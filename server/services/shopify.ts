@@ -121,6 +121,132 @@ export class ShopifyService {
     };
   }
 
+  private getAuthHeaders(accessToken: string): Record<string, string> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    if (accessToken.includes(':')) {
+      const [apiKey, apiPassword] = accessToken.split(':');
+      const credentials = Buffer.from(`${apiKey}:${apiPassword}`).toString('base64');
+      headers['Authorization'] = `Basic ${credentials}`;
+    } else {
+      headers['X-Shopify-Access-Token'] = accessToken;
+    }
+
+    return headers;
+  }
+
+  private parseNextPageUrl(linkHeader: string | null): string | null {
+    if (!linkHeader) return null;
+    
+    const links = linkHeader.split(',');
+    for (const link of links) {
+      const match = link.match(/<([^>]+)>;\s*rel="next"/);
+      if (match) {
+        return match[1];
+      }
+    }
+    return null;
+  }
+
+  private async sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  private getRateLimitDelay(response: Response): number {
+    // Check for rate limit headers
+    const callLimit = response.headers.get('X-Shopify-Shop-Api-Call-Limit');
+    if (callLimit) {
+      const [current, max] = callLimit.split('/').map(Number);
+      const usage = current / max;
+      // If we're using more than 80% of the bucket, slow down
+      if (usage > 0.8) {
+        return 1000; // 1 second delay
+      } else if (usage > 0.5) {
+        return 500; // 0.5 second delay
+      }
+    }
+    return 250; // Default delay
+  }
+
+  async fetchAllOrders(shop: string, accessToken: string, params: {
+    status?: string;
+    created_at_min?: string;
+  } = {}): Promise<ShopifyOrder[]> {
+    const allOrders: ShopifyOrder[] = [];
+    const headers = this.getAuthHeaders(accessToken);
+    
+    // Build initial URL with max limit (250 is Shopify's max per request)
+    const queryParams = new URLSearchParams({
+      limit: '250',
+      status: params.status || 'any',
+      order: 'created_at asc', // Consistent ordering for pagination
+    });
+
+    if (params.created_at_min) {
+      queryParams.set('created_at_min', params.created_at_min);
+    }
+
+    let url: string | null = `https://${shop}/admin/api/2024-01/orders.json?${queryParams.toString()}`;
+    let pageCount = 0;
+    let retryCount = 0;
+    const maxRetries = 3;
+
+    console.log(`[Shopify] Starting paginated fetch from ${shop}...`);
+
+    while (url) {
+      pageCount++;
+      console.log(`[Shopify] Fetching page ${pageCount}... (${allOrders.length} orders so far)`);
+
+      try {
+        const response = await fetch(url, { headers });
+
+        // Handle rate limiting with retry
+        if (response.status === 429) {
+          const retryAfter = response.headers.get('Retry-After');
+          const delay = retryAfter ? parseInt(retryAfter) * 1000 : 2000;
+          console.log(`[Shopify] Rate limited, waiting ${delay}ms before retry...`);
+          await this.sleep(delay);
+          retryCount++;
+          if (retryCount > maxRetries) {
+            throw new Error('Max retries exceeded due to rate limiting');
+          }
+          continue; // Retry the same URL
+        }
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Failed to fetch orders: ${response.status} ${errorText}`);
+        }
+
+        retryCount = 0; // Reset retry count on success
+        const data: ShopifyOrdersResponse = await response.json();
+        allOrders.push(...data.orders);
+
+        // Get next page URL from Link header
+        const linkHeader = response.headers.get('Link');
+        url = this.parseNextPageUrl(linkHeader);
+
+        // Adaptive rate limiting based on Shopify's bucket usage
+        if (url) {
+          const delay = this.getRateLimitDelay(response);
+          await this.sleep(delay);
+        }
+      } catch (error) {
+        console.error(`[Shopify] Error fetching page ${pageCount}:`, error);
+        retryCount++;
+        if (retryCount > maxRetries) {
+          throw error;
+        }
+        await this.sleep(1000 * retryCount); // Exponential backoff
+      }
+    }
+
+    console.log(`[Shopify] Fetched ${allOrders.length} total orders in ${pageCount} pages`);
+    return allOrders;
+  }
+
   async fetchOrders(shop: string, accessToken: string, params: {
     limit?: number;
     status?: string;
@@ -140,19 +266,7 @@ export class ShopifyService {
     }
 
     const url = `https://${shop}/admin/api/2024-01/orders.json?${queryParams.toString()}`;
-    
-    // Support both modern access tokens (shpat_...) and legacy API key/password (stored as key:pass)
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-
-    if (accessToken.includes(':')) {
-      const [apiKey, apiPassword] = accessToken.split(':');
-      const credentials = Buffer.from(`${apiKey}:${apiPassword}`).toString('base64');
-      headers['Authorization'] = `Basic ${credentials}`;
-    } else {
-      headers['X-Shopify-Access-Token'] = accessToken;
-    }
+    const headers = this.getAuthHeaders(accessToken);
 
     const response = await fetch(url, { headers });
 
@@ -173,21 +287,31 @@ export class ShopifyService {
       throw new Error("Shopify store is not connected or missing access token");
     }
 
-    // Fetch last 2 months of data
-    const twoMonthsAgo = new Date();
-    twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
-    const created_at_min = twoMonthsAgo.toISOString();
-
-    const shopifyOrders = await this.fetchOrders(shopDomain, store.accessToken, {
-      created_at_min,
-      limit: 250 // Increased limit to fetch more historical data
+    // Fetch ALL orders using pagination (no date filter - get everything)
+    console.log(`[Shopify] Starting full order sync for merchant ${merchantId}...`);
+    
+    const shopifyOrders = await this.fetchAllOrders(shopDomain, store.accessToken, {
+      status: 'any'
     });
+    
+    console.log(`[Shopify] Processing ${shopifyOrders.length} orders...`);
+    
+    // Batch check for existing orders to reduce DB queries
+    const allShopifyIds = shopifyOrders.map(o => String(o.id));
+    console.log(`[Shopify] Checking ${allShopifyIds.length} orders for duplicates...`);
+    const existingIds = await storage.getExistingShopifyOrderIds(merchantId, allShopifyIds);
+    console.log(`[Shopify] Found ${existingIds.size} existing orders, will sync ${allShopifyIds.length - existingIds.size} new orders`);
+    
     let syncedCount = 0;
+    const skippedCount = existingIds.size;
 
     for (const shopifyOrder of shopifyOrders) {
-      // Check if order already exists to avoid duplicates
-      const existingOrder = await storage.getOrderByShopifyId(merchantId, String(shopifyOrder.id));
-      if (existingOrder) continue;
+      const shopifyOrderId = String(shopifyOrder.id);
+      
+      // Skip already existing orders
+      if (existingIds.has(shopifyOrderId)) {
+        continue;
+      }
 
       const transformedOrder = this.transformOrderForStorage(shopifyOrder);
       await storage.createOrder({
@@ -195,7 +319,14 @@ export class ShopifyService {
         merchantId,
       });
       syncedCount++;
+      
+      // Log progress every 100 orders
+      if (syncedCount % 100 === 0) {
+        console.log(`[Shopify] Synced ${syncedCount} new orders...`);
+      }
     }
+
+    console.log(`[Shopify] Sync complete: ${syncedCount} new, ${skippedCount} existing, ${shopifyOrders.length} total`);
 
     // Refresh dashboard stats after sync
     await storage.getDashboardStats(merchantId);

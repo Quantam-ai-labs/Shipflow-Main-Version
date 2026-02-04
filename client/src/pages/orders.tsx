@@ -213,7 +213,7 @@ export default function Orders() {
             data-testid="button-sync-orders"
           >
             <RefreshCw className={`w-4 h-4 mr-2 ${syncOrdersMutation.isPending ? "animate-spin" : ""}`} />
-            {syncOrdersMutation.isPending ? "Syncing..." : "Sync Last 2 Months"}
+            {syncOrdersMutation.isPending ? "Syncing..." : "Sync All Orders"}
           </Button>
           <Button variant="outline" size="sm" onClick={handleExport} data-testid="button-export-orders">
             <Download className="w-4 h-4 mr-2" />

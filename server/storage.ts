@@ -14,7 +14,7 @@ import {
   users,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, or, ilike, sql, count } from "drizzle-orm";
+import { eq, desc, and, or, ilike, sql, count, inArray } from "drizzle-orm";
 
 export interface IStorage {
   // Merchants
@@ -46,6 +46,7 @@ export interface IStorage {
   getOrders(merchantId: string, options?: { search?: string; status?: string; page?: number; pageSize?: number }): Promise<{ orders: Order[]; total: number }>;
   getOrderById(merchantId: string, id: string): Promise<Order | undefined>;
   getOrderByShopifyId(merchantId: string, shopifyOrderId: string): Promise<Order | undefined>;
+  getExistingShopifyOrderIds(merchantId: string, shopifyOrderIds: string[]): Promise<Set<string>>;
   getRecentOrders(merchantId: string, limit?: number): Promise<Order[]>;
   createOrder(order: InsertOrder): Promise<Order>;
   updateOrder(merchantId: string, id: string, data: Partial<InsertOrder>): Promise<Order | undefined>;
@@ -217,6 +218,32 @@ export class DatabaseStorage implements IStorage {
     const [order] = await db.select().from(orders)
       .where(and(eq(orders.shopifyOrderId, shopifyOrderId), eq(orders.merchantId, merchantId)));
     return order;
+  }
+
+  async getExistingShopifyOrderIds(merchantId: string, shopifyOrderIds: string[]): Promise<Set<string>> {
+    if (shopifyOrderIds.length === 0) return new Set();
+    
+    // Batch query in chunks of 500 to avoid query size limits
+    const chunkSize = 500;
+    const existingIds = new Set<string>();
+    
+    for (let i = 0; i < shopifyOrderIds.length; i += chunkSize) {
+      const chunk = shopifyOrderIds.slice(i, i + chunkSize);
+      const existing = await db.select({ shopifyOrderId: orders.shopifyOrderId })
+        .from(orders)
+        .where(and(
+          eq(orders.merchantId, merchantId),
+          inArray(orders.shopifyOrderId, chunk)
+        ));
+      
+      for (const order of existing) {
+        if (order.shopifyOrderId) {
+          existingIds.add(order.shopifyOrderId);
+        }
+      }
+    }
+    
+    return existingIds;
   }
 
   async getRecentOrders(merchantId: string, limit = 5): Promise<Order[]> {
