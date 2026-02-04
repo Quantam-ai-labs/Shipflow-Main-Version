@@ -1,0 +1,70 @@
+You are a senior SaaS architect and product engineer.
+
+I want to build a production-grade, multi-tenant logistics operations platform for Shopify merchants in Pakistan.
+
+IMPORTANT RULES:
+- Do NOT start coding yet.
+- First produce a clear SYSTEM PLAN, ARCHITECTURE, and BUILD ROADMAP.
+- Explain everything in simple English for a non-coder.
+- Only after planning, propose a step-by-step build sequence.
+
+====================================
+1) WHAT WE ARE BUILDING (PROBLEM)
+====================================
+We are building an all-in-one logistics operations dashboard for Shopify merchants that:
+
+- Syncs Shopify orders automatically
+- Tracks courier shipment statuses (Leopards first, PostEx second; more later)
+- Shows data in a Google-Sheets-like grid for daily operations
+- Allows agents to add remarks per shipment
+- Provides analytics by courier and city
+- Handles COD reconciliation and payments
+- Supports multiple merchants and multiple users per merchant
+- Is designed to scale into a SaaS product
+
+====================================
+2) HOW THE SYSTEM SHOULD WORK (FLOW)
+====================================
+Explain clearly:
+- How data flows from Shopify → backend → database → dashboard
+- How courier status syncing works (manual + scheduled)
+- How multi-merchant isolation works
+- How users (Admin/Manager/Agent) interact with the system
+- How Shopify OAuth is used (no manual tokens)
+- How webhooks keep data updated
+- How we avoid CORS and security issues
+
+Use diagrams or bullet flows if helpful.
+
+====================================
+3) CORE MODULES (EXPLAIN EACH)
+====================================
+Explain the responsibility of each module:
+
+A) Frontend (Dashboard UI)
+- Pages/tabs and what each does
+
+B) Backend API
+- What APIs exist and why
+
+C) Database
+- What data we store and why
+- High-level table explanations (no SQL yet)
+
+D) Integrations
+- Shopify (OAuth + webhooks)
+- Couriers (Leopards, PostEx via connectors)
+
+E) Sync Engine
+- Manual sync
+- Scheduled background sync
+
+====================================
+4) TECH STACK DECISIONS (JUSTIFY)
+====================================
+Propose and justify:
+- Frontend framework
+- Backend framework
+- Database
+- ORM
+- Auth syst
