@@ -43,7 +43,7 @@ export interface IStorage {
   updateCourierAccount(id: string, data: Partial<InsertCourierAccount>): Promise<CourierAccount | undefined>;
 
   // Orders - All scoped by merchantId
-  getOrders(merchantId: string, options?: { search?: string; status?: string; page?: number; pageSize?: number }): Promise<{ orders: Order[]; total: number }>;
+  getOrders(merchantId: string, options?: { search?: string; status?: string; courier?: string; month?: string; page?: number; pageSize?: number }): Promise<{ orders: Order[]; total: number }>;
   getOrderById(merchantId: string, id: string): Promise<Order | undefined>;
   getOrderByShopifyId(merchantId: string, shopifyOrderId: string): Promise<Order | undefined>;
   getExistingShopifyOrderIds(merchantId: string, shopifyOrderIds: string[]): Promise<Set<string>>;
@@ -177,7 +177,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Orders - All scoped by merchantId
-  async getOrders(merchantId: string, options?: { search?: string; status?: string; page?: number; pageSize?: number }): Promise<{ orders: Order[]; total: number }> {
+  async getOrders(merchantId: string, options?: { search?: string; status?: string; courier?: string; month?: string; page?: number; pageSize?: number }): Promise<{ orders: Order[]; total: number }> {
     const page = options?.page || 1;
     const pageSize = options?.pageSize || 20;
     const offset = (page - 1) * pageSize;
@@ -185,7 +185,36 @@ export class DatabaseStorage implements IStorage {
     let conditions = [eq(orders.merchantId, merchantId)];
     
     if (options?.status && options.status !== "all") {
-      conditions.push(eq(orders.orderStatus, options.status));
+      conditions.push(eq(orders.shipmentStatus, options.status));
+    }
+
+    if (options?.courier && options.courier !== "all") {
+      conditions.push(ilike(orders.courierName, `%${options.courier}%`));
+    }
+
+    // Month filter
+    if (options?.month && options.month !== "all") {
+      const now = new Date();
+      let startDate: Date;
+      let endDate: Date | null = null;
+      
+      if (options.month === "current") {
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      } else if (options.month === "last") {
+        startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        endDate = new Date(now.getFullYear(), now.getMonth(), 1); // exclusive end
+      } else if (options.month === "2months") {
+        startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+      } else if (options.month === "3months") {
+        startDate = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+      } else {
+        startDate = new Date(0); // fallback to all time
+      }
+      
+      conditions.push(sql`${orders.orderDate} >= ${startDate.toISOString()}`);
+      if (endDate) {
+        conditions.push(sql`${orders.orderDate} < ${endDate.toISOString()}`);
+      }
     }
 
     if (options?.search) {
@@ -193,7 +222,8 @@ export class DatabaseStorage implements IStorage {
         or(
           ilike(orders.orderNumber, `%${options.search}%`),
           ilike(orders.customerName, `%${options.search}%`),
-          ilike(orders.city, `%${options.search}%`)
+          ilike(orders.city, `%${options.search}%`),
+          ilike(orders.customerPhone, `%${options.search}%`)
         )!
       );
     }

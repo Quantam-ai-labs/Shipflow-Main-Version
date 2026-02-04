@@ -20,6 +20,7 @@ import CodReconciliation from "@/pages/cod-reconciliation";
 import Team from "@/pages/team";
 import Integrations from "@/pages/integrations";
 import Settings from "@/pages/settings";
+import Onboarding from "@/pages/onboarding";
 import NotFound from "@/pages/not-found";
 
 function AppRoutes() {
@@ -37,6 +38,7 @@ function AppRoutes() {
       <Route path="/team" component={Team} />
       <Route path="/integrations" component={Integrations} />
       <Route path="/settings" component={Settings} />
+      <Route path="/onboarding" component={Onboarding} />
       <Route component={NotFound} />
     </Switch>
   );

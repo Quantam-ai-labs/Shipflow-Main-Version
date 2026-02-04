@@ -264,11 +264,13 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
 
-      const { search, status, page, pageSize } = req.query;
+      const { search, status, courier, month, page, pageSize } = req.query;
       
       const result = await storage.getOrders(merchantId, {
         search: search as string,
         status: status as string,
+        courier: courier as string,
+        month: month as string,
         page: parseInt(page as string) || 1,
         pageSize: parseInt(pageSize as string) || 20,
       });
@@ -347,6 +349,38 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error creating remark:", error);
       res.status(500).json({ message: "Failed to create remark" });
+    }
+  });
+
+  // Update order remark columns directly
+  app.patch("/api/orders/:id/remark", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const { field, value } = req.body;
+      if (!field || ![1, 2, 3, 4].includes(field)) {
+        return res.status(400).json({ message: "Invalid remark field" });
+      }
+
+      // Verify order exists and belongs to merchant
+      const order = await storage.getOrderById(merchantId, req.params.id);
+      if (!order) {
+        return res.status(404).json({ message: "Order not found" });
+      }
+
+      // Build update object based on field
+      const updateData: Record<string, any> = {};
+      if (field === 1) updateData.remark1 = value;
+      if (field === 2) updateData.remark2 = value;
+      if (field === 3) updateData.remark3 = value;
+      if (field === 4) updateData.remark4 = value;
+
+      const updated = await storage.updateOrder(merchantId, req.params.id, updateData);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating remark:", error);
+      res.status(500).json({ message: "Failed to update remark" });
     }
   });
 

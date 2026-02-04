@@ -7,6 +7,13 @@ interface ShopifyConfig {
   scopes: string;
 }
 
+interface ShopifyOrderMetafield {
+  key: string;
+  value: string;
+  namespace: string;
+  type: string;
+}
+
 interface ShopifyOrder {
   id: number;
   name: string;
@@ -22,14 +29,37 @@ interface ShopifyOrder {
   financial_status: string;
   fulfillment_status: string | null;
   customer: {
+    id: number;
     first_name: string;
     last_name: string;
     email: string;
     phone: string | null;
+    default_address?: {
+      address1: string;
+      address2: string | null;
+      city: string;
+      province: string;
+      country: string;
+      zip: string;
+      phone: string | null;
+    };
   } | null;
   shipping_address: {
     first_name: string;
     last_name: string;
+    name: string;
+    address1: string;
+    address2: string | null;
+    city: string;
+    province: string;
+    country: string;
+    zip: string;
+    phone: string | null;
+  } | null;
+  billing_address: {
+    first_name: string;
+    last_name: string;
+    name: string;
     address1: string;
     address2: string | null;
     city: string;
@@ -44,9 +74,12 @@ interface ShopifyOrder {
     quantity: number;
     price: string;
     sku: string;
+    variant_title: string | null;
   }>;
   tags: string;
   note: string | null;
+  note_attributes: Array<{ name: string; value: string }>;
+  metafields?: ShopifyOrderMetafield[];
 }
 
 interface ShopifyOrdersResponse {
@@ -355,17 +388,83 @@ export class ShopifyService {
     paymentStatus: string;
     fulfillmentStatus: string;
     orderStatus: string;
-    lineItems: Array<{ name: string; quantity: number; price: number; sku?: string }>;
+    lineItems: Array<{ name: string; quantity: number; price: number; sku?: string; variantTitle?: string }>;
     tags: string[];
     notes: string | null;
     orderDate: Date;
+    courierName: string | null;
+    courierTracking: string | null;
+    totalQuantity: number;
   } {
     const customer = shopifyOrder.customer;
     const shippingAddr = shopifyOrder.shipping_address;
+    const billingAddr = shopifyOrder.billing_address;
 
-    const customerName = customer 
-      ? `${customer.first_name || ''} ${customer.last_name || ''}`.trim() 
-      : (shippingAddr ? `${shippingAddr.first_name || ''} ${shippingAddr.last_name || ''}`.trim() : 'Unknown');
+    // Priority for customer name: shipping_address.name > customer name > billing_address.name
+    let customerName = 'Unknown';
+    if (shippingAddr?.name) {
+      customerName = shippingAddr.name;
+    } else if (shippingAddr?.first_name || shippingAddr?.last_name) {
+      customerName = `${shippingAddr?.first_name || ''} ${shippingAddr?.last_name || ''}`.trim();
+    } else if (customer?.first_name || customer?.last_name) {
+      customerName = `${customer?.first_name || ''} ${customer?.last_name || ''}`.trim();
+    } else if (billingAddr?.name) {
+      customerName = billingAddr.name;
+    }
+
+    // Priority for phone: shipping_address > customer > billing_address
+    let customerPhone: string | null = null;
+    if (shippingAddr?.phone) {
+      customerPhone = shippingAddr.phone;
+    } else if (customer?.phone) {
+      customerPhone = customer.phone;
+    } else if (billingAddr?.phone) {
+      customerPhone = billingAddr.phone;
+    } else if (customer?.default_address?.phone) {
+      customerPhone = customer.default_address.phone;
+    }
+
+    // Get email from multiple sources
+    const customerEmail = customer?.email || shopifyOrder.email || null;
+
+    // Get city from shipping address, fallback to billing address
+    const city = shippingAddr?.city || billingAddr?.city || customer?.default_address?.city || null;
+    const province = shippingAddr?.province || billingAddr?.province || customer?.default_address?.province || null;
+    const postalCode = shippingAddr?.zip || billingAddr?.zip || customer?.default_address?.zip || null;
+    const country = shippingAddr?.country || billingAddr?.country || customer?.default_address?.country || 'Pakistan';
+
+    // Build full shipping address
+    let fullAddress: string | null = null;
+    if (shippingAddr) {
+      const addressParts = [
+        shippingAddr.address1,
+        shippingAddr.address2,
+      ].filter(Boolean);
+      fullAddress = addressParts.join(', ') || null;
+    } else if (billingAddr) {
+      const addressParts = [
+        billingAddr.address1,
+        billingAddr.address2,
+      ].filter(Boolean);
+      fullAddress = addressParts.join(', ') || null;
+    }
+
+    // Extract courier info from note_attributes (hxs_courier_name, hxs_courier_tracking)
+    let courierName: string | null = null;
+    let courierTracking: string | null = null;
+    
+    if (shopifyOrder.note_attributes && Array.isArray(shopifyOrder.note_attributes)) {
+      for (const attr of shopifyOrder.note_attributes) {
+        if (attr.name === 'hxs_courier_name') {
+          courierName = attr.value;
+        } else if (attr.name === 'hxs_courier_tracking') {
+          courierTracking = attr.value;
+        }
+      }
+    }
+
+    // Calculate total quantity from line items
+    const totalQuantity = shopifyOrder.line_items.reduce((sum, item) => sum + item.quantity, 0);
 
     const isCod = shopifyOrder.financial_status === 'pending' || 
                   shopifyOrder.tags.toLowerCase().includes('cod');
@@ -389,21 +488,22 @@ export class ShopifyService {
       shopifyOrderId: String(shopifyOrder.id),
       orderNumber: shopifyOrder.name,
       customerName,
-      customerEmail: customer?.email || shopifyOrder.email || null,
-      customerPhone: customer?.phone || shippingAddr?.phone || null,
-      shippingAddress: shippingAddr 
-        ? [shippingAddr.address1, shippingAddr.address2].filter(Boolean).join(', ')
-        : null,
-      city: shippingAddr?.city || null,
-      province: shippingAddr?.province || null,
-      postalCode: shippingAddr?.zip || null,
-      country: shippingAddr?.country || 'Pakistan',
+      customerEmail,
+      customerPhone,
+      shippingAddress: fullAddress,
+      city,
+      province,
+      postalCode,
+      country,
       totalAmount: shopifyOrder.total_price,
       subtotalAmount: shopifyOrder.subtotal_price,
       shippingAmount,
       discountAmount: shopifyOrder.total_discounts,
       currency: shopifyOrder.currency,
       paymentMethod: isCod ? 'cod' : 'prepaid',
+      courierName,
+      courierTracking,
+      totalQuantity,
       paymentStatus,
       fulfillmentStatus,
       orderStatus,

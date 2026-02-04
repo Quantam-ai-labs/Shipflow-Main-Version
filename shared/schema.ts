@@ -134,8 +134,17 @@ export const orders = pgTable("orders", {
   fulfillmentStatus: varchar("fulfillment_status", { length: 30 }).default("unfulfilled"), // unfulfilled, fulfilled, partial
   orderStatus: varchar("order_status", { length: 30 }).default("pending"), // pending, processing, shipped, delivered, cancelled, returned
   lineItems: jsonb("line_items"), // Array of products
+  totalQuantity: integer("total_quantity").default(1),
   tags: text("tags").array(),
   notes: text("notes"),
+  courierName: varchar("courier_name", { length: 100 }), // From Shopify note_attributes (hxs_courier_name)
+  courierTracking: varchar("courier_tracking", { length: 100 }), // From Shopify note_attributes (hxs_courier_tracking)
+  shipmentStatus: varchar("shipment_status", { length: 50 }).default("pending"), // Universal: pending, booked, dispatched, arrived, out_for_delivery, delivered, failed, reattempt, returned
+  remark1: text("remark_1"),
+  remark2: text("remark_2"),
+  remark3: text("remark_3"),
+  remark4: text("remark_4"),
+  lastTrackingUpdate: timestamp("last_tracking_update"),
   orderDate: timestamp("order_date").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -143,8 +152,10 @@ export const orders = pgTable("orders", {
   index("idx_orders_merchant").on(table.merchantId),
   index("idx_orders_shopify_id").on(table.shopifyOrderId),
   index("idx_orders_status").on(table.orderStatus),
+  index("idx_orders_shipment_status").on(table.shipmentStatus),
   index("idx_orders_city").on(table.city),
   index("idx_orders_date").on(table.orderDate),
+  index("idx_orders_courier").on(table.courierName),
 ]);
 
 export const insertOrderSchema = createInsertSchema(orders).omit({
