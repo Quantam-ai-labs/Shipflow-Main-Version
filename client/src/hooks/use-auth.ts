@@ -1,47 +1,26 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { User } from "@shared/models/auth";
 
-async function fetchUser(): Promise<User | null> {
-  const response = await fetch("/api/auth/user", {
-    credentials: "include",
-  });
-
-  if (response.status === 401) {
-    return null;
-  }
-
-  if (!response.ok) {
-    throw new Error(`${response.status}: ${response.statusText}`);
-  }
-
-  return response.json();
-}
-
-async function logout(): Promise<void> {
-  window.location.href = "/api/logout";
-}
+// DEV MODE: Auth bypassed for development - always authenticated with demo user
+const DEMO_USER: User = {
+  id: "demo-user-001",
+  email: "demo@shipflow.pk",
+  firstName: "Demo",
+  lastName: "User",
+  profileImageUrl: null,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+};
 
 export function useAuth() {
-  const queryClient = useQueryClient();
-  const { data: user, isLoading } = useQuery<User | null>({
-    queryKey: ["/api/auth/user"],
-    queryFn: fetchUser,
-    retry: false,
-    staleTime: 1000 * 60 * 5, // 5 minutes
-  });
-
-  const logoutMutation = useMutation({
-    mutationFn: logout,
-    onSuccess: () => {
-      queryClient.setQueryData(["/api/auth/user"], null);
-    },
-  });
-
+  // Auth bypassed - always return authenticated demo user
   return {
-    user,
-    isLoading,
-    isAuthenticated: !!user,
-    logout: logoutMutation.mutate,
-    isLoggingOut: logoutMutation.isPending,
+    user: DEMO_USER,
+    isLoading: false,
+    isAuthenticated: true,
+    logout: () => {
+      // No-op in dev mode
+      console.log("Logout disabled in dev mode");
+    },
+    isLoggingOut: false,
   };
 }
