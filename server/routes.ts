@@ -265,12 +265,14 @@ export async function registerRoutes(
       if (!merchantId) return;
 
       const { search, status, page, pageSize } = req.query;
+      
       const result = await storage.getOrders(merchantId, {
         search: search as string,
         status: status as string,
         page: parseInt(page as string) || 1,
         pageSize: parseInt(pageSize as string) || 20,
       });
+      
       res.json(result);
     } catch (error) {
       console.error("Error fetching orders:", error);

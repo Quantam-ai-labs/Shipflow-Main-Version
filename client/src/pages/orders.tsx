@@ -38,7 +38,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Order } from "@shared/schema";
@@ -111,9 +111,15 @@ export default function Orders() {
   });
 
   const { data, isLoading, refetch } = useQuery<OrdersResponse>({
-    queryKey: ["/api/orders", queryParams.toString()],
-    refetchInterval: 30000, // Auto-refresh every 30 seconds
+    queryKey: ["/api/orders", search, statusFilter, courierFilter, page],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/orders?${queryParams.toString()}`);
+      return res.json();
+    },
+    refetchInterval: 5000, // Faster refresh for sync feedback
   });
+
+  const queryClient = useQueryClient();
 
   // Sync orders from Shopify
   const syncOrdersMutation = useMutation({
@@ -160,8 +166,8 @@ export default function Orders() {
           `"${order.customerName}"`,
           `"${order.city}"`,
           order.totalAmount,
-          order.status,
-          order.courier || "",
+          order.orderStatus,
+          "",
           new Date(order.createdAt!).toLocaleDateString(),
         ].join(",")
       ),
