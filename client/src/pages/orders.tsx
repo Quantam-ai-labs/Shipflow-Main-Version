@@ -197,9 +197,14 @@ export default function Orders() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Orders</h1>
-          <p className="text-muted-foreground">Manage and track all your orders in one place.</p>
+          <p className="text-muted-foreground">Manage and track all your real orders from Shopify.</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          {isDemoData && (
+             <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
+               Demo Data Active
+             </Badge>
+          )}
           <Button 
             variant="outline" 
             size="sm" 
@@ -208,7 +213,7 @@ export default function Orders() {
             data-testid="button-sync-orders"
           >
             <RefreshCw className={`w-4 h-4 mr-2 ${syncOrdersMutation.isPending ? "animate-spin" : ""}`} />
-            {syncOrdersMutation.isPending ? "Syncing..." : "Sync Orders"}
+            {syncOrdersMutation.isPending ? "Syncing..." : "Sync Last 2 Months"}
           </Button>
           <Button variant="outline" size="sm" onClick={handleExport} data-testid="button-export-orders">
             <Download className="w-4 h-4 mr-2" />

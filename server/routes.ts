@@ -618,14 +618,10 @@ export async function registerRoutes(
         });
       }
 
-      // Trigger initial order sync using the proper service
-      if (shopifyService && typeof shopifyService.syncOrders === 'function') {
-        await shopifyService.syncOrders(merchantId, fullDomain);
-      } else {
-        await syncShopifyOrders(merchantId, fullDomain);
-      }
+      // Trigger sync for last 2 months
+      await shopifyService.syncOrders(merchantId, storeDomain);
 
-      res.json({ success: true, message: "Store connected successfully" });
+      res.json({ success: true, message: "Shopify store connected successfully" });
     } catch (error) {
       console.error("Error connecting Shopify:", error);
       res.status(500).json({ message: "Failed to connect Shopify" });
@@ -714,12 +710,8 @@ export async function registerRoutes(
         });
       }
 
-      // Trigger initial order sync using the proper service
-      if (shopifyService && typeof shopifyService.syncOrders === 'function') {
-        await shopifyService.syncOrders(merchantId, storeDomain);
-      } else {
-        await syncShopifyOrders(merchantId, storeDomain);
-      }
+      // Trigger sync for last 2 months
+      await shopifyService.syncOrders(merchantId, storeDomain);
 
       res.json({ success: true, message: "Shopify store connected successfully" });
     } catch (error) {
