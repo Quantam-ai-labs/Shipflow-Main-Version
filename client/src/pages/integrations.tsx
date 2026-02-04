@@ -50,7 +50,9 @@ export default function Integrations() {
   const [isShopifyDialogOpen, setIsShopifyDialogOpen] = useState(false);
   const [shopifyStoreDomain, setShopifyStoreDomain] = useState("");
   const [shopifyAccessToken, setShopifyAccessToken] = useState("");
-  const [useManualToken, setUseManualToken] = useState(true);
+  const [shopifyApiKey, setShopifyApiKey] = useState("");
+  const [shopifyApiPassword, setShopifyApiPassword] = useState("");
+  const [useLegacyAuth, setUseLegacyAuth] = useState(false);
   const [selectedCourier, setSelectedCourier] = useState<string | null>(null);
   const [courierApiKey, setCourierApiKey] = useState("");
   const [courierAccountNumber, setCourierAccountNumber] = useState("");
@@ -81,7 +83,7 @@ export default function Integrations() {
   });
 
   const manualConnectMutation = useMutation({
-    mutationFn: async (data: { storeDomain: string; accessToken: string }) => {
+    mutationFn: async (data: { storeDomain: string; accessToken?: string; apiKey?: string; apiPassword?: string }) => {
       return apiRequest("POST", "/api/integrations/shopify/manual-connect", data);
     },
     onSuccess: () => {
@@ -89,6 +91,8 @@ export default function Integrations() {
       setIsShopifyDialogOpen(false);
       setShopifyStoreDomain("");
       setShopifyAccessToken("");
+      setShopifyApiKey("");
+      setShopifyApiPassword("");
       toast({
         title: "Shopify Connected!",
         description: "Your Shopify store has been connected successfully.",
@@ -119,7 +123,21 @@ export default function Integrations() {
       return;
     }
     
-    if (useManualToken) {
+    const shop = `${storeName}.myshopify.com`;
+    
+    if (useLegacyAuth) {
+      // Legacy API key/password authentication
+      if (!shopifyApiKey || !shopifyApiPassword) {
+        toast({
+          title: "Credentials Required",
+          description: "Please enter both API key and API password.",
+          variant: "destructive",
+        });
+        return;
+      }
+      manualConnectMutation.mutate({ storeDomain: shop, apiKey: shopifyApiKey, apiPassword: shopifyApiPassword });
+    } else {
+      // Modern access token authentication
       if (!shopifyAccessToken) {
         toast({
           title: "Access Token Required",
@@ -128,11 +146,7 @@ export default function Integrations() {
         });
         return;
       }
-      const shop = `${storeName}.myshopify.com`;
       manualConnectMutation.mutate({ storeDomain: shop, accessToken: shopifyAccessToken });
-    } else {
-      const shop = `${storeName}.myshopify.com`;
-      window.location.href = `/api/shopify/install?shop=${encodeURIComponent(shop)}`;
     }
   };
 
@@ -422,20 +436,63 @@ export default function Integrations() {
                 Enter your store name without the .myshopify.com part
               </p>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="accessToken">Admin API Access Token</Label>
-              <Input
-                id="accessToken"
-                type="password"
-                placeholder="shpat_xxxxxxxxxx"
-                value={shopifyAccessToken}
-                onChange={(e) => setShopifyAccessToken(e.target.value)}
-                data-testid="input-shopify-token"
+            
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="useLegacy"
+                checked={useLegacyAuth}
+                onChange={(e) => setUseLegacyAuth(e.target.checked)}
+                className="rounded border-input"
               />
-              <p className="text-xs text-muted-foreground">
-                Get this from your Shopify Admin → Settings → Apps → Develop apps → Create an app → Configure Admin API scopes (read_orders) → Install app → Reveal token
-              </p>
+              <Label htmlFor="useLegacy" className="text-sm cursor-pointer">
+                Use Legacy App (API Key + Password)
+              </Label>
             </div>
+
+            {useLegacyAuth ? (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="apiKey">API Key</Label>
+                  <Input
+                    id="apiKey"
+                    placeholder="Your legacy app API key"
+                    value={shopifyApiKey}
+                    onChange={(e) => setShopifyApiKey(e.target.value)}
+                    data-testid="input-shopify-api-key"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="apiPassword">API Password</Label>
+                  <Input
+                    id="apiPassword"
+                    type="password"
+                    placeholder="Your legacy app API password"
+                    value={shopifyApiPassword}
+                    onChange={(e) => setShopifyApiPassword(e.target.value)}
+                    data-testid="input-shopify-api-password"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Find these in your Shopify Admin → Apps → Manage private apps → Your app
+                  </p>
+                </div>
+              </>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor="accessToken">Admin API Access Token</Label>
+                <Input
+                  id="accessToken"
+                  type="password"
+                  placeholder="shpat_xxxxxxxxxx"
+                  value={shopifyAccessToken}
+                  onChange={(e) => setShopifyAccessToken(e.target.value)}
+                  data-testid="input-shopify-token"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Get this from your Shopify Admin → Settings → Apps → Develop apps → Create an app → Configure Admin API scopes (read_orders) → Install app → Reveal token
+                </p>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsShopifyDialogOpen(false)}>
@@ -443,7 +500,7 @@ export default function Integrations() {
             </Button>
             <Button
               onClick={handleConnectShopify}
-              disabled={!shopifyStoreDomain || !shopifyAccessToken || manualConnectMutation.isPending}
+              disabled={!shopifyStoreDomain || (useLegacyAuth ? (!shopifyApiKey || !shopifyApiPassword) : !shopifyAccessToken) || manualConnectMutation.isPending}
               data-testid="button-confirm-shopify"
             >
               {manualConnectMutation.isPending ? "Connecting..." : "Connect Store"}

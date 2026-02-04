@@ -623,16 +623,24 @@ export async function registerRoutes(
     }
   });
 
-  // Manual Shopify connection with access token (bypasses OAuth)
+  // Manual Shopify connection with access token or legacy API key/password (bypasses OAuth)
   app.post("/api/integrations/shopify/manual-connect", isAuthenticated, async (req, res) => {
     try {
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
 
-      const { storeDomain, accessToken } = req.body;
+      const { storeDomain, accessToken, apiKey, apiPassword } = req.body;
       
-      if (!storeDomain || !accessToken) {
-        return res.status(400).json({ message: "Store domain and access token are required" });
+      if (!storeDomain) {
+        return res.status(400).json({ message: "Store domain is required" });
+      }
+
+      // Need either access token OR legacy api key/password
+      const hasModernToken = !!accessToken;
+      const hasLegacyCredentials = apiKey && apiPassword;
+      
+      if (!hasModernToken && !hasLegacyCredentials) {
+        return res.status(400).json({ message: "Either access token or API key/password is required" });
       }
 
       // Validate store domain format
@@ -641,21 +649,41 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Invalid store domain format" });
       }
 
-      // Validate the access token by making a test API call
+      // Validate credentials by making a test API call
       try {
-        const testResponse = await fetch(`https://${storeDomain}/admin/api/2024-01/shop.json`, {
-          headers: {
-            'X-Shopify-Access-Token': accessToken,
-            'Content-Type': 'application/json',
-          },
-        });
+        let testResponse;
+        
+        if (hasModernToken) {
+          // Modern access token auth
+          testResponse = await fetch(`https://${storeDomain}/admin/api/2024-01/shop.json`, {
+            headers: {
+              'X-Shopify-Access-Token': accessToken,
+              'Content-Type': 'application/json',
+            },
+          });
+        } else {
+          // Legacy API key/password auth (Basic Auth)
+          const credentials = Buffer.from(`${apiKey}:${apiPassword}`).toString('base64');
+          testResponse = await fetch(`https://${storeDomain}/admin/api/2024-01/shop.json`, {
+            headers: {
+              'Authorization': `Basic ${credentials}`,
+              'Content-Type': 'application/json',
+            },
+          });
+        }
 
         if (!testResponse.ok) {
-          return res.status(400).json({ message: "Invalid access token - could not connect to Shopify" });
+          const errorText = await testResponse.text();
+          console.error("Shopify API error:", testResponse.status, errorText);
+          return res.status(400).json({ message: "Invalid credentials - could not connect to Shopify" });
         }
       } catch (err) {
-        return res.status(400).json({ message: "Could not verify access token with Shopify" });
+        console.error("Shopify connection error:", err);
+        return res.status(400).json({ message: "Could not verify credentials with Shopify" });
       }
+
+      // Store credentials - for legacy apps, store as "apiKey:apiPassword" format
+      const tokenToStore = hasModernToken ? accessToken : `${apiKey}:${apiPassword}`;
 
       // Store or update the Shopify connection
       const existingStore = await storage.getShopifyStore(merchantId);
@@ -663,7 +691,7 @@ export async function registerRoutes(
       if (existingStore) {
         await storage.updateShopifyStore(existingStore.id, {
           shopDomain: storeDomain,
-          accessToken,
+          accessToken: tokenToStore,
           isConnected: true,
           lastSyncAt: new Date(),
         });
@@ -671,7 +699,7 @@ export async function registerRoutes(
         await storage.createShopifyStore({
           merchantId,
           shopDomain: storeDomain,
-          accessToken,
+          accessToken: tokenToStore,
           scopes: 'read_orders',
           isConnected: true,
         });
