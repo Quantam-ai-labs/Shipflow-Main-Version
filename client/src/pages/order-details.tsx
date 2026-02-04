@@ -1,0 +1,458 @@
+import { useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Package,
+  ArrowLeft,
+  User,
+  Phone,
+  Mail,
+  MapPin,
+  Truck,
+  Clock,
+  CheckCircle2,
+  MessageSquare,
+  Send,
+} from "lucide-react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import type { Order, Shipment, ShipmentEvent, Remark } from "@shared/schema";
+import { Link, useParams } from "wouter";
+import { format } from "date-fns";
+import { useToast } from "@/hooks/use-toast";
+
+interface OrderDetails extends Order {
+  shipments: (Shipment & { events: ShipmentEvent[] })[];
+  remarks: Remark[];
+}
+
+function getStatusBadge(status: string) {
+  const statusConfig: Record<string, string> = {
+    pending: "bg-gray-500/10 text-gray-600 border-gray-500/20",
+    processing: "bg-blue-500/10 text-blue-600 border-blue-500/20",
+    shipped: "bg-amber-500/10 text-amber-600 border-amber-500/20",
+    booked: "bg-blue-500/10 text-blue-600 border-blue-500/20",
+    picked: "bg-indigo-500/10 text-indigo-600 border-indigo-500/20",
+    in_transit: "bg-amber-500/10 text-amber-600 border-amber-500/20",
+    out_for_delivery: "bg-purple-500/10 text-purple-600 border-purple-500/20",
+    delivered: "bg-green-500/10 text-green-600 border-green-500/20",
+    cancelled: "bg-red-500/10 text-red-600 border-red-500/20",
+    returned: "bg-red-500/10 text-red-600 border-red-500/20",
+    failed: "bg-red-500/10 text-red-600 border-red-500/20",
+  };
+
+  const color = statusConfig[status] || statusConfig.pending;
+  const displayStatus = status.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+
+  return <Badge className={color}>{displayStatus}</Badge>;
+}
+
+function getTrackingIcon(status: string) {
+  const iconMap: Record<string, React.ElementType> = {
+    booked: Package,
+    picked: Truck,
+    in_transit: Truck,
+    out_for_delivery: Truck,
+    delivered: CheckCircle2,
+  };
+  return iconMap[status] || Clock;
+}
+
+export default function OrderDetails() {
+  const { id } = useParams<{ id: string }>();
+  const { toast } = useToast();
+  const [newRemark, setNewRemark] = useState("");
+  const [remarkType, setRemarkType] = useState("general");
+
+  const { data: order, isLoading } = useQuery<OrderDetails>({
+    queryKey: ["/api/orders", id],
+  });
+
+  const addRemarkMutation = useMutation({
+    mutationFn: async (data: { content: string; remarkType: string }) => {
+      return apiRequest("POST", `/api/orders/${id}/remarks`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders", id] });
+      setNewRemark("");
+      toast({
+        title: "Remark added",
+        description: "Your remark has been saved successfully.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to add remark. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleAddRemark = () => {
+    if (!newRemark.trim()) return;
+    addRemarkMutation.mutate({ content: newRemark, remarkType });
+  };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-4">
+          <Skeleton className="h-10 w-10" />
+          <Skeleton className="h-8 w-48" />
+        </div>
+        <div className="grid lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-6">
+            <Skeleton className="h-64 w-full" />
+            <Skeleton className="h-48 w-full" />
+          </div>
+          <Skeleton className="h-96 w-full" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!order) {
+    return (
+      <div className="text-center py-16">
+        <Package className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
+        <h3 className="font-medium mb-1">Order not found</h3>
+        <p className="text-sm text-muted-foreground mb-4">
+          The order you're looking for doesn't exist or has been deleted.
+        </p>
+        <Link href="/orders">
+          <Button variant="outline">
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Orders
+          </Button>
+        </Link>
+      </div>
+    );
+  }
+
+  const shipment = order.shipments?.[0];
+  const lineItems = order.lineItems as Array<{ name: string; quantity: number; price: string }> | null;
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <Link href="/orders">
+            <Button variant="ghost" size="icon" data-testid="button-back-orders">
+              <ArrowLeft className="w-5 h-5" />
+            </Button>
+          </Link>
+          <div>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold">Order #{order.orderNumber}</h1>
+              {getStatusBadge(order.orderStatus || "pending")}
+            </div>
+            <p className="text-muted-foreground text-sm">
+              {order.orderDate ? format(new Date(order.orderDate), "MMMM dd, yyyy 'at' h:mm a") : ""}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid lg:grid-cols-3 gap-6">
+        {/* Main Content */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Customer Info */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <User className="w-5 h-5" />
+                Customer Details
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                    <User className="w-5 h-5 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <p className="font-medium">{order.customerName}</p>
+                    <p className="text-sm text-muted-foreground">Customer</p>
+                  </div>
+                </div>
+                {order.customerPhone && (
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                      <Phone className="w-5 h-5 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <p className="font-medium">{order.customerPhone}</p>
+                      <p className="text-sm text-muted-foreground">Phone</p>
+                    </div>
+                  </div>
+                )}
+                {order.customerEmail && (
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                      <Mail className="w-5 h-5 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <p className="font-medium truncate max-w-[200px]">{order.customerEmail}</p>
+                      <p className="text-sm text-muted-foreground">Email</p>
+                    </div>
+                  </div>
+                )}
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                    <MapPin className="w-5 h-5 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <p className="font-medium">{order.city}, {order.province}</p>
+                    <p className="text-sm text-muted-foreground">Location</p>
+                  </div>
+                </div>
+              </div>
+              {order.shippingAddress && (
+                <div className="pt-4 border-t">
+                  <p className="text-sm text-muted-foreground mb-1">Shipping Address</p>
+                  <p className="text-sm">{order.shippingAddress}</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Shipment Tracking */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Truck className="w-5 h-5" />
+                Shipment Tracking
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {shipment ? (
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between flex-wrap gap-4">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Courier</p>
+                      <p className="font-medium capitalize">{shipment.courierName}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Tracking Number</p>
+                      <p className="font-medium font-mono">{shipment.trackingNumber || "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Status</p>
+                      {getStatusBadge(shipment.status || "booked")}
+                    </div>
+                  </div>
+                  <Separator />
+                  {/* Timeline */}
+                  <div className="space-y-4">
+                    <p className="text-sm font-medium">Tracking History</p>
+                    {shipment.events && shipment.events.length > 0 ? (
+                      <div className="relative pl-6 space-y-4">
+                        <div className="absolute left-[11px] top-2 bottom-2 w-0.5 bg-border" />
+                        {shipment.events.map((event, index) => {
+                          const Icon = getTrackingIcon(event.status);
+                          return (
+                            <div key={event.id} className="relative flex items-start gap-4">
+                              <div className={`absolute left-[-15px] w-6 h-6 rounded-full flex items-center justify-center ${
+                                index === 0 ? "bg-primary text-primary-foreground" : "bg-muted"
+                              }`}>
+                                <Icon className="w-3 h-3" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-sm">{event.status.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}</p>
+                                <p className="text-xs text-muted-foreground">{event.description}</p>
+                                <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                                  {event.location && <span>{event.location}</span>}
+                                  {event.eventTime && (
+                                    <span>{format(new Date(event.eventTime), "MMM dd, h:mm a")}</span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No tracking updates yet.</p>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Truck className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
+                  <h3 className="font-medium mb-1">No shipment assigned</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Assign a courier to start tracking this order.
+                  </p>
+                  <Button variant="outline" data-testid="button-assign-courier">
+                    Assign Courier
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Remarks */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <MessageSquare className="w-5 h-5" />
+                Remarks
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-2">
+                <Textarea
+                  placeholder="Add a remark about this order..."
+                  value={newRemark}
+                  onChange={(e) => setNewRemark(e.target.value)}
+                  className="min-h-[80px]"
+                  data-testid="input-remark"
+                />
+              </div>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <Select value={remarkType} onValueChange={setRemarkType}>
+                  <SelectTrigger className="w-[160px]" data-testid="select-remark-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="general">General</SelectItem>
+                    <SelectItem value="follow_up">Follow Up</SelectItem>
+                    <SelectItem value="issue">Issue</SelectItem>
+                    <SelectItem value="resolved">Resolved</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button
+                  onClick={handleAddRemark}
+                  disabled={!newRemark.trim() || addRemarkMutation.isPending}
+                  data-testid="button-add-remark"
+                >
+                  <Send className="w-4 h-4 mr-2" />
+                  {addRemarkMutation.isPending ? "Adding..." : "Add Remark"}
+                </Button>
+              </div>
+              <Separator />
+              <div className="space-y-4">
+                {order.remarks && order.remarks.length > 0 ? (
+                  order.remarks.map((remark) => (
+                    <div key={remark.id} className="flex gap-3">
+                      <Avatar className="h-8 w-8">
+                        <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                          U
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Badge variant="outline" className="text-xs capitalize">
+                            {remark.remarkType?.replace(/_/g, " ")}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {remark.createdAt ? format(new Date(remark.createdAt), "MMM dd, h:mm a") : ""}
+                          </span>
+                        </div>
+                        <p className="text-sm">{remark.content}</p>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No remarks yet. Add one above.
+                  </p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Sidebar */}
+        <div className="space-y-6">
+          {/* Order Summary */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Order Summary</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {lineItems && lineItems.length > 0 ? (
+                <div className="space-y-3">
+                  {lineItems.map((item, index) => (
+                    <div key={index} className="flex items-center justify-between text-sm">
+                      <div>
+                        <p className="font-medium">{item.name}</p>
+                        <p className="text-muted-foreground">Qty: {item.quantity}</p>
+                      </div>
+                      <p className="font-medium">PKR {Number(item.price).toLocaleString()}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No line items</p>
+              )}
+              <Separator />
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Subtotal</span>
+                  <span>PKR {Number(order.subtotalAmount || 0).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Shipping</span>
+                  <span>PKR {Number(order.shippingAmount || 0).toLocaleString()}</span>
+                </div>
+                {order.discountAmount && Number(order.discountAmount) > 0 && (
+                  <div className="flex justify-between text-green-600">
+                    <span>Discount</span>
+                    <span>-PKR {Number(order.discountAmount).toLocaleString()}</span>
+                  </div>
+                )}
+                <Separator />
+                <div className="flex justify-between font-semibold text-base">
+                  <span>Total</span>
+                  <span>PKR {Number(order.totalAmount).toLocaleString()}</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Payment Info */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Payment</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Method</span>
+                <Badge variant="outline" className="capitalize">
+                  {order.paymentMethod || "COD"}
+                </Badge>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Status</span>
+                <Badge
+                  className={
+                    order.paymentStatus === "paid"
+                      ? "bg-green-500/10 text-green-600 border-green-500/20"
+                      : "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                  }
+                >
+                  {order.paymentStatus?.replace(/\b\w/g, (l) => l.toUpperCase())}
+                </Badge>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
