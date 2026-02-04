@@ -147,6 +147,8 @@ export default function Orders() {
   const orders = data?.orders ?? [];
   const totalPages = Math.ceil((data?.total ?? 0) / pageSize);
 
+  const isDemoData = orders.length > 0 && orders.some(o => o.shopifyOrderId?.startsWith('shopify_'));
+  
   const handleExport = () => {
     if (orders.length === 0) {
       toast({

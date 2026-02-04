@@ -173,7 +173,15 @@ export class ShopifyService {
       throw new Error("Shopify store is not connected or missing access token");
     }
 
-    const shopifyOrders = await this.fetchOrders(shopDomain, store.accessToken);
+    // Fetch last 2 months of data
+    const twoMonthsAgo = new Date();
+    twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
+    const created_at_min = twoMonthsAgo.toISOString();
+
+    const shopifyOrders = await this.fetchOrders(shopDomain, store.accessToken, {
+      created_at_min,
+      limit: 250 // Increased limit to fetch more historical data
+    });
     let syncedCount = 0;
 
     for (const shopifyOrder of shopifyOrders) {

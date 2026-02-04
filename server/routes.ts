@@ -556,9 +556,12 @@ export async function registerRoutes(
       const shopifyStore = await storage.getShopifyStore(merchantId);
       const couriers = await storage.getCourierAccounts(merchantId);
 
+      // Filter out demo store in production if needed, or just return real data
+      const isShopifyConnected = !!(shopifyStore?.isConnected && shopifyStore?.accessToken && shopifyStore.accessToken !== "demo-access-token");
+
       res.json({
         shopify: {
-          isConnected: shopifyStore?.isConnected || false,
+          isConnected: isShopifyConnected,
           shopDomain: shopifyStore?.shopDomain || null,
           lastSyncAt: shopifyStore?.lastSyncAt || null,
         },
