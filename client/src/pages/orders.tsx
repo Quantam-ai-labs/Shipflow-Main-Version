@@ -141,6 +141,48 @@ export default function Orders() {
   const orders = data?.orders ?? [];
   const totalPages = Math.ceil((data?.total ?? 0) / pageSize);
 
+  const handleExport = () => {
+    if (orders.length === 0) {
+      toast({
+        title: "No orders to export",
+        description: "There are no orders matching your current filters.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const headers = ["Order #", "Customer", "City", "Total", "Status", "Courier", "Created"];
+    const csvContent = [
+      headers.join(","),
+      ...orders.map((order) =>
+        [
+          order.orderNumber,
+          `"${order.customerName}"`,
+          `"${order.city}"`,
+          order.totalAmount,
+          order.status,
+          order.courier || "",
+          new Date(order.createdAt!).toLocaleDateString(),
+        ].join(",")
+      ),
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `orders-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+
+    toast({
+      title: "Export complete",
+      description: `Exported ${orders.length} orders to CSV.`,
+    });
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -160,7 +202,7 @@ export default function Orders() {
             <RefreshCw className={`w-4 h-4 mr-2 ${syncOrdersMutation.isPending ? "animate-spin" : ""}`} />
             {syncOrdersMutation.isPending ? "Syncing..." : "Sync Orders"}
           </Button>
-          <Button variant="outline" size="sm" data-testid="button-export-orders">
+          <Button variant="outline" size="sm" onClick={handleExport} data-testid="button-export-orders">
             <Download className="w-4 h-4 mr-2" />
             Export
           </Button>

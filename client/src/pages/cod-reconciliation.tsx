@@ -99,6 +99,7 @@ export default function CodReconciliationPage() {
 
   const { data, isLoading } = useQuery<CodReconciliationResponse>({
     queryKey: ["/api/cod-reconciliation", queryParams.toString()],
+    refetchInterval: 30000, // Auto-refresh every 30 seconds
   });
 
   const records = data?.records ?? [];
@@ -152,6 +153,49 @@ export default function CodReconciliationPage() {
   const pendingRecords = records.filter((r) => r.status === "pending");
   const allPendingSelected = pendingRecords.length > 0 && pendingRecords.every((r) => selectedRecords.includes(r.id));
 
+  const handleExport = () => {
+    if (records.length === 0) {
+      toast({
+        title: "No records to export",
+        description: "There are no COD records matching your current filters.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const headers = ["Tracking #", "Courier", "COD Amount", "Courier Fee", "Net Amount", "Status", "Settlement Ref", "Date"];
+    const csvContent = [
+      headers.join(","),
+      ...records.map((record) =>
+        [
+          record.trackingNumber || "",
+          record.courierName || "",
+          record.codAmount,
+          record.courierFee || "",
+          record.netAmount || "",
+          record.status || "",
+          record.courierSettlementRef || "",
+          record.createdAt ? format(new Date(record.createdAt), "yyyy-MM-dd") : "",
+        ].join(",")
+      ),
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `cod-reconciliation-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+
+    toast({
+      title: "Export complete",
+      description: `Exported ${records.length} COD records to CSV.`,
+    });
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -167,7 +211,7 @@ export default function CodReconciliationPage() {
               Reconcile ({selectedRecords.length})
             </Button>
           )}
-          <Button variant="outline" size="sm" data-testid="button-export-cod">
+          <Button variant="outline" size="sm" onClick={handleExport} data-testid="button-export-cod">
             <Download className="w-4 h-4 mr-2" />
             Export
           </Button>

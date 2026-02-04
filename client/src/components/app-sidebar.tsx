@@ -57,7 +57,7 @@ const mainNavItems = [
   },
   {
     title: "COD Reconciliation",
-    url: "/cod",
+    url: "/cod-reconciliation",
     icon: DollarSign,
   },
 ];
