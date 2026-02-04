@@ -623,6 +623,67 @@ export async function registerRoutes(
     }
   });
 
+  // Manual Shopify connection with access token (bypasses OAuth)
+  app.post("/api/integrations/shopify/manual-connect", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const { storeDomain, accessToken } = req.body;
+      
+      if (!storeDomain || !accessToken) {
+        return res.status(400).json({ message: "Store domain and access token are required" });
+      }
+
+      // Validate store domain format
+      const shopDomainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com$/;
+      if (!shopDomainRegex.test(storeDomain)) {
+        return res.status(400).json({ message: "Invalid store domain format" });
+      }
+
+      // Validate the access token by making a test API call
+      try {
+        const testResponse = await fetch(`https://${storeDomain}/admin/api/2024-01/shop.json`, {
+          headers: {
+            'X-Shopify-Access-Token': accessToken,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (!testResponse.ok) {
+          return res.status(400).json({ message: "Invalid access token - could not connect to Shopify" });
+        }
+      } catch (err) {
+        return res.status(400).json({ message: "Could not verify access token with Shopify" });
+      }
+
+      // Store or update the Shopify connection
+      const existingStore = await storage.getShopifyStore(merchantId);
+      
+      if (existingStore) {
+        await storage.updateShopifyStore(existingStore.id, {
+          shopDomain: storeDomain,
+          accessToken,
+          isConnected: true,
+          lastSyncAt: new Date(),
+        });
+      } else {
+        await storage.createShopifyStore({
+          merchantId,
+          shopDomain: storeDomain,
+          accessToken,
+          scopes: 'read_orders',
+          isConnected: true,
+        });
+      }
+
+      res.json({ success: true, message: "Shopify store connected successfully" });
+    } catch (error) {
+      console.error("Error manually connecting Shopify:", error);
+      res.status(500).json({ message: "Failed to connect Shopify store" });
+    }
+  });
+
   app.post("/api/integrations/shopify/disconnect", isAuthenticated, async (req, res) => {
     try {
       const merchantId = await requireMerchant(req, res);

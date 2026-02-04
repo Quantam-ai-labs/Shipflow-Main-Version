@@ -49,6 +49,8 @@ export default function Integrations() {
   const [isCourierDialogOpen, setIsCourierDialogOpen] = useState(false);
   const [isShopifyDialogOpen, setIsShopifyDialogOpen] = useState(false);
   const [shopifyStoreDomain, setShopifyStoreDomain] = useState("");
+  const [shopifyAccessToken, setShopifyAccessToken] = useState("");
+  const [useManualToken, setUseManualToken] = useState(true);
   const [selectedCourier, setSelectedCourier] = useState<string | null>(null);
   const [courierApiKey, setCourierApiKey] = useState("");
   const [courierAccountNumber, setCourierAccountNumber] = useState("");
@@ -78,6 +80,29 @@ export default function Integrations() {
     queryKey: ["/api/integrations"],
   });
 
+  const manualConnectMutation = useMutation({
+    mutationFn: async (data: { storeDomain: string; accessToken: string }) => {
+      return apiRequest("POST", "/api/integrations/shopify/manual-connect", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
+      setIsShopifyDialogOpen(false);
+      setShopifyStoreDomain("");
+      setShopifyAccessToken("");
+      toast({
+        title: "Shopify Connected!",
+        description: "Your Shopify store has been connected successfully.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Connection Failed",
+        description: error.message || "Failed to connect Shopify store.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleConnectShopify = () => {
     if (!shopifyStoreDomain) return;
     
@@ -94,8 +119,21 @@ export default function Integrations() {
       return;
     }
     
-    const shop = `${storeName}.myshopify.com`;
-    window.location.href = `/api/shopify/install?shop=${encodeURIComponent(shop)}`;
+    if (useManualToken) {
+      if (!shopifyAccessToken) {
+        toast({
+          title: "Access Token Required",
+          description: "Please enter your Shopify Admin API Access Token.",
+          variant: "destructive",
+        });
+        return;
+      }
+      const shop = `${storeName}.myshopify.com`;
+      manualConnectMutation.mutate({ storeDomain: shop, accessToken: shopifyAccessToken });
+    } else {
+      const shop = `${storeName}.myshopify.com`;
+      window.location.href = `/api/shopify/install?shop=${encodeURIComponent(shop)}`;
+    }
   };
 
   const disconnectShopifyMutation = useMutation({
@@ -364,7 +402,7 @@ export default function Integrations() {
           <DialogHeader>
             <DialogTitle>Connect Shopify Store</DialogTitle>
             <DialogDescription>
-              Enter your Shopify store domain to connect and start syncing orders.
+              Enter your Shopify store details to connect and start syncing orders.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -384,6 +422,20 @@ export default function Integrations() {
                 Enter your store name without the .myshopify.com part
               </p>
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="accessToken">Admin API Access Token</Label>
+              <Input
+                id="accessToken"
+                type="password"
+                placeholder="shpat_xxxxxxxxxx"
+                value={shopifyAccessToken}
+                onChange={(e) => setShopifyAccessToken(e.target.value)}
+                data-testid="input-shopify-token"
+              />
+              <p className="text-xs text-muted-foreground">
+                Get this from your Shopify Admin → Settings → Apps → Develop apps → Create an app → Configure Admin API scopes (read_orders) → Install app → Reveal token
+              </p>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsShopifyDialogOpen(false)}>
@@ -391,10 +443,10 @@ export default function Integrations() {
             </Button>
             <Button
               onClick={handleConnectShopify}
-              disabled={!shopifyStoreDomain}
+              disabled={!shopifyStoreDomain || !shopifyAccessToken || manualConnectMutation.isPending}
               data-testid="button-confirm-shopify"
             >
-              Connect Store
+              {manualConnectMutation.isPending ? "Connecting..." : "Connect Store"}
             </Button>
           </DialogFooter>
         </DialogContent>
