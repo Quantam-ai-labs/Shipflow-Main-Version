@@ -38,7 +38,9 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import type { Order } from "@shared/schema";
 import { Link } from "wouter";
 import { format } from "date-fns";
@@ -93,6 +95,7 @@ interface OrdersResponse {
 }
 
 export default function Orders() {
+  const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [courierFilter, setCourierFilter] = useState("all");
@@ -109,6 +112,30 @@ export default function Orders() {
 
   const { data, isLoading, refetch } = useQuery<OrdersResponse>({
     queryKey: ["/api/orders", queryParams.toString()],
+    refetchInterval: 30000, // Auto-refresh every 30 seconds
+  });
+
+  // Sync orders from Shopify
+  const syncOrdersMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/integrations/shopify/sync", {});
+      return res.json() as Promise<{ synced: number; message: string }>;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
+      toast({
+        title: "Orders synced",
+        description: data.message || `Successfully synced ${data.synced} orders`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Sync failed",
+        description: error?.message || "Could not sync orders. Please connect Shopify first.",
+        variant: "destructive",
+      });
+    },
   });
 
   const orders = data?.orders ?? [];
@@ -123,9 +150,15 @@ export default function Orders() {
           <p className="text-muted-foreground">Manage and track all your orders in one place.</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <Button variant="outline" size="sm" onClick={() => refetch()} data-testid="button-refresh-orders">
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Sync Orders
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => syncOrdersMutation.mutate()}
+            disabled={syncOrdersMutation.isPending}
+            data-testid="button-sync-orders"
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${syncOrdersMutation.isPending ? "animate-spin" : ""}`} />
+            {syncOrdersMutation.isPending ? "Syncing..." : "Sync Orders"}
           </Button>
           <Button variant="outline" size="sm" data-testid="button-export-orders">
             <Download className="w-4 h-4 mr-2" />

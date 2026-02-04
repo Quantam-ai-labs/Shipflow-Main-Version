@@ -99,6 +99,7 @@ export default function Shipments() {
 
   const { data, isLoading, refetch } = useQuery<ShipmentsResponse>({
     queryKey: ["/api/shipments", queryParams.toString()],
+    refetchInterval: 30000, // Auto-refresh every 30 seconds
   });
 
   const shipments = data?.shipments ?? [];

@@ -120,10 +120,12 @@ function getStatusBadge(status: string) {
 export default function Dashboard() {
   const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery<DashboardStats>({
     queryKey: ["/api/dashboard/stats"],
+    refetchInterval: 30000, // Auto-refresh every 30 seconds
   });
 
   const { data: recentOrders, isLoading: ordersLoading } = useQuery<RecentOrder[]>({
     queryKey: ["/api/orders/recent"],
+    refetchInterval: 30000, // Auto-refresh every 30 seconds
   });
 
   const handleRefresh = () => {
