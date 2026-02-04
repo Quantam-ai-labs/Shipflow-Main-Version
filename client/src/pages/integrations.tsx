@@ -78,33 +78,23 @@ export default function Integrations() {
     queryKey: ["/api/integrations"],
   });
 
-  const connectShopifyMutation = useMutation({
-    mutationFn: async (storeDomain: string) => {
-      return apiRequest("POST", "/api/integrations/shopify/connect", { storeDomain });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
-      setIsShopifyDialogOpen(false);
-      setShopifyStoreDomain("");
-      toast({
-        title: "Connected",
-        description: "Your Shopify store has been connected successfully!",
-      });
-    },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to connect Shopify store. Please try again.",
-        variant: "destructive",
-      });
-    },
-  });
-
   const handleConnectShopify = () => {
     if (!shopifyStoreDomain) return;
-    const shop = shopifyStoreDomain.includes('.myshopify.com') 
-      ? shopifyStoreDomain 
-      : `${shopifyStoreDomain}.myshopify.com`;
+    
+    // Validate store name (alphanumeric and hyphens only)
+    const storeNameRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]*$/;
+    const storeName = shopifyStoreDomain.replace('.myshopify.com', '').trim();
+    
+    if (!storeNameRegex.test(storeName)) {
+      toast({
+        title: "Invalid Store Name",
+        description: "Store name can only contain letters, numbers, and hyphens.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    const shop = `${storeName}.myshopify.com`;
     window.location.href = `/api/shopify/install?shop=${encodeURIComponent(shop)}`;
   };
 
@@ -295,7 +285,6 @@ export default function Integrations() {
               </p>
               <Button
                 onClick={() => setIsShopifyDialogOpen(true)}
-                disabled={connectShopifyMutation.isPending}
                 data-testid="button-connect-shopify"
               >
                 <Store className="w-4 h-4 mr-2" />
@@ -402,10 +391,10 @@ export default function Integrations() {
             </Button>
             <Button
               onClick={handleConnectShopify}
-              disabled={connectShopifyMutation.isPending || !shopifyStoreDomain}
+              disabled={!shopifyStoreDomain}
               data-testid="button-confirm-shopify"
             >
-              {connectShopifyMutation.isPending ? "Connecting..." : "Connect Store"}
+              Connect Store
             </Button>
           </DialogFooter>
         </DialogContent>

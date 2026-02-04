@@ -699,6 +699,13 @@ export async function registerRoutes(
       }
 
       const shopDomain = shop.includes('.myshopify.com') ? shop : `${shop}.myshopify.com`;
+      
+      // Validate shop domain format (must be valid Shopify store domain)
+      const shopDomainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com$/;
+      if (!shopDomainRegex.test(shopDomain)) {
+        return res.status(400).json({ message: "Invalid shop domain format" });
+      }
+
       const state = crypto.randomBytes(16).toString('hex');
 
       (req.session as any).shopifyState = state;
@@ -717,13 +724,39 @@ export async function registerRoutes(
       const { code, shop, state, hmac } = req.query;
 
       if (!code || !shop || !state) {
-        return res.status(400).send("Missing required parameters");
+        return res.redirect('/integrations?shopify=error&message=Missing+required+parameters');
       }
 
+      // Validate state to prevent CSRF attacks
       const savedState = req.session?.shopifyState;
       if (state !== savedState) {
         console.warn("State mismatch - potential CSRF attack", { received: state, expected: savedState });
+        return res.redirect('/integrations?shopify=error&message=Invalid+state+parameter');
       }
+
+      // Validate shop domain format
+      const shopDomainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com$/;
+      if (!shopDomainRegex.test(shop as string)) {
+        return res.redirect('/integrations?shopify=error&message=Invalid+shop+domain');
+      }
+
+      // Validate HMAC if provided (Shopify signs the callback)
+      if (hmac) {
+        const queryParams: Record<string, string> = {};
+        for (const [key, value] of Object.entries(req.query)) {
+          if (typeof value === 'string') {
+            queryParams[key] = value;
+          }
+        }
+        const isValid = shopifyService.validateHmac(queryParams);
+        if (!isValid) {
+          console.warn("HMAC validation failed");
+          return res.redirect('/integrations?shopify=error&message=Invalid+signature');
+        }
+      }
+
+      // Clear the state from session after validation
+      delete req.session.shopifyState;
 
       const { accessToken, scope } = await shopifyService.exchangeCodeForToken(shop as string, code as string);
 
