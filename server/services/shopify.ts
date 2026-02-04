@@ -141,12 +141,20 @@ export class ShopifyService {
 
     const url = `https://${shop}/admin/api/2024-01/orders.json?${queryParams.toString()}`;
     
-    const response = await fetch(url, {
-      headers: {
-        'X-Shopify-Access-Token': accessToken,
-        'Content-Type': 'application/json',
-      },
-    });
+    // Support both modern access tokens (shpat_...) and legacy API key/password (stored as key:pass)
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    if (accessToken.includes(':')) {
+      const [apiKey, apiPassword] = accessToken.split(':');
+      const credentials = Buffer.from(`${apiKey}:${apiPassword}`).toString('base64');
+      headers['Authorization'] = `Basic ${credentials}`;
+    } else {
+      headers['X-Shopify-Access-Token'] = accessToken;
+    }
+
+    const response = await fetch(url, { headers });
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -155,6 +163,37 @@ export class ShopifyService {
 
     const data: ShopifyOrdersResponse = await response.json();
     return data.orders;
+  }
+
+  async syncOrders(merchantId: string, shopDomain: string): Promise<{ synced: number; total: number }> {
+    const { storage } = await import('../storage');
+    const store = await storage.getShopifyStore(merchantId);
+    
+    if (!store || !store.isConnected || !store.accessToken) {
+      throw new Error("Shopify store is not connected or missing access token");
+    }
+
+    const shopifyOrders = await this.fetchOrders(shopDomain, store.accessToken);
+    let syncedCount = 0;
+
+    for (const shopifyOrder of shopifyOrders) {
+      // Check if order already exists to avoid duplicates
+      const existingOrder = await storage.getOrderByShopifyId(merchantId, String(shopifyOrder.id));
+      if (existingOrder) continue;
+
+      const transformedOrder = this.transformOrderForStorage(shopifyOrder);
+      await storage.createOrder({
+        ...transformedOrder,
+        merchantId,
+      });
+      syncedCount++;
+    }
+
+    // Refresh dashboard stats after sync
+    await storage.getDashboardStats(merchantId);
+
+    await storage.updateShopifyStore(store.id, { lastSyncAt: new Date() });
+    return { synced: syncedCount, total: shopifyOrders.length };
   }
 
   transformOrderForStorage(shopifyOrder: ShopifyOrder): {

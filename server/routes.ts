@@ -613,8 +613,12 @@ export async function registerRoutes(
         });
       }
 
-      // Trigger initial order sync
-      await syncShopifyOrders(merchantId, fullDomain);
+      // Trigger initial order sync using the proper service
+      if (shopifyService && typeof shopifyService.syncOrders === 'function') {
+        await shopifyService.syncOrders(merchantId, fullDomain);
+      } else {
+        await syncShopifyOrders(merchantId, fullDomain);
+      }
 
       res.json({ success: true, message: "Store connected successfully" });
     } catch (error) {
@@ -705,6 +709,13 @@ export async function registerRoutes(
         });
       }
 
+      // Trigger initial order sync using the proper service
+      if (shopifyService && typeof shopifyService.syncOrders === 'function') {
+        await shopifyService.syncOrders(merchantId, storeDomain);
+      } else {
+        await syncShopifyOrders(merchantId, storeDomain);
+      }
+
       res.json({ success: true, message: "Shopify store connected successfully" });
     } catch (error) {
       console.error("Error manually connecting Shopify:", error);
@@ -748,35 +759,17 @@ export async function registerRoutes(
         });
       }
 
-      const shopifyOrders = await shopifyService.fetchOrders(store.shopDomain!, store.accessToken, {
-        limit: 50,
-        status: 'any',
-      });
-
-      let syncedCount = 0;
-      for (const shopifyOrder of shopifyOrders) {
-        const existingOrder = await storage.getOrderByShopifyId(merchantId, String(shopifyOrder.id));
-        if (existingOrder) continue;
-
-        const orderData = shopifyService.transformOrderForStorage(shopifyOrder);
-        await storage.createOrder({
-          merchantId,
-          ...orderData,
-        });
-        syncedCount++;
-      }
-
-      await storage.updateShopifyStore(store.id, { lastSyncAt: new Date() });
-
+      // Otherwise use the real Shopify service
+      const result = await shopifyService.syncOrders(merchantId, store.shopDomain!);
       res.json({ 
         success: true, 
-        message: `Successfully synced ${syncedCount} new orders`,
-        synced: syncedCount,
-        total: shopifyOrders.length 
+        message: `Successfully synced ${result.synced} new orders`,
+        synced: result.synced,
+        total: result.total
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error syncing Shopify:", error);
-      res.status(500).json({ message: "Failed to sync Shopify" });
+      res.status(500).json({ message: error.message || "Failed to sync Shopify" });
     }
   });
 
