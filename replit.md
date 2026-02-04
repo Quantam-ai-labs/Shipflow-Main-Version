@@ -70,6 +70,28 @@ Preferred communication style: Simple, everyday language.
 
 **Auth is currently bypassed for development.** The app uses a demo user without requiring login. This will be re-enabled once all features are working correctly.
 
+## Recent Changes
+
+### Onboarding Wizard (February 2026)
+- Added `/onboarding` route with 3-step setup flow:
+  1. Connect Shopify - supports both access tokens and legacy API key/password
+  2. Setup Couriers - optional step to configure Leopards and PostEx credentials
+  3. Initial Sync - imports all historical orders from Shopify
+
+### Orders Page Enhancements
+- Complete redesign with all columns: Status, Order ID, City, Name, Phone, Address, Qty, Amount, Tags, Remarks 1-4
+- Month-wise filtering: Current Month, Last Month, Last 2/3 Months
+- Courier filtering: Leopards, PostEx, TCS
+- Universal shipment statuses: Pending, Booked, Dispatched, Arrived, Out for Delivery, Delivered, Failed, Reattempt, Returned
+- Inline remark editing with 4 remark columns for team collaboration
+
+### Backend Improvements
+- `GET /api/orders` supports search, status, courier, month filters with pagination
+- `PATCH /api/orders/:id/remark` for inline remark updates (tenant-isolated)
+- Shopify sync extracts customer data from shipping_address with fallbacks
+- Order metafields (hxs_courier_name, hxs_courier_tracking) captured during sync
+- Storage layer implements proper month filtering with date range cutoffs
+
 ## Courier API Integration Plan
 
 ### Leopards Courier API
