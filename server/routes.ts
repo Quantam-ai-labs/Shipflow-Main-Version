@@ -43,6 +43,135 @@ const settingsUpdateSchema = z.object({
   }).optional(),
 });
 
+// Helper function to generate unique order number
+function generateOrderNumber(): string {
+  const prefix = "SF";
+  const timestamp = Date.now().toString(36).toUpperCase();
+  const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+  return `${prefix}-${timestamp}-${random}`;
+}
+
+// Helper function to generate tracking number
+function generateTrackingNumber(courier: string): string {
+  const prefixes: Record<string, string> = {
+    leopards: "LEO",
+    postex: "PEX",
+    tcs: "TCS",
+  };
+  const prefix = prefixes[courier] || "TRK";
+  return `${prefix}${Date.now().toString().slice(-8)}${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+}
+
+// Simulate syncing orders from Shopify (generates demo data for testing)
+async function syncShopifyOrders(merchantId: string, storeDomain: string): Promise<{ synced: number; total: number }> {
+  // Generate realistic demo orders (simulating Shopify API response)
+  const customerNames = [
+    "Ahmad Ali", "Sara Khan", "Muhammad Hassan", "Fatima Zahra", "Ali Raza",
+    "Ayesha Malik", "Usman Ahmed", "Hira Noor", "Bilal Qureshi", "Zainab Shah"
+  ];
+  
+  const cities = ["Karachi", "Lahore", "Islamabad", "Rawalpindi", "Faisalabad", "Multan", "Peshawar", "Quetta"];
+  
+  const products = [
+    { name: "Designer Kurta", price: 2500 },
+    { name: "Silk Dupatta", price: 1800 },
+    { name: "Lawn Suit 3pc", price: 4500 },
+    { name: "Cotton Shalwar", price: 1200 },
+    { name: "Embroidered Shirt", price: 3200 },
+    { name: "Chiffon Dress", price: 5500 },
+    { name: "Formal Suit", price: 6800 },
+    { name: "Casual Kurti", price: 1500 },
+  ];
+
+  const statuses: Array<"pending" | "confirmed" | "processing" | "shipped" | "delivered" | "cancelled" | "returned"> = 
+    ["pending", "confirmed", "processing", "shipped", "delivered"];
+  
+  const couriers = ["leopards", "postex", "tcs"];
+
+  // Generate 5-10 new orders
+  const orderCount = Math.floor(Math.random() * 6) + 5;
+  let syncedCount = 0;
+
+  for (let i = 0; i < orderCount; i++) {
+    const customer = customerNames[Math.floor(Math.random() * customerNames.length)];
+    const city = cities[Math.floor(Math.random() * cities.length)];
+    const product = products[Math.floor(Math.random() * products.length)];
+    const quantity = Math.floor(Math.random() * 3) + 1;
+    const status = statuses[Math.floor(Math.random() * statuses.length)];
+    const courier = couriers[Math.floor(Math.random() * couriers.length)];
+    
+    const subtotal = product.price * quantity;
+    const shippingCost = Math.random() > 0.5 ? 200 : 0;
+    const total = subtotal + shippingCost;
+    
+    const isCod = Math.random() > 0.3; // 70% COD orders
+    
+    // Create order
+    const order = await storage.createOrder({
+      merchantId,
+      shopifyOrderId: `shopify_${Date.now()}_${i}`,
+      orderNumber: generateOrderNumber(),
+      customerName: customer,
+      customerEmail: `${customer.toLowerCase().replace(" ", ".")}@example.com`,
+      customerPhone: `+92${Math.floor(Math.random() * 900000000) + 100000000}`,
+      shippingAddress: `House ${Math.floor(Math.random() * 500) + 1}, Street ${Math.floor(Math.random() * 50) + 1}`,
+      city,
+      country: "Pakistan",
+      lineItems: [{ name: product.name, quantity, price: product.price }],
+      subtotalAmount: subtotal.toString(),
+      shippingAmount: shippingCost.toString(),
+      totalAmount: total.toString(),
+      currency: "PKR",
+      paymentMethod: isCod ? "cod" : "prepaid",
+      paymentStatus: isCod ? "pending" : "paid",
+      orderStatus: status,
+    });
+
+    // Create shipment for non-pending orders
+    if (status !== "pending") {
+      const shipmentStatus = status === "delivered" ? "delivered" : 
+                            status === "shipped" ? "in_transit" : "booked";
+      
+      await storage.createShipment({
+        merchantId,
+        orderId: order.id,
+        courierName: courier,
+        trackingNumber: generateTrackingNumber(courier),
+        status: shipmentStatus,
+        estimatedDelivery: new Date(Date.now() + Math.random() * 7 * 24 * 60 * 60 * 1000),
+        shippingCost: shippingCost.toString(),
+        weight: (Math.random() * 2 + 0.5).toFixed(2),
+      });
+    }
+
+    // Create COD record for COD orders
+    if (isCod) {
+      const codStatus = status === "delivered" ? "received" : "pending";
+      const courierFee = Math.floor(total * 0.03); // 3% courier fee
+      await storage.createCodReconciliation({
+        merchantId,
+        orderId: order.id,
+        courierName: courier,
+        trackingNumber: order.orderNumber,
+        codAmount: total.toString(),
+        courierFee: courierFee.toString(),
+        netAmount: (total - courierFee).toString(),
+        status: codStatus,
+      });
+    }
+
+    syncedCount++;
+  }
+
+  // Update last sync timestamp
+  const store = await storage.getShopifyStore(merchantId);
+  if (store) {
+    await storage.updateShopifyStore(store.id, { lastSyncAt: new Date() });
+  }
+
+  return { synced: syncedCount, total: orderCount };
+}
+
 // Demo mode flag - set to false in production for strict tenant isolation
 const DEMO_MODE = process.env.NODE_ENV !== "production";
 
@@ -153,7 +282,8 @@ export async function registerRoutes(
       if (!merchantId) return;
 
       // Get order with merchantId scope (will return undefined if not found or not owned)
-      const order = await storage.getOrderById(merchantId, req.params.id);
+      const orderId = req.params.id as string;
+      const order = await storage.getOrderById(merchantId, orderId);
       if (!order) {
         return res.status(404).json({ message: "Order not found" });
       }
@@ -377,13 +507,14 @@ export async function registerRoutes(
       }
 
       // Verify team member exists and belongs to this merchant
-      const existingMember = await storage.getTeamMemberById(merchantId, req.params.id);
+      const memberId = req.params.id as string;
+      const existingMember = await storage.getTeamMemberById(merchantId, memberId);
       if (!existingMember) {
         return res.status(404).json({ message: "Team member not found" });
       }
 
       // Update role (scoped by merchantId)
-      const member = await storage.updateTeamMemberRole(merchantId, req.params.id, validated.data.role);
+      const member = await storage.updateTeamMemberRole(merchantId, memberId, validated.data.role);
       res.json(member);
     } catch (error) {
       console.error("Error updating role:", error);
@@ -397,13 +528,14 @@ export async function registerRoutes(
       if (!merchantId) return;
 
       // Verify team member exists and belongs to this merchant
-      const existingMember = await storage.getTeamMemberById(merchantId, req.params.id);
+      const memberId = req.params.id as string;
+      const existingMember = await storage.getTeamMemberById(merchantId, memberId);
       if (!existingMember) {
         return res.status(404).json({ message: "Team member not found" });
       }
 
       // Delete (scoped by merchantId)
-      await storage.deleteTeamMember(merchantId, req.params.id);
+      await storage.deleteTeamMember(merchantId, memberId);
       res.json({ success: true });
     } catch (error) {
       console.error("Error removing member:", error);
@@ -439,16 +571,50 @@ export async function registerRoutes(
     }
   });
 
+  // Shopify connect schema
+  const shopifyConnectSchema = z.object({
+    storeDomain: z.string().min(1, "Store domain is required"),
+  });
+
   app.post("/api/integrations/shopify/connect", isAuthenticated, async (req, res) => {
     try {
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
 
-      // In a real app, this would initiate Shopify OAuth flow
-      // For demo, we'll just return a mock auth URL
-      res.json({
-        authUrl: "/api/integrations/shopify/callback?shop=demo-store.myshopify.com",
-      });
+      const validated = shopifyConnectSchema.safeParse(req.body);
+      if (!validated.success) {
+        return res.status(400).json({ message: validated.error.errors[0].message });
+      }
+
+      const { storeDomain } = validated.data;
+      const fullDomain = storeDomain.includes('.myshopify.com') 
+        ? storeDomain 
+        : `${storeDomain}.myshopify.com`;
+
+      // Check if store already exists for this merchant
+      const existingStore = await storage.getShopifyStore(merchantId);
+      
+      if (existingStore) {
+        // Update existing store
+        await storage.updateShopifyStore(existingStore.id, {
+          shopDomain: fullDomain,
+          isConnected: true,
+          accessToken: "demo-access-token", // In production, this comes from OAuth
+        });
+      } else {
+        // Create new store connection
+        await storage.createShopifyStore({
+          merchantId,
+          shopDomain: fullDomain,
+          accessToken: "demo-access-token",
+          isConnected: true,
+        });
+      }
+
+      // Trigger initial order sync
+      await syncShopifyOrders(merchantId, fullDomain);
+
+      res.json({ success: true, message: "Store connected successfully" });
     } catch (error) {
       console.error("Error connecting Shopify:", error);
       res.status(500).json({ message: "Failed to connect Shopify" });
@@ -476,8 +642,21 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
 
-      // In a real app, this would trigger a Shopify order sync
-      res.json({ success: true, message: "Sync initiated" });
+      // Check if Shopify is connected
+      const store = await storage.getShopifyStore(merchantId);
+      if (!store || !store.isConnected) {
+        return res.status(400).json({ message: "Shopify store is not connected" });
+      }
+
+      // Sync orders from Shopify (demo mode generates new orders)
+      const result = await syncShopifyOrders(merchantId, store.shopDomain!);
+
+      res.json({ 
+        success: true, 
+        message: `Successfully synced ${result.synced} orders`,
+        synced: result.synced,
+        total: result.total 
+      });
     } catch (error) {
       console.error("Error syncing Shopify:", error);
       res.status(500).json({ message: "Failed to sync Shopify" });

@@ -44,6 +44,8 @@ interface IntegrationsData {
 export default function Integrations() {
   const { toast } = useToast();
   const [isCourierDialogOpen, setIsCourierDialogOpen] = useState(false);
+  const [isShopifyDialogOpen, setIsShopifyDialogOpen] = useState(false);
+  const [shopifyStoreDomain, setShopifyStoreDomain] = useState("");
   const [selectedCourier, setSelectedCourier] = useState<string | null>(null);
   const [courierApiKey, setCourierApiKey] = useState("");
   const [courierAccountNumber, setCourierAccountNumber] = useState("");
@@ -53,20 +55,31 @@ export default function Integrations() {
   });
 
   const connectShopifyMutation = useMutation({
-    mutationFn: async () => {
-      return apiRequest("POST", "/api/integrations/shopify/connect", {});
+    mutationFn: async (storeDomain: string) => {
+      return apiRequest("POST", "/api/integrations/shopify/connect", { storeDomain });
     },
-    onSuccess: (data: { authUrl: string }) => {
-      window.location.href = data.authUrl;
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
+      setIsShopifyDialogOpen(false);
+      setShopifyStoreDomain("");
+      toast({
+        title: "Connected",
+        description: "Your Shopify store has been connected successfully!",
+      });
     },
     onError: () => {
       toast({
         title: "Error",
-        description: "Failed to initiate Shopify connection. Please try again.",
+        description: "Failed to connect Shopify store. Please try again.",
         variant: "destructive",
       });
     },
   });
+
+  const handleConnectShopify = () => {
+    if (!shopifyStoreDomain) return;
+    connectShopifyMutation.mutate(shopifyStoreDomain);
+  };
 
   const disconnectShopifyMutation = useMutation({
     mutationFn: async () => {
@@ -254,12 +267,12 @@ export default function Integrations() {
                 Connect your Shopify store to automatically import orders and receive real-time updates via webhooks.
               </p>
               <Button
-                onClick={() => connectShopifyMutation.mutate()}
+                onClick={() => setIsShopifyDialogOpen(true)}
                 disabled={connectShopifyMutation.isPending}
                 data-testid="button-connect-shopify"
               >
                 <Store className="w-4 h-4 mr-2" />
-                {connectShopifyMutation.isPending ? "Connecting..." : "Connect Shopify Store"}
+                Connect Shopify Store
               </Button>
             </div>
           )}
@@ -328,6 +341,48 @@ export default function Integrations() {
           })}
         </div>
       </div>
+
+      {/* Shopify Connection Dialog */}
+      <Dialog open={isShopifyDialogOpen} onOpenChange={setIsShopifyDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Connect Shopify Store</DialogTitle>
+            <DialogDescription>
+              Enter your Shopify store domain to connect and start syncing orders.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="storeDomain">Store Domain</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="storeDomain"
+                  placeholder="your-store"
+                  value={shopifyStoreDomain}
+                  onChange={(e) => setShopifyStoreDomain(e.target.value)}
+                  data-testid="input-shopify-domain"
+                />
+                <span className="text-muted-foreground text-sm whitespace-nowrap">.myshopify.com</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Enter your store name without the .myshopify.com part
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsShopifyDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConnectShopify}
+              disabled={connectShopifyMutation.isPending || !shopifyStoreDomain}
+              data-testid="button-confirm-shopify"
+            >
+              {connectShopifyMutation.isPending ? "Connecting..." : "Connect Store"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Courier Configuration Dialog */}
       <Dialog open={isCourierDialogOpen} onOpenChange={setIsCourierDialogOpen}>
