@@ -45,6 +45,7 @@ export interface IStorage {
   // Orders - All scoped by merchantId
   getOrders(merchantId: string, options?: { search?: string; status?: string; page?: number; pageSize?: number }): Promise<{ orders: Order[]; total: number }>;
   getOrderById(merchantId: string, id: string): Promise<Order | undefined>;
+  getOrderByShopifyId(merchantId: string, shopifyOrderId: string): Promise<Order | undefined>;
   getRecentOrders(merchantId: string, limit?: number): Promise<Order[]>;
   createOrder(order: InsertOrder): Promise<Order>;
   updateOrder(merchantId: string, id: string, data: Partial<InsertOrder>): Promise<Order | undefined>;
@@ -209,6 +210,12 @@ export class DatabaseStorage implements IStorage {
   async getOrderById(merchantId: string, id: string): Promise<Order | undefined> {
     const [order] = await db.select().from(orders)
       .where(and(eq(orders.id, id), eq(orders.merchantId, merchantId)));
+    return order;
+  }
+
+  async getOrderByShopifyId(merchantId: string, shopifyOrderId: string): Promise<Order | undefined> {
+    const [order] = await db.select().from(orders)
+      .where(and(eq(orders.shopifyOrderId, shopifyOrderId), eq(orders.merchantId, merchantId)));
     return order;
   }
 

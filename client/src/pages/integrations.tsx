@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +26,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Label } from "@/components/ui/label";
 import { SiShopify } from "react-icons/si";
+import { useLocation, useSearch } from "wouter";
 
 interface IntegrationsData {
   shopify: {
@@ -43,12 +44,35 @@ interface IntegrationsData {
 
 export default function Integrations() {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
+  const searchString = useSearch();
   const [isCourierDialogOpen, setIsCourierDialogOpen] = useState(false);
   const [isShopifyDialogOpen, setIsShopifyDialogOpen] = useState(false);
   const [shopifyStoreDomain, setShopifyStoreDomain] = useState("");
   const [selectedCourier, setSelectedCourier] = useState<string | null>(null);
   const [courierApiKey, setCourierApiKey] = useState("");
   const [courierAccountNumber, setCourierAccountNumber] = useState("");
+
+  useEffect(() => {
+    const params = new URLSearchParams(searchString);
+    const shopifyStatus = params.get('shopify');
+    
+    if (shopifyStatus === 'connected') {
+      toast({
+        title: "Shopify Connected!",
+        description: "Your Shopify store has been connected successfully. You can now sync orders.",
+      });
+      setLocation('/integrations', { replace: true });
+    } else if (shopifyStatus === 'error') {
+      const message = params.get('message') || 'An error occurred while connecting to Shopify';
+      toast({
+        title: "Connection Failed",
+        description: message,
+        variant: "destructive",
+      });
+      setLocation('/integrations', { replace: true });
+    }
+  }, [searchString, toast, setLocation]);
 
   const { data, isLoading } = useQuery<IntegrationsData>({
     queryKey: ["/api/integrations"],
@@ -78,7 +102,10 @@ export default function Integrations() {
 
   const handleConnectShopify = () => {
     if (!shopifyStoreDomain) return;
-    connectShopifyMutation.mutate(shopifyStoreDomain);
+    const shop = shopifyStoreDomain.includes('.myshopify.com') 
+      ? shopifyStoreDomain 
+      : `${shopifyStoreDomain}.myshopify.com`;
+    window.location.href = `/api/shopify/install?shop=${encodeURIComponent(shop)}`;
   };
 
   const disconnectShopifyMutation = useMutation({

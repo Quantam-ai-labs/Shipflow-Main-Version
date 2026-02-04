@@ -3,6 +3,8 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { z } from "zod";
+import crypto from "crypto";
+import { shopifyService } from "./services/shopify";
 
 // Zod schemas for validation
 const remarkSchema = z.object({
@@ -642,24 +644,132 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
 
-      // Check if Shopify is connected
       const store = await storage.getShopifyStore(merchantId);
       if (!store || !store.isConnected) {
         return res.status(400).json({ message: "Shopify store is not connected" });
       }
 
-      // Sync orders from Shopify (demo mode generates new orders)
-      const result = await syncShopifyOrders(merchantId, store.shopDomain!);
+      if (!store.accessToken || store.accessToken === "demo-access-token") {
+        const result = await syncShopifyOrders(merchantId, store.shopDomain!);
+        return res.json({ 
+          success: true, 
+          message: `Successfully synced ${result.synced} orders (demo mode)`,
+          synced: result.synced,
+          total: result.total 
+        });
+      }
+
+      const shopifyOrders = await shopifyService.fetchOrders(store.shopDomain!, store.accessToken, {
+        limit: 50,
+        status: 'any',
+      });
+
+      let syncedCount = 0;
+      for (const shopifyOrder of shopifyOrders) {
+        const existingOrder = await storage.getOrderByShopifyId(merchantId, String(shopifyOrder.id));
+        if (existingOrder) continue;
+
+        const orderData = shopifyService.transformOrderForStorage(shopifyOrder);
+        await storage.createOrder({
+          merchantId,
+          ...orderData,
+        });
+        syncedCount++;
+      }
+
+      await storage.updateShopifyStore(store.id, { lastSyncAt: new Date() });
 
       res.json({ 
         success: true, 
-        message: `Successfully synced ${result.synced} orders`,
-        synced: result.synced,
-        total: result.total 
+        message: `Successfully synced ${syncedCount} new orders`,
+        synced: syncedCount,
+        total: shopifyOrders.length 
       });
     } catch (error) {
       console.error("Error syncing Shopify:", error);
       res.status(500).json({ message: "Failed to sync Shopify" });
+    }
+  });
+
+  app.get("/api/shopify/install", async (req, res) => {
+    try {
+      const { shop } = req.query;
+      if (!shop || typeof shop !== 'string') {
+        return res.status(400).json({ message: "Shop parameter is required" });
+      }
+
+      const shopDomain = shop.includes('.myshopify.com') ? shop : `${shop}.myshopify.com`;
+      const state = crypto.randomBytes(16).toString('hex');
+
+      (req.session as any).shopifyState = state;
+      (req.session as any).shopDomain = shopDomain;
+
+      const installUrl = shopifyService.getInstallUrl(shopDomain, state);
+      res.redirect(installUrl);
+    } catch (error) {
+      console.error("Error initiating Shopify install:", error);
+      res.status(500).json({ message: "Failed to initiate Shopify install" });
+    }
+  });
+
+  app.get("/api/shopify/callback", async (req: any, res) => {
+    try {
+      const { code, shop, state, hmac } = req.query;
+
+      if (!code || !shop || !state) {
+        return res.status(400).send("Missing required parameters");
+      }
+
+      const savedState = req.session?.shopifyState;
+      if (state !== savedState) {
+        console.warn("State mismatch - potential CSRF attack", { received: state, expected: savedState });
+      }
+
+      const { accessToken, scope } = await shopifyService.exchangeCodeForToken(shop as string, code as string);
+
+      const userId = req.user?.claims?.sub;
+      let merchantId: string | null = null;
+
+      if (userId) {
+        merchantId = await storage.getUserMerchantId(userId);
+      }
+
+      if (!merchantId) {
+        const demoMerchant = await storage.getMerchantBySlug("demo-fashion");
+        merchantId = demoMerchant?.id || null;
+      }
+
+      if (!merchantId) {
+        return res.status(400).send("No merchant found. Please create a merchant account first.");
+      }
+
+      const existingStore = await storage.getShopifyStore(merchantId);
+      
+      if (existingStore) {
+        await storage.updateShopifyStore(existingStore.id, {
+          shopDomain: shop as string,
+          accessToken,
+          scopes: scope,
+          isConnected: true,
+          lastSyncAt: new Date(),
+        });
+      } else {
+        await storage.createShopifyStore({
+          merchantId,
+          shopDomain: shop as string,
+          accessToken,
+          scopes: scope,
+          isConnected: true,
+        });
+      }
+
+      delete req.session.shopifyState;
+      delete req.session.shopDomain;
+
+      res.redirect('/integrations?shopify=connected');
+    } catch (error) {
+      console.error("Error in Shopify callback:", error);
+      res.redirect('/integrations?shopify=error&message=' + encodeURIComponent(String(error)));
     }
   });
 

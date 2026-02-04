@@ -40,3 +40,9 @@ waitForPort = 5000
 
 [agent]
 integrations = ["javascript_database:1.0.0", "javascript_log_in_with_replit:2.0.0"]
+
+[userenv]
+
+[userenv.shared]
+SHOPIFY_CLIENT_ID = "278e5818e8675db69d1cbb46eea2a420"
+SHOPIFY_APP_URL = "https://lala-logistics.replit.app"
