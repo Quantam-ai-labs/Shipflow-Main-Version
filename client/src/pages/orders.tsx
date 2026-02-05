@@ -111,7 +111,7 @@ export default function Orders() {
   const [courierFilter, setCourierFilter] = useState("all");
   const [monthFilter, setMonthFilter] = useState("all");
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(50);
+  const [pageSize] = useState(200);
   
   const [remarkDialogOpen, setRemarkDialogOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -372,7 +372,7 @@ export default function Orders() {
                 <th className="text-left p-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Address</th>
                 <th className="text-center p-2 w-[50px] text-xs font-semibold uppercase tracking-wide text-muted-foreground">Qty</th>
                 <th className="text-right p-2 w-[90px] text-xs font-semibold uppercase tracking-wide text-muted-foreground">Amount</th>
-                <th className="text-left p-2 w-[100px] text-xs font-semibold uppercase tracking-wide text-muted-foreground">Courier</th>
+                <th className="text-left p-2 w-[140px] text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tags</th>
                 <th className="text-left p-2 w-[160px] text-xs font-semibold uppercase tracking-wide text-muted-foreground">Remark</th>
                 <th className="w-[40px]"></th>
               </tr>
@@ -428,13 +428,19 @@ export default function Orders() {
                       {Number(order.totalAmount).toLocaleString()}
                     </td>
                     <td className="p-2">
-                      {order.courierName ? (
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs">{order.courierName.replace(" Courier", "")}</span>
-                          {order.courierTracking && (
-                            <span className="text-[10px] text-muted-foreground font-mono">
-                              {order.courierTracking.slice(0, 8)}...
-                            </span>
+                      {order.tags && order.tags.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {order.tags.slice(0, 2).map((tag, i) => (
+                            <Badge 
+                              key={`${order.id}-tag-${i}`} 
+                              variant="secondary" 
+                              className="text-[10px] py-0 px-1.5 font-normal"
+                            >
+                              {tag}
+                            </Badge>
+                          ))}
+                          {order.tags.length > 2 && (
+                            <span className="text-[10px] text-muted-foreground">+{order.tags.length - 2}</span>
                           )}
                         </div>
                       ) : (
