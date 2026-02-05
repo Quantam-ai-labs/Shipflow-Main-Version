@@ -32,25 +32,44 @@ export interface TrackingResult {
 }
 
 const STATUS_MAP: Record<string, string> = {
-  'Booked': 'booked',
-  'Picked Up': 'dispatched',
-  'Arrived at Origin': 'dispatched',
-  'In Transit': 'dispatched',
-  'Arrived at Destination': 'arrived',
-  'Out for Delivery': 'out_for_delivery',
-  'Delivered': 'delivered',
-  'Delivery Failed': 'failed',
-  'Re-Attempt': 'reattempt',
-  'Returned': 'returned',
-  'Return In Transit': 'returned',
+  'booked': 'booked',
+  'picked up': 'dispatched',
+  'picked': 'dispatched',
+  'arrived at origin': 'dispatched',
+  'in transit': 'dispatched',
+  'at transit hub': 'dispatched',
+  'arrived at destination': 'arrived',
+  'arrived': 'arrived',
+  'out for delivery': 'out_for_delivery',
+  'out': 'out_for_delivery',
+  'delivered': 'delivered',
+  'delivery failed': 'failed',
+  'failed': 'failed',
+  'attempt': 'reattempt',
+  're-attempt': 'reattempt',
+  'reattempt': 'reattempt',
+  'returned': 'returned',
+  'return': 'returned',
+  'pending': 'booked',
+  'shipment created': 'booked',
 };
 
 function mapLeopardsStatus(courierStatus: string): string {
+  const status = courierStatus.toLowerCase().trim();
+  
+  // Direct match first
+  if (STATUS_MAP[status]) {
+    return STATUS_MAP[status];
+  }
+  
+  // Partial match
   for (const [key, value] of Object.entries(STATUS_MAP)) {
-    if (courierStatus.toLowerCase().includes(key.toLowerCase())) {
+    if (status.includes(key)) {
       return value;
     }
   }
+  
+  console.log(`[Leopards] Unknown status: ${courierStatus}`);
   return 'booked';
 }
 
@@ -60,9 +79,8 @@ export class LeopardsService {
   private apiPassword: string;
 
   constructor() {
-    this.baseUrl = process.env.NODE_ENV === 'production'
-      ? 'https://merchantapi.leopardscourier.com/api'
-      : 'https://merchantapistaging.leopardscourier.com/api';
+    // Always use production URL since we have production credentials
+    this.baseUrl = 'https://merchantapi.leopardscourier.com/api';
     this.apiKey = process.env.LEOPARDS_API_KEY || '';
     this.apiPassword = process.env.LEOPARDS_API_PASSWORD || '';
   }
