@@ -77,7 +77,7 @@ export default function Analytics() {
   const [dateRange, setDateRange] = useState("30d");
 
   const { data, isLoading } = useQuery<AnalyticsData>({
-    queryKey: ["/api/analytics", dateRange],
+    queryKey: [`/api/analytics?dateRange=${dateRange}`],
   });
 
   const overview = data?.overview;
