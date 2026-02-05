@@ -193,7 +193,14 @@ export default function Orders() {
   const totalPages = Math.ceil((data?.total || 0) / pageSize);
   
   // Check if customer data is missing (shows warning banner)
-  const missingCustomerData = orders.length > 0 && orders.filter(o => o.customerName === "Unknown").length > orders.length * 0.5;
+  // Count orders with missing customer info (Unknown, null, empty, or N/A)
+  const missingCustomerCount = orders.filter(o => 
+    !o.customerName || 
+    o.customerName === "Unknown" || 
+    o.customerName === "N/A" || 
+    o.customerName.trim() === ""
+  ).length;
+  const missingCustomerData = orders.length >= 5 && missingCustomerCount > orders.length * 0.5;
 
   // Group orders by month
   const ordersByMonth = orders.reduce((acc, order) => {
@@ -235,7 +242,7 @@ export default function Orders() {
     <div className="space-y-6">
       {/* Warning Banner for Missing Customer Data */}
       {missingCustomerData && (
-        <div className="p-4 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg">
+        <div className="p-4 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg" data-testid="banner-missing-customer-data">
           <div className="flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
             <div>
@@ -244,10 +251,13 @@ export default function Orders() {
               </p>
               <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
                 Your Shopify access token may not have the required permissions to access customer information (names, addresses, phones). 
-                To fix this, create a new Custom App in Shopify Admin with the <strong>read_customers</strong> scope enabled, 
-                then reconnect your store in{" "}
-                <Link href="/integrations" className="underline font-medium">Integrations</Link>.
+                To fix this:
               </p>
+              <ol className="text-sm text-amber-700 dark:text-amber-300 mt-2 list-decimal list-inside space-y-1">
+                <li>Create a new Custom App in Shopify Admin with the <strong>read_customers</strong> scope enabled</li>
+                <li>Go to{" "}<Link href="/integrations" className="underline font-medium" data-testid="link-integrations">Integrations</Link>{" "}and click "Update Token"</li>
+                <li>Re-sync your orders to get complete customer data</li>
+              </ol>
             </div>
           </div>
         </div>
