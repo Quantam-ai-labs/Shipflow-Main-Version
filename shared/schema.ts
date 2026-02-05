@@ -116,11 +116,11 @@ export const orders = pgTable("orders", {
   merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
   shopifyOrderId: varchar("shopify_order_id", { length: 100 }),
   orderNumber: varchar("order_number", { length: 50 }).notNull(),
-  customerName: varchar("customer_name", { length: 255 }).notNull(),
+  customerName: varchar("customer_name", { length: 500 }).notNull(),
   customerEmail: varchar("customer_email", { length: 255 }),
   customerPhone: varchar("customer_phone", { length: 30 }),
   shippingAddress: text("shipping_address"),
-  city: varchar("city", { length: 100 }),
+  city: varchar("city", { length: 255 }),
   province: varchar("province", { length: 100 }),
   postalCode: varchar("postal_code", { length: 20 }),
   country: varchar("country", { length: 100 }).default("Pakistan"),
@@ -137,8 +137,8 @@ export const orders = pgTable("orders", {
   totalQuantity: integer("total_quantity").default(1),
   tags: text("tags").array(),
   notes: text("notes"),
-  courierName: varchar("courier_name", { length: 100 }), // From Shopify note_attributes (hxs_courier_name)
-  courierTracking: varchar("courier_tracking", { length: 100 }), // From Shopify note_attributes (hxs_courier_tracking)
+  courierName: varchar("courier_name", { length: 255 }), // From Shopify note_attributes (hxs_courier_name)
+  courierTracking: varchar("courier_tracking", { length: 255 }), // From Shopify note_attributes (hxs_courier_tracking)
   shipmentStatus: varchar("shipment_status", { length: 50 }).default("pending"), // Universal: pending, booked, dispatched, arrived, out_for_delivery, delivered, failed, reattempt, returned
   remark: text("remark"), // Single remark field for team notes
   landingSite: text("landing_site"), // UTM: landing page URL

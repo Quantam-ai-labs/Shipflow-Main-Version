@@ -92,10 +92,33 @@ Preferred communication style: Simple, everyday language.
 - Order metafields (hxs_courier_name, hxs_courier_tracking) captured during sync
 - Storage layer implements proper month filtering with date range cutoffs
 
+## Customer Data Extraction (February 2026)
+
+### How Customer Data Works
+ShipFlow extracts customer data from Shopify orders in this priority:
+1. **shipping_address** fields (name, phone, city, address) - standard Shopify
+2. **billing_address** fields - fallback
+3. **customer** object fields - fallback  
+4. **note_attributes** array - **CRITICAL for custom checkout forms**
+
+### Custom Checkout Forms (note_attributes)
+Many Pakistani Shopify stores use custom checkout apps that store customer data in `note_attributes` instead of standard address fields. ShipFlow extracts:
+- `First Name` / `Last Name` → customerName
+- `Mobile Number | موبائل نمبر` → customerPhone  
+- `Full Address | پورا ایڈریس درج کریں` → shippingAddress
+- `City | اپنا شہر درج کریں` → city
+- `hxs_courier_name` / `hxs_courier_tracking` → courierName, courierTracking
+
+### Data Statistics
+- ~7,337 orders have complete customer data (from note_attributes)
+- ~15,357 orders show "Unknown" (older orders before custom checkout was implemented)
+
 ## Shopify Permissions Troubleshooting
 
 ### Missing Customer Data Issue
-If customer names, addresses, and phones show as "Unknown" or empty, the issue is **Shopify access token permissions**. The Shopify API will mask/redact customer PII if the access token doesn't have proper scopes.
+If customer names show as "Unknown" for ALL orders, check:
+1. Is the store using a custom checkout form with note_attributes?
+2. Are Shopify access token permissions correct?
 
 ### Required Shopify Admin API Scopes
 When creating a Custom App in Shopify Admin, ensure these scopes are enabled:
