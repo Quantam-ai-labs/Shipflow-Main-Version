@@ -466,8 +466,35 @@ export class ShopifyService {
     const customer = shopifyOrder.customer;
     const shippingAddr = shopifyOrder.shipping_address;
     const billingAddr = shopifyOrder.billing_address;
+    
+    // Helper to extract value from note_attributes by name patterns
+    // (supports both English and Urdu labels used by custom checkout forms)
+    const getNoteAttribute = (patterns: string[]): string | null => {
+      if (!shopifyOrder.note_attributes || !Array.isArray(shopifyOrder.note_attributes)) {
+        return null;
+      }
+      for (const attr of shopifyOrder.note_attributes) {
+        const name = attr.name?.toLowerCase() || '';
+        for (const pattern of patterns) {
+          if (name.includes(pattern.toLowerCase())) {
+            return attr.value?.trim() || null;
+          }
+        }
+      }
+      return null;
+    };
+    
+    // Extract customer data from note_attributes (used by custom checkout forms)
+    const noteFirstName = getNoteAttribute(['first name', 'first_name']);
+    const noteLastName = getNoteAttribute(['last name', 'last_name']);
+    const noteFullName = noteFirstName && noteLastName 
+      ? `${noteFirstName} ${noteLastName}`.trim() 
+      : noteFirstName || noteLastName || null;
+    const notePhone = getNoteAttribute(['mobile', 'phone', 'contact']);
+    const noteAddress = getNoteAttribute(['full address', 'address', 'ایڈریس']);
+    const noteCity = getNoteAttribute(['city', 'شہر']);
 
-    // Priority for customer name: shipping_address.name > customer name > billing_address.name
+    // Priority for customer name: shipping_address.name > customer name > billing_address.name > note_attributes
     let customerName = 'Unknown';
     if (shippingAddr?.name) {
       customerName = shippingAddr.name;
@@ -477,9 +504,11 @@ export class ShopifyService {
       customerName = `${customer?.first_name || ''} ${customer?.last_name || ''}`.trim();
     } else if (billingAddr?.name) {
       customerName = billingAddr.name;
+    } else if (noteFullName) {
+      customerName = noteFullName;
     }
 
-    // Priority for phone: shipping_address > customer > billing_address
+    // Priority for phone: shipping_address > customer > billing_address > note_attributes
     let customerPhone: string | null = null;
     if (shippingAddr?.phone) {
       customerPhone = shippingAddr.phone;
@@ -489,31 +518,35 @@ export class ShopifyService {
       customerPhone = billingAddr.phone;
     } else if (customer?.default_address?.phone) {
       customerPhone = customer.default_address.phone;
+    } else if (notePhone) {
+      customerPhone = notePhone;
     }
 
     // Get email from multiple sources
     const customerEmail = customer?.email || shopifyOrder.email || null;
 
-    // Get city from shipping address, fallback to billing address
-    const city = shippingAddr?.city || billingAddr?.city || customer?.default_address?.city || null;
+    // Get city from shipping address, fallback to billing address, then note_attributes
+    const city = shippingAddr?.city || billingAddr?.city || customer?.default_address?.city || noteCity || null;
     const province = shippingAddr?.province || billingAddr?.province || customer?.default_address?.province || null;
     const postalCode = shippingAddr?.zip || billingAddr?.zip || customer?.default_address?.zip || null;
     const country = shippingAddr?.country || billingAddr?.country || customer?.default_address?.country || 'Pakistan';
 
-    // Build full shipping address
+    // Build full shipping address with fallback to note_attributes
     let fullAddress: string | null = null;
-    if (shippingAddr) {
+    if (shippingAddr?.address1) {
       const addressParts = [
         shippingAddr.address1,
         shippingAddr.address2,
       ].filter(Boolean);
       fullAddress = addressParts.join(', ') || null;
-    } else if (billingAddr) {
+    } else if (billingAddr?.address1) {
       const addressParts = [
         billingAddr.address1,
         billingAddr.address2,
       ].filter(Boolean);
       fullAddress = addressParts.join(', ') || null;
+    } else if (noteAddress) {
+      fullAddress = noteAddress;
     }
 
     // Extract courier info from note_attributes (hxs_courier_name, hxs_courier_tracking)
