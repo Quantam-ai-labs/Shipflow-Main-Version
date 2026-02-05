@@ -352,15 +352,15 @@ export async function registerRoutes(
     }
   });
 
-  // Update order remark columns directly
+  // Update order remark
   app.patch("/api/orders/:id/remark", isAuthenticated, async (req: any, res) => {
     try {
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
 
-      const { field, value } = req.body;
-      if (!field || ![1, 2, 3, 4].includes(field)) {
-        return res.status(400).json({ message: "Invalid remark field" });
+      const { value } = req.body;
+      if (typeof value !== 'string') {
+        return res.status(400).json({ message: "Invalid remark value" });
       }
 
       // Verify order exists and belongs to merchant
@@ -369,14 +369,7 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Order not found" });
       }
 
-      // Build update object based on field
-      const updateData: Record<string, any> = {};
-      if (field === 1) updateData.remark1 = value;
-      if (field === 2) updateData.remark2 = value;
-      if (field === 3) updateData.remark3 = value;
-      if (field === 4) updateData.remark4 = value;
-
-      const updated = await storage.updateOrder(merchantId, req.params.id, updateData);
+      const updated = await storage.updateOrder(merchantId, req.params.id, { remark: value });
       res.json(updated);
     } catch (error) {
       console.error("Error updating remark:", error);
@@ -1003,6 +996,78 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error updating settings:", error);
       res.status(500).json({ message: "Failed to update settings" });
+    }
+  });
+
+  // Sync courier statuses for all orders with tracking numbers
+  app.post("/api/couriers/sync-statuses", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const { trackShipment } = await import('./services/couriers');
+      
+      // Get all orders with courier tracking numbers
+      const { orders: ordersWithTracking } = await storage.getOrders(merchantId, { pageSize: 1000 });
+      const trackableOrders = ordersWithTracking.filter(o => o.courierTracking && o.courierName);
+
+      let updated = 0;
+      let failed = 0;
+
+      for (const order of trackableOrders) {
+        try {
+          const result = await trackShipment(order.courierName!, order.courierTracking!);
+          
+          if (result && result.success) {
+            await storage.updateOrder(merchantId, order.id, {
+              shipmentStatus: result.status,
+              lastTrackingUpdate: new Date(),
+            });
+            updated++;
+          } else {
+            failed++;
+          }
+        } catch (err) {
+          console.error(`[Courier Sync] Error for ${order.courierTracking}:`, err);
+          failed++;
+        }
+        
+        // Rate limiting
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+
+      res.json({ 
+        success: true, 
+        updated, 
+        failed, 
+        total: trackableOrders.length 
+      });
+    } catch (error) {
+      console.error("Error syncing courier statuses:", error);
+      res.status(500).json({ message: "Failed to sync courier statuses" });
+    }
+  });
+
+  // Track single shipment
+  app.get("/api/couriers/track/:courier/:trackingNumber", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const courier = req.params.courier as string;
+      const trackingNumber = req.params.trackingNumber as string;
+      const { trackShipment } = await import('./services/couriers');
+      
+      const result = await trackShipment(courier, trackingNumber);
+      
+      if (!result) {
+        return res.status(400).json({ message: "Unknown courier" });
+      }
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Error tracking shipment:", error);
+      res.status(500).json({ message: "Failed to track shipment" });
     }
   });
 

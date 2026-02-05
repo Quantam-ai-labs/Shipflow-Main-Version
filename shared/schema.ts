@@ -140,10 +140,11 @@ export const orders = pgTable("orders", {
   courierName: varchar("courier_name", { length: 100 }), // From Shopify note_attributes (hxs_courier_name)
   courierTracking: varchar("courier_tracking", { length: 100 }), // From Shopify note_attributes (hxs_courier_tracking)
   shipmentStatus: varchar("shipment_status", { length: 50 }).default("pending"), // Universal: pending, booked, dispatched, arrived, out_for_delivery, delivered, failed, reattempt, returned
-  remark1: text("remark_1"),
-  remark2: text("remark_2"),
-  remark3: text("remark_3"),
-  remark4: text("remark_4"),
+  remark: text("remark"), // Single remark field for team notes
+  landingSite: text("landing_site"), // UTM: landing page URL
+  referringSite: text("referring_site"), // UTM: referrer URL
+  browserIp: varchar("browser_ip", { length: 50 }), // Customer IP address
+  rawShopifyData: jsonb("raw_shopify_data"), // Complete Shopify order JSON for future use
   lastTrackingUpdate: timestamp("last_tracking_update"),
   orderDate: timestamp("order_date").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),

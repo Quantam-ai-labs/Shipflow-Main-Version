@@ -14,7 +14,7 @@ import {
   users,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, or, ilike, sql, count, inArray } from "drizzle-orm";
+import { eq, desc, and, or, ilike, sql, count, inArray, isNull } from "drizzle-orm";
 
 export interface IStorage {
   // Merchants
@@ -47,6 +47,7 @@ export interface IStorage {
   getOrderById(merchantId: string, id: string): Promise<Order | undefined>;
   getOrderByShopifyId(merchantId: string, shopifyOrderId: string): Promise<Order | undefined>;
   getExistingShopifyOrderIds(merchantId: string, shopifyOrderIds: string[]): Promise<Set<string>>;
+  getExistingOrdersByShopifyIds(merchantId: string, shopifyOrderIds: string[]): Promise<Map<string, string>>;
   getRecentOrders(merchantId: string, limit?: number): Promise<Order[]>;
   createOrder(order: InsertOrder): Promise<Order>;
   updateOrder(merchantId: string, id: string, data: Partial<InsertOrder>): Promise<Order | undefined>;
@@ -185,7 +186,18 @@ export class DatabaseStorage implements IStorage {
     let conditions = [eq(orders.merchantId, merchantId)];
     
     if (options?.status && options.status !== "all") {
-      conditions.push(eq(orders.shipmentStatus, options.status));
+      // "unfulfilled" means orders without courier tracking (null or empty)
+      if (options.status === "unfulfilled") {
+        conditions.push(
+          or(
+            isNull(orders.courierTracking),
+            eq(orders.courierTracking, "")
+          )!
+        );
+      } else {
+        // For other statuses, filter by shipmentStatus
+        conditions.push(eq(orders.shipmentStatus, options.status));
+      }
     }
 
     if (options?.courier && options.courier !== "all") {
@@ -274,6 +286,32 @@ export class DatabaseStorage implements IStorage {
     }
     
     return existingIds;
+  }
+
+  async getExistingOrdersByShopifyIds(merchantId: string, shopifyOrderIds: string[]): Promise<Map<string, string>> {
+    if (shopifyOrderIds.length === 0) return new Map();
+    
+    // Batch query in chunks of 500 to avoid query size limits
+    const chunkSize = 500;
+    const existingMap = new Map<string, string>();
+    
+    for (let i = 0; i < shopifyOrderIds.length; i += chunkSize) {
+      const chunk = shopifyOrderIds.slice(i, i + chunkSize);
+      const existing = await db.select({ id: orders.id, shopifyOrderId: orders.shopifyOrderId })
+        .from(orders)
+        .where(and(
+          eq(orders.merchantId, merchantId),
+          inArray(orders.shopifyOrderId, chunk)
+        ));
+      
+      for (const order of existing) {
+        if (order.shopifyOrderId) {
+          existingMap.set(order.shopifyOrderId, order.id);
+        }
+      }
+    }
+    
+    return existingMap;
   }
 
   async getRecentOrders(merchantId: string, limit = 5): Promise<Order[]> {

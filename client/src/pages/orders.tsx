@@ -59,7 +59,7 @@ import { format } from "date-fns";
 
 const statusOptions = [
   { value: "all", label: "All Statuses" },
-  { value: "pending", label: "Pending" },
+  { value: "unfulfilled", label: "Unfulfilled" },
   { value: "booked", label: "Booked" },
   { value: "dispatched", label: "Dispatched" },
   { value: "arrived", label: "Arrived at Destination" },
@@ -85,8 +85,9 @@ const courierOptions = [
   { value: "tcs", label: "TCS" },
 ];
 
-function getShipmentStatusBadge(status: string | null) {
+function getShipmentStatusBadge(status: string | null, hasCourierTracking: boolean) {
   const statusConfig: Record<string, { bg: string; label: string }> = {
+    unfulfilled: { bg: "bg-slate-500/10 text-slate-600 border-slate-500/20", label: "Unfulfilled" },
     pending: { bg: "bg-gray-500/10 text-gray-600 border-gray-500/20", label: "Pending" },
     booked: { bg: "bg-blue-500/10 text-blue-600 border-blue-500/20", label: "Booked" },
     dispatched: { bg: "bg-indigo-500/10 text-indigo-600 border-indigo-500/20", label: "Dispatched" },
@@ -98,6 +99,12 @@ function getShipmentStatusBadge(status: string | null) {
     returned: { bg: "bg-red-500/10 text-red-600 border-red-500/20", label: "Returned" },
   };
 
+  // If no courier tracking, show "Unfulfilled" regardless of shipmentStatus
+  if (!hasCourierTracking) {
+    return <Badge className={statusConfig.unfulfilled.bg}>{statusConfig.unfulfilled.label}</Badge>;
+  }
+
+  // For tracked orders, show actual status or "Pending" if status unknown
   const config = statusConfig[status || "pending"] || statusConfig.pending;
   return <Badge className={config.bg}>{config.label}</Badge>;
 }
@@ -126,7 +133,6 @@ export default function Orders() {
   const [pageSize] = useState(50);
   const [remarkDialogOpen, setRemarkDialogOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [remarkField, setRemarkField] = useState<1 | 2 | 3 | 4>(1);
   const [remarkValue, setRemarkValue] = useState("");
   const isDemoData = false;
 
@@ -168,8 +174,8 @@ export default function Orders() {
   });
 
   const updateRemarkMutation = useMutation({
-    mutationFn: async ({ orderId, field, value }: { orderId: string; field: number; value: string }) => {
-      const response = await apiRequest("PATCH", `/api/orders/${orderId}/remark`, { field, value });
+    mutationFn: async ({ orderId, value }: { orderId: string; value: string }) => {
+      const response = await apiRequest("PATCH", `/api/orders/${orderId}/remark`, { value });
       return response.json();
     },
     onSuccess: () => {
@@ -197,10 +203,15 @@ export default function Orders() {
   }, {} as Record<string, Order[]>);
 
   const handleExport = () => {
+    const getExportStatus = (order: Order) => {
+      // Match UI logic: unfulfilled if no courier tracking, otherwise actual status
+      if (!order.courierTracking) return "Unfulfilled";
+      return order.shipmentStatus || "Pending";
+    };
     const csv = orders.map((o) => 
-      `${o.orderNumber},${o.customerName},${o.customerPhone || ""},${o.city || ""},${o.shippingAddress || ""},${o.totalQuantity || 1},${o.totalAmount},${(o.tags || []).join(";")},${o.shipmentStatus || "pending"},${o.remark1 || ""},${o.remark2 || ""},${o.remark3 || ""},${o.remark4 || ""}`
+      `${o.orderNumber},${o.customerName},${o.customerPhone || ""},${o.city || ""},${o.shippingAddress || ""},${o.totalQuantity || 1},${o.totalAmount},${(o.tags || []).join(";")},${getExportStatus(o)},${o.remark || ""}`
     ).join("\n");
-    const header = "Order ID,Customer Name,Phone,City,Address,Qty,Amount,Tags,Shipment Status,Remark 1,Remark 2,Remark 3,Remark 4\n";
+    const header = "Order ID,Customer Name,Phone,City,Address,Qty,Amount,Tags,Status,Remark\n";
     const blob = new Blob([header + csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -210,11 +221,9 @@ export default function Orders() {
     toast({ title: "Export Complete", description: `Exported ${orders.length} orders to CSV.` });
   };
 
-  const openRemarkDialog = (order: Order, field: 1 | 2 | 3 | 4) => {
+  const openRemarkDialog = (order: Order) => {
     setSelectedOrder(order);
-    setRemarkField(field);
-    const currentRemark = field === 1 ? order.remark1 : field === 2 ? order.remark2 : field === 3 ? order.remark3 : order.remark4;
-    setRemarkValue(currentRemark || "");
+    setRemarkValue(order.remark || "");
     setRemarkDialogOpen(true);
   };
 
@@ -348,10 +357,7 @@ export default function Orders() {
                       <TableHead className="w-[60px] text-center font-semibold">Qty</TableHead>
                       <TableHead className="w-[100px] text-right font-semibold">Amount</TableHead>
                       <TableHead className="font-semibold">Tags</TableHead>
-                      <TableHead className="w-[120px] font-semibold">Remark 1</TableHead>
-                      <TableHead className="w-[120px] font-semibold">Remark 2</TableHead>
-                      <TableHead className="w-[120px] font-semibold">Remark 3</TableHead>
-                      <TableHead className="w-[120px] font-semibold">Remark 4</TableHead>
+                      <TableHead className="w-[200px] font-semibold">Remark</TableHead>
                       <TableHead className="w-[50px]"></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -359,7 +365,7 @@ export default function Orders() {
                     {Object.entries(ordersByMonth).map(([month, monthOrders]) => (
                       <>
                         <TableRow key={`month-${month}`} className="bg-muted/30">
-                          <TableCell colSpan={14} className="py-2">
+                          <TableCell colSpan={11} className="py-2">
                             <span className="font-semibold text-sm flex items-center gap-2">
                               <Calendar className="w-4 h-4" />
                               {month} ({monthOrders.length} orders)
@@ -369,7 +375,7 @@ export default function Orders() {
                         {monthOrders.map((order) => (
                           <TableRow key={order.id} className="hover-elevate" data-testid={`table-row-order-${order.id}`}>
                             <TableCell>
-                              {getShipmentStatusBadge(order.shipmentStatus)}
+                              {getShipmentStatusBadge(order.shipmentStatus, !!order.courierTracking)}
                             </TableCell>
                             <TableCell className="font-medium">
                               <Link href={`/orders/${order.id}`} className="hover:text-primary hover:underline">
@@ -410,38 +416,12 @@ export default function Orders() {
                             </TableCell>
                             <TableCell>
                               <button 
-                                onClick={() => openRemarkDialog(order, 1)}
+                                onClick={() => openRemarkDialog(order)}
                                 className="text-xs text-left hover:bg-muted p-1 rounded cursor-pointer w-full min-h-[24px] truncate"
-                                title={order.remark1 || "Add remark"}
+                                title={order.remark || "Add remark"}
+                                data-testid={`button-remark-${order.id}`}
                               >
-                                {order.remark1 || <span className="text-muted-foreground italic">Add...</span>}
-                              </button>
-                            </TableCell>
-                            <TableCell>
-                              <button 
-                                onClick={() => openRemarkDialog(order, 2)}
-                                className="text-xs text-left hover:bg-muted p-1 rounded cursor-pointer w-full min-h-[24px] truncate"
-                                title={order.remark2 || "Add remark"}
-                              >
-                                {order.remark2 || <span className="text-muted-foreground italic">Add...</span>}
-                              </button>
-                            </TableCell>
-                            <TableCell>
-                              <button 
-                                onClick={() => openRemarkDialog(order, 3)}
-                                className="text-xs text-left hover:bg-muted p-1 rounded cursor-pointer w-full min-h-[24px] truncate"
-                                title={order.remark3 || "Add remark"}
-                              >
-                                {order.remark3 || <span className="text-muted-foreground italic">Add...</span>}
-                              </button>
-                            </TableCell>
-                            <TableCell>
-                              <button 
-                                onClick={() => openRemarkDialog(order, 4)}
-                                className="text-xs text-left hover:bg-muted p-1 rounded cursor-pointer w-full min-h-[24px] truncate"
-                                title={order.remark4 || "Add remark"}
-                              >
-                                {order.remark4 || <span className="text-muted-foreground italic">Add...</span>}
+                                {order.remark || <span className="text-muted-foreground italic">Add...</span>}
                               </button>
                             </TableCell>
                             <TableCell>
@@ -545,10 +525,10 @@ export default function Orders() {
             <Button 
               onClick={() => selectedOrder && updateRemarkMutation.mutate({ 
                 orderId: selectedOrder.id, 
-                field: remarkField, 
                 value: remarkValue 
               })}
               disabled={updateRemarkMutation.isPending}
+              data-testid="button-save-remark"
             >
               {updateRemarkMutation.isPending ? "Saving..." : "Save Remark"}
             </Button>

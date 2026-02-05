@@ -28,6 +28,13 @@ interface ShopifyOrder {
   currency: string;
   financial_status: string;
   fulfillment_status: string | null;
+  landing_site: string | null; // UTM landing page
+  referring_site: string | null; // UTM referrer
+  browser_ip: string | null; // Customer IP
+  client_details?: {
+    browser_ip: string | null;
+    user_agent: string | null;
+  } | null;
   customer: {
     id: number;
     first_name: string;
@@ -312,7 +319,7 @@ export class ShopifyService {
     return data.orders;
   }
 
-  async syncOrders(merchantId: string, shopDomain: string): Promise<{ synced: number; total: number }> {
+  async syncOrders(merchantId: string, shopDomain: string): Promise<{ synced: number; updated: number; total: number }> {
     const { storage } = await import('../storage');
     const store = await storage.getShopifyStore(merchantId);
     
@@ -329,43 +336,66 @@ export class ShopifyService {
     
     console.log(`[Shopify] Processing ${shopifyOrders.length} orders...`);
     
-    // Batch check for existing orders to reduce DB queries
+    // Get existing orders with their IDs for update
     const allShopifyIds = shopifyOrders.map(o => String(o.id));
-    console.log(`[Shopify] Checking ${allShopifyIds.length} orders for duplicates...`);
-    const existingIds = await storage.getExistingShopifyOrderIds(merchantId, allShopifyIds);
-    console.log(`[Shopify] Found ${existingIds.size} existing orders, will sync ${allShopifyIds.length - existingIds.size} new orders`);
+    console.log(`[Shopify] Checking ${allShopifyIds.length} orders for existing records...`);
+    const existingOrdersMap = await storage.getExistingOrdersByShopifyIds(merchantId, allShopifyIds);
+    console.log(`[Shopify] Found ${existingOrdersMap.size} existing orders to update, ${allShopifyIds.length - existingOrdersMap.size} new orders`);
     
-    let syncedCount = 0;
-    const skippedCount = existingIds.size;
+    let newCount = 0;
+    let updatedCount = 0;
 
     for (const shopifyOrder of shopifyOrders) {
       const shopifyOrderId = String(shopifyOrder.id);
-      
-      // Skip already existing orders
-      if (existingIds.has(shopifyOrderId)) {
-        continue;
-      }
-
       const transformedOrder = this.transformOrderForStorage(shopifyOrder);
-      await storage.createOrder({
-        ...transformedOrder,
-        merchantId,
-      });
-      syncedCount++;
+      
+      const existingOrderId = existingOrdersMap.get(shopifyOrderId);
+      
+      if (existingOrderId) {
+        // UPDATE existing order with fresh data from Shopify
+        await storage.updateOrder(merchantId, existingOrderId, {
+          customerName: transformedOrder.customerName,
+          customerEmail: transformedOrder.customerEmail,
+          customerPhone: transformedOrder.customerPhone,
+          shippingAddress: transformedOrder.shippingAddress,
+          city: transformedOrder.city,
+          province: transformedOrder.province,
+          postalCode: transformedOrder.postalCode,
+          country: transformedOrder.country,
+          courierName: transformedOrder.courierName,
+          courierTracking: transformedOrder.courierTracking,
+          shipmentStatus: transformedOrder.shipmentStatus,
+          fulfillmentStatus: transformedOrder.fulfillmentStatus,
+          tags: transformedOrder.tags,
+          notes: transformedOrder.notes,
+          landingSite: transformedOrder.landingSite,
+          referringSite: transformedOrder.referringSite,
+          browserIp: transformedOrder.browserIp,
+          rawShopifyData: transformedOrder.rawShopifyData,
+        });
+        updatedCount++;
+      } else {
+        // CREATE new order
+        await storage.createOrder({
+          ...transformedOrder,
+          merchantId,
+        });
+        newCount++;
+      }
       
       // Log progress every 100 orders
-      if (syncedCount % 100 === 0) {
-        console.log(`[Shopify] Synced ${syncedCount} new orders...`);
+      if ((newCount + updatedCount) % 100 === 0) {
+        console.log(`[Shopify] Processed ${newCount + updatedCount} orders (${newCount} new, ${updatedCount} updated)...`);
       }
     }
 
-    console.log(`[Shopify] Sync complete: ${syncedCount} new, ${skippedCount} existing, ${shopifyOrders.length} total`);
+    console.log(`[Shopify] Sync complete: ${newCount} new, ${updatedCount} updated, ${shopifyOrders.length} total`);
 
     // Refresh dashboard stats after sync
     await storage.getDashboardStats(merchantId);
 
     await storage.updateShopifyStore(store.id, { lastSyncAt: new Date() });
-    return { synced: syncedCount, total: shopifyOrders.length };
+    return { synced: newCount, updated: updatedCount, total: shopifyOrders.length };
   }
 
   transformOrderForStorage(shopifyOrder: ShopifyOrder): {
@@ -388,6 +418,7 @@ export class ShopifyService {
     paymentStatus: string;
     fulfillmentStatus: string;
     orderStatus: string;
+    shipmentStatus: string;
     lineItems: Array<{ name: string; quantity: number; price: number; sku?: string; variantTitle?: string }>;
     tags: string[];
     notes: string | null;
@@ -395,6 +426,10 @@ export class ShopifyService {
     courierName: string | null;
     courierTracking: string | null;
     totalQuantity: number;
+    landingSite: string | null;
+    referringSite: string | null;
+    browserIp: string | null;
+    rawShopifyData: Record<string, any>;
   } {
     const customer = shopifyOrder.customer;
     const shippingAddr = shopifyOrder.shipping_address;
@@ -484,6 +519,20 @@ export class ShopifyService {
 
     const shippingAmount = shopifyOrder.total_shipping_price_set?.shop_money?.amount || '0';
 
+    // Extract UTM/marketing data
+    const landingSite = shopifyOrder.landing_site || null;
+    const referringSite = shopifyOrder.referring_site || null;
+    const browserIp = shopifyOrder.browser_ip || shopifyOrder.client_details?.browser_ip || null;
+
+    // Determine shipment status based on fulfillment and courier info
+    let shipmentStatus = 'unfulfilled';
+    if (courierTracking) {
+      // If has tracking, we'll fetch real status from courier later
+      shipmentStatus = fulfillmentStatus === 'fulfilled' ? 'delivered' : 'booked';
+    } else if (fulfillmentStatus === 'fulfilled') {
+      shipmentStatus = 'delivered';
+    }
+
     return {
       shopifyOrderId: String(shopifyOrder.id),
       orderNumber: shopifyOrder.name,
@@ -507,6 +556,7 @@ export class ShopifyService {
       paymentStatus,
       fulfillmentStatus,
       orderStatus,
+      shipmentStatus,
       lineItems: shopifyOrder.line_items.map(item => ({
         name: item.title,
         quantity: item.quantity,
@@ -516,6 +566,10 @@ export class ShopifyService {
       tags: shopifyOrder.tags ? shopifyOrder.tags.split(',').map(t => t.trim()) : [],
       notes: shopifyOrder.note,
       orderDate: new Date(shopifyOrder.created_at),
+      landingSite,
+      referringSite,
+      browserIp,
+      rawShopifyData: shopifyOrder as unknown as Record<string, any>,
     };
   }
 }
