@@ -21,7 +21,11 @@ interface DashboardStats {
   totalOrders: number;
   pendingShipments: number;
   inTransit: number;
+  booked: number;
   deliveredToday: number;
+  totalDelivered: number;
+  totalReturned: number;
+  totalFailed: number;
   codPending: string;
   ordersTrend: number;
   deliveryRate: number;
@@ -150,33 +154,33 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Total Orders"
-          value={stats?.totalOrders ?? 0}
+          value={stats?.totalOrders?.toLocaleString() ?? 0}
           icon={Package}
           trend={stats?.ordersTrend}
           trendLabel="vs last week"
           isLoading={statsLoading}
         />
         <StatCard
-          title="Pending Shipments"
-          value={stats?.pendingShipments ?? 0}
+          title="Delivered"
+          value={stats?.totalDelivered?.toLocaleString() ?? 0}
+          icon={CheckCircle2}
+          trend={stats?.deliveryRate}
+          trendLabel="delivery rate"
+          iconColor="text-green-500"
+          isLoading={statsLoading}
+        />
+        <StatCard
+          title="Pending / Unfulfilled"
+          value={stats?.pendingShipments?.toLocaleString() ?? 0}
           icon={Clock}
           iconColor="text-amber-500"
           isLoading={statsLoading}
         />
         <StatCard
-          title="In Transit"
-          value={stats?.inTransit ?? 0}
+          title="In Transit / Booked"
+          value={((stats?.inTransit ?? 0) + (stats?.booked ?? 0)).toLocaleString()}
           icon={Truck}
           iconColor="text-blue-500"
-          isLoading={statsLoading}
-        />
-        <StatCard
-          title="Delivered Today"
-          value={stats?.deliveredToday ?? 0}
-          icon={CheckCircle2}
-          trend={stats?.deliveryRate}
-          trendLabel="delivery rate"
-          iconColor="text-green-500"
           isLoading={statsLoading}
         />
       </div>

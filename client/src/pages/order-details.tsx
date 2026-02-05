@@ -38,25 +38,24 @@ interface OrderDetails extends Order {
   remarks: Remark[];
 }
 
-function getStatusBadge(status: string) {
-  const statusConfig: Record<string, string> = {
-    pending: "bg-gray-500/10 text-gray-600 border-gray-500/20",
-    processing: "bg-blue-500/10 text-blue-600 border-blue-500/20",
-    shipped: "bg-amber-500/10 text-amber-600 border-amber-500/20",
-    booked: "bg-blue-500/10 text-blue-600 border-blue-500/20",
-    picked: "bg-indigo-500/10 text-indigo-600 border-indigo-500/20",
-    in_transit: "bg-amber-500/10 text-amber-600 border-amber-500/20",
-    out_for_delivery: "bg-purple-500/10 text-purple-600 border-purple-500/20",
-    delivered: "bg-green-500/10 text-green-600 border-green-500/20",
-    cancelled: "bg-red-500/10 text-red-600 border-red-500/20",
-    returned: "bg-red-500/10 text-red-600 border-red-500/20",
-    failed: "bg-red-500/10 text-red-600 border-red-500/20",
+function getStatusBadge(status: string | null) {
+  const normalizedStatus = status || "unfulfilled";
+  const statusConfig: Record<string, { bg: string; label: string }> = {
+    unfulfilled: { bg: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300", label: "Unfulfilled" },
+    pending: { bg: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300", label: "Pending" },
+    booked: { bg: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300", label: "Booked" },
+    dispatched: { bg: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300", label: "Dispatched" },
+    arrived: { bg: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300", label: "Arrived" },
+    out_for_delivery: { bg: "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300", label: "Out for Delivery" },
+    delivered: { bg: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300", label: "Delivered" },
+    failed: { bg: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300", label: "Failed" },
+    reattempt: { bg: "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300", label: "Reattempt" },
+    returned: { bg: "bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300", label: "Returned" },
+    cancelled: { bg: "bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-400", label: "Cancelled" },
   };
 
-  const color = statusConfig[status] || statusConfig.pending;
-  const displayStatus = status.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
-
-  return <Badge className={color}>{displayStatus}</Badge>;
+  const config = statusConfig[normalizedStatus] || statusConfig.pending;
+  return <Badge className={config.bg}>{config.label}</Badge>;
 }
 
 function getTrackingIcon(status: string) {
@@ -158,7 +157,7 @@ export default function OrderDetails() {
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold">Order #{order.orderNumber}</h1>
-              {getStatusBadge(order.orderStatus || "pending")}
+              {getStatusBadge(order.shipmentStatus)}
             </div>
             <p className="text-muted-foreground text-sm">
               {order.orderDate ? format(new Date(order.orderDate), "MMMM dd, yyyy 'at' h:mm a") : ""}

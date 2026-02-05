@@ -490,79 +490,122 @@ export class DatabaseStorage implements IStorage {
   // Analytics
   async getDashboardStats(merchantId: string): Promise<any> {
     const allOrders = await db.select().from(orders).where(eq(orders.merchantId, merchantId));
-    const allShipments = await db.select().from(shipments).where(eq(shipments.merchantId, merchantId));
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const deliveredToday = allShipments.filter(s => 
-      s.status === "delivered" && s.actualDelivery && new Date(s.actualDelivery) >= today
+    // Use orders table shipmentStatus field for all stats
+    const deliveredToday = allOrders.filter(o => 
+      o.shipmentStatus === "delivered" && o.lastTrackingUpdate && new Date(o.lastTrackingUpdate) >= today
     ).length;
 
-    const pendingShipments = allShipments.filter(s => 
-      s.status === "booked" || s.status === "picked"
+    // Pending = unfulfilled or pending shipmentStatus
+    const pendingShipments = allOrders.filter(o => 
+      o.shipmentStatus === "pending" || o.shipmentStatus === "unfulfilled" || !o.shipmentStatus
     ).length;
 
-    const inTransit = allShipments.filter(s => 
-      s.status === "in_transit" || s.status === "out_for_delivery"
+    // In transit = dispatched, arrived, or out_for_delivery
+    const inTransit = allOrders.filter(o => 
+      o.shipmentStatus === "dispatched" || o.shipmentStatus === "arrived" || o.shipmentStatus === "out_for_delivery"
     ).length;
 
+    // Booked = orders that have been booked with courier
+    const booked = allOrders.filter(o => o.shipmentStatus === "booked").length;
+
+    // COD pending = cod orders that haven't been delivered
     const codPending = allOrders
-      .filter(o => o.paymentMethod === "cod" && o.paymentStatus === "pending")
+      .filter(o => o.paymentMethod === "cod" && o.shipmentStatus !== "delivered")
       .reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
 
-    const totalDelivered = allShipments.filter(s => s.status === "delivered").length;
-    const deliveryRate = allShipments.length > 0 
-      ? Math.round((totalDelivered / allShipments.length) * 100) 
+    const totalDelivered = allOrders.filter(o => o.shipmentStatus === "delivered").length;
+    const totalReturned = allOrders.filter(o => o.shipmentStatus === "returned").length;
+    const totalFailed = allOrders.filter(o => o.shipmentStatus === "failed" || o.shipmentStatus === "reattempt").length;
+    
+    // Delivery rate = delivered / (delivered + returned + failed)
+    const completedOrders = totalDelivered + totalReturned + totalFailed;
+    const deliveryRate = completedOrders > 0 
+      ? Math.round((totalDelivered / completedOrders) * 100) 
+      : 0;
+
+    // Calculate trend (compare this week vs last week)
+    const lastWeek = new Date();
+    lastWeek.setDate(lastWeek.getDate() - 7);
+    const thisWeekOrders = allOrders.filter(o => o.orderDate && new Date(o.orderDate) >= lastWeek).length;
+    const twoWeeksAgo = new Date();
+    twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+    const lastWeekOrders = allOrders.filter(o => 
+      o.orderDate && new Date(o.orderDate) >= twoWeeksAgo && new Date(o.orderDate) < lastWeek
+    ).length;
+    const ordersTrend = lastWeekOrders > 0 
+      ? Math.round(((thisWeekOrders - lastWeekOrders) / lastWeekOrders) * 100)
       : 0;
 
     return {
       totalOrders: allOrders.length,
       pendingShipments,
       inTransit,
+      booked,
       deliveredToday,
-      codPending: codPending.toLocaleString(),
-      ordersTrend: 12,
+      totalDelivered,
+      totalReturned,
+      totalFailed,
+      codPending: `PKR ${codPending.toLocaleString()}`,
+      ordersTrend,
       deliveryRate,
     };
   }
 
   async getAnalytics(merchantId: string, dateRange: string): Promise<any> {
     const allOrders = await db.select().from(orders).where(eq(orders.merchantId, merchantId));
-    const allShipments = await db.select().from(shipments).where(eq(shipments.merchantId, merchantId));
 
-    const totalDelivered = allShipments.filter(s => s.status === "delivered").length;
-    const totalReturned = allShipments.filter(s => s.status === "returned").length;
-    const deliveryRate = allShipments.length > 0 
-      ? Math.round((totalDelivered / allShipments.length) * 100) 
+    // Use orders table shipmentStatus field for all stats
+    const totalDelivered = allOrders.filter(o => o.shipmentStatus === "delivered").length;
+    const totalReturned = allOrders.filter(o => o.shipmentStatus === "returned").length;
+    const totalFailed = allOrders.filter(o => o.shipmentStatus === "failed" || o.shipmentStatus === "reattempt").length;
+    
+    // Delivery rate = delivered / (delivered + returned + failed)
+    const completedOrders = totalDelivered + totalReturned + totalFailed;
+    const deliveryRate = completedOrders > 0 
+      ? Math.round((totalDelivered / completedOrders) * 100) 
       : 0;
 
     const totalRevenue = allOrders.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
+    const deliveredRevenue = allOrders
+      .filter(o => o.shipmentStatus === "delivered")
+      .reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
 
-    // Courier performance
-    const courierMap = new Map<string, { orders: number; delivered: number; returned: number }>();
-    allShipments.forEach(s => {
-      const current = courierMap.get(s.courierName) || { orders: 0, delivered: 0, returned: 0 };
+    // Courier performance from orders table
+    const courierMap = new Map<string, { orders: number; delivered: number; returned: number; failed: number }>();
+    allOrders.forEach(o => {
+      const courier = o.courierName || "No Courier";
+      const current = courierMap.get(courier) || { orders: 0, delivered: 0, returned: 0, failed: 0 };
       current.orders++;
-      if (s.status === "delivered") current.delivered++;
-      if (s.status === "returned") current.returned++;
-      courierMap.set(s.courierName, current);
+      if (o.shipmentStatus === "delivered") current.delivered++;
+      if (o.shipmentStatus === "returned") current.returned++;
+      if (o.shipmentStatus === "failed" || o.shipmentStatus === "reattempt") current.failed++;
+      courierMap.set(courier, current);
     });
 
-    const courierPerformance = Array.from(courierMap.entries()).map(([courier, data]) => ({
-      courier: courier.charAt(0).toUpperCase() + courier.slice(1),
-      ...data,
-      deliveryRate: data.orders > 0 ? Math.round((data.delivered / data.orders) * 100) : 0,
-    }));
+    const courierPerformance = Array.from(courierMap.entries())
+      .filter(([courier]) => courier !== "No Courier")
+      .map(([courier, data]) => ({
+        courier: courier,
+        ...data,
+        deliveryRate: (data.delivered + data.returned + data.failed) > 0 
+          ? Math.round((data.delivered / (data.delivered + data.returned + data.failed)) * 100) 
+          : 0,
+      }))
+      .sort((a, b) => b.orders - a.orders);
 
-    // City breakdown
-    const cityMap = new Map<string, { orders: number; delivered: number; revenue: number }>();
+    // City breakdown from orders table
+    const cityMap = new Map<string, { orders: number; delivered: number; returned: number; revenue: number }>();
     allOrders.forEach(o => {
       const city = o.city || "Unknown";
-      const current = cityMap.get(city) || { orders: 0, delivered: 0, revenue: 0 };
+      const current = cityMap.get(city) || { orders: 0, delivered: 0, returned: 0, revenue: 0 };
       current.orders++;
       current.revenue += Number(o.totalAmount || 0);
-      if (o.orderStatus === "delivered") current.delivered++;
+      if (o.shipmentStatus === "delivered") current.delivered++;
+      if (o.shipmentStatus === "returned") current.returned++;
       cityMap.set(city, current);
     });
 
@@ -571,33 +614,52 @@ export class DatabaseStorage implements IStorage {
         city,
         orders: data.orders,
         delivered: data.delivered,
-        revenue: data.revenue.toLocaleString(),
+        returned: data.returned,
+        revenue: `PKR ${data.revenue.toLocaleString()}`,
+        deliveryRate: (data.delivered + data.returned) > 0 
+          ? Math.round((data.delivered / (data.delivered + data.returned)) * 100) 
+          : 0,
       }))
-      .sort((a, b) => b.orders - a.orders);
+      .sort((a, b) => b.orders - a.orders)
+      .slice(0, 20); // Top 20 cities
 
-    // Daily orders (simplified)
-    const dailyOrders = [
-      { date: "Mon", orders: 12, delivered: 10 },
-      { date: "Tue", orders: 15, delivered: 12 },
-      { date: "Wed", orders: 8, delivered: 8 },
-      { date: "Thu", orders: 20, delivered: 18 },
-      { date: "Fri", orders: 25, delivered: 22 },
-      { date: "Sat", orders: 18, delivered: 15 },
-      { date: "Sun", orders: 10, delivered: 9 },
-    ];
+    // Daily orders for last 7 days
+    const last7Days = [];
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      date.setHours(0, 0, 0, 0);
+      const nextDate = new Date(date);
+      nextDate.setDate(nextDate.getDate() + 1);
+      
+      const dayOrders = allOrders.filter(o => {
+        if (!o.orderDate) return false;
+        const orderDate = new Date(o.orderDate);
+        return orderDate >= date && orderDate < nextDate;
+      });
+      
+      const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+      last7Days.push({
+        date: dayName,
+        orders: dayOrders.length,
+        delivered: dayOrders.filter(o => o.shipmentStatus === "delivered").length,
+        revenue: dayOrders.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0),
+      });
+    }
 
     return {
       overview: {
         totalOrders: allOrders.length,
         totalDelivered,
         totalReturned,
+        totalFailed,
         deliveryRate,
-        avgDeliveryTime: 2.5,
-        totalRevenue: totalRevenue.toLocaleString(),
+        totalRevenue: `PKR ${totalRevenue.toLocaleString()}`,
+        deliveredRevenue: `PKR ${deliveredRevenue.toLocaleString()}`,
       },
       courierPerformance,
       cityBreakdown,
-      dailyOrders,
+      dailyOrders: last7Days,
     };
   }
 
