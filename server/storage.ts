@@ -50,6 +50,7 @@ export interface IStorage {
   getExistingShopifyOrderIds(merchantId: string, shopifyOrderIds: string[]): Promise<Set<string>>;
   getExistingOrdersByShopifyIds(merchantId: string, shopifyOrderIds: string[]): Promise<Map<string, string>>;
   getRecentOrders(merchantId: string, limit?: number): Promise<Order[]>;
+  getOrdersWithMissingCity(merchantId: string, limit?: number): Promise<{ id: string; shopifyOrderId: string }[]>;
   createOrder(order: InsertOrder): Promise<Order>;
   updateOrder(merchantId: string, id: string, data: Partial<InsertOrder>): Promise<Order | undefined>;
 
@@ -337,6 +338,21 @@ export class DatabaseStorage implements IStorage {
 
   async getRecentOrders(merchantId: string, limit = 5): Promise<Order[]> {
     return db.select().from(orders).where(eq(orders.merchantId, merchantId)).orderBy(desc(orders.orderDate)).limit(limit);
+  }
+
+  async getOrdersWithMissingCity(merchantId: string, limit = 500): Promise<{ id: string; shopifyOrderId: string }[]> {
+    const result = await db.select({
+      id: orders.id,
+      shopifyOrderId: orders.shopifyOrderId,
+    })
+    .from(orders)
+    .where(and(
+      eq(orders.merchantId, merchantId),
+      isNull(orders.city)
+    ))
+    .limit(limit);
+    
+    return result.filter(r => r.shopifyOrderId !== null) as { id: string; shopifyOrderId: string }[];
   }
 
   async createOrder(order: InsertOrder): Promise<Order> {

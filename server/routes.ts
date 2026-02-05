@@ -828,6 +828,64 @@ export async function registerRoutes(
     }
   });
 
+  // Fix city data for existing orders using GraphQL
+  // This is needed because Shopify Basic plan restricts PII in REST API
+  // but GraphQL returns some fields like city
+  app.post("/api/integrations/shopify/fix-city-data", isAuthenticated, async (req, res) => {
+    try {
+      const { merchantId } = req.body.user;
+      
+      const store = await storage.getShopifyStore(merchantId);
+      if (!store || !store.isConnected || !store.accessToken || !store.shopDomain) {
+        return res.status(400).json({ message: "Shopify store not connected" });
+      }
+
+      // Get orders with missing city data
+      const ordersWithMissingCity = await storage.getOrdersWithMissingCity(merchantId, 500);
+      
+      if (ordersWithMissingCity.length === 0) {
+        return res.json({ 
+          success: true, 
+          message: "No orders need city data update",
+          updated: 0 
+        });
+      }
+
+      console.log(`[Fix City Data] Found ${ordersWithMissingCity.length} orders with missing city...`);
+
+      const shopifyIds = ordersWithMissingCity.map(o => o.shopifyOrderId);
+      const cityData = await shopifyService.batchFetchOrderCitiesViaGraphQL(
+        store.shopDomain, 
+        store.accessToken, 
+        shopifyIds
+      );
+
+      let updated = 0;
+      for (const order of ordersWithMissingCity) {
+        const data = cityData.get(order.shopifyOrderId);
+        if (data?.city) {
+          await storage.updateOrder(merchantId, order.id, {
+            city: data.city,
+            province: data.province,
+          });
+          updated++;
+        }
+      }
+
+      console.log(`[Fix City Data] Updated ${updated}/${ordersWithMissingCity.length} orders with city data`);
+
+      res.json({ 
+        success: true, 
+        message: `Updated ${updated} orders with city data from Shopify`,
+        updated,
+        processed: ordersWithMissingCity.length
+      });
+    } catch (error: any) {
+      console.error("Error fixing city data:", error);
+      res.status(500).json({ message: error.message || "Failed to fix city data" });
+    }
+  });
+
   app.get("/api/shopify/install", async (req, res) => {
     try {
       const { shop } = req.query;

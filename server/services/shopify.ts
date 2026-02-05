@@ -194,6 +194,108 @@ export class ShopifyService {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
+  async fetchOrderCityViaGraphQL(shop: string, accessToken: string, orderId: string): Promise<{ city: string | null; province: string | null }> {
+    const headers = this.getAuthHeaders(accessToken);
+    headers['Content-Type'] = 'application/json';
+    
+    const graphqlUrl = `https://${shop}/admin/api/2024-01/graphql.json`;
+    const gid = `gid://shopify/Order/${orderId}`;
+    
+    const query = `{
+      order(id: "${gid}") {
+        shippingAddress {
+          city
+          province
+          country
+        }
+        billingAddress {
+          city
+          province
+          country
+        }
+      }
+    }`;
+    
+    try {
+      const response = await fetch(graphqlUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ query }),
+      });
+      
+      if (!response.ok) {
+        return { city: null, province: null };
+      }
+      
+      const result = await response.json();
+      const data = result?.data?.order;
+      
+      const city = data?.shippingAddress?.city || data?.billingAddress?.city || null;
+      const province = data?.shippingAddress?.province || data?.billingAddress?.province || null;
+      
+      return { city, province };
+    } catch (error) {
+      console.error('[Shopify GraphQL] Error fetching city:', error);
+      return { city: null, province: null };
+    }
+  }
+
+  async batchFetchOrderCitiesViaGraphQL(shop: string, accessToken: string, orderIds: string[]): Promise<Map<string, { city: string | null; province: string | null }>> {
+    const results = new Map<string, { city: string | null; province: string | null }>();
+    const headers = this.getAuthHeaders(accessToken);
+    headers['Content-Type'] = 'application/json';
+    
+    const graphqlUrl = `https://${shop}/admin/api/2024-01/graphql.json`;
+    
+    const batchSize = 50;
+    for (let i = 0; i < orderIds.length; i += batchSize) {
+      const batch = orderIds.slice(i, i + batchSize);
+      
+      const queryParts = batch.map((id, idx) => `
+        order${idx}: order(id: "gid://shopify/Order/${id}") {
+          id
+          shippingAddress { city province }
+          billingAddress { city province }
+        }
+      `);
+      
+      const query = `{ ${queryParts.join('\n')} }`;
+      
+      try {
+        const response = await fetch(graphqlUrl, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ query }),
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          const data = result?.data;
+          
+          if (data) {
+            batch.forEach((orderId, idx) => {
+              const orderData = data[`order${idx}`];
+              if (orderData) {
+                const city = orderData?.shippingAddress?.city || orderData?.billingAddress?.city || null;
+                const province = orderData?.shippingAddress?.province || orderData?.billingAddress?.province || null;
+                results.set(orderId, { city, province });
+              }
+            });
+          }
+        }
+      } catch (error) {
+        console.error('[Shopify GraphQL] Batch fetch error:', error);
+      }
+      
+      if (i + batchSize < orderIds.length) {
+        await this.sleep(500);
+      }
+    }
+    
+    console.log(`[Shopify GraphQL] Fetched city data for ${results.size}/${orderIds.length} orders`);
+    return results;
+  }
+
   private getRateLimitDelay(response: Response): number {
     // Check for rate limit headers
     const callLimit = response.headers.get('X-Shopify-Shop-Api-Call-Limit');
@@ -422,6 +524,51 @@ export class ShopifyService {
     }
 
     console.log(`[Shopify] Sync complete: ${newCount} new, ${updatedCount} updated, ${shopifyOrders.length} total`);
+
+    // Phase 2: Use GraphQL to fetch city data for orders that have incomplete customer data
+    // This helps on Basic Shopify plans where REST API doesn't return full address data
+    // but GraphQL returns some fields like city
+    const ordersNeedingCityUpdate: string[] = [];
+    const shopifyIdToDbId = new Map<string, string>();
+    
+    for (const shopifyOrder of shopifyOrders) {
+      const shopifyOrderId = String(shopifyOrder.id);
+      const transformedOrder = this.transformOrderForStorage(shopifyOrder);
+      
+      // If REST API didn't give us city data, try GraphQL
+      if (!transformedOrder.city && (transformedOrder.customerName === 'Unknown' || !transformedOrder.shippingAddress)) {
+        const dbId = existingOrdersMap.get(shopifyOrderId);
+        if (dbId) {
+          ordersNeedingCityUpdate.push(shopifyOrderId);
+          shopifyIdToDbId.set(shopifyOrderId, dbId);
+        }
+      }
+    }
+    
+    if (ordersNeedingCityUpdate.length > 0) {
+      console.log(`[Shopify GraphQL] Fetching city data for ${ordersNeedingCityUpdate.length} orders with incomplete addresses...`);
+      
+      const cityData = await this.batchFetchOrderCitiesViaGraphQL(shopDomain, store.accessToken, ordersNeedingCityUpdate);
+      
+      let cityUpdates = 0;
+      const cityDataEntries = Array.from(cityData.entries());
+      for (const entry of cityDataEntries) {
+        const shopifyOrderId = entry[0];
+        const data = entry[1];
+        if (data.city) {
+          const dbId = shopifyIdToDbId.get(shopifyOrderId);
+          if (dbId) {
+            await storage.updateOrder(merchantId, dbId, {
+              city: data.city,
+              province: data.province,
+            });
+            cityUpdates++;
+          }
+        }
+      }
+      
+      console.log(`[Shopify GraphQL] Updated ${cityUpdates} orders with city data from GraphQL`);
+    }
 
     // Refresh dashboard stats after sync
     await storage.getDashboardStats(merchantId);
