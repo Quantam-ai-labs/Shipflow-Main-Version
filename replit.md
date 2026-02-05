@@ -92,6 +92,31 @@ Preferred communication style: Simple, everyday language.
 - Order metafields (hxs_courier_name, hxs_courier_tracking) captured during sync
 - Storage layer implements proper month filtering with date range cutoffs
 
+## Shopify Permissions Troubleshooting
+
+### Missing Customer Data Issue
+If customer names, addresses, and phones show as "Unknown" or empty, the issue is **Shopify access token permissions**. The Shopify API will mask/redact customer PII if the access token doesn't have proper scopes.
+
+### Required Shopify Admin API Scopes
+When creating a Custom App in Shopify Admin, ensure these scopes are enabled:
+- **read_orders** - Access to order data (amounts, products, status)
+- **read_customers** - **CRITICAL** - Access to customer names, addresses, phones
+- **read_products** - Access to product data
+- **read_fulfillments** - Access to fulfillment status
+
+### How to Fix
+1. Go to Shopify Admin → Apps → Develop Apps
+2. Create a new Custom App (or edit existing)
+3. Click "Configure Admin API scopes"
+4. Enable: read_orders, read_customers, read_products, read_fulfillments
+5. Install the app and copy the new Access Token
+6. Go to ShipFlow → Integrations → Update Token
+7. Re-sync orders to get complete customer data
+
+### UI Indicators
+- Orders page shows warning banner when >50% of orders have "Unknown" customer names
+- Onboarding and Integrations pages show required scopes in blue info boxes
+
 ## Courier API Integration Plan
 
 ### Leopards Courier API

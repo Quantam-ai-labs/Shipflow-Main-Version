@@ -251,19 +251,32 @@ export default function Onboarding() {
                     </div>
                     
                     {useAccessToken ? (
-                      <div className="space-y-2">
-                        <Label htmlFor="access-token">Admin API Access Token</Label>
-                        <Input
-                          id="access-token"
-                          type="password"
-                          placeholder="shpat_xxxxx..."
-                          value={shopifyToken}
-                          onChange={(e) => setShopifyToken(e.target.value)}
-                          data-testid="input-shopify-token"
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          You can find this in your Shopify Admin &gt; Apps &gt; Develop Apps
-                        </p>
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="access-token">Admin API Access Token</Label>
+                          <Input
+                            id="access-token"
+                            type="password"
+                            placeholder="shpat_xxxxx..."
+                            value={shopifyToken}
+                            onChange={(e) => setShopifyToken(e.target.value)}
+                            data-testid="input-shopify-token"
+                          />
+                        </div>
+                        <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+                          <p className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-2">
+                            Required Admin API Scopes:
+                          </p>
+                          <ul className="text-xs text-blue-700 dark:text-blue-300 space-y-1 list-disc list-inside">
+                            <li><strong>read_orders</strong> - Access to order data</li>
+                            <li><strong>read_customers</strong> - Access to customer names, addresses, phones</li>
+                            <li><strong>read_products</strong> - Access to product data</li>
+                            <li><strong>read_fulfillments</strong> - Access to fulfillment status</li>
+                          </ul>
+                          <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
+                            Go to Shopify Admin → Apps → Develop Apps → Create App → Configure Admin API scopes
+                          </p>
+                        </div>
                       </div>
                     ) : (
                       <>

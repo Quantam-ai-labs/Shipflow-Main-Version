@@ -262,6 +262,18 @@ export class ShopifyService {
 
         retryCount = 0; // Reset retry count on success
         const data: ShopifyOrdersResponse = await response.json();
+        
+        // Debug: Log raw API response for first few orders
+        if (pageCount === 1 && data.orders.length > 0) {
+          // Log full raw order to see all available fields
+          const firstOrder = data.orders[0];
+          const lastOrder = data.orders[data.orders.length - 1];
+          console.log(`[Shopify RAW API DEBUG] FULL first order JSON (keys): ${Object.keys(firstOrder as any).join(', ')}`);
+          console.log(`[Shopify RAW API DEBUG] shipping_address keys: ${firstOrder.shipping_address ? Object.keys(firstOrder.shipping_address).join(', ') : 'NULL'}`);
+          console.log(`[Shopify RAW API DEBUG] First order shipping_address FULL: ${JSON.stringify(firstOrder.shipping_address, null, 2)}`);
+          console.log(`[Shopify RAW API DEBUG] Last order on page (#${lastOrder.name}) shipping_address: ${JSON.stringify(lastOrder.shipping_address)}`);
+        }
+        
         allOrders.push(...data.orders);
 
         // Get next page URL from Link header
@@ -347,7 +359,27 @@ export class ShopifyService {
 
     for (const shopifyOrder of shopifyOrders) {
       const shopifyOrderId = String(shopifyOrder.id);
+      
+      // Debug: Log the first few orders to see what data is coming from Shopify
+      if (newCount + updatedCount < 3) {
+        console.log(`[Shopify DEBUG] Order ${shopifyOrder.name}:`);
+        console.log(`  - customer: ${JSON.stringify(shopifyOrder.customer)}`);
+        console.log(`  - shipping_address: ${JSON.stringify(shopifyOrder.shipping_address)}`);
+        console.log(`  - billing_address: ${JSON.stringify(shopifyOrder.billing_address)}`);
+        console.log(`  - email: ${shopifyOrder.email}`);
+      }
+      
       const transformedOrder = this.transformOrderForStorage(shopifyOrder);
+      
+      // Debug: Log transformed customer data
+      if (newCount + updatedCount < 3) {
+        console.log(`[Shopify DEBUG] Transformed ${shopifyOrder.name}:`);
+        console.log(`  - customerName: ${transformedOrder.customerName}`);
+        console.log(`  - customerPhone: ${transformedOrder.customerPhone}`);
+        console.log(`  - customerEmail: ${transformedOrder.customerEmail}`);
+        console.log(`  - city: ${transformedOrder.city}`);
+        console.log(`  - shippingAddress: ${transformedOrder.shippingAddress}`);
+      }
       
       const existingOrderId = existingOrdersMap.get(shopifyOrderId);
       

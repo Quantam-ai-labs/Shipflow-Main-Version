@@ -49,6 +49,7 @@ import {
   Phone,
   MapPin,
   Tag,
+  AlertCircle,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -190,6 +191,9 @@ export default function Orders() {
 
   const orders = data?.orders || [];
   const totalPages = Math.ceil((data?.total || 0) / pageSize);
+  
+  // Check if customer data is missing (shows warning banner)
+  const missingCustomerData = orders.length > 0 && orders.filter(o => o.customerName === "Unknown").length > orders.length * 0.5;
 
   // Group orders by month
   const ordersByMonth = orders.reduce((acc, order) => {
@@ -229,6 +233,26 @@ export default function Orders() {
 
   return (
     <div className="space-y-6">
+      {/* Warning Banner for Missing Customer Data */}
+      {missingCustomerData && (
+        <div className="p-4 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
+            <div>
+              <p className="font-medium text-amber-800 dark:text-amber-200">
+                Customer data is missing from your orders
+              </p>
+              <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                Your Shopify access token may not have the required permissions to access customer information (names, addresses, phones). 
+                To fix this, create a new Custom App in Shopify Admin with the <strong>read_customers</strong> scope enabled, 
+                then reconnect your store in{" "}
+                <Link href="/integrations" className="underline font-medium">Integrations</Link>.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
