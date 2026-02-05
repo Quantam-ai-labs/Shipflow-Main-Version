@@ -130,7 +130,29 @@ export async function setupAuth(app: Express) {
   });
 }
 
+// Demo mode flag - bypasses auth in development
+const DEMO_MODE = process.env.NODE_ENV !== "production";
+
+// Demo user for development - uses a fixed ID so team membership is preserved
+const DEMO_USER = {
+  claims: {
+    sub: "demo-user-dev-123",
+    email: "demo@shipflow.pk",
+    first_name: "Demo",
+    last_name: "User",
+  },
+  expires_at: Math.floor(Date.now() / 1000) + 86400 * 30, // 30 days from now
+};
+
 export const isAuthenticated: RequestHandler = async (req, res, next) => {
+  // DEMO MODE: Bypass authentication and inject demo user
+  if (DEMO_MODE) {
+    if (!req.user) {
+      (req as any).user = DEMO_USER;
+    }
+    return next();
+  }
+
   const user = req.user as any;
 
   if (!req.isAuthenticated() || !user.expires_at) {
