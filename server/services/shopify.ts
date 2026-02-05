@@ -494,59 +494,82 @@ export class ShopifyService {
     const noteAddress = getNoteAttribute(['full address', 'address', 'ایڈریس']);
     const noteCity = getNoteAttribute(['city', 'شہر']);
 
-    // Priority for customer name: shipping_address.name > customer name > billing_address.name > note_attributes
+    // Helper to check if a value is meaningful (not empty, not just whitespace)
+    const isMeaningful = (val: string | null | undefined): val is string => {
+      return Boolean(val && val.trim().length > 0);
+    };
+
+    // Priority for customer name: 
+    // 1. shipping_address.name (store checkout)
+    // 2. shipping_address first+last (store checkout)
+    // 3. customer first+last (customer account)
+    // 4. billing_address.name (fallback)
+    // 5. note_attributes (custom checkout forms like Releaseit COD)
     let customerName = 'Unknown';
-    if (shippingAddr?.name) {
-      customerName = shippingAddr.name;
-    } else if (shippingAddr?.first_name || shippingAddr?.last_name) {
+    
+    // Try shipping address name first
+    if (isMeaningful(shippingAddr?.name)) {
+      customerName = shippingAddr.name.trim();
+    } else if (isMeaningful(shippingAddr?.first_name) || isMeaningful(shippingAddr?.last_name)) {
       customerName = `${shippingAddr?.first_name || ''} ${shippingAddr?.last_name || ''}`.trim();
-    } else if (customer?.first_name || customer?.last_name) {
+    } 
+    // Then try customer object
+    else if (isMeaningful(customer?.first_name) || isMeaningful(customer?.last_name)) {
       customerName = `${customer?.first_name || ''} ${customer?.last_name || ''}`.trim();
-    } else if (billingAddr?.name) {
-      customerName = billingAddr.name;
-    } else if (noteFullName) {
-      customerName = noteFullName;
+    } 
+    // Then billing address
+    else if (isMeaningful(billingAddr?.name)) {
+      customerName = billingAddr.name.trim();
+    } else if (isMeaningful(billingAddr?.first_name) || isMeaningful(billingAddr?.last_name)) {
+      customerName = `${billingAddr?.first_name || ''} ${billingAddr?.last_name || ''}`.trim();
+    }
+    // Finally note_attributes (Releaseit COD Form)
+    else if (isMeaningful(noteFullName)) {
+      customerName = noteFullName.trim();
     }
 
     // Priority for phone: shipping_address > customer > billing_address > note_attributes
     let customerPhone: string | null = null;
-    if (shippingAddr?.phone) {
-      customerPhone = shippingAddr.phone;
-    } else if (customer?.phone) {
-      customerPhone = customer.phone;
-    } else if (billingAddr?.phone) {
-      customerPhone = billingAddr.phone;
-    } else if (customer?.default_address?.phone) {
-      customerPhone = customer.default_address.phone;
-    } else if (notePhone) {
-      customerPhone = notePhone;
+    if (isMeaningful(shippingAddr?.phone)) {
+      customerPhone = shippingAddr.phone.trim();
+    } else if (isMeaningful(customer?.phone)) {
+      customerPhone = customer.phone.trim();
+    } else if (isMeaningful(billingAddr?.phone)) {
+      customerPhone = billingAddr.phone.trim();
+    } else if (isMeaningful(customer?.default_address?.phone)) {
+      customerPhone = customer.default_address.phone.trim();
+    } else if (isMeaningful(notePhone)) {
+      customerPhone = notePhone.trim();
     }
 
     // Get email from multiple sources
-    const customerEmail = customer?.email || shopifyOrder.email || null;
+    const customerEmail = customer?.email?.trim() || shopifyOrder.email?.trim() || null;
 
     // Get city from shipping address, fallback to billing address, then note_attributes
-    const city = shippingAddr?.city || billingAddr?.city || customer?.default_address?.city || noteCity || null;
+    const city = (isMeaningful(shippingAddr?.city) ? shippingAddr.city.trim() : null) 
+      || (isMeaningful(billingAddr?.city) ? billingAddr.city.trim() : null) 
+      || (isMeaningful(customer?.default_address?.city) ? customer.default_address.city.trim() : null) 
+      || (isMeaningful(noteCity) ? noteCity.trim() : null);
     const province = shippingAddr?.province || billingAddr?.province || customer?.default_address?.province || null;
     const postalCode = shippingAddr?.zip || billingAddr?.zip || customer?.default_address?.zip || null;
     const country = shippingAddr?.country || billingAddr?.country || customer?.default_address?.country || 'Pakistan';
 
     // Build full shipping address with fallback to note_attributes
     let fullAddress: string | null = null;
-    if (shippingAddr?.address1) {
+    if (isMeaningful(shippingAddr?.address1)) {
       const addressParts = [
         shippingAddr.address1,
         shippingAddr.address2,
-      ].filter(Boolean);
-      fullAddress = addressParts.join(', ') || null;
-    } else if (billingAddr?.address1) {
+      ].filter(p => isMeaningful(p));
+      fullAddress = addressParts.join(', ').trim() || null;
+    } else if (isMeaningful(billingAddr?.address1)) {
       const addressParts = [
         billingAddr.address1,
         billingAddr.address2,
-      ].filter(Boolean);
-      fullAddress = addressParts.join(', ') || null;
-    } else if (noteAddress) {
-      fullAddress = noteAddress;
+      ].filter(p => isMeaningful(p));
+      fullAddress = addressParts.join(', ').trim() || null;
+    } else if (isMeaningful(noteAddress)) {
+      fullAddress = noteAddress.trim();
     }
 
     // Extract courier info from note_attributes (hxs_courier_name, hxs_courier_tracking)

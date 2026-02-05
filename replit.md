@@ -78,15 +78,26 @@ Preferred communication style: Simple, everyday language.
   2. Setup Couriers - optional step to configure Leopards and PostEx credentials
   3. Initial Sync - imports all historical orders from Shopify
 
-### Orders Page Enhancements
-- Complete redesign with all columns: Status, Order ID, City, Name, Phone, Address, Qty, Amount, Tags, Remarks 1-4
-- Month-wise filtering: Current Month, Last Month, Last 2/3 Months
-- Courier filtering: Leopards, PostEx, TCS
-- Universal shipment statuses: Pending, Booked, Dispatched, Arrived, Out for Delivery, Delivered, Failed, Reattempt, Returned
-- Inline remark editing with 4 remark columns for team collaboration
+### Orders Page (Clean Table UI)
+- Clean spreadsheet-style table with alternating row colors and sticky header
+- Columns: Status, Order ID, City, Name, Phone, Address, Qty, Amount, Courier, Remark
+- Server-side filtering via dropdowns: Status, Courier, Month (Current/Last/2-3 months)
+- Full-text search across order number, customer name, phone, tracking
+- Inline remark editing via modal dialog
+- Pagination (50 orders per page) with server-side filtering
+- Export to CSV functionality
+
+### Courier Status Tracking
+- Real-time status sync via "Sync Status" button
+- Efficient batched processing: max 25 orders per sync, 5 parallel requests
+- Smart filtering: only syncs non-delivered orders not updated in last hour
+- Completes in under 10 seconds for typical batch
+- Status mapping: Leopards and PostEx statuses mapped to universal statuses
 
 ### Backend Improvements
 - `GET /api/orders` supports search, status, courier, month filters with pagination
+- `POST /api/couriers/sync-statuses` - batched courier status updates
+- `GET /api/couriers/track/:courier/:trackingNumber` - track individual shipment
 - `PATCH /api/orders/:id/remark` for inline remark updates (tenant-isolated)
 - Shopify sync extracts customer data from shipping_address with fallbacks
 - Order metafields (hxs_courier_name, hxs_courier_tracking) captured during sync

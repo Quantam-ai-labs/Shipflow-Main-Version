@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -12,14 +11,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -36,20 +27,17 @@ import {
 import {
   Package,
   Search,
-  Filter,
   MoreVertical,
   Eye,
   Truck,
-  MessageSquare,
   RefreshCw,
   Download,
   ChevronLeft,
   ChevronRight,
-  Calendar,
-  Phone,
-  MapPin,
-  Tag,
   AlertCircle,
+  X,
+  Loader2,
+  Filter,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -63,17 +51,17 @@ const statusOptions = [
   { value: "unfulfilled", label: "Unfulfilled" },
   { value: "booked", label: "Booked" },
   { value: "dispatched", label: "Dispatched" },
-  { value: "arrived", label: "Arrived at Destination" },
+  { value: "arrived", label: "Arrived" },
   { value: "out_for_delivery", label: "Out for Delivery" },
   { value: "delivered", label: "Delivered" },
-  { value: "failed", label: "Delivery Failed" },
+  { value: "failed", label: "Failed" },
   { value: "reattempt", label: "Reattempt" },
   { value: "returned", label: "Returned" },
 ];
 
 const monthOptions = [
-  { value: "all", label: "All Months" },
-  { value: "current", label: "Current Month" },
+  { value: "all", label: "All Time" },
+  { value: "current", label: "This Month" },
   { value: "last", label: "Last Month" },
   { value: "2months", label: "Last 2 Months" },
   { value: "3months", label: "Last 3 Months" },
@@ -86,35 +74,26 @@ const courierOptions = [
   { value: "tcs", label: "TCS" },
 ];
 
-function getShipmentStatusBadge(status: string | null, hasCourierTracking: boolean) {
-  const statusConfig: Record<string, { bg: string; label: string }> = {
-    unfulfilled: { bg: "bg-slate-500/10 text-slate-600 border-slate-500/20", label: "Unfulfilled" },
-    pending: { bg: "bg-gray-500/10 text-gray-600 border-gray-500/20", label: "Pending" },
-    booked: { bg: "bg-blue-500/10 text-blue-600 border-blue-500/20", label: "Booked" },
-    dispatched: { bg: "bg-indigo-500/10 text-indigo-600 border-indigo-500/20", label: "Dispatched" },
-    arrived: { bg: "bg-purple-500/10 text-purple-600 border-purple-500/20", label: "Arrived" },
-    out_for_delivery: { bg: "bg-amber-500/10 text-amber-600 border-amber-500/20", label: "Out for Delivery" },
-    delivered: { bg: "bg-green-500/10 text-green-600 border-green-500/20", label: "Delivered" },
-    failed: { bg: "bg-red-500/10 text-red-600 border-red-500/20", label: "Failed" },
-    reattempt: { bg: "bg-orange-500/10 text-orange-600 border-orange-500/20", label: "Reattempt" },
-    returned: { bg: "bg-red-500/10 text-red-600 border-red-500/20", label: "Returned" },
+function getStatusBadge(status: string | null, hasCourierTracking: boolean) {
+  const config: Record<string, { bg: string; label: string }> = {
+    unfulfilled: { bg: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300", label: "Unfulfilled" },
+    pending: { bg: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300", label: "Pending" },
+    booked: { bg: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300", label: "Booked" },
+    dispatched: { bg: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300", label: "Dispatched" },
+    arrived: { bg: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300", label: "Arrived" },
+    out_for_delivery: { bg: "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300", label: "Out for Delivery" },
+    delivered: { bg: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300", label: "Delivered" },
+    failed: { bg: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300", label: "Failed" },
+    reattempt: { bg: "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300", label: "Reattempt" },
+    returned: { bg: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300", label: "Returned" },
   };
 
-  // If no courier tracking, show "Unfulfilled" regardless of shipmentStatus
   if (!hasCourierTracking) {
-    return <Badge className={statusConfig.unfulfilled.bg}>{statusConfig.unfulfilled.label}</Badge>;
+    return <Badge className={`${config.unfulfilled.bg} text-xs font-medium`}>{config.unfulfilled.label}</Badge>;
   }
 
-  // For tracked orders, show actual status or "Pending" if status unknown
-  const config = statusConfig[status || "pending"] || statusConfig.pending;
-  return <Badge className={config.bg}>{config.label}</Badge>;
-}
-
-function getPaymentBadge(method: string | null) {
-  if (method === "cod") {
-    return <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30">COD</Badge>;
-  }
-  return <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30">Prepaid</Badge>;
+  const c = config[status || "pending"] || config.pending;
+  return <Badge className={`${c.bg} text-xs font-medium`}>{c.label}</Badge>;
 }
 
 interface OrdersResponse {
@@ -127,21 +106,31 @@ interface OrdersResponse {
 export default function Orders() {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [courierFilter, setCourierFilter] = useState("all");
   const [monthFilter, setMonthFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [pageSize] = useState(50);
+  
   const [remarkDialogOpen, setRemarkDialogOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [remarkValue, setRemarkValue] = useState("");
-  const isDemoData = false;
 
-  const { data, isLoading } = useQuery<OrdersResponse>({
-    queryKey: ["/api/orders", { search, status: statusFilter, courier: courierFilter, month: monthFilter, page, pageSize }],
+  const handleSearchChange = useCallback((value: string) => {
+    setSearch(value);
+    const timer = setTimeout(() => {
+      setDebouncedSearch(value);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const { data, isLoading, isFetching } = useQuery<OrdersResponse>({
+    queryKey: ["/api/orders", { search: debouncedSearch, status: statusFilter, courier: courierFilter, month: monthFilter, page, pageSize }],
     queryFn: async () => {
       const params = new URLSearchParams();
-      if (search) params.set("search", search);
+      if (debouncedSearch) params.set("search", debouncedSearch);
       if (statusFilter && statusFilter !== "all") params.set("status", statusFilter);
       if (courierFilter && courierFilter !== "all") params.set("courier", courierFilter);
       if (monthFilter && monthFilter !== "all") params.set("month", monthFilter);
@@ -153,24 +142,40 @@ export default function Orders() {
     },
   });
 
+  const orders = data?.orders || [];
+  const totalPages = Math.ceil((data?.total || 0) / pageSize);
+
   const syncOrdersMutation = useMutation({
     mutationFn: async () => {
       const response = await apiRequest("POST", "/api/integrations/shopify/sync");
       return response.json();
     },
-    onSuccess: (data) => {
+    onSuccess: (result) => {
       toast({
         title: "Sync Complete",
-        description: `Synced ${data.synced} new orders (${data.total} total from Shopify).`,
+        description: `Synced ${result.synced} new orders (${result.total} total).`,
       });
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
     },
     onError: (error: Error) => {
+      toast({ title: "Sync Failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const syncCourierStatusMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/couriers/sync-statuses");
+      return response.json();
+    },
+    onSuccess: (result) => {
       toast({
-        title: "Sync Failed",
-        description: error.message,
-        variant: "destructive",
+        title: "Courier Status Updated",
+        description: `Updated ${result.updated} of ${result.total} shipments.`,
       });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Status Sync Failed", description: error.message, variant: "destructive" });
     },
   });
 
@@ -188,39 +193,15 @@ export default function Orders() {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
-
-  const orders = data?.orders || [];
-  const totalPages = Math.ceil((data?.total || 0) / pageSize);
   
-  // Check if customer data is missing (shows warning banner)
-  // Count orders with missing customer info (Unknown, null, empty, or N/A)
   const missingCustomerCount = orders.filter(o => 
-    !o.customerName || 
-    o.customerName === "Unknown" || 
-    o.customerName === "N/A" || 
-    o.customerName.trim() === ""
+    !o.customerName || o.customerName === "Unknown" || o.customerName === "N/A"
   ).length;
-  const missingCustomerData = orders.length >= 5 && missingCustomerCount > orders.length * 0.5;
-
-  // Group orders by month
-  const ordersByMonth = orders.reduce((acc, order) => {
-    const date = order.orderDate ? new Date(order.orderDate) : new Date();
-    const monthKey = format(date, "MMMM yyyy");
-    if (!acc[monthKey]) {
-      acc[monthKey] = [];
-    }
-    acc[monthKey].push(order);
-    return acc;
-  }, {} as Record<string, Order[]>);
+  const showMissingDataWarning = orders.length >= 5 && missingCustomerCount > orders.length * 0.5;
 
   const handleExport = () => {
-    const getExportStatus = (order: Order) => {
-      // Match UI logic: unfulfilled if no courier tracking, otherwise actual status
-      if (!order.courierTracking) return "Unfulfilled";
-      return order.shipmentStatus || "Pending";
-    };
     const csv = orders.map((o) => 
-      `${o.orderNumber},${o.customerName},${o.customerPhone || ""},${o.city || ""},${o.shippingAddress || ""},${o.totalQuantity || 1},${o.totalAmount},${(o.tags || []).join(";")},${getExportStatus(o)},${o.remark || ""}`
+      `"${o.orderNumber}","${o.customerName}","${o.customerPhone || ""}","${o.city || ""}","${(o.shippingAddress || "").replace(/"/g, '""')}","${o.totalQuantity || 1}","${o.totalAmount}","${(o.tags || []).join(";")}","${o.courierTracking ? o.shipmentStatus || "Pending" : "Unfulfilled"}","${(o.remark || "").replace(/"/g, '""')}"`
     ).join("\n");
     const header = "Order ID,Customer Name,Phone,City,Address,Qty,Amount,Tags,Status,Remark\n";
     const blob = new Blob([header + csv], { type: "text/csv" });
@@ -229,7 +210,7 @@ export default function Orders() {
     a.href = url;
     a.download = `orders-${format(new Date(), "yyyy-MM-dd")}.csv`;
     a.click();
-    toast({ title: "Export Complete", description: `Exported ${orders.length} orders to CSV.` });
+    toast({ title: "Export Complete", description: `Exported ${orders.length} orders.` });
   };
 
   const openRemarkDialog = (order: Order) => {
@@ -238,309 +219,302 @@ export default function Orders() {
     setRemarkDialogOpen(true);
   };
 
+  const clearAllFilters = () => {
+    setSearch("");
+    setDebouncedSearch("");
+    setStatusFilter("all");
+    setCourierFilter("all");
+    setMonthFilter("all");
+    setPage(1);
+  };
+
+  const hasActiveFilters = debouncedSearch || statusFilter !== "all" || courierFilter !== "all" || monthFilter !== "all";
+
   return (
-    <div className="space-y-6">
-      {/* Warning Banner for Missing Customer Data */}
-      {missingCustomerData && (
-        <div className="p-4 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg" data-testid="banner-missing-customer-data">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
-            <div>
-              <p className="font-medium text-amber-800 dark:text-amber-200">
-                Customer data is missing from your orders
-              </p>
-              <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
-                Your Shopify access token may not have the required permissions to access customer information (names, addresses, phones). 
-                To fix this:
-              </p>
-              <ol className="text-sm text-amber-700 dark:text-amber-300 mt-2 list-decimal list-inside space-y-1">
-                <li>Create a new Custom App in Shopify Admin with the <strong>read_customers</strong> scope enabled</li>
-                <li>Go to{" "}<Link href="/integrations" className="underline font-medium" data-testid="link-integrations">Integrations</Link>{" "}and click "Update Token"</li>
-                <li>Re-sync your orders to get complete customer data</li>
-              </ol>
-            </div>
+    <div className="h-full flex flex-col">
+      {showMissingDataWarning && (
+        <div className="mx-4 mt-4 p-3 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg flex items-start gap-3" data-testid="banner-missing-customer-data">
+          <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+          <div className="text-sm">
+            <span className="font-medium text-amber-800 dark:text-amber-200">Customer data missing for some orders.</span>{" "}
+            <Link href="/integrations" className="underline text-amber-700 dark:text-amber-300">Update Shopify permissions</Link> and re-sync.
           </div>
         </div>
       )}
       
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">Orders</h1>
-          <p className="text-muted-foreground">Complete order management with customer data and tracking.</p>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {isDemoData && (
-             <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
-               Demo Data Active
-             </Badge>
+      <div className="flex items-center justify-between gap-4 p-4 border-b bg-background sticky top-0 z-10">
+        <div className="flex items-center gap-3">
+          <h1 className="text-xl font-bold" data-testid="heading-orders">Orders</h1>
+          {data?.total !== undefined && (
+            <Badge variant="secondary" className="font-normal">
+              {data.total.toLocaleString()} total
+            </Badge>
           )}
+          {isFetching && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+        </div>
+        
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Search orders..."
+              value={search}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              className="pl-8 w-[180px] h-9"
+              data-testid="input-search-orders"
+            />
+          </div>
+          
+          <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
+            <SelectTrigger className="w-[140px] h-9" data-testid="select-status-filter">
+              <Filter className="w-4 h-4 mr-1" />
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              {statusOptions.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          
+          <Select value={courierFilter} onValueChange={(v) => { setCourierFilter(v); setPage(1); }}>
+            <SelectTrigger className="w-[130px] h-9" data-testid="select-courier-filter">
+              <Truck className="w-4 h-4 mr-1" />
+              <SelectValue placeholder="Courier" />
+            </SelectTrigger>
+            <SelectContent>
+              {courierOptions.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          
+          <Select value={monthFilter} onValueChange={(v) => { setMonthFilter(v); setPage(1); }}>
+            <SelectTrigger className="w-[130px] h-9" data-testid="select-month-filter">
+              <SelectValue placeholder="Time" />
+            </SelectTrigger>
+            <SelectContent>
+              {monthOptions.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          
+          {hasActiveFilters && (
+            <Button variant="ghost" size="sm" onClick={clearAllFilters} className="h-9 text-muted-foreground">
+              <X className="w-4 h-4 mr-1" /> Clear
+            </Button>
+          )}
+          
+          <div className="h-6 w-px bg-border mx-1" />
+          
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => syncCourierStatusMutation.mutate()}
+            disabled={syncCourierStatusMutation.isPending}
+            className="h-9"
+            data-testid="button-sync-courier-status"
+          >
+            {syncCourierStatusMutation.isPending ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Truck className="w-4 h-4 mr-2" />
+            )}
+            Sync Status
+          </Button>
+          
           <Button 
             variant="outline" 
             size="sm" 
             onClick={() => syncOrdersMutation.mutate()}
             disabled={syncOrdersMutation.isPending}
+            className="h-9"
             data-testid="button-sync-orders"
           >
-            <RefreshCw className={`w-4 h-4 mr-2 ${syncOrdersMutation.isPending ? "animate-spin" : ""}`} />
-            {syncOrdersMutation.isPending ? "Syncing..." : "Sync All Orders"}
+            {syncOrdersMutation.isPending ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4 mr-2" />
+            )}
+            Sync Orders
           </Button>
-          <Button variant="outline" size="sm" onClick={handleExport} data-testid="button-export-orders">
+          
+          <Button variant="outline" size="sm" onClick={handleExport} className="h-9" data-testid="button-export-orders">
             <Download className="w-4 h-4 mr-2" />
             Export
           </Button>
         </div>
       </div>
 
-      {/* Filters */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex flex-col lg:flex-row gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Search by order number, customer name, phone, or city..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-10"
-                data-testid="input-search-orders"
-              />
-            </div>
-            <div className="flex gap-2 flex-wrap">
-              <Select value={monthFilter} onValueChange={setMonthFilter}>
-                <SelectTrigger className="w-[160px]" data-testid="select-month-filter">
-                  <Calendar className="w-4 h-4 mr-2" />
-                  <SelectValue placeholder="Month" />
-                </SelectTrigger>
-                <SelectContent>
-                  {monthOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[180px]" data-testid="select-status-filter">
-                  <Filter className="w-4 h-4 mr-2" />
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  {statusOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={courierFilter} onValueChange={setCourierFilter}>
-                <SelectTrigger className="w-[160px]" data-testid="select-courier-filter">
-                  <Truck className="w-4 h-4 mr-2" />
-                  <SelectValue placeholder="Courier" />
-                </SelectTrigger>
-                <SelectContent>
-                  {courierOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Orders Table */}
-      <Card>
-        <CardHeader className="pb-4">
-          <CardTitle className="text-lg font-semibold flex items-center gap-2">
-            <Package className="w-5 h-5" />
-            Orders List
-            {data?.total !== undefined && (
-              <Badge variant="secondary" className="ml-2">
-                {data.total.toLocaleString()} orders
-              </Badge>
-            )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="p-4 space-y-4">
-              {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-                <div key={i} className="flex items-center gap-4">
-                  <Skeleton className="h-4 w-20" />
-                  <Skeleton className="h-4 w-32 flex-1" />
-                  <Skeleton className="h-4 w-24" />
-                  <Skeleton className="h-6 w-20" />
-                </div>
-              ))}
-            </div>
-          ) : orders.length > 0 ? (
-            <>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/50">
-                      <TableHead className="w-[80px] font-semibold">Status</TableHead>
-                      <TableHead className="w-[100px] font-semibold">Order ID</TableHead>
-                      <TableHead className="w-[100px] font-semibold">City</TableHead>
-                      <TableHead className="font-semibold">Customer Name</TableHead>
-                      <TableHead className="font-semibold">Phone</TableHead>
-                      <TableHead className="font-semibold">Address</TableHead>
-                      <TableHead className="w-[60px] text-center font-semibold">Qty</TableHead>
-                      <TableHead className="w-[100px] text-right font-semibold">Amount</TableHead>
-                      <TableHead className="font-semibold">Tags</TableHead>
-                      <TableHead className="w-[200px] font-semibold">Remark</TableHead>
-                      <TableHead className="w-[50px]"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {Object.entries(ordersByMonth).map(([month, monthOrders]) => (
-                      <>
-                        <TableRow key={`month-${month}`} className="bg-muted/30">
-                          <TableCell colSpan={11} className="py-2">
-                            <span className="font-semibold text-sm flex items-center gap-2">
-                              <Calendar className="w-4 h-4" />
-                              {month} ({monthOrders.length} orders)
-                            </span>
-                          </TableCell>
-                        </TableRow>
-                        {monthOrders.map((order) => (
-                          <TableRow key={order.id} className="hover-elevate" data-testid={`table-row-order-${order.id}`}>
-                            <TableCell>
-                              {getShipmentStatusBadge(order.shipmentStatus, !!order.courierTracking)}
-                            </TableCell>
-                            <TableCell className="font-medium">
-                              <Link href={`/orders/${order.id}`} className="hover:text-primary hover:underline">
-                                {order.orderNumber}
-                              </Link>
-                            </TableCell>
-                            <TableCell className="text-sm">
-                              {order.city || <span className="text-muted-foreground">-</span>}
-                            </TableCell>
-                            <TableCell>
-                              <span className="font-medium text-sm">{order.customerName}</span>
-                            </TableCell>
-                            <TableCell className="text-sm">
-                              {order.customerPhone || <span className="text-muted-foreground">-</span>}
-                            </TableCell>
-                            <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate" title={order.shippingAddress || ""}>
-                              {order.shippingAddress || "-"}
-                            </TableCell>
-                            <TableCell className="text-center font-medium">
-                              {order.totalQuantity || 1}
-                            </TableCell>
-                            <TableCell className="text-right font-medium">
-                              PKR {Number(order.totalAmount).toLocaleString()}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex flex-wrap gap-1 max-w-[150px]">
-                                {(order.tags || []).slice(0, 3).map((tag, i) => (
-                                  <Badge key={i} variant="outline" className="text-xs px-1 py-0">
-                                    {tag}
-                                  </Badge>
-                                ))}
-                                {(order.tags || []).length > 3 && (
-                                  <Badge variant="outline" className="text-xs px-1 py-0">
-                                    +{(order.tags || []).length - 3}
-                                  </Badge>
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <button 
-                                onClick={() => openRemarkDialog(order)}
-                                className="text-xs text-left hover:bg-muted p-1 rounded cursor-pointer w-full min-h-[24px] truncate"
-                                title={order.remark || "Add remark"}
-                                data-testid={`button-remark-${order.id}`}
-                              >
-                                {order.remark || <span className="text-muted-foreground italic">Add...</span>}
-                              </button>
-                            </TableCell>
-                            <TableCell>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="icon" data-testid={`button-order-menu-${order.id}`}>
-                                    <MoreVertical className="w-4 h-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem asChild>
-                                    <Link href={`/orders/${order.id}`} className="cursor-pointer">
-                                      <Eye className="w-4 h-4 mr-2" />
-                                      View Details
-                                    </Link>
-                                  </DropdownMenuItem>
-                                  {order.courierTracking && (
-                                    <DropdownMenuItem>
-                                      <Truck className="w-4 h-4 mr-2" />
-                                      Track: {order.courierName || "Courier"}
-                                    </DropdownMenuItem>
-                                  )}
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </>
-                    ))}
-                  </TableBody>
-                </Table>
+      <div className="flex-1 overflow-auto">
+        {isLoading ? (
+          <div className="p-4 space-y-2">
+            {Array.from({ length: 20 }).map((_, i) => (
+              <div key={`skeleton-${i}`} className="flex items-center gap-4 py-2">
+                <Skeleton className="h-6 w-20" />
+                <Skeleton className="h-6 w-24" />
+                <Skeleton className="h-6 w-28 flex-1" />
+                <Skeleton className="h-6 w-24" />
+                <Skeleton className="h-6 w-20" />
               </div>
-              {/* Pagination */}
-              {totalPages > 1 && (
-                <div className="flex items-center justify-between p-4 border-t">
-                  <p className="text-sm text-muted-foreground">
-                    Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, data?.total ?? 0)} of {data?.total?.toLocaleString()} orders
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPage(page - 1)}
-                      disabled={page === 1}
-                      data-testid="button-prev-page"
-                    >
-                      <ChevronLeft className="w-4 h-4" />
-                      Prev
-                    </Button>
-                    <span className="text-sm text-muted-foreground px-2">
-                      Page {page} of {totalPages}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPage(page + 1)}
-                      disabled={page >= totalPages}
-                      data-testid="button-next-page"
-                    >
-                      Next
-                      <ChevronRight className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
+            ))}
+          </div>
+        ) : (
+          <table className="w-full text-sm border-collapse" data-testid="table-orders">
+            <thead className="sticky top-0 bg-muted/90 backdrop-blur-sm z-10">
+              <tr className="border-b">
+                <th className="text-left p-2 pl-4 w-[100px] text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status</th>
+                <th className="text-left p-2 w-[100px] text-xs font-semibold uppercase tracking-wide text-muted-foreground">Order ID</th>
+                <th className="text-left p-2 w-[110px] text-xs font-semibold uppercase tracking-wide text-muted-foreground">City</th>
+                <th className="text-left p-2 w-[160px] text-xs font-semibold uppercase tracking-wide text-muted-foreground">Name</th>
+                <th className="text-left p-2 w-[120px] text-xs font-semibold uppercase tracking-wide text-muted-foreground">Phone</th>
+                <th className="text-left p-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Address</th>
+                <th className="text-center p-2 w-[50px] text-xs font-semibold uppercase tracking-wide text-muted-foreground">Qty</th>
+                <th className="text-right p-2 w-[90px] text-xs font-semibold uppercase tracking-wide text-muted-foreground">Amount</th>
+                <th className="text-left p-2 w-[100px] text-xs font-semibold uppercase tracking-wide text-muted-foreground">Courier</th>
+                <th className="text-left p-2 w-[160px] text-xs font-semibold uppercase tracking-wide text-muted-foreground">Remark</th>
+                <th className="w-[40px]"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {orders.length === 0 ? (
+                <tr key="empty-row">
+                  <td colSpan={11} className="text-center py-12">
+                    <Package className="w-10 h-10 mx-auto text-muted-foreground opacity-40 mb-3" />
+                    <p className="text-muted-foreground">No orders found</p>
+                    {hasActiveFilters && (
+                      <Button variant="ghost" onClick={clearAllFilters} className="mt-2 text-primary">
+                        Clear all filters
+                      </Button>
+                    )}
+                  </td>
+                </tr>
+              ) : (
+                orders.map((order, idx) => (
+                  <tr 
+                    key={order.id} 
+                    className={`border-b border-border/50 hover:bg-muted/30 transition-colors ${idx % 2 === 0 ? "bg-background" : "bg-muted/10"}`}
+                    data-testid={`table-row-order-${order.id}`}
+                  >
+                    <td className="p-2 pl-4">
+                      {getStatusBadge(order.shipmentStatus, !!order.courierTracking)}
+                    </td>
+                    <td className="p-2">
+                      <Link 
+                        href={`/orders/${order.id}`} 
+                        className="font-medium text-primary hover:underline"
+                        data-testid={`link-order-${order.id}`}
+                      >
+                        {order.orderNumber}
+                      </Link>
+                    </td>
+                    <td className="p-2 text-muted-foreground">
+                      {order.city || <span className="text-muted-foreground/50">-</span>}
+                    </td>
+                    <td className="p-2 font-medium truncate max-w-[160px]" title={order.customerName}>
+                      {order.customerName}
+                    </td>
+                    <td className="p-2 text-muted-foreground font-mono text-xs">
+                      {order.customerPhone || <span className="text-muted-foreground/50">-</span>}
+                    </td>
+                    <td className="p-2 text-muted-foreground text-xs truncate max-w-[200px]" title={order.shippingAddress || ""}>
+                      {order.shippingAddress || <span className="text-muted-foreground/50">-</span>}
+                    </td>
+                    <td className="p-2 text-center font-medium">
+                      {order.totalQuantity || 1}
+                    </td>
+                    <td className="p-2 text-right font-medium tabular-nums">
+                      {Number(order.totalAmount).toLocaleString()}
+                    </td>
+                    <td className="p-2">
+                      {order.courierName ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs">{order.courierName.replace(" Courier", "")}</span>
+                          {order.courierTracking && (
+                            <span className="text-[10px] text-muted-foreground font-mono">
+                              {order.courierTracking.slice(0, 8)}...
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground/50 text-xs">-</span>
+                      )}
+                    </td>
+                    <td className="p-2">
+                      <button 
+                        onClick={() => openRemarkDialog(order)}
+                        className="text-xs text-left hover:bg-muted p-1 rounded cursor-pointer w-full min-h-[24px] truncate block"
+                        title={order.remark || "Add remark"}
+                        data-testid={`button-remark-${order.id}`}
+                      >
+                        {order.remark || <span className="text-muted-foreground/50 italic">Add...</span>}
+                      </button>
+                    </td>
+                    <td className="p-2 pr-4">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-7 w-7" data-testid={`button-order-menu-${order.id}`}>
+                            <MoreVertical className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem asChild>
+                            <Link href={`/orders/${order.id}`} className="cursor-pointer">
+                              <Eye className="w-4 h-4 mr-2" />
+                              View Details
+                            </Link>
+                          </DropdownMenuItem>
+                          {order.courierTracking && (
+                            <DropdownMenuItem>
+                              <Truck className="w-4 h-4 mr-2" />
+                              Track: {order.courierTracking}
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </td>
+                  </tr>
+                ))
               )}
-            </>
-          ) : (
-            <div className="text-center py-12">
-              <Package className="w-12 h-12 mx-auto text-muted-foreground opacity-50 mb-4" />
-              <h3 className="text-lg font-medium mb-1">No orders found</h3>
-              <p className="text-muted-foreground mb-4">
-                {search || statusFilter !== "all" 
-                  ? "Try adjusting your filters" 
-                  : "Connect your Shopify store and sync orders to get started"}
-              </p>
-              <Button onClick={() => syncOrdersMutation.mutate()} disabled={syncOrdersMutation.isPending}>
-                <RefreshCw className={`w-4 h-4 mr-2 ${syncOrdersMutation.isPending ? "animate-spin" : ""}`} />
-                Sync Orders from Shopify
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            </tbody>
+          </table>
+        )}
+      </div>
 
-      {/* Remark Dialog */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between p-3 border-t bg-background sticky bottom-0">
+          <p className="text-sm text-muted-foreground">
+            Showing {(page - 1) * pageSize + 1}-{Math.min(page * pageSize, data?.total ?? 0)} of {data?.total?.toLocaleString()}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage(page - 1)}
+              disabled={page === 1}
+              data-testid="button-prev-page"
+            >
+              <ChevronLeft className="w-4 h-4 mr-1" />
+              Prev
+            </Button>
+            <span className="text-sm text-muted-foreground px-2">
+              Page {page} of {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage(page + 1)}
+              disabled={page >= totalPages}
+              data-testid="button-next-page"
+            >
+              Next
+              <ChevronRight className="w-4 h-4 ml-1" />
+            </Button>
+          </div>
+        </div>
+      )}
+
       <Dialog open={remarkDialogOpen} onOpenChange={setRemarkDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -549,18 +523,16 @@ export default function Orders() {
           <Textarea
             value={remarkValue}
             onChange={(e) => setRemarkValue(e.target.value)}
-            placeholder="Enter your remark..."
-            className="min-h-[100px]"
+            placeholder="Add a note about this order..."
+            rows={4}
+            data-testid="textarea-remark"
           />
           <DialogFooter>
             <Button variant="outline" onClick={() => setRemarkDialogOpen(false)}>
               Cancel
             </Button>
-            <Button 
-              onClick={() => selectedOrder && updateRemarkMutation.mutate({ 
-                orderId: selectedOrder.id, 
-                value: remarkValue 
-              })}
+            <Button
+              onClick={() => selectedOrder && updateRemarkMutation.mutate({ orderId: selectedOrder.id, value: remarkValue })}
               disabled={updateRemarkMutation.isPending}
               data-testid="button-save-remark"
             >

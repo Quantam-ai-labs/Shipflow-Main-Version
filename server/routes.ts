@@ -999,7 +999,7 @@ export async function registerRoutes(
     }
   });
 
-  // Sync courier statuses for all orders with tracking numbers
+  // Sync courier statuses for orders with tracking numbers (batched)
   app.post("/api/couriers/sync-statuses", isAuthenticated, async (req, res) => {
     try {
       const merchantId = await requireMerchant(req, res);
@@ -1007,34 +1007,67 @@ export async function registerRoutes(
 
       const { trackShipment } = await import('./services/couriers');
       
-      // Get all orders with courier tracking numbers
-      const { orders: ordersWithTracking } = await storage.getOrders(merchantId, { pageSize: 1000 });
-      const trackableOrders = ordersWithTracking.filter(o => o.courierTracking && o.courierName);
+      // Get recent orders with tracking - limit to 50 to keep response time reasonable
+      // Priority: orders not delivered yet and not recently updated
+      const { orders: ordersWithTracking } = await storage.getOrders(merchantId, { 
+        pageSize: 100 
+      });
+      
+      // Filter to trackable orders that need status updates
+      const now = new Date();
+      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+      
+      const trackableOrders = ordersWithTracking
+        .filter(o => o.courierTracking && o.courierName)
+        .filter(o => o.shipmentStatus !== 'delivered' && o.shipmentStatus !== 'returned')
+        .filter(o => !o.lastTrackingUpdate || new Date(o.lastTrackingUpdate) < oneHourAgo)
+        .slice(0, 25); // Limit to 25 orders per sync to keep under 10 seconds
+
+      console.log(`[Courier Sync] Syncing ${trackableOrders.length} orders...`);
 
       let updated = 0;
       let failed = 0;
 
-      for (const order of trackableOrders) {
-        try {
-          const result = await trackShipment(order.courierName!, order.courierTracking!);
-          
-          if (result && result.success) {
-            await storage.updateOrder(merchantId, order.id, {
-              shipmentStatus: result.status,
-              lastTrackingUpdate: new Date(),
-            });
+      // Process in parallel batches of 5
+      const batchSize = 5;
+      for (let i = 0; i < trackableOrders.length; i += batchSize) {
+        const batch = trackableOrders.slice(i, i + batchSize);
+        
+        const results = await Promise.allSettled(
+          batch.map(async (order) => {
+            try {
+              const result = await trackShipment(order.courierName!, order.courierTracking!);
+              
+              if (result && result.success) {
+                await storage.updateOrder(merchantId, order.id, {
+                  shipmentStatus: result.status,
+                  lastTrackingUpdate: new Date(),
+                });
+                return true;
+              }
+              return false;
+            } catch (err) {
+              console.error(`[Courier Sync] Error for ${order.courierTracking}:`, err);
+              return false;
+            }
+          })
+        );
+
+        for (const result of results) {
+          if (result.status === 'fulfilled' && result.value) {
             updated++;
           } else {
             failed++;
           }
-        } catch (err) {
-          console.error(`[Courier Sync] Error for ${order.courierTracking}:`, err);
-          failed++;
         }
         
-        // Rate limiting
-        await new Promise(resolve => setTimeout(resolve, 200));
+        // Brief delay between batches
+        if (i + batchSize < trackableOrders.length) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
       }
+
+      console.log(`[Courier Sync] Complete: ${updated} updated, ${failed} failed`);
 
       res.json({ 
         success: true, 
