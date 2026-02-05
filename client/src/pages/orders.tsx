@@ -510,7 +510,7 @@ export default function Orders() {
       <Dialog open={remarkDialogOpen} onOpenChange={setRemarkDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit Remark {remarkField} - {selectedOrder?.orderNumber}</DialogTitle>
+            <DialogTitle>Edit Remark - {selectedOrder?.orderNumber}</DialogTitle>
           </DialogHeader>
           <Textarea
             value={remarkValue}
