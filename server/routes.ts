@@ -497,6 +497,23 @@ export async function registerRoutes(
     }
   });
 
+  // Generate COD records from delivered orders
+  app.post("/api/cod-reconciliation/generate", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const result = await storage.generateCodRecordsFromOrders(merchantId);
+      res.json({ 
+        message: `Generated ${result.created} COD records (${result.skipped} already existed)`,
+        ...result 
+      });
+    } catch (error) {
+      console.error("Error generating COD records:", error);
+      res.status(500).json({ message: "Failed to generate COD records" });
+    }
+  });
+
   // Team Management
   app.get("/api/team", isAuthenticated, async (req, res) => {
     try {

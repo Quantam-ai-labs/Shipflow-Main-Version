@@ -72,6 +72,7 @@ export interface IStorage {
   getCodRecordById(merchantId: string, id: string): Promise<CodReconciliation | undefined>;
   createCodReconciliation(record: InsertCodReconciliation): Promise<CodReconciliation>;
   updateCodReconciliation(merchantId: string, id: string, data: Partial<InsertCodReconciliation>): Promise<CodReconciliation | undefined>;
+  generateCodRecordsFromOrders(merchantId: string): Promise<{ created: number; skipped: number }>;
 
   // Analytics
   getDashboardStats(merchantId: string): Promise<any>;
@@ -485,6 +486,62 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(codReconciliation.id, id), eq(codReconciliation.merchantId, merchantId)))
       .returning();
     return updated;
+  }
+
+  async generateCodRecordsFromOrders(merchantId: string): Promise<{ created: number; skipped: number }> {
+    // Get delivered COD orders that don't have COD reconciliation records yet
+    const deliveredCodOrders = await db.select()
+      .from(orders)
+      .where(
+        and(
+          eq(orders.merchantId, merchantId),
+          eq(orders.paymentMethod, "cod"),
+          eq(orders.shipmentStatus, "delivered")
+        )
+      );
+    
+    // Get existing COD reconciliation records to avoid duplicates
+    const existingRecords = await db.select({ orderId: codReconciliation.orderId })
+      .from(codReconciliation)
+      .where(eq(codReconciliation.merchantId, merchantId));
+    
+    const existingOrderIds = new Set(existingRecords.map(r => r.orderId));
+    
+    // Filter orders that need records created
+    const ordersToCreate = deliveredCodOrders.filter(o => !existingOrderIds.has(o.id));
+    const skipped = deliveredCodOrders.length - ordersToCreate.length;
+    
+    if (ordersToCreate.length === 0) {
+      return { created: 0, skipped };
+    }
+    
+    // Batch insert in chunks of 500 for better performance
+    const BATCH_SIZE = 500;
+    let created = 0;
+    
+    for (let i = 0; i < ordersToCreate.length; i += BATCH_SIZE) {
+      const batch = ordersToCreate.slice(i, i + BATCH_SIZE);
+      const values = batch.map(order => {
+        const codAmount = Number(order.totalAmount) || 0;
+        const courierFee = Math.round(codAmount * 0.025 * 100) / 100;
+        const netAmount = codAmount - courierFee;
+        return {
+          merchantId,
+          orderId: order.id,
+          courierName: order.courierName,
+          trackingNumber: order.courierTracking,
+          codAmount: codAmount.toString(),
+          courierFee: courierFee.toString(),
+          netAmount: netAmount.toString(),
+          status: "pending",
+        };
+      });
+      
+      await db.insert(codReconciliation).values(values);
+      created += batch.length;
+    }
+    
+    return { created, skipped };
   }
 
   // Analytics

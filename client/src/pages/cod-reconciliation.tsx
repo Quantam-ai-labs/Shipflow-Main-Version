@@ -38,6 +38,7 @@ import {
   Download,
   ChevronLeft,
   ChevronRight,
+  RefreshCw,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -129,6 +130,27 @@ export default function CodReconciliationPage() {
     },
   });
 
+  const generateMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/cod-reconciliation/generate", {});
+    },
+    onSuccess: async (response: any) => {
+      const data = await response.json();
+      queryClient.invalidateQueries({ queryKey: ["/api/cod-reconciliation"] });
+      toast({
+        title: "Records generated",
+        description: data.message,
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to generate records. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
       setSelectedRecords(records.filter((r) => r.status === "pending").map((r) => r.id));
@@ -211,6 +233,16 @@ export default function CodReconciliationPage() {
               Reconcile ({selectedRecords.length})
             </Button>
           )}
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => generateMutation.mutate()} 
+            disabled={generateMutation.isPending}
+            data-testid="button-generate-cod"
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${generateMutation.isPending ? 'animate-spin' : ''}`} />
+            {generateMutation.isPending ? 'Generating...' : 'Sync COD Records'}
+          </Button>
           <Button variant="outline" size="sm" onClick={handleExport} data-testid="button-export-cod">
             <Download className="w-4 h-4 mr-2" />
             Export
