@@ -33,11 +33,15 @@ export interface TrackingResult {
 
 const STATUS_MAP: Record<string, string> = {
   'booked': 'booked',
+  'pending': 'booked',
+  'shipment created': 'booked',
+  'dispatched': 'dispatched',
   'picked up': 'dispatched',
   'picked': 'dispatched',
   'arrived at origin': 'dispatched',
   'in transit': 'dispatched',
   'at transit hub': 'dispatched',
+  'transit': 'dispatched',
   'arrived at destination': 'arrived',
   'arrived': 'arrived',
   'out for delivery': 'out_for_delivery',
@@ -50,8 +54,8 @@ const STATUS_MAP: Record<string, string> = {
   'reattempt': 'reattempt',
   'returned': 'returned',
   'return': 'returned',
-  'pending': 'booked',
-  'shipment created': 'booked',
+  'cancelled': 'returned',
+  'cancel': 'returned',
 };
 
 function mapLeopardsStatus(courierStatus: string): string {

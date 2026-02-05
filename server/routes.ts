@@ -264,12 +264,13 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
 
-      const { search, status, courier, month, page, pageSize } = req.query;
+      const { search, status, courier, city, month, page, pageSize } = req.query;
       
       const result = await storage.getOrders(merchantId, {
         search: search as string,
         status: status as string,
         courier: courier as string,
+        city: city as string,
         month: month as string,
         page: parseInt(page as string) || 1,
         pageSize: parseInt(pageSize as string) || 20,
@@ -279,6 +280,19 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching orders:", error);
       res.status(500).json({ message: "Failed to fetch orders" });
+    }
+  });
+
+  app.get("/api/orders/cities", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      
+      const cities = await storage.getUniqueCities(merchantId);
+      res.json({ cities });
+    } catch (error) {
+      console.error("Error fetching cities:", error);
+      res.status(500).json({ message: "Failed to fetch cities" });
     }
   });
 

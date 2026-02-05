@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +24,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Package,
   Search,
@@ -38,13 +39,14 @@ import {
   X,
   Loader2,
   Filter,
+  Calendar,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Order } from "@shared/schema";
 import { Link } from "wouter";
-import { format } from "date-fns";
+import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
 
 const statusOptions = [
   { value: "all", label: "All Statuses" },
@@ -59,13 +61,25 @@ const statusOptions = [
   { value: "returned", label: "Returned" },
 ];
 
-const monthOptions = [
-  { value: "all", label: "All Time" },
-  { value: "current", label: "This Month" },
-  { value: "last", label: "Last Month" },
-  { value: "2months", label: "Last 2 Months" },
-  { value: "3months", label: "Last 3 Months" },
-];
+// Generate month tabs from January 2026 to current month
+function getMonthTabs() {
+  const tabs = [{ value: "all", label: "Universal", shortLabel: "All" }];
+  const startDate = new Date(2026, 0, 1); // January 2026
+  const now = new Date();
+  
+  let current = new Date(startDate);
+  while (current <= now) {
+    const monthValue = format(current, "yyyy-MM");
+    const monthLabel = format(current, "MMMM yyyy");
+    const shortLabel = format(current, "MMM");
+    tabs.push({ value: monthValue, label: monthLabel, shortLabel });
+    current = new Date(current.getFullYear(), current.getMonth() + 1, 1);
+  }
+  
+  return tabs;
+}
+
+const monthTabs = getMonthTabs();
 
 const courierOptions = [
   { value: "all", label: "All Couriers" },
@@ -109,6 +123,7 @@ export default function Orders() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [courierFilter, setCourierFilter] = useState("all");
+  const [cityFilter, setCityFilter] = useState("");
   const [monthFilter, setMonthFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [pageSize] = useState(200);
@@ -127,12 +142,13 @@ export default function Orders() {
   }, []);
 
   const { data, isLoading, isFetching } = useQuery<OrdersResponse>({
-    queryKey: ["/api/orders", { search: debouncedSearch, status: statusFilter, courier: courierFilter, month: monthFilter, page, pageSize }],
+    queryKey: ["/api/orders", { search: debouncedSearch, status: statusFilter, courier: courierFilter, city: cityFilter, month: monthFilter, page, pageSize }],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (debouncedSearch) params.set("search", debouncedSearch);
       if (statusFilter && statusFilter !== "all") params.set("status", statusFilter);
       if (courierFilter && courierFilter !== "all") params.set("courier", courierFilter);
+      if (cityFilter) params.set("city", cityFilter);
       if (monthFilter && monthFilter !== "all") params.set("month", monthFilter);
       params.set("page", String(page));
       params.set("pageSize", String(pageSize));
@@ -143,6 +159,17 @@ export default function Orders() {
   });
 
   const orders = data?.orders || [];
+  
+  // Fetch unique cities from the backend for filter dropdown
+  const { data: citiesData } = useQuery<{ cities: string[] }>({
+    queryKey: ["/api/orders/cities"],
+    queryFn: async () => {
+      const res = await fetch("/api/orders/cities", { credentials: "include" });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+  });
+  const uniqueCities = citiesData?.cities || [];
   const totalPages = Math.ceil((data?.total || 0) / pageSize);
 
   const syncOrdersMutation = useMutation({
@@ -224,11 +251,12 @@ export default function Orders() {
     setDebouncedSearch("");
     setStatusFilter("all");
     setCourierFilter("all");
+    setCityFilter("");
     setMonthFilter("all");
     setPage(1);
   };
 
-  const hasActiveFilters = debouncedSearch || statusFilter !== "all" || courierFilter !== "all" || monthFilter !== "all";
+  const hasActiveFilters = debouncedSearch || statusFilter !== "all" || courierFilter !== "all" || cityFilter || monthFilter !== "all";
 
   return (
     <div className="h-full flex flex-col">
@@ -289,17 +317,6 @@ export default function Orders() {
             </SelectContent>
           </Select>
           
-          <Select value={monthFilter} onValueChange={(v) => { setMonthFilter(v); setPage(1); }}>
-            <SelectTrigger className="w-[130px] h-9" data-testid="select-month-filter">
-              <SelectValue placeholder="Time" />
-            </SelectTrigger>
-            <SelectContent>
-              {monthOptions.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          
           {hasActiveFilters && (
             <Button variant="ghost" size="sm" onClick={clearAllFilters} className="h-9 text-muted-foreground">
               <X className="w-4 h-4 mr-1" /> Clear
@@ -347,6 +364,25 @@ export default function Orders() {
         </div>
       </div>
 
+      <div className="px-4 py-2 border-b bg-muted/30 overflow-x-auto">
+        <div className="flex gap-1 min-w-max">
+          {monthTabs.map((tab) => (
+            <button
+              key={tab.value}
+              onClick={() => { setMonthFilter(tab.value); setPage(1); }}
+              className={`px-3 py-1.5 text-sm rounded-t-md border-b-2 transition-colors whitespace-nowrap ${
+                monthFilter === tab.value
+                  ? "bg-background border-primary text-foreground font-medium shadow-sm"
+                  : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              }`}
+              data-testid={`tab-month-${tab.value}`}
+            >
+              {tab.shortLabel || tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="flex-1 overflow-auto">
         {isLoading ? (
           <div className="p-4 space-y-2">
@@ -364,9 +400,62 @@ export default function Orders() {
           <table className="w-full text-sm border-collapse" data-testid="table-orders">
             <thead className="sticky top-0 bg-muted/90 backdrop-blur-sm z-10">
               <tr className="border-b">
-                <th className="text-left p-2 pl-4 w-[100px] text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status</th>
+                <th className="text-left p-2 pl-4 w-[120px]">
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status</span>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button className={`p-0.5 rounded hover:bg-muted ${statusFilter !== "all" ? "text-primary" : "text-muted-foreground"}`} data-testid="filter-status-dropdown">
+                          <Filter className="w-3 h-3" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="w-[160px]">
+                        {statusOptions.map((opt) => (
+                          <DropdownMenuItem 
+                            key={opt.value} 
+                            onSelect={() => { setStatusFilter(opt.value); setPage(1); }}
+                            className={statusFilter === opt.value ? "bg-muted font-medium" : ""}
+                            data-testid={`status-option-${opt.value}`}
+                          >
+                            {opt.label}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </th>
                 <th className="text-left p-2 w-[100px] text-xs font-semibold uppercase tracking-wide text-muted-foreground">Order ID</th>
-                <th className="text-left p-2 w-[110px] text-xs font-semibold uppercase tracking-wide text-muted-foreground">City</th>
+                <th className="text-left p-2 w-[120px]">
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">City</span>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button className={`p-0.5 rounded hover:bg-muted ${cityFilter ? "text-primary" : "text-muted-foreground"}`} data-testid="filter-city-dropdown">
+                          <Filter className="w-3 h-3" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="w-[180px] max-h-[300px] overflow-y-auto">
+                        <DropdownMenuItem 
+                          onSelect={() => { setCityFilter(""); setPage(1); }} 
+                          className={!cityFilter ? "bg-muted font-medium" : ""}
+                          data-testid="city-option-all"
+                        >
+                          All Cities
+                        </DropdownMenuItem>
+                        {uniqueCities.map((city) => (
+                          <DropdownMenuItem 
+                            key={city} 
+                            onSelect={() => { setCityFilter(city); setPage(1); }}
+                            className={cityFilter === city ? "bg-muted font-medium" : ""}
+                            data-testid={`city-option-${city.toLowerCase().replace(/\s+/g, '-')}`}
+                          >
+                            {city}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </th>
                 <th className="text-left p-2 w-[160px] text-xs font-semibold uppercase tracking-wide text-muted-foreground">Name</th>
                 <th className="text-left p-2 w-[120px] text-xs font-semibold uppercase tracking-wide text-muted-foreground">Phone</th>
                 <th className="text-left p-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Address</th>

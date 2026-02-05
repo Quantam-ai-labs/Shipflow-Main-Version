@@ -43,7 +43,8 @@ export interface IStorage {
   updateCourierAccount(id: string, data: Partial<InsertCourierAccount>): Promise<CourierAccount | undefined>;
 
   // Orders - All scoped by merchantId
-  getOrders(merchantId: string, options?: { search?: string; status?: string; courier?: string; month?: string; page?: number; pageSize?: number }): Promise<{ orders: Order[]; total: number }>;
+  getOrders(merchantId: string, options?: { search?: string; status?: string; courier?: string; city?: string; month?: string; page?: number; pageSize?: number }): Promise<{ orders: Order[]; total: number }>;
+  getUniqueCities(merchantId: string): Promise<string[]>;
   getOrderById(merchantId: string, id: string): Promise<Order | undefined>;
   getOrderByShopifyId(merchantId: string, shopifyOrderId: string): Promise<Order | undefined>;
   getExistingShopifyOrderIds(merchantId: string, shopifyOrderIds: string[]): Promise<Set<string>>;
@@ -178,7 +179,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Orders - All scoped by merchantId
-  async getOrders(merchantId: string, options?: { search?: string; status?: string; courier?: string; month?: string; page?: number; pageSize?: number }): Promise<{ orders: Order[]; total: number }> {
+  async getOrders(merchantId: string, options?: { search?: string; status?: string; courier?: string; city?: string; month?: string; page?: number; pageSize?: number }): Promise<{ orders: Order[]; total: number }> {
     const page = options?.page || 1;
     const pageSize = options?.pageSize || 20;
     const offset = (page - 1) * pageSize;
@@ -204,17 +205,27 @@ export class DatabaseStorage implements IStorage {
       conditions.push(ilike(orders.courierName, `%${options.courier}%`));
     }
 
-    // Month filter
+    // City filter
+    if (options?.city) {
+      conditions.push(eq(orders.city, options.city));
+    }
+
+    // Month filter - supports yyyy-MM format (e.g., "2026-01") or legacy values
     if (options?.month && options.month !== "all") {
       const now = new Date();
       let startDate: Date;
       let endDate: Date | null = null;
       
-      if (options.month === "current") {
+      // Check if it's a yyyy-MM format
+      if (/^\d{4}-\d{2}$/.test(options.month)) {
+        const [year, month] = options.month.split("-").map(Number);
+        startDate = new Date(year, month - 1, 1);
+        endDate = new Date(year, month, 1); // First day of next month (exclusive)
+      } else if (options.month === "current") {
         startDate = new Date(now.getFullYear(), now.getMonth(), 1);
       } else if (options.month === "last") {
         startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        endDate = new Date(now.getFullYear(), now.getMonth(), 1); // exclusive end
+        endDate = new Date(now.getFullYear(), now.getMonth(), 1);
       } else if (options.month === "2months") {
         startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
       } else if (options.month === "3months") {
@@ -248,6 +259,15 @@ export class DatabaseStorage implements IStorage {
     ]);
 
     return { orders: result, total: totalResult[0]?.count || 0 };
+  }
+
+  async getUniqueCities(merchantId: string): Promise<string[]> {
+    const result = await db.selectDistinct({ city: orders.city })
+      .from(orders)
+      .where(and(eq(orders.merchantId, merchantId), sql`${orders.city} IS NOT NULL AND ${orders.city} != ''`))
+      .orderBy(orders.city);
+    
+    return result.map(r => r.city).filter((c): c is string => c !== null);
   }
 
   async getOrderById(merchantId: string, id: string): Promise<Order | undefined> {
