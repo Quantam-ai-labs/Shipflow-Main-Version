@@ -30,17 +30,16 @@ export interface TrackingResult {
   }>;
 }
 
-// PostEx status codes from API documentation
 const STATUS_CODE_MAP: Record<string, string> = {
-  '0001': 'booked',        // At Merchant's Warehouse
-  '0002': 'returned',      // Returned
-  '0003': 'dispatched',    // At PostEx Warehouse
-  '0004': 'dispatched',    // Package on Route
-  '0005': 'delivered',     // Delivered
-  '0006': 'returned',      // Returned
-  '0007': 'returned',      // Returned
-  '0008': 'reattempt',     // Delivery Under Review
-  '0013': 'failed',        // Attempt Made
+  '0001': 'booked',
+  '0002': 'returned',
+  '0003': 'dispatched',
+  '0004': 'dispatched',
+  '0005': 'delivered',
+  '0006': 'returned',
+  '0007': 'returned',
+  '0008': 'reattempt',
+  '0013': 'failed',
 };
 
 function mapPostExStatus(statusCode: string, statusMessage?: string): string {
@@ -49,7 +48,6 @@ function mapPostExStatus(statusCode: string, statusMessage?: string): string {
     return mappedStatus;
   }
   
-  // Fallback to checking status message
   if (statusMessage) {
     const msg = statusMessage.toLowerCase();
     if (msg.includes('delivered')) return 'delivered';
@@ -63,16 +61,16 @@ function mapPostExStatus(statusCode: string, statusMessage?: string): string {
 }
 
 export class PostExService {
-  private baseUrl: string;
-  private apiToken: string;
+  private baseUrl = 'https://api.postex.pk/services/integration/api/order';
 
-  constructor() {
-    this.baseUrl = 'https://api.postex.pk/services/integration/api/order';
-    this.apiToken = process.env.POSTEX_API_TOKEN || '';
+  private getToken(overrides?: { apiToken?: string }): string {
+    return overrides?.apiToken || process.env.POSTEX_API_TOKEN || '';
   }
 
-  async trackShipment(trackingNumber: string): Promise<TrackingResult> {
-    if (!this.apiToken) {
+  async trackShipment(trackingNumber: string, credentials?: { apiToken?: string }): Promise<TrackingResult> {
+    const token = this.getToken(credentials);
+
+    if (!token) {
       throw new Error('PostEx API token not configured');
     }
 
@@ -81,7 +79,7 @@ export class PostExService {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'token': this.apiToken,
+          'token': token,
         },
       });
 
@@ -137,11 +135,11 @@ export class PostExService {
     }
   }
 
-  async trackMultiple(trackingNumbers: string[]): Promise<Map<string, TrackingResult>> {
+  async trackMultiple(trackingNumbers: string[], credentials?: { apiToken?: string }): Promise<Map<string, TrackingResult>> {
     const results = new Map<string, TrackingResult>();
     
     for (const tn of trackingNumbers) {
-      const result = await this.trackShipment(tn);
+      const result = await this.trackShipment(tn, credentials);
       results.set(tn, result);
       await new Promise(resolve => setTimeout(resolve, 200));
     }

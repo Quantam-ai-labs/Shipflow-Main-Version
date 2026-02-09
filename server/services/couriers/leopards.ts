@@ -61,12 +61,10 @@ const STATUS_MAP: Record<string, string> = {
 function mapLeopardsStatus(courierStatus: string): string {
   const status = courierStatus.toLowerCase().trim();
   
-  // Direct match first
   if (STATUS_MAP[status]) {
     return STATUS_MAP[status];
   }
   
-  // Partial match
   for (const [key, value] of Object.entries(STATUS_MAP)) {
     if (status.includes(key)) {
       return value;
@@ -78,19 +76,19 @@ function mapLeopardsStatus(courierStatus: string): string {
 }
 
 export class LeopardsService {
-  private baseUrl: string;
-  private apiKey: string;
-  private apiPassword: string;
+  private baseUrl = 'https://merchantapi.leopardscourier.com/api';
 
-  constructor() {
-    // Always use production URL since we have production credentials
-    this.baseUrl = 'https://merchantapi.leopardscourier.com/api';
-    this.apiKey = process.env.LEOPARDS_API_KEY || '';
-    this.apiPassword = process.env.LEOPARDS_API_PASSWORD || '';
+  private getCredentials(overrides?: { apiKey?: string; apiPassword?: string }) {
+    return {
+      apiKey: overrides?.apiKey || process.env.LEOPARDS_API_KEY || '',
+      apiPassword: overrides?.apiPassword || process.env.LEOPARDS_API_PASSWORD || '',
+    };
   }
 
-  async trackShipment(trackingNumber: string): Promise<TrackingResult> {
-    if (!this.apiKey || !this.apiPassword) {
+  async trackShipment(trackingNumber: string, credentials?: { apiKey?: string; apiPassword?: string }): Promise<TrackingResult> {
+    const creds = this.getCredentials(credentials);
+
+    if (!creds.apiKey || !creds.apiPassword) {
       throw new Error('Leopards API credentials not configured');
     }
 
@@ -101,8 +99,8 @@ export class LeopardsService {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          api_key: this.apiKey,
-          api_password: this.apiPassword,
+          api_key: creds.apiKey,
+          api_password: creds.apiPassword,
           track_numbers: trackingNumber,
         }),
       });
@@ -157,13 +155,86 @@ export class LeopardsService {
     }
   }
 
-  async trackMultiple(trackingNumbers: string[]): Promise<Map<string, TrackingResult>> {
+  async trackMultiple(trackingNumbers: string[], credentials?: { apiKey?: string; apiPassword?: string }): Promise<Map<string, TrackingResult>> {
     const results = new Map<string, TrackingResult>();
+    const creds = this.getCredentials(credentials);
+
+    if (!creds.apiKey || !creds.apiPassword) {
+      for (const tn of trackingNumbers) {
+        results.set(tn, {
+          success: false,
+          trackingNumber: tn,
+          status: 'error',
+          statusDescription: 'Leopards API credentials not configured',
+          courierStatus: '',
+          lastUpdate: null,
+          events: [],
+        });
+      }
+      return results;
+    }
     
-    for (const tn of trackingNumbers) {
-      const result = await this.trackShipment(tn);
-      results.set(tn, result);
-      await new Promise(resolve => setTimeout(resolve, 200));
+    const batchSize = 10;
+    for (let i = 0; i < trackingNumbers.length; i += batchSize) {
+      const batch = trackingNumbers.slice(i, i + batchSize);
+      
+      try {
+        const response = await fetch(`${this.baseUrl}/trackBookedPacket/format/json/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            api_key: creds.apiKey,
+            api_password: creds.apiPassword,
+            track_numbers: batch.join(','),
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Leopards API error: ${response.status}`);
+        }
+
+        const data: LeopardsTrackingResponse = await response.json();
+
+        if (data.status === 1 && data.packet_list) {
+          for (const packet of data.packet_list) {
+            const universalStatus = mapLeopardsStatus(packet.booked_packet_status);
+            const events = (packet.Tracking_Detail || []).map(detail => ({
+              status: detail.Status,
+              date: detail.Activity_Date,
+              description: detail.Reason || detail.Status,
+            }));
+            results.set(packet.track_number, {
+              success: true,
+              trackingNumber: packet.track_number,
+              status: universalStatus,
+              statusDescription: packet.status_remarks || packet.booked_packet_status,
+              courierStatus: packet.booked_packet_status,
+              lastUpdate: packet.activity_date || null,
+              events,
+            });
+          }
+        }
+      } catch (error) {
+        console.error('[Leopards] Batch track error:', error);
+      }
+
+      for (const tn of batch) {
+        if (!results.has(tn)) {
+          results.set(tn, {
+            success: false,
+            trackingNumber: tn,
+            status: 'unknown',
+            statusDescription: 'Tracking not found in batch response',
+            courierStatus: '',
+            lastUpdate: null,
+            events: [],
+          });
+        }
+      }
+      
+      if (i + batchSize < trackingNumbers.length) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
     }
     
     return results;

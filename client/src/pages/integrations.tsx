@@ -21,13 +21,15 @@ import {
   ExternalLink,
   RefreshCw,
   Activity,
-  AlertTriangle,
   Database,
-  Webhook,
   Phone,
   MapPin,
   User,
-  Mail,
+  Zap,
+  ShieldCheck,
+  Key,
+  Lock,
+  Loader2,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -47,7 +49,10 @@ interface IntegrationsData {
     name: string;
     isActive: boolean;
     accountNumber: string | null;
+    hasDbCredentials: boolean;
+    useEnvCredentials: boolean;
   }>;
+  envCredentials: Record<string, { hasKey: boolean; hasSecret: boolean }>;
 }
 
 interface DataHealthData {
@@ -61,17 +66,75 @@ interface DataHealthData {
   lastApiSyncAt: string | null;
   shopDomain: string | null;
   isConnected: boolean;
-  recentSyncLogs?: Array<{
-    id: string;
-    syncType: string;
-    ordersCreated: number;
-    ordersUpdated: number;
-    totalFetched: number;
-    status: string;
-    startedAt: string;
-    completedAt: string | null;
-  }>;
 }
+
+const COURIER_CONFIG: Record<string, {
+  displayName: string;
+  description: string;
+  website: string;
+  fields: Array<{
+    key: string;
+    label: string;
+    placeholder: string;
+    type: string;
+    envVar: string;
+    required: boolean;
+  }>;
+}> = {
+  leopards: {
+    displayName: "Leopards Courier",
+    description: "Pakistan's leading courier service with extensive network coverage across all major cities.",
+    website: "https://www.leopardscourier.com",
+    fields: [
+      {
+        key: "apiKey",
+        label: "API Key",
+        placeholder: "Enter your Leopards API key",
+        type: "password",
+        envVar: "LEOPARDS_API_KEY",
+        required: true,
+      },
+      {
+        key: "apiSecret",
+        label: "API Password",
+        placeholder: "Enter your Leopards API password",
+        type: "password",
+        envVar: "LEOPARDS_API_PASSWORD",
+        required: true,
+      },
+    ],
+  },
+  postex: {
+    displayName: "PostEx",
+    description: "Modern logistics and payment solution for e-commerce businesses in Pakistan.",
+    website: "https://postex.pk",
+    fields: [
+      {
+        key: "apiKey",
+        label: "API Token",
+        placeholder: "Enter your PostEx API token",
+        type: "password",
+        envVar: "POSTEX_API_TOKEN",
+        required: true,
+      },
+    ],
+  },
+  tcs: {
+    displayName: "TCS",
+    description: "Trusted courier service with nationwide delivery and COD support.",
+    website: "https://www.tcsexpress.com",
+    fields: [
+      {
+        key: "apiKey",
+        label: "API Key",
+        placeholder: "Enter your TCS API key",
+        type: "password",
+        envVar: "TCS_API_KEY",
+        required: true,
+      },
+    ],
+  },
+};
 
 export default function Integrations() {
   const { toast } = useToast();
@@ -85,8 +148,8 @@ export default function Integrations() {
   const [shopifyApiPassword, setShopifyApiPassword] = useState("");
   const [useLegacyAuth, setUseLegacyAuth] = useState(false);
   const [selectedCourier, setSelectedCourier] = useState<string | null>(null);
-  const [courierApiKey, setCourierApiKey] = useState("");
-  const [courierAccountNumber, setCourierAccountNumber] = useState("");
+  const [courierFormData, setCourierFormData] = useState<Record<string, string>>({});
+  const [useEnvCreds, setUseEnvCreds] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(searchString);
@@ -167,7 +230,6 @@ export default function Integrations() {
   const handleConnectShopify = () => {
     if (!shopifyStoreDomain) return;
     
-    // Validate store name (alphanumeric and hyphens only)
     const storeNameRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]*$/;
     const storeName = shopifyStoreDomain.replace('.myshopify.com', '').trim();
     
@@ -183,7 +245,6 @@ export default function Integrations() {
     const shop = `${storeName}.myshopify.com`;
     
     if (useLegacyAuth) {
-      // Legacy API key/password authentication
       if (!shopifyApiKey || !shopifyApiPassword) {
         toast({
           title: "Credentials Required",
@@ -194,7 +255,6 @@ export default function Integrations() {
       }
       manualConnectMutation.mutate({ storeDomain: shop, apiKey: shopifyApiKey, apiPassword: shopifyApiPassword });
     } else {
-      // Modern access token authentication
       if (!shopifyAccessToken) {
         toast({
           title: "Access Token Required",
@@ -248,18 +308,18 @@ export default function Integrations() {
   });
 
   const saveCourierMutation = useMutation({
-    mutationFn: async (data: { courierName: string; apiKey: string; accountNumber: string }) => {
-      return apiRequest("POST", "/api/integrations/couriers", data);
+    mutationFn: async (payload: { courierName: string; apiKey?: string; apiSecret?: string; accountNumber?: string; useEnvCredentials: boolean }) => {
+      return apiRequest("POST", "/api/integrations/couriers", payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
       setIsCourierDialogOpen(false);
-      setCourierApiKey("");
-      setCourierAccountNumber("");
+      setCourierFormData({});
       setSelectedCourier(null);
+      setUseEnvCreds(false);
       toast({
-        title: "Courier connected",
-        description: "Your courier account has been saved.",
+        title: "Courier Connected",
+        description: "Your courier account has been saved and is ready for tracking.",
       });
     },
     onError: () => {
@@ -271,46 +331,96 @@ export default function Integrations() {
     },
   });
 
+  const testCourierMutation = useMutation({
+    mutationFn: async (courierName: string) => {
+      const resp = await apiRequest("POST", "/api/integrations/couriers/test", { courierName });
+      return resp.json();
+    },
+    onSuccess: (result: { success: boolean; message: string }) => {
+      toast({
+        title: result.success ? "Connection Successful" : "Connection Failed",
+        description: result.message,
+        variant: result.success ? "default" : "destructive",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Test Failed",
+        description: "Could not test the connection. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleSaveCourier = () => {
-    if (!selectedCourier || !courierApiKey) return;
+    if (!selectedCourier) return;
+    const config = COURIER_CONFIG[selectedCourier];
+    if (!config) return;
+
+    if (!useEnvCreds) {
+      const missingRequired = config.fields.filter(f => f.required && !courierFormData[f.key]);
+      if (missingRequired.length > 0) {
+        toast({
+          title: "Missing Credentials",
+          description: `Please fill in: ${missingRequired.map(f => f.label).join(', ')}`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     saveCourierMutation.mutate({
       courierName: selectedCourier,
-      apiKey: courierApiKey,
-      accountNumber: courierAccountNumber,
+      apiKey: courierFormData.apiKey || undefined,
+      apiSecret: courierFormData.apiSecret || undefined,
+      accountNumber: courierFormData.accountNumber || undefined,
+      useEnvCredentials: useEnvCreds,
     });
   };
 
   const openCourierDialog = (courierName: string) => {
     setSelectedCourier(courierName);
+    setCourierFormData({});
+    const connectedCourier = data?.couriers.find(c => c.name === courierName);
+    const hasEnv = hasFullEnvCreds(courierName);
+    setUseEnvCreds(connectedCourier?.useEnvCredentials || (!connectedCourier?.hasDbCredentials && hasEnv));
     setIsCourierDialogOpen(true);
   };
 
-  const couriersList = [
-    {
-      name: "leopards",
-      displayName: "Leopards Courier",
-      description: "Pakistan's leading courier service with extensive network coverage.",
-      logo: "🐆",
-    },
-    {
-      name: "postex",
-      displayName: "PostEx",
-      description: "Modern logistics solution for e-commerce businesses.",
-      logo: "📦",
-    },
-    {
-      name: "tcs",
-      displayName: "TCS",
-      description: "Trusted courier service with nationwide delivery.",
-      logo: "🚚",
-    },
-  ];
+  const couriersList = Object.entries(COURIER_CONFIG).map(([name, config]) => ({
+    name,
+    ...config,
+  }));
+
+  function hasFullEnvCreds(courierName: string): boolean {
+    const envCreds = data?.envCredentials?.[courierName];
+    if (!envCreds) return false;
+    if (courierName === 'leopards') return !!(envCreds.hasKey && envCreds.hasSecret);
+    return !!envCreds.hasKey;
+  }
+
+  function getCourierStatus(courierName: string): { connected: boolean; source: string } {
+    const connected = data?.couriers.find(c => c.name === courierName);
+    const hasEnv = hasFullEnvCreds(courierName);
+    
+    if (connected?.isActive) {
+      if (connected.useEnvCredentials || (!connected.hasDbCredentials && hasEnv)) {
+        return { connected: true, source: 'env' };
+      }
+      return { connected: true, source: 'custom' };
+    }
+    
+    if (hasEnv) {
+      return { connected: false, source: 'env_available' };
+    }
+    
+    return { connected: false, source: 'none' };
+  }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold">Integrations</h1>
+        <h1 className="text-2xl font-bold" data-testid="text-integrations-title">Integrations</h1>
         <p className="text-muted-foreground">Connect your Shopify store and courier accounts.</p>
       </div>
 
@@ -401,7 +511,7 @@ export default function Integrations() {
           ) : (
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Connect your Shopify store to automatically import orders and receive real-time updates via webhooks.
+                Connect your Shopify store to automatically import orders and sync them in real-time.
               </p>
               <Button
                 onClick={() => setIsShopifyDialogOpen(true)}
@@ -420,20 +530,26 @@ export default function Integrations() {
         <h2 className="text-lg font-semibold mb-4">Courier Integrations</h2>
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
           {couriersList.map((courier) => {
-            const connectedCourier = data?.couriers.find((c) => c.name === courier.name);
-            const isConnected = !!connectedCourier?.isActive;
+            const status = getCourierStatus(courier.name);
 
             return (
               <Card key={courier.name} className="hover-elevate">
                 <CardContent className="p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center text-2xl">
-                      {courier.logo}
+                  <div className="flex items-start justify-between gap-2 mb-4">
+                    <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center">
+                      <Truck className="w-6 h-6 text-muted-foreground" />
                     </div>
-                    {isConnected ? (
+                    {isLoading ? (
+                      <Skeleton className="h-6 w-24" />
+                    ) : status.connected ? (
                       <Badge className="bg-green-500/10 text-green-600 border-green-500/20">
                         <CheckCircle2 className="w-3 h-3 mr-1" />
                         Connected
+                      </Badge>
+                    ) : status.source === 'env_available' ? (
+                      <Badge className="bg-blue-500/10 text-blue-600 border-blue-500/20">
+                        <Key className="w-3 h-3 mr-1" />
+                        Key Available
                       </Badge>
                     ) : (
                       <Badge variant="outline" className="text-muted-foreground">
@@ -441,36 +557,79 @@ export default function Integrations() {
                       </Badge>
                     )}
                   </div>
-                  <h3 className="font-semibold mb-1">{courier.displayName}</h3>
+                  <h3 className="font-semibold mb-1" data-testid={`text-courier-name-${courier.name}`}>{courier.displayName}</h3>
                   <p className="text-sm text-muted-foreground mb-4">{courier.description}</p>
-                  {isConnected ? (
-                    <div className="flex items-center gap-2">
+                  
+                  {status.connected && (
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
+                      {status.source === 'env' ? (
+                        <>
+                          <ShieldCheck className="w-3 h-3" />
+                          <span>Using environment credentials</span>
+                        </>
+                      ) : (
+                        <>
+                          <Lock className="w-3 h-3" />
+                          <span>Using custom credentials</span>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {status.connected ? (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openCourierDialog(courier.name)}
+                          data-testid={`button-configure-${courier.name}`}
+                        >
+                          <Settings className="w-4 h-4 mr-2" />
+                          Configure
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => testCourierMutation.mutate(courier.name)}
+                          disabled={testCourierMutation.isPending}
+                          data-testid={`button-test-${courier.name}`}
+                        >
+                          {testCourierMutation.isPending ? (
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          ) : (
+                            <Zap className="w-4 h-4 mr-2" />
+                          )}
+                          Test
+                        </Button>
+                      </>
+                    ) : status.source === 'env_available' ? (
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={() => openCourierDialog(courier.name)}
+                        data-testid={`button-activate-${courier.name}`}
+                      >
+                        <Zap className="w-4 h-4 mr-2" />
+                        Activate
+                      </Button>
+                    ) : (
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => openCourierDialog(courier.name)}
-                        data-testid={`button-configure-${courier.name}`}
+                        data-testid={`button-connect-${courier.name}`}
                       >
-                        <Settings className="w-4 h-4 mr-2" />
-                        Configure
+                        <Truck className="w-4 h-4 mr-2" />
+                        Connect
                       </Button>
-                      <Button variant="ghost" size="sm" asChild>
-                        <a href={`https://${courier.name}.pk`} target="_blank" rel="noopener noreferrer">
-                          <ExternalLink className="w-4 h-4" />
-                        </a>
-                      </Button>
-                    </div>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => openCourierDialog(courier.name)}
-                      data-testid={`button-connect-${courier.name}`}
-                    >
-                      <Truck className="w-4 h-4 mr-2" />
-                      Connect
+                    )}
+                    <Button variant="ghost" size="sm" asChild>
+                      <a href={courier.website} target="_blank" rel="noopener noreferrer">
+                        <ExternalLink className="w-4 h-4" />
+                      </a>
                     </Button>
-                  )}
+                  </div>
                 </CardContent>
               </Card>
             );
@@ -478,11 +637,10 @@ export default function Integrations() {
         </div>
       </div>
 
-      {/* Data Health & Webhook Monitoring */}
+      {/* Sync Health & Data Quality */}
       <div>
         <h2 className="text-lg font-semibold mb-4">Sync Health & Data Quality</h2>
         <div className="grid md:grid-cols-2 gap-4">
-          {/* Data Quality Card */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <div>
@@ -534,7 +692,6 @@ export default function Integrations() {
             </CardContent>
           </Card>
 
-          {/* Sync Status Card */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <div>
@@ -570,7 +727,6 @@ export default function Integrations() {
           </Card>
         </div>
 
-        {/* Reconciliation Action */}
         <Card className="mt-4">
           <CardContent className="p-4">
             <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -579,7 +735,7 @@ export default function Integrations() {
                 <div>
                   <p className="font-medium text-sm">Manual Reconciliation</p>
                   <p className="text-xs text-muted-foreground">
-                    Fetch recent order updates from Shopify API to fill in any gaps from missed webhooks.
+                    Fetch recent order updates from Shopify API to fill in any data gaps.
                   </p>
                 </div>
               </div>
@@ -596,8 +752,6 @@ export default function Integrations() {
             </div>
           </CardContent>
         </Card>
-
-        {/* Recent Webhook Events */}
       </div>
 
       {/* Shopify Connection Dialog */}
@@ -663,7 +817,7 @@ export default function Integrations() {
                     data-testid="input-shopify-api-password"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Find these in your Shopify Admin → Apps → Manage private apps → Your app
+                    Find these in your Shopify Admin &rarr; Apps &rarr; Manage private apps &rarr; Your app
                   </p>
                 </div>
               </>
@@ -691,7 +845,7 @@ export default function Integrations() {
                     <li><strong>read_fulfillments</strong> - Access to fulfillment status</li>
                   </ul>
                   <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
-                    Go to Shopify Admin → Apps → Develop Apps → Create App → Configure Admin API scopes
+                    Go to Shopify Admin &rarr; Apps &rarr; Develop Apps &rarr; Create App &rarr; Configure Admin API scopes
                   </p>
                 </div>
               </div>
@@ -713,49 +867,111 @@ export default function Integrations() {
       </Dialog>
 
       {/* Courier Configuration Dialog */}
-      <Dialog open={isCourierDialogOpen} onOpenChange={setIsCourierDialogOpen}>
-        <DialogContent>
+      <Dialog open={isCourierDialogOpen} onOpenChange={(open) => {
+        setIsCourierDialogOpen(open);
+        if (!open) {
+          setCourierFormData({});
+          setSelectedCourier(null);
+        }
+      }}>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              Configure {selectedCourier ? couriersList.find((c) => c.name === selectedCourier)?.displayName : "Courier"}
+              Configure {selectedCourier ? COURIER_CONFIG[selectedCourier]?.displayName : "Courier"}
             </DialogTitle>
             <DialogDescription>
-              Enter your API credentials to connect your courier account.
+              {selectedCourier && COURIER_CONFIG[selectedCourier] ? (
+                `Set up API credentials for ${COURIER_CONFIG[selectedCourier].displayName} to enable shipment tracking.`
+              ) : (
+                "Enter your API credentials to connect your courier account."
+              )}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="apiKey">API Key</Label>
-              <Input
-                id="apiKey"
-                type="password"
-                placeholder="Enter your API key"
-                value={courierApiKey}
-                onChange={(e) => setCourierApiKey(e.target.value)}
-                data-testid="input-courier-api-key"
-              />
+          
+          {selectedCourier && COURIER_CONFIG[selectedCourier] && (
+            <div className="space-y-4 py-2">
+              {/* Environment credential option */}
+              {selectedCourier && hasFullEnvCreds(selectedCourier) && (
+                <div className="p-3 rounded-lg border bg-muted/30">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5">
+                      <input
+                        type="checkbox"
+                        id="useEnvCreds"
+                        checked={useEnvCreds}
+                        onChange={(e) => setUseEnvCreds(e.target.checked)}
+                        className="rounded border-input"
+                        data-testid="checkbox-use-env-credentials"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="useEnvCreds" className="text-sm font-medium cursor-pointer">
+                        Use pre-configured credentials
+                      </Label>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        API credentials are already configured in the environment. Check this to use them instead of entering custom credentials.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {!useEnvCreds && (
+                <div className="space-y-3">
+                  {COURIER_CONFIG[selectedCourier].fields.map((field) => (
+                    <div key={field.key} className="space-y-2">
+                      <Label htmlFor={`courier-${field.key}`}>
+                        {field.label}
+                        {field.required && <span className="text-destructive ml-1">*</span>}
+                      </Label>
+                      <Input
+                        id={`courier-${field.key}`}
+                        type={field.type}
+                        placeholder={field.placeholder}
+                        value={courierFormData[field.key] || ""}
+                        onChange={(e) => setCourierFormData(prev => ({ ...prev, [field.key]: e.target.value }))}
+                        data-testid={`input-courier-${field.key}`}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {selectedCourier === 'leopards' && !useEnvCreds && (
+                <div className="p-3 bg-amber-50 dark:bg-amber-950/50 rounded-lg border border-amber-200 dark:border-amber-800">
+                  <p className="text-xs text-amber-700 dark:text-amber-300">
+                    Find your API Key and Password in your Leopards account under <strong>API Settings</strong> &rarr; <strong>API Management</strong>.
+                  </p>
+                </div>
+              )}
+
+              {selectedCourier === 'postex' && !useEnvCreds && (
+                <div className="p-3 bg-amber-50 dark:bg-amber-950/50 rounded-lg border border-amber-200 dark:border-amber-800">
+                  <p className="text-xs text-amber-700 dark:text-amber-300">
+                    Your API Token can be found in your PostEx merchant dashboard under <strong>Integration Settings</strong>.
+                  </p>
+                </div>
+              )}
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="accountNumber">Account Number (Optional)</Label>
-              <Input
-                id="accountNumber"
-                placeholder="Enter your account number"
-                value={courierAccountNumber}
-                onChange={(e) => setCourierAccountNumber(e.target.value)}
-                data-testid="input-courier-account"
-              />
-            </div>
-          </div>
-          <DialogFooter>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-0">
             <Button variant="outline" onClick={() => setIsCourierDialogOpen(false)}>
               Cancel
             </Button>
             <Button
               onClick={handleSaveCourier}
-              disabled={saveCourierMutation.isPending || !courierApiKey}
+              disabled={saveCourierMutation.isPending || (!useEnvCreds && !Object.values(courierFormData).some(v => v))}
               data-testid="button-save-courier"
             >
-              {saveCourierMutation.isPending ? "Saving..." : "Save Credentials"}
+              {saveCourierMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Save & Connect"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

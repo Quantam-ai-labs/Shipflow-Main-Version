@@ -39,12 +39,12 @@ Preferred communication style: Simple, everyday language.
 - **Merchant Management**: Root tenant entity with subscription and profile.
 - **Team Collaboration**: `teamMembers` for user-to-merchant links and roles.
 - **Shopify Integration**: OAuth credentials and sync state.
-- **Courier Management**: API credentials for various couriers.
+- **Courier Management**: Per-courier API credentials with env secret fallback. Leopards uses `apiKey` + `apiSecret` (API Password). PostEx uses `apiKey` (API Token). Credentials resolved via `getCourierCredentials()` helper: DB custom creds > env secrets.
 - **Order Management**: Syncs from Shopify, tracks status, allows remarks.
 - **Shipment Tracking**: Records courier tracking and events.
 - **COD Reconciliation**: Tracks payment settlements.
 - **Onboarding Wizard**: Guides initial setup (Shopify connection, courier config, initial sync).
-- **Courier Status Tracking**: Batched, efficient syncing of shipment statuses.
+- **Courier Status Tracking**: Batched syncing of shipment statuses using real courier APIs (Leopards `trackBookedPacket`, PostEx `track-order`). Credentials resolved per-merchant with env fallback. Test connectivity endpoint at `POST /api/integrations/couriers/test`.
 - **Customer Data Extraction**: Priority chain: `shipping_address` > `customer` > `billing_address` > `customer.default_address` > order-level fields > `note_attributes` (last resort for PII, used directly for courier tracking: `hxs_courier_name`, `hxs_courier_tracking`).
 - **Shopify Permissions Handling**: Grow plan provides full customer data access via REST API.
 

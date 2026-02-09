@@ -3,6 +3,11 @@ import { postexService, type TrackingResult as PostExTrackingResult } from './po
 
 export type TrackingResult = LeopardsTrackingResult | PostExTrackingResult;
 
+export interface CourierCredentials {
+  apiKey?: string;
+  apiSecret?: string;
+}
+
 export function getCourierService(courierName: string) {
   const name = courierName.toLowerCase();
   
@@ -17,15 +22,28 @@ export function getCourierService(courierName: string) {
   return null;
 }
 
-export async function trackShipment(courierName: string, trackingNumber: string): Promise<TrackingResult | null> {
-  const service = getCourierService(courierName);
+export async function trackShipment(
+  courierName: string, 
+  trackingNumber: string,
+  credentials?: CourierCredentials,
+): Promise<TrackingResult | null> {
+  const name = courierName.toLowerCase();
   
-  if (!service) {
-    console.log(`[Courier] Unknown courier: ${courierName}`);
-    return null;
+  if (name.includes('leopard')) {
+    return leopardsService.trackShipment(trackingNumber, credentials ? {
+      apiKey: credentials.apiKey,
+      apiPassword: credentials.apiSecret,
+    } : undefined);
   }
   
-  return service.trackShipment(trackingNumber);
+  if (name.includes('postex')) {
+    return postexService.trackShipment(trackingNumber, credentials ? {
+      apiToken: credentials.apiKey,
+    } : undefined);
+  }
+  
+  console.log(`[Courier] Unknown courier: ${courierName}`);
+  return null;
 }
 
 export { leopardsService, postexService };

@@ -29,8 +29,10 @@ const teamRoleUpdateSchema = z.object({
 
 const courierAccountSchema = z.object({
   courierName: z.enum(["leopards", "postex", "tcs"]),
-  apiKey: z.string().min(1, "API key is required"),
+  apiKey: z.string().optional(),
+  apiSecret: z.string().optional(),
   accountNumber: z.string().optional(),
+  useEnvCredentials: z.boolean().optional(),
 });
 
 const settingsUpdateSchema = z.object({
@@ -231,6 +233,27 @@ export async function registerRoutes(
 
   // Seed demo data on startup
   await storage.seedDemoData();
+
+  async function getCourierCredentials(merchantId: string, courierName: string): Promise<{ apiKey: string | null; apiSecret: string | null } | null> {
+    const accounts = await storage.getCourierAccounts(merchantId);
+    const account = accounts.find(a => a.courierName === courierName);
+    const settings = (account?.settings as Record<string, any>) || {};
+
+    if (courierName === 'leopards') {
+      const apiKey = (!settings.useEnvCredentials && account?.apiKey) || process.env.LEOPARDS_API_KEY || null;
+      const apiSecret = (!settings.useEnvCredentials && account?.apiSecret) || process.env.LEOPARDS_API_PASSWORD || null;
+      if (!apiKey || !apiSecret) return null;
+      return { apiKey, apiSecret };
+    }
+
+    if (courierName === 'postex') {
+      const apiKey = (!settings.useEnvCredentials && account?.apiKey) || process.env.POSTEX_API_TOKEN || null;
+      if (!apiKey) return null;
+      return { apiKey, apiSecret: null };
+    }
+
+    return null;
+  }
 
   // Dashboard Stats
   app.get("/api/dashboard/stats", isAuthenticated, async (req, res) => {
@@ -618,18 +641,35 @@ export async function registerRoutes(
       // Filter out demo store in production if needed, or just return real data
       const isShopifyConnected = !!(shopifyStore?.isConnected && shopifyStore?.accessToken && shopifyStore.accessToken !== "demo-access-token");
 
+      const envCredentials: Record<string, { hasKey: boolean; hasSecret: boolean }> = {
+        leopards: {
+          hasKey: !!process.env.LEOPARDS_API_KEY,
+          hasSecret: !!process.env.LEOPARDS_API_PASSWORD,
+        },
+        postex: {
+          hasKey: !!process.env.POSTEX_API_TOKEN,
+          hasSecret: false,
+        },
+      };
+
       res.json({
         shopify: {
           isConnected: isShopifyConnected,
           shopDomain: shopifyStore?.shopDomain || null,
           lastSyncAt: shopifyStore?.lastSyncAt || null,
         },
-        couriers: couriers.map((c) => ({
-          id: c.id,
-          name: c.courierName,
-          isActive: c.isActive,
-          accountNumber: c.accountNumber,
-        })),
+        couriers: couriers.map((c) => {
+          const settings = (c.settings as Record<string, any>) || {};
+          return {
+            id: c.id,
+            name: c.courierName,
+            isActive: c.isActive,
+            accountNumber: c.accountNumber,
+            hasDbCredentials: !!(c.apiKey || c.apiSecret),
+            useEnvCredentials: !!settings.useEnvCredentials,
+          };
+        }),
+        envCredentials,
       });
     } catch (error) {
       console.error("Error fetching integrations:", error);
@@ -1050,26 +1090,93 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
 
-      // Validate request body
       const validated = courierAccountSchema.safeParse(req.body);
       if (!validated.success) {
         return res.status(400).json({ message: validated.error.errors[0].message });
       }
 
-      const { courierName, apiKey, accountNumber } = validated.data;
+      const { courierName, apiKey, apiSecret, accountNumber, useEnvCredentials } = validated.data;
 
-      const account = await storage.createCourierAccount({
-        merchantId,
-        courierName,
-        apiKey,
-        accountNumber,
-        isActive: true,
-      });
+      const existing = (await storage.getCourierAccounts(merchantId)).find(c => c.courierName === courierName);
 
-      res.json(account);
+      const settings: Record<string, any> = { useEnvCredentials: !!useEnvCredentials };
+
+      if (existing) {
+        const account = await storage.updateCourierAccount(existing.id, {
+          apiKey: useEnvCredentials ? null : (apiKey || existing.apiKey),
+          apiSecret: useEnvCredentials ? null : (apiSecret || existing.apiSecret),
+          accountNumber: accountNumber || existing.accountNumber,
+          settings,
+          isActive: true,
+        });
+        res.json(account);
+      } else {
+        const account = await storage.createCourierAccount({
+          merchantId,
+          courierName,
+          apiKey: useEnvCredentials ? null : (apiKey || null),
+          apiSecret: useEnvCredentials ? null : (apiSecret || null),
+          accountNumber: accountNumber || null,
+          settings,
+          isActive: true,
+        });
+        res.json(account);
+      }
     } catch (error) {
       console.error("Error saving courier:", error);
       res.status(500).json({ message: "Failed to save courier" });
+    }
+  });
+
+  app.post("/api/integrations/couriers/test", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const { courierName } = req.body;
+      if (!courierName) return res.status(400).json({ message: "courierName required" });
+
+      const creds = await getCourierCredentials(merchantId, courierName);
+      if (!creds) {
+        return res.json({ success: false, message: "No credentials configured" });
+      }
+
+      if (courierName === 'leopards') {
+        try {
+          const resp = await fetch('https://merchantapi.leopardscourier.com/api/getAllCities/format/json/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ api_key: creds.apiKey, api_password: creds.apiSecret }),
+          });
+          const data = await resp.json();
+          if (data.status === 1) {
+            return res.json({ success: true, message: `Connected! ${data.city_list?.length || 0} cities available.` });
+          }
+          return res.json({ success: false, message: data.error || 'Authentication failed' });
+        } catch (err: any) {
+          return res.json({ success: false, message: err.message });
+        }
+      }
+
+      if (courierName === 'postex') {
+        try {
+          const resp = await fetch('https://api.postex.pk/services/integration/api/order/v2/get-operational-city', {
+            headers: { 'Content-Type': 'application/json', 'token': creds.apiKey! },
+          });
+          const data = await resp.json();
+          if (data.statusCode === '200') {
+            return res.json({ success: true, message: `Connected! ${data.dist?.length || 0} operational cities.` });
+          }
+          return res.json({ success: false, message: data.statusMessage || 'Authentication failed' });
+        } catch (err: any) {
+          return res.json({ success: false, message: err.message });
+        }
+      }
+
+      return res.json({ success: false, message: `Test not available for ${courierName}` });
+    } catch (error) {
+      console.error("Error testing courier:", error);
+      res.status(500).json({ message: "Failed to test courier connection" });
     }
   });
 
@@ -1140,13 +1247,10 @@ export async function registerRoutes(
 
       const { trackShipment } = await import('./services/couriers');
       
-      // Get recent orders with tracking - limit to 50 to keep response time reasonable
-      // Priority: orders not delivered yet and not recently updated
       const { orders: ordersWithTracking } = await storage.getOrders(merchantId, { 
-        pageSize: 100 
+        pageSize: 200 
       });
       
-      // Filter to trackable orders that need status updates
       const now = new Date();
       const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
       
@@ -1154,14 +1258,25 @@ export async function registerRoutes(
         .filter(o => o.courierTracking && o.courierName)
         .filter(o => o.shipmentStatus !== 'delivered' && o.shipmentStatus !== 'returned')
         .filter(o => !o.lastTrackingUpdate || new Date(o.lastTrackingUpdate) < oneHourAgo)
-        .slice(0, 25); // Limit to 25 orders per sync to keep under 10 seconds
+        .slice(0, 25);
+
+      if (trackableOrders.length === 0) {
+        return res.json({ success: true, updated: 0, failed: 0, total: 0, message: "No orders need status updates" });
+      }
 
       console.log(`[Courier Sync] Syncing ${trackableOrders.length} orders...`);
+
+      const courierCredsCache = new Map<string, { apiKey: string | null; apiSecret: string | null } | null>();
+      for (const order of trackableOrders) {
+        const cn = order.courierName!.toLowerCase();
+        if (!courierCredsCache.has(cn)) {
+          courierCredsCache.set(cn, await getCourierCredentials(merchantId, cn));
+        }
+      }
 
       let updated = 0;
       let failed = 0;
 
-      // Process in parallel batches of 5
       const batchSize = 5;
       for (let i = 0; i < trackableOrders.length; i += batchSize) {
         const batch = trackableOrders.slice(i, i + batchSize);
@@ -1169,7 +1284,14 @@ export async function registerRoutes(
         const results = await Promise.allSettled(
           batch.map(async (order) => {
             try {
-              const result = await trackShipment(order.courierName!, order.courierTracking!);
+              const cn = order.courierName!.toLowerCase();
+              const creds = courierCredsCache.get(cn);
+              if (!creds) {
+                return false;
+              }
+              const credObj = { apiKey: creds.apiKey || undefined, apiSecret: creds.apiSecret || undefined };
+              
+              const result = await trackShipment(order.courierName!, order.courierTracking!, credObj);
               
               if (result && result.success) {
                 await storage.updateOrder(merchantId, order.id, {
@@ -1194,7 +1316,6 @@ export async function registerRoutes(
           }
         }
         
-        // Brief delay between batches
         if (i + batchSize < trackableOrders.length) {
           await new Promise(resolve => setTimeout(resolve, 500));
         }
@@ -1224,7 +1345,9 @@ export async function registerRoutes(
       const trackingNumber = req.params.trackingNumber as string;
       const { trackShipment } = await import('./services/couriers');
       
-      const result = await trackShipment(courier, trackingNumber);
+      const creds = await getCourierCredentials(merchantId, courier);
+      const credObj = creds ? { apiKey: creds.apiKey || undefined, apiSecret: creds.apiSecret || undefined } : undefined;
+      const result = await trackShipment(courier, trackingNumber, credObj);
       
       if (!result) {
         return res.status(400).json({ message: "Unknown courier" });
