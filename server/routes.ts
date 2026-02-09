@@ -1006,11 +1006,9 @@ export async function registerRoutes(
   // ============================================
   // SHOPIFY WEBHOOK ENDPOINTS (No auth - verified via HMAC)
   // ============================================
-  const rawBodyParser = express.raw({ type: 'application/json', limit: '10mb' });
-
   const handleShopifyWebhook = async (req: Request, res: Response, topic: string) => {
     try {
-      const rawBody = req.body as Buffer;
+      const rawBody = (req as any).rawBody as Buffer | undefined;
       const hmac = req.headers['x-shopify-hmac-sha256'] as string;
       const shopDomain = req.headers['x-shopify-shop-domain'] as string;
       const webhookId = req.headers['x-shopify-webhook-id'] as string;
@@ -1018,6 +1016,12 @@ export async function registerRoutes(
       if (!shopDomain) {
         console.error('[Webhook] Missing shop domain header');
         res.status(400).send('Missing shop domain');
+        return;
+      }
+
+      if (!rawBody) {
+        console.error(`[Webhook] No raw body available for HMAC verification for ${topic}`);
+        res.status(400).send('Missing body');
         return;
       }
 
@@ -1042,19 +1046,19 @@ export async function registerRoutes(
     }
   };
 
-  app.post("/api/webhooks/shopify/orders-create", rawBodyParser, (req, res) => {
+  app.post("/api/webhooks/shopify/orders-create", (req, res) => {
     handleShopifyWebhook(req, res, 'orders/create');
   });
 
-  app.post("/api/webhooks/shopify/orders-updated", rawBodyParser, (req, res) => {
+  app.post("/api/webhooks/shopify/orders-updated", (req, res) => {
     handleShopifyWebhook(req, res, 'orders/updated');
   });
 
-  app.post("/api/webhooks/shopify/fulfillments-create", rawBodyParser, (req, res) => {
+  app.post("/api/webhooks/shopify/fulfillments-create", (req, res) => {
     handleShopifyWebhook(req, res, 'fulfillments/create');
   });
 
-  app.post("/api/webhooks/shopify/fulfillments-update", rawBodyParser, (req, res) => {
+  app.post("/api/webhooks/shopify/fulfillments-update", (req, res) => {
     handleShopifyWebhook(req, res, 'fulfillments/update');
   });
 
@@ -1139,7 +1143,7 @@ export async function registerRoutes(
             orderStatus: transformedOrder.orderStatus,
             rawShopifyData: transformedOrder.rawShopifyData,
             lastApiSyncAt: new Date(),
-            shopifyUpdatedAt: shopifyOrder.updated_at ? new Date(shopifyOrder.updated_at) : undefined,
+            shopifyUpdatedAt: (shopifyOrder as any).updated_at ? new Date((shopifyOrder as any).updated_at) : undefined,
           };
 
           if (transformedOrder.customerName !== 'Unknown' && transformedOrder.customerName !== existingOrder.customerName) {
