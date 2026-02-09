@@ -234,19 +234,28 @@ export async function registerRoutes(
   // Seed demo data on startup
   await storage.seedDemoData();
 
+  function normalizeCourierName(raw: string): string {
+    const name = raw.toLowerCase().trim();
+    if (name.includes('leopard')) return 'leopards';
+    if (name.includes('postex') || name.includes('post ex')) return 'postex';
+    if (name.includes('tcs')) return 'tcs';
+    return name;
+  }
+
   async function getCourierCredentials(merchantId: string, courierName: string): Promise<{ apiKey: string | null; apiSecret: string | null } | null> {
+    const normalized = normalizeCourierName(courierName);
     const accounts = await storage.getCourierAccounts(merchantId);
-    const account = accounts.find(a => a.courierName === courierName);
+    const account = accounts.find(a => a.courierName === normalized);
     const settings = (account?.settings as Record<string, any>) || {};
 
-    if (courierName === 'leopards') {
+    if (normalized === 'leopards') {
       const apiKey = (!settings.useEnvCredentials && account?.apiKey) || process.env.LEOPARDS_API_KEY || null;
       const apiSecret = (!settings.useEnvCredentials && account?.apiSecret) || process.env.LEOPARDS_API_PASSWORD || null;
       if (!apiKey || !apiSecret) return null;
       return { apiKey, apiSecret };
     }
 
-    if (courierName === 'postex') {
+    if (normalized === 'postex') {
       const apiKey = (!settings.useEnvCredentials && account?.apiKey) || process.env.POSTEX_API_TOKEN || null;
       if (!apiKey) return null;
       return { apiKey, apiSecret: null };
@@ -1246,29 +1255,22 @@ export async function registerRoutes(
       if (!merchantId) return;
 
       const { trackShipment } = await import('./services/couriers');
+      const forceRefresh = req.body?.forceRefresh === true;
       
-      const { orders: ordersWithTracking } = await storage.getOrders(merchantId, { 
-        pageSize: 200 
+      const trackableOrders = await storage.getOrdersForCourierSync(merchantId, {
+        forceRefresh,
+        limit: 1500,
       });
-      
-      const now = new Date();
-      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-      
-      const trackableOrders = ordersWithTracking
-        .filter(o => o.courierTracking && o.courierName)
-        .filter(o => o.shipmentStatus !== 'delivered' && o.shipmentStatus !== 'returned')
-        .filter(o => !o.lastTrackingUpdate || new Date(o.lastTrackingUpdate) < oneHourAgo)
-        .slice(0, 25);
 
       if (trackableOrders.length === 0) {
-        return res.json({ success: true, updated: 0, failed: 0, total: 0, message: "No orders need status updates" });
+        return res.json({ success: true, updated: 0, failed: 0, skipped: 0, total: 0, message: "No orders need status updates" });
       }
 
-      console.log(`[Courier Sync] Syncing ${trackableOrders.length} orders...`);
+      console.log(`[Courier Sync] Syncing ${trackableOrders.length} orders (forceRefresh=${forceRefresh})...`);
 
       const courierCredsCache = new Map<string, { apiKey: string | null; apiSecret: string | null } | null>();
       for (const order of trackableOrders) {
-        const cn = order.courierName!.toLowerCase();
+        const cn = normalizeCourierName(order.courierName!);
         if (!courierCredsCache.has(cn)) {
           courierCredsCache.set(cn, await getCourierCredentials(merchantId, cn));
         }
@@ -1276,18 +1278,19 @@ export async function registerRoutes(
 
       let updated = 0;
       let failed = 0;
+      let skipped = 0;
 
-      const batchSize = 5;
+      const batchSize = 10;
       for (let i = 0; i < trackableOrders.length; i += batchSize) {
         const batch = trackableOrders.slice(i, i + batchSize);
         
         const results = await Promise.allSettled(
           batch.map(async (order) => {
             try {
-              const cn = order.courierName!.toLowerCase();
+              const cn = normalizeCourierName(order.courierName!);
               const creds = courierCredsCache.get(cn);
               if (!creds) {
-                return false;
+                return 'skipped';
               }
               const credObj = { apiKey: creds.apiKey || undefined, apiSecret: creds.apiSecret || undefined };
               
@@ -1298,35 +1301,38 @@ export async function registerRoutes(
                   shipmentStatus: result.status,
                   lastTrackingUpdate: new Date(),
                 });
-                return true;
+                return 'updated';
               }
-              return false;
+              return 'failed';
             } catch (err) {
               console.error(`[Courier Sync] Error for ${order.courierTracking}:`, err);
-              return false;
+              return 'failed';
             }
           })
         );
 
         for (const result of results) {
-          if (result.status === 'fulfilled' && result.value) {
-            updated++;
+          if (result.status === 'fulfilled') {
+            if (result.value === 'updated') updated++;
+            else if (result.value === 'skipped') skipped++;
+            else failed++;
           } else {
             failed++;
           }
         }
         
         if (i + batchSize < trackableOrders.length) {
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise(resolve => setTimeout(resolve, 300));
         }
       }
 
-      console.log(`[Courier Sync] Complete: ${updated} updated, ${failed} failed`);
+      console.log(`[Courier Sync] Complete: ${updated} updated, ${failed} failed, ${skipped} skipped (no creds)`);
 
       res.json({ 
         success: true, 
         updated, 
-        failed, 
+        failed,
+        skipped,
         total: trackableOrders.length 
       });
     } catch (error) {

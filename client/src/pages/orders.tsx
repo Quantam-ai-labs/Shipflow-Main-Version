@@ -206,14 +206,21 @@ export default function Orders() {
   }, [syncStatus?.lastSync?.timestamp]);
 
   const syncCourierStatusMutation = useMutation({
-    mutationFn: async () => {
-      const response = await apiRequest("POST", "/api/couriers/sync-statuses");
+    mutationFn: async (forceRefresh?: boolean) => {
+      const response = await apiRequest("POST", "/api/couriers/sync-statuses", { forceRefresh: forceRefresh || false });
       return response.json();
     },
     onSuccess: (result) => {
+      const parts = [];
+      if (result.updated > 0) parts.push(`${result.updated} updated`);
+      if (result.failed > 0) parts.push(`${result.failed} failed`);
+      if (result.skipped > 0) parts.push(`${result.skipped} skipped (no credentials)`);
+      
       toast({
-        title: "Courier Status Updated",
-        description: `Updated ${result.updated} of ${result.total} shipments.`,
+        title: result.updated > 0 ? "Courier Status Updated" : "Sync Complete",
+        description: result.total === 0 
+          ? "All shipments are already up to date." 
+          : `${parts.join(', ')} out of ${result.total} shipments.`,
       });
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
     },
@@ -344,7 +351,7 @@ export default function Orders() {
           <Button 
             variant="outline" 
             size="sm" 
-            onClick={() => syncCourierStatusMutation.mutate()}
+            onClick={() => syncCourierStatusMutation.mutate(false)}
             disabled={syncCourierStatusMutation.isPending}
             className="h-9"
             data-testid="button-sync-courier-status"

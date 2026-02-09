@@ -51,6 +51,7 @@ export interface IStorage {
   getExistingOrdersByShopifyIds(merchantId: string, shopifyOrderIds: string[]): Promise<Map<string, string>>;
   getRecentOrders(merchantId: string, limit?: number): Promise<Order[]>;
   getOrdersWithMissingCity(merchantId: string, limit?: number): Promise<{ id: string; shopifyOrderId: string }[]>;
+  getOrdersForCourierSync(merchantId: string, options?: { forceRefresh?: boolean; limit?: number }): Promise<Order[]>;
   createOrder(order: InsertOrder): Promise<Order>;
   updateOrder(merchantId: string, id: string, data: Partial<InsertOrder>): Promise<Order | undefined>;
 
@@ -363,6 +364,32 @@ export class DatabaseStorage implements IStorage {
     .limit(limit);
     
     return result.filter(r => r.shopifyOrderId !== null) as { id: string; shopifyOrderId: string }[];
+  }
+
+  async getOrdersForCourierSync(merchantId: string, options?: { forceRefresh?: boolean; limit?: number }): Promise<Order[]> {
+    const syncLimit = options?.limit || 1500;
+    const forceRefresh = options?.forceRefresh || false;
+
+    let conditions = [
+      eq(orders.merchantId, merchantId),
+      sql`${orders.courierTracking} IS NOT NULL AND ${orders.courierTracking} != ''`,
+      sql`${orders.courierName} IS NOT NULL AND ${orders.courierName} != ''`,
+    ];
+
+    if (!forceRefresh) {
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      conditions.push(
+        or(
+          isNull(orders.lastTrackingUpdate),
+          sql`${orders.lastTrackingUpdate} < ${oneHourAgo}`
+        )!
+      );
+    }
+
+    return db.select().from(orders)
+      .where(and(...conditions))
+      .orderBy(desc(orders.orderDate))
+      .limit(syncLimit);
   }
 
   async createOrder(order: InsertOrder): Promise<Order> {
