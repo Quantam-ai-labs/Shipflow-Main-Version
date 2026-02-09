@@ -1,0 +1,129 @@
+Redesign the app into a simple pipeline workflow with these tabs:
+
+1) New Orders (Inbox)
+2) Pending Orders
+3) Hold Orders (with timer)
+4) Ready to Ship
+5) Fulfilled / Booked
+6) Cancelled
+
+GOAL:
+New Orders must always become empty. No order should remain in New Orders. Every new order must be moved to exactly one of:
+- Ready to Ship (Confirmed)
+- Cancelled
+- Pending Orders (needs fix / incomplete)
+- Hold Orders (customer asked to hold until a date/time)
+
+DATABASE CHANGES:
+Add order_workflow_status enum:
+- NEW
+- PENDING
+- HOLD
+- READY_TO_SHIP
+- FULFILLED
+- CANCELLED
+
+Add these fields to Orders:
+- pending_reason (text, required when status=PENDING)
+- pending_reason_type (enum) with values like:
+  - INCOMPLETE_ADDRESS
+  - MISSING_PHONE
+  - WRONG_CITY
+  - CUSTOMER_NOT_RESPONDING
+  - CUSTOMER_REQUESTED_CHANGE
+  - FRAUD_SUSPECTED
+  - OTHER
+- hold_until (datetime, required when status=HOLD)
+- hold_created_at, hold_created_by_user_id
+- confirmed_at, confirmed_by_user_id
+- cancelled_at, cancelled_by_user_id
+- cancel_reason (text)
+
+UI WORKFLOW:
+
+A) New Orders tab (workflow_status=NEW):
+- Show fresh Shopify orders only (unprocessed).
+- Each row has buttons:
+  1) Confirm → moves to READY_TO_SHIP
+  2) Cancel → asks cancel reason, moves to CANCELLED
+  3) Pending → asks pending reason type + optional note, moves to PENDING
+  4) Hold → opens a date/time picker (hold_until), moves to HOLD
+- Also add checkboxes + bulk actions:
+  - Confirm Selected
+  - Cancel Selected (asks reason once)
+  - Mark Selected Pending (asks reason type once)
+  - Mark Selected Hold (asks hold_until once)
+
+After any action, the order must immediately disappear from New Orders.
+
+B) Pending Orders tab (workflow_status=PENDING):
+Purpose: orders that cannot be processed due to missing info or issues.
+- Show columns: pending_reason_type, pending_reason, plus key order fields.
+- Must allow actions:
+  - Fix & Confirm → moves to READY_TO_SHIP
+  - Hold → moves to HOLD (set hold_until)
+  - Cancel → moves to CANCELLED
+- Provide quick inline edit fields for missing customer data (phone/address/city) if required.
+- Add filters by pending_reason_type so agents can work faster.
+
+C) Hold Orders tab (workflow_status=HOLD):
+- Must show hold_until countdown.
+- When hold_until time passes:
+  - show notification banner + mark as “Hold Expired”
+  - allow agent to move it to:
+    - READY_TO_SHIP
+    - PENDING
+    - CANCELLED
+- Add bulk action “Release Hold” (move selected to READY_TO_SHIP or PENDING).
+
+D) Ready to Ship tab (workflow_status=READY_TO_SHIP):
+- Contains confirmed orders ready for courier booking.
+- Each row has checkbox + booking controls:
+  - courier selection (Leopards, PostEx)
+  - weight preset dropdown
+  - pieces default 1
+  - COD confirm
+- Bulk booking must support selecting subset and booking with chosen courier:
+  - Select 50 → Bulk Book with Leopards
+  - Select 50 → Bulk Book with PostEx
+- After successful booking:
+  - Save courier_name + tracking_number + tracking_url in Shipments table
+  - Move order to FULFILLED automatically
+- If booking fails:
+  - keep order in READY_TO_SHIP with booking_status=FAILED + error + Retry
+
+E) Fulfilled / Booked tab (workflow_status=FULFILLED):
+- Show tracking details + real-time courier status + last sync time.
+- Allow manual sync and auto sync jobs.
+- Show universal_status mapped from courier raw status.
+
+F) Cancelled tab (workflow_status=CANCELLED):
+- Read-only list with cancel reason, who cancelled, when.
+
+INTEGRATIONS:
+1) Shopify:
+- Use OAuth (Dev Dashboard flow), not manual token paste.
+- Use webhooks: orders/create and orders/updated (+ fulfillments if needed).
+- On new Shopify order webhook:
+  - upsert order into DB with workflow_status=NEW
+- On updates:
+  - update tags, raw json, etc. but do NOT change workflow_status automatically.
+
+2) Couriers:
+- Support Leopards + PostEx credentials in Settings:
+  - Leopards: api_key + password
+  - PostEx: token only
+- Create a connector pattern for booking and tracking.
+- Implement universal status mapping using our standard universal statuses (handled separately).
+
+IMPORTANT RELIABILITY:
+- Idempotent upsert by (merchant_id, shopify_order_id)
+- Webhooks can be duplicate or out of order; no duplicates allowed.
+- Never overwrite non-empty resolved customer fields with empty/redacted values.
+- Store raw webhook + raw api JSON for debugging.
+
+UI STYLE:
+- Simple Apple-like UI, glassmorphism, light/dark toggle.
+- Spreadsheet-like tables and fast bulk actions.
+
+Finish with README + env.example.
