@@ -41,7 +41,7 @@ const mainNavItems = [
     icon: LayoutDashboard,
   },
   {
-    title: "Orders",
+    title: "Pipeline",
     url: "/orders",
     icon: Package,
   },

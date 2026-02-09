@@ -152,6 +152,20 @@ export const orders = pgTable("orders", {
   orderDate: timestamp("order_date").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+  workflowStatus: varchar("workflow_status", { length: 50 }).notNull().default("NEW"),
+  pendingReason: text("pending_reason"),
+  pendingReasonType: varchar("pending_reason_type", { length: 50 }),
+  holdUntil: timestamp("hold_until"),
+  holdCreatedAt: timestamp("hold_created_at"),
+  holdCreatedByUserId: varchar("hold_created_by_user_id"),
+  confirmedAt: timestamp("confirmed_at"),
+  confirmedByUserId: varchar("confirmed_by_user_id"),
+  cancelledAt: timestamp("cancelled_at"),
+  cancelledByUserId: varchar("cancelled_by_user_id"),
+  cancelReason: text("cancel_reason"),
+  itemSummary: text("item_summary"),
+  bookingStatus: varchar("booking_status", { length: 50 }),
+  bookingError: text("booking_error"),
 }, (table) => [
   index("idx_orders_merchant").on(table.merchantId),
   index("idx_orders_shopify_id").on(table.shopifyOrderId),
@@ -160,6 +174,7 @@ export const orders = pgTable("orders", {
   index("idx_orders_city").on(table.city),
   index("idx_orders_date").on(table.orderDate),
   index("idx_orders_courier").on(table.courierName),
+  index("idx_orders_workflow_status").on(table.workflowStatus),
 ]);
 
 export const insertOrderSchema = createInsertSchema(orders).omit({

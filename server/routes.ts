@@ -297,7 +297,7 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
 
-      const { search, status, courier, city, month, page, pageSize } = req.query;
+      const { search, status, courier, city, month, page, pageSize, workflowStatus, pendingReasonType } = req.query;
       
       const result = await storage.getOrders(merchantId, {
         search: search as string,
@@ -307,6 +307,8 @@ export async function registerRoutes(
         month: month as string,
         page: parseInt(page as string) || 1,
         pageSize: parseInt(pageSize as string) || 20,
+        workflowStatus: workflowStatus as string,
+        pendingReasonType: pendingReasonType as string,
       });
       
       res.json(result);
@@ -339,6 +341,137 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching statuses:", error);
       res.status(500).json({ message: "Failed to fetch statuses" });
+    }
+  });
+
+  app.get("/api/orders/workflow-counts", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const counts = await storage.getWorkflowCounts(merchantId);
+      res.json(counts);
+    } catch (error) {
+      console.error("Error fetching workflow counts:", error);
+      res.status(500).json({ message: "Failed to fetch workflow counts" });
+    }
+  });
+
+  app.post("/api/orders/:id/workflow", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const orderId = req.params.id;
+      const { action, cancelReason, pendingReasonType, pendingReason, holdUntil, customerPhone, shippingAddress, city } = req.body;
+      const userId = (req.user as any)?.id || "system";
+
+      const order = await storage.getOrderById(merchantId, orderId);
+      if (!order) return res.status(404).json({ message: "Order not found" });
+
+      let updateData: any = {};
+
+      switch (action) {
+        case "confirm":
+          updateData = { workflowStatus: "READY_TO_SHIP", confirmedAt: new Date(), confirmedByUserId: userId };
+          break;
+        case "cancel":
+          if (!cancelReason) return res.status(400).json({ message: "Cancel reason is required" });
+          updateData = { workflowStatus: "CANCELLED", cancelledAt: new Date(), cancelledByUserId: userId, cancelReason };
+          break;
+        case "pending":
+          if (!pendingReasonType) return res.status(400).json({ message: "Pending reason type is required" });
+          updateData = { workflowStatus: "PENDING", pendingReasonType, pendingReason: pendingReason || "" };
+          break;
+        case "hold":
+          if (!holdUntil) return res.status(400).json({ message: "Hold until date is required" });
+          updateData = { workflowStatus: "HOLD", holdUntil: new Date(holdUntil), holdCreatedAt: new Date(), holdCreatedByUserId: userId };
+          break;
+        case "release-hold":
+          updateData = { workflowStatus: "READY_TO_SHIP", confirmedAt: new Date(), confirmedByUserId: userId, holdUntil: null };
+          break;
+        case "fix-confirm":
+          updateData = { workflowStatus: "READY_TO_SHIP", confirmedAt: new Date(), confirmedByUserId: userId, pendingReason: null, pendingReasonType: null };
+          if (customerPhone) updateData.customerPhone = customerPhone;
+          if (shippingAddress) updateData.shippingAddress = shippingAddress;
+          if (city) updateData.city = city;
+          break;
+        case "move-to-pending":
+          if (!pendingReasonType) return res.status(400).json({ message: "Pending reason type is required" });
+          updateData = { workflowStatus: "PENDING", pendingReasonType, pendingReason: pendingReason || "", holdUntil: null };
+          break;
+        default:
+          return res.status(400).json({ message: "Invalid action" });
+      }
+
+      const updated = await storage.updateOrderWorkflow(merchantId, orderId, updateData);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating workflow:", error);
+      res.status(500).json({ message: "Failed to update workflow" });
+    }
+  });
+
+  app.post("/api/orders/bulk-workflow", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { orderIds, action, cancelReason, pendingReasonType, pendingReason, holdUntil } = req.body;
+      const userId = (req.user as any)?.id || "system";
+
+      if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
+        return res.status(400).json({ message: "Order IDs are required" });
+      }
+
+      let updateData: any = {};
+
+      switch (action) {
+        case "confirm":
+          updateData = { workflowStatus: "READY_TO_SHIP", confirmedAt: new Date(), confirmedByUserId: userId };
+          break;
+        case "cancel":
+          if (!cancelReason) return res.status(400).json({ message: "Cancel reason is required" });
+          updateData = { workflowStatus: "CANCELLED", cancelledAt: new Date(), cancelledByUserId: userId, cancelReason };
+          break;
+        case "pending":
+          if (!pendingReasonType) return res.status(400).json({ message: "Pending reason type is required" });
+          updateData = { workflowStatus: "PENDING", pendingReasonType, pendingReason: pendingReason || "" };
+          break;
+        case "hold":
+          if (!holdUntil) return res.status(400).json({ message: "Hold until date is required" });
+          updateData = { workflowStatus: "HOLD", holdUntil: new Date(holdUntil), holdCreatedAt: new Date(), holdCreatedByUserId: userId };
+          break;
+        case "release-hold":
+          updateData = { workflowStatus: "READY_TO_SHIP", confirmedAt: new Date(), confirmedByUserId: userId, holdUntil: null };
+          break;
+        default:
+          return res.status(400).json({ message: "Invalid action" });
+      }
+
+      const count = await storage.bulkUpdateOrderWorkflow(merchantId, orderIds, updateData);
+      res.json({ updated: count });
+    } catch (error) {
+      console.error("Error bulk updating workflow:", error);
+      res.status(500).json({ message: "Failed to bulk update workflow" });
+    }
+  });
+
+  app.patch("/api/orders/:id/customer", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const orderId = req.params.id;
+      const { customerPhone, shippingAddress, city } = req.body;
+
+      const updateData: any = {};
+      if (customerPhone !== undefined) updateData.customerPhone = customerPhone;
+      if (shippingAddress !== undefined) updateData.shippingAddress = shippingAddress;
+      if (city !== undefined) updateData.city = city;
+
+      const updated = await storage.updateOrderWorkflow(merchantId, orderId, updateData);
+      if (!updated) return res.status(404).json({ message: "Order not found" });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating customer info:", error);
+      res.status(500).json({ message: "Failed to update customer info" });
     }
   });
 

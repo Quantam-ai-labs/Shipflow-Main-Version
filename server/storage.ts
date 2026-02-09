@@ -194,13 +194,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Orders - All scoped by merchantId
-  async getOrders(merchantId: string, options?: { search?: string; status?: string; courier?: string; city?: string; month?: string; page?: number; pageSize?: number }): Promise<{ orders: Order[]; total: number }> {
+  async getOrders(merchantId: string, options?: { search?: string; status?: string; courier?: string; city?: string; month?: string; page?: number; pageSize?: number; workflowStatus?: string; pendingReasonType?: string }): Promise<{ orders: Order[]; total: number }> {
     const page = options?.page || 1;
     const pageSize = options?.pageSize || 20;
     const offset = (page - 1) * pageSize;
 
     let conditions = [eq(orders.merchantId, merchantId)];
     
+    if (options?.workflowStatus && options.workflowStatus !== "all") {
+      conditions.push(eq(orders.workflowStatus, options.workflowStatus));
+    }
+
+    if (options?.pendingReasonType && options.pendingReasonType !== "all") {
+      conditions.push(eq(orders.pendingReasonType, options.pendingReasonType));
+    }
+
     if (options?.status && options.status !== "all") {
       if (options.status === "Unfulfilled") {
         conditions.push(
@@ -290,6 +298,39 @@ export class DatabaseStorage implements IStorage {
       .orderBy(orders.shipmentStatus);
     
     return result.map(r => r.status).filter((s): s is string => s !== null);
+  }
+
+  async getWorkflowCounts(merchantId: string): Promise<Record<string, number>> {
+    const result = await db.select({
+      status: orders.workflowStatus,
+      count: count()
+    }).from(orders)
+      .where(eq(orders.merchantId, merchantId))
+      .groupBy(orders.workflowStatus);
+    
+    const counts: Record<string, number> = { NEW: 0, PENDING: 0, HOLD: 0, READY_TO_SHIP: 0, FULFILLED: 0, CANCELLED: 0 };
+    for (const row of result) {
+      counts[row.status] = row.count;
+    }
+    return counts;
+  }
+
+  async updateOrderWorkflow(merchantId: string, orderId: string, data: Partial<Order>): Promise<Order | undefined> {
+    const [updated] = await db.update(orders)
+      .set({ ...data, updatedAt: new Date() })
+      .where(and(eq(orders.id, orderId), eq(orders.merchantId, merchantId)))
+      .returning();
+    return updated;
+  }
+
+  async bulkUpdateOrderWorkflow(merchantId: string, orderIds: string[], data: Partial<Order>): Promise<number> {
+    const result = await db.update(orders)
+      .set({ ...data, updatedAt: new Date() })
+      .where(and(
+        inArray(orders.id, orderIds),
+        eq(orders.merchantId, merchantId)
+      ));
+    return orderIds.length;
   }
 
   async getOrderById(merchantId: string, id: string): Promise<Order | undefined> {

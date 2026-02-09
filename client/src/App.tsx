@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import Landing from "@/pages/landing";
 import Dashboard from "@/pages/dashboard";
 import Orders from "@/pages/orders";
+import Pipeline from "@/pages/pipeline";
 import OrderDetails from "@/pages/order-details";
 import Shipments from "@/pages/shipments";
 import Analytics from "@/pages/analytics";
@@ -31,7 +32,7 @@ function AppRoutes() {
       </Route>
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/orders/:id" component={OrderDetails} />
-      <Route path="/orders" component={Orders} />
+      <Route path="/orders" component={Pipeline} />
       <Route path="/shipments" component={Shipments} />
       <Route path="/analytics" component={Analytics} />
       <Route path="/cod-reconciliation" component={CodReconciliation} />
