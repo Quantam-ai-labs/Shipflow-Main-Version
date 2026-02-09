@@ -6,7 +6,6 @@ import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integra
 import { z } from "zod";
 import crypto from "crypto";
 import { shopifyService } from "./services/shopify";
-import { webhookHandler } from "./services/webhookHandler";
 
 // Zod schemas for validation
 const remarkSchema = z.object({
@@ -853,34 +852,15 @@ export async function registerRoutes(
         });
       }
 
-      console.log(`[Fix City Data] Found ${ordersWithMissingCity.length} orders with missing city...`);
+      console.log(`[Fix City Data] Found ${ordersWithMissingCity.length} orders with missing city, triggering full re-sync...`);
 
-      const shopifyIds = ordersWithMissingCity.map(o => o.shopifyOrderId);
-      const cityData = await shopifyService.batchFetchOrderCitiesViaGraphQL(
-        store.shopDomain, 
-        store.accessToken, 
-        shopifyIds
-      );
-
-      let updated = 0;
-      for (const order of ordersWithMissingCity) {
-        const data = cityData.get(order.shopifyOrderId);
-        if (data?.city) {
-          await storage.updateOrder(merchantId, order.id, {
-            city: data.city,
-            province: data.province,
-          });
-          updated++;
-        }
-      }
-
-      console.log(`[Fix City Data] Updated ${updated}/${ordersWithMissingCity.length} orders with city data`);
+      const result = await shopifyService.syncOrders(merchantId, store.shopDomain, true);
 
       res.json({ 
         success: true, 
-        message: `Updated ${updated} orders with city data from Shopify`,
-        updated,
-        processed: ordersWithMissingCity.length
+        message: `Full re-sync complete: ${result.synced} new, ${result.updated} updated orders with complete data`,
+        updated: result.updated,
+        processed: result.total
       });
     } catch (error: any) {
       console.error("Error fixing city data:", error);
@@ -1004,84 +984,25 @@ export async function registerRoutes(
   });
 
   // ============================================
-  // SHOPIFY WEBHOOK ENDPOINTS (No auth - verified via HMAC)
-  // ============================================
-  const handleShopifyWebhook = async (req: Request, res: Response, topic: string) => {
-    try {
-      const rawBody = (req as any).rawBody as Buffer | undefined;
-      const hmac = req.headers['x-shopify-hmac-sha256'] as string;
-      const shopDomain = req.headers['x-shopify-shop-domain'] as string;
-      const webhookId = req.headers['x-shopify-webhook-id'] as string;
-
-      if (!shopDomain) {
-        console.error('[Webhook] Missing shop domain header');
-        res.status(400).send('Missing shop domain');
-        return;
-      }
-
-      if (!rawBody) {
-        console.error(`[Webhook] No raw body available for HMAC verification for ${topic}`);
-        res.status(400).send('Missing body');
-        return;
-      }
-
-      if (hmac && !webhookHandler.verifyHmac(rawBody, hmac)) {
-        console.error(`[Webhook] HMAC verification failed for ${topic} from ${shopDomain}`);
-        res.status(401).send('HMAC verification failed');
-        return;
-      }
-
-      res.status(200).send('OK');
-
-      if (topic.startsWith('orders/')) {
-        await webhookHandler.processOrderWebhook(topic, shopDomain, rawBody, webhookId);
-      } else if (topic.startsWith('fulfillments/')) {
-        await webhookHandler.processFulfillmentWebhook(topic, shopDomain, rawBody, webhookId);
-      }
-    } catch (error) {
-      console.error(`[Webhook] Unhandled error for ${topic}:`, error);
-      if (!res.headersSent) {
-        res.status(500).send('Internal error');
-      }
-    }
-  };
-
-  app.post("/api/webhooks/shopify/orders-create", (req, res) => {
-    handleShopifyWebhook(req, res, 'orders/create');
-  });
-
-  app.post("/api/webhooks/shopify/orders-updated", (req, res) => {
-    handleShopifyWebhook(req, res, 'orders/updated');
-  });
-
-  app.post("/api/webhooks/shopify/fulfillments-create", (req, res) => {
-    handleShopifyWebhook(req, res, 'fulfillments/create');
-  });
-
-  app.post("/api/webhooks/shopify/fulfillments-update", (req, res) => {
-    handleShopifyWebhook(req, res, 'fulfillments/update');
-  });
-
-  // ============================================
-  // WEBHOOK HEALTH & DATA HEALTH ENDPOINTS
+  // DATA HEALTH & SYNC LOG ENDPOINTS
   // ============================================
   app.get("/api/data-health", isAuthenticated, async (req, res) => {
     try {
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
 
-      const [dataHealth, webhookHealth, lastSync] = await Promise.all([
+      const [dataHealth, lastSync, recentSyncLogs] = await Promise.all([
         storage.getDataHealthStats(merchantId),
-        storage.getWebhookHealthStats(merchantId),
         storage.getShopifyStore(merchantId),
+        storage.getRecentSyncLogs(merchantId, 10),
       ]);
 
       res.json({
         dataHealth,
-        webhookHealth,
         lastApiSyncAt: lastSync?.lastSyncAt || null,
         shopDomain: lastSync?.shopDomain || null,
         isConnected: lastSync?.isConnected || false,
+        recentSyncLogs,
       });
     } catch (error) {
       console.error("Error fetching data health:", error);
@@ -1089,106 +1010,17 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/webhook-events", isAuthenticated, async (req, res) => {
+  app.get("/api/sync-logs", isAuthenticated, async (req, res) => {
     try {
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
 
-      const limit = parseInt(req.query.limit as string) || 50;
-      const events = await storage.getRecentWebhookEvents(merchantId, limit);
-      res.json({ events });
+      const limit = parseInt(req.query.limit as string) || 20;
+      const logs = await storage.getRecentSyncLogs(merchantId, limit);
+      res.json({ logs });
     } catch (error) {
-      console.error("Error fetching webhook events:", error);
-      res.status(500).json({ message: "Failed to fetch webhook events" });
-    }
-  });
-
-  // Reconciliation endpoint - fetches orders updated since last sync
-  app.post("/api/integrations/shopify/reconcile", isAuthenticated, async (req, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-
-      const store = await storage.getShopifyStore(merchantId);
-      if (!store || !store.isConnected || !store.accessToken || store.accessToken === "demo-access-token") {
-        return res.status(400).json({ message: "Shopify store not connected with real credentials" });
-      }
-
-      const sinceDate = store.lastSyncAt
-        ? new Date(new Date(store.lastSyncAt).getTime() - 6 * 60 * 60 * 1000)
-        : new Date(Date.now() - 24 * 60 * 60 * 1000);
-
-      console.log(`[Reconcile] Fetching orders updated since ${sinceDate.toISOString()}`);
-
-      const updatedOrders = await shopifyService.fetchAllOrders(store.shopDomain, store.accessToken, {
-        status: 'any',
-        created_at_min: sinceDate.toISOString(),
-      });
-
-      console.log(`[Reconcile] Found ${updatedOrders.length} orders to reconcile`);
-
-      let updated = 0;
-      let created = 0;
-
-      for (const shopifyOrder of updatedOrders) {
-        const shopifyOrderId = String(shopifyOrder.id);
-        const existingOrder = await storage.getOrderByShopifyId(merchantId, shopifyOrderId);
-        const transformedOrder = shopifyService.transformOrderForStorage(shopifyOrder);
-
-        if (existingOrder) {
-          const safeUpdate: any = {
-            tags: transformedOrder.tags,
-            fulfillmentStatus: transformedOrder.fulfillmentStatus,
-            paymentStatus: transformedOrder.paymentStatus,
-            orderStatus: transformedOrder.orderStatus,
-            rawShopifyData: transformedOrder.rawShopifyData,
-            lastApiSyncAt: new Date(),
-            shopifyUpdatedAt: (shopifyOrder as any).updated_at ? new Date((shopifyOrder as any).updated_at) : undefined,
-          };
-
-          if (transformedOrder.customerName !== 'Unknown' && transformedOrder.customerName !== existingOrder.customerName) {
-            safeUpdate.customerName = transformedOrder.customerName;
-          }
-          if (transformedOrder.customerPhone && !existingOrder.customerPhone) {
-            safeUpdate.customerPhone = transformedOrder.customerPhone;
-          }
-          if (transformedOrder.city && !existingOrder.city) {
-            safeUpdate.city = transformedOrder.city;
-          }
-          if (transformedOrder.shippingAddress && !existingOrder.shippingAddress) {
-            safeUpdate.shippingAddress = transformedOrder.shippingAddress;
-          }
-          if (transformedOrder.courierTracking && !existingOrder.courierTracking) {
-            safeUpdate.courierTracking = transformedOrder.courierTracking;
-            safeUpdate.courierName = transformedOrder.courierName;
-          }
-
-          await storage.updateOrder(merchantId, existingOrder.id, safeUpdate);
-          updated++;
-        } else {
-          await storage.createOrder({
-            ...transformedOrder,
-            merchantId,
-            lastApiSyncAt: new Date(),
-          });
-          created++;
-        }
-      }
-
-      await storage.updateShopifyStore(store.id, { lastSyncAt: new Date() });
-
-      console.log(`[Reconcile] Complete: ${created} created, ${updated} updated`);
-
-      res.json({
-        success: true,
-        message: `Reconciliation complete: ${created} new, ${updated} updated`,
-        created,
-        updated,
-        total: updatedOrders.length,
-      });
-    } catch (error: any) {
-      console.error("Error reconciling:", error);
-      res.status(500).json({ message: error.message || "Failed to reconcile" });
+      console.error("Error fetching sync logs:", error);
+      res.status(500).json({ message: "Failed to fetch sync logs" });
     }
   });
 

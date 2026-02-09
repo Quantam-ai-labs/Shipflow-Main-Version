@@ -1,7 +1,6 @@
 import {
   merchants, teamMembers, shopifyStores, courierAccounts,
   orders, shipments, shipmentEvents, remarks, codReconciliation, syncLogs,
-  webhookEvents,
   type Merchant, type InsertMerchant,
   type TeamMember, type InsertTeamMember,
   type ShopifyStore, type InsertShopifyStore,
@@ -12,7 +11,6 @@ import {
   type Remark, type InsertRemark,
   type CodReconciliation, type InsertCodReconciliation,
   type SyncLog, type InsertSyncLog,
-  type WebhookEvent, type InsertWebhookEvent,
   users,
 } from "@shared/schema";
 import { db } from "./db";
@@ -77,13 +75,10 @@ export interface IStorage {
   updateCodReconciliation(merchantId: string, id: string, data: Partial<InsertCodReconciliation>): Promise<CodReconciliation | undefined>;
   generateCodRecordsFromOrders(merchantId: string): Promise<{ created: number; skipped: number }>;
 
-  // Webhook Events
-  createWebhookEvent(event: InsertWebhookEvent): Promise<WebhookEvent>;
-  getWebhookEventByWebhookId(merchantId: string, webhookId: string): Promise<WebhookEvent | undefined>;
-  isDuplicateWebhook(merchantId: string, topic: string, payloadHash: string, windowMinutes?: number): Promise<boolean>;
-  updateWebhookEventStatus(id: string, status: string, errorMessage?: string): Promise<void>;
-  getRecentWebhookEvents(merchantId: string, limit?: number): Promise<WebhookEvent[]>;
-  getWebhookHealthStats(merchantId: string): Promise<{ totalReceived: number; totalProcessed: number; totalFailed: number; totalSkipped: number; lastReceivedAt: Date | null }>;
+  // Sync Logs
+  createSyncLog(log: InsertSyncLog): Promise<SyncLog>;
+  updateSyncLog(id: string, data: Partial<InsertSyncLog>): Promise<void>;
+  getRecentSyncLogs(merchantId: string, limit?: number): Promise<SyncLog[]>;
 
   // Data Health
   getDataHealthStats(merchantId: string): Promise<{ missingPhone: number; missingAddress: number; missingCity: number; missingName: number; totalOrders: number }>;
@@ -751,65 +746,24 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  // Webhook Events
-  async createWebhookEvent(event: InsertWebhookEvent): Promise<WebhookEvent> {
-    const [created] = await db.insert(webhookEvents).values(event).returning();
+  // Sync Logs
+  async createSyncLog(log: InsertSyncLog): Promise<SyncLog> {
+    const [created] = await db.insert(syncLogs).values(log).returning();
     return created;
   }
 
-  async getWebhookEventByWebhookId(merchantId: string, webhookId: string): Promise<WebhookEvent | undefined> {
-    const [event] = await db.select().from(webhookEvents)
-      .where(and(
-        eq(webhookEvents.merchantId, merchantId),
-        eq(webhookEvents.shopifyWebhookId, webhookId)
-      ));
-    return event;
+  async updateSyncLog(id: string, data: Partial<InsertSyncLog>): Promise<void> {
+    await db.update(syncLogs).set({
+      ...data,
+      completedAt: new Date(),
+    }).where(eq(syncLogs.id, id));
   }
 
-  async isDuplicateWebhook(merchantId: string, topic: string, payloadHash: string, windowMinutes = 10): Promise<boolean> {
-    const windowStart = new Date(Date.now() - windowMinutes * 60 * 1000);
-    const [existing] = await db.select({ id: webhookEvents.id }).from(webhookEvents)
-      .where(and(
-        eq(webhookEvents.merchantId, merchantId),
-        eq(webhookEvents.topic, topic),
-        eq(webhookEvents.payloadHash, payloadHash),
-        gte(webhookEvents.receivedAt, windowStart)
-      ))
-      .limit(1);
-    return !!existing;
-  }
-
-  async updateWebhookEventStatus(id: string, status: string, errorMessage?: string): Promise<void> {
-    await db.update(webhookEvents).set({
-      processingStatus: status,
-      processedAt: new Date(),
-      errorMessage: errorMessage || null,
-    }).where(eq(webhookEvents.id, id));
-  }
-
-  async getRecentWebhookEvents(merchantId: string, limit = 50): Promise<WebhookEvent[]> {
-    return db.select().from(webhookEvents)
-      .where(eq(webhookEvents.merchantId, merchantId))
-      .orderBy(desc(webhookEvents.receivedAt))
+  async getRecentSyncLogs(merchantId: string, limit = 20): Promise<SyncLog[]> {
+    return db.select().from(syncLogs)
+      .where(eq(syncLogs.merchantId, merchantId))
+      .orderBy(desc(syncLogs.startedAt))
       .limit(limit);
-  }
-
-  async getWebhookHealthStats(merchantId: string): Promise<{ totalReceived: number; totalProcessed: number; totalFailed: number; totalSkipped: number; lastReceivedAt: Date | null }> {
-    const allEvents = await db.select({
-      status: webhookEvents.processingStatus,
-      receivedAt: webhookEvents.receivedAt,
-    }).from(webhookEvents)
-      .where(eq(webhookEvents.merchantId, merchantId));
-
-    const totalReceived = allEvents.length;
-    const totalProcessed = allEvents.filter(e => e.status === 'processed').length;
-    const totalFailed = allEvents.filter(e => e.status === 'failed').length;
-    const totalSkipped = allEvents.filter(e => e.status === 'skipped_duplicate').length;
-    const lastReceivedAt = allEvents.length > 0
-      ? allEvents.reduce((max, e) => (!max || (e.receivedAt && e.receivedAt > max) ? e.receivedAt : max), null as Date | null)
-      : null;
-
-    return { totalReceived, totalProcessed, totalFailed, totalSkipped, lastReceivedAt };
   }
 
   // Data Health

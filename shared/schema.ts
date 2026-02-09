@@ -14,7 +14,7 @@ export const merchants = pgTable("merchants", {
   name: varchar("name", { length: 255 }).notNull(),
   slug: varchar("slug", { length: 100 }).unique().notNull(),
   email: varchar("email", { length: 255 }).notNull(),
-  phone: varchar("phone", { length: 20 }),
+  phone: varchar("phone", { length: 50 }),
   address: text("address"),
   city: varchar("city", { length: 100 }),
   country: varchar("country", { length: 100 }).default("Pakistan"),
@@ -118,21 +118,21 @@ export const orders = pgTable("orders", {
   orderNumber: varchar("order_number", { length: 50 }).notNull(),
   customerName: varchar("customer_name", { length: 500 }).notNull(),
   customerEmail: varchar("customer_email", { length: 255 }),
-  customerPhone: varchar("customer_phone", { length: 30 }),
+  customerPhone: varchar("customer_phone", { length: 50 }),
   shippingAddress: text("shipping_address"),
   city: varchar("city", { length: 255 }),
   province: varchar("province", { length: 100 }),
-  postalCode: varchar("postal_code", { length: 20 }),
+  postalCode: varchar("postal_code", { length: 50 }),
   country: varchar("country", { length: 100 }).default("Pakistan"),
   totalAmount: decimal("total_amount", { precision: 12, scale: 2 }).notNull(),
   subtotalAmount: decimal("subtotal_amount", { precision: 12, scale: 2 }),
   shippingAmount: decimal("shipping_amount", { precision: 12, scale: 2 }),
   discountAmount: decimal("discount_amount", { precision: 12, scale: 2 }),
-  currency: varchar("currency", { length: 10 }).default("PKR"),
+  currency: varchar("currency", { length: 20 }).default("PKR"),
   paymentMethod: varchar("payment_method", { length: 50 }),
-  paymentStatus: varchar("payment_status", { length: 30 }).default("pending"),
-  fulfillmentStatus: varchar("fulfillment_status", { length: 30 }).default("unfulfilled"),
-  orderStatus: varchar("order_status", { length: 30 }).default("pending"),
+  paymentStatus: varchar("payment_status", { length: 50 }).default("pending"),
+  fulfillmentStatus: varchar("fulfillment_status", { length: 50 }).default("unfulfilled"),
+  orderStatus: varchar("order_status", { length: 50 }).default("pending"),
   lineItems: jsonb("line_items"),
   totalQuantity: integer("total_quantity").default(1),
   tags: text("tags").array(),
@@ -145,11 +145,7 @@ export const orders = pgTable("orders", {
   referringSite: text("referring_site"),
   browserIp: varchar("browser_ip", { length: 50 }),
   rawShopifyData: jsonb("raw_shopify_data"),
-  rawWebhookData: jsonb("raw_webhook_data"),
-  resolvedSource: jsonb("resolved_source"),
-  dataQualityFlags: jsonb("data_quality_flags"),
   lastApiSyncAt: timestamp("last_api_sync_at"),
-  lastWebhookAt: timestamp("last_webhook_at"),
   shopifyUpdatedAt: timestamp("shopify_updated_at"),
   lastTrackingUpdate: timestamp("last_tracking_update"),
   orderDate: timestamp("order_date").defaultNow(),
@@ -173,34 +169,6 @@ export const insertOrderSchema = createInsertSchema(orders).omit({
 export type InsertOrder = z.infer<typeof insertOrderSchema>;
 export type Order = typeof orders.$inferSelect;
 
-// ============================================
-// WEBHOOK EVENTS (Audit + Dedup)
-// ============================================
-export const webhookEvents = pgTable("webhook_events", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
-  topic: varchar("topic", { length: 100 }).notNull(),
-  shopifyWebhookId: varchar("shopify_webhook_id", { length: 255 }),
-  shopDomain: varchar("shop_domain", { length: 255 }),
-  shopifyOrderId: varchar("shopify_order_id", { length: 100 }),
-  payloadHash: varchar("payload_hash", { length: 64 }),
-  processingStatus: varchar("processing_status", { length: 30 }).default("received"),
-  errorMessage: text("error_message"),
-  receivedAt: timestamp("received_at").defaultNow(),
-  processedAt: timestamp("processed_at"),
-}, (table) => [
-  index("idx_webhook_events_merchant").on(table.merchantId),
-  index("idx_webhook_events_webhook_id").on(table.shopifyWebhookId),
-  index("idx_webhook_events_order").on(table.shopifyOrderId),
-  index("idx_webhook_events_status").on(table.processingStatus),
-]);
-
-export const insertWebhookEventSchema = createInsertSchema(webhookEvents).omit({
-  id: true,
-  receivedAt: true,
-});
-export type InsertWebhookEvent = z.infer<typeof insertWebhookEventSchema>;
-export type WebhookEvent = typeof webhookEvents.$inferSelect;
 
 // ============================================
 // SHIPMENTS (Courier tracking)
@@ -356,14 +324,6 @@ export const merchantsRelations = relations(merchants, ({ many }) => ({
   shipments: many(shipments),
   codReconciliation: many(codReconciliation),
   syncLogs: many(syncLogs),
-  webhookEvents: many(webhookEvents),
-}));
-
-export const webhookEventsRelations = relations(webhookEvents, ({ one }) => ({
-  merchant: one(merchants, {
-    fields: [webhookEvents.merchantId],
-    references: [merchants.id],
-  }),
 }));
 
 export const teamMembersRelations = relations(teamMembers, ({ one }) => ({
