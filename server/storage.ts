@@ -45,6 +45,7 @@ export interface IStorage {
   // Orders - All scoped by merchantId
   getOrders(merchantId: string, options?: { search?: string; status?: string; courier?: string; city?: string; month?: string; page?: number; pageSize?: number }): Promise<{ orders: Order[]; total: number }>;
   getUniqueCities(merchantId: string): Promise<string[]>;
+  getUniqueStatuses(merchantId: string): Promise<string[]>;
   getOrderById(merchantId: string, id: string): Promise<Order | undefined>;
   getOrderByShopifyId(merchantId: string, shopifyOrderId: string): Promise<Order | undefined>;
   getExistingShopifyOrderIds(merchantId: string, shopifyOrderIds: string[]): Promise<Set<string>>;
@@ -201,7 +202,6 @@ export class DatabaseStorage implements IStorage {
     let conditions = [eq(orders.merchantId, merchantId)];
     
     if (options?.status && options.status !== "all") {
-      // "unfulfilled" means orders without courier tracking (null or empty)
       if (options.status === "unfulfilled") {
         conditions.push(
           or(
@@ -209,9 +209,10 @@ export class DatabaseStorage implements IStorage {
             eq(orders.courierTracking, "")
           )!
         );
+      } else if (options.status === "cancelled") {
+        conditions.push(ilike(orders.shipmentStatus, 'Cancelled'));
       } else {
-        // For other statuses, filter by shipmentStatus
-        conditions.push(eq(orders.shipmentStatus, options.status));
+        conditions.push(ilike(orders.shipmentStatus, options.status));
       }
     }
 
@@ -282,6 +283,15 @@ export class DatabaseStorage implements IStorage {
       .orderBy(orders.city);
     
     return result.map(r => r.city).filter((c): c is string => c !== null);
+  }
+
+  async getUniqueStatuses(merchantId: string): Promise<string[]> {
+    const result = await db.selectDistinct({ status: orders.shipmentStatus })
+      .from(orders)
+      .where(and(eq(orders.merchantId, merchantId), sql`${orders.shipmentStatus} IS NOT NULL AND ${orders.shipmentStatus} != ''`))
+      .orderBy(orders.shipmentStatus);
+    
+    return result.map(r => r.status).filter((s): s is string => s !== null);
   }
 
   async getOrderById(merchantId: string, id: string): Promise<Order | undefined> {

@@ -29,6 +29,7 @@ interface ShopifyOrder {
   currency: string;
   financial_status: string;
   fulfillment_status: string | null;
+  cancelled_at: string | null;
   landing_site: string | null;
   referring_site: string | null;
   browser_ip: string | null;
@@ -608,9 +609,11 @@ export class ShopifyService {
     const referringSite = shopifyOrder.referring_site || null;
     const browserIp = shopifyOrder.browser_ip || shopifyOrder.client_details?.browser_ip || null;
 
-    let shipmentStatus = 'unfulfilled';
-    if (courierTracking) {
-      shipmentStatus = 'booked';
+    let shipmentStatus = 'Unfulfilled';
+    if (shopifyOrder.cancelled_at) {
+      shipmentStatus = 'Cancelled';
+    } else if (courierTracking) {
+      shipmentStatus = 'Booked';
     }
 
     return {

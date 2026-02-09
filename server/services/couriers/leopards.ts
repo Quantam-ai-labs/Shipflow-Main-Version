@@ -31,68 +31,6 @@ export interface TrackingResult {
   }>;
 }
 
-const STATUS_MAP: Record<string, string> = {
-  'booked': 'booked',
-  'pending': 'booked',
-  'shipment created': 'booked',
-  'dispatched': 'dispatched',
-  'picked up': 'dispatched',
-  'picked': 'dispatched',
-  'arrived at origin': 'dispatched',
-  'in transit': 'dispatched',
-  'at transit hub': 'dispatched',
-  'transit': 'dispatched',
-  'arrived at destination': 'arrived',
-  'arrived': 'arrived',
-  'out for delivery': 'out_for_delivery',
-  'out': 'out_for_delivery',
-  'delivered': 'delivered',
-  'delivery failed': 'failed',
-  'failed': 'failed',
-  'attempt': 'reattempt',
-  're-attempt': 'reattempt',
-  'reattempt': 'reattempt',
-  'returned': 'returned',
-  'return': 'returned',
-  'cancelled': 'returned',
-  'cancel': 'returned',
-  'pickup request not send': 'booked',
-  'pickup request not sent': 'booked',
-  'pickup requested': 'booked',
-  'ready for pickup': 'booked',
-  'not picked': 'booked',
-  'shipment received': 'dispatched',
-  'arrived at hub': 'dispatched',
-  'miss route': 'dispatched',
-  'misrouted': 'dispatched',
-  'held at station': 'dispatched',
-  'held': 'dispatched',
-  'refused': 'failed',
-  'not accepted': 'failed',
-  'cnee not available': 'failed',
-  'incomplete address': 'failed',
-  'wrong address': 'failed',
-  'wrong number': 'failed',
-  'over shipped': 'returned',
-};
-
-function mapLeopardsStatus(courierStatus: string): string {
-  const status = courierStatus.toLowerCase().trim();
-  
-  if (STATUS_MAP[status]) {
-    return STATUS_MAP[status];
-  }
-  
-  for (const [key, value] of Object.entries(STATUS_MAP)) {
-    if (status.includes(key)) {
-      return value;
-    }
-  }
-  
-  console.log(`[Leopards] Unknown status: ${courierStatus}`);
-  return 'booked';
-}
-
 export class LeopardsService {
   private baseUrl = 'https://merchantapi.leopardscourier.com/api';
 
@@ -142,7 +80,7 @@ export class LeopardsService {
       }
 
       const packet = data.packet_list[0];
-      const universalStatus = mapLeopardsStatus(packet.booked_packet_status);
+      const rawStatus = packet.booked_packet_status;
 
       const events = (packet.Tracking_Detail || []).map(detail => ({
         status: detail.Status,
@@ -153,9 +91,9 @@ export class LeopardsService {
       return {
         success: true,
         trackingNumber: packet.track_number,
-        status: universalStatus,
-        statusDescription: packet.status_remarks || packet.booked_packet_status,
-        courierStatus: packet.booked_packet_status,
+        status: rawStatus,
+        statusDescription: packet.status_remarks || rawStatus,
+        courierStatus: rawStatus,
         lastUpdate: packet.activity_date || null,
         events,
       };
@@ -215,7 +153,7 @@ export class LeopardsService {
 
         if (data.status === 1 && data.packet_list) {
           for (const packet of data.packet_list) {
-            const universalStatus = mapLeopardsStatus(packet.booked_packet_status);
+            const rawStatus = packet.booked_packet_status;
             const events = (packet.Tracking_Detail || []).map(detail => ({
               status: detail.Status,
               date: detail.Activity_Date,
@@ -224,9 +162,9 @@ export class LeopardsService {
             results.set(packet.track_number, {
               success: true,
               trackingNumber: packet.track_number,
-              status: universalStatus,
-              statusDescription: packet.status_remarks || packet.booked_packet_status,
-              courierStatus: packet.booked_packet_status,
+              status: rawStatus,
+              statusDescription: packet.status_remarks || rawStatus,
+              courierStatus: rawStatus,
               lastUpdate: packet.activity_date || null,
               events,
             });

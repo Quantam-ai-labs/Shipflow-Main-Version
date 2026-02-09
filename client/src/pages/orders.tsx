@@ -48,18 +48,20 @@ import type { Order } from "@shared/schema";
 import { Link } from "wouter";
 import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
 
-const statusOptions = [
-  { value: "all", label: "All Statuses" },
-  { value: "unfulfilled", label: "Unfulfilled" },
-  { value: "booked", label: "Booked" },
-  { value: "dispatched", label: "Dispatched" },
-  { value: "arrived", label: "Arrived" },
-  { value: "out_for_delivery", label: "Out for Delivery" },
-  { value: "delivered", label: "Delivered" },
-  { value: "failed", label: "Failed" },
-  { value: "reattempt", label: "Reattempt" },
-  { value: "returned", label: "Returned" },
-];
+function getStatusColor(status: string): string {
+  const s = status.toLowerCase();
+  if (s === 'delivered') return "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300";
+  if (s.includes('return') || s.includes('reverse')) return "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300";
+  if (s === 'cancelled') return "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300";
+  if (s.includes('fail') || s.includes('refused') || s.includes('not accepted')) return "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300";
+  if (s.includes('attempt') || s.includes('re-attempt')) return "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300";
+  if (s.includes('dispatch') || s.includes('transit') || s.includes('route') || s.includes('picked')) return "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300";
+  if (s.includes('arrived') || s.includes('destination') || s.includes('hub') || s.includes('station')) return "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300";
+  if (s.includes('out for delivery') || s.includes('out for')) return "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300";
+  if (s === 'unfulfilled') return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
+  if (s.includes('book') || s.includes('pickup') || s.includes('not picked') || s.includes('pending') || s.includes('shipment created')) return "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300";
+  return "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300";
+}
 
 // Generate month tabs from January 2026 to current month
 function getMonthTabs() {
@@ -89,25 +91,9 @@ const courierOptions = [
 ];
 
 function getStatusBadge(status: string | null, hasCourierTracking: boolean) {
-  const config: Record<string, { bg: string; label: string }> = {
-    unfulfilled: { bg: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300", label: "Unfulfilled" },
-    pending: { bg: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300", label: "Pending" },
-    booked: { bg: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300", label: "Booked" },
-    dispatched: { bg: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300", label: "Dispatched" },
-    arrived: { bg: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300", label: "Arrived" },
-    out_for_delivery: { bg: "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300", label: "Out for Delivery" },
-    delivered: { bg: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300", label: "Delivered" },
-    failed: { bg: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300", label: "Failed" },
-    reattempt: { bg: "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300", label: "Reattempt" },
-    returned: { bg: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300", label: "Returned" },
-  };
-
-  if (!hasCourierTracking) {
-    return <Badge className={`${config.unfulfilled.bg} text-xs font-medium`}>{config.unfulfilled.label}</Badge>;
-  }
-
-  const c = config[status || "pending"] || config.pending;
-  return <Badge className={`${c.bg} text-xs font-medium`}>{c.label}</Badge>;
+  const displayStatus = status || 'Unfulfilled';
+  const colorClass = getStatusColor(displayStatus);
+  return <Badge className={`${colorClass} text-xs font-medium`} data-testid={`badge-status-${displayStatus.toLowerCase().replace(/\s+/g, '-')}`}>{displayStatus}</Badge>;
 }
 
 interface OrdersResponse {
@@ -170,6 +156,16 @@ export default function Orders() {
     },
   });
   const uniqueCities = citiesData?.cities || [];
+
+  const { data: statusesData } = useQuery<{ statuses: string[] }>({
+    queryKey: ["/api/orders/statuses"],
+    queryFn: async () => {
+      const res = await fetch("/api/orders/statuses", { credentials: "include" });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+  });
+  const uniqueStatuses = statusesData?.statuses || [];
   const totalPages = Math.ceil((data?.total || 0) / pageSize);
 
   const syncOrdersMutation = useMutation({
@@ -317,13 +313,15 @@ export default function Orders() {
           </div>
           
           <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
-            <SelectTrigger className="w-[140px] h-9" data-testid="select-status-filter">
+            <SelectTrigger className="w-[180px] h-9" data-testid="select-status-filter">
               <Filter className="w-4 h-4 mr-1" />
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
-              {statusOptions.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+              <SelectItem value="all">All Statuses</SelectItem>
+              <SelectItem value="unfulfilled">Unfulfilled</SelectItem>
+              {uniqueStatuses.filter(s => s.toLowerCase() !== 'unfulfilled').map((status) => (
+                <SelectItem key={status} value={status}>{status}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -455,15 +453,29 @@ export default function Orders() {
                           <Filter className="w-3 h-3" />
                         </button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="start" className="w-[160px]">
-                        {statusOptions.map((opt) => (
+                      <DropdownMenuContent align="start" className="w-[200px] max-h-[300px] overflow-y-auto">
+                        <DropdownMenuItem 
+                          onSelect={() => { setStatusFilter("all"); setPage(1); }}
+                          className={statusFilter === "all" ? "bg-muted font-medium" : ""}
+                          data-testid="status-option-all"
+                        >
+                          All Statuses
+                        </DropdownMenuItem>
+                        <DropdownMenuItem 
+                          onSelect={() => { setStatusFilter("unfulfilled"); setPage(1); }}
+                          className={statusFilter === "unfulfilled" ? "bg-muted font-medium" : ""}
+                          data-testid="status-option-unfulfilled"
+                        >
+                          Unfulfilled
+                        </DropdownMenuItem>
+                        {uniqueStatuses.filter(s => s.toLowerCase() !== 'unfulfilled').map((status) => (
                           <DropdownMenuItem 
-                            key={opt.value} 
-                            onSelect={() => { setStatusFilter(opt.value); setPage(1); }}
-                            className={statusFilter === opt.value ? "bg-muted font-medium" : ""}
-                            data-testid={`status-option-${opt.value}`}
+                            key={status} 
+                            onSelect={() => { setStatusFilter(status); setPage(1); }}
+                            className={statusFilter === status ? "bg-muted font-medium" : ""}
+                            data-testid={`status-option-${status.toLowerCase().replace(/\s+/g, '-')}`}
                           >
-                            {opt.label}
+                            {status}
                           </DropdownMenuItem>
                         ))}
                       </DropdownMenuContent>

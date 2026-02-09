@@ -30,36 +30,6 @@ export interface TrackingResult {
   }>;
 }
 
-const STATUS_CODE_MAP: Record<string, string> = {
-  '0001': 'booked',
-  '0002': 'returned',
-  '0003': 'dispatched',
-  '0004': 'dispatched',
-  '0005': 'delivered',
-  '0006': 'returned',
-  '0007': 'returned',
-  '0008': 'reattempt',
-  '0013': 'failed',
-};
-
-function mapPostExStatus(statusCode: string, statusMessage?: string): string {
-  const mappedStatus = STATUS_CODE_MAP[statusCode];
-  if (mappedStatus) {
-    return mappedStatus;
-  }
-  
-  if (statusMessage) {
-    const msg = statusMessage.toLowerCase();
-    if (msg.includes('delivered')) return 'delivered';
-    if (msg.includes('return')) return 'returned';
-    if (msg.includes('attempt')) return 'failed';
-    if (msg.includes('route') || msg.includes('transit')) return 'dispatched';
-  }
-  
-  console.log(`[PostEx] Unknown status code: ${statusCode}`);
-  return 'booked';
-}
-
 export class PostExService {
   private baseUrl = 'https://api.postex.pk/services/integration/api/order';
 
@@ -103,8 +73,7 @@ export class PostExService {
 
       const history = data.dist.transactionStatusHistory || [];
       const latestStatus = history.length > 0 ? history[history.length - 1] : null;
-      const statusCode = latestStatus?.transactionStatusMessageCode || '0001';
-      const universalStatus = mapPostExStatus(statusCode, latestStatus?.transactionStatusMessage);
+      const rawStatus = latestStatus?.transactionStatusMessage || data.dist.transactionStatusMessage || data.dist.transactionStatus;
 
       const events = history.map(h => ({
         status: h.transactionStatusMessage,
@@ -115,9 +84,9 @@ export class PostExService {
       return {
         success: true,
         trackingNumber: data.dist.trackingNumber,
-        status: universalStatus,
-        statusDescription: data.dist.transactionStatusMessage || data.dist.transactionStatus,
-        courierStatus: data.dist.transactionStatus,
+        status: rawStatus,
+        statusDescription: rawStatus,
+        courierStatus: rawStatus,
         lastUpdate: latestStatus?.dateTime || null,
         events,
       };

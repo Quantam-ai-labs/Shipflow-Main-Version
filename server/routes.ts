@@ -329,6 +329,19 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/orders/statuses", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      
+      const statuses = await storage.getUniqueStatuses(merchantId);
+      res.json({ statuses });
+    } catch (error) {
+      console.error("Error fetching statuses:", error);
+      res.status(500).json({ message: "Failed to fetch statuses" });
+    }
+  });
+
   app.get("/api/orders/:id", isAuthenticated, async (req, res) => {
     try {
       const merchantId = await requireMerchant(req, res);
