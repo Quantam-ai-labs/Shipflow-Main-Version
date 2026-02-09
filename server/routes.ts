@@ -831,6 +831,25 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/integrations/shopify/sync-status", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const { getLastSyncResult, isSyncRunning } = await import('./services/autoSync');
+      const lastResult = getLastSyncResult(merchantId);
+      const running = isSyncRunning();
+      res.json({
+        autoSyncEnabled: true,
+        intervalSeconds: 30,
+        isRunning: running,
+        lastSync: lastResult,
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get sync status" });
+    }
+  });
+
   // Fix city data for existing orders using GraphQL
   // This is needed because Shopify Basic plan restricts PII in REST API
   // but GraphQL returns some fields like city

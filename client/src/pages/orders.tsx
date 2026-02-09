@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -189,6 +189,22 @@ export default function Orders() {
     },
   });
 
+  const { data: syncStatus } = useQuery<{
+    autoSyncEnabled: boolean;
+    intervalSeconds: number;
+    isRunning: boolean;
+    lastSync: { timestamp: string; ordersCreated: number; ordersUpdated: number; totalFetched: number; error?: string } | null;
+  }>({
+    queryKey: ["/api/integrations/shopify/sync-status"],
+    refetchInterval: 15000,
+  });
+
+  useEffect(() => {
+    if (syncStatus?.lastSync && (syncStatus.lastSync.ordersCreated > 0 || syncStatus.lastSync.ordersUpdated > 0)) {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+    }
+  }, [syncStatus?.lastSync?.timestamp]);
+
   const syncCourierStatusMutation = useMutation({
     mutationFn: async () => {
       const response = await apiRequest("POST", "/api/couriers/sync-statuses");
@@ -356,6 +372,29 @@ export default function Orders() {
             )}
             Sync Orders
           </Button>
+
+          {syncStatus?.autoSyncEnabled && (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground" data-testid="status-auto-sync">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+              </span>
+              {syncStatus.lastSync?.error ? (
+                <span className="text-destructive">Error</span>
+              ) : (
+                <span>Live</span>
+              )}
+              {syncStatus.lastSync?.timestamp && !syncStatus.lastSync.error && (
+                <span className="hidden sm:inline">
+                  {(() => {
+                    const secs = Math.round((Date.now() - new Date(syncStatus.lastSync.timestamp).getTime()) / 1000);
+                    if (isNaN(secs) || secs < 0) return '';
+                    return secs < 60 ? `${secs}s ago` : `${Math.round(secs / 60)}m ago`;
+                  })()}
+                </span>
+              )}
+            </div>
+          )}
           
           <Button variant="outline" size="sm" onClick={handleExport} className="h-9" data-testid="button-export-orders">
             <Download className="w-4 h-4 mr-2" />

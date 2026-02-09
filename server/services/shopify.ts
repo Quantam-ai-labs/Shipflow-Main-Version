@@ -342,14 +342,20 @@ export class ShopifyService {
       const lastSyncDate = new Date(store.lastSyncAt!);
       lastSyncDate.setHours(lastSyncDate.getHours() - 1);
       fetchParams.updated_at_min = lastSyncDate.toISOString();
-      console.log(`[Shopify] Starting INCREMENTAL sync for merchant ${merchantId} (orders updated since ${fetchParams.updated_at_min})...`);
     } else {
       console.log(`[Shopify] Starting FULL sync for merchant ${merchantId}...`);
     }
 
     const shopifyOrders = await this.fetchAllOrders(shopDomain, store.accessToken, fetchParams);
     
-    console.log(`[Shopify] Fetched ${shopifyOrders.length} orders (${isIncremental ? 'incremental' : 'full'} sync), processing...`);
+    if (shopifyOrders.length === 0 && isIncremental) {
+      await storage.updateShopifyStore(store.id, { lastSyncAt: syncStartTime });
+      return { synced: 0, updated: 0, total: 0 };
+    }
+    
+    if (shopifyOrders.length > 0 || !isIncremental) {
+      console.log(`[Shopify] Fetched ${shopifyOrders.length} orders (${isIncremental ? 'incremental' : 'full'} sync), processing...`);
+    }
     
     const allShopifyIds = shopifyOrders.map(o => String(o.id));
     const existingOrdersMap = await storage.getExistingOrdersByShopifyIds(merchantId, allShopifyIds);
