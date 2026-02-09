@@ -411,9 +411,14 @@ export class ShopifyService {
         await storage.updateOrder(merchantId, existingOrderId, updateData);
         updatedCount++;
       } else {
+        const lineItemNames = (transformedOrder.lineItems || [])
+          .map((item: any) => item.name || item.title || 'Item')
+          .join(', ');
         await storage.createOrder({
           ...transformedOrder,
           merchantId,
+          workflowStatus: "NEW",
+          itemSummary: lineItemNames || null,
           lastApiSyncAt: now,
           shopifyUpdatedAt: new Date(shopifyOrder.updated_at),
         });

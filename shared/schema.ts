@@ -151,6 +151,13 @@ export const orders = pgTable("orders", {
   orderDate: timestamp("order_date").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+  workflowStatus: varchar("workflow_status", { length: 20 }).default("NEW").notNull(),
+  confirmedAt: timestamp("confirmed_at"),
+  confirmedByUserId: varchar("confirmed_by_user_id", { length: 255 }),
+  cancelledAt: timestamp("cancelled_at"),
+  cancelledByUserId: varchar("cancelled_by_user_id", { length: 255 }),
+  cancelReason: text("cancel_reason"),
+  itemSummary: text("item_summary"),
 }, (table) => [
   index("idx_orders_merchant").on(table.merchantId),
   index("idx_orders_shopify_id").on(table.shopifyOrderId),
@@ -159,6 +166,7 @@ export const orders = pgTable("orders", {
   index("idx_orders_city").on(table.city),
   index("idx_orders_date").on(table.orderDate),
   index("idx_orders_courier").on(table.courierName),
+  index("idx_orders_workflow_status").on(table.workflowStatus),
 ]);
 
 export const insertOrderSchema = createInsertSchema(orders).omit({

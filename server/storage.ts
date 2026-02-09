@@ -43,7 +43,10 @@ export interface IStorage {
   updateCourierAccount(id: string, data: Partial<InsertCourierAccount>): Promise<CourierAccount | undefined>;
 
   // Orders - All scoped by merchantId
-  getOrders(merchantId: string, options?: { search?: string; status?: string; courier?: string; city?: string; month?: string; page?: number; pageSize?: number }): Promise<{ orders: Order[]; total: number }>;
+  getOrders(merchantId: string, options?: { search?: string; status?: string; courier?: string; city?: string; month?: string; workflowStatus?: string; page?: number; pageSize?: number }): Promise<{ orders: Order[]; total: number }>;
+  getWorkflowCounts(merchantId: string): Promise<{ NEW: number; READY_TO_SHIP: number; FULFILLED: number; CANCELLED: number }>;
+  confirmOrder(merchantId: string, orderId: string, userId: string): Promise<Order | undefined>;
+  cancelOrder(merchantId: string, orderId: string, userId: string, reason: string): Promise<Order | undefined>;
   getUniqueCities(merchantId: string): Promise<string[]>;
   getOrderById(merchantId: string, id: string): Promise<Order | undefined>;
   getOrderByShopifyId(merchantId: string, shopifyOrderId: string): Promise<Order | undefined>;
@@ -193,15 +196,18 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Orders - All scoped by merchantId
-  async getOrders(merchantId: string, options?: { search?: string; status?: string; courier?: string; city?: string; month?: string; page?: number; pageSize?: number }): Promise<{ orders: Order[]; total: number }> {
+  async getOrders(merchantId: string, options?: { search?: string; status?: string; courier?: string; city?: string; month?: string; workflowStatus?: string; page?: number; pageSize?: number }): Promise<{ orders: Order[]; total: number }> {
     const page = options?.page || 1;
     const pageSize = options?.pageSize || 20;
     const offset = (page - 1) * pageSize;
 
     let conditions = [eq(orders.merchantId, merchantId)];
     
+    if (options?.workflowStatus && options.workflowStatus !== "all") {
+      conditions.push(eq(orders.workflowStatus, options.workflowStatus));
+    }
+
     if (options?.status && options.status !== "all") {
-      // "unfulfilled" means orders without courier tracking (null or empty)
       if (options.status === "unfulfilled") {
         conditions.push(
           or(
@@ -210,7 +216,6 @@ export class DatabaseStorage implements IStorage {
           )!
         );
       } else {
-        // For other statuses, filter by shipmentStatus
         conditions.push(eq(orders.shipmentStatus, options.status));
       }
     }
@@ -273,6 +278,58 @@ export class DatabaseStorage implements IStorage {
     ]);
 
     return { orders: result, total: totalResult[0]?.count || 0 };
+  }
+
+  async getWorkflowCounts(merchantId: string): Promise<{ NEW: number; READY_TO_SHIP: number; FULFILLED: number; CANCELLED: number }> {
+    const result = await db.select({
+      workflowStatus: orders.workflowStatus,
+      count: count(),
+    }).from(orders)
+      .where(eq(orders.merchantId, merchantId))
+      .groupBy(orders.workflowStatus);
+
+    const counts = { NEW: 0, READY_TO_SHIP: 0, FULFILLED: 0, CANCELLED: 0 };
+    for (const row of result) {
+      if (row.workflowStatus in counts) {
+        counts[row.workflowStatus as keyof typeof counts] = row.count;
+      }
+    }
+    return counts;
+  }
+
+  async confirmOrder(merchantId: string, orderId: string, userId: string): Promise<Order | undefined> {
+    const [updated] = await db.update(orders)
+      .set({
+        workflowStatus: "READY_TO_SHIP",
+        confirmedAt: new Date(),
+        confirmedByUserId: userId,
+        updatedAt: new Date(),
+      })
+      .where(and(
+        eq(orders.id, orderId),
+        eq(orders.merchantId, merchantId),
+        eq(orders.workflowStatus, "NEW"),
+      ))
+      .returning();
+    return updated;
+  }
+
+  async cancelOrder(merchantId: string, orderId: string, userId: string, reason: string): Promise<Order | undefined> {
+    const [updated] = await db.update(orders)
+      .set({
+        workflowStatus: "CANCELLED",
+        cancelledAt: new Date(),
+        cancelledByUserId: userId,
+        cancelReason: reason,
+        updatedAt: new Date(),
+      })
+      .where(and(
+        eq(orders.id, orderId),
+        eq(orders.merchantId, merchantId),
+        eq(orders.workflowStatus, "NEW"),
+      ))
+      .returning();
+    return updated;
   }
 
   async getUniqueCities(merchantId: string): Promise<string[]> {
