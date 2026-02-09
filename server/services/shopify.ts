@@ -359,6 +359,7 @@ export class ShopifyService {
     
     const allShopifyIds = shopifyOrders.map(o => String(o.id));
     const existingOrdersMap = await storage.getExistingOrdersByShopifyIds(merchantId, allShopifyIds);
+    const courierConfirmedIds = await storage.getOrdersWithCourierStatus(merchantId, allShopifyIds);
     
     let newCount = 0;
     let updatedCount = 0;
@@ -368,9 +369,10 @@ export class ShopifyService {
       const shopifyOrderId = String(shopifyOrder.id);
       const transformedOrder = this.transformOrderForStorage(shopifyOrder);
       const existingOrderId = existingOrdersMap.get(shopifyOrderId);
+      const hasCourierStatus = courierConfirmedIds.has(shopifyOrderId);
       
       if (existingOrderId) {
-        await storage.updateOrder(merchantId, existingOrderId, {
+        const updateData: any = {
           customerName: transformedOrder.customerName,
           customerEmail: transformedOrder.customerEmail,
           customerPhone: transformedOrder.customerPhone,
@@ -390,7 +392,6 @@ export class ShopifyService {
           orderStatus: transformedOrder.orderStatus,
           courierName: transformedOrder.courierName,
           courierTracking: transformedOrder.courierTracking,
-          shipmentStatus: transformedOrder.shipmentStatus,
           lineItems: transformedOrder.lineItems,
           totalQuantity: transformedOrder.totalQuantity,
           tags: transformedOrder.tags,
@@ -401,7 +402,13 @@ export class ShopifyService {
           rawShopifyData: transformedOrder.rawShopifyData,
           lastApiSyncAt: now,
           shopifyUpdatedAt: new Date(shopifyOrder.updated_at),
-        });
+        };
+        
+        if (!hasCourierStatus) {
+          updateData.shipmentStatus = transformedOrder.shipmentStatus;
+        }
+        
+        await storage.updateOrder(merchantId, existingOrderId, updateData);
         updatedCount++;
       } else {
         await storage.createOrder({
@@ -603,9 +610,7 @@ export class ShopifyService {
 
     let shipmentStatus = 'unfulfilled';
     if (courierTracking) {
-      shipmentStatus = fulfillmentStatus === 'fulfilled' ? 'delivered' : 'booked';
-    } else if (fulfillmentStatus === 'fulfilled') {
-      shipmentStatus = 'delivered';
+      shipmentStatus = 'booked';
     }
 
     return {

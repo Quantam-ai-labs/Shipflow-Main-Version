@@ -14,7 +14,7 @@ import {
   users,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, or, ilike, sql, count, inArray, isNull, gte } from "drizzle-orm";
+import { eq, desc, and, or, ilike, sql, count, inArray, isNull, isNotNull, gte } from "drizzle-orm";
 
 export interface IStorage {
   // Merchants
@@ -49,6 +49,7 @@ export interface IStorage {
   getOrderByShopifyId(merchantId: string, shopifyOrderId: string): Promise<Order | undefined>;
   getExistingShopifyOrderIds(merchantId: string, shopifyOrderIds: string[]): Promise<Set<string>>;
   getExistingOrdersByShopifyIds(merchantId: string, shopifyOrderIds: string[]): Promise<Map<string, string>>;
+  getOrdersWithCourierStatus(merchantId: string, shopifyOrderIds: string[]): Promise<Set<string>>;
   getRecentOrders(merchantId: string, limit?: number): Promise<Order[]>;
   getOrdersWithMissingCity(merchantId: string, limit?: number): Promise<{ id: string; shopifyOrderId: string }[]>;
   getOrdersForCourierSync(merchantId: string, options?: { forceRefresh?: boolean; limit?: number }): Promise<Order[]>;
@@ -324,7 +325,6 @@ export class DatabaseStorage implements IStorage {
   async getExistingOrdersByShopifyIds(merchantId: string, shopifyOrderIds: string[]): Promise<Map<string, string>> {
     if (shopifyOrderIds.length === 0) return new Map();
     
-    // Batch query in chunks of 500 to avoid query size limits
     const chunkSize = 500;
     const existingMap = new Map<string, string>();
     
@@ -345,6 +345,32 @@ export class DatabaseStorage implements IStorage {
     }
     
     return existingMap;
+  }
+
+  async getOrdersWithCourierStatus(merchantId: string, shopifyOrderIds: string[]): Promise<Set<string>> {
+    if (shopifyOrderIds.length === 0) return new Set();
+    
+    const chunkSize = 500;
+    const courierConfirmedIds = new Set<string>();
+    
+    for (let i = 0; i < shopifyOrderIds.length; i += chunkSize) {
+      const chunk = shopifyOrderIds.slice(i, i + chunkSize);
+      const existing = await db.select({ shopifyOrderId: orders.shopifyOrderId })
+        .from(orders)
+        .where(and(
+          eq(orders.merchantId, merchantId),
+          inArray(orders.shopifyOrderId, chunk),
+          isNotNull(orders.lastTrackingUpdate)
+        ));
+      
+      for (const order of existing) {
+        if (order.shopifyOrderId) {
+          courierConfirmedIds.add(order.shopifyOrderId);
+        }
+      }
+    }
+    
+    return courierConfirmedIds;
   }
 
   async getRecentOrders(merchantId: string, limit = 5): Promise<Order[]> {
