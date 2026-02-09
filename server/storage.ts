@@ -360,7 +360,7 @@ export class DatabaseStorage implements IStorage {
         .where(and(
           eq(orders.merchantId, merchantId),
           inArray(orders.shopifyOrderId, chunk),
-          isNotNull(orders.lastTrackingUpdate)
+          sql`${orders.courierTracking} IS NOT NULL AND ${orders.courierTracking} != ''`
         ));
       
       for (const order of existing) {
