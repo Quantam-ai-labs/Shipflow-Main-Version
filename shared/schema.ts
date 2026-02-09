@@ -140,6 +140,7 @@ export const orders = pgTable("orders", {
   courierName: varchar("courier_name", { length: 255 }),
   courierTracking: varchar("courier_tracking", { length: 255 }),
   shipmentStatus: varchar("shipment_status", { length: 50 }).default("pending"),
+  courierRawStatus: text("courier_raw_status"),
   remark: text("remark"),
   landingSite: text("landing_site"),
   referringSite: text("referring_site"),
