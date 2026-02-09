@@ -1,0 +1,192 @@
+We need a robust “API + Webhooks hybrid sync” for Shopify orders in our Replit app (Next.js + Postgres + Prisma, multi-tenant). The goal is perfect, reliable order data without duplicates or missing updates, even when webhooks are duplicated, arrive out-of-order, or are missed due to downtime.
+
+Context:
+- Orders come from mixed sources: native Shopify checkout, ReleaseIT COD form (note_attributes), and Draft Orders.
+- Some PII fields may be redacted in Admin API on Basic plan, so webhook payload sometimes contains more usable fields.
+- We must store BOTH API data and webhook data, then resolve final fields for our Operations Grid.
+
+Implement the following architecture:
+
+========================================
+1) DATA MODEL CHANGES (Prisma)
+========================================
+Add/ensure these tables/columns:
+
+A) orders table:
+- merchant_id
+- shopify_order_id (unique per merchant)
+- order_name
+- created_at, updated_at (Shopify timestamps)
+- tags (string)
+- financial_status, fulfillment_status
+- api_last_fetched_at
+- webhook_last_received_at
+- raw_api_json (JSONB)
+- raw_webhook_json (JSONB)  // store the most recent webhook payload
+- merged_raw_json (JSONB)   // optional: merged view for debugging
+- resolved_* fields used by UI:
+  - resolved_consignee_name
+  - resolved_phone1
+  - resolved_phone2
+  - resolved_email
+  - resolved_address1
+  - resolved_address2
+  - resolved_city
+  - resolved_zip
+  - resolved_country
+  - resolved_source (ENUM: WEBHOOK, API, NOTE_ATTRIBUTES, DRAFT, MANUAL)
+- data_quality_flags (JSONB) e.g. {missing_phone:true, missing_address:true}
+
+B) webhook_events table (for dedupe + audit):
+- id
+- merchant_id
+- topic (orders/create, orders/updated, fulfillments/update etc.)
+- shopify_event_id (from Shopify webhook headers if available)
+- shop_domain
+- shopify_order_id (nullable until parsed)
+- payload_hash
+- received_at
+- processed_at
+- processing_status (RECEIVED, SKIPPED_DUPLICATE, PROCESSED, FAILED)
+- error_message
+
+C) remarks/audit logs remain as is.
+
+Constraints:
+- Enforce uniqueness:
+  - (merchant_id, shopify_order_id) unique in orders
+  - (merchant_id, shopify_event_id) unique in webhook_events if Shopify provides event id header
+  - else (merchant_id, topic, payload_hash, received_at bucket) to reduce duplicates
+
+========================================
+2) WEBHOOK HANDLING (PRIMARY REAL-TIME FEED)
+========================================
+Implement webhooks endpoints:
+- /api/shopify/webhooks/orders-create
+- /api/shopify/webhooks/orders-updated
+- /api/shopify/webhooks/fulfillments-create
+- /api/shopify/webhooks/fulfillments-update
+
+Rules:
+A) Verify Shopify HMAC signature for every webhook.
+B) Immediately store the webhook in webhook_events with:
+   - topic
+   - shopify_event_id header if present
+   - payload_hash = sha256(payload)
+   - processing_status = RECEIVED
+C) Implement idempotency/dedup:
+   - If shopify_event_id already exists, mark SKIPPED_DUPLICATE and return 200.
+   - Else if payload_hash is identical for same topic & order within short window (e.g., 10 minutes), skip as duplicate.
+D) Process webhook payload:
+   - Upsert orders by (merchant_id, shopify_order_id)
+   - Save raw_webhook_json = latest webhook payload
+   - Update webhook_last_received_at
+   - Update non-sensitive fields as available: tags, statuses, line items summary, tracking info if present
+E) Always return 200 quickly to avoid retries; do heavy processing async if needed.
+
+========================================
+3) ADMIN API FETCH (BACKFILL + RECONCILIATION)
+========================================
+Implement Admin API sync using OAuth token per merchant/shop:
+A) Backfill on connect:
+- Fetch historical orders (paginated) and upsert into orders table.
+- Save raw_api_json
+- Set api_last_fetched_at
+- Extract non-PII fields safely: tags, statuses, totals, created_at, etc.
+
+B) Reconciliation job (important):
+- Run every 6 hours (or daily) to catch missed webhooks.
+- Fetch orders updated since last reconciliation timestamp using updated_at filter.
+- For each order:
+  - Upsert raw_api_json and update api_last_fetched_at
+  - Update core order fields (tags, statuses, totals)
+  - Do NOT overwrite webhook-provided PII with null/empty API values if API is redacted.
+
+========================================
+4) “MERGE + RESOLVE” LOGIC (THE HEART OF PERFECT DATA)
+========================================
+Create a single resolver function that produces “resolved_* fields” for UI.
+This function merges data sources without losing good data:
+
+Data sources to consider (highest priority first for PII):
+1) ReleaseIT/custom checkout data (order.note_attributes / attributes) if present in either API or webhook payload
+2) Webhook payload shipping_address / customer fields
+3) API payload shipping_address / customer fields
+4) billing_address (webhook then API)
+5) customer.default_address (webhook then API)
+6) manual agent-entered overrides (if we allow manual edits)
+
+Rules:
+- Never overwrite a non-empty resolved field with an empty value.
+- Track “source of truth” per resolved field (store in resolved_source json like {phone:"NOTE_ATTRIBUTES", address:"WEBHOOK"}).
+- If webhook has more complete PII, prefer it.
+- If API has better tags/status, merge it.
+- Always store tags as a union/consistent latest:
+  - Prefer webhook tags if present; else API tags; update on orders/updated webhook.
+- Compute data_quality_flags (missing phone/address/name).
+
+After each webhook process OR API reconciliation update:
+- call resolveOrder(order_id) and store resolved fields.
+
+========================================
+5) HANDLE OUT-OF-ORDER EVENTS / DUPLICATES
+========================================
+- Webhooks may arrive multiple times or out of sequence.
+Implement:
+- Compare Shopify updated_at timestamp from payload:
+  - If incoming payload updated_at is older than stored latest_updated_at, do not downgrade fields.
+- Always maintain “best known” resolved fields (non-empty wins).
+- Keep history in webhook_events and optionally order_versions table (optional).
+
+========================================
+6) FAILURE SAFETY (SERVER DOWN, MISSED WEBHOOKS)
+========================================
+- If webhooks are missed during downtime:
+  - The reconciliation job must fetch updated orders since last successful run and fill gaps.
+- Store reconciliation checkpoints per merchant:
+  - last_reconcile_at
+  - last_webhook_received_at
+
+If webhook processing fails:
+- Mark webhook_events FAILED with error
+- Retry processing (queue) with exponential backoff (max retries).
+
+========================================
+7) OPERATIONAL TOOLS (DEBUG + HEALTH)
+========================================
+Add an Admin “Data Health” page:
+- Shows:
+  - last webhook received time
+  - last API reconcile time
+  - webhook failure count
+  - orders with missing phone/address
+- Add per-order debug view:
+  - show raw_api_json vs raw_webhook_json (collapsed)
+  - show which source provided each resolved field
+- Add a manual “Reconcile Now” button for a date range.
+
+========================================
+8) PERFORMANCE & API LIMITS
+========================================
+- Respect Shopify API rate limits:
+  - implement throttling + retry on 429
+- Use pagination for backfill.
+- Avoid fetching full history every time; use updated_at filters.
+
+========================================
+9) FINAL TEST CASES (must pass)
+========================================
+Implement automated or manual test checklist:
+1) Order #1001 created → webhook arrives twice → only one record created, no duplicate rows.
+2) Webhook arrives first with PII, then API reconcile returns redacted PII → resolved fields keep PII from webhook, tags/status still updated.
+3) Server down for 2 hours → webhooks missed → reconciliation pulls updated orders and fills missing order updates.
+4) Tag updated in Shopify → orders/updated webhook updates tags.
+5) Fulfillment updated → fulfillments/update updates tracking/fulfillment_status.
+6) Draft order converted to order → system still stores best address from available sources.
+
+Implement all of the above with clean code, comments, and a clear README section explaining:
+- webhook endpoints
+- how dedupe works
+- how reconciliation works
+- how resolved fields are computed
+- required env vars and Shopify app setup.

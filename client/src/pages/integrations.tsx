@@ -20,6 +20,14 @@ import {
   Settings,
   ExternalLink,
   RefreshCw,
+  Activity,
+  AlertTriangle,
+  Database,
+  Webhook,
+  Phone,
+  MapPin,
+  User,
+  Mail,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -40,6 +48,36 @@ interface IntegrationsData {
     isActive: boolean;
     accountNumber: string | null;
   }>;
+}
+
+interface DataHealthData {
+  dataHealth: {
+    totalOrders: number;
+    missingPhone: number;
+    missingAddress: number;
+    missingCity: number;
+    missingName: number;
+  };
+  webhookHealth: {
+    totalReceived: number;
+    totalProcessed: number;
+    totalFailed: number;
+    totalSkipped: number;
+    lastReceivedAt: string | null;
+  };
+  lastApiSyncAt: string | null;
+  shopDomain: string | null;
+  isConnected: boolean;
+}
+
+interface WebhookEvent {
+  id: string;
+  topic: string;
+  shopDomain: string;
+  processingStatus: string;
+  receivedAt: string;
+  processedAt: string | null;
+  errorMessage: string | null;
 }
 
 export default function Integrations() {
@@ -80,6 +118,37 @@ export default function Integrations() {
 
   const { data, isLoading } = useQuery<IntegrationsData>({
     queryKey: ["/api/integrations"],
+  });
+
+  const { data: dataHealth, isLoading: isDataHealthLoading } = useQuery<DataHealthData>({
+    queryKey: ["/api/data-health"],
+  });
+
+  const { data: webhookEventsData } = useQuery<{ events: WebhookEvent[] }>({
+    queryKey: ["/api/webhook-events"],
+  });
+
+  const reconcileMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/integrations/shopify/reconcile", {});
+    },
+    onSuccess: async (res) => {
+      const result = await res.json();
+      queryClient.invalidateQueries({ queryKey: ["/api/data-health"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/webhook-events"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      toast({
+        title: "Reconciliation Complete",
+        description: result.message || `${result.created} new, ${result.updated} updated`,
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Reconciliation Failed",
+        description: "Could not reconcile orders. Please try again.",
+        variant: "destructive",
+      });
+    },
   });
 
   const manualConnectMutation = useMutation({
@@ -421,6 +490,192 @@ export default function Integrations() {
         </div>
       </div>
 
+      {/* Data Health & Webhook Monitoring */}
+      <div>
+        <h2 className="text-lg font-semibold mb-4">Sync Health & Data Quality</h2>
+        <div className="grid md:grid-cols-2 gap-4">
+          {/* Data Quality Card */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+              <div>
+                <CardTitle className="text-base">Data Quality</CardTitle>
+                <CardDescription>Customer data completeness across all orders</CardDescription>
+              </div>
+              <Database className="w-5 h-5 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              {isDataHealthLoading ? (
+                <div className="space-y-3">
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-4 w-1/2" />
+                </div>
+              ) : dataHealth ? (
+                <div className="space-y-3">
+                  <div className="text-sm text-muted-foreground mb-2">
+                    {dataHealth.dataHealth.totalOrders.toLocaleString()} total orders
+                  </div>
+                  <DataQualityRow
+                    icon={<User className="w-4 h-4" />}
+                    label="Name"
+                    missing={dataHealth.dataHealth.missingName}
+                    total={dataHealth.dataHealth.totalOrders}
+                  />
+                  <DataQualityRow
+                    icon={<Phone className="w-4 h-4" />}
+                    label="Phone"
+                    missing={dataHealth.dataHealth.missingPhone}
+                    total={dataHealth.dataHealth.totalOrders}
+                  />
+                  <DataQualityRow
+                    icon={<MapPin className="w-4 h-4" />}
+                    label="Address"
+                    missing={dataHealth.dataHealth.missingAddress}
+                    total={dataHealth.dataHealth.totalOrders}
+                  />
+                  <DataQualityRow
+                    icon={<MapPin className="w-4 h-4" />}
+                    label="City"
+                    missing={dataHealth.dataHealth.missingCity}
+                    total={dataHealth.dataHealth.totalOrders}
+                  />
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No data available</p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Webhook Health Card */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+              <div>
+                <CardTitle className="text-base">Webhook Status</CardTitle>
+                <CardDescription>Real-time order update events from Shopify</CardDescription>
+              </div>
+              <Webhook className="w-5 h-5 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              {isDataHealthLoading ? (
+                <div className="space-y-3">
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-3/4" />
+                </div>
+              ) : dataHealth ? (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="text-center p-2 rounded-md bg-muted/50">
+                      <div className="text-lg font-semibold" data-testid="text-webhooks-received">
+                        {dataHealth.webhookHealth.totalReceived}
+                      </div>
+                      <div className="text-xs text-muted-foreground">Received</div>
+                    </div>
+                    <div className="text-center p-2 rounded-md bg-muted/50">
+                      <div className="text-lg font-semibold text-green-600" data-testid="text-webhooks-processed">
+                        {dataHealth.webhookHealth.totalProcessed}
+                      </div>
+                      <div className="text-xs text-muted-foreground">Processed</div>
+                    </div>
+                    <div className="text-center p-2 rounded-md bg-muted/50">
+                      <div className="text-lg font-semibold text-red-600" data-testid="text-webhooks-failed">
+                        {dataHealth.webhookHealth.totalFailed}
+                      </div>
+                      <div className="text-xs text-muted-foreground">Failed</div>
+                    </div>
+                    <div className="text-center p-2 rounded-md bg-muted/50">
+                      <div className="text-lg font-semibold text-muted-foreground" data-testid="text-webhooks-skipped">
+                        {dataHealth.webhookHealth.totalSkipped}
+                      </div>
+                      <div className="text-xs text-muted-foreground">Skipped</div>
+                    </div>
+                  </div>
+                  {dataHealth.webhookHealth.lastReceivedAt && (
+                    <p className="text-xs text-muted-foreground">
+                      Last received: {new Date(dataHealth.webhookHealth.lastReceivedAt).toLocaleString()}
+                    </p>
+                  )}
+                  {dataHealth.lastApiSyncAt && (
+                    <p className="text-xs text-muted-foreground">
+                      Last API sync: {new Date(dataHealth.lastApiSyncAt).toLocaleString()}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No webhook data</p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Reconciliation Action */}
+        <Card className="mt-4">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div className="flex items-center gap-3">
+                <Activity className="w-5 h-5 text-muted-foreground" />
+                <div>
+                  <p className="font-medium text-sm">Manual Reconciliation</p>
+                  <p className="text-xs text-muted-foreground">
+                    Fetch recent order updates from Shopify API to fill in any gaps from missed webhooks.
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => reconcileMutation.mutate()}
+                disabled={reconcileMutation.isPending || !data?.shopify.isConnected}
+                data-testid="button-reconcile"
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${reconcileMutation.isPending ? 'animate-spin' : ''}`} />
+                {reconcileMutation.isPending ? "Reconciling..." : "Run Reconciliation"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Recent Webhook Events */}
+        {webhookEventsData?.events && webhookEventsData.events.length > 0 && (
+          <Card className="mt-4">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Recent Webhook Events</CardTitle>
+              <CardDescription>Latest events received from Shopify</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                {webhookEventsData.events.slice(0, 20).map((event) => (
+                  <div key={event.id} className="flex items-center justify-between gap-2 py-2 border-b last:border-0">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {event.processingStatus === 'processed' ? (
+                        <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+                      ) : event.processingStatus === 'failed' ? (
+                        <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+                      ) : (
+                        <Activity className="w-4 h-4 text-muted-foreground shrink-0" />
+                      )}
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate" data-testid={`text-webhook-topic-${event.id}`}>
+                          {event.topic}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(event.receivedAt).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                    <Badge
+                      variant={event.processingStatus === 'processed' ? 'default' : event.processingStatus === 'failed' ? 'destructive' : 'outline'}
+                      data-testid={`badge-webhook-status-${event.id}`}
+                    >
+                      {event.processingStatus}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
       {/* Shopify Connection Dialog */}
       <Dialog open={isShopifyDialogOpen} onOpenChange={setIsShopifyDialogOpen}>
         <DialogContent>
@@ -581,6 +836,35 @@ export default function Integrations() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function DataQualityRow({ icon, label, missing, total }: { icon: React.ReactNode; label: string; missing: number; total: number }) {
+  const hasData = total > 0 ? ((total - missing) / total) * 100 : 0;
+  const isGood = hasData >= 80;
+  const isWarning = hasData >= 50 && hasData < 80;
+
+  return (
+    <div className="flex items-center gap-3">
+      <div className="text-muted-foreground shrink-0">{icon}</div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <span className="text-sm font-medium">{label}</span>
+          <span className={`text-xs font-medium ${isGood ? 'text-green-600' : isWarning ? 'text-yellow-600' : 'text-red-600'}`} data-testid={`text-quality-${label.toLowerCase()}`}>
+            {Math.round(hasData)}%
+          </span>
+        </div>
+        <div className="w-full h-1.5 rounded-full bg-muted">
+          <div
+            className={`h-full rounded-full transition-all ${isGood ? 'bg-green-500' : isWarning ? 'bg-yellow-500' : 'bg-red-500'}`}
+            style={{ width: `${hasData}%` }}
+          />
+        </div>
+        {missing > 0 && (
+          <span className="text-xs text-muted-foreground">{missing.toLocaleString()} missing</span>
+        )}
+      </div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import {
   merchants, teamMembers, shopifyStores, courierAccounts,
   orders, shipments, shipmentEvents, remarks, codReconciliation, syncLogs,
+  webhookEvents,
   type Merchant, type InsertMerchant,
   type TeamMember, type InsertTeamMember,
   type ShopifyStore, type InsertShopifyStore,
@@ -11,10 +12,11 @@ import {
   type Remark, type InsertRemark,
   type CodReconciliation, type InsertCodReconciliation,
   type SyncLog, type InsertSyncLog,
+  type WebhookEvent, type InsertWebhookEvent,
   users,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, or, ilike, sql, count, inArray, isNull } from "drizzle-orm";
+import { eq, desc, and, or, ilike, sql, count, inArray, isNull, gte } from "drizzle-orm";
 
 export interface IStorage {
   // Merchants
@@ -74,6 +76,19 @@ export interface IStorage {
   createCodReconciliation(record: InsertCodReconciliation): Promise<CodReconciliation>;
   updateCodReconciliation(merchantId: string, id: string, data: Partial<InsertCodReconciliation>): Promise<CodReconciliation | undefined>;
   generateCodRecordsFromOrders(merchantId: string): Promise<{ created: number; skipped: number }>;
+
+  // Webhook Events
+  createWebhookEvent(event: InsertWebhookEvent): Promise<WebhookEvent>;
+  getWebhookEventByWebhookId(merchantId: string, webhookId: string): Promise<WebhookEvent | undefined>;
+  isDuplicateWebhook(merchantId: string, topic: string, payloadHash: string, windowMinutes?: number): Promise<boolean>;
+  updateWebhookEventStatus(id: string, status: string, errorMessage?: string): Promise<void>;
+  getRecentWebhookEvents(merchantId: string, limit?: number): Promise<WebhookEvent[]>;
+  getWebhookHealthStats(merchantId: string): Promise<{ totalReceived: number; totalProcessed: number; totalFailed: number; totalSkipped: number; lastReceivedAt: Date | null }>;
+
+  // Data Health
+  getDataHealthStats(merchantId: string): Promise<{ missingPhone: number; missingAddress: number; missingCity: number; missingName: number; totalOrders: number }>;
+  getMerchantByShopDomain(shopDomain: string): Promise<{ merchantId: string; storeId: string; accessToken: string } | null>;
+  getOrdersUpdatedSince(merchantId: string, since: Date, limit?: number): Promise<Order[]>;
 
   // Analytics
   getDashboardStats(merchantId: string): Promise<any>;
@@ -736,9 +751,111 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
+  // Webhook Events
+  async createWebhookEvent(event: InsertWebhookEvent): Promise<WebhookEvent> {
+    const [created] = await db.insert(webhookEvents).values(event).returning();
+    return created;
+  }
+
+  async getWebhookEventByWebhookId(merchantId: string, webhookId: string): Promise<WebhookEvent | undefined> {
+    const [event] = await db.select().from(webhookEvents)
+      .where(and(
+        eq(webhookEvents.merchantId, merchantId),
+        eq(webhookEvents.shopifyWebhookId, webhookId)
+      ));
+    return event;
+  }
+
+  async isDuplicateWebhook(merchantId: string, topic: string, payloadHash: string, windowMinutes = 10): Promise<boolean> {
+    const windowStart = new Date(Date.now() - windowMinutes * 60 * 1000);
+    const [existing] = await db.select({ id: webhookEvents.id }).from(webhookEvents)
+      .where(and(
+        eq(webhookEvents.merchantId, merchantId),
+        eq(webhookEvents.topic, topic),
+        eq(webhookEvents.payloadHash, payloadHash),
+        gte(webhookEvents.receivedAt, windowStart)
+      ))
+      .limit(1);
+    return !!existing;
+  }
+
+  async updateWebhookEventStatus(id: string, status: string, errorMessage?: string): Promise<void> {
+    await db.update(webhookEvents).set({
+      processingStatus: status,
+      processedAt: new Date(),
+      errorMessage: errorMessage || null,
+    }).where(eq(webhookEvents.id, id));
+  }
+
+  async getRecentWebhookEvents(merchantId: string, limit = 50): Promise<WebhookEvent[]> {
+    return db.select().from(webhookEvents)
+      .where(eq(webhookEvents.merchantId, merchantId))
+      .orderBy(desc(webhookEvents.receivedAt))
+      .limit(limit);
+  }
+
+  async getWebhookHealthStats(merchantId: string): Promise<{ totalReceived: number; totalProcessed: number; totalFailed: number; totalSkipped: number; lastReceivedAt: Date | null }> {
+    const allEvents = await db.select({
+      status: webhookEvents.processingStatus,
+      receivedAt: webhookEvents.receivedAt,
+    }).from(webhookEvents)
+      .where(eq(webhookEvents.merchantId, merchantId));
+
+    const totalReceived = allEvents.length;
+    const totalProcessed = allEvents.filter(e => e.status === 'processed').length;
+    const totalFailed = allEvents.filter(e => e.status === 'failed').length;
+    const totalSkipped = allEvents.filter(e => e.status === 'skipped_duplicate').length;
+    const lastReceivedAt = allEvents.length > 0
+      ? allEvents.reduce((max, e) => (!max || (e.receivedAt && e.receivedAt > max) ? e.receivedAt : max), null as Date | null)
+      : null;
+
+    return { totalReceived, totalProcessed, totalFailed, totalSkipped, lastReceivedAt };
+  }
+
+  // Data Health
+  async getDataHealthStats(merchantId: string): Promise<{ missingPhone: number; missingAddress: number; missingCity: number; missingName: number; totalOrders: number }> {
+    const [total] = await db.select({ count: count() }).from(orders)
+      .where(eq(orders.merchantId, merchantId));
+    const [missingPhoneResult] = await db.select({ count: count() }).from(orders)
+      .where(and(eq(orders.merchantId, merchantId), or(isNull(orders.customerPhone), eq(orders.customerPhone, ''))));
+    const [missingAddressResult] = await db.select({ count: count() }).from(orders)
+      .where(and(eq(orders.merchantId, merchantId), or(isNull(orders.shippingAddress), eq(orders.shippingAddress, ''))));
+    const [missingCityResult] = await db.select({ count: count() }).from(orders)
+      .where(and(eq(orders.merchantId, merchantId), or(isNull(orders.city), eq(orders.city, ''))));
+    const [missingNameResult] = await db.select({ count: count() }).from(orders)
+      .where(and(eq(orders.merchantId, merchantId), or(eq(orders.customerName, 'Unknown'), eq(orders.customerName, ''))));
+
+    return {
+      totalOrders: total?.count || 0,
+      missingPhone: missingPhoneResult?.count || 0,
+      missingAddress: missingAddressResult?.count || 0,
+      missingCity: missingCityResult?.count || 0,
+      missingName: missingNameResult?.count || 0,
+    };
+  }
+
+  async getMerchantByShopDomain(shopDomain: string): Promise<{ merchantId: string; storeId: string; accessToken: string } | null> {
+    const [store] = await db.select().from(shopifyStores)
+      .where(and(
+        eq(shopifyStores.shopDomain, shopDomain),
+        eq(shopifyStores.isConnected, true)
+      ));
+    if (!store || !store.accessToken) return null;
+    return { merchantId: store.merchantId, storeId: store.id, accessToken: store.accessToken };
+  }
+
+  async getOrdersUpdatedSince(merchantId: string, since: Date, limit = 1000): Promise<Order[]> {
+    return db.select().from(orders)
+      .where(and(
+        eq(orders.merchantId, merchantId),
+        gte(orders.updatedAt, since)
+      ))
+      .orderBy(desc(orders.updatedAt))
+      .limit(limit);
+  }
+
   // Seed demo data
   async seedDemoData(): Promise<void> {
-    // Demo data seeding disabled to favor real data
     return;
   }
 }

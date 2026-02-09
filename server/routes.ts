@@ -1,10 +1,12 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
+import express from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { z } from "zod";
 import crypto from "crypto";
 import { shopifyService } from "./services/shopify";
+import { webhookHandler } from "./services/webhookHandler";
 
 // Zod schemas for validation
 const remarkSchema = z.object({
@@ -998,6 +1000,191 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error in Shopify callback:", error);
       res.redirect('/integrations?shopify=error&message=' + encodeURIComponent(String(error)));
+    }
+  });
+
+  // ============================================
+  // SHOPIFY WEBHOOK ENDPOINTS (No auth - verified via HMAC)
+  // ============================================
+  const rawBodyParser = express.raw({ type: 'application/json', limit: '10mb' });
+
+  const handleShopifyWebhook = async (req: Request, res: Response, topic: string) => {
+    try {
+      const rawBody = req.body as Buffer;
+      const hmac = req.headers['x-shopify-hmac-sha256'] as string;
+      const shopDomain = req.headers['x-shopify-shop-domain'] as string;
+      const webhookId = req.headers['x-shopify-webhook-id'] as string;
+
+      if (!shopDomain) {
+        console.error('[Webhook] Missing shop domain header');
+        res.status(400).send('Missing shop domain');
+        return;
+      }
+
+      if (hmac && !webhookHandler.verifyHmac(rawBody, hmac)) {
+        console.error(`[Webhook] HMAC verification failed for ${topic} from ${shopDomain}`);
+        res.status(401).send('HMAC verification failed');
+        return;
+      }
+
+      res.status(200).send('OK');
+
+      if (topic.startsWith('orders/')) {
+        await webhookHandler.processOrderWebhook(topic, shopDomain, rawBody, webhookId);
+      } else if (topic.startsWith('fulfillments/')) {
+        await webhookHandler.processFulfillmentWebhook(topic, shopDomain, rawBody, webhookId);
+      }
+    } catch (error) {
+      console.error(`[Webhook] Unhandled error for ${topic}:`, error);
+      if (!res.headersSent) {
+        res.status(500).send('Internal error');
+      }
+    }
+  };
+
+  app.post("/api/webhooks/shopify/orders-create", rawBodyParser, (req, res) => {
+    handleShopifyWebhook(req, res, 'orders/create');
+  });
+
+  app.post("/api/webhooks/shopify/orders-updated", rawBodyParser, (req, res) => {
+    handleShopifyWebhook(req, res, 'orders/updated');
+  });
+
+  app.post("/api/webhooks/shopify/fulfillments-create", rawBodyParser, (req, res) => {
+    handleShopifyWebhook(req, res, 'fulfillments/create');
+  });
+
+  app.post("/api/webhooks/shopify/fulfillments-update", rawBodyParser, (req, res) => {
+    handleShopifyWebhook(req, res, 'fulfillments/update');
+  });
+
+  // ============================================
+  // WEBHOOK HEALTH & DATA HEALTH ENDPOINTS
+  // ============================================
+  app.get("/api/data-health", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const [dataHealth, webhookHealth, lastSync] = await Promise.all([
+        storage.getDataHealthStats(merchantId),
+        storage.getWebhookHealthStats(merchantId),
+        storage.getShopifyStore(merchantId),
+      ]);
+
+      res.json({
+        dataHealth,
+        webhookHealth,
+        lastApiSyncAt: lastSync?.lastSyncAt || null,
+        shopDomain: lastSync?.shopDomain || null,
+        isConnected: lastSync?.isConnected || false,
+      });
+    } catch (error) {
+      console.error("Error fetching data health:", error);
+      res.status(500).json({ message: "Failed to fetch data health" });
+    }
+  });
+
+  app.get("/api/webhook-events", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const limit = parseInt(req.query.limit as string) || 50;
+      const events = await storage.getRecentWebhookEvents(merchantId, limit);
+      res.json({ events });
+    } catch (error) {
+      console.error("Error fetching webhook events:", error);
+      res.status(500).json({ message: "Failed to fetch webhook events" });
+    }
+  });
+
+  // Reconciliation endpoint - fetches orders updated since last sync
+  app.post("/api/integrations/shopify/reconcile", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const store = await storage.getShopifyStore(merchantId);
+      if (!store || !store.isConnected || !store.accessToken || store.accessToken === "demo-access-token") {
+        return res.status(400).json({ message: "Shopify store not connected with real credentials" });
+      }
+
+      const sinceDate = store.lastSyncAt
+        ? new Date(new Date(store.lastSyncAt).getTime() - 6 * 60 * 60 * 1000)
+        : new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+      console.log(`[Reconcile] Fetching orders updated since ${sinceDate.toISOString()}`);
+
+      const updatedOrders = await shopifyService.fetchAllOrders(store.shopDomain, store.accessToken, {
+        status: 'any',
+        created_at_min: sinceDate.toISOString(),
+      });
+
+      console.log(`[Reconcile] Found ${updatedOrders.length} orders to reconcile`);
+
+      let updated = 0;
+      let created = 0;
+
+      for (const shopifyOrder of updatedOrders) {
+        const shopifyOrderId = String(shopifyOrder.id);
+        const existingOrder = await storage.getOrderByShopifyId(merchantId, shopifyOrderId);
+        const transformedOrder = shopifyService.transformOrderForStorage(shopifyOrder);
+
+        if (existingOrder) {
+          const safeUpdate: any = {
+            tags: transformedOrder.tags,
+            fulfillmentStatus: transformedOrder.fulfillmentStatus,
+            paymentStatus: transformedOrder.paymentStatus,
+            orderStatus: transformedOrder.orderStatus,
+            rawShopifyData: transformedOrder.rawShopifyData,
+            lastApiSyncAt: new Date(),
+            shopifyUpdatedAt: shopifyOrder.updated_at ? new Date(shopifyOrder.updated_at) : undefined,
+          };
+
+          if (transformedOrder.customerName !== 'Unknown' && transformedOrder.customerName !== existingOrder.customerName) {
+            safeUpdate.customerName = transformedOrder.customerName;
+          }
+          if (transformedOrder.customerPhone && !existingOrder.customerPhone) {
+            safeUpdate.customerPhone = transformedOrder.customerPhone;
+          }
+          if (transformedOrder.city && !existingOrder.city) {
+            safeUpdate.city = transformedOrder.city;
+          }
+          if (transformedOrder.shippingAddress && !existingOrder.shippingAddress) {
+            safeUpdate.shippingAddress = transformedOrder.shippingAddress;
+          }
+          if (transformedOrder.courierTracking && !existingOrder.courierTracking) {
+            safeUpdate.courierTracking = transformedOrder.courierTracking;
+            safeUpdate.courierName = transformedOrder.courierName;
+          }
+
+          await storage.updateOrder(merchantId, existingOrder.id, safeUpdate);
+          updated++;
+        } else {
+          await storage.createOrder({
+            ...transformedOrder,
+            merchantId,
+            lastApiSyncAt: new Date(),
+          });
+          created++;
+        }
+      }
+
+      await storage.updateShopifyStore(store.id, { lastSyncAt: new Date() });
+
+      console.log(`[Reconcile] Complete: ${created} created, ${updated} updated`);
+
+      res.json({
+        success: true,
+        message: `Reconciliation complete: ${created} new, ${updated} updated`,
+        created,
+        updated,
+        total: updatedOrders.length,
+      });
+    } catch (error: any) {
+      console.error("Error reconciling:", error);
+      res.status(500).json({ message: error.message || "Failed to reconcile" });
     }
   });
 

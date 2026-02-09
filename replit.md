@@ -48,6 +48,15 @@ Preferred communication style: Simple, everyday language.
 - **Customer Data Extraction**: Prioritizes `shipping_address`, then `billing_address`, `customer` object, and critically, `note_attributes` for custom checkout forms.
 - **Shopify Permissions Handling**: UI indicators and guidance for required `read_orders`, `read_customers`, `read_products`, `read_fulfillments` scopes.
 
+### Hybrid Sync System (API + Webhooks)
+- **Webhook Events Table**: `webhook_events` stores all incoming Shopify webhook events with deduplication (by webhook ID and payload hash within 10-minute window).
+- **Webhook Endpoints**: 4 POST endpoints at `/api/webhooks/shopify/{orders-create,orders-updated,fulfillments-create,fulfillments-update}` with HMAC verification via `SHOPIFY_WEBHOOK_SECRET` or `SHOPIFY_APP_SHARED_SECRET`.
+- **Merge/Resolve Logic** (`server/services/webhookHandler.ts`): Resolves best customer data from multiple sources with priority: `note_attributes` > webhook shipping_address > webhook customer > webhook billing_address > API data > existing order data. Tracks `resolvedSource` (which field came from which source) and `dataQualityFlags` (missing_name, missing_phone, etc.).
+- **Out-of-Order Handling**: Compares `shopify_updated_at` timestamps to prevent stale webhook data from overwriting newer data.
+- **Reconciliation**: `POST /api/integrations/shopify/reconcile` endpoint fetches recent orders from Shopify API to backfill any gaps from missed webhooks. Only updates fields that are missing or empty (never overwrites good data with blanks).
+- **Data Health Dashboard**: Integrations page shows data quality metrics (% of orders with name/phone/address/city), webhook event counts (received/processed/failed/skipped), and recent webhook event log.
+- **Order Tracking Columns**: `rawWebhookData`, `resolvedSource`, `dataQualityFlags`, `lastApiSyncAt`, `lastWebhookAt`, `shopifyUpdatedAt` added to orders table.
+
 ## External Dependencies
 
 ### Database
