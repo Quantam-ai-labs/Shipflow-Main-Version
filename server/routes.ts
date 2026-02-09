@@ -816,11 +816,13 @@ export async function registerRoutes(
       }
 
       // Otherwise use the real Shopify service
-      const result = await shopifyService.syncOrders(merchantId, store.shopDomain!);
+      const forceFullSync = req.body?.forceFullSync === true;
+      const result = await shopifyService.syncOrders(merchantId, store.shopDomain!, forceFullSync);
       res.json({ 
         success: true, 
-        message: `Successfully synced ${result.synced} new orders`,
+        message: `Successfully synced ${result.synced} new orders, ${result.updated} updated`,
         synced: result.synced,
+        updated: result.updated,
         total: result.total
       });
     } catch (error: any) {

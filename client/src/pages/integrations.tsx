@@ -58,26 +58,19 @@ interface DataHealthData {
     missingCity: number;
     missingName: number;
   };
-  webhookHealth: {
-    totalReceived: number;
-    totalProcessed: number;
-    totalFailed: number;
-    totalSkipped: number;
-    lastReceivedAt: string | null;
-  };
   lastApiSyncAt: string | null;
   shopDomain: string | null;
   isConnected: boolean;
-}
-
-interface WebhookEvent {
-  id: string;
-  topic: string;
-  shopDomain: string;
-  processingStatus: string;
-  receivedAt: string;
-  processedAt: string | null;
-  errorMessage: string | null;
+  recentSyncLogs?: Array<{
+    id: string;
+    syncType: string;
+    ordersCreated: number;
+    ordersUpdated: number;
+    totalFetched: number;
+    status: string;
+    startedAt: string;
+    completedAt: string | null;
+  }>;
 }
 
 export default function Integrations() {
@@ -124,10 +117,6 @@ export default function Integrations() {
     queryKey: ["/api/data-health"],
   });
 
-  const { data: webhookEventsData } = useQuery<{ events: WebhookEvent[] }>({
-    queryKey: ["/api/webhook-events"],
-  });
-
   const reconcileMutation = useMutation({
     mutationFn: async () => {
       return apiRequest("POST", "/api/integrations/shopify/reconcile", {});
@@ -135,7 +124,6 @@ export default function Integrations() {
     onSuccess: async (res) => {
       const result = await res.json();
       queryClient.invalidateQueries({ queryKey: ["/api/data-health"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/webhook-events"] });
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       toast({
         title: "Reconciliation Complete",
@@ -546,14 +534,14 @@ export default function Integrations() {
             </CardContent>
           </Card>
 
-          {/* Webhook Health Card */}
+          {/* Sync Status Card */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <div>
-                <CardTitle className="text-base">Webhook Status</CardTitle>
-                <CardDescription>Real-time order update events from Shopify</CardDescription>
+                <CardTitle className="text-base">Sync Status</CardTitle>
+                <CardDescription>API sync activity with Shopify</CardDescription>
               </div>
-              <Webhook className="w-5 h-5 text-muted-foreground" />
+              <RefreshCw className="w-5 h-5 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               {isDataHealthLoading ? (
@@ -563,45 +551,20 @@ export default function Integrations() {
                 </div>
               ) : dataHealth ? (
                 <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="text-center p-2 rounded-md bg-muted/50">
-                      <div className="text-lg font-semibold" data-testid="text-webhooks-received">
-                        {dataHealth.webhookHealth.totalReceived}
-                      </div>
-                      <div className="text-xs text-muted-foreground">Received</div>
+                  <div className="text-center p-3 rounded-md bg-muted/50">
+                    <div className="text-lg font-semibold" data-testid="text-total-orders">
+                      {dataHealth.dataHealth.totalOrders.toLocaleString()}
                     </div>
-                    <div className="text-center p-2 rounded-md bg-muted/50">
-                      <div className="text-lg font-semibold text-green-600" data-testid="text-webhooks-processed">
-                        {dataHealth.webhookHealth.totalProcessed}
-                      </div>
-                      <div className="text-xs text-muted-foreground">Processed</div>
-                    </div>
-                    <div className="text-center p-2 rounded-md bg-muted/50">
-                      <div className="text-lg font-semibold text-red-600" data-testid="text-webhooks-failed">
-                        {dataHealth.webhookHealth.totalFailed}
-                      </div>
-                      <div className="text-xs text-muted-foreground">Failed</div>
-                    </div>
-                    <div className="text-center p-2 rounded-md bg-muted/50">
-                      <div className="text-lg font-semibold text-muted-foreground" data-testid="text-webhooks-skipped">
-                        {dataHealth.webhookHealth.totalSkipped}
-                      </div>
-                      <div className="text-xs text-muted-foreground">Skipped</div>
-                    </div>
+                    <div className="text-xs text-muted-foreground">Total Orders Synced</div>
                   </div>
-                  {dataHealth.webhookHealth.lastReceivedAt && (
-                    <p className="text-xs text-muted-foreground">
-                      Last received: {new Date(dataHealth.webhookHealth.lastReceivedAt).toLocaleString()}
-                    </p>
-                  )}
                   {dataHealth.lastApiSyncAt && (
                     <p className="text-xs text-muted-foreground">
-                      Last API sync: {new Date(dataHealth.lastApiSyncAt).toLocaleString()}
+                      Last sync: {new Date(dataHealth.lastApiSyncAt).toLocaleString()}
                     </p>
                   )}
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">No webhook data</p>
+                <p className="text-sm text-muted-foreground">No sync data</p>
               )}
             </CardContent>
           </Card>
@@ -635,45 +598,6 @@ export default function Integrations() {
         </Card>
 
         {/* Recent Webhook Events */}
-        {webhookEventsData?.events && webhookEventsData.events.length > 0 && (
-          <Card className="mt-4">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Recent Webhook Events</CardTitle>
-              <CardDescription>Latest events received from Shopify</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                {webhookEventsData.events.slice(0, 20).map((event) => (
-                  <div key={event.id} className="flex items-center justify-between gap-2 py-2 border-b last:border-0">
-                    <div className="flex items-center gap-2 min-w-0">
-                      {event.processingStatus === 'processed' ? (
-                        <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
-                      ) : event.processingStatus === 'failed' ? (
-                        <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
-                      ) : (
-                        <Activity className="w-4 h-4 text-muted-foreground shrink-0" />
-                      )}
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate" data-testid={`text-webhook-topic-${event.id}`}>
-                          {event.topic}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(event.receivedAt).toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
-                    <Badge
-                      variant={event.processingStatus === 'processed' ? 'default' : event.processingStatus === 'failed' ? 'destructive' : 'outline'}
-                      data-testid={`badge-webhook-status-${event.id}`}
-                    >
-                      {event.processingStatus}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
       </div>
 
       {/* Shopify Connection Dialog */}

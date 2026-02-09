@@ -43,13 +43,16 @@ interface ShopifyOrder {
     email: string;
     phone: string | null;
     default_address?: {
-      address1: string;
-      address2: string | null;
-      city: string;
-      province: string;
-      country: string;
-      zip: string;
-      phone: string | null;
+      name?: string;
+      first_name?: string;
+      last_name?: string;
+      address1?: string;
+      address2?: string | null;
+      city?: string;
+      province?: string;
+      country?: string;
+      zip?: string;
+      phone?: string | null;
     };
   } | null;
   shipping_address: {
@@ -481,6 +484,8 @@ export class ShopifyService {
       return Boolean(val && val.trim().length > 0);
     };
 
+    const defaultAddr = customer?.default_address;
+
     let customerName = 'Unknown';
     
     if (isMeaningful(shippingAddr?.name)) {
@@ -496,6 +501,11 @@ export class ShopifyService {
     } else if (isMeaningful(billingAddr?.first_name) || isMeaningful(billingAddr?.last_name)) {
       customerName = `${billingAddr?.first_name || ''} ${billingAddr?.last_name || ''}`.trim();
     }
+    else if (isMeaningful(defaultAddr?.name)) {
+      customerName = defaultAddr.name!.trim();
+    } else if (isMeaningful(defaultAddr?.first_name) || isMeaningful(defaultAddr?.last_name)) {
+      customerName = `${defaultAddr?.first_name || ''} ${defaultAddr?.last_name || ''}`.trim();
+    }
     else if (isMeaningful(noteFullName)) {
       customerName = noteFullName.trim();
     }
@@ -507,21 +517,23 @@ export class ShopifyService {
       customerPhone = customer.phone.trim();
     } else if (isMeaningful(billingAddr?.phone)) {
       customerPhone = billingAddr.phone.trim();
-    } else if (isMeaningful(customer?.default_address?.phone)) {
-      customerPhone = customer.default_address.phone.trim();
+    } else if (isMeaningful(defaultAddr?.phone)) {
+      customerPhone = defaultAddr.phone!.trim();
+    } else if (isMeaningful((shopifyOrder as any).phone)) {
+      customerPhone = (shopifyOrder as any).phone.trim();
     } else if (isMeaningful(notePhone)) {
       customerPhone = notePhone.trim();
     }
 
-    const customerEmail = customer?.email?.trim() || shopifyOrder.email?.trim() || null;
+    const customerEmail = customer?.email?.trim() || shopifyOrder.email?.trim() || (shopifyOrder as any).contact_email?.trim() || null;
 
     const city = (isMeaningful(shippingAddr?.city) ? shippingAddr.city.trim() : null) 
       || (isMeaningful(billingAddr?.city) ? billingAddr.city.trim() : null) 
-      || (isMeaningful(customer?.default_address?.city) ? customer.default_address.city.trim() : null) 
+      || (isMeaningful(defaultAddr?.city) ? defaultAddr.city.trim() : null) 
       || (isMeaningful(noteCity) ? noteCity.trim() : null);
-    const province = shippingAddr?.province || billingAddr?.province || customer?.default_address?.province || null;
-    const postalCode = shippingAddr?.zip || billingAddr?.zip || customer?.default_address?.zip || null;
-    const country = shippingAddr?.country || billingAddr?.country || customer?.default_address?.country || 'Pakistan';
+    const province = shippingAddr?.province || billingAddr?.province || defaultAddr?.province || null;
+    const postalCode = shippingAddr?.zip || billingAddr?.zip || defaultAddr?.zip || null;
+    const country = shippingAddr?.country || billingAddr?.country || defaultAddr?.country || 'Pakistan';
 
     let fullAddress: string | null = null;
     if (isMeaningful(shippingAddr?.address1)) {
@@ -534,6 +546,12 @@ export class ShopifyService {
       const addressParts = [
         billingAddr.address1,
         billingAddr.address2,
+      ].filter(p => isMeaningful(p));
+      fullAddress = addressParts.join(', ').trim() || null;
+    } else if (isMeaningful(defaultAddr?.address1)) {
+      const addressParts = [
+        defaultAddr.address1,
+        defaultAddr.address2,
       ].filter(p => isMeaningful(p));
       fullAddress = addressParts.join(', ').trim() || null;
     } else if (isMeaningful(noteAddress)) {
