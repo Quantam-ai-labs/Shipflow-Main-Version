@@ -331,11 +331,11 @@ export async function registerRoutes(
 
   app.get("/api/orders/statuses", isAuthenticated, async (req, res) => {
     try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-      
-      const statuses = await storage.getUniqueStatuses(merchantId);
-      res.json({ statuses });
+      const { UNIVERSAL_STATUSES } = await import('./services/statusNormalization');
+      const { getStatusDisplayLabel } = await import('./services/statusNormalization');
+      res.json({ 
+        statuses: UNIVERSAL_STATUSES.map(s => ({ value: s, label: getStatusDisplayLabel(s) }))
+      });
     } catch (error) {
       console.error("Error fetching statuses:", error);
       res.status(500).json({ message: "Failed to fetch statuses" });
@@ -1307,11 +1307,12 @@ export async function registerRoutes(
               }
               const credObj = { apiKey: creds.apiKey || undefined, apiSecret: creds.apiSecret || undefined };
               
-              const result = await trackShipment(order.courierName!, order.courierTracking!, credObj);
+              const result = await trackShipment(order.courierName!, order.courierTracking!, credObj, order.shipmentStatus);
               
               if (result && result.success) {
                 await storage.updateOrder(merchantId, order.id, {
-                  shipmentStatus: result.status,
+                  shipmentStatus: result.normalizedStatus,
+                  courierRawStatus: result.rawCourierStatus,
                   lastTrackingUpdate: new Date(),
                 });
                 return 'updated';

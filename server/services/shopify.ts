@@ -611,9 +611,9 @@ export class ShopifyService {
 
     let shipmentStatus = 'Unfulfilled';
     if (shopifyOrder.cancelled_at) {
-      shipmentStatus = 'Cancelled';
+      shipmentStatus = 'CANCELLED';
     } else if (courierTracking) {
-      shipmentStatus = 'Booked';
+      shipmentStatus = 'BOOKED';
     }
 
     return {

@@ -202,17 +202,15 @@ export class DatabaseStorage implements IStorage {
     let conditions = [eq(orders.merchantId, merchantId)];
     
     if (options?.status && options.status !== "all") {
-      if (options.status === "unfulfilled") {
+      if (options.status === "Unfulfilled") {
         conditions.push(
           or(
             isNull(orders.courierTracking),
             eq(orders.courierTracking, "")
           )!
         );
-      } else if (options.status === "cancelled") {
-        conditions.push(ilike(orders.shipmentStatus, 'Cancelled'));
       } else {
-        conditions.push(ilike(orders.shipmentStatus, options.status));
+        conditions.push(eq(orders.shipmentStatus, options.status));
       }
     }
 
@@ -585,7 +583,7 @@ export class DatabaseStorage implements IStorage {
         and(
           eq(orders.merchantId, merchantId),
           eq(orders.paymentMethod, "cod"),
-          eq(orders.shipmentStatus, "delivered")
+          eq(orders.shipmentStatus, "DELIVERED")
         )
       );
     
@@ -640,32 +638,29 @@ export class DatabaseStorage implements IStorage {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Use orders table shipmentStatus field for all stats
     const deliveredToday = allOrders.filter(o => 
-      o.shipmentStatus === "delivered" && o.lastTrackingUpdate && new Date(o.lastTrackingUpdate) >= today
+      o.shipmentStatus === "DELIVERED" && o.lastTrackingUpdate && new Date(o.lastTrackingUpdate) >= today
     ).length;
 
-    // Pending = unfulfilled or pending shipmentStatus
     const pendingShipments = allOrders.filter(o => 
-      o.shipmentStatus === "pending" || o.shipmentStatus === "unfulfilled" || !o.shipmentStatus
+      o.shipmentStatus === "Unfulfilled" || o.shipmentStatus === "pending" || !o.shipmentStatus
     ).length;
 
-    // In transit = dispatched, arrived, or out_for_delivery
     const inTransit = allOrders.filter(o => 
-      o.shipmentStatus === "dispatched" || o.shipmentStatus === "arrived" || o.shipmentStatus === "out_for_delivery"
+      o.shipmentStatus === "IN_TRANSIT" || o.shipmentStatus === "ARRIVED_AT_DESTINATION" || o.shipmentStatus === "OUT_FOR_DELIVERY"
     ).length;
 
-    // Booked = orders that have been booked with courier
-    const booked = allOrders.filter(o => o.shipmentStatus === "booked").length;
+    const booked = allOrders.filter(o => 
+      o.shipmentStatus === "BOOKED" || o.shipmentStatus === "PICKED_UP" || o.shipmentStatus === "ARRIVED_AT_ORIGIN"
+    ).length;
 
-    // COD pending = cod orders that haven't been delivered
     const codPending = allOrders
-      .filter(o => o.paymentMethod === "cod" && o.shipmentStatus !== "delivered")
+      .filter(o => o.paymentMethod === "cod" && o.shipmentStatus !== "DELIVERED")
       .reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
 
-    const totalDelivered = allOrders.filter(o => o.shipmentStatus === "delivered").length;
-    const totalReturned = allOrders.filter(o => o.shipmentStatus === "returned").length;
-    const totalFailed = allOrders.filter(o => o.shipmentStatus === "failed" || o.shipmentStatus === "reattempt").length;
+    const totalDelivered = allOrders.filter(o => o.shipmentStatus === "DELIVERED").length;
+    const totalReturned = allOrders.filter(o => o.shipmentStatus === "RETURNED_TO_SHIPPER" || o.shipmentStatus === "RETURN_IN_TRANSIT").length;
+    const totalFailed = allOrders.filter(o => o.shipmentStatus === "DELIVERY_FAILED" || o.shipmentStatus === "DELIVERY_ATTEMPTED").length;
     
     // Delivery rate = delivered / (delivered + returned + failed)
     const completedOrders = totalDelivered + totalReturned + totalFailed;
@@ -704,10 +699,9 @@ export class DatabaseStorage implements IStorage {
   async getAnalytics(merchantId: string, dateRange: string): Promise<any> {
     const allOrders = await db.select().from(orders).where(eq(orders.merchantId, merchantId));
 
-    // Use orders table shipmentStatus field for all stats
-    const totalDelivered = allOrders.filter(o => o.shipmentStatus === "delivered").length;
-    const totalReturned = allOrders.filter(o => o.shipmentStatus === "returned").length;
-    const totalFailed = allOrders.filter(o => o.shipmentStatus === "failed" || o.shipmentStatus === "reattempt").length;
+    const totalDelivered = allOrders.filter(o => o.shipmentStatus === "DELIVERED").length;
+    const totalReturned = allOrders.filter(o => o.shipmentStatus === "RETURNED_TO_SHIPPER" || o.shipmentStatus === "RETURN_IN_TRANSIT").length;
+    const totalFailed = allOrders.filter(o => o.shipmentStatus === "DELIVERY_FAILED" || o.shipmentStatus === "DELIVERY_ATTEMPTED").length;
     
     // Delivery rate = delivered / (delivered + returned + failed)
     const completedOrders = totalDelivered + totalReturned + totalFailed;
@@ -717,7 +711,7 @@ export class DatabaseStorage implements IStorage {
 
     const totalRevenue = allOrders.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
     const deliveredRevenue = allOrders
-      .filter(o => o.shipmentStatus === "delivered")
+      .filter(o => o.shipmentStatus === "DELIVERED")
       .reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
 
     // Courier performance from orders table
@@ -726,9 +720,9 @@ export class DatabaseStorage implements IStorage {
       const courier = o.courierName || "No Courier";
       const current = courierMap.get(courier) || { orders: 0, delivered: 0, returned: 0, failed: 0 };
       current.orders++;
-      if (o.shipmentStatus === "delivered") current.delivered++;
-      if (o.shipmentStatus === "returned") current.returned++;
-      if (o.shipmentStatus === "failed" || o.shipmentStatus === "reattempt") current.failed++;
+      if (o.shipmentStatus === "DELIVERED") current.delivered++;
+      if (o.shipmentStatus === "RETURNED_TO_SHIPPER" || o.shipmentStatus === "RETURN_IN_TRANSIT") current.returned++;
+      if (o.shipmentStatus === "DELIVERY_FAILED" || o.shipmentStatus === "DELIVERY_ATTEMPTED") current.failed++;
       courierMap.set(courier, current);
     });
 
@@ -750,8 +744,8 @@ export class DatabaseStorage implements IStorage {
       const current = cityMap.get(city) || { orders: 0, delivered: 0, returned: 0, revenue: 0 };
       current.orders++;
       current.revenue += Number(o.totalAmount || 0);
-      if (o.shipmentStatus === "delivered") current.delivered++;
-      if (o.shipmentStatus === "returned") current.returned++;
+      if (o.shipmentStatus === "DELIVERED") current.delivered++;
+      if (o.shipmentStatus === "RETURNED_TO_SHIPPER" || o.shipmentStatus === "RETURN_IN_TRANSIT") current.returned++;
       cityMap.set(city, current);
     });
 
@@ -788,7 +782,7 @@ export class DatabaseStorage implements IStorage {
       last7Days.push({
         date: dayName,
         orders: dayOrders.length,
-        delivered: dayOrders.filter(o => o.shipmentStatus === "delivered").length,
+        delivered: dayOrders.filter(o => o.shipmentStatus === "DELIVERED").length,
         revenue: dayOrders.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0),
       });
     }

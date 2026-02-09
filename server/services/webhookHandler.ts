@@ -198,13 +198,13 @@ export class WebhookHandler {
       let shipmentStatus = existingOrder.shipmentStatus;
 
       if (fulfillmentStatus === 'success' || fulfillmentStatus === 'fulfilled') {
-        shipmentStatus = 'delivered';
+        shipmentStatus = 'DELIVERED';
       } else if (fulfillmentStatus === 'in_transit') {
-        shipmentStatus = 'dispatched';
+        shipmentStatus = 'IN_TRANSIT';
       } else if (fulfillmentStatus === 'out_for_delivery') {
-        shipmentStatus = 'out_for_delivery';
+        shipmentStatus = 'OUT_FOR_DELIVERY';
       } else if (fulfillmentStatus === 'failure') {
-        shipmentStatus = 'failed';
+        shipmentStatus = 'DELIVERY_FAILED';
       }
 
       const trackingNumber = payload.tracking_number || payload.tracking_numbers?.[0] || null;

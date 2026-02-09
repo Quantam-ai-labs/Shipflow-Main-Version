@@ -99,24 +99,45 @@ function StatCard({
   );
 }
 
-function getStatusBadge(status: string) {
-  const statusConfig: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; color: string }> = {
-    pending: { variant: "secondary", color: "bg-gray-500/10 text-gray-600 border-gray-500/20" },
-    processing: { variant: "secondary", color: "bg-blue-500/10 text-blue-600 border-blue-500/20" },
-    shipped: { variant: "secondary", color: "bg-amber-500/10 text-amber-600 border-amber-500/20" },
-    in_transit: { variant: "secondary", color: "bg-amber-500/10 text-amber-600 border-amber-500/20" },
-    out_for_delivery: { variant: "secondary", color: "bg-purple-500/10 text-purple-600 border-purple-500/20" },
-    delivered: { variant: "secondary", color: "bg-green-500/10 text-green-600 border-green-500/20" },
-    cancelled: { variant: "destructive", color: "bg-red-500/10 text-red-600 border-red-500/20" },
-    returned: { variant: "destructive", color: "bg-red-500/10 text-red-600 border-red-500/20" },
-  };
+const UNIVERSAL_STATUS_COLORS: Record<string, string> = {
+  'BOOKED': "bg-blue-500/10 text-blue-600 border-blue-500/20",
+  'PICKED_UP': "bg-indigo-500/10 text-indigo-600 border-indigo-500/20",
+  'ARRIVED_AT_ORIGIN': "bg-purple-500/10 text-purple-600 border-purple-500/20",
+  'IN_TRANSIT': "bg-indigo-500/10 text-indigo-600 border-indigo-500/20",
+  'ARRIVED_AT_DESTINATION': "bg-purple-500/10 text-purple-600 border-purple-500/20",
+  'OUT_FOR_DELIVERY': "bg-amber-500/10 text-amber-600 border-amber-500/20",
+  'DELIVERY_ATTEMPTED': "bg-orange-500/10 text-orange-600 border-orange-500/20",
+  'DELIVERED': "bg-green-500/10 text-green-600 border-green-500/20",
+  'DELIVERY_FAILED': "bg-red-500/10 text-red-600 border-red-500/20",
+  'RETURNED_TO_SHIPPER': "bg-red-500/10 text-red-600 border-red-500/20",
+  'RETURN_IN_TRANSIT': "bg-red-500/10 text-red-600 border-red-500/20",
+  'CANCELLED': "bg-red-500/10 text-red-600 border-red-500/20",
+  'Unfulfilled': "bg-gray-500/10 text-gray-600 border-gray-500/20",
+};
 
-  const config = statusConfig[status] || statusConfig.pending;
-  const displayStatus = status.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+const UNIVERSAL_STATUS_LABELS: Record<string, string> = {
+  'BOOKED': 'Booked',
+  'PICKED_UP': 'Picked Up',
+  'ARRIVED_AT_ORIGIN': 'At Origin',
+  'IN_TRANSIT': 'In Transit',
+  'ARRIVED_AT_DESTINATION': 'At Destination',
+  'OUT_FOR_DELIVERY': 'Out for Delivery',
+  'DELIVERY_ATTEMPTED': 'Attempted',
+  'DELIVERED': 'Delivered',
+  'DELIVERY_FAILED': 'Failed',
+  'RETURNED_TO_SHIPPER': 'Returned',
+  'RETURN_IN_TRANSIT': 'Return in Transit',
+  'CANCELLED': 'Cancelled',
+  'Unfulfilled': 'Unfulfilled',
+};
+
+function getStatusBadge(status: string) {
+  const color = UNIVERSAL_STATUS_COLORS[status] || "bg-gray-500/10 text-gray-600 border-gray-500/20";
+  const label = UNIVERSAL_STATUS_LABELS[status] || status;
 
   return (
-    <Badge className={config.color}>
-      {displayStatus}
+    <Badge className={color}>
+      {label}
     </Badge>
   );
 }
@@ -256,7 +277,7 @@ export default function Dashboard() {
                         <p className="font-medium text-sm">PKR {order.totalAmount}</p>
                         <p className="text-xs text-muted-foreground capitalize">{order.paymentMethod}</p>
                       </div>
-                      {getStatusBadge(order.orderStatus || "pending")}
+                      {getStatusBadge(order.shipmentStatus || "Unfulfilled")}
                     </div>
                   </div>
                 </Link>

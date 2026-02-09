@@ -1,7 +1,14 @@
 import { leopardsService, type TrackingResult as LeopardsTrackingResult } from './leopards';
 import { postexService, type TrackingResult as PostExTrackingResult } from './postex';
+import { normalizeStatus, detectCourierType, isFinalStatus, type UniversalStatus } from '../statusNormalization';
 
 export type TrackingResult = LeopardsTrackingResult | PostExTrackingResult;
+
+export type NormalizedTrackingResult = TrackingResult & {
+  normalizedStatus: UniversalStatus;
+  rawCourierStatus: string;
+  wasMapped: boolean;
+};
 
 export interface CourierCredentials {
   apiKey?: string;
@@ -26,24 +33,48 @@ export async function trackShipment(
   courierName: string, 
   trackingNumber: string,
   credentials?: CourierCredentials,
-): Promise<TrackingResult | null> {
+  currentStatus?: string | null,
+): Promise<NormalizedTrackingResult | null> {
   const name = courierName.toLowerCase();
+  let result: TrackingResult | null = null;
   
   if (name.includes('leopard')) {
-    return leopardsService.trackShipment(trackingNumber, credentials ? {
+    result = await leopardsService.trackShipment(trackingNumber, credentials ? {
       apiKey: credentials.apiKey,
       apiPassword: credentials.apiSecret,
     } : undefined);
-  }
-  
-  if (name.includes('postex')) {
-    return postexService.trackShipment(trackingNumber, credentials ? {
+  } else if (name.includes('postex')) {
+    result = await postexService.trackShipment(trackingNumber, credentials ? {
       apiToken: credentials.apiKey,
     } : undefined);
+  } else {
+    console.log(`[Courier] Unknown courier: ${courierName}`);
+    return null;
   }
-  
-  console.log(`[Courier] Unknown courier: ${courierName}`);
-  return null;
+
+  if (!result) return null;
+
+  const courierType = detectCourierType(courierName);
+  if (!courierType || !result.success) {
+    return {
+      ...result,
+      normalizedStatus: (currentStatus as UniversalStatus) || 'BOOKED',
+      rawCourierStatus: result.courierStatus || '',
+      wasMapped: false,
+    };
+  }
+
+  const rawCourierStatus = result.courierStatus || result.status;
+  const { normalizedStatus, mapped } = normalizeStatus(rawCourierStatus, courierType, currentStatus);
+
+  return {
+    ...result,
+    normalizedStatus,
+    rawCourierStatus,
+    wasMapped: mapped,
+  };
 }
 
 export { leopardsService, postexService };
+export { normalizeStatus, detectCourierType, isFinalStatus, UNIVERSAL_STATUSES } from '../statusNormalization';
+export type { UniversalStatus } from '../statusNormalization';

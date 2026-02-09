@@ -48,19 +48,44 @@ import type { Order } from "@shared/schema";
 import { Link } from "wouter";
 import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
 
+const STATUS_COLORS: Record<string, string> = {
+  'BOOKED': "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
+  'PICKED_UP': "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300",
+  'ARRIVED_AT_ORIGIN': "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
+  'IN_TRANSIT': "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300",
+  'ARRIVED_AT_DESTINATION': "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
+  'OUT_FOR_DELIVERY': "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300",
+  'DELIVERY_ATTEMPTED': "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300",
+  'DELIVERED': "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
+  'DELIVERY_FAILED': "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
+  'RETURNED_TO_SHIPPER': "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
+  'RETURN_IN_TRANSIT': "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
+  'CANCELLED': "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
+  'Unfulfilled': "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  'BOOKED': 'Booked',
+  'PICKED_UP': 'Picked Up',
+  'ARRIVED_AT_ORIGIN': 'At Origin',
+  'IN_TRANSIT': 'In Transit',
+  'ARRIVED_AT_DESTINATION': 'At Destination',
+  'OUT_FOR_DELIVERY': 'Out for Delivery',
+  'DELIVERY_ATTEMPTED': 'Attempted',
+  'DELIVERED': 'Delivered',
+  'DELIVERY_FAILED': 'Failed',
+  'RETURNED_TO_SHIPPER': 'Returned',
+  'RETURN_IN_TRANSIT': 'Return in Transit',
+  'CANCELLED': 'Cancelled',
+  'Unfulfilled': 'Unfulfilled',
+};
+
 function getStatusColor(status: string): string {
-  const s = status.toLowerCase();
-  if (s === 'delivered') return "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300";
-  if (s.includes('return') || s.includes('reverse')) return "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300";
-  if (s === 'cancelled') return "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300";
-  if (s.includes('fail') || s.includes('refused') || s.includes('not accepted')) return "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300";
-  if (s.includes('attempt') || s.includes('re-attempt')) return "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300";
-  if (s.includes('dispatch') || s.includes('transit') || s.includes('route') || s.includes('picked')) return "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300";
-  if (s.includes('arrived') || s.includes('destination') || s.includes('hub') || s.includes('station')) return "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300";
-  if (s.includes('out for delivery') || s.includes('out for')) return "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300";
-  if (s === 'unfulfilled') return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
-  if (s.includes('book') || s.includes('pickup') || s.includes('not picked') || s.includes('pending') || s.includes('shipment created')) return "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300";
-  return "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300";
+  return STATUS_COLORS[status] || "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300";
+}
+
+function getStatusLabel(status: string): string {
+  return STATUS_LABELS[status] || status;
 }
 
 // Generate month tabs from January 2026 to current month
@@ -90,10 +115,12 @@ const courierOptions = [
   { value: "tcs", label: "TCS" },
 ];
 
-function getStatusBadge(status: string | null, hasCourierTracking: boolean) {
-  const displayStatus = status || 'Unfulfilled';
+function getStatusBadge(status: string | null, hasCourierTracking: boolean, rawStatus?: string | null) {
+  const displayStatus = (!hasCourierTracking && (!status || status === 'pending')) ? 'Unfulfilled' : (status || 'Unfulfilled');
   const colorClass = getStatusColor(displayStatus);
-  return <Badge className={`${colorClass} text-xs font-medium`} data-testid={`badge-status-${displayStatus.toLowerCase().replace(/\s+/g, '-')}`}>{displayStatus}</Badge>;
+  const label = getStatusLabel(displayStatus);
+  const title = rawStatus ? `Courier: ${rawStatus}` : undefined;
+  return <Badge className={`${colorClass} text-xs font-medium`} title={title} data-testid={`badge-status-${displayStatus.toLowerCase().replace(/\s+/g, '-')}`}>{label}</Badge>;
 }
 
 interface OrdersResponse {
@@ -157,7 +184,7 @@ export default function Orders() {
   });
   const uniqueCities = citiesData?.cities || [];
 
-  const { data: statusesData } = useQuery<{ statuses: string[] }>({
+  const { data: statusesData } = useQuery<{ statuses: { value: string; label: string }[] }>({
     queryKey: ["/api/orders/statuses"],
     queryFn: async () => {
       const res = await fetch("/api/orders/statuses", { credentials: "include" });
@@ -165,7 +192,7 @@ export default function Orders() {
       return res.json();
     },
   });
-  const uniqueStatuses = statusesData?.statuses || [];
+  const universalStatuses = statusesData?.statuses || [];
   const totalPages = Math.ceil((data?.total || 0) / pageSize);
 
   const syncOrdersMutation = useMutation({
@@ -247,7 +274,7 @@ export default function Orders() {
 
   const handleExport = () => {
     const csv = orders.map((o) => 
-      `"${o.orderNumber}","${o.customerName}","${o.customerPhone || ""}","${o.city || ""}","${(o.shippingAddress || "").replace(/"/g, '""')}","${o.totalQuantity || 1}","${o.totalAmount}","${(o.tags || []).join(";")}","${o.courierTracking ? o.shipmentStatus || "Pending" : "Unfulfilled"}","${(o.remark || "").replace(/"/g, '""')}"`
+      `"${o.orderNumber}","${o.customerName}","${o.customerPhone || ""}","${o.city || ""}","${(o.shippingAddress || "").replace(/"/g, '""')}","${o.totalQuantity || 1}","${o.totalAmount}","${(o.tags || []).join(";")}","${o.courierTracking ? getStatusLabel(o.shipmentStatus || "BOOKED") : "Unfulfilled"}","${(o.remark || "").replace(/"/g, '""')}"`
     ).join("\n");
     const header = "Order ID,Customer Name,Phone,City,Address,Qty,Amount,Tags,Status,Remark\n";
     const blob = new Blob([header + csv], { type: "text/csv" });
@@ -319,9 +346,9 @@ export default function Orders() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Statuses</SelectItem>
-              <SelectItem value="unfulfilled">Unfulfilled</SelectItem>
-              {uniqueStatuses.filter(s => s.toLowerCase() !== 'unfulfilled').map((status) => (
-                <SelectItem key={status} value={status}>{status}</SelectItem>
+              <SelectItem value="Unfulfilled">Unfulfilled</SelectItem>
+              {universalStatuses.map((s) => (
+                <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -462,20 +489,20 @@ export default function Orders() {
                           All Statuses
                         </DropdownMenuItem>
                         <DropdownMenuItem 
-                          onSelect={() => { setStatusFilter("unfulfilled"); setPage(1); }}
-                          className={statusFilter === "unfulfilled" ? "bg-muted font-medium" : ""}
+                          onSelect={() => { setStatusFilter("Unfulfilled"); setPage(1); }}
+                          className={statusFilter === "Unfulfilled" ? "bg-muted font-medium" : ""}
                           data-testid="status-option-unfulfilled"
                         >
                           Unfulfilled
                         </DropdownMenuItem>
-                        {uniqueStatuses.filter(s => s.toLowerCase() !== 'unfulfilled').map((status) => (
+                        {universalStatuses.map((s) => (
                           <DropdownMenuItem 
-                            key={status} 
-                            onSelect={() => { setStatusFilter(status); setPage(1); }}
-                            className={statusFilter === status ? "bg-muted font-medium" : ""}
-                            data-testid={`status-option-${status.toLowerCase().replace(/\s+/g, '-')}`}
+                            key={s.value} 
+                            onSelect={() => { setStatusFilter(s.value); setPage(1); }}
+                            className={statusFilter === s.value ? "bg-muted font-medium" : ""}
+                            data-testid={`status-option-${s.value.toLowerCase().replace(/\s+/g, '-')}`}
                           >
-                            {status}
+                            {s.label}
                           </DropdownMenuItem>
                         ))}
                       </DropdownMenuContent>
@@ -545,7 +572,7 @@ export default function Orders() {
                     data-testid={`table-row-order-${order.id}`}
                   >
                     <td className="p-2 pl-4">
-                      {getStatusBadge(order.shipmentStatus, !!order.courierTracking)}
+                      {getStatusBadge(order.shipmentStatus, !!order.courierTracking, (order as any).courierRawStatus)}
                     </td>
                     <td className="p-2">
                       <Link 

@@ -38,13 +38,18 @@ import { format } from "date-fns";
 
 const statusOptions = [
   { value: "all", label: "All Statuses" },
-  { value: "booked", label: "Booked" },
-  { value: "picked", label: "Picked" },
-  { value: "in_transit", label: "In Transit" },
-  { value: "out_for_delivery", label: "Out for Delivery" },
-  { value: "delivered", label: "Delivered" },
-  { value: "returned", label: "Returned" },
-  { value: "failed", label: "Failed" },
+  { value: "BOOKED", label: "Booked" },
+  { value: "PICKED_UP", label: "Picked Up" },
+  { value: "ARRIVED_AT_ORIGIN", label: "At Origin" },
+  { value: "IN_TRANSIT", label: "In Transit" },
+  { value: "ARRIVED_AT_DESTINATION", label: "At Destination" },
+  { value: "OUT_FOR_DELIVERY", label: "Out for Delivery" },
+  { value: "DELIVERY_ATTEMPTED", label: "Attempted" },
+  { value: "DELIVERED", label: "Delivered" },
+  { value: "DELIVERY_FAILED", label: "Failed" },
+  { value: "RETURNED_TO_SHIPPER", label: "Returned" },
+  { value: "RETURN_IN_TRANSIT", label: "Return in Transit" },
+  { value: "CANCELLED", label: "Cancelled" },
 ];
 
 const courierOptions = [
@@ -54,21 +59,35 @@ const courierOptions = [
   { value: "tcs", label: "TCS" },
 ];
 
+const SHIPMENT_STATUS_COLORS: Record<string, { color: string; icon: React.ElementType }> = {
+  'BOOKED': { color: "bg-blue-500/10 text-blue-600 border-blue-500/20", icon: Package },
+  'PICKED_UP': { color: "bg-indigo-500/10 text-indigo-600 border-indigo-500/20", icon: Package },
+  'ARRIVED_AT_ORIGIN': { color: "bg-purple-500/10 text-purple-600 border-purple-500/20", icon: Package },
+  'IN_TRANSIT': { color: "bg-amber-500/10 text-amber-600 border-amber-500/20", icon: Truck },
+  'ARRIVED_AT_DESTINATION': { color: "bg-purple-500/10 text-purple-600 border-purple-500/20", icon: Truck },
+  'OUT_FOR_DELIVERY': { color: "bg-amber-500/10 text-amber-600 border-amber-500/20", icon: Truck },
+  'DELIVERY_ATTEMPTED': { color: "bg-orange-500/10 text-orange-600 border-orange-500/20", icon: AlertCircle },
+  'DELIVERED': { color: "bg-green-500/10 text-green-600 border-green-500/20", icon: CheckCircle2 },
+  'DELIVERY_FAILED': { color: "bg-red-500/10 text-red-600 border-red-500/20", icon: AlertCircle },
+  'RETURNED_TO_SHIPPER': { color: "bg-red-500/10 text-red-600 border-red-500/20", icon: AlertCircle },
+  'RETURN_IN_TRANSIT': { color: "bg-red-500/10 text-red-600 border-red-500/20", icon: AlertCircle },
+  'CANCELLED': { color: "bg-red-500/10 text-red-600 border-red-500/20", icon: AlertCircle },
+};
+
+const SHIPMENT_STATUS_LABELS: Record<string, string> = {
+  'BOOKED': 'Booked', 'PICKED_UP': 'Picked Up', 'ARRIVED_AT_ORIGIN': 'At Origin',
+  'IN_TRANSIT': 'In Transit', 'ARRIVED_AT_DESTINATION': 'At Destination',
+  'OUT_FOR_DELIVERY': 'Out for Delivery', 'DELIVERY_ATTEMPTED': 'Attempted',
+  'DELIVERED': 'Delivered', 'DELIVERY_FAILED': 'Failed',
+  'RETURNED_TO_SHIPPER': 'Returned', 'RETURN_IN_TRANSIT': 'Return in Transit',
+  'CANCELLED': 'Cancelled',
+};
+
 function getStatusBadge(status: string) {
-  const statusConfig: Record<string, { color: string; icon: React.ElementType }> = {
-    booked: { color: "bg-blue-500/10 text-blue-600 border-blue-500/20", icon: Package },
-    picked: { color: "bg-indigo-500/10 text-indigo-600 border-indigo-500/20", icon: Package },
-    in_transit: { color: "bg-amber-500/10 text-amber-600 border-amber-500/20", icon: Truck },
-    out_for_delivery: { color: "bg-purple-500/10 text-purple-600 border-purple-500/20", icon: Truck },
-    delivered: { color: "bg-green-500/10 text-green-600 border-green-500/20", icon: CheckCircle2 },
-    returned: { color: "bg-red-500/10 text-red-600 border-red-500/20", icon: AlertCircle },
-    failed: { color: "bg-red-500/10 text-red-600 border-red-500/20", icon: AlertCircle },
-  };
+  const config = SHIPMENT_STATUS_COLORS[status] || { color: "bg-gray-500/10 text-gray-600", icon: Clock };
+  const label = SHIPMENT_STATUS_LABELS[status] || status;
 
-  const config = statusConfig[status] || { color: "bg-gray-500/10 text-gray-600", icon: Clock };
-  const displayStatus = status.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
-
-  return <Badge className={config.color}>{displayStatus}</Badge>;
+  return <Badge className={config.color}>{label}</Badge>;
 }
 
 interface ShipmentWithOrder extends Shipment {
