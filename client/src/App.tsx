@@ -12,10 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 import Landing from "@/pages/landing";
 import Dashboard from "@/pages/dashboard";
-import OrdersNew from "@/pages/orders-new";
-import OrdersReady from "@/pages/orders-ready";
-import OrdersFulfilled from "@/pages/orders-fulfilled";
-import OrdersCancelled from "@/pages/orders-cancelled";
+import Orders from "@/pages/orders";
 import OrderDetails from "@/pages/order-details";
 import Shipments from "@/pages/shipments";
 import Analytics from "@/pages/analytics";
@@ -33,14 +30,8 @@ function AppRoutes() {
         <Redirect to="/dashboard" />
       </Route>
       <Route path="/dashboard" component={Dashboard} />
-      <Route path="/orders/new" component={OrdersNew} />
-      <Route path="/orders/ready" component={OrdersReady} />
-      <Route path="/orders/fulfilled" component={OrdersFulfilled} />
-      <Route path="/orders/cancelled" component={OrdersCancelled} />
       <Route path="/orders/:id" component={OrderDetails} />
-      <Route path="/orders">
-        <Redirect to="/orders/new" />
-      </Route>
+      <Route path="/orders" component={Orders} />
       <Route path="/shipments" component={Shipments} />
       <Route path="/analytics" component={Analytics} />
       <Route path="/cod-reconciliation" component={CodReconciliation} />

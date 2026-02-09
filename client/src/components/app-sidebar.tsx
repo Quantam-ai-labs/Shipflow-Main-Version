@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useLocation, Link } from "wouter";
 import {
   Sidebar,
@@ -11,13 +10,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarMenuSub,
-  SidebarMenuSubItem,
-  SidebarMenuSubButton,
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,43 +31,20 @@ import {
   Store,
   LogOut,
   ChevronUp,
-  ChevronRight,
-  Inbox,
-  CheckCircle2,
-  ShoppingBag,
-  XCircle,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
-import { useQuery } from "@tanstack/react-query";
 
-const orderSubItems = [
+const mainNavItems = [
   {
-    title: "New Orders",
-    url: "/orders/new",
-    icon: Inbox,
-    countKey: "NEW" as const,
+    title: "Dashboard",
+    url: "/dashboard",
+    icon: LayoutDashboard,
   },
   {
-    title: "Ready to Ship",
-    url: "/orders/ready",
-    icon: CheckCircle2,
-    countKey: "READY_TO_SHIP" as const,
+    title: "Orders",
+    url: "/orders",
+    icon: Package,
   },
-  {
-    title: "Fulfilled",
-    url: "/orders/fulfilled",
-    icon: ShoppingBag,
-    countKey: "FULFILLED" as const,
-  },
-  {
-    title: "Cancelled",
-    url: "/orders/cancelled",
-    icon: XCircle,
-    countKey: "CANCELLED" as const,
-  },
-];
-
-const otherNavItems = [
   {
     title: "Shipments",
     url: "/shipments",
@@ -111,13 +83,6 @@ const settingsNavItems = [
 export function AppSidebar() {
   const [location] = useLocation();
   const { user, logout, isLoggingOut } = useAuth();
-  const isOrdersSection = location.startsWith("/orders");
-  const [ordersOpen, setOrdersOpen] = useState(isOrdersSection);
-
-  const { data: counts } = useQuery<{ NEW: number; READY_TO_SHIP: number; FULFILLED: number; CANCELLED: number }>({
-    queryKey: ["/api/orders/counts"],
-    refetchInterval: 30000,
-  });
 
   const getUserInitials = () => {
     if (user?.firstName && user?.lastName) {
@@ -153,57 +118,11 @@ export function AppSidebar() {
           <SidebarGroupLabel>Main</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  isActive={location === "/dashboard"}
-                >
-                  <Link href="/dashboard" data-testid="nav-dashboard">
-                    <LayoutDashboard className="w-4 h-4" />
-                    <span>Dashboard</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  isActive={isOrdersSection}
-                  onClick={() => setOrdersOpen(!ordersOpen)}
-                  data-testid="nav-orders"
-                >
-                  <Package className="w-4 h-4" />
-                  <span>Orders</span>
-                  <ChevronRight className={`ml-auto w-4 h-4 transition-transform duration-200 ${ordersOpen ? "rotate-90" : ""}`} />
-                </SidebarMenuButton>
-                {ordersOpen && (
-                  <SidebarMenuSub>
-                    {orderSubItems.map((item) => (
-                      <SidebarMenuSubItem key={item.url}>
-                        <SidebarMenuSubButton
-                          asChild
-                          isActive={location === item.url}
-                        >
-                          <Link href={item.url} data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
-                            <item.icon className="w-4 h-4" />
-                            <span className="flex-1">{item.title}</span>
-                            {counts && counts[item.countKey] > 0 && (
-                              <Badge variant="secondary" className="ml-auto text-xs min-w-[1.5rem] justify-center" data-testid={`count-${item.countKey.toLowerCase()}`}>
-                                {counts[item.countKey]}
-                              </Badge>
-                            )}
-                          </Link>
-                        </SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
-                    ))}
-                  </SidebarMenuSub>
-                )}
-              </SidebarMenuItem>
-
-              {otherNavItems.map((item) => (
+              {mainNavItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild
-                    isActive={location === item.url || location.startsWith(item.url)}
+                    isActive={location === item.url || (item.url !== "/dashboard" && location.startsWith(item.url))}
                   >
                     <Link href={item.url} data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
                       <item.icon className="w-4 h-4" />

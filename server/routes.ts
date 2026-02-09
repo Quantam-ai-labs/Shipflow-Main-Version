@@ -297,7 +297,7 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
 
-      const { search, status, courier, city, month, workflowStatus, page, pageSize } = req.query;
+      const { search, status, courier, city, month, page, pageSize } = req.query;
       
       const result = await storage.getOrders(merchantId, {
         search: search as string,
@@ -305,7 +305,6 @@ export async function registerRoutes(
         courier: courier as string,
         city: city as string,
         month: month as string,
-        workflowStatus: workflowStatus as string,
         page: parseInt(page as string) || 1,
         pageSize: parseInt(pageSize as string) || 20,
       });
@@ -314,60 +313,6 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching orders:", error);
       res.status(500).json({ message: "Failed to fetch orders" });
-    }
-  });
-
-  app.get("/api/orders/counts", isAuthenticated, async (req, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-
-      const counts = await storage.getWorkflowCounts(merchantId);
-      res.json(counts);
-    } catch (error) {
-      console.error("Error fetching workflow counts:", error);
-      res.status(500).json({ message: "Failed to fetch counts" });
-    }
-  });
-
-  app.post("/api/orders/:id/confirm", isAuthenticated, async (req, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-
-      const userId = (req.user as any)?.id || "unknown";
-      const orderId = req.params.id as string;
-      const order = await storage.confirmOrder(merchantId, orderId, userId);
-      if (!order) {
-        return res.status(404).json({ message: "Order not found or not in NEW status" });
-      }
-      res.json(order);
-    } catch (error) {
-      console.error("Error confirming order:", error);
-      res.status(500).json({ message: "Failed to confirm order" });
-    }
-  });
-
-  app.post("/api/orders/:id/cancel", isAuthenticated, async (req, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-
-      const userId = (req.user as any)?.id || "unknown";
-      const orderId = req.params.id as string;
-      const { reason } = req.body;
-      if (!reason || typeof reason !== "string") {
-        return res.status(400).json({ message: "Cancel reason is required" });
-      }
-
-      const order = await storage.cancelOrder(merchantId, orderId, userId, reason);
-      if (!order) {
-        return res.status(404).json({ message: "Order not found or not in NEW status" });
-      }
-      res.json(order);
-    } catch (error) {
-      console.error("Error cancelling order:", error);
-      res.status(500).json({ message: "Failed to cancel order" });
     }
   });
 
