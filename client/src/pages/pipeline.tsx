@@ -1182,7 +1182,7 @@ export default function Pipeline() {
                     <div className="flex items-center gap-1 flex-wrap">
                       {bookingResultsModal.results.batchId && (
                         <Button size="sm" variant="outline" onClick={() => window.open(`/api/print/batch-awb/${bookingResultsModal.results.batchId}.pdf`, "_blank")} data-testid="button-download-awb">
-                          <Printer className="w-3.5 h-3.5 mr-1" />Download Airway Bills
+                          <Printer className="w-3.5 h-3.5 mr-1" />Download Courier AWBs
                         </Button>
                       )}
                       <Button size="sm" variant="ghost" onClick={copyTrackingNumbers} data-testid="button-copy-tracking">

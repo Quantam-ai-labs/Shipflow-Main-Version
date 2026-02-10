@@ -29,8 +29,6 @@ import {
   Tag,
   Printer,
   Download,
-  RefreshCw,
-  ExternalLink,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -95,35 +93,20 @@ export default function OrderDetails() {
     enabled: !!id,
   });
 
-  const { data: printData, isLoading: printLoading } = useQuery<{
-    order: { id: string; orderNumber: string; courierName: string; courierTracking: string };
-    shipments: any[];
-    printRecords: { id: string; trackingNumber: string; pdfPath: string; generatedAt: string }[];
-  }>({
-    queryKey: ["/api/print/order", id],
-    queryFn: async () => {
-      const res = await fetch(`/api/print/order/${id}`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch print info");
-      return res.json();
-    },
-    enabled: !!id && !!order?.courierTracking,
-  });
-
   const regenerateMutation = useMutation({
     mutationFn: async () => {
       return apiRequest("POST", `/api/print/regenerate/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/print/order", id] });
       toast({
-        title: "PDF Regenerated",
-        description: "A fresh airway bill PDF has been generated.",
+        title: "Print Record Updated",
+        description: "Print record refreshed successfully.",
       });
     },
     onError: () => {
       toast({
         title: "Error",
-        description: "Failed to regenerate PDF. Please try again.",
+        description: "Failed to refresh print record.",
         variant: "destructive",
       });
     },
@@ -589,83 +572,28 @@ export default function OrderDetails() {
                   )}
                 </div>
                 <Separator />
-                {printLoading ? (
-                  <div className="space-y-2">
-                    <Skeleton className="h-9 w-full" />
-                    <Skeleton className="h-9 w-full" />
-                  </div>
-                ) : printData && printData.printRecords && printData.printRecords.length > 0 ? (
-                  <div className="space-y-2">
-                    {(() => {
-                      const latestRecord = printData.printRecords[0];
-                      return (
-                        <>
-                          <p className="text-xs text-muted-foreground" data-testid="text-print-generated-at">
-                            Generated {format(new Date(latestRecord.generatedAt), "MMM dd, h:mm a")}
-                          </p>
-                          <div className="flex flex-col gap-2">
-                            <Button
-                              variant="outline"
-                              className="w-full justify-start gap-2"
-                              data-testid="button-print-airway-bill"
-                              onClick={() => window.open(`/api/print/shipment/${latestRecord.id}.pdf`, "_blank")}
-                            >
-                              <Printer className="w-4 h-4" />
-                              Print Airway Bill
-                            </Button>
-                            <Button
-                              variant="outline"
-                              className="w-full justify-start gap-2"
-                              data-testid="button-download-pdf"
-                              asChild
-                            >
-                              <a href={`/api/print/shipment/${latestRecord.id}.pdf`} download>
-                                <Download className="w-4 h-4" />
-                                Download PDF
-                              </a>
-                            </Button>
-                            <Button
-                              variant="outline"
-                              className="w-full justify-start gap-2"
-                              data-testid="button-regenerate-pdf"
-                              onClick={() => regenerateMutation.mutate()}
-                              disabled={regenerateMutation.isPending}
-                            >
-                              <RefreshCw className={`w-4 h-4 ${regenerateMutation.isPending ? "animate-spin" : ""}`} />
-                              {regenerateMutation.isPending ? "Regenerating..." : "Regenerate PDF"}
-                            </Button>
-                          </div>
-                        </>
-                      );
-                    })()}
-                    {(order as any).courierSlipUrl && (
-                      <Button
-                        variant="outline"
-                        className="w-full justify-start gap-2"
-                        data-testid="link-courier-slip"
-                        asChild
-                      >
-                        <a href={(order as any).courierSlipUrl} target="_blank" rel="noopener noreferrer">
-                          <ExternalLink className="w-4 h-4" />
-                          Open Courier Slip
-                        </a>
-                      </Button>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-center py-4">
-                    <p className="text-sm text-muted-foreground mb-3" data-testid="text-no-print-records">No print records yet</p>
-                    <Button
-                      variant="outline"
-                      data-testid="button-generate-pdf"
-                      onClick={() => regenerateMutation.mutate()}
-                      disabled={regenerateMutation.isPending}
-                    >
-                      <Printer className="w-4 h-4 mr-2" />
-                      {regenerateMutation.isPending ? "Generating..." : "Generate"}
-                    </Button>
-                  </div>
-                )}
+                <div className="flex flex-col gap-2">
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start gap-2"
+                    data-testid="button-print-airway-bill"
+                    onClick={() => window.open(`/api/print/native-slip/${(order as any).id}.pdf`, "_blank")}
+                  >
+                    <Printer className="w-4 h-4" />
+                    Print Courier Airway Bill
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start gap-2"
+                    data-testid="button-download-pdf"
+                    asChild
+                  >
+                    <a href={`/api/print/native-slip/${(order as any).id}.pdf`} download>
+                      <Download className="w-4 h-4" />
+                      Download Courier AWB
+                    </a>
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           )}

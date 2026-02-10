@@ -567,7 +567,7 @@ export default function Shipments() {
                                     variant="ghost"
                                     size="icon"
                                     onClick={() => window.open(`/api/print/batch-awb/${batch.id}.pdf`, "_blank")}
-                                    title="Download All Airway Bills"
+                                    title="Download Courier Airway Bills"
                                     data-testid={`button-download-batch-awb-${batch.id}`}
                                   >
                                     <Printer className="w-4 h-4" />
@@ -663,7 +663,7 @@ export default function Shipments() {
                     data-testid="button-download-batch-awb"
                   >
                     <Printer className="w-4 h-4 mr-2" />
-                    Print All AWBs
+                    Print Courier AWBs
                   </Button>
                 )}
                 {batchDetailData?.batch?.pdfBatchPath && (
@@ -761,30 +761,17 @@ export default function Shipments() {
                           ) : "-"}
                         </TableCell>
                         <TableCell>
-                          {item.bookingStatus === "BOOKED" && item.trackingNumber && (
+                          {item.bookingStatus === "BOOKED" && item.trackingNumber && item.orderId && (
                             <div className="flex items-center gap-1">
-                              {item.printRecordId && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => window.open(`/api/print/shipment/${item.printRecordId}.pdf`, "_blank")}
-                                  title="Download Airway Bill"
-                                  data-testid={`button-download-awb-${item.id}`}
-                                >
-                                  <Download className="w-4 h-4" />
-                                </Button>
-                              )}
-                              {item.slipUrl && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => window.open(item.slipUrl!, "_blank")}
-                                  title="View Courier Slip"
-                                  data-testid={`button-print-slip-${item.id}`}
-                                >
-                                  <Printer className="w-4 h-4" />
-                                </Button>
-                              )}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => window.open(`/api/print/native-slip/${item.orderId}.pdf`, "_blank")}
+                                title="Download Courier Airway Bill"
+                                data-testid={`button-download-awb-${item.id}`}
+                              >
+                                <Download className="w-4 h-4" />
+                              </Button>
                             </div>
                           )}
                         </TableCell>
