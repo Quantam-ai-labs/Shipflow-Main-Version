@@ -496,24 +496,142 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/orders/:id/customer", isAuthenticated, async (req, res) => {
+  app.get("/api/orders/:id/change-log", isAuthenticated, async (req, res) => {
     try {
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
       const orderId = req.params.id;
-      const { customerPhone, shippingAddress, city } = req.body;
+      const logs = await storage.getOrderChangeLog(merchantId, orderId);
+      res.json(logs);
+    } catch (error) {
+      console.error("Error fetching change log:", error);
+      res.status(500).json({ message: "Failed to fetch change log" });
+    }
+  });
+
+  const PICKED_UP_OR_BEYOND_STATUSES = [
+    'PICKED_UP', 'IN_TRANSIT', 'ARRIVED_AT_DESTINATION', 'OUT_FOR_DELIVERY',
+    'DELIVERY_ATTEMPTED', 'DELIVERED', 'DELIVERY_FAILED', 'RETURNED_TO_SHIPPER', 'RETURN_IN_TRANSIT'
+  ];
+
+  app.patch("/api/orders/:id/customer", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const orderId = req.params.id;
+
+      const order = await storage.getOrderById(merchantId, orderId);
+      if (!order) return res.status(404).json({ message: "Order not found" });
+
+      if (order.shipmentStatus && PICKED_UP_OR_BEYOND_STATUSES.includes(order.shipmentStatus)) {
+        return res.status(403).json({ message: "Order is locked - courier has picked up the shipment" });
+      }
+
+      const { customerName, customerPhone, shippingAddress, city } = req.body;
 
       const updateData: any = {};
-      if (customerPhone !== undefined) updateData.customerPhone = customerPhone;
-      if (shippingAddress !== undefined) updateData.shippingAddress = shippingAddress;
-      if (city !== undefined) updateData.city = city;
+      const fieldsToCheck: Array<{ key: string; newVal: any }> = [];
+      if (customerName !== undefined) { updateData.customerName = customerName; fieldsToCheck.push({ key: 'customerName', newVal: customerName }); }
+      if (customerPhone !== undefined) { updateData.customerPhone = customerPhone; fieldsToCheck.push({ key: 'customerPhone', newVal: customerPhone }); }
+      if (shippingAddress !== undefined) { updateData.shippingAddress = shippingAddress; fieldsToCheck.push({ key: 'shippingAddress', newVal: shippingAddress }); }
+      if (city !== undefined) { updateData.city = city; fieldsToCheck.push({ key: 'city', newVal: city }); }
 
       const updated = await storage.updateOrderWorkflow(merchantId, orderId, updateData);
       if (!updated) return res.status(404).json({ message: "Order not found" });
+
+      const actorUserId = req.user?.claims?.sub || null;
+      const firstName = req.user?.claims?.first_name || "";
+      const lastName = req.user?.claims?.last_name || "";
+      const actorName = (firstName + " " + lastName).trim() || "Unknown";
+
+      for (const field of fieldsToCheck) {
+        const oldValue = (order as any)[field.key];
+        if (String(oldValue ?? "") !== String(field.newVal ?? "")) {
+          await storage.createOrderChangeLog({
+            orderId,
+            merchantId,
+            changeType: "FIELD_EDIT",
+            fieldName: field.key,
+            oldValue: oldValue != null ? String(oldValue) : null,
+            newValue: field.newVal != null ? String(field.newVal) : null,
+            actorUserId,
+            actorName,
+            actorType: "user",
+          });
+        }
+      }
+
       res.json(updated);
     } catch (error) {
       console.error("Error updating customer info:", error);
       res.status(500).json({ message: "Failed to update customer info" });
+    }
+  });
+
+  app.post("/api/orders/:id/cancel-booking", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const orderId = req.params.id;
+
+      const order = await storage.getOrderById(merchantId, orderId);
+      if (!order) return res.status(404).json({ message: "Order not found" });
+
+      if (order.workflowStatus !== "FULFILLED") {
+        return res.status(400).json({ message: "Order must be in FULFILLED status to cancel booking" });
+      }
+
+      if (order.shipmentStatus && PICKED_UP_OR_BEYOND_STATUSES.includes(order.shipmentStatus)) {
+        return res.status(403).json({ message: "Cannot cancel - courier has already picked up" });
+      }
+
+      const oldCourierTracking = order.courierTracking;
+      const oldCourierName = order.courierName;
+
+      await storage.updateOrderWorkflow(merchantId, orderId, {
+        courierName: null,
+        courierTracking: null,
+        courierSlipUrl: null,
+        bookingStatus: null,
+        bookingError: null,
+        bookedAt: null,
+        shipmentStatus: 'Unfulfilled',
+        courierRawStatus: null,
+      });
+
+      const userId = req.user?.claims?.sub || "system";
+      const result = await transitionOrder({
+        merchantId,
+        orderId,
+        toStatus: "PENDING",
+        action: "cancel_booking",
+        actorUserId: userId,
+        actorType: "user",
+        reason: "Booking cancelled by user",
+      });
+
+      if (!result.success) {
+        return res.status(400).json({ message: result.error });
+      }
+
+      const firstName = req.user?.claims?.first_name || "";
+      const lastName = req.user?.claims?.last_name || "";
+      const actorName = (firstName + " " + lastName).trim() || "Unknown";
+
+      await storage.createOrderChangeLog({
+        orderId,
+        merchantId,
+        changeType: "BOOKING_CANCELLED",
+        actorUserId: userId,
+        actorName,
+        actorType: "user",
+        metadata: { oldCourierTracking, oldCourierName },
+      });
+
+      res.json(result.order);
+    } catch (error) {
+      console.error("Error cancelling booking:", error);
+      res.status(500).json({ message: "Failed to cancel booking" });
     }
   });
 
@@ -541,10 +659,14 @@ export async function registerRoutes(
       // Get remarks (scoped by merchantId via order ownership)
       const orderRemarks = await storage.getRemarks(merchantId, order.id);
 
+      // Get change log
+      const changeLog = await storage.getOrderChangeLog(merchantId, order.id);
+
       res.json({
         ...order,
         shipments: shipmentsWithEvents,
         remarks: orderRemarks,
+        changeLog,
       });
     } catch (error) {
       console.error("Error fetching order:", error);
@@ -643,6 +765,13 @@ export async function registerRoutes(
     try {
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
+
+      const order = await storage.getOrderById(merchantId, req.params.id);
+      if (!order) return res.status(404).json({ message: "Order not found" });
+      if (order.shipmentStatus && PICKED_UP_OR_BEYOND_STATUSES.includes(order.shipmentStatus)) {
+        return res.status(403).json({ message: "Order is locked - courier has picked up the shipment" });
+      }
+
       const { amount, method, reference, notes } = req.body;
       if (!amount || typeof amount !== "number" || amount <= 0) {
         return res.status(400).json({ message: "Amount must be a positive number" });
@@ -1773,10 +1902,11 @@ export async function registerRoutes(
         const items = order.lineItems as any[];
         if (items && items.length > 0) {
           return items.map((i: any) => {
-            const name = (i.name || i.title || "Item").replace(/\s*[-–]\s*(Small|Medium|Large|XL|XXL|S|M|L|XS|One Size).*$/i, "");
-            const short = name.length > 30 ? name.substring(0, 28) + ".." : name;
-            return i.quantity > 1 ? `${short} x${i.quantity}` : short;
-          }).join(", ");
+            const name = (i.name || i.title || "Item").trim();
+            const variant = i.variant_title ? ` - ${i.variant_title}` : "";
+            const qty = i.quantity > 1 ? ` x ${i.quantity}` : "";
+            return `${name}${variant}${qty}`;
+          }).join(" | ");
         }
         return order.itemSummary || "Order items";
       };

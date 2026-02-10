@@ -44,6 +44,7 @@ import { useToast } from "@/hooks/use-toast";
 interface OrderDetails extends Order {
   shipments: (Shipment & { events: ShipmentEvent[] })[];
   remarks: Remark[];
+  changeLog?: any[];
 }
 
 function getStatusBadge(status: string | null) {
@@ -504,42 +505,94 @@ export default function OrderDetails() {
             </CardContent>
           </Card>
 
-          {/* Workflow Audit Log */}
-          {auditLog && auditLog.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <History className="w-5 h-5" />
-                  Status History
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3" data-testid="audit-log-list">
-                  {auditLog.map((entry: any) => (
-                    <div key={entry.id} className="flex items-start gap-3 text-sm" data-testid={`audit-entry-${entry.id}`}>
-                      <div className="w-2 h-2 rounded-full bg-muted-foreground/40 mt-1.5 shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <Badge variant="outline" className="text-xs">{entry.fromStatus}</Badge>
-                          <span className="text-muted-foreground text-xs">to</span>
-                          <Badge variant="secondary" className="text-xs">{entry.toStatus}</Badge>
-                          {entry.actorType === "system" && (
-                            <Badge variant="outline" className="text-xs bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400">auto</Badge>
+          {/* Combined Activity History */}
+          {((auditLog && auditLog.length > 0) || (order?.changeLog && order.changeLog.length > 0)) && (() => {
+            const timeline: any[] = [];
+            if (auditLog) {
+              auditLog.forEach((e: any) => timeline.push({ ...e, _type: "status" as const, _time: new Date(e.createdAt).getTime() }));
+            }
+            if (order?.changeLog) {
+              order.changeLog.forEach((e: any) => timeline.push({ ...e, _type: "change" as const, _time: new Date(e.createdAt).getTime() }));
+            }
+            timeline.sort((a, b) => b._time - a._time);
+
+            return (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <History className="w-5 h-5" />
+                    Activity History
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3" data-testid="audit-log-list">
+                    {timeline.map((entry: any, idx: number) => (
+                      <div key={`${entry._type}-${entry.id || idx}`} className="flex items-start gap-3 text-sm" data-testid={`activity-entry-${idx}`}>
+                        <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
+                          entry._type === "status" ? "bg-blue-400" :
+                          entry.changeType === "BOOKING_CANCELLED" ? "bg-red-400" :
+                          entry.changeType === "PAYMENT_ADDED" || entry.changeType === "PAYMENT_REMOVED" ? "bg-green-400" :
+                          "bg-amber-400"
+                        }`} />
+                        <div className="flex-1 min-w-0">
+                          {entry._type === "status" ? (
+                            <>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <Badge variant="outline" className="text-xs">{entry.fromStatus}</Badge>
+                                <span className="text-muted-foreground text-xs">to</span>
+                                <Badge variant="secondary" className="text-xs">{entry.toStatus}</Badge>
+                                {entry.actorType === "system" && (
+                                  <Badge variant="outline" className="text-xs bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400">auto</Badge>
+                                )}
+                              </div>
+                              {entry.reason && (
+                                <p className="text-xs text-muted-foreground mt-0.5 truncate">{entry.reason}</p>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              {entry.changeType === "FIELD_EDIT" && (
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-xs font-medium capitalize">{(entry.fieldName || "").replace(/([A-Z])/g, ' $1').trim()}</span>
+                                  <span className="text-xs text-muted-foreground">changed</span>
+                                  {entry.oldValue && (
+                                    <>
+                                      <span className="text-xs text-muted-foreground">from</span>
+                                      <span className="text-xs line-through text-muted-foreground/70 max-w-[120px] truncate">{entry.oldValue}</span>
+                                    </>
+                                  )}
+                                  <span className="text-xs text-muted-foreground">to</span>
+                                  <span className="text-xs font-medium max-w-[120px] truncate">{entry.newValue}</span>
+                                </div>
+                              )}
+                              {entry.changeType === "BOOKING_CANCELLED" && (
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <Badge variant="destructive" className="text-xs">Booking Cancelled</Badge>
+                                  {entry.oldValue && <span className="text-xs text-muted-foreground">{entry.oldValue}</span>}
+                                </div>
+                              )}
+                              {(entry.changeType === "PAYMENT_ADDED" || entry.changeType === "PAYMENT_REMOVED") && (
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <Badge variant="outline" className="text-xs">{entry.changeType === "PAYMENT_ADDED" ? "Payment Added" : "Payment Removed"}</Badge>
+                                  {entry.newValue && <span className="text-xs">{entry.newValue}</span>}
+                                </div>
+                              )}
+                              {entry.actorName && (
+                                <span className="text-xs text-muted-foreground">by {entry.actorName}</span>
+                              )}
+                            </>
                           )}
+                          <p className="text-xs text-muted-foreground/70 mt-0.5">
+                            {entry.createdAt ? formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true }) : ""}
+                          </p>
                         </div>
-                        {entry.reason && (
-                          <p className="text-xs text-muted-foreground mt-0.5 truncate">{entry.reason}</p>
-                        )}
-                        <p className="text-xs text-muted-foreground/70 mt-0.5">
-                          {entry.createdAt ? formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true }) : ""}
-                        </p>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
         </div>
 
         {/* Sidebar */}

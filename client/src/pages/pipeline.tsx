@@ -167,6 +167,7 @@ export default function Pipeline() {
   const [holdUntil, setHoldUntil] = useState("");
 
   const [editingOrder, setEditingOrder] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [editAddress, setEditAddress] = useState("");
   const [editCity, setEditCity] = useState("");
@@ -277,6 +278,21 @@ export default function Pipeline() {
     },
     onError: (err: any) => {
       toast({ title: "Error", description: err.message || "Failed to mark as prepaid", variant: "destructive" });
+    },
+  });
+
+  const cancelBookingMutation = useMutation({
+    mutationFn: async (orderId: string) => {
+      const res = await apiRequest("POST", `/api/orders/${orderId}/cancel-booking`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders/workflow-counts"] });
+      toast({ title: "Booking cancelled", description: "Order moved back to Pending" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Cannot cancel", description: err.message || "Failed to cancel booking", variant: "destructive" });
     },
   });
 
@@ -521,14 +537,52 @@ export default function Pipeline() {
           )}
 
           {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "HOLD" || activeTab === "READY_TO_SHIP") && (
+            <>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => bulkMarkPrepaidMutation.mutate({ orderIds: Array.from(selectedIds), method: "CASH" })}
+                disabled={bulkMarkPrepaidMutation.isPending}
+                data-testid="bulk-mark-prepaid"
+              >
+                <CreditCard className="w-3.5 h-3.5 mr-1.5" />Mark Prepaid
+              </Button>
+              {selectedIds.size === 1 && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    const orderId = Array.from(selectedIds)[0];
+                    const order = orders.find(o => o.id === orderId);
+                    if (order && order.codPaymentStatus !== "PAID") {
+                      setPaymentModal({
+                        open: true,
+                        orderId: order.id,
+                        orderNumber: order.orderNumber,
+                        totalAmount: Number(order.totalAmount),
+                        prepaidAmount: Number(order.prepaidAmount || 0),
+                      });
+                    }
+                  }}
+                  data-testid="bulk-add-payment"
+                >
+                  <Plus className="w-3.5 h-3.5 mr-1.5" />Add Payment
+                </Button>
+              )}
+            </>
+          )}
+
+          {activeTab === "FULFILLED" && selectedIds.size > 0 && (
             <Button
               size="sm"
-              variant="secondary"
-              onClick={() => bulkMarkPrepaidMutation.mutate({ orderIds: Array.from(selectedIds), method: "CASH" })}
-              disabled={bulkMarkPrepaidMutation.isPending}
-              data-testid="bulk-mark-prepaid"
+              variant="destructive"
+              onClick={() => {
+                Array.from(selectedIds).forEach(id => cancelBookingMutation.mutate(id));
+              }}
+              disabled={cancelBookingMutation.isPending}
+              data-testid="bulk-cancel-booking"
             >
-              <CreditCard className="w-3.5 h-3.5 mr-1.5" />Mark Prepaid
+              <Undo2 className="w-3.5 h-3.5 mr-1.5" />Cancel Booking
             </Button>
           )}
 
@@ -595,8 +649,8 @@ export default function Pipeline() {
           <table className="w-full text-sm">
             <thead className="bg-muted/50 sticky top-0">
               <tr className="border-b">
-                {activeTab !== "CANCELLED" && activeTab !== "FULFILLED" && (
-                  <th className="w-10 px-3 py-2.5 text-left">
+                {activeTab !== "CANCELLED" && (
+                  <th className="w-10 px-3 py-2 text-left">
                     <Checkbox
                       checked={selectedIds.size === orders.length && orders.length > 0}
                       onCheckedChange={toggleSelectAll}
@@ -625,9 +679,7 @@ export default function Pipeline() {
                 {activeTab === "CANCELLED" && (
                   <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Reason</th>
                 )}
-                {activeTab !== "FULFILLED" && (
-                  <th className="px-3 py-2.5 text-right font-medium text-muted-foreground">Actions</th>
-                )}
+                <th className="px-3 py-2 text-right font-medium text-muted-foreground">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -639,8 +691,8 @@ export default function Pipeline() {
                   } ${activeTab === "HOLD" && order.holdUntil && isPast(new Date(order.holdUntil)) ? "bg-red-50/50 dark:bg-red-950/30" : ""}`}
                   data-testid={`order-row-${order.id}`}
                 >
-                  {activeTab !== "CANCELLED" && activeTab !== "FULFILLED" && (
-                    <td className="px-3 py-2.5">
+                  {activeTab !== "CANCELLED" && (
+                    <td className="px-3 py-1.5">
                       <Checkbox
                         checked={selectedIds.has(order.id)}
                         onCheckedChange={() => toggleSelect(order.id)}
@@ -648,7 +700,7 @@ export default function Pipeline() {
                       />
                     </td>
                   )}
-                  <td className="px-3 py-2.5">
+                  <td className="px-3 py-1.5">
                     <Link href={`/orders/detail/${order.id}`} className="font-medium text-sm hover:underline" data-testid={`link-order-${order.id}`}>
                       {order.orderNumber}
                     </Link>
@@ -661,9 +713,16 @@ export default function Pipeline() {
                       </div>
                     )}
                   </td>
-                  <td className="px-3 py-2.5">
-                    {editingOrder === order.id && activeTab === "PENDING" ? (
+                  <td className="px-3 py-1.5">
+                    {editingOrder === order.id && (activeTab === "NEW" || activeTab === "PENDING" || activeTab === "READY_TO_SHIP") ? (
                       <div className="space-y-1">
+                        <Input
+                          value={editName}
+                          onChange={e => setEditName(e.target.value)}
+                          placeholder="Name"
+                          className="h-7 text-xs"
+                          data-testid={`input-edit-name-${order.id}`}
+                        />
                         <Input
                           value={editPhone}
                           onChange={e => setEditPhone(e.target.value)}
@@ -689,7 +748,7 @@ export default function Pipeline() {
                           <Button size="sm" className="h-6 text-xs px-2" onClick={() => {
                             customerUpdateMutation.mutate({
                               orderId: order.id,
-                              data: { customerPhone: editPhone, shippingAddress: editAddress, city: editCity }
+                              data: { customerName: editName, customerPhone: editPhone, shippingAddress: editAddress, city: editCity }
                             });
                           }} data-testid={`button-save-edit-${order.id}`}>Save</Button>
                           <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={() => setEditingOrder(null)}>Cancel</Button>
@@ -702,8 +761,8 @@ export default function Pipeline() {
                       </div>
                     )}
                   </td>
-                  <td className="px-3 py-2.5 hidden md:table-cell text-sm">{order.city || "-"}</td>
-                  <td className="px-3 py-2.5">
+                  <td className="px-3 py-1.5 hidden md:table-cell text-sm">{order.city || "-"}</td>
+                  <td className="px-3 py-1.5">
                     <div className="font-medium text-sm">PKR {Number(order.totalAmount).toLocaleString()}</div>
                     {order.codPaymentStatus === "PAID" ? (
                       <Badge className="text-xs bg-green-500/10 text-green-600 border-green-500/20" data-testid={`badge-prepaid-${order.id}`}>Prepaid</Badge>
@@ -714,31 +773,11 @@ export default function Pipeline() {
                     ) : (
                       <div className="text-xs text-muted-foreground capitalize">{order.paymentMethod}</div>
                     )}
-                    {activeTab !== "FULFILLED" && activeTab !== "CANCELLED" && order.codPaymentStatus !== "PAID" && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-5 px-1 text-xs text-muted-foreground mt-0.5"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setPaymentModal({
-                            open: true,
-                            orderId: order.id,
-                            orderNumber: order.orderNumber,
-                            totalAmount: Number(order.totalAmount),
-                            prepaidAmount: Number(order.prepaidAmount || 0),
-                          });
-                        }}
-                        data-testid={`button-quick-pay-${order.id}`}
-                      >
-                        <Plus className="w-3 h-3 mr-0.5" />Pay
-                      </Button>
-                    )}
                   </td>
-                  <td className="px-3 py-2.5 hidden lg:table-cell text-xs text-muted-foreground max-w-[150px] truncate">
+                  <td className="px-3 py-1.5 hidden lg:table-cell text-xs text-muted-foreground max-w-[150px] truncate">
                     {order.totalQuantity || 1} item{(order.totalQuantity || 1) > 1 ? "s" : ""}
                   </td>
-                  <td className="px-3 py-2.5 hidden md:table-cell" data-testid={`cell-tags-${order.id}`}>
+                  <td className="px-3 py-1.5 hidden md:table-cell" data-testid={`cell-tags-${order.id}`}>
                     <div className="flex flex-wrap gap-1">
                       {getRoboTags(order.tags as string[]).map(tag => (
                         <Badge key={tag} className={`text-xs ${ROBO_TAG_CONFIG[tag]?.className}`} data-testid={`badge-tag-${tag}-${order.id}`}>
@@ -750,7 +789,7 @@ export default function Pipeline() {
 
                   {/* Pending-specific columns */}
                   {activeTab === "PENDING" && (
-                    <td className="px-3 py-2.5">
+                    <td className="px-3 py-1.5">
                       <Badge variant="secondary" className="text-xs mb-1" data-testid={`badge-pending-reason-${order.id}`}>
                         {PENDING_REASON_TYPES.find(r => r.value === order.pendingReasonType)?.label || order.pendingReasonType || "Unknown"}
                       </Badge>
@@ -762,7 +801,7 @@ export default function Pipeline() {
 
                   {/* Hold-specific columns */}
                   {activeTab === "HOLD" && (
-                    <td className="px-3 py-2.5">
+                    <td className="px-3 py-1.5">
                       {order.holdUntil ? (
                         <div>
                           <div className="text-xs">{format(new Date(order.holdUntil), "MMM d, h:mm a")}</div>
@@ -775,11 +814,11 @@ export default function Pipeline() {
                   {/* Fulfilled-specific columns */}
                   {activeTab === "FULFILLED" && (
                     <>
-                      <td className="px-3 py-2.5">
+                      <td className="px-3 py-1.5">
                         <div className="text-xs font-medium">{order.courierName || "-"}</div>
                         <div className="text-xs text-muted-foreground">{order.courierTracking || "-"}</div>
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td className="px-3 py-1.5">
                         <Badge className={`text-xs ${UNIVERSAL_STATUS_COLORS[order.shipmentStatus || ""] || "bg-slate-100 text-slate-700"}`}
                           data-testid={`badge-status-${order.id}`}
                           title={order.courierRawStatus || undefined}>
@@ -791,7 +830,7 @@ export default function Pipeline() {
 
                   {/* Cancelled-specific columns */}
                   {activeTab === "CANCELLED" && (
-                    <td className="px-3 py-2.5">
+                    <td className="px-3 py-1.5">
                       <div className="text-xs text-muted-foreground">{order.cancelReason || "No reason given"}</div>
                       {order.cancelledAt && (
                         <div className="text-xs text-muted-foreground/70">{format(new Date(order.cancelledAt), "MMM d, h:mm a")}</div>
@@ -800,76 +839,83 @@ export default function Pipeline() {
                   )}
 
                   {/* Action buttons */}
-                  {activeTab !== "FULFILLED" && (
-                    <td className="px-3 py-2.5 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "HOLD") && (
-                          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-green-600"
-                            onClick={() => handleSingleAction(order.id, activeTab === "HOLD" ? "release-hold" : activeTab === "PENDING" ? "fix-confirm" : "confirm")}
-                            disabled={isPending}
-                            data-testid={`button-confirm-${order.id}`}>
-                            <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
-                            {activeTab === "HOLD" ? "Release" : "Confirm"}
-                          </Button>
-                        )}
-                        {activeTab === "PENDING" && (
-                          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs"
-                            onClick={() => {
-                              setEditingOrder(order.id);
-                              setEditPhone(order.customerPhone || "");
-                              setEditAddress(order.shippingAddress || "");
-                              setEditCity(order.city || "");
-                            }}
-                            data-testid={`button-edit-${order.id}`}>
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </Button>
-                        )}
-                        {activeTab === "NEW" && (
-                          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-amber-600"
-                            onClick={() => handleSingleAction(order.id, "pending")}
-                            disabled={isPending}
-                            data-testid={`button-pending-${order.id}`}>
-                            <Clock className="w-3.5 h-3.5 mr-1" />Pending
-                          </Button>
-                        )}
-                        {(activeTab === "NEW" || activeTab === "PENDING") && (
-                          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-purple-600"
-                            onClick={() => handleSingleAction(order.id, "hold")}
-                            disabled={isPending}
-                            data-testid={`button-hold-${order.id}`}>
-                            <Pause className="w-3.5 h-3.5 mr-1" />Hold
-                          </Button>
-                        )}
-                        {activeTab === "HOLD" && (
-                          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-amber-600"
-                            onClick={() => handleSingleAction(order.id, "move-to-pending")}
-                            disabled={isPending}
-                            data-testid={`button-to-pending-${order.id}`}>
-                            <Clock className="w-3.5 h-3.5 mr-1" />Pending
-                          </Button>
-                        )}
-                        {activeTab === "READY_TO_SHIP" && (
-                          <Badge variant="secondary" className="text-xs">Ready</Badge>
-                        )}
-                        {activeTab !== "NEW" && order.previousWorkflowStatus && (
-                          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-muted-foreground"
-                            onClick={() => workflowMutation.mutate({ orderId: order.id, action: "revert" })}
-                            disabled={isPending}
-                            data-testid={`button-revert-${order.id}`}>
-                            <Undo2 className="w-3.5 h-3.5 mr-1" />Revert
-                          </Button>
-                        )}
-                        {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "HOLD") && (
-                          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-red-600"
-                            onClick={() => handleSingleAction(order.id, "cancel")}
-                            disabled={isPending}
-                            data-testid={`button-cancel-${order.id}`}>
-                            <XCircle className="w-3.5 h-3.5" />
-                          </Button>
-                        )}
-                      </div>
-                    </td>
-                  )}
+                  <td className="px-3 py-1.5 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "HOLD") && (
+                        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-green-600"
+                          onClick={() => handleSingleAction(order.id, activeTab === "HOLD" ? "release-hold" : activeTab === "PENDING" ? "fix-confirm" : "confirm")}
+                          disabled={isPending}
+                          data-testid={`button-confirm-${order.id}`}>
+                          <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                          {activeTab === "HOLD" ? "Release" : "Confirm"}
+                        </Button>
+                      )}
+                      {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "READY_TO_SHIP") && (
+                        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs"
+                          onClick={() => {
+                            setEditingOrder(order.id);
+                            setEditName(order.customerName || "");
+                            setEditPhone(order.customerPhone || "");
+                            setEditAddress(order.shippingAddress || "");
+                            setEditCity(order.city || "");
+                          }}
+                          data-testid={`button-edit-${order.id}`}>
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
+                      {activeTab === "NEW" && (
+                        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-amber-600"
+                          onClick={() => handleSingleAction(order.id, "pending")}
+                          disabled={isPending}
+                          data-testid={`button-pending-${order.id}`}>
+                          <Clock className="w-3.5 h-3.5 mr-1" />Pending
+                        </Button>
+                      )}
+                      {(activeTab === "NEW" || activeTab === "PENDING") && (
+                        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-purple-600"
+                          onClick={() => handleSingleAction(order.id, "hold")}
+                          disabled={isPending}
+                          data-testid={`button-hold-${order.id}`}>
+                          <Pause className="w-3.5 h-3.5 mr-1" />Hold
+                        </Button>
+                      )}
+                      {activeTab === "HOLD" && (
+                        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-amber-600"
+                          onClick={() => handleSingleAction(order.id, "move-to-pending")}
+                          disabled={isPending}
+                          data-testid={`button-to-pending-${order.id}`}>
+                          <Clock className="w-3.5 h-3.5 mr-1" />Pending
+                        </Button>
+                      )}
+                      {activeTab === "READY_TO_SHIP" && (
+                        <Badge variant="secondary" className="text-xs">Ready</Badge>
+                      )}
+                      {activeTab === "FULFILLED" && (order.shipmentStatus === "BOOKED" || order.shipmentStatus === "Unfulfilled" || !order.shipmentStatus || order.shipmentStatus === "ARRIVED_AT_ORIGIN") && (
+                        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-red-600"
+                          onClick={() => cancelBookingMutation.mutate(order.id)}
+                          disabled={cancelBookingMutation.isPending}
+                          data-testid={`button-cancel-booking-${order.id}`}>
+                          <Undo2 className="w-3.5 h-3.5 mr-1" />Cancel
+                        </Button>
+                      )}
+                      {activeTab !== "NEW" && activeTab !== "FULFILLED" && order.previousWorkflowStatus && (
+                        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-muted-foreground"
+                          onClick={() => workflowMutation.mutate({ orderId: order.id, action: "revert" })}
+                          disabled={isPending}
+                          data-testid={`button-revert-${order.id}`}>
+                          <Undo2 className="w-3.5 h-3.5 mr-1" />Revert
+                        </Button>
+                      )}
+                      {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "HOLD") && (
+                        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-red-600"
+                          onClick={() => handleSingleAction(order.id, "cancel")}
+                          disabled={isPending}
+                          data-testid={`button-cancel-${order.id}`}>
+                          <XCircle className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>

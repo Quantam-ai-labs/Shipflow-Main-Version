@@ -1,7 +1,7 @@
 import {
   merchants, teamMembers, shopifyStores, courierAccounts,
   orders, shipments, shipmentEvents, remarks, codReconciliation, syncLogs, workflowAuditLog, bookingJobs,
-  shipmentBatches, shipmentBatchItems, shipmentPrintRecords, orderPayments,
+  shipmentBatches, shipmentBatchItems, shipmentPrintRecords, orderPayments, orderChangeLog,
   type Merchant, type InsertMerchant,
   type TeamMember, type InsertTeamMember,
   type ShopifyStore, type InsertShopifyStore,
@@ -17,6 +17,7 @@ import {
   type ShipmentBatchItem, type InsertShipmentBatchItem,
   type ShipmentPrintRecord, type InsertShipmentPrintRecord,
   type OrderPayment, type InsertOrderPayment,
+  type OrderChangeLog, type InsertOrderChangeLog,
   users,
 } from "@shared/schema";
 import { db } from "./db";
@@ -124,6 +125,10 @@ export interface IStorage {
   getShipmentPrintRecord(merchantId: string, shipmentId: string): Promise<ShipmentPrintRecord | undefined>;
   getShipmentPrintRecordById(merchantId: string, id: string): Promise<ShipmentPrintRecord | undefined>;
   updateShipmentPrintRecord(id: string, data: Partial<InsertShipmentPrintRecord>): Promise<ShipmentPrintRecord | undefined>;
+
+  // Order Change Log
+  createOrderChangeLog(entry: InsertOrderChangeLog): Promise<OrderChangeLog>;
+  getOrderChangeLog(merchantId: string, orderId: string): Promise<OrderChangeLog[]>;
 
   // Order Payments
   getOrderPayments(merchantId: string, orderId: string): Promise<OrderPayment[]>;
@@ -1061,6 +1066,18 @@ export class DatabaseStorage implements IStorage {
   async updateShipmentPrintRecord(id: string, data: Partial<InsertShipmentPrintRecord>): Promise<ShipmentPrintRecord | undefined> {
     const [updated] = await db.update(shipmentPrintRecords).set(data).where(eq(shipmentPrintRecords.id, id)).returning();
     return updated;
+  }
+
+  // Order Change Log
+  async createOrderChangeLog(entry: InsertOrderChangeLog): Promise<OrderChangeLog> {
+    const [created] = await db.insert(orderChangeLog).values(entry).returning();
+    return created;
+  }
+
+  async getOrderChangeLog(merchantId: string, orderId: string): Promise<OrderChangeLog[]> {
+    return db.select().from(orderChangeLog).where(
+      and(eq(orderChangeLog.merchantId, merchantId), eq(orderChangeLog.orderId, orderId))
+    ).orderBy(desc(orderChangeLog.createdAt));
   }
 
   // Order Payments

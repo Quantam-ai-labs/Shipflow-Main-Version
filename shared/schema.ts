@@ -224,6 +224,36 @@ export type WorkflowAuditLog = typeof workflowAuditLog.$inferSelect;
 
 
 // ============================================
+// ORDER CHANGE LOG (Field edits, payment changes, booking actions audit)
+// ============================================
+export const orderChangeLog = pgTable("order_change_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orderId: varchar("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  changeType: varchar("change_type", { length: 30 }).notNull(),
+  fieldName: varchar("field_name", { length: 50 }),
+  oldValue: text("old_value"),
+  newValue: text("new_value"),
+  reason: text("reason"),
+  actorUserId: varchar("actor_user_id"),
+  actorName: varchar("actor_name", { length: 255 }),
+  actorType: varchar("actor_type", { length: 20 }).notNull().default("user"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_change_log_order").on(table.orderId),
+  index("idx_change_log_merchant").on(table.merchantId),
+]);
+
+export const insertOrderChangeLogSchema = createInsertSchema(orderChangeLog).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertOrderChangeLog = z.infer<typeof insertOrderChangeLogSchema>;
+export type OrderChangeLog = typeof orderChangeLog.$inferSelect;
+
+
+// ============================================
 // ORDER PAYMENTS (Prepaid / partial payment tracking)
 // ============================================
 export const orderPayments = pgTable("order_payments", {

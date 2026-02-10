@@ -72,11 +72,23 @@ export function validateOrderForBooking(order: Order): string[] {
   return missing;
 }
 
+export const COURIER_SPECIAL_INSTRUCTIONS = "Allow Open parcel - Must call before Delivery - Handle With Care";
+
 export function orderToPacket(order: Order): BookingPacket {
   const items = order.lineItems as any[];
   const pieces = order.totalQuantity || items?.length || 1;
-  const itemSummary = order.itemSummary ||
-    (items ? items.map((i: any) => `${i.name || i.title} x${i.quantity || 1}`).join(", ") : "Order items");
+  const itemSummary = items && items.length > 0
+    ? items.map((i: any) => {
+        const name = (i.name || i.title || "Item").trim();
+        const variant = i.variant_title ? ` - ${i.variant_title}` : "";
+        const qty = (i.quantity || 1) > 1 ? ` x ${i.quantity}` : "";
+        return `${name}${variant}${qty}`;
+      }).join(" | ")
+    : (order.itemSummary || "Order items");
+
+  const notesParts: string[] = [];
+  if (order.notes) notesParts.push(order.notes);
+  notesParts.push(COURIER_SPECIAL_INSTRUCTIONS);
 
   return {
     orderId: order.id,
@@ -88,7 +100,7 @@ export function orderToPacket(order: Order): BookingPacket {
     codAmount: parseFloat(order.codRemaining ?? order.totalAmount) || 0,
     weight: 200,
     pieces,
-    specialInstructions: order.notes || "",
+    specialInstructions: notesParts.join(" | "),
     itemSummary,
   };
 }
