@@ -372,6 +372,8 @@ export class ShopifyService {
       const existingOrderId = existingOrdersMap.get(shopifyOrderId);
       const hasCourierStatus = courierConfirmedIds.has(shopifyOrderId);
       
+      const initialWorkflowStatus = this.determineWorkflowStatus(shopifyOrder);
+
       if (existingOrderId) {
         const updateData: any = {
           customerName: transformedOrder.customerName,
@@ -408,21 +410,52 @@ export class ShopifyService {
         if (!hasCourierStatus) {
           updateData.shipmentStatus = transformedOrder.shipmentStatus;
         }
-        
+
         await storage.updateOrder(merchantId, existingOrderId, updateData);
+
         try {
-          const { applyRoboTags } = await import('./workflowTransition');
-          await applyRoboTags(merchantId, existingOrderId, transformedOrder.tags);
+          const { transitionOrder, applyRoboTags } = await import('./workflowTransition');
+          if (initialWorkflowStatus === 'CANCELLED') {
+            await transitionOrder({
+              merchantId,
+              orderId: existingOrderId,
+              toStatus: 'CANCELLED',
+              action: 'shopify_sync_cancel',
+              actorType: 'system',
+              reason: 'Cancelled in Shopify',
+              extraData: {
+                cancelledAt: shopifyOrder.cancelled_at ? new Date(shopifyOrder.cancelled_at) : now,
+                cancelReason: 'Cancelled in Shopify',
+              },
+            });
+          } else if (initialWorkflowStatus === 'FULFILLED') {
+            await transitionOrder({
+              merchantId,
+              orderId: existingOrderId,
+              toStatus: 'FULFILLED',
+              action: 'shopify_sync_fulfill',
+              actorType: 'system',
+              reason: 'Fulfilled in Shopify',
+            });
+          } else {
+            await applyRoboTags(merchantId, existingOrderId, transformedOrder.tags);
+          }
         } catch (e) {}
         updatedCount++;
       } else {
-        const created = await storage.createOrder({
+        const createData: any = {
           ...transformedOrder,
           merchantId,
+          workflowStatus: initialWorkflowStatus,
           lastApiSyncAt: now,
           shopifyUpdatedAt: new Date(shopifyOrder.updated_at),
-        });
-        if (created?.id) {
+        };
+        if (initialWorkflowStatus === 'CANCELLED') {
+          createData.cancelledAt = shopifyOrder.cancelled_at ? new Date(shopifyOrder.cancelled_at) : now;
+          createData.cancelReason = 'Cancelled in Shopify';
+        }
+        const created = await storage.createOrder(createData);
+        if (created?.id && initialWorkflowStatus === 'NEW') {
           try {
             const { applyRoboTags } = await import('./workflowTransition');
             await applyRoboTags(merchantId, created.id, transformedOrder.tags);
@@ -441,6 +474,16 @@ export class ShopifyService {
     await storage.getDashboardStats(merchantId);
     await storage.updateShopifyStore(store.id, { lastSyncAt: syncStartTime });
     return { synced: newCount, updated: updatedCount, total: shopifyOrders.length };
+  }
+
+  determineWorkflowStatus(shopifyOrder: ShopifyOrder): string {
+    if (shopifyOrder.cancelled_at) {
+      return 'CANCELLED';
+    }
+    if (shopifyOrder.fulfillment_status === 'fulfilled') {
+      return 'FULFILLED';
+    }
+    return 'NEW';
   }
 
   transformOrderForStorage(shopifyOrder: ShopifyOrder): {
