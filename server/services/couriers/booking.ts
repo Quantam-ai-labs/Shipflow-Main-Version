@@ -220,7 +220,7 @@ export async function loadPostExCities(token: string): Promise<PostExCityEntry[]
 export async function bookLeopardsPacket(
   packet: BookingPacket,
   credentials: { apiKey: string; apiPassword: string },
-  shipperInfo: { name: string; phone: string; address: string; city: string },
+  shipperInfo: { name: string; phone: string; address: string; city: string; shipperId?: string },
   cities: LeopardsCityEntry[]
 ): Promise<BookingResult> {
   const originMatch = findLeopardsCity(shipperInfo.city, cities);
@@ -238,9 +238,13 @@ export async function bookLeopardsPacket(
     booked_packet_order_id: packet.orderNumber,
     origin_city: String(originCityId),
     destination_city: destCityId ? String(destCityId) : packet.city,
-    shipment_name_eng: shipperInfo.name || "ShipFlow Merchant",
-    shipment_phone: normalizePhone(shipperInfo.phone) || "0000000000",
-    shipment_address: shipperInfo.address || "Default Address",
+    ...(shipperInfo.shipperId ? {
+      shipment_id: shipperInfo.shipperId,
+    } : {
+      shipment_name_eng: shipperInfo.name || "ShipFlow Merchant",
+      shipment_phone: normalizePhone(shipperInfo.phone) || "0000000000",
+      shipment_address: shipperInfo.address || "Default Address",
+    }),
     consignment_name_eng: packet.customerName || "Customer",
     consignment_phone: normalizePhone(packet.customerPhone) || "0000000000",
     consignment_address: packet.shippingAddress || "Address",
@@ -298,7 +302,7 @@ export async function bookLeopardsPacket(
 export async function bookLeopardsBatch(
   packets: BookingPacket[],
   credentials: { apiKey: string; apiPassword: string },
-  shipperInfo: { name: string; phone: string; address: string; city: string }
+  shipperInfo: { name: string; phone: string; address: string; city: string; shipperId?: string }
 ): Promise<BookingResult[]> {
   const results: BookingResult[] = [];
   const cities = await loadLeopardsCities(credentials.apiKey, credentials.apiPassword);

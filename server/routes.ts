@@ -34,6 +34,7 @@ const courierAccountSchema = z.object({
   apiSecret: z.string().optional(),
   accountNumber: z.string().optional(),
   useEnvCredentials: z.boolean().optional(),
+  settings: z.record(z.any()).optional(),
 });
 
 const settingsUpdateSchema = z.object({
@@ -859,6 +860,7 @@ export async function registerRoutes(
             accountNumber: c.accountNumber,
             hasDbCredentials: !!(c.apiKey || c.apiSecret),
             useEnvCredentials: !!settings.useEnvCredentials,
+            settings,
           };
         }),
         envCredentials,
@@ -1287,11 +1289,11 @@ export async function registerRoutes(
         return res.status(400).json({ message: validated.error.errors[0].message });
       }
 
-      const { courierName, apiKey, apiSecret, accountNumber, useEnvCredentials } = validated.data;
+      const { courierName, apiKey, apiSecret, accountNumber, useEnvCredentials, settings: incomingSettings } = validated.data;
 
       const existing = (await storage.getCourierAccounts(merchantId)).find(c => c.courierName === courierName);
 
-      const settings: Record<string, any> = { useEnvCredentials: !!useEnvCredentials };
+      const settings: Record<string, any> = { useEnvCredentials: !!useEnvCredentials, ...incomingSettings };
 
       if (existing) {
         const account = await storage.updateCourierAccount(existing.id, {
@@ -1758,17 +1760,33 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Merchant not found" });
       }
 
+      const courierAccount = (await storage.getCourierAccounts(merchantId)).find(c => c.courierName === courier);
+      const courierSettings = courierAccount?.settings as Record<string, any> | null;
+
       const shipperInfo = {
         name: merchant.name || "ShipFlow Merchant",
         phone: merchant.phone || "",
         address: merchant.address || "",
         city: merchant.city || "Lahore",
+        shipperId: courierSettings?.shipperId || "2125655",
       };
 
       const { validateOrderForBooking, orderToPacket, bookLeopardsBatch, bookPostExBulk } = await import("./services/couriers/booking");
+      const { generateAirwayBillPdf, generateBatchLoadsheetPdf } = await import("./services/pdfGenerator");
 
       const fetchedOrders = await storage.getOrdersByIds(merchantId, orderIds);
       const userId = (req.user as any)?.id || "system";
+
+      const batch = await storage.createShipmentBatch({
+        merchantId,
+        createdByUserId: userId,
+        courierName: courier,
+        batchType: orderIds.length > 1 ? "BULK" : "SINGLE",
+        status: "CREATED",
+        totalSelectedCount: orderIds.length,
+        successCount: 0,
+        failedCount: 0,
+      });
 
       const results: Array<{
         orderId: string;
@@ -1932,12 +1950,277 @@ export async function registerRoutes(
       const successCount = results.filter(r => r.success).length;
       const failedCount = results.filter(r => !r.success).length;
 
-      console.log(`[Booking] ${courier}: ${successCount} success, ${failedCount} failed out of ${results.length}`);
+      const batchStatus = failedCount === 0 ? "SUCCESS" : (successCount === 0 ? "FAILED" : "PARTIAL_SUCCESS");
+      await storage.updateShipmentBatch(batch.id, {
+        successCount,
+        failedCount,
+        status: batchStatus,
+      });
 
-      res.json({ successCount, failedCount, results });
+      for (const r of results) {
+        await storage.createShipmentBatchItem({
+          batchId: batch.id,
+          orderId: r.orderId,
+          orderNumber: r.orderNumber,
+          bookingStatus: r.success ? "BOOKED" : "FAILED",
+          bookingError: r.error || null,
+          trackingNumber: r.trackingNumber || null,
+          slipUrl: r.slipUrl || null,
+          consigneeName: fetchedOrders.find(o => o.id === r.orderId)?.customerName || null,
+          consigneePhone: fetchedOrders.find(o => o.id === r.orderId)?.customerPhone || null,
+          consigneeCity: fetchedOrders.find(o => o.id === r.orderId)?.city || null,
+          codAmount: fetchedOrders.find(o => o.id === r.orderId)?.totalAmount || null,
+        });
+      }
+
+      try {
+        for (const r of results.filter(r => r.success && r.trackingNumber)) {
+          const order = fetchedOrders.find(o => o.id === r.orderId);
+          if (!order) continue;
+          const pdfPath = await generateAirwayBillPdf({
+            trackingNumber: r.trackingNumber!,
+            orderNumber: r.orderNumber,
+            courierName: courier === "leopards" ? "Leopards" : "PostEx",
+            bookedAt: new Date().toLocaleDateString(),
+            merchantName: merchant.name,
+            consigneeName: order.customerName || "Customer",
+            consigneePhone: order.customerPhone || "",
+            consigneeCity: order.city || "",
+            consigneeAddress: order.shippingAddress || "",
+            codAmount: Number(order.totalAmount) || 0,
+            weight: Number(overridesMap.get(order.id)?.weight) || 200,
+            pieces: 1,
+            itemsSummary: order.itemSummary || undefined,
+          });
+
+          const shipmentsList = await storage.getShipmentsByOrderId(merchantId, order.id);
+          const shipment = shipmentsList.find(s => s.trackingNumber === r.trackingNumber);
+
+          await storage.createShipmentPrintRecord({
+            merchantId,
+            shipmentId: shipment?.id || null,
+            orderId: order.id,
+            courierName: courier,
+            trackingNumber: r.trackingNumber!,
+            generatedByUserId: userId,
+            pdfPath,
+            source: "CUSTOM_TEMPLATE",
+            isLatest: true,
+          });
+        }
+
+        const batchLoadsheetPath = await generateBatchLoadsheetPdf({
+          batchId: batch.id,
+          courierName: courier === "leopards" ? "Leopards" : "PostEx",
+          createdBy: userId,
+          createdAt: new Date().toLocaleDateString(),
+          merchantName: merchant.name,
+          totalCount: results.length,
+          successCount,
+          failedCount,
+          items: results.map(r => {
+            const order = fetchedOrders.find(o => o.id === r.orderId);
+            return {
+              orderNumber: r.orderNumber,
+              trackingNumber: r.trackingNumber || "",
+              consigneeName: order?.customerName || "",
+              consigneeCity: order?.city || "",
+              consigneePhone: order?.customerPhone || "",
+              codAmount: Number(order?.totalAmount) || 0,
+              status: r.success ? "BOOKED" : "FAILED",
+              error: r.error,
+            };
+          }),
+        });
+
+        await storage.updateShipmentBatch(batch.id, {
+          pdfBatchPath: batchLoadsheetPath,
+        });
+      } catch (pdfErr) {
+        console.error("[Booking] PDF generation error (non-blocking):", pdfErr);
+      }
+
+      console.log(`[Booking] ${courier}: ${successCount} success, ${failedCount} failed out of ${results.length}, batch=${batch.id}`);
+
+      res.json({ successCount, failedCount, results, batchId: batch.id });
     } catch (error) {
       console.error("Error booking orders:", error);
       res.status(500).json({ message: "Failed to book orders" });
+    }
+  });
+
+  // ============================================
+  // SHIPMENT BATCHES & PRINT ROUTES
+  // ============================================
+
+  app.get("/api/shipment-batches", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const page = parseInt(req.query.page as string) || 1;
+      const pageSize = parseInt(req.query.pageSize as string) || 20;
+      const courier = req.query.courier as string;
+
+      const result = await storage.getShipmentBatches(merchantId, { page, pageSize, courier });
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching batches:", error);
+      res.status(500).json({ message: "Failed to fetch batches" });
+    }
+  });
+
+  app.get("/api/shipment-batches/:id", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const batch = await storage.getShipmentBatchById(merchantId, req.params.id);
+      if (!batch) {
+        return res.status(404).json({ message: "Batch not found" });
+      }
+
+      const items = await storage.getShipmentBatchItems(batch.id);
+      res.json({ batch, items });
+    } catch (error) {
+      console.error("Error fetching batch details:", error);
+      res.status(500).json({ message: "Failed to fetch batch details" });
+    }
+  });
+
+  app.get("/api/print/batch/:id.pdf", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const batch = await storage.getShipmentBatchById(merchantId, req.params.id);
+      if (!batch || !batch.pdfBatchPath) {
+        return res.status(404).json({ message: "Batch PDF not found" });
+      }
+
+      const { getPdfPath } = await import("./services/pdfGenerator");
+      const pdfPath = getPdfPath(batch.pdfBatchPath);
+      if (!pdfPath) {
+        return res.status(404).json({ message: "PDF file not found on disk" });
+      }
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `inline; filename="batch_${batch.id.substring(0, 8)}.pdf"`);
+      const fs = await import("fs");
+      fs.createReadStream(pdfPath).pipe(res);
+    } catch (error) {
+      console.error("Error serving batch PDF:", error);
+      res.status(500).json({ message: "Failed to serve PDF" });
+    }
+  });
+
+  app.get("/api/print/shipment/:id.pdf", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const printRecord = await storage.getShipmentPrintRecordById(merchantId, req.params.id);
+      if (!printRecord || !printRecord.pdfPath) {
+        return res.status(404).json({ message: "Print record not found" });
+      }
+
+      const { getPdfPath } = await import("./services/pdfGenerator");
+      const pdfPath = getPdfPath(printRecord.pdfPath);
+      if (!pdfPath) {
+        return res.status(404).json({ message: "PDF file not found on disk" });
+      }
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `inline; filename="awb_${printRecord.trackingNumber}.pdf"`);
+      const fs = await import("fs");
+      fs.createReadStream(pdfPath).pipe(res);
+    } catch (error) {
+      console.error("Error serving shipment PDF:", error);
+      res.status(500).json({ message: "Failed to serve PDF" });
+    }
+  });
+
+  app.get("/api/print/order/:orderId", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const order = await storage.getOrderById(merchantId, req.params.orderId);
+      if (!order) {
+        return res.status(404).json({ message: "Order not found" });
+      }
+
+      const shipmentsList = await storage.getShipmentsByOrderId(merchantId, order.id);
+      const printRecords: any[] = [];
+      for (const s of shipmentsList) {
+        const record = await storage.getShipmentPrintRecord(merchantId, s.id);
+        if (record) {
+          printRecords.push({ ...record, shipment: s });
+        }
+      }
+
+      res.json({
+        order: { id: order.id, orderNumber: order.orderNumber, courierName: order.courierName, courierTracking: order.courierTracking },
+        shipments: shipmentsList,
+        printRecords,
+      });
+    } catch (error) {
+      console.error("Error fetching print info:", error);
+      res.status(500).json({ message: "Failed to fetch print info" });
+    }
+  });
+
+  app.post("/api/print/regenerate/:orderId", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const order = await storage.getOrderById(merchantId, req.params.orderId);
+      if (!order || !order.courierTracking) {
+        return res.status(400).json({ message: "Order not found or not booked" });
+      }
+
+      const merchant = await storage.getMerchant(merchantId);
+      if (!merchant) return res.status(400).json({ message: "Merchant not found" });
+
+      const { generateAirwayBillPdf } = await import("./services/pdfGenerator");
+      const userId = (req.user as any)?.id || "system";
+
+      const pdfPath = await generateAirwayBillPdf({
+        trackingNumber: order.courierTracking,
+        orderNumber: order.orderNumber,
+        courierName: order.courierName || "Courier",
+        bookedAt: order.bookedAt ? new Date(order.bookedAt).toLocaleDateString() : new Date().toLocaleDateString(),
+        merchantName: merchant.name,
+        consigneeName: order.customerName || "Customer",
+        consigneePhone: order.customerPhone || "",
+        consigneeCity: order.city || "",
+        consigneeAddress: order.shippingAddress || "",
+        codAmount: Number(order.totalAmount) || 0,
+        weight: 200,
+        pieces: 1,
+        itemsSummary: order.itemSummary || undefined,
+      });
+
+      const shipmentsList = await storage.getShipmentsByOrderId(merchantId, order.id);
+      const shipment = shipmentsList.find(s => s.trackingNumber === order.courierTracking);
+
+      const printRecord = await storage.createShipmentPrintRecord({
+        merchantId,
+        shipmentId: shipment?.id || null,
+        orderId: order.id,
+        courierName: order.courierName || "unknown",
+        trackingNumber: order.courierTracking,
+        generatedByUserId: userId,
+        pdfPath,
+        source: "CUSTOM_TEMPLATE",
+        isLatest: true,
+      });
+
+      res.json({ success: true, printRecordId: printRecord.id });
+    } catch (error) {
+      console.error("Error regenerating PDF:", error);
+      res.status(500).json({ message: "Failed to regenerate PDF" });
     }
   });
 

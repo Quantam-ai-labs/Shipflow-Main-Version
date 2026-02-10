@@ -1,6 +1,7 @@
 import {
   merchants, teamMembers, shopifyStores, courierAccounts,
   orders, shipments, shipmentEvents, remarks, codReconciliation, syncLogs, workflowAuditLog, bookingJobs,
+  shipmentBatches, shipmentBatchItems, shipmentPrintRecords,
   type Merchant, type InsertMerchant,
   type TeamMember, type InsertTeamMember,
   type ShopifyStore, type InsertShopifyStore,
@@ -12,6 +13,9 @@ import {
   type CodReconciliation, type InsertCodReconciliation,
   type SyncLog, type InsertSyncLog,
   type BookingJob, type InsertBookingJob,
+  type ShipmentBatch, type InsertShipmentBatch,
+  type ShipmentBatchItem, type InsertShipmentBatchItem,
+  type ShipmentPrintRecord, type InsertShipmentPrintRecord,
   users,
 } from "@shared/schema";
 import { db } from "./db";
@@ -103,6 +107,22 @@ export interface IStorage {
   // Analytics
   getDashboardStats(merchantId: string): Promise<any>;
   getAnalytics(merchantId: string, dateRange: string): Promise<any>;
+
+  // Shipment Batches
+  createShipmentBatch(batch: InsertShipmentBatch): Promise<ShipmentBatch>;
+  updateShipmentBatch(id: string, data: Partial<InsertShipmentBatch>): Promise<ShipmentBatch | undefined>;
+  getShipmentBatches(merchantId: string, options?: { page?: number; pageSize?: number; courier?: string }): Promise<{ batches: ShipmentBatch[]; total: number }>;
+  getShipmentBatchById(merchantId: string, id: string): Promise<ShipmentBatch | undefined>;
+
+  // Shipment Batch Items
+  createShipmentBatchItem(item: InsertShipmentBatchItem): Promise<ShipmentBatchItem>;
+  getShipmentBatchItems(batchId: string): Promise<ShipmentBatchItem[]>;
+
+  // Print Records
+  createShipmentPrintRecord(record: InsertShipmentPrintRecord): Promise<ShipmentPrintRecord>;
+  getShipmentPrintRecord(merchantId: string, shipmentId: string): Promise<ShipmentPrintRecord | undefined>;
+  getShipmentPrintRecordById(merchantId: string, id: string): Promise<ShipmentPrintRecord | undefined>;
+  updateShipmentPrintRecord(id: string, data: Partial<InsertShipmentPrintRecord>): Promise<ShipmentPrintRecord | undefined>;
 
   // Seed
   seedDemoData(): Promise<void>;
@@ -971,7 +991,71 @@ export class DatabaseStorage implements IStorage {
       ));
   }
 
-  // Seed demo data
+  // Shipment Batches
+  async createShipmentBatch(batch: InsertShipmentBatch): Promise<ShipmentBatch> {
+    const [created] = await db.insert(shipmentBatches).values(batch).returning();
+    return created;
+  }
+
+  async updateShipmentBatch(id: string, data: Partial<InsertShipmentBatch>): Promise<ShipmentBatch | undefined> {
+    const [updated] = await db.update(shipmentBatches).set(data).where(eq(shipmentBatches.id, id)).returning();
+    return updated;
+  }
+
+  async getShipmentBatches(merchantId: string, options?: { page?: number; pageSize?: number; courier?: string }): Promise<{ batches: ShipmentBatch[]; total: number }> {
+    const page = options?.page || 1;
+    const pageSize = options?.pageSize || 20;
+    const offset = (page - 1) * pageSize;
+
+    const conditions = [eq(shipmentBatches.merchantId, merchantId)];
+    if (options?.courier && options.courier !== 'all') {
+      conditions.push(eq(shipmentBatches.courierName, options.courier));
+    }
+
+    const whereClause = and(...conditions);
+
+    const [totalResult] = await db.select({ count: count() }).from(shipmentBatches).where(whereClause);
+    const batches = await db.select().from(shipmentBatches).where(whereClause).orderBy(desc(shipmentBatches.createdAt)).limit(pageSize).offset(offset);
+
+    return { batches, total: totalResult?.count || 0 };
+  }
+
+  async getShipmentBatchById(merchantId: string, id: string): Promise<ShipmentBatch | undefined> {
+    const [batch] = await db.select().from(shipmentBatches).where(and(eq(shipmentBatches.id, id), eq(shipmentBatches.merchantId, merchantId)));
+    return batch;
+  }
+
+  // Shipment Batch Items
+  async createShipmentBatchItem(item: InsertShipmentBatchItem): Promise<ShipmentBatchItem> {
+    const [created] = await db.insert(shipmentBatchItems).values(item).returning();
+    return created;
+  }
+
+  async getShipmentBatchItems(batchId: string): Promise<ShipmentBatchItem[]> {
+    return db.select().from(shipmentBatchItems).where(eq(shipmentBatchItems.batchId, batchId)).orderBy(shipmentBatchItems.createdAt);
+  }
+
+  // Print Records
+  async createShipmentPrintRecord(record: InsertShipmentPrintRecord): Promise<ShipmentPrintRecord> {
+    const [created] = await db.insert(shipmentPrintRecords).values(record).returning();
+    return created;
+  }
+
+  async getShipmentPrintRecord(merchantId: string, shipmentId: string): Promise<ShipmentPrintRecord | undefined> {
+    const [record] = await db.select().from(shipmentPrintRecords).where(and(eq(shipmentPrintRecords.merchantId, merchantId), eq(shipmentPrintRecords.shipmentId, shipmentId), eq(shipmentPrintRecords.isLatest, true)));
+    return record;
+  }
+
+  async getShipmentPrintRecordById(merchantId: string, id: string): Promise<ShipmentPrintRecord | undefined> {
+    const [record] = await db.select().from(shipmentPrintRecords).where(and(eq(shipmentPrintRecords.id, id), eq(shipmentPrintRecords.merchantId, merchantId)));
+    return record;
+  }
+
+  async updateShipmentPrintRecord(id: string, data: Partial<InsertShipmentPrintRecord>): Promise<ShipmentPrintRecord | undefined> {
+    const [updated] = await db.update(shipmentPrintRecords).set(data).where(eq(shipmentPrintRecords.id, id)).returning();
+    return updated;
+  }
+
   async seedDemoData(): Promise<void> {
     return;
   }

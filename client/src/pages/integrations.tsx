@@ -51,6 +51,7 @@ interface IntegrationsData {
     accountNumber: string | null;
     hasDbCredentials: boolean;
     useEnvCredentials: boolean;
+    settings?: Record<string, any>;
   }>;
   envCredentials: Record<string, { hasKey: boolean; hasSecret: boolean }>;
 }
@@ -101,6 +102,14 @@ const COURIER_CONFIG: Record<string, {
         type: "password",
         envVar: "LEOPARDS_API_PASSWORD",
         required: true,
+      },
+      {
+        key: "shipperId",
+        label: "Shipper ID",
+        placeholder: "Enter your Leopards Shipper ID (e.g. 2125655)",
+        type: "text",
+        envVar: "",
+        required: false,
       },
     ],
   },
@@ -308,7 +317,7 @@ export default function Integrations() {
   });
 
   const saveCourierMutation = useMutation({
-    mutationFn: async (payload: { courierName: string; apiKey?: string; apiSecret?: string; accountNumber?: string; useEnvCredentials: boolean }) => {
+    mutationFn: async (payload: { courierName: string; apiKey?: string; apiSecret?: string; accountNumber?: string; useEnvCredentials: boolean; settings?: Record<string, any> }) => {
       return apiRequest("POST", "/api/integrations/couriers", payload);
     },
     onSuccess: () => {
@@ -375,6 +384,9 @@ export default function Integrations() {
       apiSecret: courierFormData.apiSecret || undefined,
       accountNumber: courierFormData.accountNumber || undefined,
       useEnvCredentials: useEnvCreds,
+      settings: {
+        ...(courierFormData.shipperId ? { shipperId: courierFormData.shipperId } : {}),
+      },
     });
   };
 
@@ -384,6 +396,15 @@ export default function Integrations() {
     const connectedCourier = data?.couriers.find(c => c.name === courierName);
     const hasEnv = hasFullEnvCreds(courierName);
     setUseEnvCreds(connectedCourier?.useEnvCredentials || (!connectedCourier?.hasDbCredentials && hasEnv));
+    if (connectedCourier?.settings) {
+      const s = connectedCourier.settings as Record<string, any>;
+      if (s.shipperId) {
+        setCourierFormData(prev => ({ ...prev, shipperId: s.shipperId }));
+      }
+    }
+    if (!connectedCourier && courierName === 'leopards') {
+      setCourierFormData(prev => ({ ...prev, shipperId: '2125655' }));
+    }
     setIsCourierDialogOpen(true);
   };
 

@@ -393,6 +393,94 @@ export type InsertBookingJob = z.infer<typeof insertBookingJobSchema>;
 export type BookingJob = typeof bookingJobs.$inferSelect;
 
 // ============================================
+// SHIPMENT BATCHES (Booking batch logs)
+// ============================================
+export const shipmentBatches = pgTable("shipment_batches", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  createdByUserId: varchar("created_by_user_id"),
+  courierName: varchar("courier_name", { length: 50 }).notNull(),
+  batchType: varchar("batch_type", { length: 20 }).notNull().default("BULK"),
+  status: varchar("status", { length: 30 }).notNull().default("CREATED"),
+  totalSelectedCount: integer("total_selected_count").default(0),
+  successCount: integer("success_count").default(0),
+  failedCount: integer("failed_count").default(0),
+  notes: text("notes"),
+  pdfBatchPath: text("pdf_batch_path"),
+  pdfBatchMeta: jsonb("pdf_batch_meta"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_shipment_batches_merchant").on(table.merchantId),
+]);
+
+export const insertShipmentBatchSchema = createInsertSchema(shipmentBatches).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertShipmentBatch = z.infer<typeof insertShipmentBatchSchema>;
+export type ShipmentBatch = typeof shipmentBatches.$inferSelect;
+
+// ============================================
+// SHIPMENT BATCH ITEMS (Individual results in a batch)
+// ============================================
+export const shipmentBatchItems = pgTable("shipment_batch_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  batchId: varchar("batch_id").notNull().references(() => shipmentBatches.id, { onDelete: "cascade" }),
+  shipmentId: varchar("shipment_id"),
+  orderId: varchar("order_id").notNull(),
+  orderNumber: varchar("order_number", { length: 100 }),
+  bookingStatus: varchar("booking_status", { length: 30 }).notNull().default("PENDING"),
+  bookingError: text("booking_error"),
+  trackingNumber: varchar("tracking_number", { length: 100 }),
+  slipUrl: text("slip_url"),
+  consigneeName: varchar("consignee_name", { length: 255 }),
+  consigneePhone: varchar("consignee_phone", { length: 50 }),
+  consigneeCity: varchar("consignee_city", { length: 100 }),
+  codAmount: decimal("cod_amount", { precision: 12, scale: 2 }),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_batch_items_batch").on(table.batchId),
+  index("idx_batch_items_order").on(table.orderId),
+]);
+
+export const insertShipmentBatchItemSchema = createInsertSchema(shipmentBatchItems).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertShipmentBatchItem = z.infer<typeof insertShipmentBatchItemSchema>;
+export type ShipmentBatchItem = typeof shipmentBatchItems.$inferSelect;
+
+// ============================================
+// SHIPMENT PRINT RECORDS (PDF generation tracking)
+// ============================================
+export const shipmentPrintRecords = pgTable("shipment_print_records", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  shipmentId: varchar("shipment_id"),
+  orderId: varchar("order_id"),
+  courierName: varchar("courier_name", { length: 50 }),
+  trackingNumber: varchar("tracking_number", { length: 100 }),
+  printTemplateVersion: varchar("print_template_version", { length: 20 }).default("1.0"),
+  generatedAt: timestamp("generated_at").defaultNow(),
+  generatedByUserId: varchar("generated_by_user_id"),
+  pdfPath: text("pdf_path"),
+  pdfMeta: jsonb("pdf_meta"),
+  source: varchar("source", { length: 30 }).default("CUSTOM_TEMPLATE"),
+  isLatest: boolean("is_latest").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_print_records_merchant").on(table.merchantId),
+  index("idx_print_records_shipment").on(table.shipmentId),
+]);
+
+export const insertShipmentPrintRecordSchema = createInsertSchema(shipmentPrintRecords).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertShipmentPrintRecord = z.infer<typeof insertShipmentPrintRecordSchema>;
+export type ShipmentPrintRecord = typeof shipmentPrintRecords.$inferSelect;
+
+// ============================================
 // RELATIONS
 // ============================================
 export const merchantsRelations = relations(merchants, ({ many }) => ({
