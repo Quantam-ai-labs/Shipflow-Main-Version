@@ -2295,10 +2295,11 @@ export async function registerRoutes(
       const merchant = await storage.getMerchant(merchantId);
       if (!merchant) return res.status(400).json({ message: "Merchant not found" });
 
-      const pdfGen = await import("./services/pdfGenerator");
+      const { generateMultiAirwayBillPdf } = await import("./services/pdfGenerator");
+      type AirwayBillDataType = import("./services/pdfGenerator").AirwayBillData;
 
       const courierLabel = batch.courierName === "leopards" ? "Leopards" : batch.courierName === "postex" ? "PostEx" : batch.courierName;
-      const billsData: pdfGen.AirwayBillData[] = [];
+      const billsData: AirwayBillDataType[] = [];
       for (const item of bookedItems) {
         const order = await storage.getOrderById(merchantId, item.orderId);
         if (!order) continue;
@@ -2314,7 +2315,7 @@ export async function registerRoutes(
           consigneeCity: item.consigneeCity || order.city || "",
           consigneeAddress: order.shippingAddress || "",
           codAmount: Number(item.codAmount) || Number(order.totalAmount) || 0,
-          weight: Number(order.weight) || 200,
+          weight: 200,
           pieces: order.totalQuantity || 1,
           itemsSummary: order.itemSummary || undefined,
         });
@@ -2324,7 +2325,7 @@ export async function registerRoutes(
         return res.status(404).json({ message: "No printable items found in this batch" });
       }
 
-      const pdfPath = await pdfGen.generateMultiAirwayBillPdf(billsData);
+      const pdfPath = await generateMultiAirwayBillPdf(billsData);
       const fsModule = await import("fs");
       
       res.setHeader("Content-Type", "application/pdf");
@@ -2369,7 +2370,7 @@ export async function registerRoutes(
         consigneeAddress: order.shippingAddress || "",
         codAmount: Number(order.totalAmount) || 0,
         weight: 200,
-        pieces: 1,
+        pieces: order.totalQuantity || 1,
         itemsSummary: order.itemSummary || undefined,
       });
 

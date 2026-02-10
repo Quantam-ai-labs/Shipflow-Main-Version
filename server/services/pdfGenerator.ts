@@ -1,4 +1,4 @@
-import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage } from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage, PDFImage } from "pdf-lib";
 import bwipjs from "bwip-js";
 import fs from "fs";
 import path from "path";
@@ -16,78 +16,93 @@ function truncate(str: string, len: number): string {
   return str.length > len ? str.substring(0, len - 3) + "..." : str;
 }
 
-async function generateBarcode(text: string, height: number = 10, scale: number = 2): Promise<Buffer | null> {
+async function generateBarcodePng(text: string, height: number = 12, scale: number = 2, includeText: boolean = false): Promise<Buffer | null> {
   try {
+    const safeText = text.replace(/[^\x20-\x7E]/g, "").trim();
+    if (!safeText) return null;
     const png = await bwipjs.toBuffer({
       bcid: "code128",
-      text: text,
+      text: safeText,
       scale,
       height,
-      includetext: false,
-    });
-    return png;
-  } catch (err) {
-    console.error("[PDF] Barcode generation failed:", err);
-    return null;
-  }
-}
-
-async function generateBarcodeWithText(text: string, height: number = 12, scale: number = 2): Promise<Buffer | null> {
-  try {
-    const png = await bwipjs.toBuffer({
-      bcid: "code128",
-      text: text,
-      scale,
-      height,
-      includetext: true,
+      includetext: includeText,
       textxalign: "center",
-      textsize: 8,
+      textsize: 9,
     });
     return png;
   } catch (err) {
-    console.error("[PDF] Barcode generation failed:", err);
+    console.error("[PDF] Barcode generation failed for:", text, err);
     return null;
   }
 }
 
-function drawText(page: PDFPage, font: PDFFont, text: string, x: number, y: number, size: number = 10, color = rgb(0.15, 0.15, 0.15)) {
-  page.drawText(text || "", { x, y, size, font, color });
+function drawTextSafe(page: PDFPage, font: PDFFont, text: string, x: number, y: number, size: number = 10, color = rgb(0.1, 0.1, 0.1)) {
+  try {
+    const safeText = (text || "").replace(/[^\x20-\x7E\xA0-\xFF]/g, " ");
+    page.drawText(safeText, { x, y, size, font, color });
+  } catch {}
 }
 
-function drawRect(page: PDFPage, x: number, y: number, w: number, h: number, borderOnly: boolean = false) {
-  if (borderOnly) {
-    page.drawRectangle({ x, y, width: w, height: h, borderColor: rgb(0.3, 0.3, 0.3), borderWidth: 0.75 });
+function drawBox(page: PDFPage, x: number, y: number, w: number, h: number, opts?: { fill?: boolean; borderWidth?: number }) {
+  const borderWidth = opts?.borderWidth ?? 0.75;
+  if (opts?.fill) {
+    page.drawRectangle({
+      x, y, width: w, height: h,
+      color: rgb(0.94, 0.94, 0.96),
+      borderColor: rgb(0.25, 0.25, 0.25),
+      borderWidth,
+    });
   } else {
-    page.drawRectangle({ x, y, width: w, height: h, color: rgb(0.95, 0.95, 0.95), borderColor: rgb(0.3, 0.3, 0.3), borderWidth: 0.75 });
+    page.drawRectangle({
+      x, y, width: w, height: h,
+      borderColor: rgb(0.25, 0.25, 0.25),
+      borderWidth,
+    });
   }
 }
 
-function drawHLine(page: PDFPage, x1: number, x2: number, y: number) {
-  page.drawLine({ start: { x: x1, y }, end: { x: x2, y }, thickness: 0.75, color: rgb(0.3, 0.3, 0.3) });
+function drawHLine(page: PDFPage, x1: number, x2: number, y: number, thickness: number = 0.5) {
+  page.drawLine({ start: { x: x1, y }, end: { x: x2, y }, thickness, color: rgb(0.3, 0.3, 0.3) });
 }
 
-function drawVLine(page: PDFPage, x: number, y1: number, y2: number) {
-  page.drawLine({ start: { x, y: y1 }, end: { x, y: y2 }, thickness: 0.75, color: rgb(0.3, 0.3, 0.3) });
+function drawVLine(page: PDFPage, x: number, y1: number, y2: number, thickness: number = 0.5) {
+  page.drawLine({ start: { x, y: y1 }, end: { x, y: y2 }, thickness, color: rgb(0.3, 0.3, 0.3) });
 }
 
-function wrapText(text: string, font: PDFFont, fontSize: number, maxWidth: number): string[] {
+function wrapText(text: string, font: PDFFont, fontSize: number, maxWidth: number, maxLines: number = 10): string[] {
   if (!text) return [""];
-  const words = text.split(" ");
+  const safeText = text.replace(/[^\x20-\x7E\xA0-\xFF]/g, " ");
+  const words = safeText.split(/\s+/).filter(w => w.length > 0);
   const lines: string[] = [];
   let currentLine = "";
 
   for (const word of words) {
     const testLine = currentLine ? `${currentLine} ${word}` : word;
-    const testWidth = font.widthOfTextAtSize(testLine, fontSize);
+    let testWidth: number;
+    try {
+      testWidth = font.widthOfTextAtSize(testLine, fontSize);
+    } catch {
+      testWidth = testLine.length * fontSize * 0.5;
+    }
     if (testWidth > maxWidth && currentLine) {
       lines.push(currentLine);
+      if (lines.length >= maxLines) {
+        lines[lines.length - 1] = truncate(lines[lines.length - 1], lines[lines.length - 1].length);
+        return lines;
+      }
       currentLine = word;
     } else {
       currentLine = testLine;
     }
   }
-  if (currentLine) lines.push(currentLine);
-  return lines;
+  if (currentLine) {
+    if (lines.length >= maxLines) {
+      lines[lines.length - 1] = lines[lines.length - 1] + "...";
+    } else {
+      lines.push(currentLine);
+    }
+  }
+  return lines.length > 0 ? lines : [""];
 }
 
 export interface AirwayBillData {
@@ -107,16 +122,24 @@ export interface AirwayBillData {
   itemsSummary?: string;
   shipmentType?: string;
   remarks?: string;
+  quantity?: number;
 }
 
-// A4: 595.28 x 841.89 points
-// 3 bills per page: each bill ~260pt tall with gaps
 const A4_WIDTH = 595.28;
 const A4_HEIGHT = 841.89;
-const BILL_WIDTH = A4_WIDTH - 40; // 20pt margin each side
-const BILL_HEIGHT = 255;
-const MARGIN_X = 20;
-const GAP_Y = 8;
+const MARGIN_X = 18;
+const MARGIN_TOP = 16;
+const BILL_WIDTH = A4_WIDTH - MARGIN_X * 2;
+const BILL_HEIGHT = 260;
+const GAP_Y = 6;
+
+const BLACK = rgb(0.05, 0.05, 0.05);
+const DARK = rgb(0.15, 0.15, 0.15);
+const GRAY = rgb(0.4, 0.4, 0.4);
+const LIGHT_GRAY = rgb(0.6, 0.6, 0.6);
+const RED = rgb(0.75, 0.1, 0.1);
+const HEADER_BG = rgb(0.13, 0.13, 0.2);
+const WHITE = rgb(1, 1, 1);
 
 async function drawSingleAirwayBill(
   page: PDFPage,
@@ -131,167 +154,233 @@ async function drawSingleAirwayBill(
   const topY = startY;
   const w = BILL_WIDTH;
 
-  const col1W = Math.floor(w * 0.36);
-  const col2W = Math.floor(w * 0.32);
+  const col1W = Math.round(w * 0.35);
+  const col2W = Math.round(w * 0.30);
   const col3W = w - col1W - col2W;
 
-  const headerH = 16;
-  const mainH = 140;
-  const remarksH = 18;
-  const productsH = 18;
+  const headerH = 18;
+  const mainH = 150;
+  const remarksH = 20;
+  const productsH = 30;
   const totalH = headerH + mainH + remarksH + productsH;
+  const bottomY = topY - totalH;
 
   const col1X = x;
   const col2X = x + col1W;
   const col3X = x + col1W + col2W;
 
-  drawRect(page, x, topY - totalH, w, totalH, true);
+  const pad = 6;
+  const lineH = 11;
+  const labelFS = 7;
+  const valueFS = 8;
+  const smallFS = 6.5;
 
-  drawRect(page, col1X, topY - headerH, col1W, headerH);
-  drawText(page, boldFont, "Customer Information", col1X + 4, topY - headerH + 4, 8);
+  drawBox(page, x, bottomY, w, totalH);
 
-  drawRect(page, col2X, topY - headerH, col2W, headerH);
-  drawText(page, boldFont, "Brand Information", col2X + 4, topY - headerH + 4, 8);
+  page.drawRectangle({
+    x: col1X, y: topY - headerH, width: col1W, height: headerH,
+    color: HEADER_BG, borderColor: rgb(0.25, 0.25, 0.25), borderWidth: 0.75,
+  });
+  drawTextSafe(page, boldFont, "CUSTOMER INFORMATION", col1X + pad, topY - headerH + 5, 7.5, WHITE);
 
-  drawRect(page, col3X, topY - headerH, col3W, headerH);
-  drawText(page, boldFont, "Parcel Information", col3X + 4, topY - headerH + 4, 8);
+  page.drawRectangle({
+    x: col2X, y: topY - headerH, width: col2W, height: headerH,
+    color: HEADER_BG, borderColor: rgb(0.25, 0.25, 0.25), borderWidth: 0.75,
+  });
+  drawTextSafe(page, boldFont, "BRAND INFORMATION", col2X + pad, topY - headerH + 5, 7.5, WHITE);
+
+  page.drawRectangle({
+    x: col3X, y: topY - headerH, width: col3W, height: headerH,
+    color: HEADER_BG, borderColor: rgb(0.25, 0.25, 0.25), borderWidth: 0.75,
+  });
+  drawTextSafe(page, boldFont, "PARCEL INFORMATION", col3X + pad, topY - headerH + 5, 7.5, WHITE);
 
   drawVLine(page, col2X, topY - headerH, topY - headerH - mainH);
   drawVLine(page, col3X, topY - headerH, topY - headerH - mainH);
 
   const mainTopY = topY - headerH;
 
-  // === COLUMN 1: Customer Information ===
-  let cy = mainTopY - 14;
-  drawText(page, boldFont, "Name: ", col1X + 4, cy, 7.5);
-  drawText(page, font, truncate(data.consigneeName, 28), col1X + 35, cy, 7.5);
+  // =====================================================
+  // COLUMN 1: Customer Information
+  // =====================================================
+  let cy = mainTopY - pad - lineH;
 
-  cy -= 12;
-  drawText(page, boldFont, "Phone: ", col1X + 4, cy, 7.5);
-  drawText(page, font, data.consigneePhone || "-", col1X + 35, cy, 7.5);
+  drawTextSafe(page, boldFont, "Name:", col1X + pad, cy, labelFS, GRAY);
+  drawTextSafe(page, boldFont, truncate(data.consigneeName, 30), col1X + pad + 32, cy, valueFS, BLACK);
 
-  cy -= 12;
-  const addressLines = wrapText(data.consigneeAddress || "-", font, 6.5, col1W - 45);
-  drawText(page, boldFont, "Address: ", col1X + 4, cy, 7.5);
-  drawText(page, font, addressLines[0] || "-", col1X + 43, cy, 6.5);
-  if (addressLines[1]) {
-    cy -= 10;
-    drawText(page, font, addressLines[1], col1X + 43, cy, 6.5);
+  cy -= lineH + 2;
+  drawTextSafe(page, boldFont, "Phone:", col1X + pad, cy, labelFS, GRAY);
+  drawTextSafe(page, font, data.consigneePhone || "-", col1X + pad + 32, cy, valueFS, DARK);
+
+  cy -= lineH + 4;
+  drawHLine(page, col1X + 2, col2X - 2, cy + 4);
+
+  drawTextSafe(page, boldFont, "Address:", col1X + pad, cy, labelFS, GRAY);
+  cy -= 2;
+  const addrMaxW = col1W - pad * 2 - 2;
+  const addrLines = wrapText(data.consigneeAddress || "-", font, smallFS, addrMaxW, 4);
+  for (let i = 0; i < Math.min(addrLines.length, 4); i++) {
+    drawTextSafe(page, font, addrLines[i], col1X + pad, cy - (i * 9), smallFS, DARK);
   }
-  if (addressLines[2]) {
-    cy -= 10;
-    drawText(page, font, addressLines[2], col1X + 43, cy, 6.5);
-  }
+  cy -= Math.min(addrLines.length, 4) * 9 + 4;
 
-  cy -= 16;
-  drawHLine(page, col1X, col2X, cy + 6);
-  drawText(page, boldFont, "Destination: ", col1X + 4, cy, 7.5);
-  drawText(page, font, data.consigneeCity || "-", col1X + 55, cy, 8, rgb(0, 0, 0));
+  drawHLine(page, col1X + 2, col2X - 2, cy + 4);
+  drawTextSafe(page, boldFont, "Dest. City:", col1X + pad, cy - 2, labelFS, GRAY);
+  drawTextSafe(page, boldFont, (data.consigneeCity || "-").toUpperCase(), col1X + pad + 48, cy - 2, 9, BLACK);
 
-  cy -= 16;
-  drawHLine(page, col1X, col2X, cy + 6);
-  drawText(page, boldFont, "Order: ", col1X + 4, cy, 7.5);
-  drawText(page, font, data.orderNumber || "-", col1X + 35, cy, 8);
+  cy -= lineH + 6;
+  drawHLine(page, col1X + 2, col2X - 2, cy + 4);
+  drawTextSafe(page, boldFont, "Order #:", col1X + pad, cy - 2, labelFS, GRAY);
+  drawTextSafe(page, boldFont, data.orderNumber || "-", col1X + pad + 38, cy - 2, valueFS, DARK);
 
-  const orderBarcode = await generateBarcode(data.orderNumber?.replace('#', '') || "0", 8, 1);
-  if (orderBarcode) {
-    try {
-      const barcodeImg = await pdfDoc.embedPng(orderBarcode);
-      const bw = Math.min(90, col1W - 20);
-      const bh = (barcodeImg.height / barcodeImg.width) * bw;
-      page.drawImage(barcodeImg, { x: col1X + 8, y: cy - bh - 5, width: bw, height: bh });
-    } catch {}
-  }
-
-  // === COLUMN 2: Brand Information ===
-  let by = mainTopY - 14;
-  drawText(page, boldFont, "Shipper: ", col2X + 4, by, 7.5);
-  drawText(page, font, truncate(data.merchantName, 22), col2X + 40, by, 7.5);
-
-  by -= 12;
-  if (data.merchantAddress) {
-    const shipAddrLines = wrapText(data.merchantAddress, font, 6.5, col2W - 60);
-    drawText(page, boldFont, "Shipper Address: ", col2X + 4, by, 6.5);
-    drawText(page, font, shipAddrLines[0] || "", col2X + 70, by, 6.5);
-    if (shipAddrLines[1]) {
-      by -= 10;
-      drawText(page, font, shipAddrLines[1], col2X + 70, by, 6.5);
+  const orderBarcodeArea = cy - 6;
+  const orderBarcodeText = (data.orderNumber || "0").replace(/[^a-zA-Z0-9]/g, "");
+  if (orderBarcodeText.length > 0) {
+    const orderBarcode = await generateBarcodePng(orderBarcodeText, 8, 1);
+    if (orderBarcode) {
+      try {
+        const barcodeImg = await pdfDoc.embedPng(orderBarcode);
+        const bw = Math.min(col1W - pad * 2 - 4, 120);
+        const bh = Math.min((barcodeImg.height / barcodeImg.width) * bw, 22);
+        page.drawImage(barcodeImg, { x: col1X + pad, y: orderBarcodeArea - bh, width: bw, height: bh });
+      } catch {}
     }
   }
 
-  by -= 24;
-  drawHLine(page, col2X, col3X, by + 12);
-  drawText(page, boldFont, "Amount: ", col2X + 4, by + 2, 8);
-  drawText(page, boldFont, `Rs ${data.codAmount.toLocaleString()}`, col2X + 45, by + 2, 12, rgb(0.8, 0.1, 0.1));
+  // =====================================================
+  // COLUMN 2: Brand Information
+  // =====================================================
+  let by = mainTopY - pad - lineH;
 
-  const amountBarcode = await generateBarcode(String(data.codAmount), 8, 1);
+  drawTextSafe(page, boldFont, "Shipper:", col2X + pad, by, labelFS, GRAY);
+  drawTextSafe(page, boldFont, truncate(data.merchantName, 24), col2X + pad + 36, by, valueFS, BLACK);
+
+  by -= lineH + 4;
+  drawHLine(page, col2X + 2, col3X - 2, by + 4);
+
+  if (data.merchantAddress) {
+    drawTextSafe(page, boldFont, "Address:", col2X + pad, by, labelFS, GRAY);
+    by -= 2;
+    const shipAddrMaxW = col2W - pad * 2 - 2;
+    const shipAddrLines = wrapText(data.merchantAddress, font, smallFS, shipAddrMaxW, 3);
+    for (let i = 0; i < Math.min(shipAddrLines.length, 3); i++) {
+      drawTextSafe(page, font, shipAddrLines[i], col2X + pad, by - (i * 9), smallFS, DARK);
+    }
+    by -= Math.min(shipAddrLines.length, 3) * 9 + 4;
+  } else {
+    by -= 10;
+  }
+
+  drawHLine(page, col2X + 2, col3X - 2, by + 4);
+
+  by -= 4;
+  drawTextSafe(page, boldFont, "COD Amount:", col2X + pad, by, labelFS, GRAY);
+  by -= 4;
+  drawTextSafe(page, boldFont, `Rs. ${data.codAmount.toLocaleString()}`, col2X + pad, by - 14, 16, RED);
+
+  const amountBarcodeY = by - 36;
+  const amountBarcode = await generateBarcodePng(String(Math.round(data.codAmount)), 8, 1);
   if (amountBarcode) {
     try {
       const barcodeImg = await pdfDoc.embedPng(amountBarcode);
-      const bw = Math.min(80, col2W - 20);
-      const bh = (barcodeImg.height / barcodeImg.width) * bw;
-      page.drawImage(barcodeImg, { x: col2X + 8, y: by - bh - 8, width: bw, height: bh });
+      const bw = Math.min(col2W - pad * 2 - 4, 110);
+      const bh = Math.min((barcodeImg.height / barcodeImg.width) * bw, 22);
+      page.drawImage(barcodeImg, { x: col2X + pad, y: amountBarcodeY - bh, width: bw, height: bh });
     } catch {}
   }
 
-  // === COLUMN 3: Parcel Information ===
-  let py = mainTopY - 14;
-  drawText(page, boldFont, data.courierName.toUpperCase(), col3X + 4, py, 9);
+  // =====================================================
+  // COLUMN 3: Parcel Information
+  // =====================================================
+  let py = mainTopY - pad - 2;
 
-  py -= 18;
-  const trackingBarcode = await generateBarcodeWithText(data.trackingNumber, 10, 2);
+  const courierLabel = data.courierName.toUpperCase();
+  drawTextSafe(page, boldFont, courierLabel, col3X + pad, py - 8, 11, BLACK);
+
+  py -= 22;
+
+  const trackingBarcode = await generateBarcodePng(data.trackingNumber, 14, 2, true);
   if (trackingBarcode) {
     try {
       const barcodeImg = await pdfDoc.embedPng(trackingBarcode);
-      const bw = Math.min(col3W - 12, 150);
-      const bh = (barcodeImg.height / barcodeImg.width) * bw;
-      page.drawImage(barcodeImg, { x: col3X + 4, y: py - bh, width: bw, height: bh });
-      py -= bh + 6;
+      const bw = Math.min(col3W - pad * 2, 160);
+      const bh = Math.min((barcodeImg.height / barcodeImg.width) * bw, 40);
+      page.drawImage(barcodeImg, { x: col3X + pad, y: py - bh, width: bw, height: bh });
+      py -= bh + 4;
     } catch {}
+  } else {
+    drawTextSafe(page, boldFont, `TN: ${data.trackingNumber}`, col3X + pad, py - 8, 8, BLACK);
+    py -= 14;
   }
 
   py -= 4;
-  drawHLine(page, col3X, x + w, py + 2);
-  const serviceMode = data.shipmentType || "Overnight";
-  drawText(page, boldFont, "Service: ", col3X + 4, py - 8, 7);
-  drawText(page, font, serviceMode, col3X + 40, py - 8, 7);
+  drawHLine(page, col3X + 2, x + w - 2, py + 2);
 
-  const fragileX = col3X + col3W - 55;
-  drawText(page, boldFont, "Fragile: ", fragileX, py - 8, 7);
-  drawText(page, font, "yes", fragileX + 32, py - 8, 7);
+  const infoStartY = py - 4;
+  const halfCol = (col3W - pad * 2) / 2;
 
-  py -= 22;
-  drawHLine(page, col3X, x + w, py + 2);
-  drawText(page, boldFont, "Date: ", col3X + 4, py - 8, 7);
-  drawText(page, font, data.bookedAt, col3X + 28, py - 8, 7);
+  drawTextSafe(page, boldFont, "Service:", col3X + pad, infoStartY, labelFS, GRAY);
+  drawTextSafe(page, font, data.shipmentType || "Overnight", col3X + pad + 36, infoStartY, valueFS, DARK);
 
-  const weightX = col3X + col3W / 2;
-  drawText(page, boldFont, "Weight: ", weightX, py - 8, 7);
-  drawText(page, font, `${data.weight} (Grams)`, weightX + 32, py - 8, 7);
+  drawTextSafe(page, boldFont, "Fragile:", col3X + pad + halfCol, infoStartY, labelFS, GRAY);
+  drawTextSafe(page, font, "Yes", col3X + pad + halfCol + 32, infoStartY, valueFS, DARK);
 
-  py -= 22;
-  drawHLine(page, col3X, x + w, py + 2);
-  drawText(page, boldFont, "Pieces: ", col3X + 4, py - 8, 7);
-  drawText(page, font, String(data.pieces), col3X + 34, py - 8, 7);
+  const row2Y = infoStartY - lineH - 2;
+  drawHLine(page, col3X + 2, x + w - 2, row2Y + 5);
 
-  const qtyX = col3X + col3W / 2;
-  drawText(page, boldFont, "Qty: ", qtyX, py - 8, 7);
-  drawText(page, font, String(data.pieces), qtyX + 22, py - 8, 7);
+  drawTextSafe(page, boldFont, "Date:", col3X + pad, row2Y, labelFS, GRAY);
+  drawTextSafe(page, font, data.bookedAt, col3X + pad + 24, row2Y, valueFS, DARK);
 
-  // === REMARKS ROW ===
-  const remarksY = topY - headerH - mainH;
-  drawHLine(page, x, x + w, remarksY);
-  drawRect(page, x, remarksY - remarksH, w, remarksH, true);
-  drawText(page, boldFont, "Remarks: ", x + 4, remarksY - 12, 7);
-  const remarksText = data.remarks || "Allow Open Parcel - Must Call Before Delivery - Handle With Care";
-  drawText(page, font, truncate(remarksText, 110), x + 42, remarksY - 12, 6.5);
+  drawTextSafe(page, boldFont, "Weight:", col3X + pad + halfCol, row2Y, labelFS, GRAY);
+  drawTextSafe(page, font, `${data.weight}g`, col3X + pad + halfCol + 32, row2Y, valueFS, DARK);
 
-  // === PRODUCTS ROW ===
-  const productsY = remarksY - remarksH;
-  drawRect(page, x, productsY - productsH, w, productsH, true);
-  drawText(page, boldFont, "Products: ", x + 4, productsY - 12, 7);
-  const productsText = data.itemsSummary ? `[ ${data.itemsSummary} ]` : "[ - ]";
-  drawText(page, font, truncate(productsText, 110), x + 45, productsY - 12, 6.5);
+  const row3Y = row2Y - lineH - 2;
+  drawHLine(page, col3X + 2, x + w - 2, row3Y + 5);
+
+  drawTextSafe(page, boldFont, "Pieces:", col3X + pad, row3Y, labelFS, GRAY);
+  drawTextSafe(page, font, String(data.pieces), col3X + pad + 32, row3Y, valueFS, DARK);
+
+  const qty = data.quantity || data.pieces;
+  drawTextSafe(page, boldFont, "Qty:", col3X + pad + halfCol, row3Y, labelFS, GRAY);
+  drawTextSafe(page, font, String(qty), col3X + pad + halfCol + 20, row3Y, valueFS, DARK);
+
+  // =====================================================
+  // REMARKS ROW (full width)
+  // =====================================================
+  const remarksTopY = topY - headerH - mainH;
+  drawHLine(page, x, x + w, remarksTopY, 0.75);
+
+  page.drawRectangle({
+    x, y: remarksTopY - remarksH, width: w, height: remarksH,
+    color: rgb(0.97, 0.97, 0.98),
+    borderColor: rgb(0.25, 0.25, 0.25),
+    borderWidth: 0.5,
+  });
+
+  drawTextSafe(page, boldFont, "Remarks:", x + pad, remarksTopY - 13, 7, GRAY);
+  const remarksText = data.remarks || "Allow Open Parcel  |  Must Call Before Delivery  |  Handle With Care";
+  const remarksMaxW = w - pad * 2 - 48;
+  const wrappedRemarks = wrapText(remarksText, font, smallFS, remarksMaxW, 2);
+  drawTextSafe(page, font, wrappedRemarks[0] || "", x + pad + 44, remarksTopY - 8, smallFS, DARK);
+  if (wrappedRemarks[1]) {
+    drawTextSafe(page, font, wrappedRemarks[1], x + pad + 44, remarksTopY - 17, smallFS, DARK);
+  }
+
+  // =====================================================
+  // PRODUCTS ROW (full width)
+  // =====================================================
+  const productsTopY = remarksTopY - remarksH;
+
+  drawBox(page, x, productsTopY - productsH, w, productsH);
+
+  drawTextSafe(page, boldFont, "Products:", x + pad, productsTopY - 10, 7, GRAY);
+
+  const productsText = data.itemsSummary || "-";
+  const productsMaxW = w - pad * 2 - 50;
+  const productLines = wrapText(productsText, font, smallFS, productsMaxW, 3);
+  for (let i = 0; i < Math.min(productLines.length, 3); i++) {
+    drawTextSafe(page, font, productLines[i], x + pad + 46, productsTopY - 10 - (i * 9), smallFS, DARK);
+  }
 }
 
 export async function generateAirwayBillPdf(data: AirwayBillData): Promise<string> {
@@ -302,7 +391,7 @@ export async function generateAirwayBillPdf(data: AirwayBillData): Promise<strin
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
   const page = pdfDoc.addPage([A4_WIDTH, A4_HEIGHT]);
-  await drawSingleAirwayBill(page, pdfDoc, font, boldFont, data, MARGIN_X, A4_HEIGHT - 20);
+  await drawSingleAirwayBill(page, pdfDoc, font, boldFont, data, MARGIN_X, A4_HEIGHT - MARGIN_TOP);
 
   const pdfBytes = await pdfDoc.save();
   const filename = `awb_${data.trackingNumber}_${Date.now()}.pdf`;
@@ -331,7 +420,7 @@ export async function generateMultiAirwayBillPdf(bills: AirwayBillData[]): Promi
       page = pdfDoc.getPages()[pdfDoc.getPageCount() - 1];
     }
 
-    const topY = A4_HEIGHT - 20 - posOnPage * (BILL_HEIGHT + GAP_Y);
+    const topY = A4_HEIGHT - MARGIN_TOP - posOnPage * (BILL_HEIGHT + GAP_Y);
     await drawSingleAirwayBill(page, pdfDoc, font, boldFont, bills[i], MARGIN_X, topY);
   }
 
@@ -374,8 +463,8 @@ function drawLine(page: PDFPage, y: number, width: number) {
 }
 
 function drawLabel(page: PDFPage, font: PDFFont, boldFont: PDFFont, label: string, value: string, x: number, y: number, labelSize: number = 8, valueSize: number = 10) {
-  drawText(page, font, label, x, y + 12, labelSize, rgb(0.5, 0.5, 0.5));
-  drawText(page, boldFont, value || "-", x, y, valueSize);
+  drawTextSafe(page, font, label, x, y + 12, labelSize, rgb(0.5, 0.5, 0.5));
+  drawTextSafe(page, boldFont, value || "-", x, y, valueSize);
 }
 
 export async function generateBatchLoadsheetPdf(data: BatchLoadsheetData): Promise<string> {
@@ -398,17 +487,17 @@ export async function generateBatchLoadsheetPdf(data: BatchLoadsheetData): Promi
     height: 38,
     color: rgb(0.12, 0.12, 0.18),
   });
-  drawText(page, boldFont, "BATCH LOADSHEET", 35, y + 5, 16, rgb(1, 1, 1));
-  drawText(page, font, `${data.courierName.toUpperCase()} | Batch: ${data.batchId.substring(0, 8)}`, 35, y - 8, 9, rgb(0.7, 0.7, 0.7));
+  drawTextSafe(page, boldFont, "BATCH LOADSHEET", 35, y + 5, 16, rgb(1, 1, 1));
+  drawTextSafe(page, font, `${data.courierName.toUpperCase()} | Batch: ${data.batchId.substring(0, 8)}`, 35, y - 8, 9, rgb(0.7, 0.7, 0.7));
 
   const statusText = `Total: ${data.totalCount} | Success: ${data.successCount} | Failed: ${data.failedCount}`;
-  drawText(page, boldFont, statusText, pageWidth - 300, y + 2, 10, rgb(1, 1, 1));
+  drawTextSafe(page, boldFont, statusText, pageWidth - 300, y + 2, 10, rgb(1, 1, 1));
 
   y -= 50;
 
-  drawText(page, font, `Merchant: ${data.merchantName}`, 35, y, 9, rgb(0.4, 0.4, 0.4));
-  drawText(page, font, `Created: ${data.createdAt}`, 250, y, 9, rgb(0.4, 0.4, 0.4));
-  drawText(page, font, `By: ${data.createdBy}`, 500, y, 9, rgb(0.4, 0.4, 0.4));
+  drawTextSafe(page, font, `Merchant: ${data.merchantName}`, 35, y, 9, rgb(0.4, 0.4, 0.4));
+  drawTextSafe(page, font, `Created: ${data.createdAt}`, 250, y, 9, rgb(0.4, 0.4, 0.4));
+  drawTextSafe(page, font, `By: ${data.createdBy}`, 500, y, 9, rgb(0.4, 0.4, 0.4));
 
   y -= 25;
 
@@ -423,7 +512,7 @@ export async function generateBatchLoadsheetPdf(data: BatchLoadsheetData): Promi
     color: rgb(0.93, 0.93, 0.96),
   });
   colHeaders.forEach((header, i) => {
-    drawText(page, boldFont, header, cols[i], y, 8, rgb(0.3, 0.3, 0.35));
+    drawTextSafe(page, boldFont, header, cols[i], y, 8, rgb(0.3, 0.3, 0.35));
   });
   y -= 22;
 
@@ -442,7 +531,7 @@ export async function generateBatchLoadsheetPdf(data: BatchLoadsheetData): Promi
         color: rgb(0.93, 0.93, 0.96),
       });
       colHeaders.forEach((header, i) => {
-        drawText(page, boldFont, header, cols[i], y, 8, rgb(0.3, 0.3, 0.35));
+        drawTextSafe(page, boldFont, header, cols[i], y, 8, rgb(0.3, 0.3, 0.35));
       });
       y -= 22;
       rowCount = 0;
@@ -461,22 +550,22 @@ export async function generateBatchLoadsheetPdf(data: BatchLoadsheetData): Promi
     });
 
     const textColor = isSuccess ? rgb(0.15, 0.15, 0.15) : rgb(0.7, 0.2, 0.2);
-    drawText(page, font, String(idx + 1), cols[0], y, 8, textColor);
-    drawText(page, font, truncate(item.orderNumber, 15), cols[1], y, 8, textColor);
-    drawText(page, font, item.trackingNumber || "-", cols[2], y, 8, textColor);
-    drawText(page, font, truncate(item.consigneeName, 15), cols[3], y, 8, textColor);
-    drawText(page, font, truncate(item.consigneeCity, 12), cols[4], y, 8, textColor);
-    drawText(page, font, truncate(item.consigneePhone, 14), cols[5], y, 8, textColor);
-    drawText(page, font, item.codAmount ? `${item.codAmount.toLocaleString()}` : "-", cols[6], y, 8, textColor);
+    drawTextSafe(page, font, String(idx + 1), cols[0], y, 8, textColor);
+    drawTextSafe(page, font, truncate(item.orderNumber, 15), cols[1], y, 8, textColor);
+    drawTextSafe(page, font, item.trackingNumber || "-", cols[2], y, 8, textColor);
+    drawTextSafe(page, font, truncate(item.consigneeName, 15), cols[3], y, 8, textColor);
+    drawTextSafe(page, font, truncate(item.consigneeCity, 12), cols[4], y, 8, textColor);
+    drawTextSafe(page, font, truncate(item.consigneePhone, 14), cols[5], y, 8, textColor);
+    drawTextSafe(page, font, item.codAmount ? `${item.codAmount.toLocaleString()}` : "-", cols[6], y, 8, textColor);
 
     const statusColor = isSuccess ? rgb(0.1, 0.5, 0.2) : rgb(0.8, 0.2, 0.2);
-    drawText(page, boldFont, isSuccess ? "OK" : "FAIL", cols[7], y, 8, statusColor);
+    drawTextSafe(page, boldFont, isSuccess ? "OK" : "FAIL", cols[7], y, 8, statusColor);
 
     y -= 18;
     rowCount++;
 
     if (!isSuccess && item.error) {
-      drawText(page, font, `  Error: ${truncate(item.error, 100)}`, cols[1], y, 7, rgb(0.6, 0.3, 0.3));
+      drawTextSafe(page, font, `  Error: ${truncate(item.error, 100)}`, cols[1], y, 7, rgb(0.6, 0.3, 0.3));
       y -= 14;
       rowCount++;
     }
@@ -485,7 +574,7 @@ export async function generateBatchLoadsheetPdf(data: BatchLoadsheetData): Promi
   y -= 20;
   drawLine(page, y, pageWidth);
   y -= 15;
-  drawText(page, font, `Generated by ShipFlow | ${new Date().toISOString()}`, 35, y, 7, rgb(0.6, 0.6, 0.6));
+  drawTextSafe(page, font, `Generated by ShipFlow | ${new Date().toISOString()}`, 35, y, 7, rgb(0.6, 0.6, 0.6));
 
   const pdfBytes = await pdfDoc.save();
   const filename = `batch_${data.batchId.substring(0, 8)}_${Date.now()}.pdf`;

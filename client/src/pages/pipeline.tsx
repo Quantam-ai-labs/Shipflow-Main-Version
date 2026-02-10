@@ -40,6 +40,8 @@ import {
   Send,
   Copy,
   ExternalLink,
+  Printer,
+  Download,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -383,6 +385,7 @@ export default function Pipeline() {
         results: {
           summary: { success: data.successCount, failed: data.failedCount, total: data.results.length },
           results: data.results,
+          batchId: data.batchId,
         },
       });
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
@@ -1171,14 +1174,21 @@ export default function Pipeline() {
             <div className="space-y-3 max-h-[400px] overflow-y-auto">
               {bookingResultsModal.results.results.filter((r: any) => r.success).length > 0 && (
                 <div>
-                  <div className="flex items-center justify-between gap-2 mb-2">
+                  <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
                     <div className="flex items-center gap-2">
                       <CheckCircle2 className="w-4 h-4 text-green-600" />
                       <span className="text-sm font-medium text-green-600">Booked Successfully</span>
                     </div>
-                    <Button size="sm" variant="ghost" onClick={copyTrackingNumbers} data-testid="button-copy-tracking">
-                      <Copy className="w-3.5 h-3.5 mr-1" />Copy Tracking
-                    </Button>
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {bookingResultsModal.results.batchId && (
+                        <Button size="sm" variant="outline" onClick={() => window.open(`/api/print/batch-awb/${bookingResultsModal.results.batchId}.pdf`, "_blank")} data-testid="button-download-awb">
+                          <Printer className="w-3.5 h-3.5 mr-1" />Download Airway Bills
+                        </Button>
+                      )}
+                      <Button size="sm" variant="ghost" onClick={copyTrackingNumbers} data-testid="button-copy-tracking">
+                        <Copy className="w-3.5 h-3.5 mr-1" />Copy Tracking
+                      </Button>
+                    </div>
                   </div>
                   <div className="space-y-1">
                     {bookingResultsModal.results.results.filter((r: any) => r.success).map((r: any) => (
