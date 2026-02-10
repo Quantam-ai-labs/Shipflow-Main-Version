@@ -72,7 +72,7 @@ export function orderToPacket(order: Order): BookingPacket {
     shippingAddress: order.shippingAddress || "",
     city: order.city || "",
     codAmount: order.paymentMethod === "cod" ? parseFloat(order.totalAmount) : 0,
-    weight: 500,
+    weight: 200,
     pieces,
     specialInstructions: order.notes || "",
     itemSummary,
@@ -137,6 +137,7 @@ export async function bookLeopardsBatch(
 
   const leopardsPackets = packets.map((p) => {
     const destCityId = findLeopardsCity(p.city, cityMap);
+    const mode = (p as any).mode || "overnight";
     return {
       booked_packet_weight: p.weight,
       booked_packet_no_piece: p.pieces,
@@ -152,6 +153,7 @@ export async function bookLeopardsBatch(
       consignment_address: p.shippingAddress,
       special_instructions: p.specialInstructions || p.itemSummary || "Handle with care",
       shipment_type: p.codAmount > 0 ? "COD" : "Detain",
+      booked_packet_shipment_type: mode === "overland" ? "Overland" : "Overnight",
     };
   });
 

@@ -1575,13 +1575,46 @@ export async function registerRoutes(
         existingJobs.filter(j => j.status === "success" && j.trackingNumber).map(j => j.orderId)
       );
 
-      const valid: Array<{ orderId: string; orderNumber: string; customerName: string; city: string; amount: string; phone: string }> = [];
-      const invalid: Array<{ orderId: string; orderNumber: string; missingFields: string[] }> = [];
+      const { orderToPacket } = await import("./services/couriers/booking");
+
+      function buildProductDescription(order: any): string {
+        const items = order.lineItems as any[];
+        if (items && items.length > 0) {
+          return items.map((i: any) => {
+            const name = (i.name || i.title || "Item").replace(/\s*[-–]\s*(Small|Medium|Large|XL|XXL|S|M|L|XS|One Size).*$/i, "");
+            const short = name.length > 30 ? name.substring(0, 28) + ".." : name;
+            return i.quantity > 1 ? `${short} x${i.quantity}` : short;
+          }).join(", ");
+        }
+        return order.itemSummary || "Order items";
+      }
+
+      const valid: Array<{
+        orderId: string; orderNumber: string; customerName: string; city: string;
+        address: string; phone: string; weight: number; pieces: number;
+        productDescription: string; codAmount: number; amount: string;
+        missingFields?: string[];
+      }> = [];
+      const invalid: Array<{
+        orderId: string; orderNumber: string; customerName: string; city: string;
+        address: string; phone: string; weight: number; pieces: number;
+        productDescription: string; codAmount: number; amount: string;
+        missingFields: string[];
+      }> = [];
       const alreadyBooked: Array<{ orderId: string; orderNumber: string; trackingNumber: string }> = [];
 
       for (const order of fetchedOrders) {
         if (order.workflowStatus !== "READY_TO_SHIP") {
-          invalid.push({ orderId: order.id, orderNumber: order.orderNumber, missingFields: ["Not in Ready to Ship status"] });
+          invalid.push({
+            orderId: order.id, orderNumber: order.orderNumber,
+            customerName: order.customerName || "", city: order.city || "",
+            address: order.shippingAddress || "", phone: normalizePhone(order.customerPhone),
+            weight: 200, pieces: order.totalQuantity || 1,
+            productDescription: buildProductDescription(order),
+            codAmount: order.paymentMethod === "cod" ? parseFloat(order.totalAmount) : 0,
+            amount: order.totalAmount,
+            missingFields: ["Not in Ready to Ship status"],
+          });
           continue;
         }
 
@@ -1595,17 +1628,27 @@ export async function registerRoutes(
           continue;
         }
 
+        const pieces = order.totalQuantity || ((order.lineItems as any[])?.length) || 1;
+        const productDescription = buildProductDescription(order);
+        const codAmount = order.paymentMethod === "cod" ? parseFloat(order.totalAmount) : 0;
+        const phone = normalizePhone(order.customerPhone);
+
         const missing = validateOrderForBooking(order);
         if (missing.length > 0) {
-          invalid.push({ orderId: order.id, orderNumber: order.orderNumber, missingFields: missing });
+          invalid.push({
+            orderId: order.id, orderNumber: order.orderNumber,
+            customerName: order.customerName || "", city: order.city || "",
+            address: order.shippingAddress || "", phone,
+            weight: 200, pieces, productDescription, codAmount,
+            amount: order.totalAmount, missingFields: missing,
+          });
         } else {
           valid.push({
-            orderId: order.id,
-            orderNumber: order.orderNumber,
-            customerName: order.customerName,
-            city: order.city || "",
+            orderId: order.id, orderNumber: order.orderNumber,
+            customerName: order.customerName, city: order.city || "",
+            address: order.shippingAddress || "", phone,
+            weight: 200, pieces, productDescription, codAmount,
             amount: order.totalAmount,
-            phone: normalizePhone(order.customerPhone),
           });
         }
       }
@@ -1622,12 +1665,19 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
 
-      const { orderIds, courier } = req.body;
+      const { orderIds, courier, orderOverrides } = req.body;
       if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
         return res.status(400).json({ message: "Order IDs required" });
       }
       if (!courier || !["leopards", "postex"].includes(courier)) {
         return res.status(400).json({ message: "Valid courier required" });
+      }
+
+      const overridesMap = new Map<string, { weight?: number; mode?: string }>();
+      if (orderOverrides && typeof orderOverrides === "object") {
+        for (const [oid, ov] of Object.entries(orderOverrides)) {
+          overridesMap.set(oid, ov as { weight?: number; mode?: string });
+        }
       }
 
       const creds = await getCourierCredentials(merchantId, courier);
@@ -1718,7 +1768,13 @@ export async function registerRoutes(
         jobMap.set(order.id, job.id);
       }
 
-      const packets = toBook.map(orderToPacket);
+      const packets = toBook.map(order => {
+        const pkt = orderToPacket(order);
+        const ovr = overridesMap.get(order.id);
+        if (ovr?.weight) pkt.weight = ovr.weight;
+        if (ovr?.mode) (pkt as any).mode = ovr.mode;
+        return pkt;
+      });
 
       let bookingResults: Array<{
         orderId: string;
