@@ -291,7 +291,7 @@ export default function Shipments() {
                           {shipment.trackingNumber || "-"}
                         </TableCell>
                         <TableCell>
-                          <Link href={`/orders/${shipment.orderId}`} className="text-primary hover:underline">
+                          <Link href={`/orders/detail/${shipment.orderId}`} className="text-primary hover:underline">
                             #{shipment.order?.orderNumber}
                           </Link>
                         </TableCell>

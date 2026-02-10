@@ -20,10 +20,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Badge } from "@/components/ui/badge";
 import {
   LayoutDashboard,
   Package,
+  Inbox,
+  Clock,
+  Pause,
   Truck,
+  CheckCircle,
+  XCircle,
   BarChart3,
   DollarSign,
   Users,
@@ -33,18 +39,26 @@ import {
   ChevronUp,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { useQuery } from "@tanstack/react-query";
 
-const mainNavItems = [
+const topNavItems = [
   {
     title: "Dashboard",
     url: "/dashboard",
     icon: LayoutDashboard,
   },
-  {
-    title: "Pipeline",
-    url: "/orders",
-    icon: Package,
-  },
+];
+
+const pipelineItems = [
+  { title: "New Orders", url: "/orders/new", icon: Inbox, key: "NEW" },
+  { title: "Pending", url: "/orders/pending", icon: Clock, key: "PENDING" },
+  { title: "Hold", url: "/orders/hold", icon: Pause, key: "HOLD" },
+  { title: "Ready to Ship", url: "/orders/ready", icon: Truck, key: "READY_TO_SHIP" },
+  { title: "Fulfilled", url: "/orders/fulfilled", icon: CheckCircle, key: "FULFILLED" },
+  { title: "Cancelled", url: "/orders/cancelled", icon: XCircle, key: "CANCELLED" },
+];
+
+const bottomNavItems = [
   {
     title: "Shipments",
     url: "/shipments",
@@ -101,6 +115,11 @@ export function AppSidebar() {
     return user?.email || "User";
   };
 
+  const { data: counts } = useQuery<Record<string, number>>({
+    queryKey: ["/api/orders/workflow-counts"],
+    refetchInterval: 30000,
+  });
+
   return (
     <Sidebar>
       <SidebarHeader className="p-4">
@@ -115,14 +134,61 @@ export function AppSidebar() {
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Main</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {mainNavItems.map((item) => (
+              {topNavItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild
-                    isActive={location === item.url || (item.url !== "/dashboard" && location.startsWith(item.url))}
+                    isActive={location === item.url}
+                  >
+                    <Link href={item.url} data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                      <item.icon className="w-4 h-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel>Pipeline</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {pipelineItems.map((item) => {
+                const count = counts?.[item.key] || 0;
+                return (
+                  <SidebarMenuItem key={item.key}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={location === item.url}
+                    >
+                      <Link href={item.url} data-testid={`nav-pipeline-${item.key.toLowerCase()}`}>
+                        <item.icon className="w-4 h-4" />
+                        <span className="flex-1">{item.title}</span>
+                        {count > 0 && (
+                          <Badge variant="secondary" className="h-5 min-w-[20px] px-1.5 text-xs ml-auto">
+                            {count}
+                          </Badge>
+                        )}
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel>More</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {bottomNavItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={location === item.url}
                   >
                     <Link href={item.url} data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
                       <item.icon className="w-4 h-4" />

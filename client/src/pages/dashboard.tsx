@@ -259,7 +259,7 @@ export default function Dashboard() {
           ) : recentOrders && recentOrders.length > 0 ? (
             <div className="space-y-3">
               {recentOrders.map((order) => (
-                <Link key={order.id} href={`/orders/${order.id}`}>
+                <Link key={order.id} href={`/orders/detail/${order.id}`}>
                   <div className="flex items-center justify-between p-4 rounded-lg border hover-elevate cursor-pointer transition-colors" data-testid={`order-row-${order.id}`}>
                     <div className="flex items-center gap-4">
                       <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">

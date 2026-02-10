@@ -31,9 +31,13 @@ function AppRoutes() {
         <Redirect to="/dashboard" />
       </Route>
       <Route path="/dashboard" component={Dashboard} />
-      <Route path="/orders/:id" component={OrderDetails} />
-      <Route path="/orders" component={Pipeline} />
+      <Route path="/orders/detail/:id" component={OrderDetails} />
+      <Route path="/orders/:stage" component={Pipeline} />
+      <Route path="/orders">
+        <Redirect to="/orders/new" />
+      </Route>
       <Route path="/shipments" component={Shipments} />
+      
       <Route path="/analytics" component={Analytics} />
       <Route path="/cod-reconciliation" component={CodReconciliation} />
       <Route path="/team" component={Team} />

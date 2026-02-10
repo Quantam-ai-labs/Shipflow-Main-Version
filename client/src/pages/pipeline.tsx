@@ -2,7 +2,6 @@ import { useState, useCallback, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -32,28 +31,34 @@ import {
   CheckCircle2,
   AlertCircle,
   Loader2,
-  RefreshCw,
   ChevronLeft,
   ChevronRight,
-  Timer,
   Edit3,
-  RotateCcw,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Order } from "@shared/schema";
-import { Link } from "wouter";
+import { Link, useParams } from "wouter";
 import { format, formatDistanceToNow, isPast } from "date-fns";
 
-const WORKFLOW_TABS = [
-  { key: "NEW", label: "New Orders", icon: Inbox, color: "text-blue-600" },
-  { key: "PENDING", label: "Pending", icon: Clock, color: "text-amber-600" },
-  { key: "HOLD", label: "Hold", icon: Pause, color: "text-purple-600" },
-  { key: "READY_TO_SHIP", label: "Ready to Ship", icon: Truck, color: "text-indigo-600" },
-  { key: "FULFILLED", label: "Fulfilled", icon: Package, color: "text-green-600" },
-  { key: "CANCELLED", label: "Cancelled", icon: XCircle, color: "text-red-600" },
-];
+const STAGE_TO_STATUS: Record<string, string> = {
+  new: "NEW",
+  pending: "PENDING",
+  hold: "HOLD",
+  ready: "READY_TO_SHIP",
+  fulfilled: "FULFILLED",
+  cancelled: "CANCELLED",
+};
+
+const STAGE_TITLES: Record<string, string> = {
+  NEW: "New Orders",
+  PENDING: "Pending Orders",
+  HOLD: "On Hold",
+  READY_TO_SHIP: "Ready to Ship",
+  FULFILLED: "Fulfilled Orders",
+  CANCELLED: "Cancelled Orders",
+};
 
 const PENDING_REASON_TYPES = [
   { value: "INCOMPLETE_ADDRESS", label: "Incomplete Address" },
@@ -121,7 +126,9 @@ function HoldCountdown({ holdUntil }: { holdUntil: string | Date }) {
 }
 
 export default function Pipeline() {
-  const [activeTab, setActiveTab] = useState("NEW");
+  const params = useParams<{ stage: string }>();
+  const activeTab = STAGE_TO_STATUS[params.stage || "new"] || "NEW";
+
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 300);
   const [page, setPage] = useState(1);
@@ -145,10 +152,12 @@ export default function Pipeline() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const { data: counts, isLoading: countsLoading } = useQuery<Record<string, number>>({
-    queryKey: ["/api/orders/workflow-counts"],
-    refetchInterval: 15000,
-  });
+  useEffect(() => {
+    setPage(1);
+    setSelectedIds(new Set());
+    setSearch("");
+    setPendingReasonFilter("all");
+  }, [activeTab]);
 
   const { data, isLoading, isFetching } = useQuery<{ orders: Order[]; total: number }>({
     queryKey: ["/api/orders", { workflowStatus: activeTab, search: debouncedSearch, page, pageSize, pendingReasonType: activeTab === "PENDING" ? pendingReasonFilter : undefined }],
@@ -205,13 +214,6 @@ export default function Pipeline() {
     },
   });
 
-  const handleTabChange = useCallback((tab: string) => {
-    setActiveTab(tab);
-    setPage(1);
-    setSelectedIds(new Set());
-    setSearch("");
-    setPendingReasonFilter("all");
-  }, []);
 
   const toggleSelect = useCallback((id: string) => {
     setSelectedIds(prev => {
@@ -299,40 +301,10 @@ export default function Pipeline() {
 
   return (
     <div className="h-full flex flex-col -m-4 md:-m-6">
-      {/* Tab Navigation */}
-      <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10">
-        <div className="flex items-center gap-1 px-4 pt-3 overflow-x-auto" data-testid="pipeline-tabs">
-          {WORKFLOW_TABS.map(tab => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.key;
-            const count = counts?.[tab.key] || 0;
-            return (
-              <button
-                key={tab.key}
-                onClick={() => handleTabChange(tab.key)}
-                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-md border-b-2 transition-colors whitespace-nowrap ${
-                  isActive
-                    ? "border-primary text-foreground bg-muted/50"
-                    : "border-transparent text-muted-foreground hover-elevate"
-                }`}
-                data-testid={`tab-${tab.key}`}
-              >
-                <Icon className={`w-4 h-4 ${isActive ? tab.color : ""}`} />
-                {tab.label}
-                {count > 0 && (
-                  <Badge variant={isActive ? "default" : "secondary"} className="text-xs h-5 min-w-[20px] px-1.5">
-                    {count}
-                  </Badge>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Toolbar */}
+      {/* Header + Toolbar */}
       <div className="flex items-center justify-between gap-3 px-4 py-3 border-b flex-wrap">
         <div className="flex items-center gap-3 flex-wrap">
+          <h1 className="text-lg font-semibold mr-2" data-testid="text-page-title">{STAGE_TITLES[activeTab] || "Orders"}</h1>
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
@@ -495,7 +467,7 @@ export default function Pipeline() {
                     </td>
                   )}
                   <td className="px-3 py-2.5">
-                    <Link href={`/orders/${order.id}`} className="font-medium text-sm hover:underline" data-testid={`link-order-${order.id}`}>
+                    <Link href={`/orders/detail/${order.id}`} className="font-medium text-sm hover:underline" data-testid={`link-order-${order.id}`}>
                       {order.orderNumber}
                     </Link>
                     <div className="text-xs text-muted-foreground">
