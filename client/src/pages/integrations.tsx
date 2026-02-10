@@ -129,7 +129,7 @@ const COURIER_CONFIG: Record<string, {
       {
         key: "pickupAddressCode",
         label: "Pickup Address Code",
-        placeholder: "Enter your PostEx Pickup Address Code (e.g. 001)",
+        placeholder: "Enter your PostEx Pickup Address Code (e.g. 002)",
         type: "text",
         envVar: "",
         required: false,
@@ -418,7 +418,7 @@ export default function Integrations() {
       setCourierFormData(prev => ({ ...prev, shipperId: '2125655' }));
     }
     if (!connectedCourier && courierName === 'postex') {
-      setCourierFormData(prev => ({ ...prev, pickupAddressCode: '001' }));
+      setCourierFormData(prev => ({ ...prev, pickupAddressCode: '002' }));
     }
     setIsCourierDialogOpen(true);
   };
