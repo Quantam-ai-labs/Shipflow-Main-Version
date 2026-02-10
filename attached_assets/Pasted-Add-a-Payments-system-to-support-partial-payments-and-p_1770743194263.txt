@@ -1,0 +1,152 @@
+Add a “Payments” system to support partial payments and prepaid orders, and ensure courier booking uses the remaining COD automatically.
+
+CURRENT:
+- Orders have a total amount (COD) shown on New Orders + Order Details.
+- Booking currently sends full COD amount to courier.
+
+NEW REQUIREMENTS:
+1) Support partial payments (customer pays some amount before delivery).
+2) Remaining amount should be booked as COD.
+3) Fully prepaid orders should be booked with COD = 0.
+4) Payments should be manageable both:
+   - from the New Orders list (quick edit / bulk)
+   - and inside the Order Details page (full payment history and controls)
+
+========================================
+A) DATABASE / SCHEMA CHANGES (Prisma)
+========================================
+1) Create a new table: order_payments
+- id (uuid)
+- merchant_id
+- order_id
+- amount (number)
+- method enum: CASH, BANK, JAZZCASH, EASYPAISA, CARD, OTHER
+- reference (string, optional) // transaction id / screenshot reference
+- notes (text, optional)
+- created_by_user_id
+- created_at
+
+2) Update orders table:
+- total_amount (number)  // original order amount from Shopify
+- cod_original (number)  // same as total_amount initially (for audit)
+- prepaid_amount (number, default 0) // cached sum of payments (optional)
+- cod_remaining (number) // computed or cached: max(total_amount - prepaid_amount, 0)
+- payment_status enum:
+  - UNPAID
+  - PARTIALLY_PAID
+  - PAID
+- last_payment_at (datetime, nullable)
+
+Rules:
+- prepaid_amount must never exceed total_amount (clamp).
+- cod_remaining must never be negative (clamp at 0).
+
+========================================
+B) PAYMENT CALCULATION LOGIC
+========================================
+Implement a single source-of-truth function:
+
+computePaymentState(order):
+- prepaid = sum(order_payments.amount)
+- cod_remaining = max(order.total_amount - prepaid, 0)
+- payment_status:
+  - if prepaid == 0 -> UNPAID
+  - if 0 < prepaid < total_amount -> PARTIALLY_PAID
+  - if prepaid >= total_amount -> PAID
+Return {prepaid, cod_remaining, payment_status}
+
+Every time a payment is added/edited/deleted, recompute and store cached fields on orders for performance.
+
+========================================
+C) ORDER DETAILS PAGE: PAYMENTS SECTION (MUST HAVE)
+========================================
+Add a “Payments” card on Order Details page:
+
+Show:
+- Total Amount
+- Paid (prepaid_amount)
+- Remaining COD (cod_remaining)
+- Payment Status badge (UNPAID / PARTIAL / PAID)
+
+Add Payment Form:
+- Amount input
+- Method dropdown
+- Reference field (optional)
+- Notes (optional)
+Buttons:
+- Add Payment
+- Mark Fully Paid (auto adds remaining amount as a payment OR sets prepaid to total via a special entry)
+- Reset Payments (admin only)
+
+Payment History table:
+- date/time
+- amount
+- method
+- reference
+- created by
+- delete/edit actions (role-based)
+
+Also allow “Set Remaining COD manually” ONLY for admin (optional), but default should be computed from payments.
+
+========================================
+D) NEW ORDERS PAGE: QUICK COD EDIT + BULK
+========================================
+On New Orders table, add:
+- Column: Paid / Remaining COD
+- Quick action: “Add Payment” (small modal) per order
+- Inline edit: allow editing “Paid amount” or “Remaining COD” (choose ONE approach):
+  Recommended: Add Payment only (safer audit trail).
+- Bulk action:
+  - Select multiple orders -> “Mark Prepaid” or “Add Payment to Selected”
+  - For bulk “Mark Prepaid”, set each selected order COD remaining to 0 by adding payment equal to remaining.
+
+Ensure this does not break workflow statuses.
+
+========================================
+E) COURIER BOOKING INTEGRATION (CRITICAL)
+========================================
+Update booking logic for both couriers:
+
+When booking a shipment, ALWAYS use:
+COD_TO_SEND = order.cod_remaining
+
+Rules:
+- If cod_remaining is 0 -> treat as prepaid; book with COD 0.
+- If partial paid -> book with remaining only.
+- Never send original total_amount if prepaid exists.
+
+Leopards booking:
+- booked_packet_collect_amount = COD_TO_SEND
+
+PostEx booking:
+- invoicePayment = COD_TO_SEND
+
+Store in shipments table:
+- cod_sent_to_courier
+- prepaid_at_booking
+- remaining_cod_at_booking
+So we have audit proof.
+
+If order is already booked:
+- Changing payments should NOT automatically change courier COD.
+- Show warning: “This order is already booked; COD cannot be changed unless rebooked.”
+- Add a “Rebook with updated COD” action (admin-only).
+
+========================================
+F) UI SAFETY + VALIDATIONS
+========================================
+- Prevent adding payment > remaining (or allow but clamp and mark as PAID).
+- If user tries to book and address/phone missing, block booking.
+- Show clear labels: Paid, Remaining COD.
+- If payment_status = PAID, display “Prepaid” badge in Ready-to-Ship and Booked tabs.
+
+========================================
+G) TEST CASES (MUST PASS)
+========================================
+1) Order total 2199, payment 1000 added -> remaining COD = 1199 -> booking sends 1199.
+2) Order total 2199, payment 2199 added -> remaining COD = 0 -> booking sends 0.
+3) Multiple payments (500 + 700) -> remaining correct.
+4) Delete a payment -> remaining recalculates correctly.
+5) Already booked order -> payment changes do not alter courier record; rebook required.
+
+Deliver end-to-end: schema migrations, APIs, UI, and booking integration updates.
