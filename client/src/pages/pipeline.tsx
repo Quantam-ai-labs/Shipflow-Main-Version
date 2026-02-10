@@ -37,6 +37,9 @@ import {
   ChevronsRight,
   Edit3,
   Undo2,
+  Send,
+  Copy,
+  ExternalLink,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -163,6 +166,11 @@ export default function Pipeline() {
   const [editPhone, setEditPhone] = useState("");
   const [editAddress, setEditAddress] = useState("");
   const [editCity, setEditCity] = useState("");
+
+  const [selectedCourier, setSelectedCourier] = useState<string>("leopards");
+  const [bookingConfirmModal, setBookingConfirmModal] = useState<{ open: boolean; preview: any | null }>({ open: false, preview: null });
+  const [bookingResultsModal, setBookingResultsModal] = useState<{ open: boolean; results: any | null }>({ open: false, results: null });
+  const [isBookingLoading, setIsBookingLoading] = useState(false);
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -307,6 +315,57 @@ export default function Pipeline() {
     setHoldUntil("");
   }, [holdUntil, holdModal, workflowMutation, bulkWorkflowMutation]);
 
+  const handleBookSelected = useCallback(async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setIsBookingLoading(true);
+    try {
+      const res = await apiRequest("POST", "/api/booking/preview", { orderIds: ids, courier: selectedCourier });
+      const preview = await res.json();
+      setBookingConfirmModal({ open: true, preview });
+    } catch (err: any) {
+      toast({ title: "Preview failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsBookingLoading(false);
+    }
+  }, [selectedIds, selectedCourier, toast]);
+
+  const submitBooking = useCallback(async () => {
+    if (!bookingConfirmModal.preview) return;
+    const validIds = bookingConfirmModal.preview.valid.map((v: any) => v.orderId);
+    if (validIds.length === 0) return;
+    setBookingConfirmModal({ open: false, preview: null });
+    setIsBookingLoading(true);
+    try {
+      const res = await apiRequest("POST", "/api/booking/book", { orderIds: validIds, courier: selectedCourier });
+      const data = await res.json();
+      setBookingResultsModal({
+        open: true,
+        results: {
+          summary: { success: data.successCount, failed: data.failedCount, total: data.results.length },
+          results: data.results,
+        },
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders/workflow-counts"] });
+      setSelectedIds(new Set());
+    } catch (err: any) {
+      toast({ title: "Booking failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsBookingLoading(false);
+    }
+  }, [bookingConfirmModal, selectedCourier, queryClient, toast]);
+
+  const copyTrackingNumbers = useCallback(() => {
+    if (!bookingResultsModal.results) return;
+    const trackingNums = bookingResultsModal.results.results
+      .filter((r: any) => r.success && r.trackingNumber)
+      .map((r: any) => r.trackingNumber)
+      .join("\n");
+    navigator.clipboard.writeText(trackingNums);
+    toast({ title: "Tracking numbers copied" });
+  }, [bookingResultsModal, toast]);
+
   const expiredHolds = useMemo(() => {
     if (activeTab !== "HOLD") return 0;
     return orders.filter(o => o.holdUntil && isPast(new Date(o.holdUntil))).length;
@@ -383,6 +442,25 @@ export default function Pipeline() {
             <Button size="sm" onClick={() => handleBulkAction("release-hold")} disabled={isPending} data-testid="bulk-release">
               <Truck className="w-3.5 h-3.5 mr-1.5" />Release
             </Button>
+          )}
+
+          {activeTab === "READY_TO_SHIP" && (
+            <>
+              <div className="h-4 w-px bg-border" />
+              <Select value={selectedCourier} onValueChange={setSelectedCourier}>
+                <SelectTrigger className="h-8 w-[130px] text-xs" data-testid="select-courier">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="leopards">Leopards</SelectItem>
+                  <SelectItem value="postex">PostEx</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button size="sm" onClick={handleBookSelected} disabled={isBookingLoading || isPending} data-testid="button-book-selected">
+                {isBookingLoading ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Send className="w-3.5 h-3.5 mr-1.5" />}
+                Book Selected
+              </Button>
+            </>
           )}
 
           <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())} data-testid="bulk-clear">
@@ -795,6 +873,147 @@ export default function Pipeline() {
             <Button variant="ghost" onClick={() => setHoldModal({ open: false, orderIds: [] })}>Back</Button>
             <Button onClick={submitHold} disabled={!holdUntil} data-testid="button-submit-hold">
               Set Hold
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Booking Confirmation Modal */}
+      <Dialog open={bookingConfirmModal.open} onOpenChange={open => { if (!open) setBookingConfirmModal({ open: false, preview: null }); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Confirm Booking via {selectedCourier === "leopards" ? "Leopards" : "PostEx"}</DialogTitle>
+            <DialogDescription>Review the orders before submitting to the courier.</DialogDescription>
+          </DialogHeader>
+          {bookingConfirmModal.preview && (
+            <div className="space-y-3 max-h-[400px] overflow-y-auto">
+              {bookingConfirmModal.preview.valid.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <CheckCircle2 className="w-4 h-4 text-green-600" />
+                    <span className="text-sm font-medium">{bookingConfirmModal.preview.valid.length} ready to book</span>
+                  </div>
+                  <div className="space-y-1">
+                    {bookingConfirmModal.preview.valid.map((v: any) => (
+                      <div key={v.orderId} className="flex items-center justify-between gap-2 text-xs px-2 py-1.5 rounded bg-muted/50" data-testid={`preview-valid-${v.orderId}`}>
+                        <span className="font-medium">{v.orderNumber}</span>
+                        <span className="text-muted-foreground truncate max-w-[200px]">{v.customerName} - {v.city}</span>
+                        <span className="font-medium">Rs {Number(v.amount).toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {bookingConfirmModal.preview.alreadyBooked?.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Package className="w-4 h-4 text-blue-600" />
+                    <span className="text-sm font-medium text-blue-600">{bookingConfirmModal.preview.alreadyBooked.length} already booked</span>
+                  </div>
+                  <div className="space-y-1">
+                    {bookingConfirmModal.preview.alreadyBooked.map((ab: any) => (
+                      <div key={ab.orderId} className="flex items-center justify-between gap-2 text-xs px-2 py-1.5 rounded bg-blue-50 dark:bg-blue-950/30" data-testid={`preview-booked-${ab.orderId}`}>
+                        <span className="font-medium">{ab.orderNumber}</span>
+                        <span className="font-mono text-blue-700 dark:text-blue-400">{ab.trackingNumber}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {bookingConfirmModal.preview.invalid.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertCircle className="w-4 h-4 text-red-600" />
+                    <span className="text-sm font-medium text-red-600">{bookingConfirmModal.preview.invalid.length} cannot be booked</span>
+                  </div>
+                  <div className="space-y-1">
+                    {bookingConfirmModal.preview.invalid.map((inv: any) => (
+                      <div key={inv.orderId} className="flex items-center justify-between gap-2 text-xs px-2 py-1.5 rounded bg-red-50 dark:bg-red-950/30" data-testid={`preview-invalid-${inv.orderId}`}>
+                        <span className="font-medium">{inv.orderNumber}</span>
+                        <span className="text-red-600 dark:text-red-400 truncate max-w-[250px]">{inv.missingFields?.join(", ")}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setBookingConfirmModal({ open: false, preview: null })} data-testid="button-cancel-booking">Back</Button>
+            <Button
+              onClick={submitBooking}
+              disabled={!bookingConfirmModal.preview || bookingConfirmModal.preview.valid.length === 0}
+              data-testid="button-confirm-booking"
+            >
+              <Send className="w-3.5 h-3.5 mr-1.5" />
+              Book {bookingConfirmModal.preview?.valid.length || 0} Orders
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Booking Results Modal */}
+      <Dialog open={bookingResultsModal.open} onOpenChange={open => { if (!open) setBookingResultsModal({ open: false, results: null }); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Booking Results</DialogTitle>
+            <DialogDescription>
+              {bookingResultsModal.results && (
+                <span>{bookingResultsModal.results.summary.success} of {bookingResultsModal.results.summary.total} orders booked successfully.</span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          {bookingResultsModal.results && (
+            <div className="space-y-3 max-h-[400px] overflow-y-auto">
+              {bookingResultsModal.results.results.filter((r: any) => r.success).length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-green-600" />
+                      <span className="text-sm font-medium text-green-600">Booked Successfully</span>
+                    </div>
+                    <Button size="sm" variant="ghost" onClick={copyTrackingNumbers} data-testid="button-copy-tracking">
+                      <Copy className="w-3.5 h-3.5 mr-1" />Copy Tracking
+                    </Button>
+                  </div>
+                  <div className="space-y-1">
+                    {bookingResultsModal.results.results.filter((r: any) => r.success).map((r: any) => (
+                      <div key={r.orderId} className="flex items-center justify-between gap-2 text-xs px-2 py-1.5 rounded bg-green-50 dark:bg-green-950/30" data-testid={`result-success-${r.orderId}`}>
+                        <span className="font-medium">{r.orderNumber}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-green-700 dark:text-green-400">{r.trackingNumber}</span>
+                          {r.slipUrl && (
+                            <a href={r.slipUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {bookingResultsModal.results.results.filter((r: any) => !r.success).length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <XCircle className="w-4 h-4 text-red-600" />
+                    <span className="text-sm font-medium text-red-600">Failed</span>
+                  </div>
+                  <div className="space-y-1">
+                    {bookingResultsModal.results.results.filter((r: any) => !r.success).map((r: any) => (
+                      <div key={r.orderId} className="flex items-center justify-between gap-2 text-xs px-2 py-1.5 rounded bg-red-50 dark:bg-red-950/30" data-testid={`result-failed-${r.orderId}`}>
+                        <span className="font-medium">{r.orderNumber}</span>
+                        <span className="text-red-600 dark:text-red-400 truncate max-w-[250px]">{r.error}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setBookingResultsModal({ open: false, results: null })} data-testid="button-close-results">
+              Done
             </Button>
           </DialogFooter>
         </DialogContent>

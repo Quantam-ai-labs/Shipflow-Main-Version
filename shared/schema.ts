@@ -167,8 +167,10 @@ export const orders = pgTable("orders", {
   lastStatusChangedAt: timestamp("last_status_changed_at"),
   lastStatusChangedByUserId: varchar("last_status_changed_by_user_id"),
   itemSummary: text("item_summary"),
+  courierSlipUrl: text("courier_slip_url"),
   bookingStatus: varchar("booking_status", { length: 50 }),
   bookingError: text("booking_error"),
+  bookedAt: timestamp("booked_at"),
 }, (table) => [
   index("idx_orders_merchant").on(table.merchantId),
   index("idx_orders_shopify_id").on(table.shopifyOrderId),
@@ -359,6 +361,36 @@ export const insertSyncLogSchema = createInsertSchema(syncLogs).omit({
 });
 export type InsertSyncLog = z.infer<typeof insertSyncLogSchema>;
 export type SyncLog = typeof syncLogs.$inferSelect;
+
+// ============================================
+// BOOKING JOBS (Courier booking idempotency)
+// ============================================
+export const bookingJobs = pgTable("booking_jobs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  orderId: varchar("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
+  courierName: varchar("courier_name", { length: 50 }).notNull(),
+  status: varchar("status", { length: 30 }).notNull().default("queued"),
+  trackingNumber: varchar("tracking_number", { length: 100 }),
+  slipUrl: text("slip_url"),
+  rawRequest: jsonb("raw_request"),
+  rawResponse: jsonb("raw_response"),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_booking_jobs_merchant").on(table.merchantId),
+  index("idx_booking_jobs_order").on(table.orderId),
+  index("idx_booking_jobs_order_courier").on(table.orderId, table.courierName),
+]);
+
+export const insertBookingJobSchema = createInsertSchema(bookingJobs).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertBookingJob = z.infer<typeof insertBookingJobSchema>;
+export type BookingJob = typeof bookingJobs.$inferSelect;
 
 // ============================================
 // RELATIONS

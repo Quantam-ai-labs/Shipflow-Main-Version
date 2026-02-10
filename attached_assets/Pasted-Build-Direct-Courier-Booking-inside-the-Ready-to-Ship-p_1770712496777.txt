@@ -1,0 +1,220 @@
+Build Direct Courier Booking inside the “Ready to Ship” page of our app (ShipFlow). The UI already has a Ready-to-Ship table with checkboxes for each order. Implement a one-click bulk booking workflow: user selects multiple Ready-to-Ship orders → chooses a courier (Leopards or PostEx) → clicks “Book Selected” → system creates bookings via courier APIs, stores tracking numbers + label links, and moves booked orders to “Fulfilled / Monthly Tabs” (or keeps them in Ready-to-Ship but marked as BOOKED depending on our workflow setting).
+
+1) Couriers & Credentials (multi-merchant, generic)
+
+We are multi-merchant. Each merchant will store courier credentials in Settings.
+
+Leopards uses api_key + api_password in request body for POST APIs. 
+
+Leopard Api Documentation
+
+PostEx uses a token in request headers. 
+
+Postex Api Documentation
+
+
+Update Settings UI so each courier can have custom credential fields:
+
+Leopards: api_key, api_password, and env toggle (staging vs production base URL). 
+
+Leopard Api Documentation
+
+PostEx: token and env toggle.
+
+Create a courier abstraction layer so adding new couriers later is easy.
+
+2) Ready-to-Ship Booking UX (super simple)
+
+On Ready-to-Ship page:
+
+Each row has a checkbox, and a top toolbar shows:
+
+Courier dropdown: Leopards / PostEx
+
+Button: Book Selected
+
+Optional: “Generate Load Sheet / Labels” after booking
+
+When user clicks “Book Selected”:
+
+Validate each selected order has required fields (name, phone, address, city, COD amount, items/pieces, weight if required).
+
+Show confirmation modal “Book X orders with {Courier}?”
+
+Perform booking in backend with robust error handling:
+
+If 50 selected and 5 fail, book remaining 45 and show a results summary with per-order errors.
+
+Store booking results (tracking number, slip/label link, status BOOKED, courier name, booking payload, response, timestamps).
+
+Update UI in real-time (optimistic UI allowed but must confirm results).
+
+3) Leopards Booking Implementation (Batch booking preferred)
+
+Implement Leopards booking using Batch Book Packet endpoint (preferred for bulk). The request must include merchant api_key, api_password, and packets array. 
+
+Leopard Api Documentation
+
+
+Each packet must map from our order fields into Leopards fields (minimum required):
+
+booked_packet_weight (grams), booked_packet_no_piece, booked_packet_collect_amount 
+
+Leopard Api Documentation
+
+origin_city, destination_city (use “self” or city ID strategy; if we don’t have city IDs yet, implement “Get All Cities” caching to map city names → IDs) 
+
+Leopard Api Documentation
+
+Shipper fields required: shipment_name_eng, shipment_phone, shipment_address 
+
+Leopard Api Documentation
+
+Consignee fields required: consignment_name_eng, consignment_phone, consignment_address 
+
+Leopard Api Documentation
+
+special_instructions required by validation 
+
+Leopard Api Documentation
+
+
+Optional: booked_packet_order_id = our internal order number, return address fields, etc.
+
+On success, Leopards returns for each packet: track_number and slip_link. Store both. 
+
+Leopard Api Documentation
+
+
+Also store raw response and link “Open Slip” in UI.
+
+Important:
+
+If Leopards returns validation errors per packet, parse and attach errors to those orders, don’t fail the whole batch. 
+
+Leopard Api Documentation
+
+Add a “Manual Sync Status” button later using Leopards tracking endpoint (trackBookedPacket) to update statuses. (We already have universal statuses in our app.)
+
+4) PostEx Booking Implementation (Create Order per selected order)
+
+PostEx booking is done by creating an order through:
+POST https://api.postex.pk/services/integration/api/order/v3/create-order 
+
+Postex Api Documentation
+
+
+Send token in header. 
+
+Postex Api Documentation
+
+
+Request body mapping from our order to PostEx required params:
+
+orderRefNumber = our internal order number (string) 
+
+Postex Api Documentation
+
+invoicePayment = COD amount 
+
+Postex Api Documentation
+
+customerName, customerPhone (format 03xxxxxxxxx), deliveryAddress, cityName 
+
+Postex Api Documentation
+
+items (#pieces), invoiceDivision (use 1 by default), orderType (“Normal” default) 
+
+Postex Api Documentation
+
+
+Optional: orderDetail summary string (items list), transactionNotes (special instructions), and pickup/store address codes if we later support multiple warehouses. 
+
+Postex Api Documentation
+
+On success, PostEx returns: trackingNumber and initial orderStatus “UnBooked”. Store trackingNumber. 
+
+Postex Api Documentation
+
+
+Note: Even if PostEx calls it “UnBooked”, in our app we still mark courier booking as BOOKED once trackingNumber is created (because booking was created at PostEx side). Keep both fields: postexOrderStatus and our universalStatus.
+
+5) Prevent duplicates + idempotency
+
+Booking must be “safe”:
+
+If the same order is booked twice (double click, refresh, retries), do NOT create a second courier booking.
+
+Implement idempotency:
+
+Before booking, check if order already has courier_tracking_number for that courier. If yes, skip and report “Already booked”.
+
+Also maintain a booking_jobs table keyed by (merchantId, orderId, courier) with states: queued, processing, success, failed. If request repeats while processing, return current job status.
+
+Log every booking attempt with request payload + response.
+
+6) Data to store per order after booking
+
+For each booked order store:
+
+courier_name (LEOPARDS/POSTEX)
+
+courier_tracking_number
+
+courier_slip_url (Leopards slip_link; PostEx later airwaybill link if we implement)
+
+courier_booking_status (BOOKED/FAILED)
+
+courier_raw_response JSON
+
+booked_at timestamp
+
+universal_status set to BOOKED (from our standard statuses list)
+
+Keep existing “pipeline tab” logic (Ready-to-Ship → Fulfilled or Monthly tab) and update counts.
+
+7) City normalization & validation
+
+Implement city normalization:
+
+For Leopards, add a cached city list loader using “Get All Cities” and map our city name to Leopards city ID or accepted string. 
+
+Leopard Api Documentation
+
+For PostEx, use cityName as text; optionally validate against PostEx operational cities API later.
+
+Phone cleanup:
+
+Normalize Pakistani phone to “03xxxxxxxxx” for PostEx. 
+
+Postex Api Documentation
+
+For Leopards, keep as string digits but sanitize + remove spaces.
+
+8) Backend endpoints to build
+
+Create backend routes:
+
+POST /api/booking/preview (validates selected orders, returns what will be sent, and shows missing fields)
+
+POST /api/booking/leopards/batch (books selected orders through Leopards batch API)
+
+POST /api/booking/postex/bulk (loops selected orders, calls PostEx create-order per order, returns per-order result list)
+
+Return a unified response format: { successCount, failedCount, results: [{orderId, ok, trackingNumber, slipUrl, error}] }
+
+9) UI results + follow-up actions
+
+After booking:
+
+Show toast + expandable panel listing booked vs failed.
+
+Add quick buttons:
+
+“Copy tracking numbers”
+
+“Open slips” (Leopards slip links)
+
+Keep the design minimal, Apple-like, glassmorphism, dark/light mode consistent.
+
+Implement this end-to-end (UI + backend + DB). Use clean TypeScript types, strong validation, and do not break existing pipeline tabs.

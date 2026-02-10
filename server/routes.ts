@@ -1550,5 +1550,255 @@ export async function registerRoutes(
     }
   });
 
+  // ============================================
+  // COURIER BOOKING ENDPOINTS
+  // ============================================
+
+  app.post("/api/booking/preview", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const { orderIds, courier } = req.body;
+      if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
+        return res.status(400).json({ message: "Order IDs required" });
+      }
+      if (!courier || !["leopards", "postex"].includes(courier)) {
+        return res.status(400).json({ message: "Valid courier required (leopards or postex)" });
+      }
+
+      const { validateOrderForBooking, normalizePhone } = await import("./services/couriers/booking");
+
+      const fetchedOrders = await storage.getOrdersByIds(merchantId, orderIds);
+      const existingJobs = await storage.getBookingJobsByOrderIds(merchantId, orderIds);
+      const bookedOrderIds = new Set(
+        existingJobs.filter(j => j.status === "success" && j.trackingNumber).map(j => j.orderId)
+      );
+
+      const valid: Array<{ orderId: string; orderNumber: string; customerName: string; city: string; amount: string; phone: string }> = [];
+      const invalid: Array<{ orderId: string; orderNumber: string; missingFields: string[] }> = [];
+      const alreadyBooked: Array<{ orderId: string; orderNumber: string; trackingNumber: string }> = [];
+
+      for (const order of fetchedOrders) {
+        if (order.workflowStatus !== "READY_TO_SHIP") {
+          invalid.push({ orderId: order.id, orderNumber: order.orderNumber, missingFields: ["Not in Ready to Ship status"] });
+          continue;
+        }
+
+        if (bookedOrderIds.has(order.id) || order.courierTracking) {
+          const existingJob = existingJobs.find(j => j.orderId === order.id && j.status === "success");
+          alreadyBooked.push({
+            orderId: order.id,
+            orderNumber: order.orderNumber,
+            trackingNumber: existingJob?.trackingNumber || order.courierTracking || "Unknown",
+          });
+          continue;
+        }
+
+        const missing = validateOrderForBooking(order);
+        if (missing.length > 0) {
+          invalid.push({ orderId: order.id, orderNumber: order.orderNumber, missingFields: missing });
+        } else {
+          valid.push({
+            orderId: order.id,
+            orderNumber: order.orderNumber,
+            customerName: order.customerName,
+            city: order.city || "",
+            amount: order.totalAmount,
+            phone: normalizePhone(order.customerPhone),
+          });
+        }
+      }
+
+      res.json({ valid, invalid, alreadyBooked, courier });
+    } catch (error) {
+      console.error("Error previewing booking:", error);
+      res.status(500).json({ message: "Failed to preview booking" });
+    }
+  });
+
+  app.post("/api/booking/book", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const { orderIds, courier } = req.body;
+      if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
+        return res.status(400).json({ message: "Order IDs required" });
+      }
+      if (!courier || !["leopards", "postex"].includes(courier)) {
+        return res.status(400).json({ message: "Valid courier required" });
+      }
+
+      const creds = await getCourierCredentials(merchantId, courier);
+      if (!creds) {
+        return res.status(400).json({ message: `No ${courier} credentials configured. Go to Settings to add them.` });
+      }
+
+      const merchant = await storage.getMerchant(merchantId);
+      if (!merchant) {
+        return res.status(400).json({ message: "Merchant not found" });
+      }
+
+      const shipperInfo = {
+        name: merchant.name || "ShipFlow Merchant",
+        phone: merchant.phone || "",
+        address: merchant.address || "",
+        city: merchant.city || "Lahore",
+      };
+
+      const { validateOrderForBooking, orderToPacket, bookLeopardsBatch, bookPostExBulk } = await import("./services/couriers/booking");
+
+      const fetchedOrders = await storage.getOrdersByIds(merchantId, orderIds);
+      const userId = (req.user as any)?.id || "system";
+
+      const results: Array<{
+        orderId: string;
+        orderNumber: string;
+        success: boolean;
+        trackingNumber?: string;
+        slipUrl?: string;
+        error?: string;
+      }> = [];
+
+      const toBook: typeof fetchedOrders = [];
+      for (const order of fetchedOrders) {
+        const existingJob = await storage.getBookingJob(merchantId, order.id, courier);
+        if (existingJob && existingJob.status === "success" && existingJob.trackingNumber) {
+          results.push({
+            orderId: order.id,
+            orderNumber: order.orderNumber,
+            success: true,
+            trackingNumber: existingJob.trackingNumber,
+            slipUrl: existingJob.slipUrl || undefined,
+            error: "Already booked",
+          });
+          continue;
+        }
+        if (existingJob && existingJob.status === "processing") {
+          results.push({
+            orderId: order.id,
+            orderNumber: order.orderNumber,
+            success: false,
+            error: "Booking in progress",
+          });
+          continue;
+        }
+
+        const missing = validateOrderForBooking(order);
+        if (missing.length > 0) {
+          results.push({
+            orderId: order.id,
+            orderNumber: order.orderNumber,
+            success: false,
+            error: `Missing: ${missing.join(", ")}`,
+          });
+          continue;
+        }
+
+        toBook.push(order);
+      }
+
+      if (toBook.length === 0) {
+        return res.json({
+          successCount: results.filter(r => r.success).length,
+          failedCount: results.filter(r => !r.success).length,
+          results,
+        });
+      }
+
+      const jobMap = new Map<string, string>();
+      for (const order of toBook) {
+        const job = await storage.createBookingJob({
+          merchantId,
+          orderId: order.id,
+          courierName: courier,
+          status: "processing",
+        });
+        jobMap.set(order.id, job.id);
+      }
+
+      const packets = toBook.map(orderToPacket);
+
+      let bookingResults: Array<{
+        orderId: string;
+        orderNumber: string;
+        success: boolean;
+        trackingNumber?: string;
+        slipUrl?: string;
+        error?: string;
+        rawResponse?: any;
+      }>;
+
+      if (courier === "leopards") {
+        bookingResults = await bookLeopardsBatch(packets, {
+          apiKey: creds.apiKey!,
+          apiPassword: creds.apiSecret!,
+        }, shipperInfo);
+      } else {
+        bookingResults = await bookPostExBulk(packets, creds.apiKey!, shipperInfo);
+      }
+
+      for (const br of bookingResults) {
+        const jobId = jobMap.get(br.orderId);
+        if (jobId) {
+          await storage.updateBookingJob(jobId, {
+            status: br.success ? "success" : "failed",
+            trackingNumber: br.trackingNumber || null,
+            slipUrl: br.slipUrl || null,
+            rawResponse: br.rawResponse || null,
+            errorMessage: br.error || null,
+          });
+        }
+
+        if (br.success && br.trackingNumber) {
+          await storage.updateOrder(merchantId, br.orderId, {
+            courierName: courier === "leopards" ? "Leopards" : "PostEx",
+            courierTracking: br.trackingNumber,
+            courierSlipUrl: br.slipUrl || null,
+            bookingStatus: "BOOKED",
+            bookingError: null,
+            bookedAt: new Date(),
+            shipmentStatus: "BOOKED",
+          });
+
+          await transitionOrder({
+            merchantId,
+            orderId: br.orderId,
+            toStatus: "FULFILLED",
+            action: "courier_booked",
+            actorUserId: userId,
+            actorType: "user",
+            reason: `Booked with ${courier === "leopards" ? "Leopards" : "PostEx"} - ${br.trackingNumber}`,
+          });
+        } else {
+          await storage.updateOrder(merchantId, br.orderId, {
+            bookingStatus: "FAILED",
+            bookingError: br.error || "Booking failed",
+          });
+        }
+
+        results.push({
+          orderId: br.orderId,
+          orderNumber: br.orderNumber,
+          success: br.success,
+          trackingNumber: br.trackingNumber,
+          slipUrl: br.slipUrl,
+          error: br.error,
+        });
+      }
+
+      const successCount = results.filter(r => r.success).length;
+      const failedCount = results.filter(r => !r.success).length;
+
+      console.log(`[Booking] ${courier}: ${successCount} success, ${failedCount} failed out of ${results.length}`);
+
+      res.json({ successCount, failedCount, results });
+    } catch (error) {
+      console.error("Error booking orders:", error);
+      res.status(500).json({ message: "Failed to book orders" });
+    }
+  });
+
   return httpServer;
 }

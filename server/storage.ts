@@ -1,6 +1,6 @@
 import {
   merchants, teamMembers, shopifyStores, courierAccounts,
-  orders, shipments, shipmentEvents, remarks, codReconciliation, syncLogs, workflowAuditLog,
+  orders, shipments, shipmentEvents, remarks, codReconciliation, syncLogs, workflowAuditLog, bookingJobs,
   type Merchant, type InsertMerchant,
   type TeamMember, type InsertTeamMember,
   type ShopifyStore, type InsertShopifyStore,
@@ -11,6 +11,7 @@ import {
   type Remark, type InsertRemark,
   type CodReconciliation, type InsertCodReconciliation,
   type SyncLog, type InsertSyncLog,
+  type BookingJob, type InsertBookingJob,
   users,
 } from "@shared/schema";
 import { db } from "./db";
@@ -90,6 +91,14 @@ export interface IStorage {
 
   // Audit Log
   getOrderAuditLog(merchantId: string, orderId: string): Promise<any[]>;
+
+  // Booking Jobs
+  getBookingJob(merchantId: string, orderId: string, courierName: string): Promise<BookingJob | undefined>;
+  getBookingJobsByOrderIds(merchantId: string, orderIds: string[]): Promise<BookingJob[]>;
+  createBookingJob(job: InsertBookingJob): Promise<BookingJob>;
+  updateBookingJob(id: string, data: Partial<InsertBookingJob>): Promise<BookingJob | undefined>;
+  getOrdersByIds(merchantId: string, orderIds: string[]): Promise<Order[]>;
+  updateOrderWorkflow(merchantId: string, orderId: string, data: Partial<InsertOrder>): Promise<Order | undefined>;
 
   // Analytics
   getDashboardStats(merchantId: string): Promise<any>;
@@ -916,6 +925,50 @@ export class DatabaseStorage implements IStorage {
       ))
       .orderBy(desc(orders.updatedAt))
       .limit(limit);
+  }
+
+  // Booking Jobs
+  async getBookingJob(merchantId: string, orderId: string, courierName: string): Promise<BookingJob | undefined> {
+    const [job] = await db.select().from(bookingJobs)
+      .where(and(
+        eq(bookingJobs.merchantId, merchantId),
+        eq(bookingJobs.orderId, orderId),
+        eq(bookingJobs.courierName, courierName)
+      ))
+      .orderBy(desc(bookingJobs.createdAt))
+      .limit(1);
+    return job;
+  }
+
+  async getBookingJobsByOrderIds(merchantId: string, orderIds: string[]): Promise<BookingJob[]> {
+    if (orderIds.length === 0) return [];
+    return db.select().from(bookingJobs)
+      .where(and(
+        eq(bookingJobs.merchantId, merchantId),
+        inArray(bookingJobs.orderId, orderIds)
+      ));
+  }
+
+  async createBookingJob(job: InsertBookingJob): Promise<BookingJob> {
+    const [created] = await db.insert(bookingJobs).values(job).returning();
+    return created;
+  }
+
+  async updateBookingJob(id: string, data: Partial<InsertBookingJob>): Promise<BookingJob | undefined> {
+    const [updated] = await db.update(bookingJobs)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(bookingJobs.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getOrdersByIds(merchantId: string, orderIds: string[]): Promise<Order[]> {
+    if (orderIds.length === 0) return [];
+    return db.select().from(orders)
+      .where(and(
+        eq(orders.merchantId, merchantId),
+        inArray(orders.id, orderIds)
+      ));
   }
 
   // Seed demo data
