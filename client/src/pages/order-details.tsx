@@ -25,12 +25,13 @@ import {
   CheckCircle2,
   MessageSquare,
   Send,
+  History,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Order, Shipment, ShipmentEvent, Remark } from "@shared/schema";
 import { Link, useParams } from "wouter";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 
 interface OrderDetails extends Order {
@@ -77,6 +78,16 @@ export default function OrderDetails() {
 
   const { data: order, isLoading } = useQuery<OrderDetails>({
     queryKey: ["/api/orders", id],
+  });
+
+  const { data: auditLog } = useQuery<any[]>({
+    queryKey: ["/api/orders", id, "audit-log"],
+    queryFn: async () => {
+      const res = await fetch(`/api/orders/${id}/audit-log`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch audit log");
+      return res.json();
+    },
+    enabled: !!id,
   });
 
   const addRemarkMutation = useMutation({
@@ -374,6 +385,43 @@ export default function OrderDetails() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Workflow Audit Log */}
+          {auditLog && auditLog.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <History className="w-5 h-5" />
+                  Status History
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3" data-testid="audit-log-list">
+                  {auditLog.map((entry: any) => (
+                    <div key={entry.id} className="flex items-start gap-3 text-sm" data-testid={`audit-entry-${entry.id}`}>
+                      <div className="w-2 h-2 rounded-full bg-muted-foreground/40 mt-1.5 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge variant="outline" className="text-xs">{entry.fromStatus}</Badge>
+                          <span className="text-muted-foreground text-xs">to</span>
+                          <Badge variant="secondary" className="text-xs">{entry.toStatus}</Badge>
+                          {entry.actorType === "system" && (
+                            <Badge variant="outline" className="text-xs bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400">auto</Badge>
+                          )}
+                        </div>
+                        {entry.reason && (
+                          <p className="text-xs text-muted-foreground mt-0.5 truncate">{entry.reason}</p>
+                        )}
+                        <p className="text-xs text-muted-foreground/70 mt-0.5">
+                          {entry.createdAt ? formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true }) : ""}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Sidebar */}

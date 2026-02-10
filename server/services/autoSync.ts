@@ -1,8 +1,10 @@
 import { db } from '../db';
-import { shopifyStores } from '../../shared/schema';
+import { shopifyStores, merchants } from '../../shared/schema';
 import { eq } from 'drizzle-orm';
+import { autoMoveStalePending } from './workflowTransition';
 
 const SYNC_INTERVAL_MS = 30_000;
+const STALE_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 
 interface SyncResult {
   timestamp: Date;
@@ -13,8 +15,23 @@ interface SyncResult {
 }
 
 let syncTimer: ReturnType<typeof setInterval> | null = null;
+let staleTimer: ReturnType<typeof setInterval> | null = null;
 let isSyncing = false;
 const lastSyncResults = new Map<string, SyncResult>();
+
+async function runStaleOrderCheck() {
+  try {
+    const allMerchants = await db.select({ id: merchants.id }).from(merchants);
+    for (const m of allMerchants) {
+      const moved = await autoMoveStalePending(m.id);
+      if (moved > 0) {
+        console.log(`[AutoSync] Auto-moved ${moved} stale NEW orders to PENDING for merchant ${m.id}`);
+      }
+    }
+  } catch (error: any) {
+    console.error('[AutoSync] Stale order check error:', error.message);
+  }
+}
 
 export function getLastSyncResult(merchantId: string): SyncResult | null {
   return lastSyncResults.get(merchantId) || null;
@@ -89,14 +106,20 @@ export function startAutoSync() {
   console.log(`[AutoSync] Starting automatic Shopify sync every ${SYNC_INTERVAL_MS / 1000}s`);
 
   setTimeout(() => runAutoSync(), 5000);
-
   syncTimer = setInterval(runAutoSync, SYNC_INTERVAL_MS);
+
+  setTimeout(() => runStaleOrderCheck(), 15000);
+  staleTimer = setInterval(runStaleOrderCheck, STALE_CHECK_INTERVAL_MS);
 }
 
 export function stopAutoSync() {
   if (syncTimer) {
     clearInterval(syncTimer);
     syncTimer = null;
-    console.log('[AutoSync] Stopped automatic sync');
   }
+  if (staleTimer) {
+    clearInterval(staleTimer);
+    staleTimer = null;
+  }
+  console.log('[AutoSync] Stopped automatic sync');
 }

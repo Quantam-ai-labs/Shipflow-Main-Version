@@ -410,14 +410,24 @@ export class ShopifyService {
         }
         
         await storage.updateOrder(merchantId, existingOrderId, updateData);
+        try {
+          const { applyRoboTags } = await import('./workflowTransition');
+          await applyRoboTags(merchantId, existingOrderId, transformedOrder.tags);
+        } catch (e) {}
         updatedCount++;
       } else {
-        await storage.createOrder({
+        const created = await storage.createOrder({
           ...transformedOrder,
           merchantId,
           lastApiSyncAt: now,
           shopifyUpdatedAt: new Date(shopifyOrder.updated_at),
         });
+        if (created?.id) {
+          try {
+            const { applyRoboTags } = await import('./workflowTransition');
+            await applyRoboTags(merchantId, created.id, transformedOrder.tags);
+          } catch (e) {}
+        }
         newCount++;
       }
       

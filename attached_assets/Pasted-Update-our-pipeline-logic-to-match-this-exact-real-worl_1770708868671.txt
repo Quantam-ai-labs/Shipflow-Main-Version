@@ -1,0 +1,64 @@
+Update our pipeline logic to match this exact real-world workflow.
+
+Tabs remain:
+- New Orders
+- Pending
+- Hold
+- Ready to Ship
+- Fulfilled
+- Cancelled
+
+KEY WORKFLOW RULES:
+
+1) New Orders tab behavior
+- New Orders contains all incoming orders AND orders still being worked on.
+- Orders stay in New Orders until they are finalized by:
+  a) Manual Confirm -> READY_TO_SHIP
+  b) Manual Cancel -> CANCELLED
+  c) Manual Hold -> HOLD
+- Additionally, we have Robo-tags from Shopify:
+  - Tag "Robo-Confirm" means the order should be treated as confirmed and auto-moved to READY_TO_SHIP.
+  - Tag "Robo-Cancel" means the order should be auto-moved to CANCELLED.
+  - Tag "Robo-Pending" means the order stays in NEW (New Orders) unless finalized manually.
+
+2) 24-hour auto move rule
+- Any order that remains NOT finalized (still workflow_status=NEW) for 24 hours after its created_at must automatically move to workflow_status=PENDING.
+- Pending tab is specifically for orders that were not finalized within 24 hours.
+- Implement a scheduled job that runs every 10-15 minutes to find NEW orders older than 24 hours and move them to PENDING.
+
+3) Revert (Undo) feature
+- Add a Revert button on all tabs (except New Orders optional) so agents can undo mistakes.
+- Implement data fields:
+  - workflow_status (enum: NEW, PENDING, HOLD, READY_TO_SHIP, FULFILLED, CANCELLED)
+  - previous_workflow_status (same enum, nullable)
+  - last_status_changed_at (datetime)
+  - last_status_changed_by_user_id (nullable)
+- Every time status changes, store the previous value.
+- Revert action sets workflow_status back to previous_workflow_status and updates previous_workflow_status appropriately (swap or keep history).
+- Log revert actions in an audit table: order_id, from_status, to_status, user_id, timestamp, optional reason.
+
+4) Robo-tag syncing
+- When we receive Shopify webhooks orders/create or orders/updated OR run API reconciliation:
+  - Parse tags
+  - Apply Robo-tag rule ONLY if the order is still in NEW or PENDING (do not override if already shipped/fulfilled manually).
+  - Priority: Robo-Cancel > Robo-Confirm > Robo-Pending
+  - If Robo-Confirm -> move to READY_TO_SHIP
+  - If Robo-Cancel -> move to CANCELLED
+  - If Robo-Pending -> keep in NEW (still subject to 24h rule)
+
+5) UI requirements
+- New Orders list must allow manual actions (Confirm, Pending optional, Hold, Cancel) and bulk selection.
+- Add a "Revert" button in row actions menu (3 dots) on Ready to Ship, Cancelled, Pending, Hold.
+- Pending tab should show how long order has been pending and optional reason field.
+
+6) Safety
+- No duplicates (upsert by shopify_order_id per merchant).
+- Do not change workflow status for orders in FULFILLED unless an admin reverts.
+- Ensure job and webhook handling is idempotent.
+
+Deliver:
+- Updated schema + migrations
+- Updated API routes
+- Updated UI actions + bulk actions
+- Scheduler/cron for 24h auto move to Pending
+- Audit log for all state changes

@@ -1,6 +1,6 @@
 import {
   merchants, teamMembers, shopifyStores, courierAccounts,
-  orders, shipments, shipmentEvents, remarks, codReconciliation, syncLogs,
+  orders, shipments, shipmentEvents, remarks, codReconciliation, syncLogs, workflowAuditLog,
   type Merchant, type InsertMerchant,
   type TeamMember, type InsertTeamMember,
   type ShopifyStore, type InsertShopifyStore,
@@ -87,6 +87,9 @@ export interface IStorage {
   getDataHealthStats(merchantId: string): Promise<{ missingPhone: number; missingAddress: number; missingCity: number; missingName: number; totalOrders: number }>;
   getMerchantByShopDomain(shopDomain: string): Promise<{ merchantId: string; storeId: string; accessToken: string } | null>;
   getOrdersUpdatedSince(merchantId: string, since: Date, limit?: number): Promise<Order[]>;
+
+  // Audit Log
+  getOrderAuditLog(merchantId: string, orderId: string): Promise<any[]>;
 
   // Analytics
   getDashboardStats(merchantId: string): Promise<any>;
@@ -331,6 +334,15 @@ export class DatabaseStorage implements IStorage {
         eq(orders.merchantId, merchantId)
       ));
     return orderIds.length;
+  }
+
+  async getOrderAuditLog(merchantId: string, orderId: string): Promise<any[]> {
+    return db.select().from(workflowAuditLog)
+      .where(and(
+        eq(workflowAuditLog.orderId, orderId),
+        eq(workflowAuditLog.merchantId, merchantId)
+      ))
+      .orderBy(desc(workflowAuditLog.createdAt));
   }
 
   async getOrderById(merchantId: string, id: string): Promise<Order | undefined> {

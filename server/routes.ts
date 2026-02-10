@@ -6,6 +6,7 @@ import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integra
 import { z } from "zod";
 import crypto from "crypto";
 import { shopifyService } from "./services/shopify";
+import { transitionOrder, bulkTransitionOrders, revertOrder } from "./services/workflowTransition";
 
 // Zod schemas for validation
 const remarkSchema = z.object({
@@ -364,46 +365,60 @@ export async function registerRoutes(
       const { action, cancelReason, pendingReasonType, pendingReason, holdUntil, customerPhone, shippingAddress, city } = req.body;
       const userId = (req.user as any)?.id || "system";
 
-      const order = await storage.getOrderById(merchantId, orderId);
-      if (!order) return res.status(404).json({ message: "Order not found" });
-
-      let updateData: any = {};
+      let toStatus: string;
+      let reason: string | undefined;
+      let extraData: any = {};
 
       switch (action) {
         case "confirm":
-          updateData = { workflowStatus: "READY_TO_SHIP", confirmedAt: new Date(), confirmedByUserId: userId };
+          toStatus = "READY_TO_SHIP";
+          extraData = { confirmedAt: new Date(), confirmedByUserId: userId };
           break;
         case "cancel":
           if (!cancelReason) return res.status(400).json({ message: "Cancel reason is required" });
-          updateData = { workflowStatus: "CANCELLED", cancelledAt: new Date(), cancelledByUserId: userId, cancelReason };
+          toStatus = "CANCELLED";
+          reason = cancelReason;
+          extraData = { cancelledAt: new Date(), cancelledByUserId: userId, cancelReason };
           break;
         case "pending":
           if (!pendingReasonType) return res.status(400).json({ message: "Pending reason type is required" });
-          updateData = { workflowStatus: "PENDING", pendingReasonType, pendingReason: pendingReason || "" };
+          toStatus = "PENDING";
+          reason = pendingReason;
+          extraData = { pendingReasonType, pendingReason: pendingReason || "" };
           break;
         case "hold":
           if (!holdUntil) return res.status(400).json({ message: "Hold until date is required" });
-          updateData = { workflowStatus: "HOLD", holdUntil: new Date(holdUntil), holdCreatedAt: new Date(), holdCreatedByUserId: userId };
+          toStatus = "HOLD";
+          extraData = { holdUntil: new Date(holdUntil), holdCreatedAt: new Date(), holdCreatedByUserId: userId };
           break;
         case "release-hold":
-          updateData = { workflowStatus: "READY_TO_SHIP", confirmedAt: new Date(), confirmedByUserId: userId, holdUntil: null };
+          toStatus = "READY_TO_SHIP";
+          extraData = { confirmedAt: new Date(), confirmedByUserId: userId, holdUntil: null };
           break;
         case "fix-confirm":
-          updateData = { workflowStatus: "READY_TO_SHIP", confirmedAt: new Date(), confirmedByUserId: userId, pendingReason: null, pendingReasonType: null };
-          if (customerPhone) updateData.customerPhone = customerPhone;
-          if (shippingAddress) updateData.shippingAddress = shippingAddress;
-          if (city) updateData.city = city;
+          toStatus = "READY_TO_SHIP";
+          extraData = { confirmedAt: new Date(), confirmedByUserId: userId, pendingReason: null, pendingReasonType: null };
+          if (customerPhone) extraData.customerPhone = customerPhone;
+          if (shippingAddress) extraData.shippingAddress = shippingAddress;
+          if (city) extraData.city = city;
           break;
         case "move-to-pending":
           if (!pendingReasonType) return res.status(400).json({ message: "Pending reason type is required" });
-          updateData = { workflowStatus: "PENDING", pendingReasonType, pendingReason: pendingReason || "", holdUntil: null };
+          toStatus = "PENDING";
+          reason = pendingReason;
+          extraData = { pendingReasonType, pendingReason: pendingReason || "", holdUntil: null };
           break;
+        case "revert":
+          const revertResult = await revertOrder(merchantId, orderId, userId, req.body.reason);
+          if (!revertResult.success) return res.status(400).json({ message: revertResult.error });
+          return res.json(revertResult.order);
         default:
           return res.status(400).json({ message: "Invalid action" });
       }
 
-      const updated = await storage.updateOrderWorkflow(merchantId, orderId, updateData);
-      res.json(updated);
+      const result = await transitionOrder({ merchantId, orderId, toStatus, action, actorUserId: userId, reason, extraData });
+      if (!result.success) return res.status(400).json({ message: result.error });
+      res.json(result.order);
     } catch (error) {
       console.error("Error updating workflow:", error);
       res.status(500).json({ message: "Failed to update workflow" });
@@ -421,36 +436,58 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Order IDs are required" });
       }
 
-      let updateData: any = {};
+      let toStatus: string;
+      let reason: string | undefined;
+      let extraData: any = {};
 
       switch (action) {
         case "confirm":
-          updateData = { workflowStatus: "READY_TO_SHIP", confirmedAt: new Date(), confirmedByUserId: userId };
+          toStatus = "READY_TO_SHIP";
+          extraData = { confirmedAt: new Date(), confirmedByUserId: userId };
           break;
         case "cancel":
           if (!cancelReason) return res.status(400).json({ message: "Cancel reason is required" });
-          updateData = { workflowStatus: "CANCELLED", cancelledAt: new Date(), cancelledByUserId: userId, cancelReason };
+          toStatus = "CANCELLED";
+          reason = cancelReason;
+          extraData = { cancelledAt: new Date(), cancelledByUserId: userId, cancelReason };
           break;
         case "pending":
           if (!pendingReasonType) return res.status(400).json({ message: "Pending reason type is required" });
-          updateData = { workflowStatus: "PENDING", pendingReasonType, pendingReason: pendingReason || "" };
+          toStatus = "PENDING";
+          reason = pendingReason;
+          extraData = { pendingReasonType, pendingReason: pendingReason || "" };
           break;
         case "hold":
           if (!holdUntil) return res.status(400).json({ message: "Hold until date is required" });
-          updateData = { workflowStatus: "HOLD", holdUntil: new Date(holdUntil), holdCreatedAt: new Date(), holdCreatedByUserId: userId };
+          toStatus = "HOLD";
+          extraData = { holdUntil: new Date(holdUntil), holdCreatedAt: new Date(), holdCreatedByUserId: userId };
           break;
         case "release-hold":
-          updateData = { workflowStatus: "READY_TO_SHIP", confirmedAt: new Date(), confirmedByUserId: userId, holdUntil: null };
+          toStatus = "READY_TO_SHIP";
+          extraData = { confirmedAt: new Date(), confirmedByUserId: userId, holdUntil: null };
           break;
         default:
           return res.status(400).json({ message: "Invalid action" });
       }
 
-      const count = await storage.bulkUpdateOrderWorkflow(merchantId, orderIds, updateData);
-      res.json({ updated: count });
+      const result = await bulkTransitionOrders({ merchantId, orderIds, toStatus, action, actorUserId: userId, reason, extraData });
+      res.json(result);
     } catch (error) {
       console.error("Error bulk updating workflow:", error);
       res.status(500).json({ message: "Failed to bulk update workflow" });
+    }
+  });
+
+  app.get("/api/orders/:id/audit-log", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const orderId = req.params.id;
+      const logs = await storage.getOrderAuditLog(merchantId, orderId);
+      res.json(logs);
+    } catch (error) {
+      console.error("Error fetching audit log:", error);
+      res.status(500).json({ message: "Failed to fetch audit log" });
     }
   });
 

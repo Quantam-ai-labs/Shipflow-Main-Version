@@ -34,6 +34,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Edit3,
+  Undo2,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -67,6 +68,7 @@ const PENDING_REASON_TYPES = [
   { value: "CUSTOMER_NOT_RESPONDING", label: "Customer Not Responding" },
   { value: "CUSTOMER_REQUESTED_CHANGE", label: "Customer Requested Change" },
   { value: "FRAUD_SUSPECTED", label: "Fraud Suspected" },
+  { value: "AUTO_24H", label: "Auto (24h)" },
   { value: "OTHER", label: "Other" },
 ];
 
@@ -443,7 +445,7 @@ export default function Pipeline() {
                 {activeTab === "CANCELLED" && (
                   <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Reason</th>
                 )}
-                {activeTab !== "CANCELLED" && activeTab !== "FULFILLED" && (
+                {activeTab !== "FULFILLED" && (
                   <th className="px-3 py-2.5 text-right font-medium text-muted-foreground">Actions</th>
                 )}
               </tr>
@@ -473,6 +475,11 @@ export default function Pipeline() {
                     <div className="text-xs text-muted-foreground">
                       {order.orderDate ? format(new Date(order.orderDate), "MMM d, h:mm a") : ""}
                     </div>
+                    {activeTab === "PENDING" && order.lastStatusChangedAt && (
+                      <div className="text-xs text-amber-600 dark:text-amber-400" data-testid={`text-pending-duration-${order.id}`}>
+                        Pending {formatDistanceToNow(new Date(order.lastStatusChangedAt))}
+                      </div>
+                    )}
                   </td>
                   <td className="px-3 py-2.5">
                     {editingOrder === order.id && activeTab === "PENDING" ? (
@@ -576,7 +583,7 @@ export default function Pipeline() {
                   )}
 
                   {/* Action buttons */}
-                  {activeTab !== "CANCELLED" && activeTab !== "FULFILLED" && (
+                  {activeTab !== "FULFILLED" && (
                     <td className="px-3 py-2.5 text-right">
                       <div className="flex items-center justify-end gap-1">
                         {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "HOLD") && (
@@ -626,6 +633,14 @@ export default function Pipeline() {
                         )}
                         {activeTab === "READY_TO_SHIP" && (
                           <Badge variant="secondary" className="text-xs">Ready</Badge>
+                        )}
+                        {activeTab !== "NEW" && order.previousWorkflowStatus && (
+                          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-muted-foreground"
+                            onClick={() => workflowMutation.mutate({ orderId: order.id, action: "revert" })}
+                            disabled={isPending}
+                            data-testid={`button-revert-${order.id}`}>
+                            <Undo2 className="w-3.5 h-3.5 mr-1" />Revert
+                          </Button>
                         )}
                         {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "HOLD") && (
                           <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-red-600"

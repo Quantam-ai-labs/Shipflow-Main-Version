@@ -48,8 +48,16 @@ Preferred communication style: Simple, everyday language.
 - **Customer Data Extraction**: Priority chain: `shipping_address` > `customer` > `billing_address` > `customer.default_address` > order-level fields > `note_attributes` (last resort for PII, used directly for courier tracking: `hxs_courier_name`, `hxs_courier_tracking`).
 - **Shopify Permissions Handling**: Grow plan provides full customer data access via REST API.
 
+### Workflow Transition System
+- **Centralized Service** (`server/services/workflowTransition.ts`): All order status changes go through `transitionOrder()` / `bulkTransitionOrders()` with automatic audit logging, idempotency checks (won't change if already in target status), and FULFILLED protection (prevents changes to fulfilled orders except revert).
+- **Revert**: `revertOrder()` restores `previousWorkflowStatus` with audit trail. Cannot revert FULFILLED orders.
+- **Audit Log**: `workflow_audit_log` table records every transition (from/to status, action, reason, actor user/type, timestamp). Viewable in order details page under "Status History".
+- **Robo-tag Processing**: Applied during Shopify sync. Tags: Robo-Cancel→CANCELLED, Robo-Confirm→READY_TO_SHIP, Robo-Pending→PENDING. Priority: Cancel > Confirm > Pending. Only affects NEW/PENDING orders.
+- **24h Auto-Move**: Background scheduler (every 5 min) moves NEW orders older than 24h to PENDING with reason AUTO_24H and audit log entry.
+- **Pending Reasons**: INCOMPLETE_ADDRESS, MISSING_PHONE, WRONG_CITY, CUSTOMER_NOT_RESPONDING, CUSTOMER_REQUESTED_CHANGE, FRAUD_SUSPECTED, AUTO_24H, OTHER.
+
 ### API-Only Sync System (Auto-Sync)
-- **Auto-Sync Scheduler** (`server/services/autoSync.ts`): Background polling every 30 seconds for new/updated orders. Per-merchant sync status tracking. Starts automatically on server boot.
+- **Auto-Sync Scheduler** (`server/services/autoSync.ts`): Background polling every 30 seconds for new/updated orders. Per-merchant sync status tracking. Starts automatically on server boot. Also runs 24h stale order check every 5 minutes.
 - **Incremental Sync**: Uses `updated_at_min` parameter to only fetch orders changed since last sync. Quiet logging when no changes found.
 - **Manual Sync**: `POST /api/integrations/shopify/sync` endpoint still available as fallback with optional `forceFullSync` body parameter.
 - **Sync Status API**: `GET /api/integrations/shopify/sync-status` returns per-merchant auto-sync state (enabled, interval, running, last result with created/updated counts).

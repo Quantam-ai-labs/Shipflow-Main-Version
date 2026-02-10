@@ -163,6 +163,9 @@ export const orders = pgTable("orders", {
   cancelledAt: timestamp("cancelled_at"),
   cancelledByUserId: varchar("cancelled_by_user_id"),
   cancelReason: text("cancel_reason"),
+  previousWorkflowStatus: varchar("previous_workflow_status", { length: 50 }),
+  lastStatusChangedAt: timestamp("last_status_changed_at"),
+  lastStatusChangedByUserId: varchar("last_status_changed_by_user_id"),
   itemSummary: text("item_summary"),
   bookingStatus: varchar("booking_status", { length: 50 }),
   bookingError: text("booking_error"),
@@ -184,6 +187,34 @@ export const insertOrderSchema = createInsertSchema(orders).omit({
 });
 export type InsertOrder = z.infer<typeof insertOrderSchema>;
 export type Order = typeof orders.$inferSelect;
+
+
+// ============================================
+// WORKFLOW AUDIT LOG
+// ============================================
+export const workflowAuditLog = pgTable("workflow_audit_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orderId: varchar("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  fromStatus: varchar("from_status", { length: 50 }).notNull(),
+  toStatus: varchar("to_status", { length: 50 }).notNull(),
+  action: varchar("action", { length: 50 }).notNull(),
+  reason: text("reason"),
+  actorUserId: varchar("actor_user_id"),
+  actorType: varchar("actor_type", { length: 20 }).notNull().default("user"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_audit_order").on(table.orderId),
+  index("idx_audit_merchant").on(table.merchantId),
+]);
+
+export const insertWorkflowAuditLogSchema = createInsertSchema(workflowAuditLog).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertWorkflowAuditLog = z.infer<typeof insertWorkflowAuditLogSchema>;
+export type WorkflowAuditLog = typeof workflowAuditLog.$inferSelect;
 
 
 // ============================================
