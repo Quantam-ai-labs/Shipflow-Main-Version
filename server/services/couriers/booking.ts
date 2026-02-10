@@ -353,7 +353,7 @@ export async function bookPostExOrder(
       customerPhone: phone,
       deliveryAddress: packet.shippingAddress,
       invoiceDivision: 1,
-      invoicePayment: String(Math.round(packet.codAmount || 0)),
+      invoicePayment: Math.round(packet.codAmount || 0),
       items: packet.pieces || 1,
       orderDetail: packet.itemSummary || "Order items",
       orderRefNumber: packet.orderNumber,
@@ -361,9 +361,8 @@ export async function bookPostExOrder(
       transactionNotes: packet.specialInstructions || "",
     };
     if (safePickup) requestBody.pickupAddressCode = safePickup;
-    if (safeStore) requestBody.storeAddressCode = safeStore;
 
-    console.log(`[PostEx] POSTEX create-order payload address codes: storeAddressCode=${safeStore} (type=${typeof safeStore}), pickupAddressCode=${safePickup} (type=${typeof safePickup})`);
+    console.log(`[PostEx] POSTEX create-order payload: pickupAddressCode=${safePickup} (type=${typeof safePickup})`);
     console.log(`[PostEx] Full request payload keys: ${Object.keys(requestBody).join(', ')}`);
     console.log(`[PostEx] Full request:`, JSON.stringify(requestBody, null, 2));
 

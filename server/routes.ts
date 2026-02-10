@@ -1829,13 +1829,13 @@ export async function registerRoutes(
         }
       }
 
-      if (courier === "postex" && (!storeAddressCode || !pickupAddressCode)) {
+      if (courier === "postex" && !pickupAddressCode) {
         return res.status(400).json({
-          message: "Please sync pickup addresses from PostEx and select a valid address code. Go to Integrations > PostEx and click 'Fetch Addresses from PostEx'.",
+          message: "Please sync pickup addresses from PostEx and select a valid pickup address code. Go to Integrations > PostEx and click 'Sync Addresses from PostEx'.",
         });
       }
 
-      console.log(`[PostEx] Final address codes for booking: pickupAddressCode="${pickupAddressCode}" (type=${typeof pickupAddressCode}), storeAddressCode="${storeAddressCode}" (type=${typeof storeAddressCode})`);
+      console.log(`[PostEx] Final address codes for booking: pickupAddressCode="${pickupAddressCode}" (type=${typeof pickupAddressCode})`);
 
       const shipperInfo = {
         name: merchant.name || "ShipFlow Merchant",

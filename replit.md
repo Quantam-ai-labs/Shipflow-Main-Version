@@ -39,7 +39,7 @@ Preferred communication style: Simple, everyday language.
 - **Merchant Management**: Root tenant entity with subscription and profile.
 - **Team Collaboration**: `teamMembers` for user-to-merchant links and roles.
 - **Shopify Integration**: OAuth credentials and sync state.
-- **Courier Management**: Per-courier API credentials with env secret fallback. Leopards uses `apiKey` + `apiSecret` (API Password). PostEx uses `apiKey` (API Token). Credentials resolved via `getCourierCredentials()` helper: DB custom creds > env secrets.
+- **Courier Management**: Per-courier API credentials with env secret fallback. Leopards uses `apiKey` + `apiSecret` (API Password). PostEx uses `apiKey` (API Token). Credentials resolved via `getCourierCredentials()` helper: DB custom creds > env secrets. **PostEx Booking**: Only `pickupAddressCode` is sent in create-order payload (NOT `storeAddressCode` — PostEx rejects it with "INVALID MERCHANT STORE ADDRESS CODE"). `invoicePayment` must be a number, not string. Address codes auto-fetched from PostEx API and persisted to DB if missing.
 - **Order Management**: Syncs from Shopify, tracks status, allows remarks.
 - **Shipment Tracking**: Records courier tracking and events.
 - **COD Reconciliation**: Tracks payment settlements.
