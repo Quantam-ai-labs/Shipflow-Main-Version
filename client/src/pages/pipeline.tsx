@@ -1260,12 +1260,17 @@ export default function Pipeline() {
                             const resp = await fetch(`/api/print/batch-awb/${bookingResultsModal.results.batchId}.pdf`);
                             if (!resp.ok) {
                               const err = await resp.json().catch(() => ({ message: "Failed to fetch airway bills" }));
-                              toast({ title: "AWB Error", description: err.message, variant: "destructive" });
+                              toast({ title: "Invoice Error", description: err.message, variant: "destructive" });
                               return;
                             }
                             const blob = await resp.blob();
+                            if (blob.size === 0 || blob.type.includes("json")) {
+                              toast({ title: "Invoice Error", description: "Invoices not available for this batch", variant: "destructive" });
+                              return;
+                            }
                             const url = URL.createObjectURL(blob);
                             window.open(url, "_blank");
+                            setTimeout(() => URL.revokeObjectURL(url), 60000);
                           } catch {
                             toast({ title: "Error", description: "Could not fetch airway bills", variant: "destructive" });
                           }

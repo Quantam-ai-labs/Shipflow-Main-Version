@@ -2359,6 +2359,89 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/couriers/postex/invoice", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const trackingNumber = String(req.query.trackingNumber || "").trim();
+      if (!trackingNumber) {
+        return res.status(400).json({ message: "Missing trackingNumber query parameter" });
+      }
+
+      const creds = await getCourierCredentials(merchantId, "postex");
+      if (!creds?.apiKey) {
+        return res.status(400).json({ message: "PostEx credentials not configured" });
+      }
+
+      console.log(`[PostEx Invoice Route] Single invoice request: merchantId=${merchantId}, tracking=${trackingNumber}`);
+
+      const { fetchPostExSlip } = await import("./services/courierSlips");
+      const result = await fetchPostExSlip(trackingNumber, creds.apiKey);
+
+      if (!result.success || !result.pdfBuffer) {
+        return res.status(502).json({
+          message: result.error || "Failed to fetch PostEx invoice",
+          trackingNumber,
+        });
+      }
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="postex-invoice-${trackingNumber}.pdf"`);
+      res.send(result.pdfBuffer);
+    } catch (error) {
+      console.error("[PostEx Invoice Route] Error:", error);
+      res.status(500).json({ message: "Failed to fetch PostEx invoice" });
+    }
+  });
+
+  app.post("/api/couriers/postex/invoices", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const rawTrackingNumbers: string[] = req.body?.trackingNumbers;
+      if (!Array.isArray(rawTrackingNumbers) || rawTrackingNumbers.length === 0) {
+        return res.status(400).json({ message: "Missing or empty trackingNumbers array in request body" });
+      }
+
+      const trackingNumbers = rawTrackingNumbers.map(t => String(t).trim()).filter(Boolean);
+      if (trackingNumbers.length === 0) {
+        return res.status(400).json({ message: "No valid tracking numbers provided" });
+      }
+
+      const creds = await getCourierCredentials(merchantId, "postex");
+      if (!creds?.apiKey) {
+        return res.status(400).json({ message: "PostEx credentials not configured" });
+      }
+
+      console.log(`[PostEx Invoice Route] Bulk invoice request: merchantId=${merchantId}, count=${trackingNumbers.length}`);
+
+      const { fetchPostExSlipBulk } = await import("./services/courierSlips");
+      const result = await fetchPostExSlipBulk(trackingNumbers, creds.apiKey);
+
+      if (!result.success || !result.pdfBuffer) {
+        return res.status(502).json({
+          message: result.error || "Failed to fetch PostEx invoices",
+          failedTrackingNumbers: result.failedTrackingNumbers || trackingNumbers,
+          chunkErrors: (result as any).chunkErrors,
+        });
+      }
+
+      if (result.failedTrackingNumbers && result.failedTrackingNumbers.length > 0) {
+        res.setHeader("X-Partial-Failure", "true");
+        res.setHeader("X-Failed-Tracking-Numbers", result.failedTrackingNumbers.join(","));
+      }
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="postex-invoices-bulk.pdf"`);
+      res.send(result.pdfBuffer);
+    } catch (error) {
+      console.error("[PostEx Invoice Route] Bulk error:", error);
+      res.status(500).json({ message: "Failed to fetch PostEx invoices" });
+    }
+  });
+
   app.get("/api/print/native-slip/:orderId.pdf", isAuthenticated, async (req, res) => {
     try {
       const merchantId = await requireMerchant(req, res);

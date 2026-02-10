@@ -573,12 +573,17 @@ export default function Shipments() {
                                         const resp = await fetch(`/api/print/batch-awb/${batch.id}.pdf`);
                                         if (!resp.ok) {
                                           const err = await resp.json().catch(() => ({ message: "Failed to fetch airway bills" }));
-                                          toast({ title: "AWB Error", description: err.message, variant: "destructive" });
+                                          toast({ title: "Invoice Error", description: err.message, variant: "destructive" });
                                           return;
                                         }
                                         const blob = await resp.blob();
+                                        if (blob.size === 0 || blob.type.includes("json")) {
+                                          toast({ title: "Invoice Error", description: "Invoices not available for this batch", variant: "destructive" });
+                                          return;
+                                        }
                                         const url = URL.createObjectURL(blob);
                                         window.open(url, "_blank");
+                                        setTimeout(() => URL.revokeObjectURL(url), 60000);
                                       } catch {
                                         toast({ title: "Error", description: "Could not fetch airway bills", variant: "destructive" });
                                       }
@@ -680,12 +685,17 @@ export default function Shipments() {
                         const resp = await fetch(`/api/print/batch-awb/${selectedBatchId}.pdf`);
                         if (!resp.ok) {
                           const err = await resp.json().catch(() => ({ message: "Failed to fetch airway bills" }));
-                          toast({ title: "AWB Error", description: err.message, variant: "destructive" });
+                          toast({ title: "Invoice Error", description: err.message, variant: "destructive" });
                           return;
                         }
                         const blob = await resp.blob();
+                        if (blob.size === 0 || blob.type.includes("json")) {
+                          toast({ title: "Invoice Error", description: "Invoices not available for this batch", variant: "destructive" });
+                          return;
+                        }
                         const url = URL.createObjectURL(blob);
                         window.open(url, "_blank");
+                        setTimeout(() => URL.revokeObjectURL(url), 60000);
                       } catch {
                         toast({ title: "Error", description: "Could not fetch airway bills", variant: "destructive" });
                       }
@@ -798,15 +808,24 @@ export default function Shipments() {
                                 size="icon"
                                 onClick={async () => {
                                   try {
-                                    const resp = await fetch(`/api/print/native-slip/${item.orderId}.pdf`);
+                                    const isPostEx = (batchDetailData?.batch?.courierName || "").toLowerCase().includes("postex");
+                                    const fetchUrl = isPostEx && item.trackingNumber
+                                      ? `/api/couriers/postex/invoice?trackingNumber=${encodeURIComponent(item.trackingNumber)}`
+                                      : `/api/print/native-slip/${item.orderId}.pdf`;
+                                    const resp = await fetch(fetchUrl);
                                     if (!resp.ok) {
                                       const err = await resp.json().catch(() => ({ message: "Failed to fetch airway bill" }));
-                                      toast({ title: "AWB Error", description: err.message, variant: "destructive" });
+                                      toast({ title: "Invoice Error", description: err.message, variant: "destructive" });
                                       return;
                                     }
                                     const blob = await resp.blob();
+                                    if (blob.size === 0 || blob.type.includes("json")) {
+                                      toast({ title: "Invoice Error", description: "Invoice not available for this order", variant: "destructive" });
+                                      return;
+                                    }
                                     const url = URL.createObjectURL(blob);
                                     window.open(url, "_blank");
+                                    setTimeout(() => URL.revokeObjectURL(url), 60000);
                                   } catch {
                                     toast({ title: "Error", description: "Could not fetch airway bill", variant: "destructive" });
                                   }

@@ -830,19 +830,23 @@ export default function OrderDetails() {
                     data-testid="button-print-airway-bill"
                     onClick={async () => {
                       try {
-                        const resp = await fetch(`/api/print/native-slip/${(order as any).id}.pdf`);
+                        const isPostEx = (order.courierName || "").toLowerCase().includes("postex");
+                        const fetchUrl = isPostEx
+                          ? `/api/couriers/postex/invoice?trackingNumber=${encodeURIComponent(order.courierTracking!)}`
+                          : `/api/print/native-slip/${(order as any).id}.pdf`;
+                        const resp = await fetch(fetchUrl);
                         if (!resp.ok) {
                           const err = await resp.json().catch(() => ({ message: "Failed to fetch airway bill" }));
-                          toast({ title: "AWB Error", description: err.message, variant: "destructive" });
+                          toast({ title: "Invoice Error", description: err.message, variant: "destructive" });
                           return;
                         }
                         const blob = await resp.blob();
                         if (blob.size === 0 || blob.type.includes("json")) {
-                          toast({ title: "AWB Error", description: "Airway bill not available for this order", variant: "destructive" });
+                          toast({ title: "Invoice Error", description: "Invoice not available for this order", variant: "destructive" });
                           return;
                         }
                         const url = URL.createObjectURL(blob);
-                        const printWindow = window.open(url, "_blank");
+                        window.open(url, "_blank");
                         setTimeout(() => URL.revokeObjectURL(url), 60000);
                       } catch {
                         toast({ title: "Error", description: "Could not fetch airway bill", variant: "destructive" });
@@ -858,21 +862,25 @@ export default function OrderDetails() {
                     data-testid="button-download-pdf"
                     onClick={async () => {
                       try {
-                        const resp = await fetch(`/api/print/native-slip/${(order as any).id}.pdf`);
+                        const isPostEx = (order.courierName || "").toLowerCase().includes("postex");
+                        const fetchUrl = isPostEx
+                          ? `/api/couriers/postex/invoice?trackingNumber=${encodeURIComponent(order.courierTracking!)}`
+                          : `/api/print/native-slip/${(order as any).id}.pdf`;
+                        const resp = await fetch(fetchUrl);
                         if (!resp.ok) {
                           const err = await resp.json().catch(() => ({ message: "Failed to fetch airway bill" }));
-                          toast({ title: "AWB Error", description: err.message, variant: "destructive" });
+                          toast({ title: "Invoice Error", description: err.message, variant: "destructive" });
                           return;
                         }
                         const blob = await resp.blob();
                         if (blob.size === 0 || blob.type.includes("json")) {
-                          toast({ title: "AWB Error", description: "Airway bill not available for this order", variant: "destructive" });
+                          toast({ title: "Invoice Error", description: "Invoice not available for this order", variant: "destructive" });
                           return;
                         }
                         const url = URL.createObjectURL(blob);
                         const a = document.createElement("a");
                         a.href = url;
-                        a.download = `awb_${order.orderNumber}_${order.courierTracking}.pdf`;
+                        a.download = `postex-invoice-${order.courierTracking}.pdf`;
                         a.click();
                         URL.revokeObjectURL(url);
                       } catch {
