@@ -126,6 +126,14 @@ const COURIER_CONFIG: Record<string, {
         envVar: "POSTEX_API_TOKEN",
         required: true,
       },
+      {
+        key: "merchantCode",
+        label: "Merchant Code",
+        placeholder: "Enter your PostEx Merchant Code (e.g. 2125655)",
+        type: "text",
+        envVar: "",
+        required: false,
+      },
     ],
   },
   tcs: {
@@ -386,6 +394,7 @@ export default function Integrations() {
       useEnvCredentials: useEnvCreds,
       settings: {
         ...(courierFormData.shipperId ? { shipperId: courierFormData.shipperId } : {}),
+        ...(courierFormData.merchantCode ? { merchantCode: courierFormData.merchantCode } : {}),
       },
     });
   };
@@ -401,9 +410,15 @@ export default function Integrations() {
       if (s.shipperId) {
         setCourierFormData(prev => ({ ...prev, shipperId: s.shipperId }));
       }
+      if (s.merchantCode) {
+        setCourierFormData(prev => ({ ...prev, merchantCode: s.merchantCode }));
+      }
     }
     if (!connectedCourier && courierName === 'leopards') {
       setCourierFormData(prev => ({ ...prev, shipperId: '2125655' }));
+    }
+    if (!connectedCourier && courierName === 'postex') {
+      setCourierFormData(prev => ({ ...prev, merchantCode: '2125655' }));
     }
     setIsCourierDialogOpen(true);
   };
