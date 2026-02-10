@@ -344,7 +344,7 @@ export async function bookPostExOrder(
     const orderType = mode === "Reversed" ? "Reverse" :
                       mode === "Replacement" ? "Replacement" : "Normal";
 
-    const requestBody = {
+    const requestBody: Record<string, any> = {
       cityName: packet.city,
       customerName: packet.customerName,
       customerPhone: phone,
@@ -356,12 +356,12 @@ export async function bookPostExOrder(
       orderRefNumber: packet.orderNumber,
       orderType,
       transactionNotes: packet.specialInstructions || "",
-      pickupAddressCode: shipperInfo.pickupAddressCode || "",
-      storeAddressCode: shipperInfo.storeAddressCode || "",
     };
+    if (shipperInfo.pickupAddressCode) requestBody.pickupAddressCode = shipperInfo.pickupAddressCode;
+    if (shipperInfo.storeAddressCode) requestBody.storeAddressCode = shipperInfo.storeAddressCode;
 
-    console.log(`[PostEx] Booking order ${packet.orderNumber}...`);
-    console.log(`[PostEx] Request:`, JSON.stringify(requestBody, null, 2));
+    console.log(`[PostEx] Booking order ${packet.orderNumber} with pickupAddressCode="${requestBody.pickupAddressCode}", storeAddressCode="${requestBody.storeAddressCode}"`);
+    console.log(`[PostEx] Full request:`, JSON.stringify(requestBody, null, 2));
 
     const resp = await fetch("https://api.postex.pk/services/integration/api/order/v3/create-order", {
       method: "POST",

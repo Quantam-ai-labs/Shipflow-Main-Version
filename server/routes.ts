@@ -1792,14 +1792,42 @@ export async function registerRoutes(
       const courierAccount = (await storage.getCourierAccounts(merchantId)).find(c => c.courierName === courier);
       const courierSettings = courierAccount?.settings as Record<string, any> | null;
 
+      let pickupAddressCode = courierSettings?.pickupAddressCode || "";
+      let storeAddressCode = courierSettings?.storeAddressCode || "";
+
+      if (courier === "postex" && (!pickupAddressCode || !storeAddressCode)) {
+        try {
+          console.log("[PostEx] Address codes missing, auto-fetching from PostEx API...");
+          const addrResp = await fetch("https://api.postex.pk/services/integration/api/order/v1/get-merchant-address", {
+            headers: { "Content-Type": "application/json", "token": creds.apiKey! },
+          });
+          const addrData = await addrResp.json() as any;
+          if (addrData.statusCode === "200" && addrData.dist) {
+            for (const addr of addrData.dist) {
+              if (addr.addressType === "Default Address" && !storeAddressCode) {
+                storeAddressCode = addr.addressCode;
+              }
+              if (addr.addressType === "Pickup/Return Address" && !pickupAddressCode) {
+                pickupAddressCode = addr.addressCode;
+              }
+            }
+            if (!pickupAddressCode && addrData.dist.length > 0) pickupAddressCode = addrData.dist[0].addressCode;
+            if (!storeAddressCode && addrData.dist.length > 0) storeAddressCode = addrData.dist[0].addressCode;
+            console.log(`[PostEx] Auto-resolved address codes: pickup=${pickupAddressCode}, store=${storeAddressCode}`);
+          }
+        } catch (e) {
+          console.error("[PostEx] Failed to auto-fetch address codes:", e);
+        }
+      }
+
       const shipperInfo = {
         name: merchant.name || "ShipFlow Merchant",
         phone: merchant.phone || "",
         address: merchant.address || "",
         city: merchant.city || "Lahore",
         shipperId: courierSettings?.shipperId || "2125655",
-        pickupAddressCode: courierSettings?.pickupAddressCode || "002",
-        storeAddressCode: courierSettings?.storeAddressCode || "001",
+        pickupAddressCode,
+        storeAddressCode,
       };
 
       const { validateOrderForBooking, orderToPacket, bookLeopardsBatch, bookPostExBulk } = await import("./services/couriers/booking");
