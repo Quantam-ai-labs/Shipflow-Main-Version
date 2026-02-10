@@ -1792,33 +1792,50 @@ export async function registerRoutes(
       const courierAccount = (await storage.getCourierAccounts(merchantId)).find(c => c.courierName === courier);
       const courierSettings = courierAccount?.settings as Record<string, any> | null;
 
-      let pickupAddressCode = courierSettings?.pickupAddressCode || "";
-      let storeAddressCode = courierSettings?.storeAddressCode || "";
+      let pickupAddressCode = courierSettings?.pickupAddressCode ? String(courierSettings.pickupAddressCode).trim() : "";
+      let storeAddressCode = courierSettings?.storeAddressCode ? String(courierSettings.storeAddressCode).trim() : "";
 
       if (courier === "postex" && (!pickupAddressCode || !storeAddressCode)) {
         try {
-          console.log("[PostEx] Address codes missing, auto-fetching from PostEx API...");
+          console.log("[PostEx] Address codes missing/empty, auto-fetching from PostEx API...");
           const addrResp = await fetch("https://api.postex.pk/services/integration/api/order/v1/get-merchant-address", {
             headers: { "Content-Type": "application/json", "token": creds.apiKey! },
           });
           const addrData = await addrResp.json() as any;
-          if (addrData.statusCode === "200" && addrData.dist) {
+          if (addrData.statusCode === "200" && Array.isArray(addrData.dist) && addrData.dist.length > 0) {
             for (const addr of addrData.dist) {
+              const code = String(addr.addressCode).trim();
               if (addr.addressType === "Default Address" && !storeAddressCode) {
-                storeAddressCode = addr.addressCode;
+                storeAddressCode = code;
               }
-              if (addr.addressType === "Pickup/Return Address" && !pickupAddressCode) {
-                pickupAddressCode = addr.addressCode;
+              if ((addr.addressType === "Pickup/Return Address" || addr.addressType === "Pickup Address") && !pickupAddressCode) {
+                pickupAddressCode = code;
               }
             }
-            if (!pickupAddressCode && addrData.dist.length > 0) pickupAddressCode = addrData.dist[0].addressCode;
-            if (!storeAddressCode && addrData.dist.length > 0) storeAddressCode = addrData.dist[0].addressCode;
-            console.log(`[PostEx] Auto-resolved address codes: pickup=${pickupAddressCode}, store=${storeAddressCode}`);
+            if (!pickupAddressCode) pickupAddressCode = String(addrData.dist[0].addressCode).trim();
+            if (!storeAddressCode) storeAddressCode = String(addrData.dist[0].addressCode).trim();
+            console.log(`[PostEx] Auto-resolved address codes: pickup="${pickupAddressCode}", store="${storeAddressCode}"`);
+
+            if (courierAccount) {
+              const updatedSettings = { ...courierSettings, pickupAddressCode, storeAddressCode };
+              await storage.updateCourierAccount(courierAccount.id, { settings: updatedSettings });
+              console.log("[PostEx] Persisted auto-fetched address codes to DB");
+            }
+          } else {
+            console.warn("[PostEx] Could not auto-fetch addresses:", addrData.statusMessage || "No addresses returned");
           }
         } catch (e) {
           console.error("[PostEx] Failed to auto-fetch address codes:", e);
         }
       }
+
+      if (courier === "postex" && (!storeAddressCode || !pickupAddressCode)) {
+        return res.status(400).json({
+          message: "Please sync pickup addresses from PostEx and select a valid address code. Go to Integrations > PostEx and click 'Fetch Addresses from PostEx'.",
+        });
+      }
+
+      console.log(`[PostEx] Final address codes for booking: pickupAddressCode="${pickupAddressCode}" (type=${typeof pickupAddressCode}), storeAddressCode="${storeAddressCode}" (type=${typeof storeAddressCode})`);
 
       const shipperInfo = {
         name: merchant.name || "ShipFlow Merchant",

@@ -442,9 +442,31 @@ export default function Integrations() {
     try {
       const resp = await apiRequest("POST", "/api/integrations/postex/addresses");
       const data = await resp.json();
-      if (data.success && data.addresses) {
+      if (data.success && data.addresses && data.addresses.length > 0) {
         setPostexAddresses(data.addresses);
-        toast({ title: "Addresses Loaded", description: `Found ${data.addresses.length} registered address(es) from PostEx.` });
+
+        let autoPickup = "";
+        let autoStore = "";
+        for (const addr of data.addresses) {
+          const code = String(addr.addressCode || "").trim();
+          const type = (addr.addressType || "").toLowerCase();
+          if ((type.includes("pickup") || type.includes("return")) && !autoPickup) {
+            autoPickup = code;
+          }
+          if (type.includes("default") && !autoStore) {
+            autoStore = code;
+          }
+        }
+        if (!autoPickup && data.addresses.length > 0) autoPickup = String(data.addresses[0].addressCode || "").trim();
+        if (!autoStore && data.addresses.length > 0) autoStore = String(data.addresses[0].addressCode || "").trim();
+
+        setCourierFormData(prev => ({
+          ...prev,
+          pickupAddressCode: autoPickup || prev.pickupAddressCode || "",
+          storeAddressCode: autoStore || prev.storeAddressCode || "",
+        }));
+
+        toast({ title: "Addresses Synced", description: `Found ${data.addresses.length} address(es). Pickup="${autoPickup}", Store="${autoStore}" auto-assigned.` });
       } else {
         toast({ title: "Failed", description: data.message || "Could not fetch addresses from PostEx.", variant: "destructive" });
       }
@@ -1024,32 +1046,32 @@ export default function Integrations() {
 
               {selectedCourier === 'postex' && (
                 <div className="space-y-3">
-                  {useEnvCreds && (
-                    <div className="space-y-3">
-                      <div className="space-y-2">
-                        <Label htmlFor="courier-pickupAddressCode">Pickup Address Code</Label>
-                        <Input
-                          id="courier-pickupAddressCode"
-                          type="text"
-                          placeholder="Enter your PostEx Pickup Address Code"
-                          value={courierFormData.pickupAddressCode || ""}
-                          onChange={(e) => setCourierFormData(prev => ({ ...prev, pickupAddressCode: e.target.value }))}
-                          data-testid="input-courier-pickupAddressCode"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="courier-storeAddressCode">Store Address Code</Label>
-                        <Input
-                          id="courier-storeAddressCode"
-                          type="text"
-                          placeholder="Enter your PostEx Store/Default Address Code"
-                          value={courierFormData.storeAddressCode || ""}
-                          onChange={(e) => setCourierFormData(prev => ({ ...prev, storeAddressCode: e.target.value }))}
-                          data-testid="input-courier-storeAddressCode"
-                        />
-                      </div>
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="courier-pickupAddressCode">Pickup Address Code</Label>
+                      <Input
+                        id="courier-pickupAddressCode"
+                        type="text"
+                        placeholder="e.g. 002 — from PostEx"
+                        value={courierFormData.pickupAddressCode || ""}
+                        onChange={(e) => setCourierFormData(prev => ({ ...prev, pickupAddressCode: e.target.value }))}
+                        data-testid="input-courier-pickupAddressCode"
+                      />
+                      <p className="text-xs text-muted-foreground">PostEx Pickup/Return address code (string, e.g. "002")</p>
                     </div>
-                  )}
+                    <div className="space-y-2">
+                      <Label htmlFor="courier-storeAddressCode">Store/Default Address Code</Label>
+                      <Input
+                        id="courier-storeAddressCode"
+                        type="text"
+                        placeholder="e.g. 001 — from PostEx"
+                        value={courierFormData.storeAddressCode || ""}
+                        onChange={(e) => setCourierFormData(prev => ({ ...prev, storeAddressCode: e.target.value }))}
+                        data-testid="input-courier-storeAddressCode"
+                      />
+                      <p className="text-xs text-muted-foreground">PostEx Default/Store address code (string, e.g. "001")</p>
+                    </div>
+                  </div>
 
                   <Button
                     variant="outline"
@@ -1061,45 +1083,54 @@ export default function Integrations() {
                     {fetchingAddresses ? (
                       <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Fetching...</>
                     ) : (
-                      <><MapPin className="w-4 h-4 mr-2" />Fetch Addresses from PostEx</>
+                      <><MapPin className="w-4 h-4 mr-2" />Sync Addresses from PostEx</>
                     )}
                   </Button>
 
                   {postexAddresses.length > 0 && (
                     <div className="space-y-2">
-                      <p className="text-xs text-muted-foreground font-medium">Your registered PostEx addresses:</p>
-                      {postexAddresses.map((addr: any, idx: number) => (
-                        <div
-                          key={idx}
-                          className="p-2 rounded-md border text-xs space-y-1"
-                          data-testid={`postex-address-${idx}`}
-                        >
-                          <div className="flex items-center justify-between gap-2 flex-wrap">
-                            <span className="font-medium">{addr.address || addr.addressDetail || "Address"}</span>
-                            <Badge variant="secondary">{addr.pickupAddressCode || addr.addressCode || addr.code || "N/A"}</Badge>
+                      <p className="text-xs text-muted-foreground font-medium">Your registered PostEx addresses — click to assign:</p>
+                      {postexAddresses.map((addr: any, idx: number) => {
+                        const code = String(addr.addressCode || "").trim();
+                        const addrType = addr.addressType || "";
+                        const isPickup = addrType.toLowerCase().includes("pickup") || addrType.toLowerCase().includes("return");
+                        const isDefault = addrType.toLowerCase().includes("default");
+                        return (
+                          <div
+                            key={idx}
+                            className="p-2 rounded-md border text-xs space-y-1"
+                            data-testid={`postex-address-${idx}`}
+                          >
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <span className="font-medium">{addr.address || "Address"}</span>
+                              <div className="flex items-center gap-1">
+                                <Badge variant="secondary">Code: {code || "N/A"}</Badge>
+                                {addrType && <Badge variant="outline">{addrType}</Badge>}
+                              </div>
+                            </div>
+                            {addr.cityName && <p className="text-muted-foreground">{addr.cityName}</p>}
+                            {addr.contactPersonName && <p className="text-muted-foreground">Contact: {addr.contactPersonName}</p>}
+                            <div className="flex gap-2 flex-wrap">
+                              <Button
+                                size="sm"
+                                variant={isPickup ? "default" : "outline"}
+                                onClick={() => setCourierFormData(prev => ({ ...prev, pickupAddressCode: code }))}
+                                data-testid={`button-use-pickup-${idx}`}
+                              >
+                                Use as Pickup
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant={isDefault ? "default" : "outline"}
+                                onClick={() => setCourierFormData(prev => ({ ...prev, storeAddressCode: code }))}
+                                data-testid={`button-use-store-${idx}`}
+                              >
+                                Use as Store
+                              </Button>
+                            </div>
                           </div>
-                          {addr.cityName && <p className="text-muted-foreground">{addr.cityName}</p>}
-                          {addr.contactPersonName && <p className="text-muted-foreground">Contact: {addr.contactPersonName}</p>}
-                          <div className="flex gap-2 flex-wrap">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setCourierFormData(prev => ({ ...prev, pickupAddressCode: addr.pickupAddressCode || addr.addressCode || addr.code || "" }))}
-                              data-testid={`button-use-pickup-${idx}`}
-                            >
-                              Use as Pickup
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setCourierFormData(prev => ({ ...prev, storeAddressCode: addr.pickupAddressCode || addr.addressCode || addr.code || "" }))}
-                              data-testid={`button-use-store-${idx}`}
-                            >
-                              Use as Store
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>

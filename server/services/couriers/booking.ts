@@ -344,6 +344,9 @@ export async function bookPostExOrder(
     const orderType = mode === "Reversed" ? "Reverse" :
                       mode === "Replacement" ? "Replacement" : "Normal";
 
+    const safePickup = shipperInfo.pickupAddressCode ? String(shipperInfo.pickupAddressCode).trim() : "";
+    const safeStore = shipperInfo.storeAddressCode ? String(shipperInfo.storeAddressCode).trim() : "";
+
     const requestBody: Record<string, any> = {
       cityName: packet.city,
       customerName: packet.customerName,
@@ -357,10 +360,11 @@ export async function bookPostExOrder(
       orderType,
       transactionNotes: packet.specialInstructions || "",
     };
-    if (shipperInfo.pickupAddressCode) requestBody.pickupAddressCode = shipperInfo.pickupAddressCode;
-    if (shipperInfo.storeAddressCode) requestBody.storeAddressCode = shipperInfo.storeAddressCode;
+    if (safePickup) requestBody.pickupAddressCode = safePickup;
+    if (safeStore) requestBody.storeAddressCode = safeStore;
 
-    console.log(`[PostEx] Booking order ${packet.orderNumber} with pickupAddressCode="${requestBody.pickupAddressCode}", storeAddressCode="${requestBody.storeAddressCode}"`);
+    console.log(`[PostEx] POSTEX create-order payload address codes: storeAddressCode=${safeStore} (type=${typeof safeStore}), pickupAddressCode=${safePickup} (type=${typeof safePickup})`);
+    console.log(`[PostEx] Full request payload keys: ${Object.keys(requestBody).join(', ')}`);
     console.log(`[PostEx] Full request:`, JSON.stringify(requestBody, null, 2));
 
     const resp = await fetch("https://api.postex.pk/services/integration/api/order/v3/create-order", {
@@ -373,9 +377,9 @@ export async function bookPostExOrder(
     });
 
     const data = await resp.json();
-    console.log(`[PostEx] Response:`, JSON.stringify(data).substring(0, 300));
 
     if (data.statusCode === "200" && data.dist?.trackingNumber) {
+      console.log(`[PostEx] SUCCESS for ${packet.orderNumber}: trackingNumber=${data.dist.trackingNumber}`);
       return {
         orderId: packet.orderId,
         orderNumber: packet.orderNumber,
@@ -385,11 +389,13 @@ export async function bookPostExOrder(
       };
     }
 
+    const errorMsg = data.statusMessage || data.message || "PostEx booking failed";
+    console.error(`[PostEx] FAILED for ${packet.orderNumber}: ${errorMsg}`, JSON.stringify(data).substring(0, 500));
     return {
       orderId: packet.orderId,
       orderNumber: packet.orderNumber,
       success: false,
-      error: data.statusMessage || data.message || "PostEx booking failed",
+      error: errorMsg,
       rawResponse: data,
     };
   } catch (err: any) {
