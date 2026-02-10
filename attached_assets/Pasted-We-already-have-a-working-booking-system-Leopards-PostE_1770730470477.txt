@@ -1,0 +1,129 @@
+We already have a working booking system (Leopards + PostEx). Now FIX the airway-bill PDF/label generation. The current output (Screenshot 1) has layout issues: missing product descriptions, text overwriting lines, and overall formatting is not professional. We want the label design to match Screenshot 2 (clean, branded, readable), including courier logo, proper spacing, and correct product details.
+
+GOALS:
+1) Replace the current airwaybill PDF generator with a “professional label template” that matches Screenshot 2 style.
+2) Ensure NO text overlaps lines/borders. Everything must auto-wrap or truncate safely.
+3) Include courier logo (Leopards logo for Leopards labels, PostEx text/logo for PostEx labels).
+4) Include correct product details (line items summary) like Screenshot 2.
+5) After booking completes (bulk or single), show an instant button: “Download Airway Bills (PDF)” that downloads ONE combined PDF containing all booked labels from that booking action/batch (not one file per shipment).
+6) Store the batch PDF so it can be re-downloaded later from Shipments > Batch Logs.
+
+TECH REQUIREMENTS:
+- Generate PDFs server-side (Node) using a stable approach:
+  Preferred: HTML template + Puppeteer print-to-PDF (best for layout accuracy).
+  Alternative: PDFKit/pdf-lib with explicit positioning and text wrapping.
+- Use a fixed label size:
+  Option A: A4 sheet with 3 labels per page (as shown in screenshots)
+  Option B: Single label per page (toggle later)
+For now, implement A4 with 3 labels per page because we want bulk printing.
+
+DATA REQUIREMENTS (MUST SHOW ON LABEL):
+For each shipment label block include these sections exactly like Screenshot 2:
+
+A) Customer Information (left box)
+- Name
+- Phone
+- Address (multi-line wrapped)
+- Destination city
+- Order number (Shopify order name/number)
+
+B) Brand / Shipper Information (middle box)
+- Shipper/Brand name (from merchant settings)
+- Shipper address (from merchant settings; allow multiple pickup addresses later)
+- COD Amount (large and bold)
+- Optional: small barcode for order number (if desired)
+
+C) Parcel Information (right box)
+- Courier logo at top-right (Leopards or PostEx)
+- Tracking number (airwaybill) in text
+- Barcode for tracking number (must be scannable)
+- Service: Overnight (or from settings)
+- Fragile: yes/no (from order flags if any, else default yes/no from settings)
+- Date (booking date)
+- Weight (grams)
+- Pieces (default 1)
+- Qty (sum of line item quantities)
+
+D) Remarks line (full width)
+- “Allow Open Parcel - Must Call Before Delivery - Handle With Care”
+Make remarks configurable per merchant and per order (default from settings).
+
+E) Products line (full width)
+- Must include product details (THIS IS CURRENTLY MISSING).
+Format:
+  Products: [Qty x Product Title] , [Qty x Product Title] ...
+Rules:
+- Join line items into one line up to max length; if too long, wrap into 2 lines.
+- Never overflow outside the products box. If still too long, truncate with “...”.
+- Use correct Shopify line items titles (and variant if present).
+
+LAYOUT RULES (NO OVERLAP):
+- Use a grid layout with strict padding.
+- Implement safe text wrapping:
+  - Address wraps within its cell.
+  - Product details wrap within its cell.
+  - If a field is too long, truncate with ellipsis after max lines.
+- All borders and lines must remain visible and clean.
+- Fonts should match the clean look of screenshot 2:
+  - Headings bold (Customer Information / Brand Information / Parcel Information)
+  - Content readable (10–12px equivalent)
+  - COD amount bigger and bold.
+
+COURIER BRANDING:
+- For Leopards labels:
+  - Add Leopards logo image in Parcel Information (top right).
+- For PostEx labels:
+  - Add “POSTEX” logo/text in Parcel Information similar to screenshot 2.
+- Store courier logo assets inside the project (e.g., /public/logos/leopards.png, /public/logos/postex.png) and ensure they render inside Puppeteer PDF generation.
+
+BARCODE / QR:
+- Generate barcode for tracking number (Code128 recommended).
+- Generate QR code optionally (as in Screenshot 2 there is a QR near the left/middle). If QR is too much, do barcode only for now but keep code extensible.
+- Barcodes must render sharp in PDF (vector if possible).
+
+BULK PDF DOWNLOAD AFTER BOOKING (CRITICAL):
+- When user performs booking (single or bulk) from Ready-to-Ship:
+  1) Create a “batch” record (we already have shipment_batches).
+  2) After booking completes, generate ONE combined PDF with all successfully booked labels in that batch.
+  3) Immediately show a success modal/toast with a prominent button:
+     “Download Airway Bills (PDF)”
+     This should download the combined PDF instantly.
+  4) Also show a “View Labels” button that opens the PDF in new tab.
+
+- For failures, still generate PDF only for successful bookings, and show separate list of failed orders.
+
+STORAGE + REPRINT:
+- Save the combined PDF path in shipment_batches.pdf_batch_path.
+- In Shipments > Batch Logs:
+  - add actions: View/Download Airway Bills PDF.
+- In Order Details page:
+  - add action: View/Download that single order’s label PDF (either extract single page from batch or generate single label PDF on demand using same template).
+
+IMPLEMENTATION TASKS:
+1) Create new HTML label template component (server-side render):
+   - LabelPage (A4) containing 3 LabelCards per page.
+   - LabelCard implements the exact sections above.
+2) Add barcode generator (server-side):
+   - e.g., bwip-js for Code128 or similar, output as PNG/SVG embedded into HTML.
+3) Generate PDF via Puppeteer:
+   - Render HTML -> PDF with print background, fixed margins, correct scale.
+4) Add endpoints:
+   - POST /api/print/batch/:batchId/generate (internal)
+   - GET /api/print/batch/:batchId.pdf (download)
+   - GET /api/print/shipment/:shipmentId.pdf (single)
+5) Frontend:
+   - After booking completes, return batchId and a downloadUrl.
+   - Show “Download Airway Bills” button immediately.
+6) Add template safety tests:
+   - Very long address does not overflow
+   - Very long product titles wrap/truncate
+   - Barcode always visible and not cut
+
+IMPORTANT: The final output must visually match Screenshot 2 as close as possible:
+- Courier logo placement
+- Clean boxes
+- No overlapping text
+- Proper product details
+- Professional printing-ready look
+
+Deliver this end-to-end without breaking existing booking logic.
