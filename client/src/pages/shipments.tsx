@@ -202,7 +202,14 @@ export default function Shipments() {
   });
 
   const { data: batchesData, isLoading: batchesLoading } = useQuery<BatchesResponse>({
-    queryKey: ["/api/shipment-batches", batchQueryParams.toString()],
+    queryKey: ["/api/shipment-batches", { page: batchPage, courier: batchCourierFilter }],
+    queryFn: async () => {
+      const res = await fetch(`/api/shipment-batches?${batchQueryParams.toString()}`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+      return res.json();
+    },
     enabled: activeTab === "batches",
   });
 
@@ -210,7 +217,14 @@ export default function Shipments() {
   const batchTotalPages = Math.ceil((batchesData?.total ?? 0) / 20);
 
   const { data: batchDetailData, isLoading: batchDetailLoading } = useQuery<BatchDetailResponse>({
-    queryKey: ["/api/shipment-batches", selectedBatchId],
+    queryKey: ["/api/shipment-batches", "detail", selectedBatchId],
+    queryFn: async () => {
+      const res = await fetch(`/api/shipment-batches/${selectedBatchId}`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+      return res.json();
+    },
     enabled: !!selectedBatchId,
   });
 
