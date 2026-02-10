@@ -171,6 +171,10 @@ export const orders = pgTable("orders", {
   bookingStatus: varchar("booking_status", { length: 50 }),
   bookingError: text("booking_error"),
   bookedAt: timestamp("booked_at"),
+  prepaidAmount: decimal("prepaid_amount", { precision: 12, scale: 2 }).default("0"),
+  codRemaining: decimal("cod_remaining", { precision: 12, scale: 2 }),
+  codPaymentStatus: varchar("cod_payment_status", { length: 20 }).default("UNPAID"),
+  lastPaymentAt: timestamp("last_payment_at"),
 }, (table) => [
   index("idx_orders_merchant").on(table.merchantId),
   index("idx_orders_shopify_id").on(table.shopifyOrderId),
@@ -220,6 +224,31 @@ export type WorkflowAuditLog = typeof workflowAuditLog.$inferSelect;
 
 
 // ============================================
+// ORDER PAYMENTS (Prepaid / partial payment tracking)
+// ============================================
+export const orderPayments = pgTable("order_payments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  orderId: varchar("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  method: varchar("method", { length: 20 }).notNull().default("CASH"),
+  reference: varchar("reference", { length: 255 }),
+  notes: text("notes"),
+  createdByUserId: varchar("created_by_user_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_order_payments_order").on(table.orderId),
+  index("idx_order_payments_merchant").on(table.merchantId),
+]);
+
+export const insertOrderPaymentSchema = createInsertSchema(orderPayments).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertOrderPayment = z.infer<typeof insertOrderPaymentSchema>;
+export type OrderPayment = typeof orderPayments.$inferSelect;
+
+// ============================================
 // SHIPMENTS (Courier tracking)
 // ============================================
 export const shipments = pgTable("shipments", {
@@ -234,6 +263,8 @@ export const shipments = pgTable("shipments", {
   weight: decimal("weight", { precision: 8, scale: 2 }),
   dimensions: jsonb("dimensions"), // { length, width, height }
   codAmount: decimal("cod_amount", { precision: 12, scale: 2 }),
+  codSentToCourier: decimal("cod_sent_to_courier", { precision: 12, scale: 2 }),
+  prepaidAtBooking: decimal("prepaid_at_booking", { precision: 12, scale: 2 }),
   shippingCost: decimal("shipping_cost", { precision: 10, scale: 2 }),
   estimatedDelivery: timestamp("estimated_delivery"),
   actualDelivery: timestamp("actual_delivery"),

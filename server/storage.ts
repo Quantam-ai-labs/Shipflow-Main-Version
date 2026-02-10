@@ -1,7 +1,7 @@
 import {
   merchants, teamMembers, shopifyStores, courierAccounts,
   orders, shipments, shipmentEvents, remarks, codReconciliation, syncLogs, workflowAuditLog, bookingJobs,
-  shipmentBatches, shipmentBatchItems, shipmentPrintRecords,
+  shipmentBatches, shipmentBatchItems, shipmentPrintRecords, orderPayments,
   type Merchant, type InsertMerchant,
   type TeamMember, type InsertTeamMember,
   type ShopifyStore, type InsertShopifyStore,
@@ -16,6 +16,7 @@ import {
   type ShipmentBatch, type InsertShipmentBatch,
   type ShipmentBatchItem, type InsertShipmentBatchItem,
   type ShipmentPrintRecord, type InsertShipmentPrintRecord,
+  type OrderPayment, type InsertOrderPayment,
   users,
 } from "@shared/schema";
 import { db } from "./db";
@@ -123,6 +124,12 @@ export interface IStorage {
   getShipmentPrintRecord(merchantId: string, shipmentId: string): Promise<ShipmentPrintRecord | undefined>;
   getShipmentPrintRecordById(merchantId: string, id: string): Promise<ShipmentPrintRecord | undefined>;
   updateShipmentPrintRecord(id: string, data: Partial<InsertShipmentPrintRecord>): Promise<ShipmentPrintRecord | undefined>;
+
+  // Order Payments
+  getOrderPayments(merchantId: string, orderId: string): Promise<OrderPayment[]>;
+  createOrderPayment(payment: InsertOrderPayment): Promise<OrderPayment>;
+  deleteOrderPayment(merchantId: string, id: string): Promise<void>;
+  getOrderPaymentSum(merchantId: string, orderId: string): Promise<number>;
 
   // Seed
   seedDemoData(): Promise<void>;
@@ -1054,6 +1061,33 @@ export class DatabaseStorage implements IStorage {
   async updateShipmentPrintRecord(id: string, data: Partial<InsertShipmentPrintRecord>): Promise<ShipmentPrintRecord | undefined> {
     const [updated] = await db.update(shipmentPrintRecords).set(data).where(eq(shipmentPrintRecords.id, id)).returning();
     return updated;
+  }
+
+  // Order Payments
+  async getOrderPayments(merchantId: string, orderId: string): Promise<OrderPayment[]> {
+    return db.select().from(orderPayments).where(
+      and(eq(orderPayments.merchantId, merchantId), eq(orderPayments.orderId, orderId))
+    ).orderBy(desc(orderPayments.createdAt));
+  }
+
+  async createOrderPayment(payment: InsertOrderPayment): Promise<OrderPayment> {
+    const [created] = await db.insert(orderPayments).values(payment).returning();
+    return created;
+  }
+
+  async deleteOrderPayment(merchantId: string, id: string): Promise<void> {
+    await db.delete(orderPayments).where(
+      and(eq(orderPayments.id, id), eq(orderPayments.merchantId, merchantId))
+    );
+  }
+
+  async getOrderPaymentSum(merchantId: string, orderId: string): Promise<number> {
+    const result = await db.select({
+      total: sql<string>`COALESCE(SUM(${orderPayments.amount}::numeric), 0)`
+    }).from(orderPayments).where(
+      and(eq(orderPayments.merchantId, merchantId), eq(orderPayments.orderId, orderId))
+    );
+    return parseFloat(result[0]?.total || "0");
   }
 
   async seedDemoData(): Promise<void> {

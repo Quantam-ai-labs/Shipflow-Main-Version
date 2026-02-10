@@ -138,6 +138,9 @@ export class WebhookHandler {
         const created = await storage.createOrder({
           ...orderData,
           merchantId,
+          codRemaining: orderData.totalAmount,
+          prepaidAmount: "0",
+          codPaymentStatus: "UNPAID",
         });
         resultOrderId = created.id;
         console.log(`[Webhook] Created new order ${transformedOrder.orderNumber} (${topic})`);

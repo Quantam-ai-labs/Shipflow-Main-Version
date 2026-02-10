@@ -42,6 +42,8 @@ import {
   ExternalLink,
   Printer,
   Download,
+  CreditCard,
+  Plus,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -180,6 +182,10 @@ export default function Pipeline() {
   }>>({});
   const [courierCities, setCourierCities] = useState<Array<{ id?: number; name: string }>>([]);
 
+  const [paymentModal, setPaymentModal] = useState<{ open: boolean; orderId: string; orderNumber: string; totalAmount: number; prepaidAmount: number }>({ open: false, orderId: "", orderNumber: "", totalAmount: 0, prepaidAmount: 0 });
+  const [quickPayAmount, setQuickPayAmount] = useState("");
+  const [quickPayMethod, setQuickPayMethod] = useState("CASH");
+
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -245,6 +251,34 @@ export default function Pipeline() {
     },
   });
 
+  const quickPayMutation = useMutation({
+    mutationFn: async ({ orderId, amount, method }: { orderId: string; amount: number; method: string }) => {
+      return apiRequest("POST", `/api/orders/${orderId}/payments`, { amount, method });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      setPaymentModal({ open: false, orderId: "", orderNumber: "", totalAmount: 0, prepaidAmount: 0 });
+      setQuickPayAmount("");
+      toast({ title: "Payment added" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message || "Failed to add payment", variant: "destructive" });
+    },
+  });
+
+  const bulkMarkPrepaidMutation = useMutation({
+    mutationFn: async ({ orderIds, method }: { orderIds: string[]; method: string }) => {
+      return apiRequest("POST", "/api/orders/bulk-mark-prepaid", { orderIds, method });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      setSelectedIds(new Set());
+      toast({ title: "Orders marked as prepaid" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message || "Failed to mark as prepaid", variant: "destructive" });
+    },
+  });
 
   const toggleSelect = useCallback((id: string) => {
     setSelectedIds(prev => {
@@ -486,6 +520,18 @@ export default function Pipeline() {
             </Button>
           )}
 
+          {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "HOLD" || activeTab === "READY_TO_SHIP") && (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => bulkMarkPrepaidMutation.mutate({ orderIds: Array.from(selectedIds), method: "CASH" })}
+              disabled={bulkMarkPrepaidMutation.isPending}
+              data-testid="bulk-mark-prepaid"
+            >
+              <CreditCard className="w-3.5 h-3.5 mr-1.5" />Mark Prepaid
+            </Button>
+          )}
+
           {activeTab === "READY_TO_SHIP" && (
             <>
               <div className="h-4 w-px bg-border" />
@@ -659,7 +705,35 @@ export default function Pipeline() {
                   <td className="px-3 py-2.5 hidden md:table-cell text-sm">{order.city || "-"}</td>
                   <td className="px-3 py-2.5">
                     <div className="font-medium text-sm">PKR {Number(order.totalAmount).toLocaleString()}</div>
-                    <div className="text-xs text-muted-foreground capitalize">{order.paymentMethod}</div>
+                    {order.codPaymentStatus === "PAID" ? (
+                      <Badge className="text-xs bg-green-500/10 text-green-600 border-green-500/20" data-testid={`badge-prepaid-${order.id}`}>Prepaid</Badge>
+                    ) : order.codPaymentStatus === "PARTIALLY_PAID" ? (
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs text-amber-600">COD: PKR {Number(order.codRemaining ?? order.totalAmount).toLocaleString()}</span>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-muted-foreground capitalize">{order.paymentMethod}</div>
+                    )}
+                    {activeTab !== "FULFILLED" && activeTab !== "CANCELLED" && order.codPaymentStatus !== "PAID" && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-5 px-1 text-xs text-muted-foreground mt-0.5"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPaymentModal({
+                            open: true,
+                            orderId: order.id,
+                            orderNumber: order.orderNumber,
+                            totalAmount: Number(order.totalAmount),
+                            prepaidAmount: Number(order.prepaidAmount || 0),
+                          });
+                        }}
+                        data-testid={`button-quick-pay-${order.id}`}
+                      >
+                        <Plus className="w-3 h-3 mr-0.5" />Pay
+                      </Button>
+                    )}
                   </td>
                   <td className="px-3 py-2.5 hidden lg:table-cell text-xs text-muted-foreground max-w-[150px] truncate">
                     {order.totalQuantity || 1} item{(order.totalQuantity || 1) > 1 ? "s" : ""}
@@ -1228,6 +1302,68 @@ export default function Pipeline() {
           <DialogFooter>
             <Button onClick={() => setBookingResultsModal({ open: false, results: null })} data-testid="button-close-results">
               Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Quick Payment Modal */}
+      <Dialog open={paymentModal.open} onOpenChange={(open) => !open && setPaymentModal({ open: false, orderId: "", orderNumber: "", totalAmount: 0, prepaidAmount: 0 })}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Add Payment - {paymentModal.orderNumber}</DialogTitle>
+            <DialogDescription>
+              Total: PKR {paymentModal.totalAmount.toLocaleString()} | Paid: PKR {paymentModal.prepaidAmount.toLocaleString()} | Remaining: PKR {Math.max(paymentModal.totalAmount - paymentModal.prepaidAmount, 0).toLocaleString()}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              type="number"
+              placeholder="Payment amount"
+              value={quickPayAmount}
+              onChange={(e) => setQuickPayAmount(e.target.value)}
+              data-testid="input-quick-pay-amount"
+            />
+            <Select value={quickPayMethod} onValueChange={setQuickPayMethod}>
+              <SelectTrigger data-testid="select-quick-pay-method">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="CASH">Cash</SelectItem>
+                <SelectItem value="BANK">Bank</SelectItem>
+                <SelectItem value="JAZZCASH">JazzCash</SelectItem>
+                <SelectItem value="EASYPAISA">Easypaisa</SelectItem>
+                <SelectItem value="CARD">Card</SelectItem>
+                <SelectItem value="OTHER">Other</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                quickPayMutation.mutate({
+                  orderId: paymentModal.orderId,
+                  amount: Math.max(paymentModal.totalAmount - paymentModal.prepaidAmount, 0),
+                  method: quickPayMethod,
+                });
+              }}
+              disabled={quickPayMutation.isPending || paymentModal.prepaidAmount >= paymentModal.totalAmount}
+              data-testid="button-quick-mark-paid"
+            >
+              Mark Fully Paid
+            </Button>
+            <Button
+              onClick={() => {
+                const amt = parseFloat(quickPayAmount);
+                if (!amt || amt <= 0) return;
+                quickPayMutation.mutate({ orderId: paymentModal.orderId, amount: amt, method: quickPayMethod });
+              }}
+              disabled={quickPayMutation.isPending || !quickPayAmount}
+              data-testid="button-quick-pay-submit"
+            >
+              {quickPayMutation.isPending ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Plus className="w-3.5 h-3.5 mr-1.5" />}
+              Add Payment
             </Button>
           </DialogFooter>
         </DialogContent>

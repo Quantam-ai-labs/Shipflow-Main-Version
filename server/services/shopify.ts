@@ -449,6 +449,9 @@ export class ShopifyService {
           workflowStatus: initialWorkflowStatus,
           lastApiSyncAt: now,
           shopifyUpdatedAt: new Date(shopifyOrder.updated_at),
+          codRemaining: transformedOrder.totalAmount,
+          prepaidAmount: "0",
+          codPaymentStatus: "UNPAID",
         };
         if (initialWorkflowStatus === 'CANCELLED') {
           createData.cancelledAt = shopifyOrder.cancelled_at ? new Date(shopifyOrder.cancelled_at) : now;

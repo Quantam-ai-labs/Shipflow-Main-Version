@@ -85,7 +85,7 @@ export function orderToPacket(order: Order): BookingPacket {
     customerPhone: normalizePhone(order.customerPhone),
     shippingAddress: order.shippingAddress || "",
     city: order.city || "",
-    codAmount: parseFloat(order.totalAmount) || 0,
+    codAmount: parseFloat(order.codRemaining ?? order.totalAmount) || 0,
     weight: 200,
     pieces,
     specialInstructions: order.notes || "",

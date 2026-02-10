@@ -10,6 +10,7 @@ import { z } from "zod";
 import crypto from "crypto";
 import { shopifyService } from "./services/shopify";
 import { transitionOrder, bulkTransitionOrders, revertOrder } from "./services/workflowTransition";
+import { addPayment, deletePayment, markFullyPaid, resetPayments, bulkMarkPrepaid, recalculateOrderPayment } from "./services/payments";
 
 // Zod schemas for validation
 const remarkSchema = z.object({
@@ -608,6 +609,106 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error updating remark:", error);
       res.status(500).json({ message: "Failed to update remark" });
+    }
+  });
+
+  // ============================================
+  // ORDER PAYMENTS
+  // ============================================
+  app.get("/api/orders/:id/payments", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const order = await storage.getOrderById(merchantId, req.params.id);
+      if (!order) return res.status(404).json({ message: "Order not found" });
+      const payments = await storage.getOrderPayments(merchantId, req.params.id);
+      const totalAmount = parseFloat(order.totalAmount) || 0;
+      const prepaidAmount = parseFloat(order.prepaidAmount || "0");
+      const codRemaining = parseFloat(order.codRemaining || String(totalAmount));
+      res.json({
+        payments,
+        totalAmount,
+        prepaidAmount,
+        codRemaining,
+        codPaymentStatus: order.codPaymentStatus || "UNPAID",
+        isBooked: order.workflowStatus === "FULFILLED",
+      });
+    } catch (error) {
+      console.error("Error fetching payments:", error);
+      res.status(500).json({ message: "Failed to fetch payments" });
+    }
+  });
+
+  app.post("/api/orders/:id/payments", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { amount, method, reference, notes } = req.body;
+      if (!amount || typeof amount !== "number" || amount <= 0) {
+        return res.status(400).json({ message: "Amount must be a positive number" });
+      }
+      if (!method) return res.status(400).json({ message: "Payment method is required" });
+      const userId = req.user?.claims?.sub || "unknown";
+      const state = await addPayment(merchantId, req.params.id, amount, method, userId, reference, notes);
+      res.json(state);
+    } catch (error: any) {
+      console.error("Error adding payment:", error);
+      res.status(400).json({ message: error.message || "Failed to add payment" });
+    }
+  });
+
+  app.delete("/api/orders/:orderId/payments/:paymentId", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const state = await deletePayment(merchantId, req.params.paymentId, req.params.orderId);
+      res.json(state);
+    } catch (error: any) {
+      console.error("Error deleting payment:", error);
+      res.status(400).json({ message: error.message || "Failed to delete payment" });
+    }
+  });
+
+  app.post("/api/orders/:id/payments/mark-paid", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { method } = req.body;
+      const userId = req.user?.claims?.sub || "unknown";
+      const state = await markFullyPaid(merchantId, req.params.id, method || "CASH", userId);
+      res.json(state);
+    } catch (error: any) {
+      console.error("Error marking fully paid:", error);
+      res.status(400).json({ message: error.message || "Failed to mark as paid" });
+    }
+  });
+
+  app.post("/api/orders/:id/payments/reset", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const state = await resetPayments(merchantId, req.params.id);
+      res.json(state);
+    } catch (error: any) {
+      console.error("Error resetting payments:", error);
+      res.status(400).json({ message: error.message || "Failed to reset payments" });
+    }
+  });
+
+  app.post("/api/orders/bulk-mark-prepaid", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { orderIds, method } = req.body;
+      if (!Array.isArray(orderIds) || orderIds.length === 0) {
+        return res.status(400).json({ message: "orderIds array is required" });
+      }
+      const userId = req.user?.claims?.sub || "unknown";
+      const result = await bulkMarkPrepaid(merchantId, orderIds, method || "CASH", userId);
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error bulk marking prepaid:", error);
+      res.status(500).json({ message: error.message || "Failed to bulk mark prepaid" });
     }
   });
 
@@ -2048,7 +2149,7 @@ export async function registerRoutes(
           consigneeName: fetchedOrders.find(o => o.id === r.orderId)?.customerName || null,
           consigneePhone: fetchedOrders.find(o => o.id === r.orderId)?.customerPhone || null,
           consigneeCity: fetchedOrders.find(o => o.id === r.orderId)?.city || null,
-          codAmount: fetchedOrders.find(o => o.id === r.orderId)?.totalAmount || null,
+          codAmount: (fetchedOrders.find(o => o.id === r.orderId)?.codRemaining ?? fetchedOrders.find(o => o.id === r.orderId)?.totalAmount) || null,
         });
       }
 

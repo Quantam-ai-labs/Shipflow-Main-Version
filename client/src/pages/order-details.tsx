@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import {
   Package,
   ArrowLeft,
@@ -29,6 +30,9 @@ import {
   Tag,
   Printer,
   Download,
+  CreditCard,
+  Plus,
+  Trash2,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -83,6 +87,11 @@ export default function OrderDetails() {
     queryKey: ["/api/orders", id],
   });
 
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("CASH");
+  const [paymentRef, setPaymentRef] = useState("");
+  const [paymentNotes, setPaymentNotes] = useState("");
+
   const { data: auditLog } = useQuery<any[]>({
     queryKey: ["/api/orders", id, "audit-log"],
     queryFn: async () => {
@@ -92,6 +101,93 @@ export default function OrderDetails() {
     },
     enabled: !!id,
   });
+
+  const { data: paymentData } = useQuery<{
+    payments: any[];
+    totalAmount: number;
+    prepaidAmount: number;
+    codRemaining: number;
+    codPaymentStatus: string;
+    isBooked: boolean;
+  }>({
+    queryKey: ["/api/orders", id, "payments"],
+    queryFn: async () => {
+      const res = await fetch(`/api/orders/${id}/payments`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch payments");
+      return res.json();
+    },
+    enabled: !!id,
+  });
+
+  const addPaymentMutation = useMutation({
+    mutationFn: async (data: { amount: number; method: string; reference?: string; notes?: string }) => {
+      return apiRequest("POST", `/api/orders/${id}/payments`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders", id, "payments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders", id] });
+      setPaymentAmount("");
+      setPaymentRef("");
+      setPaymentNotes("");
+      toast({ title: "Payment added", description: "Payment recorded successfully." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message || "Failed to add payment.", variant: "destructive" });
+    },
+  });
+
+  const markPaidMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", `/api/orders/${id}/payments/mark-paid`, { method: paymentMethod });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders", id, "payments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders", id] });
+      toast({ title: "Marked as paid", description: "Order marked as fully paid." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message || "Failed to mark as paid.", variant: "destructive" });
+    },
+  });
+
+  const resetPaymentsMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", `/api/orders/${id}/payments/reset`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders", id, "payments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders", id] });
+      toast({ title: "Payments reset", description: "All payments have been removed." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message || "Failed to reset.", variant: "destructive" });
+    },
+  });
+
+  const deletePaymentMutation = useMutation({
+    mutationFn: async (paymentId: string) => {
+      return apiRequest("DELETE", `/api/orders/${id}/payments/${paymentId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders", id, "payments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders", id] });
+      toast({ title: "Payment deleted", description: "Payment removed and COD recalculated." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message || "Failed to delete payment.", variant: "destructive" });
+    },
+  });
+
+  const handleAddPayment = () => {
+    const amt = parseFloat(paymentAmount);
+    if (!amt || amt <= 0) return;
+    addPaymentMutation.mutate({
+      amount: amt,
+      method: paymentMethod,
+      reference: paymentRef || undefined,
+      notes: paymentNotes || undefined,
+    });
+  };
 
   const regenerateMutation = useMutation({
     mutationFn: async () => {
@@ -510,6 +606,161 @@ export default function OrderDetails() {
                   {order.paymentStatus?.replace(/\b\w/g, (l) => l.toUpperCase())}
                 </Badge>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Payments */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <CreditCard className="w-5 h-5" />
+                Payments
+                {paymentData?.codPaymentStatus && paymentData.codPaymentStatus !== "UNPAID" && (
+                  <Badge
+                    className={
+                      paymentData.codPaymentStatus === "PAID"
+                        ? "bg-green-500/10 text-green-600 border-green-500/20"
+                        : "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                    }
+                    data-testid="badge-payment-status"
+                  >
+                    {paymentData.codPaymentStatus === "PAID" ? "Prepaid" : "Partial"}
+                  </Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="space-y-1.5 text-sm">
+                <div className="flex justify-between gap-2">
+                  <span className="text-muted-foreground">Total Amount</span>
+                  <span className="font-medium" data-testid="text-payment-total">
+                    PKR {(paymentData?.totalAmount ?? Number(order.totalAmount)).toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-muted-foreground">Paid</span>
+                  <span className="font-medium text-green-600" data-testid="text-payment-paid">
+                    PKR {(paymentData?.prepaidAmount ?? 0).toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-muted-foreground">Remaining COD</span>
+                  <span className="font-semibold" data-testid="text-payment-remaining">
+                    PKR {(paymentData?.codRemaining ?? Number(order.totalAmount)).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+
+              {paymentData?.isBooked && paymentData?.prepaidAmount > 0 && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  This order is already booked. COD cannot be changed unless rebooked.
+                </p>
+              )}
+
+              {!paymentData?.isBooked && (paymentData?.codPaymentStatus !== "PAID") && (
+                <>
+                  <Separator />
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <Input
+                        type="number"
+                        placeholder="Amount"
+                        value={paymentAmount}
+                        onChange={(e) => setPaymentAmount(e.target.value)}
+                        className="flex-1"
+                        data-testid="input-payment-amount"
+                      />
+                      <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                        <SelectTrigger className="w-[120px]" data-testid="select-payment-method">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="CASH">Cash</SelectItem>
+                          <SelectItem value="BANK">Bank</SelectItem>
+                          <SelectItem value="JAZZCASH">JazzCash</SelectItem>
+                          <SelectItem value="EASYPAISA">Easypaisa</SelectItem>
+                          <SelectItem value="CARD">Card</SelectItem>
+                          <SelectItem value="OTHER">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Input
+                      placeholder="Reference (optional)"
+                      value={paymentRef}
+                      onChange={(e) => setPaymentRef(e.target.value)}
+                      data-testid="input-payment-ref"
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        onClick={handleAddPayment}
+                        disabled={addPaymentMutation.isPending || !paymentAmount}
+                        className="flex-1"
+                        data-testid="button-add-payment"
+                      >
+                        <Plus className="w-3.5 h-3.5 mr-1" />
+                        Add Payment
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => markPaidMutation.mutate()}
+                        disabled={markPaidMutation.isPending}
+                        data-testid="button-mark-paid"
+                      >
+                        Mark Fully Paid
+                      </Button>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {paymentData?.payments && paymentData.payments.length > 0 && (
+                <>
+                  <Separator />
+                  <div className="space-y-2" data-testid="payment-history">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">History</p>
+                    {paymentData.payments.map((p: any) => (
+                      <div key={p.id} className="flex items-center justify-between gap-2 text-sm" data-testid={`payment-entry-${p.id}`}>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-medium">PKR {Number(p.amount).toLocaleString()}</span>
+                            <Badge variant="outline" className="text-xs">{p.method}</Badge>
+                          </div>
+                          {p.reference && <p className="text-xs text-muted-foreground truncate">{p.reference}</p>}
+                          <p className="text-xs text-muted-foreground/70">
+                            {p.createdAt ? format(new Date(p.createdAt), "MMM dd, h:mm a") : ""}
+                          </p>
+                        </div>
+                        {!paymentData.isBooked && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => deletePaymentMutation.mutate(p.id)}
+                            disabled={deletePaymentMutation.isPending}
+                            data-testid={`button-delete-payment-${p.id}`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5 text-muted-foreground" />
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {(paymentData?.prepaidAmount ?? 0) > 0 && !paymentData?.isBooked && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="w-full text-xs text-muted-foreground"
+                  onClick={() => resetPaymentsMutation.mutate()}
+                  disabled={resetPaymentsMutation.isPending}
+                  data-testid="button-reset-payments"
+                >
+                  Reset All Payments
+                </Button>
+              )}
             </CardContent>
           </Card>
 
