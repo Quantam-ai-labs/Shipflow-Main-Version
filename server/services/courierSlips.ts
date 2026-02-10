@@ -58,22 +58,23 @@ export async function fetchPostExSlip(trackingNumber: string, token: string): Pr
       return { success: false, error: "Missing tracking number or API token" };
     }
 
-    const url = `https://api.postex.pk/services/integration/api/order/v3/airway-bill/${encodeURIComponent(trackingNumber)}`;
+    const url = "https://api.postex.pk/services/integration/api/order/v2/generate-load-sheet";
     const resp = await fetch(url, {
-      method: "GET",
+      method: "POST",
       headers: {
+        "Content-Type": "application/json",
         "token": token,
-        "Accept": "application/pdf,application/json,*/*",
       },
-      signal: AbortSignal.timeout(15000),
+      body: JSON.stringify({ trackingNumbers: [trackingNumber] }),
+      signal: AbortSignal.timeout(20000),
     });
-
-    if (!resp.ok) {
-      return { success: false, error: `PostEx airway bill fetch failed: HTTP ${resp.status}` };
-    }
 
     const contentType = resp.headers.get("content-type") || "";
     const buffer = Buffer.from(await resp.arrayBuffer());
+
+    if (buffer.length === 0) {
+      return { success: false, error: "PostEx returned empty response" };
+    }
 
     if (contentType.includes("pdf") || buffer.slice(0, 5).toString() === "%PDF-") {
       return { success: true, pdfBuffer: buffer };
@@ -103,26 +104,77 @@ export async function fetchPostExSlip(trackingNumber: string, token: string): Pr
       return { success: true, pdfBuffer: Buffer.from(pdfBytes) };
     }
 
-    if (contentType.includes("json")) {
+    if (contentType.includes("json") || !resp.ok) {
+      let errorMsg = `PostEx AWB fetch failed: HTTP ${resp.status}`;
       try {
-        const json = JSON.parse(buffer.toString());
-        if (json.dist?.url || json.dist?.labelUrl || json.url || json.labelUrl) {
-          const labelUrl = json.dist?.url || json.dist?.labelUrl || json.url || json.labelUrl;
-          const labelResp = await fetch(labelUrl, { signal: AbortSignal.timeout(15000) });
-          if (labelResp.ok) {
-            const labelBuffer = Buffer.from(await labelResp.arrayBuffer());
-            return { success: true, pdfBuffer: labelBuffer };
-          }
+        const errorJson = JSON.parse(buffer.toString());
+        if (errorJson.statusMessage === "INVALID TRACKING NUMBER(S)") {
+          errorMsg = "PostEx: AWB not available — this order may be delivered, returned, or cancelled. PostEx only generates airway bills for active orders.";
+        } else if (errorJson.statusCode && errorJson.statusCode !== "200") {
+          errorMsg = `PostEx: ${errorJson.statusMessage || "AWB unavailable"}`;
+        } else if (errorJson.statusMessage) {
+          errorMsg = `PostEx: ${errorJson.statusMessage}`;
+        } else if (errorJson.error) {
+          errorMsg = `PostEx: ${errorJson.message || errorJson.error}`;
         }
-        return { success: false, error: `PostEx returned JSON without PDF: ${JSON.stringify(json).substring(0, 200)}` };
-      } catch {
-        return { success: false, error: "PostEx returned unparseable response" };
-      }
+      } catch {}
+      return { success: false, error: errorMsg };
     }
 
     return { success: true, pdfBuffer: buffer };
   } catch (err: any) {
     return { success: false, error: `Failed to fetch PostEx airway bill: ${err.message}` };
+  }
+}
+
+export async function fetchPostExSlipBulk(trackingNumbers: string[], token: string): Promise<CourierSlipResult> {
+  try {
+    if (!trackingNumbers.length || !token) {
+      return { success: false, error: "Missing tracking numbers or API token" };
+    }
+
+    const url = "https://api.postex.pk/services/integration/api/order/v2/generate-load-sheet";
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "token": token,
+      },
+      body: JSON.stringify({ trackingNumbers }),
+      signal: AbortSignal.timeout(30000),
+    });
+
+    const contentType = resp.headers.get("content-type") || "";
+    const buffer = Buffer.from(await resp.arrayBuffer());
+
+    if (buffer.length === 0) {
+      return { success: false, error: "PostEx returned empty response for batch AWBs" };
+    }
+
+    if (contentType.includes("pdf") || buffer.slice(0, 5).toString() === "%PDF-") {
+      return { success: true, pdfBuffer: buffer };
+    }
+
+    if (contentType.includes("json") || !resp.ok) {
+      let errorMsg = `PostEx batch AWB fetch failed: HTTP ${resp.status}`;
+      try {
+        const errorJson = JSON.parse(buffer.toString());
+        if (errorJson.statusMessage === "INVALID TRACKING NUMBER(S)") {
+          errorMsg = "PostEx: AWBs not available — orders may be delivered, returned, or cancelled. PostEx only generates airway bills for active orders.";
+        } else if (errorJson.statusCode && errorJson.statusCode !== "200") {
+          errorMsg = `PostEx: ${errorJson.statusMessage || "AWBs unavailable"}`;
+        } else if (errorJson.statusMessage) {
+          errorMsg = `PostEx: ${errorJson.statusMessage}`;
+        } else if (errorJson.error) {
+          errorMsg = `PostEx: ${errorJson.message || errorJson.error}`;
+        }
+      } catch {}
+      return { success: false, error: errorMsg };
+    }
+
+    return { success: true, pdfBuffer: buffer };
+  } catch (err: any) {
+    return { success: false, error: `Failed to fetch PostEx batch airway bills: ${err.message}` };
   }
 }
 

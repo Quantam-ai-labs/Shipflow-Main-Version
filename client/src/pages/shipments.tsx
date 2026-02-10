@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,6 +41,7 @@ import { Link } from "wouter";
 import { format } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useToast } from "@/hooks/use-toast";
 
 const statusOptions = [
   { value: "all", label: "All Statuses" },
@@ -164,6 +165,7 @@ interface BatchDetailResponse {
 }
 
 export default function Shipments() {
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<string>("shipments");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -566,7 +568,21 @@ export default function Shipments() {
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    onClick={() => window.open(`/api/print/batch-awb/${batch.id}.pdf`, "_blank")}
+                                    onClick={async () => {
+                                      try {
+                                        const resp = await fetch(`/api/print/batch-awb/${batch.id}.pdf`);
+                                        if (!resp.ok) {
+                                          const err = await resp.json().catch(() => ({ message: "Failed to fetch airway bills" }));
+                                          toast({ title: "AWB Error", description: err.message, variant: "destructive" });
+                                          return;
+                                        }
+                                        const blob = await resp.blob();
+                                        const url = URL.createObjectURL(blob);
+                                        window.open(url, "_blank");
+                                      } catch {
+                                        toast({ title: "Error", description: "Could not fetch airway bills", variant: "destructive" });
+                                      }
+                                    }}
                                     title="Download Courier Airway Bills"
                                     data-testid={`button-download-batch-awb-${batch.id}`}
                                   >
@@ -659,7 +675,21 @@ export default function Shipments() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => window.open(`/api/print/batch-awb/${selectedBatchId}.pdf`, "_blank")}
+                    onClick={async () => {
+                      try {
+                        const resp = await fetch(`/api/print/batch-awb/${selectedBatchId}.pdf`);
+                        if (!resp.ok) {
+                          const err = await resp.json().catch(() => ({ message: "Failed to fetch airway bills" }));
+                          toast({ title: "AWB Error", description: err.message, variant: "destructive" });
+                          return;
+                        }
+                        const blob = await resp.blob();
+                        const url = URL.createObjectURL(blob);
+                        window.open(url, "_blank");
+                      } catch {
+                        toast({ title: "Error", description: "Could not fetch airway bills", variant: "destructive" });
+                      }
+                    }}
                     data-testid="button-download-batch-awb"
                   >
                     <Printer className="w-4 h-4 mr-2" />
@@ -766,7 +796,21 @@ export default function Shipments() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={() => window.open(`/api/print/native-slip/${item.orderId}.pdf`, "_blank")}
+                                onClick={async () => {
+                                  try {
+                                    const resp = await fetch(`/api/print/native-slip/${item.orderId}.pdf`);
+                                    if (!resp.ok) {
+                                      const err = await resp.json().catch(() => ({ message: "Failed to fetch airway bill" }));
+                                      toast({ title: "AWB Error", description: err.message, variant: "destructive" });
+                                      return;
+                                    }
+                                    const blob = await resp.blob();
+                                    const url = URL.createObjectURL(blob);
+                                    window.open(url, "_blank");
+                                  } catch {
+                                    toast({ title: "Error", description: "Could not fetch airway bill", variant: "destructive" });
+                                  }
+                                }}
                                 title="Download Courier Airway Bill"
                                 data-testid={`button-download-awb-${item.id}`}
                               >

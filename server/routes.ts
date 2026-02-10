@@ -2418,16 +2418,23 @@ export async function registerRoutes(
         return res.status(404).json({ message: "No booked items in this batch" });
       }
 
-      const { fetchLeopardsSlip, fetchPostExSlip, combinePdfs } = await import("./services/courierSlips");
+      const { fetchLeopardsSlip, fetchPostExSlipBulk, combinePdfs } = await import("./services/courierSlips");
       const courierNorm = normalizeCourierName(batch.courierName || "");
 
-      let postexToken: string | null = null;
       if (courierNorm === "postex") {
         const creds = await getCourierCredentials(merchantId, "postex");
-        postexToken = creds?.apiKey || null;
+        const postexToken = creds?.apiKey || null;
         if (!postexToken) {
           return res.status(400).json({ message: "PostEx credentials not configured" });
         }
+        const trackingNums = bookedItems.map(item => item.trackingNumber!);
+        const result = await fetchPostExSlipBulk(trackingNums, postexToken);
+        if (!result.success || !result.pdfBuffer) {
+          return res.status(502).json({ message: result.error || "Failed to fetch PostEx airway bills" });
+        }
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Disposition", `inline; filename="batch_awb_${batch.id.substring(0, 8)}.pdf"`);
+        return res.send(result.pdfBuffer);
       }
 
       const pdfBuffers: Buffer[] = [];
@@ -2448,8 +2455,6 @@ export async function registerRoutes(
           } else {
             result = await fetchLeopardsSlip(slipUrl);
           }
-        } else if (courierNorm === "postex") {
-          result = await fetchPostExSlip(item.trackingNumber!, postexToken!);
         } else {
           errors.push(`${item.orderNumber}: Unsupported courier`);
           continue;

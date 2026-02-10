@@ -828,7 +828,26 @@ export default function OrderDetails() {
                     variant="outline"
                     className="w-full justify-start gap-2"
                     data-testid="button-print-airway-bill"
-                    onClick={() => window.open(`/api/print/native-slip/${(order as any).id}.pdf`, "_blank")}
+                    onClick={async () => {
+                      try {
+                        const resp = await fetch(`/api/print/native-slip/${(order as any).id}.pdf`);
+                        if (!resp.ok) {
+                          const err = await resp.json().catch(() => ({ message: "Failed to fetch airway bill" }));
+                          toast({ title: "AWB Error", description: err.message, variant: "destructive" });
+                          return;
+                        }
+                        const blob = await resp.blob();
+                        if (blob.size === 0 || blob.type.includes("json")) {
+                          toast({ title: "AWB Error", description: "Airway bill not available for this order", variant: "destructive" });
+                          return;
+                        }
+                        const url = URL.createObjectURL(blob);
+                        const printWindow = window.open(url, "_blank");
+                        setTimeout(() => URL.revokeObjectURL(url), 60000);
+                      } catch {
+                        toast({ title: "Error", description: "Could not fetch airway bill", variant: "destructive" });
+                      }
+                    }}
                   >
                     <Printer className="w-4 h-4" />
                     Print Courier Airway Bill
@@ -837,12 +856,32 @@ export default function OrderDetails() {
                     variant="outline"
                     className="w-full justify-start gap-2"
                     data-testid="button-download-pdf"
-                    asChild
+                    onClick={async () => {
+                      try {
+                        const resp = await fetch(`/api/print/native-slip/${(order as any).id}.pdf`);
+                        if (!resp.ok) {
+                          const err = await resp.json().catch(() => ({ message: "Failed to fetch airway bill" }));
+                          toast({ title: "AWB Error", description: err.message, variant: "destructive" });
+                          return;
+                        }
+                        const blob = await resp.blob();
+                        if (blob.size === 0 || blob.type.includes("json")) {
+                          toast({ title: "AWB Error", description: "Airway bill not available for this order", variant: "destructive" });
+                          return;
+                        }
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = `awb_${order.orderNumber}_${order.courierTracking}.pdf`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      } catch {
+                        toast({ title: "Error", description: "Could not download airway bill", variant: "destructive" });
+                      }
+                    }}
                   >
-                    <a href={`/api/print/native-slip/${(order as any).id}.pdf`} download>
-                      <Download className="w-4 h-4" />
-                      Download Courier AWB
-                    </a>
+                    <Download className="w-4 h-4" />
+                    Download Courier AWB
                   </Button>
                 </div>
               </CardContent>

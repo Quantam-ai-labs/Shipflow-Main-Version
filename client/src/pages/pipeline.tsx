@@ -1255,7 +1255,21 @@ export default function Pipeline() {
                     </div>
                     <div className="flex items-center gap-1 flex-wrap">
                       {bookingResultsModal.results.batchId && (
-                        <Button size="sm" variant="outline" onClick={() => window.open(`/api/print/batch-awb/${bookingResultsModal.results.batchId}.pdf`, "_blank")} data-testid="button-download-awb">
+                        <Button size="sm" variant="outline" onClick={async () => {
+                          try {
+                            const resp = await fetch(`/api/print/batch-awb/${bookingResultsModal.results.batchId}.pdf`);
+                            if (!resp.ok) {
+                              const err = await resp.json().catch(() => ({ message: "Failed to fetch airway bills" }));
+                              toast({ title: "AWB Error", description: err.message, variant: "destructive" });
+                              return;
+                            }
+                            const blob = await resp.blob();
+                            const url = URL.createObjectURL(blob);
+                            window.open(url, "_blank");
+                          } catch {
+                            toast({ title: "Error", description: "Could not fetch airway bills", variant: "destructive" });
+                          }
+                        }} data-testid="button-download-awb">
                           <Printer className="w-3.5 h-3.5 mr-1" />Download Courier AWBs
                         </Button>
                       )}
