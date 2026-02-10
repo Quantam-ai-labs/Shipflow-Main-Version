@@ -2,6 +2,9 @@ import type { Express, Request, Response, NextFunction } from "express";
 import express from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { db } from "./db";
+import { shipmentPrintRecords } from "@shared/schema";
+import { and, eq, inArray } from "drizzle-orm";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { z } from "zod";
 import crypto from "crypto";
@@ -2157,7 +2160,31 @@ export async function registerRoutes(
       }
 
       const items = await storage.getShipmentBatchItems(batch.id);
-      res.json({ batch, items });
+      
+      const bookedOrderIds = items
+        .filter(item => item.orderId && item.bookingStatus === "BOOKED")
+        .map(item => item.orderId);
+      
+      let printRecordMap: Record<string, string> = {};
+      if (bookedOrderIds.length > 0) {
+        const printRecords = await db.select({ id: shipmentPrintRecords.id, orderId: shipmentPrintRecords.orderId })
+          .from(shipmentPrintRecords)
+          .where(and(
+            eq(shipmentPrintRecords.merchantId, merchantId),
+            inArray(shipmentPrintRecords.orderId, bookedOrderIds),
+            eq(shipmentPrintRecords.isLatest, true),
+          ));
+        for (const pr of printRecords) {
+          if (pr.orderId) printRecordMap[pr.orderId] = pr.id;
+        }
+      }
+      
+      const itemsWithPrint = items.map(item => ({
+        ...item,
+        printRecordId: (item.orderId && printRecordMap[item.orderId]) || null,
+      }));
+      
+      res.json({ batch, items: itemsWithPrint });
     } catch (error) {
       console.error("Error fetching batch details:", error);
       res.status(500).json({ message: "Failed to fetch batch details" });

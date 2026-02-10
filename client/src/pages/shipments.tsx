@@ -33,6 +33,7 @@ import {
   FileText,
   Printer,
   Eye,
+  Download,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import type { Shipment, Order } from "@shared/schema";
@@ -149,6 +150,7 @@ interface BatchItemType {
   bookingError: string | null;
   trackingNumber: string | null;
   slipUrl: string | null;
+  printRecordId: string | null;
   consigneeName: string | null;
   consigneePhone: string | null;
   consigneeCity: string | null;
@@ -565,9 +567,10 @@ export default function Shipments() {
                                     variant="ghost"
                                     size="icon"
                                     onClick={() => window.open(`/api/print/batch/${batch.id}.pdf`, "_blank")}
-                                    data-testid={`button-view-pdf-${batch.id}`}
+                                    title="Download Batch Loadsheet"
+                                    data-testid={`button-download-batch-pdf-${batch.id}`}
                                   >
-                                    <FileText className="w-4 h-4" />
+                                    <Download className="w-4 h-4" />
                                   </Button>
                                 )}
                                 <Button
@@ -647,8 +650,8 @@ export default function Shipments() {
                   onClick={() => window.open(`/api/print/batch/${selectedBatchId}.pdf`, "_blank")}
                   data-testid="button-download-batch-pdf"
                 >
-                  <FileText className="w-4 h-4 mr-2" />
-                  Download PDF
+                  <Download className="w-4 h-4 mr-2" />
+                  Download Loadsheet
                 </Button>
               )}
             </DialogTitle>
@@ -734,15 +737,31 @@ export default function Shipments() {
                           ) : "-"}
                         </TableCell>
                         <TableCell>
-                          {item.bookingStatus === "SUCCESS" && item.trackingNumber && item.slipUrl && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => window.open(item.slipUrl!, "_blank")}
-                              data-testid={`button-print-slip-${item.id}`}
-                            >
-                              <Printer className="w-4 h-4" />
-                            </Button>
+                          {item.bookingStatus === "BOOKED" && item.trackingNumber && (
+                            <div className="flex items-center gap-1">
+                              {item.printRecordId && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => window.open(`/api/print/shipment/${item.printRecordId}.pdf`, "_blank")}
+                                  title="Download Airway Bill"
+                                  data-testid={`button-download-awb-${item.id}`}
+                                >
+                                  <Download className="w-4 h-4" />
+                                </Button>
+                              )}
+                              {item.slipUrl && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => window.open(item.slipUrl!, "_blank")}
+                                  title="View Courier Slip"
+                                  data-testid={`button-print-slip-${item.id}`}
+                                >
+                                  <Printer className="w-4 h-4" />
+                                </Button>
+                              )}
+                            </div>
                           )}
                         </TableCell>
                       </TableRow>
