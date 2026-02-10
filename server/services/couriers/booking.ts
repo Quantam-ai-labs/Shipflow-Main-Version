@@ -327,7 +327,7 @@ export async function bookLeopardsBatch(
 export async function bookPostExOrder(
   packet: BookingPacket,
   token: string,
-  shipperInfo: { name: string; phone: string; address: string; city: string; pickupAddressCode?: string }
+  shipperInfo: { name: string; phone: string; address: string; city: string; pickupAddressCode?: string; storeAddressCode?: string }
 ): Promise<BookingResult> {
   try {
     const phone = packet.customerPhone;
@@ -357,7 +357,7 @@ export async function bookPostExOrder(
       orderType,
       transactionNotes: packet.specialInstructions || "",
       pickupAddressCode: shipperInfo.pickupAddressCode || "",
-      storeAddressCode: shipperInfo.pickupAddressCode || "",
+      storeAddressCode: shipperInfo.storeAddressCode || "",
     };
 
     console.log(`[PostEx] Booking order ${packet.orderNumber}...`);
@@ -406,7 +406,7 @@ export async function bookPostExOrder(
 export async function bookPostExBulk(
   packets: BookingPacket[],
   token: string,
-  shipperInfo: { name: string; phone: string; address: string; city: string; pickupAddressCode?: string }
+  shipperInfo: { name: string; phone: string; address: string; city: string; pickupAddressCode?: string; storeAddressCode?: string }
 ): Promise<BookingResult[]> {
   const results: BookingResult[] = [];
 

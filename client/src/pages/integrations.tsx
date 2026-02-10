@@ -134,6 +134,14 @@ const COURIER_CONFIG: Record<string, {
         envVar: "",
         required: false,
       },
+      {
+        key: "storeAddressCode",
+        label: "Store Address Code",
+        placeholder: "Enter your PostEx Store/Default Address Code (e.g. 001)",
+        type: "text",
+        envVar: "",
+        required: false,
+      },
     ],
   },
   tcs: {
@@ -395,6 +403,7 @@ export default function Integrations() {
       settings: {
         ...(courierFormData.shipperId ? { shipperId: courierFormData.shipperId } : {}),
         ...(courierFormData.pickupAddressCode ? { pickupAddressCode: courierFormData.pickupAddressCode } : {}),
+        ...(courierFormData.storeAddressCode ? { storeAddressCode: courierFormData.storeAddressCode } : {}),
       },
     });
   };
@@ -413,12 +422,15 @@ export default function Integrations() {
       if (s.pickupAddressCode) {
         setCourierFormData(prev => ({ ...prev, pickupAddressCode: s.pickupAddressCode }));
       }
+      if (s.storeAddressCode) {
+        setCourierFormData(prev => ({ ...prev, storeAddressCode: s.storeAddressCode }));
+      }
     }
     if (!connectedCourier && courierName === 'leopards') {
       setCourierFormData(prev => ({ ...prev, shipperId: '2125655' }));
     }
     if (!connectedCourier && courierName === 'postex') {
-      setCourierFormData(prev => ({ ...prev, pickupAddressCode: '002' }));
+      setCourierFormData(prev => ({ ...prev, pickupAddressCode: '002', storeAddressCode: '001' }));
     }
     setIsCourierDialogOpen(true);
   };
