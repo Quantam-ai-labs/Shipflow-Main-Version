@@ -33,6 +33,8 @@ import {
   Loader2,
   ChevronLeft,
   ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   Edit3,
   Undo2,
 } from "lucide-react";
@@ -145,7 +147,7 @@ export default function Pipeline() {
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 300);
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(50);
+  const [pageSize] = useState(300);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [pendingReasonFilter, setPendingReasonFilter] = useState("all");
 
@@ -683,16 +685,32 @@ export default function Pipeline() {
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between px-4 py-3 border-t bg-background">
-          <div className="text-xs text-muted-foreground">
-            Page {page} of {totalPages}
+        <div className="flex items-center justify-between px-4 py-1.5 border-t bg-background">
+          <div className="text-xs text-muted-foreground" data-testid="text-total-orders">
+            {total} orders
           </div>
           <div className="flex items-center gap-1">
-            <Button size="sm" variant="outline" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} data-testid="button-prev-page">
+            <Button size="icon" variant="ghost" onClick={() => setPage(1)} disabled={page <= 1} data-testid="button-first-page">
+              <ChevronsLeft className="w-4 h-4" />
+            </Button>
+            <Button size="icon" variant="ghost" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} data-testid="button-prev-page">
               <ChevronLeft className="w-4 h-4" />
             </Button>
-            <Button size="sm" variant="outline" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} data-testid="button-next-page">
+            <Select value={String(page)} onValueChange={v => setPage(Number(v))}>
+              <SelectTrigger className="h-8 w-auto min-w-[100px] text-xs" data-testid="select-page">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Array.from({ length: totalPages }, (_, i) => (
+                  <SelectItem key={i + 1} value={String(i + 1)}>Page {i + 1}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button size="icon" variant="ghost" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} data-testid="button-next-page">
               <ChevronRight className="w-4 h-4" />
+            </Button>
+            <Button size="icon" variant="ghost" onClick={() => setPage(totalPages)} disabled={page >= totalPages} data-testid="button-last-page">
+              <ChevronsRight className="w-4 h-4" />
             </Button>
           </div>
         </div>
