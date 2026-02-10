@@ -562,6 +562,17 @@ export default function Shipments() {
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-1">
+                                {(batch.successCount ?? 0) > 0 && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => window.open(`/api/print/batch-awb/${batch.id}.pdf`, "_blank")}
+                                    title="Download All Airway Bills"
+                                    data-testid={`button-download-batch-awb-${batch.id}`}
+                                  >
+                                    <Printer className="w-4 h-4" />
+                                  </Button>
+                                )}
                                 {batch.pdfBatchPath && (
                                   <Button
                                     variant="ghost"
@@ -643,17 +654,30 @@ export default function Shipments() {
                 <FileText className="w-5 h-5" />
                 Batch Details
               </span>
-              {batchDetailData?.batch?.pdfBatchPath && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => window.open(`/api/print/batch/${selectedBatchId}.pdf`, "_blank")}
-                  data-testid="button-download-batch-pdf"
-                >
-                  <Download className="w-4 h-4 mr-2" />
-                  Download Loadsheet
-                </Button>
-              )}
+              <div className="flex items-center gap-2 flex-wrap">
+                {(batchDetailData?.batch?.successCount ?? 0) > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.open(`/api/print/batch-awb/${selectedBatchId}.pdf`, "_blank")}
+                    data-testid="button-download-batch-awb"
+                  >
+                    <Printer className="w-4 h-4 mr-2" />
+                    Print All AWBs
+                  </Button>
+                )}
+                {batchDetailData?.batch?.pdfBatchPath && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.open(`/api/print/batch/${selectedBatchId}.pdf`, "_blank")}
+                    data-testid="button-download-batch-pdf"
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Loadsheet
+                  </Button>
+                )}
+              </div>
             </DialogTitle>
           </DialogHeader>
 

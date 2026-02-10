@@ -2062,6 +2062,7 @@ export async function registerRoutes(
             courierName: courier === "leopards" ? "Leopards" : "PostEx",
             bookedAt: new Date().toLocaleDateString(),
             merchantName: merchant.name,
+            merchantAddress: merchant.address || undefined,
             consigneeName: order.customerName || "Customer",
             consigneePhone: order.customerPhone || "",
             consigneeCity: order.city || "",
@@ -2070,6 +2071,7 @@ export async function registerRoutes(
             weight: Number(overridesMap.get(order.id)?.weight) || 200,
             pieces: 1,
             itemsSummary: order.itemSummary || undefined,
+            shipmentType: overridesMap.get(order.id)?.mode || "Overnight",
           });
 
           const shipmentsList = await storage.getShipmentsByOrderId(merchantId, order.id);
@@ -2273,6 +2275,71 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/print/batch-awb/:batchId.pdf", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const batch = await storage.getShipmentBatchById(merchantId, req.params.batchId);
+      if (!batch) {
+        return res.status(404).json({ message: "Batch not found" });
+      }
+
+      const items = await storage.getShipmentBatchItems(batch.id);
+      const bookedItems = items.filter(item => item.bookingStatus === "BOOKED" && item.trackingNumber);
+
+      if (bookedItems.length === 0) {
+        return res.status(404).json({ message: "No booked items in this batch" });
+      }
+
+      const merchant = await storage.getMerchant(merchantId);
+      if (!merchant) return res.status(400).json({ message: "Merchant not found" });
+
+      const pdfGen = await import("./services/pdfGenerator");
+
+      const courierLabel = batch.courierName === "leopards" ? "Leopards" : batch.courierName === "postex" ? "PostEx" : batch.courierName;
+      const billsData: pdfGen.AirwayBillData[] = [];
+      for (const item of bookedItems) {
+        const order = await storage.getOrderById(merchantId, item.orderId);
+        if (!order) continue;
+        billsData.push({
+          trackingNumber: item.trackingNumber!,
+          orderNumber: item.orderNumber || order.orderNumber || "-",
+          courierName: courierLabel,
+          bookedAt: item.createdAt ? new Date(item.createdAt).toLocaleDateString() : new Date().toLocaleDateString(),
+          merchantName: merchant.name,
+          merchantAddress: merchant.address || undefined,
+          consigneeName: item.consigneeName || order.customerName || "Customer",
+          consigneePhone: item.consigneePhone || order.customerPhone || "",
+          consigneeCity: item.consigneeCity || order.city || "",
+          consigneeAddress: order.shippingAddress || "",
+          codAmount: Number(item.codAmount) || Number(order.totalAmount) || 0,
+          weight: Number(order.weight) || 200,
+          pieces: order.totalQuantity || 1,
+          itemsSummary: order.itemSummary || undefined,
+        });
+      }
+
+      if (billsData.length === 0) {
+        return res.status(404).json({ message: "No printable items found in this batch" });
+      }
+
+      const pdfPath = await pdfGen.generateMultiAirwayBillPdf(billsData);
+      const fsModule = await import("fs");
+      
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `inline; filename="batch_awb_${batch.id.substring(0, 8)}.pdf"`);
+      const stream = fsModule.createReadStream(pdfPath);
+      stream.pipe(res);
+      stream.on("end", () => {
+        fsModule.unlink(pdfPath, () => {});
+      });
+    } catch (error) {
+      console.error("Error generating batch AWB PDF:", error);
+      res.status(500).json({ message: "Failed to generate batch airway bills" });
+    }
+  });
+
   app.post("/api/print/regenerate/:orderId", isAuthenticated, async (req, res) => {
     try {
       const merchantId = await requireMerchant(req, res);
@@ -2295,6 +2362,7 @@ export async function registerRoutes(
         courierName: order.courierName || "Courier",
         bookedAt: order.bookedAt ? new Date(order.bookedAt).toLocaleDateString() : new Date().toLocaleDateString(),
         merchantName: merchant.name,
+        merchantAddress: merchant.address || undefined,
         consigneeName: order.customerName || "Customer",
         consigneePhone: order.customerPhone || "",
         consigneeCity: order.city || "",
