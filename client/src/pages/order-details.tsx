@@ -26,6 +26,7 @@ import {
   MessageSquare,
   Send,
   History,
+  Tag,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -177,9 +178,9 @@ export default function OrderDetails() {
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-6">
+      <div className="grid lg:grid-cols-3 gap-4">
         {/* Main Content */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-4">
           {/* Customer Info */}
           <Card>
             <CardHeader>
@@ -425,22 +426,22 @@ export default function OrderDetails() {
         </div>
 
         {/* Sidebar */}
-        <div className="space-y-6">
+        <div className="space-y-4">
           {/* Order Summary */}
           <Card>
-            <CardHeader>
+            <CardHeader className="pb-3">
               <CardTitle className="text-lg">Order Summary</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-3">
               {lineItems && lineItems.length > 0 ? (
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {lineItems.map((item, index) => (
-                    <div key={index} className="flex items-center justify-between text-sm">
-                      <div>
-                        <p className="font-medium">{item.name}</p>
-                        <p className="text-muted-foreground">Qty: {item.quantity}</p>
+                    <div key={index} className="flex items-start justify-between gap-2 text-sm">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium leading-tight">{item.name}</p>
+                        <p className="text-muted-foreground text-xs">Qty: {item.quantity}</p>
                       </div>
-                      <p className="font-medium">PKR {Number(item.price).toLocaleString()}</p>
+                      <p className="font-medium shrink-0">PKR {Number(item.price).toLocaleString()}</p>
                     </div>
                   ))}
                 </div>
@@ -448,43 +449,35 @@ export default function OrderDetails() {
                 <p className="text-sm text-muted-foreground">No line items</p>
               )}
               <Separator />
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
+              <div className="space-y-1.5 text-sm">
+                <div className="flex justify-between gap-2">
                   <span className="text-muted-foreground">Subtotal</span>
                   <span>PKR {Number(order.subtotalAmount || 0).toLocaleString()}</span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex justify-between gap-2">
                   <span className="text-muted-foreground">Shipping</span>
                   <span>PKR {Number(order.shippingAmount || 0).toLocaleString()}</span>
                 </div>
                 {order.discountAmount && Number(order.discountAmount) > 0 && (
-                  <div className="flex justify-between text-green-600">
+                  <div className="flex justify-between gap-2 text-green-600">
                     <span>Discount</span>
                     <span>-PKR {Number(order.discountAmount).toLocaleString()}</span>
                   </div>
                 )}
                 <Separator />
-                <div className="flex justify-between font-semibold text-base">
+                <div className="flex justify-between gap-2 font-semibold text-base">
                   <span>Total</span>
                   <span>PKR {Number(order.totalAmount).toLocaleString()}</span>
                 </div>
               </div>
-            </CardContent>
-          </Card>
-
-          {/* Payment Info */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Payment</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Method</span>
+              <Separator />
+              <div className="flex items-center justify-between gap-2 text-sm">
+                <span className="text-muted-foreground">Payment</span>
                 <Badge variant="outline" className="capitalize">
                   {order.paymentMethod || "COD"}
                 </Badge>
               </div>
-              <div className="flex justify-between text-sm">
+              <div className="flex items-center justify-between gap-2 text-sm">
                 <span className="text-muted-foreground">Status</span>
                 <Badge
                   className={
@@ -498,6 +491,37 @@ export default function OrderDetails() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Tags */}
+          {order.tags && Array.isArray(order.tags) && order.tags.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg flex items-center gap-2" data-testid="text-tags-title">
+                  <Tag className="w-5 h-5" />
+                  Tags
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-2" data-testid="tags-list">
+                  {(order.tags as string[]).map((tag, index) => (
+                    <Badge
+                      key={index}
+                      variant="secondary"
+                      className={
+                        tag === 'Robo-Confirm' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' :
+                        tag === 'Robo-Pending' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300' :
+                        tag === 'Robo-Cancel' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
+                        ''
+                      }
+                      data-testid={`badge-tag-${index}`}
+                    >
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>

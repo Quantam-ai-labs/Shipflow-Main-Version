@@ -88,6 +88,17 @@ const UNIVERSAL_STATUS_COLORS: Record<string, string> = {
   'Unfulfilled': "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
 };
 
+const ROBO_TAG_CONFIG: Record<string, { label: string; className: string }> = {
+  'Robo-Confirm': { label: 'Robo-Confirm', className: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' },
+  'Robo-Pending': { label: 'Robo-Pending', className: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300' },
+  'Robo-Cancel': { label: 'Robo-Cancel', className: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' },
+};
+
+function getRoboTags(tags: string[] | null | undefined): string[] {
+  if (!tags || !Array.isArray(tags)) return [];
+  return tags.filter(t => ROBO_TAG_CONFIG[t]);
+}
+
 const UNIVERSAL_STATUS_LABELS: Record<string, string> = {
   'BOOKED': 'Booked', 'PICKED_UP': 'Picked Up', 'ARRIVED_AT_ORIGIN': 'At Origin',
   'IN_TRANSIT': 'In Transit', 'ARRIVED_AT_DESTINATION': 'At Destination',
@@ -430,6 +441,7 @@ export default function Pipeline() {
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground hidden md:table-cell">City</th>
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Amount</th>
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground hidden lg:table-cell">Items</th>
+                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground hidden md:table-cell" data-testid="header-tags">Tags</th>
                 {activeTab === "PENDING" && (
                   <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Reason</th>
                 )}
@@ -529,6 +541,15 @@ export default function Pipeline() {
                   </td>
                   <td className="px-3 py-2.5 hidden lg:table-cell text-xs text-muted-foreground max-w-[150px] truncate">
                     {order.totalQuantity || 1} item{(order.totalQuantity || 1) > 1 ? "s" : ""}
+                  </td>
+                  <td className="px-3 py-2.5 hidden md:table-cell" data-testid={`cell-tags-${order.id}`}>
+                    <div className="flex flex-wrap gap-1">
+                      {getRoboTags(order.tags as string[]).map(tag => (
+                        <Badge key={tag} className={`text-xs ${ROBO_TAG_CONFIG[tag]?.className}`} data-testid={`badge-tag-${tag}-${order.id}`}>
+                          {ROBO_TAG_CONFIG[tag]?.label}
+                        </Badge>
+                      ))}
+                    </div>
                   </td>
 
                   {/* Pending-specific columns */}
