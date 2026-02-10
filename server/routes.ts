@@ -1577,7 +1577,7 @@ export async function registerRoutes(
 
       const { orderToPacket } = await import("./services/couriers/booking");
 
-      function buildProductDescription(order: any): string {
+      const buildProductDescription = (order: any): string => {
         const items = order.lineItems as any[];
         if (items && items.length > 0) {
           return items.map((i: any) => {
@@ -1587,7 +1587,7 @@ export async function registerRoutes(
           }).join(", ");
         }
         return order.itemSummary || "Order items";
-      }
+      };
 
       const valid: Array<{
         orderId: string; orderNumber: string; customerName: string; city: string;

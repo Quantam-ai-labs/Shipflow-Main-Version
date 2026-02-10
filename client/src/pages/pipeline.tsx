@@ -171,6 +171,8 @@ export default function Pipeline() {
   const [bookingConfirmModal, setBookingConfirmModal] = useState<{ open: boolean; preview: any | null }>({ open: false, preview: null });
   const [bookingResultsModal, setBookingResultsModal] = useState<{ open: boolean; results: any | null }>({ open: false, results: null });
   const [isBookingLoading, setIsBookingLoading] = useState(false);
+  const [previewChecked, setPreviewChecked] = useState<Set<string>>(new Set());
+  const [previewOverrides, setPreviewOverrides] = useState<Record<string, { weight: number; mode: string }>>({});
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -322,6 +324,13 @@ export default function Pipeline() {
     try {
       const res = await apiRequest("POST", "/api/booking/preview", { orderIds: ids, courier: selectedCourier });
       const preview = await res.json();
+      const checkedIds = new Set<string>(preview.valid.map((v: any) => v.orderId));
+      setPreviewChecked(checkedIds);
+      const overrides: Record<string, { weight: number; mode: string }> = {};
+      for (const v of preview.valid) {
+        overrides[v.orderId] = { weight: v.weight || 200, mode: "overnight" };
+      }
+      setPreviewOverrides(overrides);
       setBookingConfirmModal({ open: true, preview });
     } catch (err: any) {
       toast({ title: "Preview failed", description: err.message, variant: "destructive" });
@@ -330,14 +339,24 @@ export default function Pipeline() {
     }
   }, [selectedIds, selectedCourier, toast]);
 
+  const checkedCount = previewChecked.size;
+
   const submitBooking = useCallback(async () => {
     if (!bookingConfirmModal.preview) return;
-    const validIds = bookingConfirmModal.preview.valid.map((v: any) => v.orderId);
-    if (validIds.length === 0) return;
+    const checkedIds = Array.from(previewChecked);
+    if (checkedIds.length === 0) return;
     setBookingConfirmModal({ open: false, preview: null });
     setIsBookingLoading(true);
     try {
-      const res = await apiRequest("POST", "/api/booking/book", { orderIds: validIds, courier: selectedCourier });
+      const overridesPayload: Record<string, { weight: number; mode: string }> = {};
+      for (const id of checkedIds) {
+        if (previewOverrides[id]) overridesPayload[id] = previewOverrides[id];
+      }
+      const res = await apiRequest("POST", "/api/booking/book", {
+        orderIds: checkedIds,
+        courier: selectedCourier,
+        orderOverrides: overridesPayload,
+      });
       const data = await res.json();
       setBookingResultsModal({
         open: true,
@@ -354,7 +373,7 @@ export default function Pipeline() {
     } finally {
       setIsBookingLoading(false);
     }
-  }, [bookingConfirmModal, selectedCourier, queryClient, toast]);
+  }, [bookingConfirmModal, previewChecked, previewOverrides, selectedCourier, queryClient, toast]);
 
   const copyTrackingNumbers = useCallback(() => {
     if (!bookingResultsModal.results) return;
@@ -880,73 +899,180 @@ export default function Pipeline() {
 
       {/* Booking Confirmation Modal */}
       <Dialog open={bookingConfirmModal.open} onOpenChange={open => { if (!open) setBookingConfirmModal({ open: false, preview: null }); }}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-[95vw] w-[1100px]">
           <DialogHeader>
             <DialogTitle>Confirm Booking via {selectedCourier === "leopards" ? "Leopards" : "PostEx"}</DialogTitle>
-            <DialogDescription>Review the orders before submitting to the courier.</DialogDescription>
+            <DialogDescription>Review order details, uncheck orders you don't want to book, and select shipment mode.</DialogDescription>
           </DialogHeader>
-          {bookingConfirmModal.preview && (
-            <div className="space-y-3 max-h-[400px] overflow-y-auto">
-              {bookingConfirmModal.preview.valid.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <CheckCircle2 className="w-4 h-4 text-green-600" />
-                    <span className="text-sm font-medium">{bookingConfirmModal.preview.valid.length} ready to book</span>
+          {bookingConfirmModal.preview && (() => {
+            const allOrders = [
+              ...bookingConfirmModal.preview.valid.map((v: any) => ({ ...v, _type: "valid" as const })),
+              ...bookingConfirmModal.preview.invalid.map((v: any) => ({ ...v, _type: "invalid" as const })),
+            ];
+            const allValidIds = bookingConfirmModal.preview.valid.map((v: any) => v.orderId);
+            const allChecked = allValidIds.length > 0 && allValidIds.every((id: string) => previewChecked.has(id));
+            return (
+              <div className="space-y-3">
+                {allOrders.length > 0 && (
+                  <div className="overflow-x-auto max-h-[55vh] overflow-y-auto border rounded-md">
+                    <table className="w-full text-xs">
+                      <thead className="bg-muted/50 sticky top-0 z-10">
+                        <tr className="border-b">
+                          <th className="px-2 py-2 text-left w-8">
+                            <Checkbox
+                              checked={allChecked}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setPreviewChecked(new Set(allValidIds));
+                                } else {
+                                  setPreviewChecked(new Set());
+                                }
+                              }}
+                              data-testid="checkbox-preview-all"
+                            />
+                          </th>
+                          <th className="px-2 py-2 text-left font-medium">#</th>
+                          <th className="px-2 py-2 text-left font-medium">Order</th>
+                          <th className="px-2 py-2 text-left font-medium">Name</th>
+                          <th className="px-2 py-2 text-left font-medium">Phone</th>
+                          <th className="px-2 py-2 text-left font-medium min-w-[160px]">Address</th>
+                          <th className="px-2 py-2 text-left font-medium">City</th>
+                          <th className="px-2 py-2 text-left font-medium">COD</th>
+                          <th className="px-2 py-2 text-left font-medium">Gram</th>
+                          <th className="px-2 py-2 text-left font-medium min-w-[120px]">Description</th>
+                          <th className="px-2 py-2 text-left font-medium">Pcs</th>
+                          <th className="px-2 py-2 text-left font-medium">Type</th>
+                          <th className="px-2 py-2 text-left font-medium w-8"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {allOrders.map((order: any, idx: number) => {
+                          const isValid = order._type === "valid";
+                          const isChecked = previewChecked.has(order.orderId);
+                          const ovr = previewOverrides[order.orderId];
+                          const hasError = !isValid && order.missingFields?.length > 0;
+                          return (
+                            <tr
+                              key={order.orderId}
+                              className={`border-b last:border-b-0 ${hasError ? "bg-red-50/50 dark:bg-red-950/20" : ""} ${!isChecked && isValid ? "opacity-50" : ""}`}
+                              data-testid={`preview-row-${order.orderId}`}
+                            >
+                              <td className="px-2 py-1.5">
+                                {isValid ? (
+                                  <Checkbox
+                                    checked={isChecked}
+                                    onCheckedChange={(checked) => {
+                                      const next = new Set(previewChecked);
+                                      if (checked) next.add(order.orderId);
+                                      else next.delete(order.orderId);
+                                      setPreviewChecked(next);
+                                    }}
+                                    data-testid={`checkbox-preview-${order.orderId}`}
+                                  />
+                                ) : (
+                                  <AlertCircle className="w-3.5 h-3.5 text-red-500" />
+                                )}
+                              </td>
+                              <td className="px-2 py-1.5 text-muted-foreground">{idx + 1}</td>
+                              <td className="px-2 py-1.5 font-medium">{order.orderNumber}</td>
+                              <td className="px-2 py-1.5 max-w-[100px] truncate">{order.customerName || "-"}</td>
+                              <td className="px-2 py-1.5 font-mono text-[11px]">{order.phone || "-"}</td>
+                              <td className="px-2 py-1.5 max-w-[180px] truncate" title={order.address}>{order.address || "-"}</td>
+                              <td className="px-2 py-1.5">{order.city || "-"}</td>
+                              <td className="px-2 py-1.5 font-medium">{Math.round(order.codAmount || 0).toLocaleString()}</td>
+                              <td className="px-2 py-1.5">
+                                {isValid ? (
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    className="h-6 w-16 text-xs px-1 text-center"
+                                    value={ovr?.weight ?? 200}
+                                    onChange={(e) => {
+                                      const w = parseInt(e.target.value) || 200;
+                                      setPreviewOverrides(prev => ({
+                                        ...prev,
+                                        [order.orderId]: { ...prev[order.orderId], weight: w },
+                                      }));
+                                    }}
+                                    data-testid={`input-weight-${order.orderId}`}
+                                  />
+                                ) : (
+                                  <span>{order.weight || 200}</span>
+                                )}
+                              </td>
+                              <td className="px-2 py-1.5 max-w-[120px] truncate" title={order.productDescription}>{order.productDescription || "-"}</td>
+                              <td className="px-2 py-1.5 text-center">{order.pieces || 1}</td>
+                              <td className="px-2 py-1.5">
+                                {isValid ? (
+                                  <Select
+                                    value={ovr?.mode ?? "overnight"}
+                                    onValueChange={(val) => {
+                                      setPreviewOverrides(prev => ({
+                                        ...prev,
+                                        [order.orderId]: { ...prev[order.orderId], mode: val },
+                                      }));
+                                    }}
+                                  >
+                                    <SelectTrigger className="h-6 w-[90px] text-xs px-1" data-testid={`select-mode-${order.orderId}`}>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="overnight">Overnight</SelectItem>
+                                      <SelectItem value="overland">Overland</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <span className="text-muted-foreground">-</span>
+                                )}
+                              </td>
+                              <td className="px-2 py-1.5">
+                                {hasError && (
+                                  <span className="text-red-500 text-[10px] whitespace-nowrap" title={order.missingFields.join(", ")}>
+                                    {order.missingFields.join(", ")}
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
-                  <div className="space-y-1">
-                    {bookingConfirmModal.preview.valid.map((v: any) => (
-                      <div key={v.orderId} className="flex items-center justify-between gap-2 text-xs px-2 py-1.5 rounded bg-muted/50" data-testid={`preview-valid-${v.orderId}`}>
-                        <span className="font-medium">{v.orderNumber}</span>
-                        <span className="text-muted-foreground truncate max-w-[200px]">{v.customerName} - {v.city}</span>
-                        <span className="font-medium">Rs {Number(v.amount).toLocaleString()}</span>
-                      </div>
-                    ))}
+                )}
+                {bookingConfirmModal.preview.alreadyBooked?.length > 0 && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <Package className="w-3.5 h-3.5 text-blue-600" />
+                      <span className="text-xs font-medium text-blue-600">{bookingConfirmModal.preview.alreadyBooked.length} already booked (skipped)</span>
+                    </div>
+                    <div className="space-y-0.5">
+                      {bookingConfirmModal.preview.alreadyBooked.map((ab: any) => (
+                        <div key={ab.orderId} className="flex items-center justify-between gap-2 text-[11px] px-2 py-1 rounded bg-blue-50 dark:bg-blue-950/30" data-testid={`preview-booked-${ab.orderId}`}>
+                          <span className="font-medium">{ab.orderNumber}</span>
+                          <span className="font-mono text-blue-700 dark:text-blue-400">{ab.trackingNumber}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
+                )}
+                <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground border-t pt-2">
+                  <span>{checkedCount} of {bookingConfirmModal.preview.valid.length} orders selected for booking</span>
+                  {bookingConfirmModal.preview.invalid.length > 0 && (
+                    <span className="text-red-500">{bookingConfirmModal.preview.invalid.length} with errors (shown in table)</span>
+                  )}
                 </div>
-              )}
-              {bookingConfirmModal.preview.alreadyBooked?.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <Package className="w-4 h-4 text-blue-600" />
-                    <span className="text-sm font-medium text-blue-600">{bookingConfirmModal.preview.alreadyBooked.length} already booked</span>
-                  </div>
-                  <div className="space-y-1">
-                    {bookingConfirmModal.preview.alreadyBooked.map((ab: any) => (
-                      <div key={ab.orderId} className="flex items-center justify-between gap-2 text-xs px-2 py-1.5 rounded bg-blue-50 dark:bg-blue-950/30" data-testid={`preview-booked-${ab.orderId}`}>
-                        <span className="font-medium">{ab.orderNumber}</span>
-                        <span className="font-mono text-blue-700 dark:text-blue-400">{ab.trackingNumber}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {bookingConfirmModal.preview.invalid.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <AlertCircle className="w-4 h-4 text-red-600" />
-                    <span className="text-sm font-medium text-red-600">{bookingConfirmModal.preview.invalid.length} cannot be booked</span>
-                  </div>
-                  <div className="space-y-1">
-                    {bookingConfirmModal.preview.invalid.map((inv: any) => (
-                      <div key={inv.orderId} className="flex items-center justify-between gap-2 text-xs px-2 py-1.5 rounded bg-red-50 dark:bg-red-950/30" data-testid={`preview-invalid-${inv.orderId}`}>
-                        <span className="font-medium">{inv.orderNumber}</span>
-                        <span className="text-red-600 dark:text-red-400 truncate max-w-[250px]">{inv.missingFields?.join(", ")}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+              </div>
+            );
+          })()}
           <DialogFooter>
             <Button variant="ghost" onClick={() => setBookingConfirmModal({ open: false, preview: null })} data-testid="button-cancel-booking">Back</Button>
             <Button
               onClick={submitBooking}
-              disabled={!bookingConfirmModal.preview || bookingConfirmModal.preview.valid.length === 0}
+              disabled={checkedCount === 0}
               data-testid="button-confirm-booking"
             >
               <Send className="w-3.5 h-3.5 mr-1.5" />
-              Book {bookingConfirmModal.preview?.valid.length || 0} Orders
+              Book {checkedCount} Orders
             </Button>
           </DialogFooter>
         </DialogContent>
