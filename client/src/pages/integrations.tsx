@@ -175,6 +175,8 @@ export default function Integrations() {
   const [selectedCourier, setSelectedCourier] = useState<string | null>(null);
   const [courierFormData, setCourierFormData] = useState<Record<string, string>>({});
   const [useEnvCreds, setUseEnvCreds] = useState(false);
+  const [postexAddresses, setPostexAddresses] = useState<any[]>([]);
+  const [fetchingAddresses, setFetchingAddresses] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(searchString);
@@ -433,6 +435,24 @@ export default function Integrations() {
       setCourierFormData(prev => ({ ...prev, pickupAddressCode: '002', storeAddressCode: '001' }));
     }
     setIsCourierDialogOpen(true);
+  };
+
+  const fetchPostexAddresses = async () => {
+    setFetchingAddresses(true);
+    try {
+      const resp = await apiRequest("POST", "/api/integrations/postex/addresses");
+      const data = await resp.json();
+      if (data.success && data.addresses) {
+        setPostexAddresses(data.addresses);
+        toast({ title: "Addresses Loaded", description: `Found ${data.addresses.length} registered address(es) from PostEx.` });
+      } else {
+        toast({ title: "Failed", description: data.message || "Could not fetch addresses from PostEx.", variant: "destructive" });
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message || "Failed to fetch PostEx addresses.", variant: "destructive" });
+    } finally {
+      setFetchingAddresses(false);
+    }
   };
 
   const couriersList = Object.entries(COURIER_CONFIG).map(([name, config]) => ({
@@ -920,6 +940,7 @@ export default function Integrations() {
         if (!open) {
           setCourierFormData({});
           setSelectedCourier(null);
+          setPostexAddresses([]);
         }
       }}>
         <DialogContent className="sm:max-w-md">
@@ -998,6 +1019,89 @@ export default function Integrations() {
                   <p className="text-xs text-amber-700 dark:text-amber-300">
                     Your API Token can be found in your PostEx merchant dashboard under <strong>Integration Settings</strong>.
                   </p>
+                </div>
+              )}
+
+              {selectedCourier === 'postex' && (
+                <div className="space-y-3">
+                  {useEnvCreds && (
+                    <div className="space-y-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="courier-pickupAddressCode">Pickup Address Code</Label>
+                        <Input
+                          id="courier-pickupAddressCode"
+                          type="text"
+                          placeholder="Enter your PostEx Pickup Address Code"
+                          value={courierFormData.pickupAddressCode || ""}
+                          onChange={(e) => setCourierFormData(prev => ({ ...prev, pickupAddressCode: e.target.value }))}
+                          data-testid="input-courier-pickupAddressCode"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="courier-storeAddressCode">Store Address Code</Label>
+                        <Input
+                          id="courier-storeAddressCode"
+                          type="text"
+                          placeholder="Enter your PostEx Store/Default Address Code"
+                          value={courierFormData.storeAddressCode || ""}
+                          onChange={(e) => setCourierFormData(prev => ({ ...prev, storeAddressCode: e.target.value }))}
+                          data-testid="input-courier-storeAddressCode"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={fetchPostexAddresses}
+                    disabled={fetchingAddresses}
+                    data-testid="button-fetch-postex-addresses"
+                  >
+                    {fetchingAddresses ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Fetching...</>
+                    ) : (
+                      <><MapPin className="w-4 h-4 mr-2" />Fetch Addresses from PostEx</>
+                    )}
+                  </Button>
+
+                  {postexAddresses.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs text-muted-foreground font-medium">Your registered PostEx addresses:</p>
+                      {postexAddresses.map((addr: any, idx: number) => (
+                        <div
+                          key={idx}
+                          className="p-2 rounded-md border text-xs space-y-1"
+                          data-testid={`postex-address-${idx}`}
+                        >
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <span className="font-medium">{addr.address || addr.addressDetail || "Address"}</span>
+                            <Badge variant="secondary">{addr.pickupAddressCode || addr.addressCode || addr.code || "N/A"}</Badge>
+                          </div>
+                          {addr.cityName && <p className="text-muted-foreground">{addr.cityName}</p>}
+                          {addr.contactPersonName && <p className="text-muted-foreground">Contact: {addr.contactPersonName}</p>}
+                          <div className="flex gap-2 flex-wrap">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setCourierFormData(prev => ({ ...prev, pickupAddressCode: addr.pickupAddressCode || addr.addressCode || addr.code || "" }))}
+                              data-testid={`button-use-pickup-${idx}`}
+                            >
+                              Use as Pickup
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setCourierFormData(prev => ({ ...prev, storeAddressCode: addr.pickupAddressCode || addr.addressCode || addr.code || "" }))}
+                              data-testid={`button-use-store-${idx}`}
+                            >
+                              Use as Store
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

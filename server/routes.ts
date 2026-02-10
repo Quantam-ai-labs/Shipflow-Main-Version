@@ -1374,6 +1374,35 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/integrations/postex/addresses", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const creds = await getCourierCredentials(merchantId, "postex");
+      if (!creds || !creds.apiKey) {
+        return res.status(400).json({ message: "PostEx credentials not configured. Save your API Token first." });
+      }
+
+      const resp = await fetch("https://api.postex.pk/services/integration/api/order/v1/get-merchant-address", {
+        headers: {
+          "Content-Type": "application/json",
+          "token": creds.apiKey,
+        },
+      });
+      const data = await resp.json();
+      console.log("[PostEx] Merchant addresses response:", JSON.stringify(data).substring(0, 500));
+
+      if (data.statusCode === "200" && data.dist) {
+        return res.json({ success: true, addresses: data.dist });
+      }
+      return res.json({ success: false, message: data.statusMessage || "Failed to fetch addresses" });
+    } catch (error: any) {
+      console.error("Error fetching PostEx addresses:", error);
+      res.status(500).json({ message: error.message || "Failed to fetch PostEx addresses" });
+    }
+  });
+
   // Settings
   app.get("/api/settings", isAuthenticated, async (req, res) => {
     try {
