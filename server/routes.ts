@@ -1551,6 +1551,53 @@ export async function registerRoutes(
   });
 
   // ============================================
+  // COURIER CITIES ENDPOINT
+  // ============================================
+
+  app.get("/api/booking/cities/:courier", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const courier = req.params.courier as string;
+      if (!["leopards", "postex"].includes(courier)) {
+        return res.status(400).json({ message: "Valid courier required" });
+      }
+
+      const creds = await getCourierCredentials(merchantId, courier);
+      if (!creds) {
+        return res.status(400).json({ message: `No ${courier} credentials configured` });
+      }
+
+      if (courier === "leopards") {
+        const { loadLeopardsCities } = await import("./services/couriers/booking");
+        const cities = await loadLeopardsCities(creds.apiKey!, creds.apiSecret!);
+        res.json({
+          courier,
+          cities: cities.map(c => ({
+            id: c.id,
+            name: c.name,
+            shipmentTypes: c.shipmentTypes,
+          })),
+        });
+      } else {
+        const { loadPostExCities } = await import("./services/couriers/booking");
+        const cities = await loadPostExCities(creds.apiKey!);
+        res.json({
+          courier,
+          cities: cities.map(c => ({
+            name: c.name,
+            isDeliveryCity: c.isDeliveryCity,
+          })),
+        });
+      }
+    } catch (error) {
+      console.error("Error loading courier cities:", error);
+      res.status(500).json({ message: "Failed to load cities" });
+    }
+  });
+
+  // ============================================
   // COURIER BOOKING ENDPOINTS
   // ============================================
 
@@ -1567,15 +1614,25 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Valid courier required (leopards or postex)" });
       }
 
-      const { validateOrderForBooking, normalizePhone } = await import("./services/couriers/booking");
+      const { validateOrderForBooking, normalizePhone, matchCityForCourier, loadLeopardsCities, loadPostExCities } = await import("./services/couriers/booking");
+
+      const creds = await getCourierCredentials(merchantId, courier);
+      let courierCities: Array<{ id?: number; name: string }> = [];
+      if (creds) {
+        if (courier === "leopards") {
+          const leopCities = await loadLeopardsCities(creds.apiKey!, creds.apiSecret!);
+          courierCities = leopCities.map(c => ({ id: c.id, name: c.name }));
+        } else {
+          const postCities = await loadPostExCities(creds.apiKey!);
+          courierCities = postCities.filter(c => c.isDeliveryCity).map(c => ({ name: c.name }));
+        }
+      }
 
       const fetchedOrders = await storage.getOrdersByIds(merchantId, orderIds);
       const existingJobs = await storage.getBookingJobsByOrderIds(merchantId, orderIds);
       const bookedOrderIds = new Set(
         existingJobs.filter(j => j.status === "success" && j.trackingNumber).map(j => j.orderId)
       );
-
-      const { orderToPacket } = await import("./services/couriers/booking");
 
       const buildProductDescription = (order: any): string => {
         const items = order.lineItems as any[];
@@ -1589,30 +1646,30 @@ export async function registerRoutes(
         return order.itemSummary || "Order items";
       };
 
-      const valid: Array<{
+      type PreviewOrder = {
         orderId: string; orderNumber: string; customerName: string; city: string;
         address: string; phone: string; weight: number; pieces: number;
         productDescription: string; codAmount: number; amount: string;
+        cityMatched: boolean; matchedCityName: string; matchedCityId?: number;
         missingFields?: string[];
-      }> = [];
-      const invalid: Array<{
-        orderId: string; orderNumber: string; customerName: string; city: string;
-        address: string; phone: string; weight: number; pieces: number;
-        productDescription: string; codAmount: number; amount: string;
-        missingFields: string[];
-      }> = [];
+      };
+
+      const valid: PreviewOrder[] = [];
+      const invalid: PreviewOrder[] = [];
       const alreadyBooked: Array<{ orderId: string; orderNumber: string; trackingNumber: string }> = [];
 
       for (const order of fetchedOrders) {
         if (order.workflowStatus !== "READY_TO_SHIP") {
+          const cityMatch = matchCityForCourier(order.city || "", courierCities, courier);
           invalid.push({
             orderId: order.id, orderNumber: order.orderNumber,
             customerName: order.customerName || "", city: order.city || "",
             address: order.shippingAddress || "", phone: normalizePhone(order.customerPhone),
             weight: 200, pieces: order.totalQuantity || 1,
             productDescription: buildProductDescription(order),
-            codAmount: order.paymentMethod === "cod" ? parseFloat(order.totalAmount) : 0,
+            codAmount: parseFloat(order.totalAmount) || 0,
             amount: order.totalAmount,
+            cityMatched: cityMatch.matched, matchedCityName: cityMatch.matchedCity, matchedCityId: cityMatch.matchedCityId,
             missingFields: ["Not in Ready to Ship status"],
           });
           continue;
@@ -1630,8 +1687,9 @@ export async function registerRoutes(
 
         const pieces = order.totalQuantity || ((order.lineItems as any[])?.length) || 1;
         const productDescription = buildProductDescription(order);
-        const codAmount = order.paymentMethod === "cod" ? parseFloat(order.totalAmount) : 0;
+        const codAmount = parseFloat(order.totalAmount) || 0;
         const phone = normalizePhone(order.customerPhone);
+        const cityMatch = matchCityForCourier(order.city || "", courierCities, courier);
 
         const missing = validateOrderForBooking(order);
         if (missing.length > 0) {
@@ -1640,7 +1698,9 @@ export async function registerRoutes(
             customerName: order.customerName || "", city: order.city || "",
             address: order.shippingAddress || "", phone,
             weight: 200, pieces, productDescription, codAmount,
-            amount: order.totalAmount, missingFields: missing,
+            amount: order.totalAmount,
+            cityMatched: cityMatch.matched, matchedCityName: cityMatch.matchedCity, matchedCityId: cityMatch.matchedCityId,
+            missingFields: missing,
           });
         } else {
           valid.push({
@@ -1649,11 +1709,15 @@ export async function registerRoutes(
             address: order.shippingAddress || "", phone,
             weight: 200, pieces, productDescription, codAmount,
             amount: order.totalAmount,
+            cityMatched: cityMatch.matched, matchedCityName: cityMatch.matchedCity, matchedCityId: cityMatch.matchedCityId,
           });
         }
       }
 
-      res.json({ valid, invalid, alreadyBooked, courier });
+      res.json({
+        valid, invalid, alreadyBooked, courier,
+        courierCities: courierCities.map(c => ({ id: (c as any).id, name: c.name })),
+      });
     } catch (error) {
       console.error("Error previewing booking:", error);
       res.status(500).json({ message: "Failed to preview booking" });
@@ -1673,10 +1737,14 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Valid courier required" });
       }
 
-      const overridesMap = new Map<string, { weight?: number; mode?: string }>();
+      const overridesMap = new Map<string, {
+        weight?: number; mode?: string; customerName?: string;
+        phone?: string; address?: string; city?: string;
+        codAmount?: number; description?: string;
+      }>();
       if (orderOverrides && typeof orderOverrides === "object") {
         for (const [oid, ov] of Object.entries(orderOverrides)) {
-          overridesMap.set(oid, ov as { weight?: number; mode?: string });
+          overridesMap.set(oid, ov as any);
         }
       }
 
@@ -1735,7 +1803,16 @@ export async function registerRoutes(
           continue;
         }
 
-        const missing = validateOrderForBooking(order);
+        const ovr = overridesMap.get(order.id);
+        const orderForValidation = { ...order };
+        if (ovr) {
+          if (ovr.customerName) orderForValidation.customerName = ovr.customerName;
+          if (ovr.phone) orderForValidation.customerPhone = ovr.phone;
+          if (ovr.address) orderForValidation.shippingAddress = ovr.address;
+          if (ovr.city) orderForValidation.city = ovr.city;
+          if (ovr.codAmount !== undefined) orderForValidation.totalAmount = String(ovr.codAmount);
+        }
+        const missing = validateOrderForBooking(orderForValidation);
         if (missing.length > 0) {
           results.push({
             orderId: order.id,
@@ -1771,8 +1848,16 @@ export async function registerRoutes(
       const packets = toBook.map(order => {
         const pkt = orderToPacket(order);
         const ovr = overridesMap.get(order.id);
-        if (ovr?.weight) pkt.weight = ovr.weight;
-        if (ovr?.mode) (pkt as any).mode = ovr.mode;
+        if (ovr) {
+          if (ovr.weight) pkt.weight = ovr.weight;
+          if (ovr.mode) pkt.mode = ovr.mode;
+          if (ovr.customerName) pkt.customerName = ovr.customerName;
+          if (ovr.phone) pkt.customerPhone = ovr.phone;
+          if (ovr.address) pkt.shippingAddress = ovr.address;
+          if (ovr.city) pkt.city = ovr.city;
+          if (ovr.codAmount !== undefined) pkt.codAmount = ovr.codAmount;
+          if (ovr.description) pkt.itemSummary = ovr.description;
+        }
         return pkt;
       });
 

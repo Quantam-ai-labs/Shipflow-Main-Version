@@ -172,7 +172,11 @@ export default function Pipeline() {
   const [bookingResultsModal, setBookingResultsModal] = useState<{ open: boolean; results: any | null }>({ open: false, results: null });
   const [isBookingLoading, setIsBookingLoading] = useState(false);
   const [previewChecked, setPreviewChecked] = useState<Set<string>>(new Set());
-  const [previewOverrides, setPreviewOverrides] = useState<Record<string, { weight: number; mode: string }>>({});
+  const [previewOverrides, setPreviewOverrides] = useState<Record<string, {
+    weight: number; mode: string; customerName: string; phone: string;
+    address: string; city: string; codAmount: number; description: string;
+  }>>({});
+  const [courierCities, setCourierCities] = useState<Array<{ id?: number; name: string }>>([]);
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -326,9 +330,25 @@ export default function Pipeline() {
       const preview = await res.json();
       const checkedIds = new Set<string>(preview.valid.map((v: any) => v.orderId));
       setPreviewChecked(checkedIds);
-      const overrides: Record<string, { weight: number; mode: string }> = {};
-      for (const v of preview.valid) {
-        overrides[v.orderId] = { weight: v.weight || 200, mode: "overnight" };
+      setCourierCities(preview.courierCities || []);
+      const defaultMode = selectedCourier === "leopards" ? "Overnight" : "Normal";
+      const overrides: Record<string, {
+        weight: number; mode: string; customerName: string; phone: string;
+        address: string; city: string; codAmount: number; description: string;
+      }> = {};
+      const allOrders = [...preview.valid, ...preview.invalid];
+      for (const v of allOrders) {
+        const cityToUse = v.cityMatched ? v.matchedCityName : v.city;
+        overrides[v.orderId] = {
+          weight: v.weight || 200,
+          mode: defaultMode,
+          customerName: v.customerName || "",
+          phone: v.phone || "",
+          address: v.address || "",
+          city: cityToUse || "",
+          codAmount: v.codAmount || 0,
+          description: v.productDescription || "",
+        };
       }
       setPreviewOverrides(overrides);
       setBookingConfirmModal({ open: true, preview });
@@ -348,7 +368,7 @@ export default function Pipeline() {
     setBookingConfirmModal({ open: false, preview: null });
     setIsBookingLoading(true);
     try {
-      const overridesPayload: Record<string, { weight: number; mode: string }> = {};
+      const overridesPayload: Record<string, any> = {};
       for (const id of checkedIds) {
         if (previewOverrides[id]) overridesPayload[id] = previewOverrides[id];
       }
@@ -899,10 +919,10 @@ export default function Pipeline() {
 
       {/* Booking Confirmation Modal */}
       <Dialog open={bookingConfirmModal.open} onOpenChange={open => { if (!open) setBookingConfirmModal({ open: false, preview: null }); }}>
-        <DialogContent className="max-w-[95vw] w-[1100px]">
+        <DialogContent className="max-w-[95vw] w-[1200px]">
           <DialogHeader>
             <DialogTitle>Confirm Booking via {selectedCourier === "leopards" ? "Leopards" : "PostEx"}</DialogTitle>
-            <DialogDescription>Review order details, uncheck orders you don't want to book, and select shipment mode.</DialogDescription>
+            <DialogDescription>Review and edit order details before booking. All fields except Order ID are editable.</DialogDescription>
           </DialogHeader>
           {bookingConfirmModal.preview && (() => {
             const allOrders = [
@@ -911,6 +931,16 @@ export default function Pipeline() {
             ];
             const allValidIds = bookingConfirmModal.preview.valid.map((v: any) => v.orderId);
             const allChecked = allValidIds.length > 0 && allValidIds.every((id: string) => previewChecked.has(id));
+            const courierName = bookingConfirmModal.preview.courier;
+            const leopardsModes = ["Overnight", "Detain", "Overland"];
+            const postexModes = ["Normal", "Reversed", "Replacement"];
+            const modeOptions = courierName === "leopards" ? leopardsModes : postexModes;
+            const updateField = (orderId: string, field: string, value: any) => {
+              setPreviewOverrides(prev => ({
+                ...prev,
+                [orderId]: { ...prev[orderId], [field]: value },
+              }));
+            };
             return (
               <div className="space-y-3">
                 {allOrders.length > 0 && (
@@ -918,31 +948,28 @@ export default function Pipeline() {
                     <table className="w-full text-xs">
                       <thead className="bg-muted/50 sticky top-0 z-10">
                         <tr className="border-b">
-                          <th className="px-2 py-2 text-left w-8">
+                          <th className="px-1 py-2 text-left w-8">
                             <Checkbox
                               checked={allChecked}
                               onCheckedChange={(checked) => {
-                                if (checked) {
-                                  setPreviewChecked(new Set(allValidIds));
-                                } else {
-                                  setPreviewChecked(new Set());
-                                }
+                                if (checked) setPreviewChecked(new Set(allValidIds));
+                                else setPreviewChecked(new Set());
                               }}
                               data-testid="checkbox-preview-all"
                             />
                           </th>
-                          <th className="px-2 py-2 text-left font-medium">#</th>
-                          <th className="px-2 py-2 text-left font-medium">Order</th>
-                          <th className="px-2 py-2 text-left font-medium">Name</th>
-                          <th className="px-2 py-2 text-left font-medium">Phone</th>
-                          <th className="px-2 py-2 text-left font-medium min-w-[160px]">Address</th>
-                          <th className="px-2 py-2 text-left font-medium">City</th>
-                          <th className="px-2 py-2 text-left font-medium">COD</th>
-                          <th className="px-2 py-2 text-left font-medium">Gram</th>
-                          <th className="px-2 py-2 text-left font-medium min-w-[120px]">Description</th>
-                          <th className="px-2 py-2 text-left font-medium">Pcs</th>
-                          <th className="px-2 py-2 text-left font-medium">Type</th>
-                          <th className="px-2 py-2 text-left font-medium w-8"></th>
+                          <th className="px-1 py-2 text-left font-medium w-6">#</th>
+                          <th className="px-1 py-2 text-left font-medium">Order</th>
+                          <th className="px-1 py-2 text-left font-medium min-w-[100px]">Name</th>
+                          <th className="px-1 py-2 text-left font-medium min-w-[100px]">Phone</th>
+                          <th className="px-1 py-2 text-left font-medium min-w-[140px]">Address</th>
+                          <th className="px-1 py-2 text-left font-medium min-w-[120px]">City</th>
+                          <th className="px-1 py-2 text-left font-medium min-w-[70px]">COD</th>
+                          <th className="px-1 py-2 text-left font-medium w-16">Gram</th>
+                          <th className="px-1 py-2 text-left font-medium min-w-[100px]">Description</th>
+                          <th className="px-1 py-2 text-left font-medium w-8">Pcs</th>
+                          <th className="px-1 py-2 text-left font-medium min-w-[100px]">Type</th>
+                          <th className="px-1 py-2 text-left font-medium w-8"></th>
                         </tr>
                       </thead>
                       <tbody>
@@ -951,13 +978,14 @@ export default function Pipeline() {
                           const isChecked = previewChecked.has(order.orderId);
                           const ovr = previewOverrides[order.orderId];
                           const hasError = !isValid && order.missingFields?.length > 0;
+                          const cityNotMatched = !order.cityMatched;
                           return (
                             <tr
                               key={order.orderId}
                               className={`border-b last:border-b-0 ${hasError ? "bg-red-50/50 dark:bg-red-950/20" : ""} ${!isChecked && isValid ? "opacity-50" : ""}`}
                               data-testid={`preview-row-${order.orderId}`}
                             >
-                              <td className="px-2 py-1.5">
+                              <td className="px-1 py-1">
                                 {isValid ? (
                                   <Checkbox
                                     checked={isChecked}
@@ -973,59 +1001,109 @@ export default function Pipeline() {
                                   <AlertCircle className="w-3.5 h-3.5 text-red-500" />
                                 )}
                               </td>
-                              <td className="px-2 py-1.5 text-muted-foreground">{idx + 1}</td>
-                              <td className="px-2 py-1.5 font-medium">{order.orderNumber}</td>
-                              <td className="px-2 py-1.5 max-w-[100px] truncate">{order.customerName || "-"}</td>
-                              <td className="px-2 py-1.5 font-mono text-[11px]">{order.phone || "-"}</td>
-                              <td className="px-2 py-1.5 max-w-[180px] truncate" title={order.address}>{order.address || "-"}</td>
-                              <td className="px-2 py-1.5">{order.city || "-"}</td>
-                              <td className="px-2 py-1.5 font-medium">{Math.round(order.codAmount || 0).toLocaleString()}</td>
-                              <td className="px-2 py-1.5">
-                                {isValid ? (
+                              <td className="px-1 py-1 text-muted-foreground">{idx + 1}</td>
+                              <td className="px-1 py-1 font-medium whitespace-nowrap">{order.orderNumber}</td>
+                              <td className="px-1 py-1">
+                                <Input
+                                  className="h-6 text-xs px-1 min-w-[90px]"
+                                  value={ovr?.customerName ?? order.customerName ?? ""}
+                                  onChange={(e) => updateField(order.orderId, "customerName", e.target.value)}
+                                  data-testid={`input-name-${order.orderId}`}
+                                />
+                              </td>
+                              <td className="px-1 py-1">
+                                <Input
+                                  className="h-6 text-xs px-1 font-mono min-w-[95px]"
+                                  value={ovr?.phone ?? order.phone ?? ""}
+                                  onChange={(e) => updateField(order.orderId, "phone", e.target.value)}
+                                  data-testid={`input-phone-${order.orderId}`}
+                                />
+                              </td>
+                              <td className="px-1 py-1">
+                                <Input
+                                  className="h-6 text-xs px-1 min-w-[130px]"
+                                  value={ovr?.address ?? order.address ?? ""}
+                                  onChange={(e) => updateField(order.orderId, "address", e.target.value)}
+                                  data-testid={`input-address-${order.orderId}`}
+                                />
+                              </td>
+                              <td className="px-1 py-1">
+                                {courierCities.length > 0 ? (
+                                  <div className="flex flex-col gap-0.5">
+                                    <Select
+                                      value={ovr?.city ?? order.city ?? ""}
+                                      onValueChange={(val) => updateField(order.orderId, "city", val)}
+                                    >
+                                      <SelectTrigger
+                                        className={`h-6 text-xs px-1 min-w-[110px] ${cityNotMatched && !(ovr?.city && courierCities.some(c => c.name === ovr.city)) ? "border-orange-400 dark:border-orange-600" : ""}`}
+                                        data-testid={`select-city-${order.orderId}`}
+                                      >
+                                        <SelectValue placeholder="Select city" />
+                                      </SelectTrigger>
+                                      <SelectContent className="max-h-[200px]">
+                                        {courierCities.map((c) => (
+                                          <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    {cityNotMatched && !(ovr?.city && courierCities.some(c => c.name === ovr.city)) && (
+                                      <span className="text-[9px] text-orange-500 leading-tight">No match: "{order.city}"</span>
+                                    )}
+                                  </div>
+                                ) : (
                                   <Input
-                                    type="number"
-                                    min={1}
-                                    className="h-6 w-16 text-xs px-1 text-center"
-                                    value={ovr?.weight ?? 200}
-                                    onChange={(e) => {
-                                      const w = parseInt(e.target.value) || 200;
-                                      setPreviewOverrides(prev => ({
-                                        ...prev,
-                                        [order.orderId]: { ...prev[order.orderId], weight: w },
-                                      }));
-                                    }}
-                                    data-testid={`input-weight-${order.orderId}`}
+                                    className="h-6 text-xs px-1 min-w-[90px]"
+                                    value={ovr?.city ?? order.city ?? ""}
+                                    onChange={(e) => updateField(order.orderId, "city", e.target.value)}
+                                    data-testid={`input-city-${order.orderId}`}
                                   />
-                                ) : (
-                                  <span>{order.weight || 200}</span>
                                 )}
                               </td>
-                              <td className="px-2 py-1.5 max-w-[120px] truncate" title={order.productDescription}>{order.productDescription || "-"}</td>
-                              <td className="px-2 py-1.5 text-center">{order.pieces || 1}</td>
-                              <td className="px-2 py-1.5">
-                                {isValid ? (
-                                  <Select
-                                    value={ovr?.mode ?? "overnight"}
-                                    onValueChange={(val) => {
-                                      setPreviewOverrides(prev => ({
-                                        ...prev,
-                                        [order.orderId]: { ...prev[order.orderId], mode: val },
-                                      }));
-                                    }}
-                                  >
-                                    <SelectTrigger className="h-6 w-[90px] text-xs px-1" data-testid={`select-mode-${order.orderId}`}>
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="overnight">Overnight</SelectItem>
-                                      <SelectItem value="overland">Overland</SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                ) : (
-                                  <span className="text-muted-foreground">-</span>
-                                )}
+                              <td className="px-1 py-1">
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  className="h-6 w-[65px] text-xs px-1 text-center"
+                                  value={ovr?.codAmount ?? order.codAmount ?? 0}
+                                  onChange={(e) => updateField(order.orderId, "codAmount", parseFloat(e.target.value) || 0)}
+                                  data-testid={`input-cod-${order.orderId}`}
+                                />
                               </td>
-                              <td className="px-2 py-1.5">
+                              <td className="px-1 py-1">
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  className="h-6 w-16 text-xs px-1 text-center"
+                                  value={ovr?.weight ?? 200}
+                                  onChange={(e) => updateField(order.orderId, "weight", parseInt(e.target.value) || 200)}
+                                  data-testid={`input-weight-${order.orderId}`}
+                                />
+                              </td>
+                              <td className="px-1 py-1">
+                                <Input
+                                  className="h-6 text-xs px-1 min-w-[90px]"
+                                  value={ovr?.description ?? order.productDescription ?? ""}
+                                  onChange={(e) => updateField(order.orderId, "description", e.target.value)}
+                                  data-testid={`input-desc-${order.orderId}`}
+                                />
+                              </td>
+                              <td className="px-1 py-1 text-center">{order.pieces || 1}</td>
+                              <td className="px-1 py-1">
+                                <Select
+                                  value={ovr?.mode ?? modeOptions[0]}
+                                  onValueChange={(val) => updateField(order.orderId, "mode", val)}
+                                >
+                                  <SelectTrigger className="h-6 min-w-[90px] text-xs px-1" data-testid={`select-mode-${order.orderId}`}>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {modeOptions.map(m => (
+                                      <SelectItem key={m} value={m}>{m}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </td>
+                              <td className="px-1 py-1">
                                 {hasError && (
                                   <span className="text-red-500 text-[10px] whitespace-nowrap" title={order.missingFields.join(", ")}>
                                     {order.missingFields.join(", ")}
