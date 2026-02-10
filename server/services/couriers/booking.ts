@@ -217,49 +217,40 @@ export async function loadPostExCities(token: string): Promise<PostExCityEntry[]
 // LEOPARDS BOOKING
 // ============================================
 
-export async function bookLeopardsBatch(
-  packets: BookingPacket[],
+export async function bookLeopardsPacket(
+  packet: BookingPacket,
   credentials: { apiKey: string; apiPassword: string },
-  shipperInfo: { name: string; phone: string; address: string; city: string }
-): Promise<BookingResult[]> {
-  const results: BookingResult[] = [];
-  const cities = await loadLeopardsCities(credentials.apiKey, credentials.apiPassword);
-
+  shipperInfo: { name: string; phone: string; address: string; city: string },
+  cities: LeopardsCityEntry[]
+): Promise<BookingResult> {
   const originMatch = findLeopardsCity(shipperInfo.city, cities);
-  const originCityId = originMatch?.id || "self";
+  const originCityId = originMatch?.id || 0;
+  const mode = packet.mode || "Overnight";
+  const destMatch = findLeopardsCity(packet.city, cities);
+  const destCityId = destMatch?.id;
 
-  const leopardsPackets = packets.map((p) => {
-    const mode = p.mode || "overnight";
-    const destMatch = findLeopardsCity(p.city, cities);
-    const destCityId = destMatch?.id;
-
-    return {
-      booked_packet_weight: String(p.weight || 200),
-      booked_packet_no_piece: String(p.pieces || 1),
-      booked_packet_collect_amount: String(Math.round(p.codAmount || 0)),
-      booked_packet_order_id: p.orderNumber,
-      origin_city: String(originCityId),
-      destination_city: destCityId ? String(destCityId) : p.city,
-      shipment_name_eng: shipperInfo.name || "self",
-      shipment_phone: normalizePhone(shipperInfo.phone) || "self",
-      shipment_address: shipperInfo.address || "self",
-      consignment_name_eng: p.customerName,
-      consignment_phone: p.customerPhone,
-      consignment_address: p.shippingAddress,
-      special_instructions: p.specialInstructions || p.itemSummary || "Handle with care",
-      shipment_type: mode.toLowerCase() === "detain" ? "Detain" : (mode.toLowerCase() === "overland" ? "Overland" : "Overnight"),
-    };
-  });
+  const requestBody: Record<string, string> = {
+    api_key: credentials.apiKey,
+    api_password: credentials.apiPassword,
+    booked_packet_weight: String(packet.weight || 200),
+    booked_packet_no_piece: String(packet.pieces || 1),
+    booked_packet_collect_amount: String(Math.round(packet.codAmount || 0)),
+    booked_packet_order_id: packet.orderNumber,
+    origin_city: String(originCityId),
+    destination_city: destCityId ? String(destCityId) : packet.city,
+    shipment_name_eng: shipperInfo.name || "ShipFlow Merchant",
+    shipment_phone: normalizePhone(shipperInfo.phone) || "0000000000",
+    shipment_address: shipperInfo.address || "Default Address",
+    consignment_name_eng: packet.customerName || "Customer",
+    consignment_phone: normalizePhone(packet.customerPhone) || "0000000000",
+    consignment_address: packet.shippingAddress || "Address",
+    special_instructions: packet.specialInstructions || packet.itemSummary || "Handle with care",
+    shipment_type: mode.toLowerCase() === "detain" ? "Detain" : (mode.toLowerCase() === "overland" ? "Overland" : "Overnight"),
+  };
 
   try {
-    const requestBody = {
-      api_key: credentials.apiKey,
-      api_password: credentials.apiPassword,
-      packets: leopardsPackets,
-    };
-
-    console.log(`[Leopards] Booking ${leopardsPackets.length} packets...`);
-    console.log(`[Leopards] Sample packet:`, JSON.stringify(leopardsPackets[0], null, 2));
+    console.log(`[Leopards] Booking order ${packet.orderNumber}...`);
+    console.log(`[Leopards] Request body:`, JSON.stringify(requestBody, null, 2));
 
     const resp = await fetch("https://merchantapi.leopardscourier.com/api/bookPacket/format/json/", {
       method: "POST",
@@ -268,62 +259,57 @@ export async function bookLeopardsBatch(
     });
 
     const data = await resp.json();
-    console.log(`[Leopards] Booking response status: ${data.status}, error: ${JSON.stringify(data.error)?.substring(0, 200)}`);
+    console.log(`[Leopards] Response for ${packet.orderNumber}: status=${data.status}, track=${data.track_number || "none"}, error=${JSON.stringify(data.error)?.substring(0, 300)}`);
 
-    if (data.status === 1 && data.packet_list && Array.isArray(data.packet_list)) {
-      for (let i = 0; i < packets.length; i++) {
-        const packet = packets[i];
-        const responsePacket = data.packet_list[i];
-        if (responsePacket && responsePacket.track_number) {
-          results.push({
-            orderId: packet.orderId,
-            orderNumber: packet.orderNumber,
-            success: true,
-            trackingNumber: responsePacket.track_number,
-            slipUrl: responsePacket.slip_link || null,
-            rawResponse: responsePacket,
-          });
-        } else {
-          results.push({
-            orderId: packet.orderId,
-            orderNumber: packet.orderNumber,
-            success: false,
-            error: responsePacket?.error || responsePacket?.status_message || "Booking failed for this packet",
-            rawResponse: responsePacket,
-          });
-        }
-      }
-    } else if (data.status === 1 && data.track_number) {
-      results.push({
-        orderId: packets[0].orderId,
-        orderNumber: packets[0].orderNumber,
+    if (data.status === 1 && data.track_number) {
+      return {
+        orderId: packet.orderId,
+        orderNumber: packet.orderNumber,
         success: true,
         trackingNumber: data.track_number,
         slipUrl: data.slip_link || null,
         rawResponse: data,
-      });
-    } else {
-      const errorMsg = data.error || data.message || "Leopards booking failed";
-      const errStr = typeof errorMsg === "object" ? JSON.stringify(errorMsg) : String(errorMsg);
-      for (const packet of packets) {
-        results.push({
-          orderId: packet.orderId,
-          orderNumber: packet.orderNumber,
-          success: false,
-          error: errStr,
-          rawResponse: data,
-        });
-      }
+      };
     }
+
+    const errorMsg = data.error || data.message || "Leopards booking failed";
+    const errStr = typeof errorMsg === "object"
+      ? Object.values(errorMsg).flat().join(", ")
+      : String(errorMsg);
+
+    return {
+      orderId: packet.orderId,
+      orderNumber: packet.orderNumber,
+      success: false,
+      error: errStr,
+      rawResponse: data,
+    };
   } catch (err: any) {
-    console.error("[Leopards] Batch booking error:", err);
-    for (const packet of packets) {
-      results.push({
-        orderId: packet.orderId,
-        orderNumber: packet.orderNumber,
-        success: false,
-        error: err.message || "Network error",
-      });
+    console.error(`[Leopards] Booking error for ${packet.orderNumber}:`, err);
+    return {
+      orderId: packet.orderId,
+      orderNumber: packet.orderNumber,
+      success: false,
+      error: err.message || "Network error",
+    };
+  }
+}
+
+export async function bookLeopardsBatch(
+  packets: BookingPacket[],
+  credentials: { apiKey: string; apiPassword: string },
+  shipperInfo: { name: string; phone: string; address: string; city: string }
+): Promise<BookingResult[]> {
+  const results: BookingResult[] = [];
+  const cities = await loadLeopardsCities(credentials.apiKey, credentials.apiPassword);
+
+  console.log(`[Leopards] Booking ${packets.length} packets sequentially...`);
+
+  for (let i = 0; i < packets.length; i++) {
+    const result = await bookLeopardsPacket(packets[i], credentials, shipperInfo, cities);
+    results.push(result);
+    if (i < packets.length - 1) {
+      await new Promise((r) => setTimeout(r, 300));
     }
   }
 

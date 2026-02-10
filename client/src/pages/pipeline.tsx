@@ -1203,11 +1203,11 @@ export default function Pipeline() {
                     <XCircle className="w-4 h-4 text-red-600" />
                     <span className="text-sm font-medium text-red-600">Failed</span>
                   </div>
-                  <div className="space-y-1">
+                  <div className="space-y-1.5">
                     {bookingResultsModal.results.results.filter((r: any) => !r.success).map((r: any) => (
-                      <div key={r.orderId} className="flex items-center justify-between gap-2 text-xs px-2 py-1.5 rounded bg-red-50 dark:bg-red-950/30" data-testid={`result-failed-${r.orderId}`}>
-                        <span className="font-medium">{r.orderNumber}</span>
-                        <span className="text-red-600 dark:text-red-400 truncate max-w-[250px]">{r.error}</span>
+                      <div key={r.orderId} className="text-xs px-3 py-2 rounded bg-red-50 dark:bg-red-950/30" data-testid={`result-failed-${r.orderId}`}>
+                        <div className="font-medium mb-1">{r.orderNumber}</div>
+                        <div className="text-red-600 dark:text-red-400 whitespace-pre-wrap break-words leading-relaxed">{r.error}</div>
                       </div>
                     ))}
                   </div>
