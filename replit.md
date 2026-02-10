@@ -63,6 +63,7 @@ Preferred communication style: Simple, everyday language.
 - **Sync Status API**: `GET /api/integrations/shopify/sync-status` returns per-merchant auto-sync state (enabled, interval, running, last result with created/updated counts).
 - **Live Indicator**: Orders page shows green pulsing "Live" indicator with last sync timestamp. Auto-refreshes order data when new orders arrive.
 - **Data Health Dashboard**: Integrations page shows data quality metrics (% of orders with name/phone/address/city).
+- **Direct Courier Booking**: Ready-to-Ship orders can be booked with Leopards (batch) or PostEx (per-order). Booking flow: select orders → preview → confirm → results. Default shipment weight: 200g. Preview modal shows detailed table with all order info (Order ID, Name, Phone, Address, City, COD, Weight, Description, Pieces, Mode). Checkboxes allow selecting/deselecting individual orders. Per-order weight and mode (Overnight/Overland) overrides. Invalid orders shown inline with errors instead of blocking batch. Book endpoint accepts `orderOverrides` map for per-order weight/mode. Successful bookings auto-transition to FULFILLED. Booking jobs tracked in `booking_jobs` table for idempotency.
 
 ## External Dependencies
 
