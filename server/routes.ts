@@ -1769,7 +1769,7 @@ export async function registerRoutes(
         address: merchant.address || "",
         city: merchant.city || "Lahore",
         shipperId: courierSettings?.shipperId || "2125655",
-        merchantCode: courierSettings?.merchantCode || "2125655",
+        pickupAddressCode: courierSettings?.pickupAddressCode || courierSettings?.merchantCode || "001",
       };
 
       const { validateOrderForBooking, orderToPacket, bookLeopardsBatch, bookPostExBulk } = await import("./services/couriers/booking");
