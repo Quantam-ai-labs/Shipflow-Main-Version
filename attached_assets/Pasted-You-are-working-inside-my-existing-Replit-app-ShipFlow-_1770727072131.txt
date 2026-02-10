@@ -1,0 +1,62 @@
+You are working inside my existing Replit app “ShipFlow”. Fix PostEx booking failures showing “INVALID MERCHANT STORE ADDRESS CODE”.
+
+Read and follow PostEx Merchant API Integration Guide v4.1.9:
+- Pickup Address API (GET) https://api.postex.pk/services/integration/api/order/v1/get-merchant-address returns “addressCode” as a mandatory String inside dist[]. Use that value as the only source of truth for merchant pickup/store address codes. (Docs show addressCode as String.) :contentReference[oaicite:2]{index=2}
+- Order Creation API (POST) https://api.postex.pk/services/integration/api/order/v3/create-order accepts optional “pickupAddressCode” and optional “storeAddressCode” (docs show them as strings). :contentReference[oaicite:3]{index=3}
+
+GOAL:
+Ensure the value we send to PostEx for store/pickup address code matches EXACTLY the PostEx “addressCode” (including leading zeros like “002”) and is sent under the correct field(s) as a STRING.
+
+DO THIS STEP-BY-STEP IN THE CODEBASE:
+
+1) Find the PostEx integration module/service where we call PostEx booking/order creation (create-order endpoint) and locate where the payload is built.
+
+2) Fix “store address code” typing & formatting:
+   - Treat address codes as STRING everywhere: database schema, API types, frontend state, and request payload.
+   - Remove any parseInt / Number() / integer validation on address code.
+   - If we must normalize, only do: code = String(code).trim()
+   - Preserve leading zeros. Never convert to number.
+
+3) Fix the payload fields sent to PostEx:
+   - Ensure the create-order payload includes:
+       storeAddressCode: "<POSTEX addressCode string>"
+     (exact key name: storeAddressCode)
+   - If the system currently uses pickupAddressCode instead of storeAddressCode, update logic to use storeAddressCode.
+   - If both fields are being sent, set both to the same correct string ONLY IF needed:
+       pickupAddressCode: "<same string>"
+       storeAddressCode: "<same string>"
+     Otherwise prefer storeAddressCode alone to avoid conflicts.
+   - Confirm header includes token exactly as docs require.
+
+4) Fix how ShipFlow chooses the address code:
+   - In the UI or settings page where merchant pickup/return addresses are shown, add a “Sync from PostEx” action:
+       Call GET /get-merchant-address with token
+       Store the returned dist[].addressCode values as strings in ShipFlow
+       Show them in a dropdown (cityName + address + addressCode)
+       Let user pick one default PostEx addressCode for bookings
+   - Ensure the selected value saved in DB remains a string (e.g., “002”).
+
+5) Add runtime diagnostics to catch the real cause:
+   - Right before calling create-order, log a single structured line:
+       “POSTEX create-order payload address codes: storeAddressCode=<value> (type=<typeof>), pickupAddressCode=<value> (type=<typeof>)”
+     and log the exact payload key names being sent.
+   - Also log PostEx response body for failures.
+
+6) Add a validation guard before booking:
+   - On booking attempt, if storeAddressCode is missing or not found in the last synced PostEx address list, block booking and show:
+     “Please sync pickup addresses from PostEx and select a valid address code.”
+   - This prevents future “INVALID MERCHANT STORE ADDRESS CODE”.
+
+7) After changes, run a quick test path:
+   - Sync addresses from PostEx and confirm “002” appears and is stored as “002” (string).
+   - Book 1 order and confirm outgoing payload includes storeAddressCode: "002" and typeof is string.
+   - Booking should succeed without “INVALID MERCHANT STORE ADDRESS CODE”.
+
+IMPORTANT:
+The likely bug is that our code is converting “002” into 2 (number) or sending the wrong key name. Fix both and ensure we always use PostEx’s own “addressCode” string from /get-merchant-address.
+
+Deliverables:
+- Updated PostEx booking logic
+- Address sync + selection UI
+- DB/type fixes so leading zeros are preserved
+- Debug logging + validation guard
