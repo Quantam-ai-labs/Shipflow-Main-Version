@@ -1,0 +1,123 @@
+You are working inside my existing Replit app “ShipFlow”. Fix PostEx Airway Bill / Invoice printing so it works for:
+- single order download
+- bulk download (multiple orders)
+Leopards is already working; PostEx is failing.
+
+Re-read PostEx API doc section “3.10 Airway Bill API”.
+Key constraints:
+- Endpoint (GET): https://api.postex.pk/services/integration/api/order/v1/get-invoice?trackingNumbers=...
+- PDF can be generated for a maximum of 10 tracking numbers per request.
+Therefore bulk must be chunked into groups of 10.
+
+GOAL:
+Implement a robust server-side PDF fetch + streaming solution with chunking + merge for bulk, and strong error handling when PostEx returns a non-PDF error response.
+
+===================================================
+1) AUDIT CURRENT IMPLEMENTATION
+===================================================
+Find where ShipFlow does PostEx “print airway bill / invoice / label / download PDF”.
+Check for these common bugs and fix them:
+- Calling PostEx directly from the browser (CORS / blocked downloads)
+- Treating response as JSON instead of binary PDF
+- Missing required token header (even if the doc doesn’t repeat it here, most PostEx endpoints require token header)
+- Sending more than 10 tracking numbers in one call
+- Joining tracking numbers with spaces or wrong delimiter; must be comma-separated with NO spaces
+- Using wrong base path (/service vs /services); Airway Bill is /services/integration/...
+
+===================================================
+2) IMPLEMENT BACKEND PROXY ENDPOINTS (RECOMMENDED)
+===================================================
+Create backend endpoints in ShipFlow (same server that handles booking) to download PDFs.
+
+A) Single invoice:
+GET /api/couriers/postex/invoice?trackingNumber=...
+Server should:
+- validate merchant auth/ownership
+- normalize trackingNumber = String(..).trim()
+- call PostEx GET /get-invoice with query trackingNumbers=<trackingNumber>
+- send PostEx token in header exactly like other PostEx calls in our codebase
+- request/handle binary response (arraybuffer/stream), NOT JSON
+- if response content-type is application/pdf OR body starts with %PDF:
+    return it to browser with:
+    Content-Type: application/pdf
+    Content-Disposition: attachment; filename="postex-invoice-<trackingNumber>.pdf"
+- else:
+    parse as text/JSON and return a clear error message:
+    “PostEx invoice failed for <trackingNumber>: <statusMessage or raw response>”
+
+B) Bulk invoice:
+POST /api/couriers/postex/invoices (body: { trackingNumbers: string[] })
+Server should:
+- validate merchant auth/ownership
+- sanitize list: trim, remove empty, dedupe
+- CHUNK into arrays of max 10 trackingNumbers each (doc limit)
+- For each chunk:
+    call PostEx /get-invoice?trackingNumbers=<comma-separated list>
+    ensure NO spaces: join with ","
+    ensure token header exists
+    validate it is a PDF (content-type or %PDF check)
+    if not PDF -> capture that chunk’s error (parse JSON/text)
+- If any chunk fails:
+    return 400 with a structured response containing:
+      - which tracking numbers failed
+      - PostEx error message
+    (do not return a corrupt PDF)
+- If all chunks succeed:
+    merge all PDFs into ONE file server-side and return combined PDF
+    Set:
+      Content-Type: application/pdf
+      Content-Disposition: attachment; filename="postex-invoices-bulk.pdf"
+
+PDF merge:
+- Use a reliable server-side library (pdf-lib recommended in Node) to merge chunk PDFs in order.
+- Do not attempt merge on client.
+
+===================================================
+3) FRONTEND CHANGES
+===================================================
+Update UI actions for PostEx printing:
+- Single order “Print Airway Bill” calls the backend single endpoint and downloads file.
+- Bulk “Print Airway Bills” sends selected trackingNumbers to bulk endpoint and downloads combined PDF.
+
+Make UX safe:
+- If selection > 10, show message:
+  “PostEx allows max 10 per request; ShipFlow will auto-split and merge.”
+- If any chunk fails, show a clear toast/modal with the exact failing tracking numbers and PostEx message.
+
+===================================================
+4) DATA INTEGRITY CHECKS
+===================================================
+Tracking numbers:
+- Ensure you are using the exact PostEx tracking number returned on booking (no spaces, no accidental conversion).
+- Store trackingNumber as string always.
+- If an order has no tracking number yet, disable print and show “Not booked”.
+
+===================================================
+5) LOGGING + DEBUGGING (MUST ADD)
+===================================================
+Add logs for invoice download to quickly diagnose future failures:
+- merchantId, count of tracking numbers requested
+- chunk sizes
+- PostEx response status code
+- content-type
+- first 8 bytes check for %PDF
+- if non-PDF, log parsed text/JSON snippet
+But never log merchant token.
+
+===================================================
+6) TESTS / VERIFICATION (MUST PASS)
+===================================================
+Test these cases:
+1) Single tracking number -> returns PDF download successfully
+2) Bulk 5 -> single call chunk -> merged result is valid PDF
+3) Bulk 12 -> splits into 10 + 2 -> merges -> valid PDF
+4) Bulk 25 -> splits 10/10/5 -> merges -> valid PDF
+5) One bad tracking number in a chunk -> API returns clear error identifying that tracking number(s), and UI shows it (no broken PDF)
+6) Confirm endpoint path is exactly:
+   https://api.postex.pk/services/integration/api/order/v1/get-invoice
+
+DELIVERABLE:
+- Working PostEx invoice download for single + bulk with chunking and merged PDF output
+- Robust error handling if PostEx returns JSON/text instead of PDF
+- No CORS issues (must be server-side proxy)
+- Clear UI messaging and logs
