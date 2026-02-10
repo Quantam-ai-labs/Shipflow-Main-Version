@@ -1,0 +1,212 @@
+We already have a working courier booking system (Leopards + PostEx) from Ready-to-Ship. Now implement a complete “Print & Logs” system so every booking has a printable record, and every bulk booking creates a batch log that can be reprinted/downloaded later as PDF.
+
+GOALS (must be bug-free, audit-friendly):
+1) Every single booking must generate a permanent printable “Airway Bill / Booking Slip” record.
+2) Every bulk booking must generate a “Batch / Loadsheet Log” record containing all shipments booked in that action.
+3) From Order Details page: user can view/print/download that order’s airway bill PDF anytime.
+4) From Shipments tab: user can open batch logs, reprint/download PDFs for:
+   - a single shipment
+   - all shipments in a batch
+5) PDFs must be consistent and downloadable. No dependence on unstable external links.
+
+GENERAL RULES:
+- Multi-tenant: everything is scoped to merchant_id.
+- Idempotent: printing should not create duplicates; a shipment always points to exactly one “print record” per booking attempt.
+- Durable: store print metadata + generated PDF file paths/URLs.
+- Security: only authenticated users from same merchant can access PDFs.
+
+========================================================
+A) DATABASE / SCHEMA (Prisma)
+========================================================
+Add new tables:
+
+1) shipment_batches
+- id (uuid)
+- merchant_id
+- created_by_user_id
+- courier_name (LEOPARDS/POSTEX)
+- batch_type enum: SINGLE, BULK
+- created_at
+- status enum: CREATED, PARTIAL_SUCCESS, SUCCESS, FAILED
+- total_selected_count
+- success_count
+- failed_count
+- notes (optional)
+- pdf_batch_path (nullable) // generated batch PDF (loadsheet)
+- pdf_batch_meta (JSON) // page count, generated_at, etc.
+
+2) shipment_print_records
+- id (uuid)
+- merchant_id
+- shipment_id (unique)
+- order_id
+- courier_name
+- tracking_number
+- print_template_version (string) // allow template updates later
+- generated_at
+- generated_by_user_id
+- pdf_path (string) // internal storage path
+- pdf_meta (JSON) // size, pages
+- source enum: COURIER_SLIP_LINK, CUSTOM_TEMPLATE
+- is_latest (boolean)
+
+3) shipment_batch_items (join table)
+- id
+- batch_id
+- shipment_id
+- order_id
+- booking_status_at_time (BOOKED/FAILED)
+- booking_error (nullable)
+- tracking_number (nullable)
+- slip_url (nullable)
+- created_at
+
+Update existing shipments table:
+- batch_id (nullable)
+- print_record_id (nullable)
+- slip_url (nullable)
+- airwaybill_number = tracking_number (or separate field if required)
+- label_format enum: LEOPARDS_SLIP, POSTEX_LABEL, CUSTOM_GENERIC
+- booking_payload_json (already exists if possible)
+- booking_response_json (already exists if possible)
+
+========================================================
+B) PRINTING OUTPUT REQUIREMENTS (PDF)
+========================================================
+We need TWO types of PDFs:
+
+1) Single Shipment PDF (Airway Bill / Slip)
+- Must include:
+  - Merchant/Brand name (from merchant settings)
+  - Courier name + tracking number
+  - Order number (#xxxx)
+  - Booking date/time
+  - Consignee: name, phone, city, address
+  - COD amount
+  - Pieces, weight
+  - Items summary (optional)
+  - Barcode / QR of tracking number (must be scannable)
+- Must print clean on A4 and also support 4x6 if possible (toggle later).
+- For Leopards:
+  - If slip_link exists, we can provide “Open Original Slip” BUT we still generate our own PDF record for consistency.
+- For PostEx:
+  - If no official label endpoint is available, generate our own “Custom Airway Bill” PDF.
+
+2) Batch PDF (Loadsheet / Batch Log)
+- For each batch booking action, generate ONE PDF containing:
+  - Batch header: Batch ID, courier name, created by, created at, totals (success/failed)
+  - Table of all shipments booked in that batch:
+    - Order #, Tracking #, Name, City, COD, Phone, Address (shortened), Status
+  - Optional: Add page breaks after N rows
+  - Barcodes for each tracking number (optional but recommended)
+- This batch PDF must be downloadable and printable.
+
+PDF generation must be done server-side in Node.
+- Use a reliable PDF library (pdf-lib or puppeteer HTML->PDF). Prefer puppeteer if layout is important.
+- Store PDFs in Replit storage or a DB-backed file system location, and serve via authenticated route.
+
+========================================================
+C) BOOKING FLOW CHANGES (CREATE BATCH LOGS)
+========================================================
+When user clicks “Book Selected” in Ready-to-Ship:
+
+1) Create a shipment_batches record immediately with:
+- total_selected_count
+- batch_type = BULK if >1 else SINGLE
+- courier_name
+- created_by_user_id
+
+2) During booking:
+- For every order shipment created, create shipment record and link it to batch_id.
+- Create shipment_batch_items rows for all selected shipments (including failed).
+
+3) After booking completes:
+- Update shipment_batches:
+  - success_count, failed_count
+  - status = SUCCESS / PARTIAL_SUCCESS / FAILED
+- Generate batch PDF and save pdf_batch_path.
+
+4) For each SUCCESS shipment:
+- Generate shipment_print_records PDF and save pdf_path.
+- Link shipments.print_record_id to latest print record.
+
+IMPORTANT:
+- If a booking is retried, do NOT create a new batch automatically unless user initiates a new booking action.
+- If a shipment already has tracking_number and is booked, do not rebook; instead allow “Reprint”.
+
+========================================================
+D) ORDER DETAILS PAGE: PRINT RECORD UI
+========================================================
+On Order Details page (single order view), add “Printing” card:
+
+- Show shipment info: courier, tracking number, booked_at
+- Buttons:
+  1) “Print Airway Bill” (opens PDF in new tab)
+  2) “Download PDF”
+  3) “Reprint (Regenerate)” (admin-only) — regenerates the PDF using latest template version and sets is_latest=true, older one is_latest=false.
+  4) If Leopards slip_url exists: “Open Courier Slip Link” (secondary action)
+
+Also show:
+- Batch ID (if part of bulk booking) with link to batch log.
+
+========================================================
+E) SHIPMENTS TAB: BATCH LOG PAGE + REPRINT
+========================================================
+In left nav “Shipments”, add two sub-pages:
+1) Shipments List
+- Filter by courier, date range, booking status, batch_id
+- Each row shows: order#, courier, tracking, booked_at, status, print actions
+
+2) Batch Logs
+- List of shipment_batches with:
+  - Batch ID, courier, created_at, created_by, totals
+  - status (SUCCESS/PARTIAL/FAILED)
+  - Actions:
+    - View batch PDF
+    - Download batch PDF
+    - Open batch details
+
+Batch Details page:
+- Shows list of shipments in batch with success/failure.
+- Per shipment actions:
+  - View/Download single airwaybill PDF
+- Bulk action:
+  - “Download All Labels as ZIP” (optional)
+  - “Download Batch PDF”
+
+========================================================
+F) FILE STORAGE & AUTHORIZED DOWNLOAD ROUTES
+========================================================
+Implement secure API routes:
+- GET /api/print/shipment/:shipmentId.pdf
+- GET /api/print/batch/:batchId.pdf
+
+Rules:
+- Must verify logged-in user belongs to merchant_id of shipment/batch.
+- Must return correct Content-Type application/pdf.
+- Must handle missing file gracefully (regenerate if allowed).
+
+========================================================
+G) TEMPLATE SYSTEM (FUTURE-PROOF)
+========================================================
+Implement a template version system:
+- print_template_version stored with each print record.
+- Create a simple template renderer so later we can customize logo, header, layout, barcode size.
+
+Merchant settings:
+- merchant_logo_url (optional)
+- brand_name
+- default_paper_size (A4 / 4x6)
+- show_prices_on_label (true/false)
+
+========================================================
+H) TEST CASES (must pass)
+========================================================
+1) Single booking -> print record created -> order details shows Print/Download
+2) Bulk booking -> batch created -> batch PDF exists -> batch details shows all shipments and their PDFs
+3) Reprint does not rebook shipments; only regenerates PDF
+4) Duplicate clicks do not create duplicate batches or print records
+5) Access control: another merchant cannot access PDFs
+6) Partial success batch still generates batch PDF showing failed rows with errors
+
+Implement all above with clean TypeScript, Prisma migrations, and UI that matches our current style (glassmorphism + dark/light).
