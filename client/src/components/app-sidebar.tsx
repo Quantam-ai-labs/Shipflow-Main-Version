@@ -56,7 +56,7 @@ const topNavItems = [
 
 const pipelineItems = [
   { title: "New Orders", url: "/orders/new", icon: Inbox, key: "NEW" },
-  { title: "Pending", url: "/orders/pending", icon: Clock, key: "PENDING" },
+  { title: "Confirmation Pending", url: "/orders/pending", icon: Clock, key: "PENDING" },
   { title: "Hold", url: "/orders/hold", icon: Pause, key: "HOLD" },
   { title: "Ready to Ship", url: "/orders/ready", icon: Truck, key: "READY_TO_SHIP" },
   { title: "Booked", url: "/orders/booked", icon: BookmarkCheck, key: "BOOKED" },
