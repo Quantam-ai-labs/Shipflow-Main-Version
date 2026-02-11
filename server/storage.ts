@@ -368,7 +368,7 @@ export class DatabaseStorage implements IStorage {
       .where(eq(orders.merchantId, merchantId))
       .groupBy(orders.workflowStatus);
     
-    const counts: Record<string, number> = { NEW: 0, PENDING: 0, HOLD: 0, READY_TO_SHIP: 0, FULFILLED: 0, CANCELLED: 0 };
+    const counts: Record<string, number> = { NEW: 0, PENDING: 0, HOLD: 0, READY_TO_SHIP: 0, BOOKED: 0, FULFILLED: 0, DELIVERED: 0, RETURN: 0, CANCELLED: 0 };
     for (const row of result) {
       counts[row.status] = row.count;
     }
@@ -514,13 +514,11 @@ export class DatabaseStorage implements IStorage {
     const syncLimit = options?.limit || 1500;
     const forceRefresh = options?.forceRefresh || false;
 
-    const FINAL_SHIPMENT_STATUSES = ['DELIVERED', 'RETURNED_TO_SHIPPER', 'CANCELLED'];
-
     let conditions = [
       eq(orders.merchantId, merchantId),
       sql`${orders.courierTracking} IS NOT NULL AND ${orders.courierTracking} != ''`,
       sql`${orders.courierName} IS NOT NULL AND ${orders.courierName} != ''`,
-      sql`(${orders.shipmentStatus} IS NULL OR ${orders.shipmentStatus} NOT IN (${sql.raw(FINAL_SHIPMENT_STATUSES.map(s => `'${s}'`).join(','))}))`,
+      sql`${orders.workflowStatus} IN ('BOOKED', 'FULFILLED')`,
     ];
 
     if (!forceRefresh) {

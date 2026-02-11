@@ -3,8 +3,8 @@ import { orders, workflowAuditLog } from "@shared/schema";
 import { eq, and, inArray, lt, sql } from "drizzle-orm";
 import type { Order } from "@shared/schema";
 
-const FINAL_STATUSES = ["FULFILLED"];
-const VALID_STATUSES = ["NEW", "PENDING", "HOLD", "READY_TO_SHIP", "FULFILLED", "CANCELLED"];
+const FINAL_STATUSES = ["DELIVERED", "RETURN"];
+const VALID_STATUSES = ["NEW", "PENDING", "HOLD", "READY_TO_SHIP", "BOOKED", "FULFILLED", "DELIVERED", "RETURN", "CANCELLED"];
 
 interface TransitionParams {
   merchantId: string;
@@ -37,7 +37,7 @@ export async function transitionOrder(params: TransitionParams): Promise<Transit
     return { success: false, error: "Order not found" };
   }
 
-  if (FINAL_STATUSES.includes(order.workflowStatus) && action !== "revert") {
+  if (FINAL_STATUSES.includes(order.workflowStatus) && action !== "revert" && action !== "admin_override") {
     return { success: false, error: `Cannot change status of ${order.workflowStatus} order` };
   }
 
@@ -150,8 +150,8 @@ export async function revertOrder(merchantId: string, orderId: string, actorUser
     return { success: false, error: "No previous status to revert to" };
   }
 
-  if (order.workflowStatus === "FULFILLED") {
-    return { success: false, error: "Cannot revert FULFILLED orders" };
+  if (FINAL_STATUSES.includes(order.workflowStatus)) {
+    return { success: false, error: `Cannot revert ${order.workflowStatus} orders` };
   }
 
   const now = new Date();

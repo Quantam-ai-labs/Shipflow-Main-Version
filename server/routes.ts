@@ -531,8 +531,8 @@ export async function registerRoutes(
       const order = await storage.getOrderById(merchantId, orderId);
       if (!order) return res.status(404).json({ message: "Order not found" });
 
-      if (order.workflowStatus === "FULFILLED" || order.workflowStatus === "CANCELLED") {
-        return res.status(403).json({ message: "Order is locked - already booked or cancelled" });
+      if (order.workflowStatus === "DELIVERED" || order.workflowStatus === "RETURN" || order.workflowStatus === "CANCELLED") {
+        return res.status(403).json({ message: "Order is locked - delivered, returned, or cancelled" });
       }
       if (order.shipmentStatus && PICKED_UP_OR_BEYOND_STATUSES.includes(order.shipmentStatus)) {
         return res.status(403).json({ message: "Order is locked - courier has picked up the shipment" });
@@ -604,8 +604,8 @@ export async function registerRoutes(
       const order = await storage.getOrderById(merchantId, orderId);
       if (!order) return res.status(404).json({ message: "Order not found" });
 
-      if (order.workflowStatus !== "FULFILLED") {
-        return res.status(400).json({ message: "Order must be in FULFILLED status to cancel booking" });
+      if (order.workflowStatus !== "BOOKED") {
+        return res.status(400).json({ message: "Order must be in BOOKED status to cancel booking" });
       }
 
       if (order.shipmentStatus && PICKED_UP_OR_BEYOND_STATUSES.includes(order.shipmentStatus)) {
@@ -778,7 +778,7 @@ export async function registerRoutes(
         prepaidAmount,
         codRemaining,
         codPaymentStatus: order.codPaymentStatus || "UNPAID",
-        isBooked: order.workflowStatus === "FULFILLED",
+        isBooked: ["BOOKED", "FULFILLED", "DELIVERED", "RETURN"].includes(order.workflowStatus),
       });
     } catch (error) {
       console.error("Error fetching payments:", error);
@@ -2744,35 +2744,12 @@ export async function registerRoutes(
           await transitionOrder({
             merchantId,
             orderId: br.orderId,
-            toStatus: "FULFILLED",
+            toStatus: "BOOKED",
             action: "courier_booked",
             actorUserId: userId,
             actorType: "user",
             reason: `Booked with ${courier === "leopards" ? "Leopards" : "PostEx"} - ${br.trackingNumber}`,
           });
-
-          try {
-            const order = fetchedOrders.find(o => o.id === br.orderId);
-            if (order?.shopifyOrderId) {
-              const shopifyStore = await storage.getShopifyStore(merchantId);
-              if (shopifyStore?.accessToken && shopifyStore?.shopDomain) {
-                const { createShopifyFulfillment } = await import("./services/shopify");
-                const decryptedToken = decryptToken(shopifyStore.accessToken);
-                const fulfillResult = await createShopifyFulfillment(
-                  shopifyStore.shopDomain,
-                  decryptedToken,
-                  order.shopifyOrderId,
-                  br.trackingNumber!,
-                  courier === "leopards" ? "Leopards" : "PostEx"
-                );
-                if (!fulfillResult.success) {
-                  console.warn(`[Booking] Shopify fulfillment write-back failed for order ${order.orderNumber}: ${fulfillResult.error}`);
-                }
-              }
-            }
-          } catch (fulfillErr) {
-            console.warn("[Booking] Shopify fulfillment write-back error:", fulfillErr);
-          }
         } else {
           await storage.updateOrder(merchantId, br.orderId, {
             bookingStatus: "FAILED",

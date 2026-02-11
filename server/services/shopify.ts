@@ -812,7 +812,7 @@ export async function createShopifyFulfillment(
   shopifyOrderId: string,
   trackingNumber: string,
   courierName: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; fulfillmentId?: string }> {
   try {
     const trackingCompanyMap: Record<string, string> = {
       'Leopards': 'Leopards Courier',
@@ -893,8 +893,9 @@ export async function createShopifyFulfillment(
     }
 
     const result = await fulfillmentRes.json();
-    console.log(`[Shopify Fulfillment] Created fulfillment for order ${shopifyOrderId}: tracking=${trackingNumber}`);
-    return { success: true };
+    const fulfillmentId = result?.fulfillment?.id ? String(result.fulfillment.id) : undefined;
+    console.log(`[Shopify Fulfillment] Created fulfillment for order ${shopifyOrderId}: tracking=${trackingNumber}, fulfillmentId=${fulfillmentId}`);
+    return { success: true, fulfillmentId };
   } catch (error: any) {
     console.error(`[Shopify Fulfillment] Error creating fulfillment:`, error);
     return { success: false, error: error.message };

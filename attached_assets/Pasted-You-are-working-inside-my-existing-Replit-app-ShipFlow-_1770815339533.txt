@@ -1,0 +1,164 @@
+You are working inside my existing Replit app “ShipFlow”.
+
+PIPELINE FINAL STRUCTURE UPDATE:
+
+We are restructuring the Orders pipeline with the following FINAL stages:
+
+1) New
+2) Pending
+3) Hold
+4) Ready to Ship (Confirmed)
+5) Booked
+6) Fulfilled (Dispatched / Picked by Courier)
+7) Delivered
+8) Return
+
+IMPORTANT BUSINESS RULES:
+
+- Orders move to "Booked" when shipment/AWB is created.
+- Orders move to "Fulfilled" ONLY when courier confirms parcel pickup (Dispatched / Picked / In Transit).
+- Orders move to "Delivered" when courier confirms Delivered.
+- Orders move to "Return" when courier confirms Returned / RTO / Return to shipper.
+- Delivered and Return are FINAL states.
+- Orders must never move backward once in Delivered or Return.
+
+========================================================
+1) STATUS DEFINITIONS (STRICT RULES)
+========================================================
+
+BOOKED:
+- Shipment exists
+- Tracking number generated
+- Courier status = BOOKED / MANIFESTED / LABEL CREATED
+- Not yet handed over to courier
+
+FULFILLED:
+- Courier tracking confirms pickup / dispatch / in transit
+- Set shipment.dispatchedAt timestamp
+- This is the moment we create Shopify fulfillment
+
+DELIVERED:
+- Courier tracking confirms delivered
+- Move order to Delivered sheet
+- Set shipment.deliveredAt timestamp
+
+RETURN:
+- Courier tracking confirms returned / RTO / failed return finalized
+- Move order to Return sheet
+- Set shipment.returnedAt timestamp
+
+FINAL STATUS LOCK:
+If order is in Delivered or Return:
+- It must never move back to Fulfilled or Booked
+- Only admin override allowed (with audit log)
+
+========================================================
+2) SHOPIFY WRITE-BACK LOGIC (VERY IMPORTANT)
+========================================================
+
+BOOKING:
+- When AWB created:
+  - Move order to Booked
+  - DO NOT create Shopify fulfillment
+
+DISPATCH (Fulfilled stage):
+- When courier status first becomes Dispatched/Picked:
+  - Create Shopify fulfillment with tracking number + courier name
+  - Save fulfillmentId
+  - Ensure idempotency (do not duplicate)
+
+DELIVERED:
+- Do NOT create another fulfillment
+- Optionally add Shopify tag "Delivered"
+
+RETURN:
+- Do NOT modify fulfillment
+- Optionally add Shopify tag "Returned"
+
+========================================================
+3) COURIER STATUS MAPPING
+========================================================
+
+Normalize courier statuses to:
+
+BOOKED
+DISPATCHED
+IN_TRANSIT
+OUT_FOR_DELIVERY
+DELIVERED (final)
+RETURNED (final)
+CANCELLED (final)
+
+Transition logic:
+
+BOOKED → FULFILLED when:
+- Status = DISPATCHED OR PICKED_UP OR IN_TRANSIT
+
+FULFILLED → DELIVERED when:
+- Status = DELIVERED
+
+FULFILLED → RETURN when:
+- Status = RETURNED
+
+========================================================
+4) UI CHANGES REQUIRED
+========================================================
+
+Add new pipeline sheets:
+
+- Booked
+- Fulfilled
+- Delivered
+- Return
+
+Booked tab must show:
+- Tracking number
+- Courier
+- Booked time
+- Last courier sync time
+- Resync button
+- Print AWB
+
+Fulfilled tab must show:
+- Dispatched time
+- Courier current status
+- Transit progress
+
+Delivered tab:
+- Delivered time
+- Final courier confirmation
+
+Return tab:
+- Return time
+- Return reason if available
+
+Each order must exist in exactly ONE primary pipeline tab.
+
+========================================================
+5) AUTOMATION
+========================================================
+
+Courier resync job must:
+- Run periodically for Booked and Fulfilled orders
+- Automatically move orders between Booked → Fulfilled → Delivered/Return
+- Respect final status lock
+
+Add manual controls:
+- Resync all Booked
+- Resync all Fulfilled
+- Per-order Resync
+- Admin-only “Mark as Dispatched” fallback
+
+========================================================
+6) VALIDATION TESTS
+========================================================
+
+1) Book order → appears in Booked only.
+2) Courier status becomes Dispatched → order moves to Fulfilled and Shopify fulfillment created.
+3) Courier status becomes Delivered → order moves to Delivered.
+4) Courier status becomes Returned → order moves to Return.
+5) Delivered/Return orders never revert.
+6) No order appears in two sheets simultaneously.
+
+DELIVERABLE:
+Fully functional pipeline with Booked → Fulfilled → Delivered/Return flow driven strictly by courier tracking, and Shopify fulfillment created only at dispatch stage.

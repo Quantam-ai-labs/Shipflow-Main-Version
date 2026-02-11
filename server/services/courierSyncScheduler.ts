@@ -3,11 +3,16 @@ import { orders, merchants, courierAccounts } from '../../shared/schema';
 import { eq, and, or, isNull, sql, desc, notInArray } from 'drizzle-orm';
 import { trackShipment, type CourierCredentials } from './couriers';
 import { storage } from '../storage';
+import { transitionOrder } from './workflowTransition';
 
 const COURIER_SYNC_INTERVAL_MS = 5 * 60 * 1000;
 const LEOPARDS_BATCH_SIZE = 10;
 const POSTEX_DELAY_MS = 300;
 const BATCH_DELAY_MS = 500;
+
+const DISPATCH_STATUSES = ['PICKED_UP', 'IN_TRANSIT', 'ARRIVED_AT_ORIGIN', 'ARRIVED_AT_DESTINATION', 'OUT_FOR_DELIVERY', 'DELIVERY_ATTEMPTED'];
+const DELIVERED_STATUSES = ['DELIVERED'];
+const RETURN_STATUSES = ['RETURNED_TO_SHIPPER', 'RETURN_IN_TRANSIT'];
 
 interface CourierSyncResult {
   timestamp: Date;
@@ -15,6 +20,7 @@ interface CourierSyncResult {
   failed: number;
   skipped: number;
   total: number;
+  transitioned?: number;
   error?: string;
 }
 
@@ -48,6 +54,121 @@ async function getCourierCredentials(merchantId: string, courierName: string): P
   return null;
 }
 
+async function createShopifyFulfillmentForOrder(merchantId: string, order: any, trackingNumber: string, courierName: string): Promise<void> {
+  try {
+    if (!order.shopifyOrderId) return;
+    if (order.shopifyFulfillmentId) return;
+
+    const shopifyStore = await storage.getShopifyStore(merchantId);
+    if (!shopifyStore?.accessToken || !shopifyStore?.shopDomain) return;
+
+    const { decryptToken } = await import('./encryption');
+    const { createShopifyFulfillment } = await import('./shopify');
+    const decryptedToken = decryptToken(shopifyStore.accessToken);
+
+    const fulfillResult = await createShopifyFulfillment(
+      shopifyStore.shopDomain,
+      decryptedToken,
+      order.shopifyOrderId,
+      trackingNumber,
+      courierName
+    );
+
+    if (fulfillResult.success && fulfillResult.fulfillmentId) {
+      await storage.updateOrder(merchantId, order.id, {
+        shopifyFulfillmentId: fulfillResult.fulfillmentId,
+      });
+      console.log(`[CourierSync] Shopify fulfillment created for order ${order.orderNumber}: ${fulfillResult.fulfillmentId}`);
+    } else if (!fulfillResult.success) {
+      console.warn(`[CourierSync] Shopify fulfillment failed for order ${order.orderNumber}: ${fulfillResult.error}`);
+    }
+  } catch (err: any) {
+    console.warn(`[CourierSync] Shopify fulfillment error for order ${order.orderNumber}:`, err.message);
+  }
+}
+
+async function autoTransitionOrder(merchantId: string, order: any, newShipmentStatus: string): Promise<string | null> {
+  const currentWorkflow = order.workflowStatus;
+
+  if (currentWorkflow === 'BOOKED' && DISPATCH_STATUSES.includes(newShipmentStatus)) {
+    const result = await transitionOrder({
+      merchantId,
+      orderId: order.id,
+      toStatus: 'FULFILLED',
+      action: 'courier_dispatched',
+      actorType: 'system',
+      reason: `Courier status: ${newShipmentStatus}`,
+      extraData: { dispatchedAt: new Date() },
+    });
+    if (result.success) {
+      const courierDisplayName = normalizeCourierName(order.courierName || '') === 'leopards' ? 'Leopards' : 'PostEx';
+      await createShopifyFulfillmentForOrder(merchantId, order, order.courierTracking, courierDisplayName);
+      console.log(`[CourierSync] Order ${order.orderNumber} transitioned BOOKED → FULFILLED`);
+      return 'FULFILLED';
+    }
+  }
+
+  if ((currentWorkflow === 'BOOKED' || currentWorkflow === 'FULFILLED') && DELIVERED_STATUSES.includes(newShipmentStatus)) {
+    if (currentWorkflow === 'BOOKED') {
+      await transitionOrder({
+        merchantId,
+        orderId: order.id,
+        toStatus: 'FULFILLED',
+        action: 'courier_dispatched',
+        actorType: 'system',
+        reason: `Auto-dispatched before delivery`,
+        extraData: { dispatchedAt: new Date() },
+      });
+      const courierDisplayName = normalizeCourierName(order.courierName || '') === 'leopards' ? 'Leopards' : 'PostEx';
+      await createShopifyFulfillmentForOrder(merchantId, order, order.courierTracking, courierDisplayName);
+    }
+    const result = await transitionOrder({
+      merchantId,
+      orderId: order.id,
+      toStatus: 'DELIVERED',
+      action: 'courier_delivered',
+      actorType: 'system',
+      reason: `Courier confirmed delivery`,
+      extraData: { deliveredAt: new Date() },
+    });
+    if (result.success) {
+      console.log(`[CourierSync] Order ${order.orderNumber} transitioned → DELIVERED`);
+      return 'DELIVERED';
+    }
+  }
+
+  if ((currentWorkflow === 'BOOKED' || currentWorkflow === 'FULFILLED') && RETURN_STATUSES.includes(newShipmentStatus)) {
+    if (currentWorkflow === 'BOOKED') {
+      await transitionOrder({
+        merchantId,
+        orderId: order.id,
+        toStatus: 'FULFILLED',
+        action: 'courier_dispatched',
+        actorType: 'system',
+        reason: `Auto-dispatched before return`,
+        extraData: { dispatchedAt: new Date() },
+      });
+      const courierDisplayName = normalizeCourierName(order.courierName || '') === 'leopards' ? 'Leopards' : 'PostEx';
+      await createShopifyFulfillmentForOrder(merchantId, order, order.courierTracking, courierDisplayName);
+    }
+    const result = await transitionOrder({
+      merchantId,
+      orderId: order.id,
+      toStatus: 'RETURN',
+      action: 'courier_returned',
+      actorType: 'system',
+      reason: `Courier confirmed return`,
+      extraData: { returnedAt: new Date() },
+    });
+    if (result.success) {
+      console.log(`[CourierSync] Order ${order.orderNumber} transitioned → RETURN`);
+      return 'RETURN';
+    }
+  }
+
+  return null;
+}
+
 async function syncMerchantCourierStatuses(merchantId: string): Promise<CourierSyncResult> {
   const trackableOrders = await storage.getOrdersForCourierSync(merchantId, {
     forceRefresh: false,
@@ -55,7 +176,7 @@ async function syncMerchantCourierStatuses(merchantId: string): Promise<CourierS
   });
 
   if (trackableOrders.length === 0) {
-    return { timestamp: new Date(), updated: 0, failed: 0, skipped: 0, total: 0 };
+    return { timestamp: new Date(), updated: 0, failed: 0, skipped: 0, total: 0, transitioned: 0 };
   }
 
   const courierCredsCache = new Map<string, { apiKey: string | null; apiSecret: string | null } | null>();
@@ -69,6 +190,7 @@ async function syncMerchantCourierStatuses(merchantId: string): Promise<CourierS
   let updated = 0;
   let failed = 0;
   let skipped = 0;
+  let transitioned = 0;
 
   const leopardsOrders = trackableOrders.filter(o => normalizeCourierName(o.courierName!) === 'leopards');
   const postexOrders = trackableOrders.filter(o => normalizeCourierName(o.courierName!) === 'postex');
@@ -96,6 +218,10 @@ async function syncMerchantCourierStatuses(merchantId: string): Promise<CourierS
               courierRawStatus: result.rawCourierStatus,
               lastTrackingUpdate: new Date(),
             });
+
+            const newWorkflow = await autoTransitionOrder(merchantId, order, result.normalizedStatus);
+            if (newWorkflow) transitioned++;
+
             return 'updated';
           }
           return 'failed';
@@ -135,6 +261,10 @@ async function syncMerchantCourierStatuses(merchantId: string): Promise<CourierS
           courierRawStatus: result.rawCourierStatus,
           lastTrackingUpdate: new Date(),
         });
+
+        const newWorkflow = await autoTransitionOrder(merchantId, order, result.normalizedStatus);
+        if (newWorkflow) transitioned++;
+
         updated++;
       } else {
         failed++;
@@ -148,7 +278,7 @@ async function syncMerchantCourierStatuses(merchantId: string): Promise<CourierS
 
   skipped += otherOrders.length;
 
-  return { timestamp: new Date(), updated, failed, skipped, total: trackableOrders.length };
+  return { timestamp: new Date(), updated, failed, skipped, total: trackableOrders.length, transitioned };
 }
 
 async function runCourierSync() {
@@ -163,8 +293,8 @@ async function runCourierSync() {
         const result = await syncMerchantCourierStatuses(m.id);
         lastSyncResults.set(m.id, result);
 
-        if (result.updated > 0 || result.failed > 0) {
-          console.log(`[CourierSync] Merchant ${m.id}: ${result.updated} updated, ${result.failed} failed, ${result.skipped} skipped out of ${result.total}`);
+        if (result.updated > 0 || result.failed > 0 || result.transitioned) {
+          console.log(`[CourierSync] Merchant ${m.id}: ${result.updated} updated, ${result.failed} failed, ${result.skipped} skipped out of ${result.total}${result.transitioned ? `, ${result.transitioned} transitioned` : ''}`);
         }
       } catch (error: any) {
         console.error(`[CourierSync] Error for merchant ${m.id}:`, error.message);
