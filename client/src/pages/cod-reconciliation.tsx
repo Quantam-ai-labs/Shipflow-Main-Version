@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { useResizableColumns, type ColumnDef } from "@/hooks/use-resizable-columns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -93,6 +94,20 @@ export default function CodReconciliationPage() {
   const [selectedRecords, setSelectedRecords] = useState<string[]>([]);
   const [isReconcileDialogOpen, setIsReconcileDialogOpen] = useState(false);
   const [settlementRef, setSettlementRef] = useState("");
+
+  const codColumns: ColumnDef[] = useMemo(() => [
+    { key: "order", defaultWidth: 100, minWidth: 60, maxWidth: 200 },
+    { key: "tracking", defaultWidth: 140, minWidth: 80, maxWidth: 300 },
+    { key: "courier", defaultWidth: 100, minWidth: 60, maxWidth: 200 },
+    { key: "cod", defaultWidth: 100, minWidth: 60, maxWidth: 200 },
+    { key: "fee", defaultWidth: 90, minWidth: 50, maxWidth: 180 },
+    { key: "net", defaultWidth: 100, minWidth: 60, maxWidth: 200 },
+    { key: "status", defaultWidth: 110, minWidth: 60, maxWidth: 220 },
+    { key: "ref", defaultWidth: 130, minWidth: 60, maxWidth: 300 },
+    { key: "date", defaultWidth: 120, minWidth: 80, maxWidth: 250 },
+  ], []);
+
+  const { getHeaderProps: getCodHeaderProps, getResizeHandleProps: getCodResizeProps } = useResizableColumns(codColumns, "cod-reconciliation");
 
   const dateParams = dateRangeToParams(dateRange);
   const queryParams = new URLSearchParams({
@@ -267,7 +282,7 @@ export default function CodReconciliationPage() {
                   <Skeleton className="h-8 w-28 mt-1" />
                 ) : (
                   <>
-                    <p className="text-2xl font-bold">PKR {summary?.totalPending ?? "0"}</p>
+                    <p className="text-2xl font-bold">{summary?.totalPending ?? "0"}</p>
                     <p className="text-xs text-muted-foreground mt-1">{summary?.pendingCount ?? 0} orders</p>
                   </>
                 )}
@@ -287,7 +302,7 @@ export default function CodReconciliationPage() {
                   <Skeleton className="h-8 w-28 mt-1" />
                 ) : (
                   <>
-                    <p className="text-2xl font-bold">PKR {summary?.totalReceived ?? "0"}</p>
+                    <p className="text-2xl font-bold">{summary?.totalReceived ?? "0"}</p>
                     <p className="text-xs text-muted-foreground mt-1">{summary?.receivedCount ?? 0} orders</p>
                   </>
                 )}
@@ -306,7 +321,7 @@ export default function CodReconciliationPage() {
                 {isLoading ? (
                   <Skeleton className="h-8 w-28 mt-1" />
                 ) : (
-                  <p className="text-2xl font-bold">PKR {summary?.totalDisputed ?? "0"}</p>
+                  <p className="text-2xl font-bold">{summary?.totalDisputed ?? "0"}</p>
                 )}
               </div>
               <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
@@ -381,10 +396,10 @@ export default function CodReconciliationPage() {
           ) : records.length > 0 ? (
             <>
               <div className="overflow-x-auto">
-                <Table>
+                <Table style={{ tableLayout: "fixed" }}>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-[50px]">
+                      <TableHead style={{ width: 50 }}>
                         <Checkbox
                           checked={allPendingSelected}
                           onCheckedChange={handleSelectAll}
@@ -392,14 +407,14 @@ export default function CodReconciliationPage() {
                           data-testid="checkbox-select-all"
                         />
                       </TableHead>
-                      <TableHead>Tracking #</TableHead>
-                      <TableHead>Courier</TableHead>
-                      <TableHead className="text-right">COD Amount</TableHead>
-                      <TableHead className="text-right">Courier Fee</TableHead>
-                      <TableHead className="text-right">Net Amount</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Settlement Ref</TableHead>
-                      <TableHead>Date</TableHead>
+                      <TableHead {...getCodHeaderProps("tracking")}>Tracking #<div {...getCodResizeProps("tracking")} /></TableHead>
+                      <TableHead {...getCodHeaderProps("courier")}>Courier<div {...getCodResizeProps("courier")} /></TableHead>
+                      <TableHead className="text-right" {...getCodHeaderProps("cod")}>COD Amount<div {...getCodResizeProps("cod")} /></TableHead>
+                      <TableHead className="text-right" {...getCodHeaderProps("fee")}>Courier Fee<div {...getCodResizeProps("fee")} /></TableHead>
+                      <TableHead className="text-right" {...getCodHeaderProps("net")}>Net Amount<div {...getCodResizeProps("net")} /></TableHead>
+                      <TableHead {...getCodHeaderProps("status")}>Status<div {...getCodResizeProps("status")} /></TableHead>
+                      <TableHead {...getCodHeaderProps("ref")}>Settlement Ref<div {...getCodResizeProps("ref")} /></TableHead>
+                      <TableHead {...getCodHeaderProps("date")}>Date<div {...getCodResizeProps("date")} /></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -418,13 +433,13 @@ export default function CodReconciliationPage() {
                         </TableCell>
                         <TableCell className="capitalize">{record.courierName}</TableCell>
                         <TableCell className="text-right font-medium">
-                          PKR {Number(record.codAmount).toLocaleString()}
+                          {Number(record.codAmount).toLocaleString()}
                         </TableCell>
                         <TableCell className="text-right text-muted-foreground">
-                          PKR {Number(record.courierFee || 0).toLocaleString()}
+                          {Number(record.courierFee || 0).toLocaleString()}
                         </TableCell>
                         <TableCell className="text-right font-medium">
-                          PKR {Number(record.netAmount || 0).toLocaleString()}
+                          {Number(record.netAmount || 0).toLocaleString()}
                         </TableCell>
                         <TableCell>{getStatusBadge(record.status || "pending")}</TableCell>
                         <TableCell className="text-muted-foreground">

@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
+import { useResizableColumns, type ColumnDef } from "@/hooks/use-resizable-columns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -209,6 +210,22 @@ export default function Pipeline() {
   const [quickPayMethod, setQuickPayMethod] = useState("CASH");
   const [prepaidConfirmOpen, setPrepaidConfirmOpen] = useState(false);
   const [confirmActionModal, setConfirmActionModal] = useState<{ open: boolean; action: string; orderIds: string[]; description: string }>({ open: false, action: "", orderIds: [], description: "" });
+
+  const pipelineColumns: ColumnDef[] = useMemo(() => [
+    { key: "order", defaultWidth: 140, minWidth: 80, maxWidth: 300 },
+    { key: "customer", defaultWidth: 160, minWidth: 80, maxWidth: 350 },
+    { key: "city", defaultWidth: 120, minWidth: 60, maxWidth: 250 },
+    { key: "amount", defaultWidth: 100, minWidth: 60, maxWidth: 200 },
+    { key: "items", defaultWidth: 60, minWidth: 40, maxWidth: 120 },
+    { key: "tags", defaultWidth: 150, minWidth: 60, maxWidth: 300 },
+    { key: "reason", defaultWidth: 140, minWidth: 80, maxWidth: 300 },
+    { key: "holdUntil", defaultWidth: 130, minWidth: 80, maxWidth: 250 },
+    { key: "courier", defaultWidth: 100, minWidth: 60, maxWidth: 200 },
+    { key: "status", defaultWidth: 130, minWidth: 60, maxWidth: 250 },
+    { key: "actions", defaultWidth: 100, minWidth: 60, maxWidth: 200 },
+  ], []);
+
+  const { widths, getHeaderProps, getResizeHandleProps } = useResizableColumns(pipelineColumns, "pipeline");
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -745,11 +762,11 @@ export default function Pipeline() {
             )}
           </div>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50 sticky top-0">
+          <table className="w-full text-sm" style={{ tableLayout: "fixed" }}>
+            <thead className="bg-muted/50 sticky top-0 z-10">
               <tr className="border-b">
                 {activeTab !== "CANCELLED" && activeTab !== "DELIVERED" && activeTab !== "RETURN" && (
-                  <th className="w-10 px-3 py-2 text-left">
+                  <th className="px-3 py-2 text-left" style={{ width: 40 }}>
                     <Checkbox
                       checked={selectedIds.size === orders.length && orders.length > 0}
                       onCheckedChange={toggleSelectAll}
@@ -757,26 +774,59 @@ export default function Pipeline() {
                     />
                   </th>
                 )}
-                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Order</th>
-                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Customer</th>
-                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground hidden md:table-cell">City</th>
-                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Amount</th>
-                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground hidden lg:table-cell">Items</th>
-                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground hidden md:table-cell" data-testid="header-tags">Tags</th>
+                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground overflow-hidden" {...getHeaderProps("order")}>
+                  Order
+                  <div {...getResizeHandleProps("order")} />
+                </th>
+                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground overflow-hidden" {...getHeaderProps("customer")}>
+                  Customer
+                  <div {...getResizeHandleProps("customer")} />
+                </th>
+                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground hidden md:table-cell overflow-hidden" {...getHeaderProps("city")}>
+                  City
+                  <div {...getResizeHandleProps("city")} />
+                </th>
+                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground overflow-hidden" {...getHeaderProps("amount")}>
+                  Amount
+                  <div {...getResizeHandleProps("amount")} />
+                </th>
+                <th className="px-3 py-2.5 text-center font-medium text-muted-foreground hidden lg:table-cell overflow-hidden" {...getHeaderProps("items")}>
+                  Items
+                  <div {...getResizeHandleProps("items")} />
+                </th>
+                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground hidden md:table-cell overflow-hidden" data-testid="header-tags" {...getHeaderProps("tags")}>
+                  Tags
+                  <div {...getResizeHandleProps("tags")} />
+                </th>
                 {activeTab === "PENDING" && (
-                  <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Reason</th>
+                  <th className="px-3 py-2.5 text-left font-medium text-muted-foreground overflow-hidden" {...getHeaderProps("reason")}>
+                    Reason
+                    <div {...getResizeHandleProps("reason")} />
+                  </th>
                 )}
                 {activeTab === "HOLD" && (
-                  <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Hold Until</th>
+                  <th className="px-3 py-2.5 text-left font-medium text-muted-foreground overflow-hidden" {...getHeaderProps("holdUntil")}>
+                    Hold Until
+                    <div {...getResizeHandleProps("holdUntil")} />
+                  </th>
                 )}
                 {(activeTab === "BOOKED" || activeTab === "FULFILLED" || activeTab === "DELIVERED" || activeTab === "RETURN") && (
                   <>
-                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Courier</th>
-                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Status</th>
+                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground overflow-hidden" {...getHeaderProps("courier")}>
+                      Courier
+                      <div {...getResizeHandleProps("courier")} />
+                    </th>
+                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground overflow-hidden" {...getHeaderProps("status")}>
+                      Status
+                      <div {...getResizeHandleProps("status")} />
+                    </th>
                   </>
                 )}
                 {activeTab === "CANCELLED" && (
-                  <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Reason</th>
+                  <th className="px-3 py-2.5 text-left font-medium text-muted-foreground overflow-hidden" {...getHeaderProps("reason")}>
+                    Reason
+                    <div {...getResizeHandleProps("reason")} />
+                  </th>
                 )}
                 <th className="px-3 py-2 text-right font-medium text-muted-foreground">Actions</th>
               </tr>
@@ -855,26 +905,26 @@ export default function Pipeline() {
                       </div>
                     ) : (
                       <div>
-                        <div className="font-medium text-sm truncate max-w-[150px]">{order.customerName}</div>
+                        <div className="font-medium text-sm truncate">{order.customerName}</div>
                         <div className="text-xs text-muted-foreground">{order.customerPhone || "No phone"}</div>
                       </div>
                     )}
                   </td>
                   <td className="px-3 py-1.5 hidden md:table-cell text-sm">{order.city || "-"}</td>
                   <td className="px-3 py-1.5">
-                    <div className="font-medium text-sm">PKR {Number(order.totalAmount).toLocaleString()}</div>
+                    <div className="font-medium text-sm">{Number(order.totalAmount).toLocaleString()}</div>
                     {order.codPaymentStatus === "PAID" ? (
                       <Badge className="text-xs bg-green-500/10 text-green-600 border-green-500/20" data-testid={`badge-prepaid-${order.id}`}>Prepaid</Badge>
                     ) : order.codPaymentStatus === "PARTIALLY_PAID" ? (
                       <div className="flex items-center gap-1">
-                        <span className="text-xs text-amber-600">COD: PKR {Number(order.codRemaining ?? order.totalAmount).toLocaleString()}</span>
+                        <span className="text-xs text-amber-600">COD: {Number(order.codRemaining ?? order.totalAmount).toLocaleString()}</span>
                       </div>
                     ) : (
                       <div className="text-xs text-muted-foreground capitalize">{order.paymentMethod}</div>
                     )}
                   </td>
-                  <td className="px-3 py-1.5 hidden lg:table-cell text-xs text-muted-foreground max-w-[150px] truncate">
-                    {order.totalQuantity || 1} item{(order.totalQuantity || 1) > 1 ? "s" : ""}
+                  <td className="px-3 py-1.5 hidden lg:table-cell text-base font-semibold text-center" data-testid={`text-items-${order.id}`}>
+                    {order.totalQuantity || 1}
                   </td>
                   <td className="px-3 py-1.5 hidden md:table-cell" data-testid={`cell-tags-${order.id}`}>
                     <div className="flex flex-wrap gap-1">
@@ -1470,7 +1520,7 @@ export default function Pipeline() {
           <DialogHeader>
             <DialogTitle>Add Payment - {paymentModal.orderNumber}</DialogTitle>
             <DialogDescription>
-              Total: PKR {paymentModal.totalAmount.toLocaleString()} | Paid: PKR {paymentModal.prepaidAmount.toLocaleString()} | Remaining: PKR {Math.max(paymentModal.totalAmount - paymentModal.prepaidAmount, 0).toLocaleString()}
+              Total: {paymentModal.totalAmount.toLocaleString()} | Paid: {paymentModal.prepaidAmount.toLocaleString()} | Remaining: {Math.max(paymentModal.totalAmount - paymentModal.prepaidAmount, 0).toLocaleString()}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">

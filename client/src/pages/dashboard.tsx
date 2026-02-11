@@ -216,7 +216,7 @@ export default function Dashboard() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">COD Pending Collection</p>
-                <p className="text-2xl font-bold">PKR {stats?.codPending ?? "0"}</p>
+                <p className="text-2xl font-bold">{stats?.codPending ?? "0"}</p>
               </div>
             </div>
             <Link href="/cod">
@@ -274,7 +274,7 @@ export default function Dashboard() {
                     </div>
                     <div className="flex items-center gap-4">
                       <div className="text-right hidden sm:block">
-                        <p className="font-medium text-sm">PKR {order.totalAmount}</p>
+                        <p className="font-medium text-sm">{order.totalAmount}</p>
                         <p className="text-xs text-muted-foreground capitalize">{order.paymentMethod}</p>
                       </div>
                       {getStatusBadge(order.shipmentStatus || "Unfulfilled")}
