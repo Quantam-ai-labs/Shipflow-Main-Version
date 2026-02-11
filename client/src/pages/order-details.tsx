@@ -527,7 +527,7 @@ export default function OrderDetails() {
   };
 
   const PICKED_UP_STATUSES = ['PICKED_UP', 'IN_TRANSIT', 'ARRIVED_AT_DESTINATION', 'OUT_FOR_DELIVERY', 'DELIVERY_ATTEMPTED', 'DELIVERED', 'DELIVERY_FAILED', 'RETURNED_TO_SHIPPER', 'RETURN_IN_TRANSIT'];
-  const isLocked = order?.workflowStatus === "FULFILLED" || order?.workflowStatus === "CANCELLED" || (order?.shipmentStatus && PICKED_UP_STATUSES.includes(order.shipmentStatus));
+  const isLocked = order?.workflowStatus === "DELIVERED" || order?.workflowStatus === "RETURN" || order?.workflowStatus === "CANCELLED";
 
   const startEditingCustomer = () => {
     if (!order) return;

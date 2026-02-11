@@ -69,7 +69,10 @@ const STAGE_TO_STATUS: Record<string, string> = {
   pending: "PENDING",
   hold: "HOLD",
   ready: "READY_TO_SHIP",
+  booked: "BOOKED",
   fulfilled: "FULFILLED",
+  delivered: "DELIVERED",
+  return: "RETURN",
   cancelled: "CANCELLED",
 };
 
@@ -78,7 +81,10 @@ const STAGE_TITLES: Record<string, string> = {
   PENDING: "Pending Orders",
   HOLD: "On Hold",
   READY_TO_SHIP: "Ready to Ship",
-  FULFILLED: "Fulfilled Orders",
+  BOOKED: "Booked",
+  FULFILLED: "Fulfilled",
+  DELIVERED: "Delivered",
+  RETURN: "Returned",
   CANCELLED: "Cancelled Orders",
 };
 
@@ -667,7 +673,7 @@ export default function Pipeline() {
             </>
           )}
 
-          {activeTab === "FULFILLED" && selectedIds.size > 0 && (
+          {activeTab === "BOOKED" && selectedIds.size > 0 && (
             <Button
               size="sm"
               variant="destructive"
@@ -742,7 +748,7 @@ export default function Pipeline() {
           <table className="w-full text-sm">
             <thead className="bg-muted/50 sticky top-0">
               <tr className="border-b">
-                {activeTab !== "CANCELLED" && (
+                {activeTab !== "CANCELLED" && activeTab !== "DELIVERED" && activeTab !== "RETURN" && (
                   <th className="w-10 px-3 py-2 text-left">
                     <Checkbox
                       checked={selectedIds.size === orders.length && orders.length > 0}
@@ -763,7 +769,7 @@ export default function Pipeline() {
                 {activeTab === "HOLD" && (
                   <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Hold Until</th>
                 )}
-                {activeTab === "FULFILLED" && (
+                {(activeTab === "BOOKED" || activeTab === "FULFILLED" || activeTab === "DELIVERED" || activeTab === "RETURN") && (
                   <>
                     <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Courier</th>
                     <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Status</th>
@@ -784,7 +790,7 @@ export default function Pipeline() {
                   } ${activeTab === "HOLD" && order.holdUntil && isPast(new Date(order.holdUntil)) ? "bg-red-50/50 dark:bg-red-950/30" : ""}`}
                   data-testid={`order-row-${order.id}`}
                 >
-                  {activeTab !== "CANCELLED" && (
+                  {activeTab !== "CANCELLED" && activeTab !== "DELIVERED" && activeTab !== "RETURN" && (
                     <td className="px-3 py-1.5">
                       <Checkbox
                         checked={selectedIds.has(order.id)}
@@ -807,7 +813,7 @@ export default function Pipeline() {
                     )}
                   </td>
                   <td className="px-3 py-1.5">
-                    {editingOrder === order.id && (activeTab === "NEW" || activeTab === "PENDING" || activeTab === "READY_TO_SHIP") ? (
+                    {editingOrder === order.id && (activeTab === "NEW" || activeTab === "PENDING" || activeTab === "READY_TO_SHIP" || activeTab === "BOOKED" || activeTab === "FULFILLED") ? (
                       <div className="space-y-1">
                         <Input
                           value={editName}
@@ -904,8 +910,8 @@ export default function Pipeline() {
                     </td>
                   )}
 
-                  {/* Fulfilled-specific columns */}
-                  {activeTab === "FULFILLED" && (
+                  {/* Courier columns for booked/fulfilled/delivered/return */}
+                  {(activeTab === "BOOKED" || activeTab === "FULFILLED" || activeTab === "DELIVERED" || activeTab === "RETURN") && (
                     <>
                       <td className="px-3 py-1.5">
                         <div className="text-xs font-medium">{order.courierName || "-"}</div>
@@ -943,7 +949,7 @@ export default function Pipeline() {
                           {activeTab === "HOLD" ? "Release" : "Confirm"}
                         </Button>
                       )}
-                      {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "READY_TO_SHIP") && (
+                      {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "READY_TO_SHIP" || activeTab === "BOOKED" || activeTab === "FULFILLED") && (
                         <Button size="sm" variant="ghost" className="h-7 px-2 text-xs"
                           onClick={() => {
                             setEditingOrder(order.id);
@@ -983,7 +989,7 @@ export default function Pipeline() {
                       {activeTab === "READY_TO_SHIP" && (
                         <Badge variant="secondary" className="text-xs">Ready</Badge>
                       )}
-                      {activeTab === "FULFILLED" && (order.shipmentStatus === "BOOKED" || order.shipmentStatus === "Unfulfilled" || !order.shipmentStatus || order.shipmentStatus === "ARRIVED_AT_ORIGIN") && (
+                      {activeTab === "BOOKED" && (
                         <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-red-600"
                           onClick={() => cancelBookingMutation.mutate(order.id)}
                           disabled={cancelBookingMutation.isPending}
@@ -991,7 +997,7 @@ export default function Pipeline() {
                           <Undo2 className="w-3.5 h-3.5 mr-1" />Cancel
                         </Button>
                       )}
-                      {activeTab !== "NEW" && activeTab !== "FULFILLED" && order.previousWorkflowStatus && (
+                      {activeTab !== "NEW" && activeTab !== "BOOKED" && activeTab !== "FULFILLED" && activeTab !== "DELIVERED" && activeTab !== "RETURN" && order.previousWorkflowStatus && (
                         <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-muted-foreground"
                           onClick={() => workflowMutation.mutate({ orderId: order.id, action: "revert" })}
                           disabled={isPending}

@@ -38,6 +38,10 @@ import {
   LogOut,
   ChevronUp,
   Shield,
+  BookmarkCheck,
+  Send,
+  PackageCheck,
+  RotateCcw,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery } from "@tanstack/react-query";
@@ -55,7 +59,10 @@ const pipelineItems = [
   { title: "Pending", url: "/orders/pending", icon: Clock, key: "PENDING" },
   { title: "Hold", url: "/orders/hold", icon: Pause, key: "HOLD" },
   { title: "Ready to Ship", url: "/orders/ready", icon: Truck, key: "READY_TO_SHIP" },
-  { title: "Fulfilled", url: "/orders/fulfilled", icon: CheckCircle, key: "FULFILLED" },
+  { title: "Booked", url: "/orders/booked", icon: BookmarkCheck, key: "BOOKED" },
+  { title: "Fulfilled", url: "/orders/fulfilled", icon: Send, key: "FULFILLED" },
+  { title: "Delivered", url: "/orders/delivered", icon: PackageCheck, key: "DELIVERED" },
+  { title: "Return", url: "/orders/return", icon: RotateCcw, key: "RETURN" },
   { title: "Cancelled", url: "/orders/cancelled", icon: XCircle, key: "CANCELLED" },
 ];
 

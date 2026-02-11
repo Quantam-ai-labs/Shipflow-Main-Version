@@ -534,9 +534,6 @@ export async function registerRoutes(
       if (order.workflowStatus === "DELIVERED" || order.workflowStatus === "RETURN" || order.workflowStatus === "CANCELLED") {
         return res.status(403).json({ message: "Order is locked - delivered, returned, or cancelled" });
       }
-      if (order.shipmentStatus && PICKED_UP_OR_BEYOND_STATUSES.includes(order.shipmentStatus)) {
-        return res.status(403).json({ message: "Order is locked - courier has picked up the shipment" });
-      }
 
       const updateData: any = {};
       const fieldsToCheck: Array<{ key: string; newVal: any }> = [];
@@ -793,8 +790,8 @@ export async function registerRoutes(
 
       const order = await storage.getOrderById(merchantId, req.params.id);
       if (!order) return res.status(404).json({ message: "Order not found" });
-      if (order.shipmentStatus && PICKED_UP_OR_BEYOND_STATUSES.includes(order.shipmentStatus)) {
-        return res.status(403).json({ message: "Order is locked - courier has picked up the shipment" });
+      if (["BOOKED", "FULFILLED", "DELIVERED", "RETURN", "CANCELLED"].includes(order.workflowStatus)) {
+        return res.status(403).json({ message: "Payments locked after booking" });
       }
 
       const { amount, method, reference, notes } = req.body;
