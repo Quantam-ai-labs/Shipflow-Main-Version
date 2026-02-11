@@ -156,7 +156,7 @@ export default function Analytics() {
                 {isLoading ? (
                   <Skeleton className="h-8 w-24 mt-1" />
                 ) : (
-                  <p className="text-2xl font-bold">{overview?.totalRevenue ?? "0"}</p>
+                  <p className="text-2xl font-bold">PKR {overview?.totalRevenue ?? "0"}</p>
                 )}
               </div>
               <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
@@ -353,7 +353,7 @@ export default function Analytics() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="font-medium">{city.revenue}</p>
+                      <p className="font-medium">PKR {city.revenue}</p>
                       <p className="text-xs text-muted-foreground">{city.delivered} delivered</p>
                     </div>
                   </div>

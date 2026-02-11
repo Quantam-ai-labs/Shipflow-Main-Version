@@ -1024,7 +1024,7 @@ export default function OrderDetails() {
                     <Separator />
                     <div className="flex justify-between gap-2 font-semibold text-base">
                       <span>Total</span>
-                      <span>{((parseFloat(editSubtotal) || 0) + (parseFloat(editShipping) || 0) - (parseFloat(editDiscount) || 0)).toLocaleString()}</span>
+                      <span>PKR {((parseFloat(editSubtotal) || 0) + (parseFloat(editShipping) || 0) - (parseFloat(editDiscount) || 0)).toLocaleString()}</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 justify-end flex-wrap">
@@ -1046,7 +1046,7 @@ export default function OrderDetails() {
                             <p className="font-medium leading-tight">{item.name}</p>
                             <p className="text-muted-foreground text-xs">Qty: {item.quantity}</p>
                           </div>
-                          <p className="font-medium shrink-0">{Number(item.price).toLocaleString()}</p>
+                          <p className="font-medium shrink-0">PKR {Number(item.price).toLocaleString()}</p>
                         </div>
                       ))}
                     </div>
@@ -1057,22 +1057,22 @@ export default function OrderDetails() {
                   <div className="space-y-1.5 text-sm">
                     <div className="flex justify-between gap-2">
                       <span className="text-muted-foreground">Subtotal</span>
-                      <span data-testid="text-subtotal">{Number(order.subtotalAmount || 0).toLocaleString()}</span>
+                      <span data-testid="text-subtotal">PKR {Number(order.subtotalAmount || 0).toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between gap-2">
                       <span className="text-muted-foreground">Shipping</span>
-                      <span data-testid="text-shipping">{Number(order.shippingAmount || 0).toLocaleString()}</span>
+                      <span data-testid="text-shipping">PKR {Number(order.shippingAmount || 0).toLocaleString()}</span>
                     </div>
                     {order.discountAmount && Number(order.discountAmount) > 0 && (
                       <div className="flex justify-between gap-2 text-green-600">
                         <span>Discount</span>
-                        <span data-testid="text-discount">-{Number(order.discountAmount).toLocaleString()}</span>
+                        <span data-testid="text-discount">-PKR {Number(order.discountAmount).toLocaleString()}</span>
                       </div>
                     )}
                     <Separator />
                     <div className="flex justify-between gap-2 font-semibold text-base">
                       <span>Total</span>
-                      <span data-testid="text-total">{Number(order.totalAmount).toLocaleString()}</span>
+                      <span data-testid="text-total">PKR {Number(order.totalAmount).toLocaleString()}</span>
                     </div>
                   </div>
                   <Separator />
@@ -1124,19 +1124,19 @@ export default function OrderDetails() {
                 <div className="flex justify-between gap-2">
                   <span className="text-muted-foreground">Total Amount</span>
                   <span className="font-medium" data-testid="text-payment-total">
-                    {(paymentData?.totalAmount ?? Number(order.totalAmount)).toLocaleString()}
+                    PKR {(paymentData?.totalAmount ?? Number(order.totalAmount)).toLocaleString()}
                   </span>
                 </div>
                 <div className="flex justify-between gap-2">
                   <span className="text-muted-foreground">Paid</span>
                   <span className="font-medium text-green-600" data-testid="text-payment-paid">
-                    {(paymentData?.prepaidAmount ?? 0).toLocaleString()}
+                    PKR {(paymentData?.prepaidAmount ?? 0).toLocaleString()}
                   </span>
                 </div>
                 <div className="flex justify-between gap-2">
                   <span className="text-muted-foreground">Remaining COD</span>
                   <span className="font-semibold" data-testid="text-payment-remaining">
-                    {(paymentData?.codRemaining ?? Number(order.totalAmount)).toLocaleString()}
+                    PKR {(paymentData?.codRemaining ?? Number(order.totalAmount)).toLocaleString()}
                   </span>
                 </div>
               </div>
@@ -1214,7 +1214,7 @@ export default function OrderDetails() {
                       <div key={p.id} className="flex items-center justify-between gap-2 text-sm" data-testid={`payment-entry-${p.id}`}>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5">
-                            <span className="font-medium">{Number(p.amount).toLocaleString()}</span>
+                            <span className="font-medium">PKR {Number(p.amount).toLocaleString()}</span>
                             <Badge variant="outline" className="text-xs">{p.method}</Badge>
                           </div>
                           {p.reference && <p className="text-xs text-muted-foreground truncate">{p.reference}</p>}

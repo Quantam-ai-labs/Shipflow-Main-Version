@@ -1,5 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
-import { useResizableColumns, type ColumnDef } from "@/hooks/use-resizable-columns";
+import { useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -180,19 +179,6 @@ export default function Shipments() {
   const [batchCourierFilter, setBatchCourierFilter] = useState("all");
   const [batchPage, setBatchPage] = useState(1);
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
-
-  const shipmentsColumns: ColumnDef[] = useMemo(() => [
-    { key: "tracking", defaultWidth: 140, minWidth: 80, maxWidth: 300 },
-    { key: "order", defaultWidth: 100, minWidth: 60, maxWidth: 200 },
-    { key: "courier", defaultWidth: 100, minWidth: 60, maxWidth: 200 },
-    { key: "customer", defaultWidth: 160, minWidth: 80, maxWidth: 350 },
-    { key: "destination", defaultWidth: 120, minWidth: 60, maxWidth: 250 },
-    { key: "cod", defaultWidth: 100, minWidth: 60, maxWidth: 200 },
-    { key: "status", defaultWidth: 120, minWidth: 60, maxWidth: 250 },
-    { key: "lastUpdate", defaultWidth: 140, minWidth: 80, maxWidth: 300 },
-  ], []);
-
-  const { getHeaderProps: getShipHeaderProps, getResizeHandleProps: getShipResizeProps } = useResizableColumns(shipmentsColumns, "shipments");
 
   const dateParams = dateRangeToParams(dateRange);
   const queryParams = new URLSearchParams({
@@ -415,14 +401,14 @@ export default function Shipments() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead {...getShipHeaderProps("tracking")}>Tracking #<div {...getShipResizeProps("tracking")} /></TableHead>
-                          <TableHead {...getShipHeaderProps("order")}>Order<div {...getShipResizeProps("order")} /></TableHead>
-                          <TableHead {...getShipHeaderProps("courier")}>Courier<div {...getShipResizeProps("courier")} /></TableHead>
-                          <TableHead {...getShipHeaderProps("customer")}>Customer<div {...getShipResizeProps("customer")} /></TableHead>
-                          <TableHead {...getShipHeaderProps("destination")}>Destination<div {...getShipResizeProps("destination")} /></TableHead>
-                          <TableHead className="text-right" {...getShipHeaderProps("cod")}>COD<div {...getShipResizeProps("cod")} /></TableHead>
-                          <TableHead {...getShipHeaderProps("status")}>Status<div {...getShipResizeProps("status")} /></TableHead>
-                          <TableHead {...getShipHeaderProps("lastUpdate")}>Last Update<div {...getShipResizeProps("lastUpdate")} /></TableHead>
+                          <TableHead>Tracking #</TableHead>
+                          <TableHead>Order</TableHead>
+                          <TableHead>Courier</TableHead>
+                          <TableHead>Customer</TableHead>
+                          <TableHead>Destination</TableHead>
+                          <TableHead className="text-right">COD</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Last Update</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -445,7 +431,7 @@ export default function Shipments() {
                             </TableCell>
                             <TableCell className="text-muted-foreground">{shipment.order?.city}</TableCell>
                             <TableCell className="text-right font-medium">
-                              {shipment.codAmount ? Number(shipment.codAmount).toLocaleString() : "-"}
+                              {shipment.codAmount ? `PKR ${Number(shipment.codAmount).toLocaleString()}` : "-"}
                             </TableCell>
                             <TableCell>{getStatusBadge(shipment.status || "booked")}</TableCell>
                             <TableCell className="text-muted-foreground text-sm">
@@ -804,7 +790,7 @@ export default function Shipments() {
                         <TableCell>{item.consigneeName || "-"}</TableCell>
                         <TableCell className="text-muted-foreground">{item.consigneeCity || "-"}</TableCell>
                         <TableCell className="text-right font-medium">
-                          {item.codAmount ? Number(item.codAmount).toLocaleString() : "-"}
+                          {item.codAmount ? `PKR ${Number(item.codAmount).toLocaleString()}` : "-"}
                         </TableCell>
                         <TableCell>
                           <Badge className={
