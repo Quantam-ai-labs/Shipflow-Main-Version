@@ -418,7 +418,9 @@ export class ShopifyService {
     const isIncremental = !forceFullSync && store.lastSyncAt != null;
     const syncStartTime = new Date();
 
-    let fetchParams: { status?: string; updated_at_min?: string } = {
+    const MIN_ORDER_DATE = '2026-01-01T00:00:00.000Z';
+
+    let fetchParams: { status?: string; updated_at_min?: string; created_at_min?: string } = {
       status: 'any',
     };
 
@@ -427,7 +429,8 @@ export class ShopifyService {
       lastSyncDate.setHours(lastSyncDate.getHours() - 1);
       fetchParams.updated_at_min = lastSyncDate.toISOString();
     } else {
-      console.log(`[Shopify] Starting FULL sync for merchant ${merchantId}...`);
+      fetchParams.created_at_min = MIN_ORDER_DATE;
+      console.log(`[Shopify] Starting FULL sync for merchant ${merchantId} from ${MIN_ORDER_DATE}...`);
     }
 
     const shopifyOrders = await this.fetchAllOrders(shopDomain, plainToken, fetchParams);
@@ -449,7 +452,14 @@ export class ShopifyService {
     let updatedCount = 0;
     const now = new Date();
 
+    const minOrderDate = new Date(MIN_ORDER_DATE);
+
     for (const shopifyOrder of shopifyOrders) {
+      const orderCreatedAt = new Date(shopifyOrder.created_at);
+      if (orderCreatedAt < minOrderDate) {
+        continue;
+      }
+
       const shopifyOrderId = String(shopifyOrder.id);
       const transformedOrder = this.transformOrderForStorage(shopifyOrder);
       const existingOrderId = existingOrdersMap.get(shopifyOrderId);
