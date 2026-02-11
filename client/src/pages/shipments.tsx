@@ -185,6 +185,13 @@ export default function Shipments() {
 
   const { data, isLoading, refetch } = useQuery<ShipmentsResponse>({
     queryKey: ["/api/shipments", queryParams.toString()],
+    queryFn: async () => {
+      const res = await fetch(`/api/shipments?${queryParams.toString()}`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+      return res.json();
+    },
     refetchInterval: 30000,
   });
 
