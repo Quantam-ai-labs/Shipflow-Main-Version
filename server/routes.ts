@@ -1353,7 +1353,8 @@ export async function registerRoutes(
 
   app.get("/api/shopify/debug/oauth-config", isAuthenticated, async (req, res) => {
     try {
-      const config = shopifyService.getOAuthConfig();
+      const shop = typeof req.query.shop === 'string' ? req.query.shop : undefined;
+      const config = shopifyService.getOAuthConfig(shop);
       res.json(config);
     } catch (error) {
       res.status(500).json({ message: "Failed to get OAuth config" });

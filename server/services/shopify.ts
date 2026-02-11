@@ -106,19 +106,31 @@ export class ShopifyService {
   private hostMismatch: boolean = false;
 
   constructor() {
-    const appUrl = (process.env.SHOPIFY_APP_URL || 'https://lala-logistics.replit.app').replace(/\/$/, '');
-    const redirectUrl = process.env.SHOPIFY_APP_REDIRECT_URL || `${appUrl}/api/shopify/callback`;
+    const clientId = process.env.SHOPIFY_APP_CLIENT_ID || '';
+    const clientSecret = process.env.SHOPIFY_APP_CLIENT_SECRET || '';
+    const appUrl = (process.env.SHOPIFY_APP_URL || '').replace(/\/$/, '');
+    const redirectUrl = process.env.SHOPIFY_APP_REDIRECT_URL || '';
     const scopes = process.env.SHOPIFY_APP_SCOPES || 'read_orders,read_fulfillments,write_webhooks';
+
+    const missing: string[] = [];
+    if (!clientId) missing.push('SHOPIFY_APP_CLIENT_ID');
+    if (!clientSecret) missing.push('SHOPIFY_APP_CLIENT_SECRET');
+    if (!appUrl) missing.push('SHOPIFY_APP_URL');
+    if (!redirectUrl) missing.push('SHOPIFY_APP_REDIRECT_URL');
+    if (missing.length > 0) {
+      console.error(`[Shopify] FATAL: Missing required env vars: ${missing.join(', ')}. OAuth will not work.`);
+    }
+
     let canonicalHost = '';
     try {
       canonicalHost = new URL(appUrl).hostname;
     } catch {
-      canonicalHost = 'lala-logistics.replit.app';
+      console.error('[Shopify] SHOPIFY_APP_URL is not a valid URL');
     }
 
     this.config = {
-      clientId: process.env.SHOPIFY_CLIENT_ID || '',
-      clientSecret: process.env.SHOPIFY_APP_SHARED_SECRET || '',
+      clientId,
+      clientSecret,
       appUrl,
       redirectUrl,
       scopes,
@@ -132,7 +144,7 @@ export class ShopifyService {
       this.hostMismatch = true;
     }
 
-    console.log(`[Shopify] OAuth config loaded: appUrl=${appUrl}, redirectUrl=${redirectUrl}, scopes=${scopes}, canonicalHost=${canonicalHost}`);
+    console.log(`[Shopify] OAuth config: appUrl=${appUrl}, redirectUrl=${redirectUrl}, scopes=${scopes}, canonicalHost=${canonicalHost}, clientIdSet=${!!clientId}, clientSecretSet=${!!clientSecret}`);
   }
 
   getCanonicalHost(): string {
@@ -143,8 +155,9 @@ export class ShopifyService {
     return this.hostMismatch;
   }
 
-  getOAuthConfig() {
-    return {
+  getOAuthConfig(shop?: string) {
+    const result: Record<string, any> = {
+      shopifyClientId: this.config.clientId,
       appUrl: this.config.appUrl,
       redirectUrl: this.config.redirectUrl,
       scopes: this.config.scopes,
@@ -153,6 +166,17 @@ export class ShopifyService {
       clientSecretSet: !!this.config.clientSecret,
       hostMismatch: this.hostMismatch,
     };
+    if (shop) {
+      const shopDomain = shop.includes('.myshopify.com') ? shop : `${shop}.myshopify.com`;
+      const params = new URLSearchParams({
+        client_id: this.config.clientId,
+        scope: this.config.scopes,
+        redirect_uri: this.config.redirectUrl,
+        state: 'DEBUG_PREVIEW',
+      });
+      result.computedAuthorizeUrl = `https://${shopDomain}/admin/oauth/authorize?${params.toString()}`;
+    }
+    return result;
   }
 
   getInstallUrl(shop: string, state: string): string {
@@ -163,8 +187,12 @@ export class ShopifyService {
       state: state,
     });
     const authorizeUrl = `https://${shop}/admin/oauth/authorize?${params.toString()}`;
-    console.log(`[Shopify OAuth] Generated authorize URL for shop=${shop}, redirect_uri=${this.config.redirectUrl}`);
-    console.log(`[Shopify OAuth] Full URL: ${authorizeUrl}`);
+    console.log(`[Shopify OAuth] Authorize URL generated:`);
+    console.log(`[Shopify OAuth]   shop=${shop}`);
+    console.log(`[Shopify OAuth]   client_id=${this.config.clientId}`);
+    console.log(`[Shopify OAuth]   redirect_uri=${this.config.redirectUrl}`);
+    console.log(`[Shopify OAuth]   scopes=${this.config.scopes}`);
+    console.log(`[Shopify OAuth]   full_url=${authorizeUrl}`);
     return authorizeUrl;
   }
 

@@ -13,7 +13,7 @@ export class WebhookHandler {
   private webhookSecret: string;
 
   constructor() {
-    this.webhookSecret = process.env.SHOPIFY_WEBHOOK_SECRET || process.env.SHOPIFY_APP_SHARED_SECRET || '';
+    this.webhookSecret = process.env.SHOPIFY_WEBHOOK_SECRET || process.env.SHOPIFY_APP_CLIENT_SECRET || '';
   }
 
   verifyHmac(rawBody: Buffer, hmacHeader: string): boolean {
