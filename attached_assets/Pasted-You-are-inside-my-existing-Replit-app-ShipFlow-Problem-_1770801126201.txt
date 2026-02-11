@@ -1,0 +1,162 @@
+You are inside my existing Replit app “ShipFlow”.
+
+Problem:
+Order import fails on onboarding step “Sync Orders” with “Import Failed / took too long”.
+Likely cause: the import endpoint fetches too many orders (10k+) or does heavy DB upserts in a single HTTP request, causing timeouts or rate-limit slowdowns.
+
+Goal:
+Implement a mistake-proof, resumable, batch-based Shopify order import system that:
+1) Never times out the UI
+2) Fetches in small batches (pagination)
+3) Imports only from the start of current year by default (Jan 1, local store time or UTC)
+4) Shows progress + allows retry/resume
+5) If the issue is NOT “too many orders”, detect and display the real root cause (auth/token/scopes/API failure).
+
+========================================================
+A) CHANGE IMPORT ARCHITECTURE: ASYNC JOB, NOT SINGLE LONG REQUEST
+========================================================
+Replace current “Sync Orders” click behavior so it does NOT call a long-running endpoint.
+
+Implement:
+1) POST /api/shopify/import/start
+   - Creates an Import Job record
+   - Returns { jobId }
+2) GET /api/shopify/import/status?jobId=...
+   - Returns progress: { status, processedCount, createdCount, updatedCount, failedCount, currentPage, nextCursor, startedAt, finishedAt, lastError }
+3) POST /api/shopify/import/cancel (optional)
+   - Cancels job safely
+
+The actual import logic must run in the background:
+- Use an in-process job runner/queue (simple is fine) OR a background worker loop.
+- Import should continue even if the UI tab closes.
+- UI should poll /status every 1–2 seconds and show progress, not time out.
+
+========================================================
+B) DATABASE: IMPORT JOB + CURSOR STATE (RESUMABLE)
+========================================================
+Add DB model/table: shopify_import_jobs
+Fields:
+- id (uuid)
+- merchantId
+- shopDomain
+- status enum: QUEUED, RUNNING, COMPLETED, FAILED, CANCELLED
+- startDate (datetime)  // default = Jan 1 of current year
+- endDate (datetime nullable) // optional
+- nextCursor (string nullable) OR nextPageInfo (string)
+- currentPage (int default 0)
+- batchSize (int default 100 or 50)
+- processedCount, createdCount, updatedCount, failedCount (ints default 0)
+- lastOrderUpdatedAt (datetime nullable)
+- lastError (text nullable)
+- startedAt, finishedAt
+
+Also store per-merchant:
+- merchant.shopifyLastSyncAt (already exists)
+- merchant.shopifyLastImportJobId (optional)
+
+The import MUST be resumable:
+- If job fails mid-way, user presses Retry -> it resumes from stored cursor, not from scratch.
+
+========================================================
+C) FETCH STRATEGY: SMALL BATCHES + DATE FILTER (START OF YEAR)
+========================================================
+Default import window:
+- startDate = Jan 1 of current year (UTC)
+- Optional: allow user to choose last 30/60/90 days, but default current year.
+
+Fetch orders in small batches using Shopify pagination:
+Option 1 (REST):
+- limit <= 250
+- use created_at_min = startDate
+- use status=any (so we include cancelled/fulfilled if needed)
+- page_info for pagination (Link header)
+Option 2 (GraphQL):
+- query orders(first: N, query: "created_at:>=YYYY-MM-DD", after: cursor)
+Either is fine. Use whichever the codebase already uses, but must support cursor pagination.
+
+Batch size:
+- Start with 50 or 100 to keep it fast and reduce timeouts
+- Increase later if stable
+
+Processing:
+- For each fetched order batch, upsert into DB (merchantId + shopifyOrderId unique)
+- Commit updates batch-by-batch so progress increases
+- Do NOT load all orders into memory
+
+========================================================
+D) RATE LIMIT + RETRIES (MUST)
+========================================================
+Add resilient throttling:
+- If Shopify returns 429 (rate limit): retry with exponential backoff and continue.
+- If 5xx transient: retry a few times.
+- If 401/403: fail job with clear message “Shopify token invalid or missing scopes”.
+
+Do not fail the whole job on one bad order:
+- If a single order insert fails, increment failedCount and continue; store lastError snippet with order id.
+
+========================================================
+E) UI: ONBOARDING SYNC PAGE MUST SHOW PROGRESS
+========================================================
+Update onboarding “Sync Orders” page:
+- Button: “Start Import”
+- When clicked: call /import/start -> get jobId
+- Poll /import/status every 1–2 seconds
+- Show:
+  - status badge
+  - processedCount
+  - createdCount / updatedCount / failedCount
+  - currentPage
+  - “Imported from Jan 1, <year>”
+  - progress message like “Fetching batch 7…”
+- On failure: show lastError + a “Retry/Resume” button
+- On success: advance onboardingStep to ORDERS_SYNCED and allow continue
+
+Important: UI must never wait for the whole import in one request.
+
+========================================================
+F) DIAGNOSE IF THE ISSUE IS NOT “TOO MANY ORDERS”
+========================================================
+Add error reporting so we know the real cause if it’s not volume:
+
+1) In /import/start, do a quick validation call before launching job:
+- call Shopify “shop” endpoint or a lightweight query
+- if fails -> return 400 with message “Shopify connection not valid” and the exact reason (401/403).
+
+2) Log (server-side) for each job:
+- shopDomain
+- startDate
+- chosen API method (REST/GraphQL)
+- batchSize
+- response status codes
+- rate-limit backoff events
+Never log access token.
+
+3) If import fails, store lastError with:
+- HTTP status
+- Shopify error message
+- the stage where it failed (FETCH / UPSERT / PARSE)
+
+========================================================
+G) AFTER IMPORT: INCREMENTAL SYNC READY
+========================================================
+After successful import, store:
+- merchant.shopifyLastSyncAt = now
+Then for later syncs, use:
+- updated_at_min = lastSyncAt
+(But keep onboarding import limited to start of year.)
+
+========================================================
+H) VERIFICATION (MUST PASS)
+========================================================
+1) Store with >10k orders should import without UI timeout.
+2) Import uses startDate = Jan 1 of current year by default.
+3) Import runs in multiple small batches and updates progress each batch.
+4) If user refreshes the page, progress continues (job continues on server).
+5) Retry resumes from cursor, not from start.
+6) If token/scopes wrong, user sees clear error (not “took too long”).
+
+Deliverable:
+- working batch import job system
+- onboarding UI progress + retry
+- current-year default filter
+- strong error messages
