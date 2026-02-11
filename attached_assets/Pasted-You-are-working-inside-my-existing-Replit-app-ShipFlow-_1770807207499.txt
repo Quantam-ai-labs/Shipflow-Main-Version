@@ -1,0 +1,288 @@
+You are working inside my existing Replit app “ShipFlow”.
+
+CRITICAL PROBLEM SUMMARY:
+- Shopify orders synced 2–3 times (duplicates). Data structure is broken, tabs/statuses not working.
+- After adding auth + onboarding, login has issues (password not recognized), no forgot password.
+- Team page broken: invites not working, emails not sending.
+- Orders tab logic must match business rules (New/Pending/Hold/Ready/Booked).
+- Shipments statuses are wrong (Delivered showing Booked). We must always track shipment status via courier APIs, NOT Shopify.
+- Hard rule: when importing Shopify orders, fetch ONLY from Jan 1 of the current year onward. Not even 1 order before Jan 1 is allowed.
+- We need a mistake-proof mechanism: no duplicates ever again, resumable batch import, idempotent webhooks, proper upsert keys, and clean status derivation.
+- When we book shipment in ShipFlow, mark fulfillment on Shopify.
+- When editing an order in ShipFlow (cancel/amount change/fulfillment/tags), commit those changes to Shopify too.
+
+DO NOT IGNORE ANY INSTRUCTIONS. Fix every page and system end-to-end.
+
+========================================================
+PHASE 0 — SAFETY + DIAGNOSIS (BEFORE CHANGING DATA)
+========================================================
+1) Add an Admin-only diagnostics page/endpoint to show:
+- current merchantId + shopDomain + Shopify connected? yes/no
+- last sync timestamps
+- count of orders, count of unique Shopify order IDs, count of duplicates
+- count of shipments, count of tracking numbers duplicates
+- webhook processing stats (received/processed/duplicates)
+This is to confirm root causes.
+
+2) Identify EXACT duplication cause:
+- Missing unique constraint on (merchantId, shopifyOrderId)?
+- Import endpoint uses create instead of upsert?
+- Webhook handler inserts duplicates (no idempotency)?
+- Orders fetched multiple times due to wrong pagination/cursor logic?
+
+Log the conclusions and fix accordingly.
+
+========================================================
+PHASE 1 — FIX DATA MODEL TO MAKE DUPLICATES IMPOSSIBLE
+========================================================
+A) ORDERS: enforce unique keys
+1) Ensure Orders table has:
+- merchantId (required)
+- shopifyOrderId stored as STRING (required)
+- UNIQUE constraint: (merchantId, shopifyOrderId)
+If currently missing, add migration.
+
+2) Add UNIQUE constraints for:
+- shopifyOrderName (optional) but do NOT rely on name for uniqueness.
+- If you store shopifyLineItemId or fulfillments, apply correct unique constraints too.
+
+B) SHIPMENTS: enforce uniqueness
+- shipment must be unique per merchant and order:
+  UNIQUE (merchantId, orderId) OR (merchantId, shopifyOrderId) depending on schema.
+- trackingNumber must be unique per merchant+courier:
+  UNIQUE (merchantId, courier, trackingNumber) where trackingNumber is not null.
+
+C) WEBHOOK EVENTS: idempotency table
+- store rawBody hash + topic + shopDomain
+- unique by hash
+- ignore duplicates safely
+
+========================================================
+PHASE 2 — CLEANUP: DELETE BAD DUPLICATES AND RESET TO CLEAN STATE
+========================================================
+We must clean existing duplicated orders.
+
+1) Create an Admin-only “Data Repair” tool:
+- Button: “Scan duplicates”
+  - groups by (merchantId, shopifyOrderId)
+  - show duplicate groups count and examples
+- Button: “Repair duplicates”
+  - For each duplicate group:
+     keep ONE canonical record (the newest by updatedAtShopify or with most linked entities)
+     reattach related records (payments, shipments, notes, status events) to the canonical order
+     delete the extra duplicates
+  - Must be done in a transaction / safe sequence
+  - After repair, enforce unique constraint so it can’t happen again
+
+2) Also implement “Hard Reset Orders (Current Year Only)” (Admin-only):
+- Delete ALL orders for a merchant (and related derived data if needed) safely
+- Then reimport ONLY Jan 1 onward using the new import mechanism (Phase 3)
+This is required because user said: “Delete previous orders and fix all this mess.”
+
+IMPORTANT:
+- Provide a confirmation step for admin-only reset
+- Do not touch other merchants’ data
+
+========================================================
+PHASE 3 — REBUILD SHOPIFY IMPORT: BATCHED, RESUMABLE, JAN-1 HARD LIMIT
+========================================================
+A) HARD DATE RULE (NO EXCEPTIONS)
+- Import MUST ONLY include orders created_at >= Jan 1 of current year (in UTC).
+- Hardcode this rule server-side (not UI).
+- Even if a user tries to request older data, reject.
+
+Implement:
+startDate = new Date(Date.UTC(currentYear, 0, 1, 0,0,0))
+
+B) ASYNC IMPORT JOB (NO TIMEOUTS)
+Replace any “sync orders” long request with:
+- POST /api/shopify/import/start  (creates job, returns jobId)
+- GET /api/shopify/import/status?jobId=...
+- POST /api/shopify/import/retry?jobId=... (resume)
+- POST /api/shopify/import/cancel?jobId=...
+
+Job stores:
+- merchantId
+- startDate (hard-coded Jan 1)
+- cursor/pageInfo
+- counts created/updated/skipped/failed
+- lastError
+
+C) PAGINATION + UPSERT ONLY
+- Fetch in small batches (50–100).
+- For each order:
+  UPSERT by (merchantId, shopifyOrderId) only.
+  Never create blindly.
+- Store updatedAtShopify and ignore older updates.
+
+D) DEDUPE GUARANTEE
+- After import completes, run a validation:
+  countDistinct(shopifyOrderId) must equal total orders count.
+  If mismatch, fail job and print diagnostic.
+
+E) WEBHOOKS
+- Webhooks should not create duplicates:
+  Upsert orders by shopifyOrderId.
+  Validate updated_at ordering.
+
+========================================================
+PHASE 4 — RESTORE TAB LOGIC + STATUS DERIVATION (BUSINESS RULES)
+========================================================
+You know the purpose of each tab; implement these as deterministic queries, NOT random flags.
+
+Define these core concepts:
+
+1) New Orders tab:
+- “Fresh Orders” = imported orders not yet processed by ShipFlow workflow
+- created within last 24h AND not confirmed AND not held AND not booked
+
+2) Pending tab:
+- orders older than 24h that are still not confirmed/held/booked
+- also include “needs attention” states
+
+3) Hold tab:
+- orders explicitly held (user action)
+- must persist as Hold until released
+
+4) Ready to Ship tab:
+- orders confirmed (either via Robo-Confirm workflow or manual Confirm button)
+- AND not booked yet
+
+5) Booked/Shipments tab:
+- orders that have a shipment booked in ShipFlow
+- show shipment status based on courier tracking (not Shopify)
+
+Implement a single “OrderWorkflowStatus” state machine stored on order:
+- NEW
+- PENDING
+- HOLD
+- CONFIRMED (Ready to ship)
+- BOOKED
+- CLOSED (Delivered/Returned/Cancelled final)
+
+But the UI tabs should be derived from:
+- workflow status + timestamps + shipment presence
+
+Fix any broken filters and ensure each order appears in exactly one primary tab.
+
+========================================================
+PHASE 5 — RESTRUCTURE SHIPMENT STATUS: ALWAYS COURIER API IS SOURCE OF TRUTH
+========================================================
+Problem: Delivered shows as Booked.
+Fix strategy:
+
+A) Shipment status source of truth:
+- courier API tracking (PostEx/Leopards)
+- store courierStatus + courierStatusRaw + lastCourierSyncAt
+- maintain shipment_status_events history (audit)
+
+B) Add “Status Resync” job system (batch):
+- POST /api/couriers/status-sync/start (courier=postex/leopards/all, mode=activeOnly)
+- GET status endpoint for progress
+- Bulk tracking if available, otherwise rate-limited single calls
+- Map raw statuses to normalized statuses:
+  BOOKED, IN_TRANSIT, OUT_FOR_DELIVERY, DELIVERED, RETURNED, CANCELLED, FAILED
+- FINAL STATUS LOCK:
+  once DELIVERED/RETURNED/CANCELLED, do not downgrade
+
+C) UI:
+- Show “Resync now” button
+- Show lastCourierSyncAt and current courier status
+- Do not show Shopify status as shipment truth
+
+========================================================
+PHASE 6 — SHOPIFY WRITE-BACK INTEGRATION (CRITICAL)
+========================================================
+ShipFlow must update Shopify when actions happen in ShipFlow.
+
+A) When booking a shipment in ShipFlow:
+- If booking successful, mark order as fulfilled in Shopify:
+  - create fulfillment with tracking number + courier name
+  - or update fulfillment appropriately
+- Add tag in Shopify if needed (e.g., “Booked-PostEx”)
+- Save audit: fulfilledAtShopify, fulfillmentId
+
+B) When editing an order in ShipFlow:
+Implement a “commit to Shopify” strategy for:
+- cancellation
+- amount changes (if supported; otherwise notes/tags to reflect)
+- fulfillment updates
+- tags updates
+- address edits (if supported by Shopify order update)
+Rules:
+- Make Shopify update the source for customer-visible truth
+- Store a “shopifySyncQueue” job for changes if Shopify API fails (retry later)
+- Never silently fail — show errors and keep a retry log.
+
+C) Add a per-merchant setting:
+- “Enable Shopify write-back” default ON for your store, can be toggled.
+
+========================================================
+PHASE 7 — AUTH FIXES + PASSWORD + FORGOT PASSWORD
+========================================================
+Current auth is broken (“not recognizing password”).
+Fix it fully:
+
+A) Password hashing consistency:
+- Ensure register uses the same hash algorithm as login verify (bcrypt or argon2) consistently
+- Fix any double-hash or encoding mismatch
+- Add tests for: register -> login works
+
+B) Forgot password:
+- Add “Forgot password” flow:
+  - request reset by email
+  - generate token, store hashed token + expiry
+  - email link to reset page
+  - reset password updates hash, invalidates token
+
+C) Session reliability:
+- Ensure cookies are secure/httpOnly
+- Fix cross-domain issues if any
+- Ensure login persists
+
+========================================================
+PHASE 8 — TEAM PAGE + INVITES + EMAIL SENDING
+========================================================
+Team invites currently not working and no emails.
+
+Implement correct team system:
+
+A) Data model:
+- users belong to merchant
+- roles: OWNER/ADMIN/STAFF (or USER/ADMIN)
+- invite table:
+  - id, merchantId, email, role, token, expiresAt, invitedByUserId, status
+
+B) Invite flow:
+- Owner/Admin enters email + role
+- System sends email with invite link
+- Invite link lets user set password and join merchant
+- Ensure email sending is configured (SMTP/Resend/SendGrid/etc.) via env vars
+- If email provider not configured, show clear error in UI and allow “copy invite link” as fallback
+
+C) Permissions:
+- Only Owner/Admin can invite
+- Staff has limited access
+
+========================================================
+PHASE 9 — GLOBAL VALIDATION + MIGRATION + FINAL QA
+========================================================
+After all fixes:
+1) Run migrations, ensure DB constraints apply.
+2) For your merchant (17qsh1-vv.myshopify.com), perform:
+- Hard reset orders
+- Import job from Jan 1 only
+- Confirm no duplicates exist
+- Verify each order appears in correct tab
+- Verify confirm/hold/pending transitions
+- Verify booking -> shipment created -> Shopify fulfillment created
+- Verify courier status resync changes delivered orders correctly
+- Verify login + forgot password works
+- Verify team invite sends email and accepts
+
+NON-NEGOTIABLE:
+- “Only Jan 1 onward data should be fetched — 1 extra order will not be tolerated.”
+Implement server-side hard filter and also a post-import check that deletes any order with createdAtShopify < Jan 1 automatically and logs it.
+
+DELIVERABLE:
+Fix every broken page (orders tabs, shipments, onboarding, team) and restore system stability with strict idempotency and correct source-of-truth rules.

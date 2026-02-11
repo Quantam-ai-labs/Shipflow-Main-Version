@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, integer, decimal, timestamp, boolean, jsonb, index } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, decimal, timestamp, boolean, jsonb, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -59,6 +59,32 @@ export const insertTeamMemberSchema = createInsertSchema(teamMembers).omit({
 });
 export type InsertTeamMember = z.infer<typeof insertTeamMemberSchema>;
 export type TeamMember = typeof teamMembers.$inferSelect;
+
+// ============================================
+// TEAM INVITES (Proper invite flow)
+// ============================================
+export const teamInvites = pgTable("team_invites", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  email: varchar("email", { length: 255 }).notNull(),
+  role: varchar("role", { length: 20 }).notNull().default("agent"),
+  token: varchar("token", { length: 64 }).notNull().unique(),
+  status: varchar("status", { length: 20 }).notNull().default("pending"),
+  invitedBy: varchar("invited_by"),
+  createdAt: timestamp("created_at").defaultNow(),
+  expiresAt: timestamp("expires_at"),
+}, (table) => [
+  index("idx_team_invites_merchant").on(table.merchantId),
+  index("idx_team_invites_email").on(table.email),
+  index("idx_team_invites_token").on(table.token),
+]);
+
+export const insertTeamInviteSchema = createInsertSchema(teamInvites).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertTeamInvite = z.infer<typeof insertTeamInviteSchema>;
+export type TeamInvite = typeof teamInvites.$inferSelect;
 
 // ============================================
 // SHOPIFY STORES (OAuth connections)
@@ -193,6 +219,7 @@ export const orders = pgTable("orders", {
   index("idx_orders_date").on(table.orderDate),
   index("idx_orders_courier").on(table.courierName),
   index("idx_orders_workflow_status").on(table.workflowStatus),
+  uniqueIndex("idx_orders_merchant_shopify_unique").on(table.merchantId, table.shopifyOrderId).where(sql`shopify_order_id IS NOT NULL`),
 ]);
 
 export const insertOrderSchema = createInsertSchema(orders).omit({

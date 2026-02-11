@@ -3,8 +3,8 @@ import express from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { shipmentPrintRecords, users, merchants, adminActionLogs, teamMembers } from "@shared/schema";
-import { and, eq, inArray, ilike, or } from "drizzle-orm";
+import { shipmentPrintRecords, users, merchants, adminActionLogs, teamMembers, teamInvites } from "@shared/schema";
+import { and, eq, inArray, ilike, or, sql } from "drizzle-orm";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { z } from "zod";
 import crypto from "crypto";
@@ -979,27 +979,173 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
 
-      // Validate request body
       const validated = teamInviteSchema.safeParse(req.body);
       if (!validated.success) {
         return res.status(400).json({ message: validated.error.errors[0].message });
       }
 
       const { email, role } = validated.data;
+      const userId = (req.session as any).userId;
 
-      // In a real app, this would send an email invitation
-      // For now, we'll create a pending member record
-      const member = await storage.createTeamMember({
-        userId: email, // Placeholder - would be actual user ID after they accept
+      const [existingUser] = await db.select().from(users).where(eq(users.email, email));
+      if (existingUser) {
+        const existingMember = await db.select().from(teamMembers)
+          .where(and(eq(teamMembers.userId, existingUser.id), eq(teamMembers.merchantId, merchantId)));
+        if (existingMember.length > 0) {
+          return res.status(400).json({ message: "This user is already a team member" });
+        }
+      }
+
+      const existingInvite = await db.select().from(teamInvites)
+        .where(and(
+          eq(teamInvites.email, email),
+          eq(teamInvites.merchantId, merchantId),
+          eq(teamInvites.status, "pending")
+        ));
+      if (existingInvite.length > 0) {
+        return res.status(400).json({ message: "An invitation has already been sent to this email" });
+      }
+
+      const token = crypto.randomBytes(32).toString("hex");
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+      const [invite] = await db.insert(teamInvites).values({
         merchantId,
-        role,
-        isActive: false,
-      });
+        email,
+        role: role || "agent",
+        token,
+        status: "pending",
+        invitedBy: userId,
+        expiresAt,
+      }).returning();
 
-      res.json(member);
+      if (existingUser) {
+        await db.insert(teamMembers).values({
+          userId: existingUser.id,
+          merchantId,
+          role: role || "agent",
+          isActive: true,
+          joinedAt: new Date(),
+        });
+
+        if (!existingUser.merchantId) {
+          await db.update(users).set({ merchantId }).where(eq(users.id, existingUser.id));
+        }
+
+        await db.update(teamInvites).set({ status: "accepted" }).where(eq(teamInvites.id, invite.id));
+      }
+
+      const inviteUrl = `${req.protocol}://${req.get("host")}/invite/${token}`;
+
+      res.json({
+        invite,
+        inviteUrl,
+        autoJoined: !!existingUser,
+      });
     } catch (error) {
       console.error("Error inviting team member:", error);
       res.status(500).json({ message: "Failed to invite team member" });
+    }
+  });
+
+  app.get("/api/team/invites", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const invites = await db.select().from(teamInvites)
+        .where(and(eq(teamInvites.merchantId, merchantId), eq(teamInvites.status, "pending")));
+
+      res.json({ invites });
+    } catch (error) {
+      console.error("Error fetching invites:", error);
+      res.status(500).json({ message: "Failed to fetch invites" });
+    }
+  });
+
+  app.get("/api/team/invite/:token", async (req, res) => {
+    try {
+      const { token } = req.params;
+      const [invite] = await db.select().from(teamInvites).where(eq(teamInvites.token, token));
+
+      if (!invite) {
+        return res.status(404).json({ message: "Invite not found" });
+      }
+
+      if (invite.status !== "pending") {
+        return res.status(400).json({ message: "This invitation has already been used" });
+      }
+
+      if (invite.expiresAt && new Date() > invite.expiresAt) {
+        return res.status(400).json({ message: "This invitation has expired" });
+      }
+
+      const [merchant] = await db.select().from(merchants).where(eq(merchants.id, invite.merchantId));
+
+      res.json({
+        email: invite.email,
+        role: invite.role,
+        merchantName: merchant?.name || "Unknown",
+        merchantId: invite.merchantId,
+      });
+    } catch (error) {
+      console.error("Error fetching invite:", error);
+      res.status(500).json({ message: "Failed to fetch invite" });
+    }
+  });
+
+  app.post("/api/team/invite/:token/accept", isAuthenticated, async (req, res) => {
+    try {
+      const { token } = req.params;
+      const userId = (req.session as any).userId;
+
+      const [invite] = await db.select().from(teamInvites).where(eq(teamInvites.token, token));
+
+      if (!invite) {
+        return res.status(404).json({ message: "Invite not found" });
+      }
+
+      if (invite.status !== "pending") {
+        return res.status(400).json({ message: "This invitation has already been used" });
+      }
+
+      if (invite.expiresAt && new Date() > invite.expiresAt) {
+        return res.status(400).json({ message: "This invitation has expired" });
+      }
+
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      if (!user) {
+        return res.status(401).json({ message: "User not found" });
+      }
+
+      if (user.email !== invite.email) {
+        return res.status(403).json({ message: "This invitation was sent to a different email address" });
+      }
+
+      const existing = await db.select().from(teamMembers)
+        .where(and(eq(teamMembers.userId, userId), eq(teamMembers.merchantId, invite.merchantId)));
+
+      if (existing.length > 0) {
+        await db.update(teamInvites).set({ status: "accepted" }).where(eq(teamInvites.id, invite.id));
+        return res.json({ message: "You are already a member of this team" });
+      }
+
+      await db.insert(teamMembers).values({
+        userId,
+        merchantId: invite.merchantId,
+        role: invite.role,
+        isActive: true,
+        joinedAt: new Date(),
+      });
+
+      await db.update(users).set({ merchantId: invite.merchantId }).where(eq(users.id, userId));
+
+      await db.update(teamInvites).set({ status: "accepted" }).where(eq(teamInvites.id, invite.id));
+
+      res.json({ message: "You have joined the team!", merchantId: invite.merchantId });
+    } catch (error) {
+      console.error("Error accepting invite:", error);
+      res.status(500).json({ message: "Failed to accept invite" });
     }
   });
 
@@ -2522,6 +2668,29 @@ export async function registerRoutes(
             actorType: "user",
             reason: `Booked with ${courier === "leopards" ? "Leopards" : "PostEx"} - ${br.trackingNumber}`,
           });
+
+          try {
+            const order = fetchedOrders.find(o => o.id === br.orderId);
+            if (order?.shopifyOrderId) {
+              const shopifyStore = await storage.getShopifyStore(merchantId);
+              if (shopifyStore?.accessToken && shopifyStore?.shopDomain) {
+                const { createShopifyFulfillment } = await import("./services/shopify");
+                const decryptedToken = decryptToken(shopifyStore.accessToken);
+                const fulfillResult = await createShopifyFulfillment(
+                  shopifyStore.shopDomain,
+                  decryptedToken,
+                  order.shopifyOrderId,
+                  br.trackingNumber!,
+                  courier === "leopards" ? "Leopards" : "PostEx"
+                );
+                if (!fulfillResult.success) {
+                  console.warn(`[Booking] Shopify fulfillment write-back failed for order ${order.orderNumber}: ${fulfillResult.error}`);
+                }
+              }
+            }
+          } catch (fulfillErr) {
+            console.warn("[Booking] Shopify fulfillment write-back error:", fulfillErr);
+          }
         } else {
           await storage.updateOrder(merchantId, br.orderId, {
             bookingStatus: "FAILED",
@@ -3123,6 +3292,64 @@ export async function registerRoutes(
     }
     return userId;
   }
+
+  app.get("/api/admin/diagnostics", isAuthenticated, async (req, res) => {
+    try {
+      const user = req.user as any;
+      if (!user || user.role !== 'SUPER_ADMIN') {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const merchantId = user.merchantId;
+      if (!merchantId) {
+        return res.status(400).json({ message: "No merchant associated" });
+      }
+
+      const [totalOrders] = (await db.execute(sql`SELECT COUNT(*)::int AS count FROM orders WHERE merchant_id = ${merchantId}`)).rows;
+      const [uniqueShopify] = (await db.execute(sql`SELECT COUNT(DISTINCT shopify_order_id)::int AS count FROM orders WHERE merchant_id = ${merchantId} AND shopify_order_id IS NOT NULL`)).rows;
+      const totalCount = (totalOrders as any).count || 0;
+      const uniqueCount = (uniqueShopify as any).count || 0;
+      const duplicatesCount = totalCount - uniqueCount;
+
+      const shopifyStoreResult = (await db.execute(sql`SELECT shop_domain, is_connected, last_sync_at, webhook_status FROM shopify_stores WHERE merchant_id = ${merchantId} LIMIT 1`)).rows;
+      const shopifyStore = shopifyStoreResult.length > 0 ? shopifyStoreResult[0] as any : null;
+
+      const [shipmentsResult] = (await db.execute(sql`SELECT COUNT(*)::int AS count FROM shipments WHERE merchant_id = ${merchantId}`)).rows;
+      const shipmentsCount = (shipmentsResult as any).count || 0;
+
+      let webhookEventsCount = 0;
+      try {
+        const [webhookResult] = (await db.execute(sql`SELECT COUNT(*)::int AS count FROM shopify_webhook_events WHERE merchant_id = ${merchantId}`)).rows;
+        webhookEventsCount = (webhookResult as any).count || 0;
+      } catch {
+      }
+
+      const workflowRows = (await db.execute(sql`SELECT workflow_status, COUNT(*)::int AS count FROM orders WHERE merchant_id = ${merchantId} GROUP BY workflow_status`)).rows;
+      const workflowCounts: Record<string, number> = {};
+      for (const row of workflowRows) {
+        const r = row as any;
+        workflowCounts[r.workflow_status] = r.count;
+      }
+
+      res.json({
+        totalOrders: totalCount,
+        uniqueShopifyOrders: uniqueCount,
+        duplicates: duplicatesCount,
+        shopifyStore: shopifyStore ? {
+          shopDomain: shopifyStore.shop_domain,
+          isConnected: shopifyStore.is_connected,
+          lastSyncAt: shopifyStore.last_sync_at,
+          webhookStatus: shopifyStore.webhook_status,
+        } : null,
+        totalShipments: shipmentsCount,
+        webhookEvents: webhookEventsCount,
+        workflowCounts,
+      });
+    } catch (error) {
+      console.error("Error fetching diagnostics:", error);
+      res.status(500).json({ message: "Failed to fetch diagnostics" });
+    }
+  });
 
   app.get("/api/admin/merchants", isAuthenticated, async (req, res) => {
     try {

@@ -87,26 +87,40 @@ export default function Team() {
     queryKey: ["/api/team"],
   });
 
+  const { data: pendingInvites } = useQuery<{ invites: any[] }>({
+    queryKey: ["/api/team/invites"],
+  });
+
   const members = data?.members ?? [];
 
   const inviteMutation = useMutation({
     mutationFn: async (data: { email: string; role: string }) => {
-      return apiRequest("POST", "/api/team/invite", data);
+      const res = await apiRequest("POST", "/api/team/invite", data);
+      return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/team"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/team/invites"] });
       setIsInviteDialogOpen(false);
       setInviteEmail("");
       setInviteRole("agent");
-      toast({
-        title: "Invitation sent",
-        description: "The team member has been invited.",
-      });
+
+      if (data.autoJoined) {
+        toast({
+          title: "Member added",
+          description: "The user has been added to your team.",
+        });
+      } else {
+        toast({
+          title: "Invitation created",
+          description: "Share the invite link with the new team member.",
+        });
+      }
     },
-    onError: () => {
+    onError: (error: any) => {
       toast({
         title: "Error",
-        description: "Failed to send invitation. Please try again.",
+        description: error.message || "Failed to send invitation. Please try again.",
         variant: "destructive",
       });
     },
@@ -380,6 +394,50 @@ export default function Team() {
           )}
         </CardContent>
       </Card>
+
+      {pendingInvites?.invites && pendingInvites.invites.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Mail className="w-5 h-5" />
+              Pending Invitations
+              <Badge variant="secondary">{pendingInvites.invites.length}</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {pendingInvites.invites.map((invite: any) => (
+                <div key={invite.id} className="flex items-center gap-4 p-4 border rounded-md" data-testid={`pending-invite-${invite.id}`}>
+                  <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                    <Mail className="w-5 h-5 text-muted-foreground" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium">{invite.email}</p>
+                    <p className="text-sm text-muted-foreground">
+                      Invited as {invite.role} · Expires {new Date(invite.expiresAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {getRoleBadge(invite.role)}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const url = `${window.location.origin}/invite/${invite.token}`;
+                        navigator.clipboard.writeText(url);
+                        toast({ title: "Link copied", description: "Invite link copied to clipboard." });
+                      }}
+                      data-testid={`button-copy-invite-${invite.id}`}
+                    >
+                      Copy Link
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

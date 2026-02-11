@@ -25,6 +25,7 @@ import Integrations from "@/pages/integrations";
 import Settings from "@/pages/settings";
 import Onboarding from "@/pages/onboarding";
 import AdminPanel from "@/pages/admin";
+import InviteAccept from "@/pages/invite-accept";
 import NotFound from "@/pages/not-found";
 
 function OnboardingBanner() {
@@ -140,6 +141,15 @@ function MainApp() {
 
   if (isSuspended) {
     return <SuspendedScreen />;
+  }
+
+  // Invite acceptance page is accessible to both authenticated and unauthenticated users
+  if (location.startsWith("/invite/")) {
+    return (
+      <Switch>
+        <Route path="/invite/:token" component={InviteAccept} />
+      </Switch>
+    );
   }
 
   if (!isAuthenticated) {

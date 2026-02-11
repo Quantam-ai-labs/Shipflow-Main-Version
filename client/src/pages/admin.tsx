@@ -17,6 +17,9 @@ import {
   Loader2,
   Building2,
   Users,
+  Database,
+  Activity,
+  AlertTriangle,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -100,12 +103,105 @@ export default function AdminPanel() {
     onError: (err: any) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
   });
 
+  const { data: diagnostics, isLoading: diagnosticsLoading } = useQuery<any>({
+    queryKey: ["/api/admin/diagnostics"],
+  });
+
+  const WORKFLOW_STATUSES = ["NEW", "PENDING", "HOLD", "READY_TO_SHIP", "FULFILLED", "CANCELLED"];
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
         <Shield className="w-6 h-6" />
         <h1 className="text-2xl font-bold" data-testid="text-admin-title">Admin Panel</h1>
       </div>
+
+      <Card data-testid="card-diagnostics">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Database className="w-4 h-4" />
+            System Diagnostics
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {diagnosticsLoading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : diagnostics ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Total Orders</p>
+                  <p className="text-xl font-bold" data-testid="text-total-orders">{diagnostics.totalOrders}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Unique Shopify Orders</p>
+                  <p className="text-xl font-bold" data-testid="text-unique-shopify-orders">{diagnostics.uniqueShopifyOrders}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    {diagnostics.duplicates > 0 && <AlertTriangle className="w-3 h-3 text-destructive" />}
+                    Duplicates Found
+                  </p>
+                  <p className={`text-xl font-bold ${diagnostics.duplicates > 0 ? "text-destructive" : ""}`} data-testid="text-duplicates">{diagnostics.duplicates}</p>
+                </div>
+              </div>
+              <Separator />
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Shopify Connection</p>
+                  <div className="flex items-center gap-2" data-testid="text-shopify-status">
+                    <Activity className="w-4 h-4" />
+                    {diagnostics.shopifyStore ? (
+                      <Badge variant={diagnostics.shopifyStore.isConnected ? "secondary" : "destructive"}>
+                        {diagnostics.shopifyStore.isConnected ? "Connected" : "Disconnected"}
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline">Not configured</Badge>
+                    )}
+                  </div>
+                  {diagnostics.shopifyStore?.shopDomain && (
+                    <p className="text-xs text-muted-foreground" data-testid="text-shop-domain">{diagnostics.shopifyStore.shopDomain}</p>
+                  )}
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Last Sync</p>
+                  <p className="text-sm font-medium" data-testid="text-last-sync">
+                    {diagnostics.shopifyStore?.lastSyncAt
+                      ? new Date(diagnostics.shopifyStore.lastSyncAt).toLocaleString()
+                      : "Never"}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Total Shipments</p>
+                  <p className="text-xl font-bold" data-testid="text-total-shipments">{diagnostics.totalShipments}</p>
+                </div>
+              </div>
+              <Separator />
+              <div>
+                <p className="text-xs text-muted-foreground mb-2">Orders by Workflow Status</p>
+                <div className="flex flex-wrap gap-2">
+                  {WORKFLOW_STATUSES.map((status) => (
+                    <Badge key={status} variant="outline" data-testid={`badge-workflow-${status.toLowerCase()}`}>
+                      {status}: {diagnostics.workflowCounts?.[status] || 0}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+              {diagnostics.webhookEvents > 0 && (
+                <div className="pt-1">
+                  <p className="text-xs text-muted-foreground">
+                    Webhook Events: <span className="font-medium" data-testid="text-webhook-events">{diagnostics.webhookEvents}</span>
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-4">Failed to load diagnostics</p>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1 space-y-4">

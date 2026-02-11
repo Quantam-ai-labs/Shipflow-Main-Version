@@ -532,6 +532,23 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createOrder(order: InsertOrder): Promise<Order> {
+    if (order.shopifyOrderId && order.merchantId) {
+      const existing = await db.select({ id: orders.id })
+        .from(orders)
+        .where(and(
+          eq(orders.merchantId, order.merchantId),
+          eq(orders.shopifyOrderId, order.shopifyOrderId)
+        ))
+        .limit(1);
+      
+      if (existing.length > 0) {
+        const [updated] = await db.update(orders)
+          .set({ ...order, updatedAt: new Date() })
+          .where(eq(orders.id, existing[0].id))
+          .returning();
+        return updated;
+      }
+    }
     const [created] = await db.insert(orders).values(order).returning();
     return created;
   }

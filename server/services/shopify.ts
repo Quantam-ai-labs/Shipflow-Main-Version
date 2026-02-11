@@ -110,7 +110,7 @@ export class ShopifyService {
     const clientSecret = process.env.SHOPIFY_APP_CLIENT_SECRET || '';
     const appUrl = (process.env.SHOPIFY_APP_URL || '').replace(/\/$/, '');
     const redirectUrl = process.env.SHOPIFY_APP_REDIRECT_URL || '';
-    const scopes = process.env.SHOPIFY_APP_SCOPES || 'read_orders,read_fulfillments,write_webhooks';
+    const scopes = process.env.SHOPIFY_APP_SCOPES || 'read_orders,read_fulfillments,write_fulfillments,write_webhooks';
 
     const missing: string[] = [];
     if (!clientId) missing.push('SHOPIFY_APP_CLIENT_ID');
@@ -793,6 +793,101 @@ export class ShopifyService {
       browserIp,
       rawShopifyData: shopifyOrder as unknown as Record<string, any>,
     };
+  }
+}
+
+export async function createShopifyFulfillment(
+  shopDomain: string,
+  accessToken: string,
+  shopifyOrderId: string,
+  trackingNumber: string,
+  courierName: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const trackingCompanyMap: Record<string, string> = {
+      'Leopards': 'Leopards Courier',
+      'leopards': 'Leopards Courier',
+      'PostEx': 'PostEx',
+      'postex': 'PostEx',
+      'TCS': 'TCS',
+      'tcs': 'TCS',
+    };
+    const trackingCompany = trackingCompanyMap[courierName] || courierName;
+
+    const fulfillmentOrdersRes = await fetch(
+      `https://${shopDomain}/admin/api/2024-01/orders/${shopifyOrderId}/fulfillment_orders.json`,
+      {
+        headers: {
+          'X-Shopify-Access-Token': accessToken,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (!fulfillmentOrdersRes.ok) {
+      const errText = await fulfillmentOrdersRes.text();
+      console.error(`[Shopify Fulfillment] Failed to get fulfillment orders: ${fulfillmentOrdersRes.status} ${errText}`);
+      return { success: false, error: `Failed to get fulfillment orders: ${fulfillmentOrdersRes.status}` };
+    }
+
+    const { fulfillment_orders } = await fulfillmentOrdersRes.json();
+
+    if (!fulfillment_orders || fulfillment_orders.length === 0) {
+      return { success: false, error: 'No fulfillment orders found' };
+    }
+
+    const openOrders = fulfillment_orders.filter(
+      (fo: any) => fo.status === 'open' || fo.status === 'in_progress'
+    );
+
+    if (openOrders.length === 0) {
+      console.log(`[Shopify Fulfillment] Order ${shopifyOrderId} already fulfilled or no open fulfillment orders`);
+      return { success: true, error: 'Already fulfilled' };
+    }
+
+    const lineItemsByFulfillmentOrder = openOrders.map((fo: any) => ({
+      fulfillment_order_id: fo.id,
+      fulfillment_order_line_items: fo.line_items.map((li: any) => ({
+        id: li.id,
+        quantity: li.fulfillable_quantity,
+      })).filter((li: any) => li.quantity > 0),
+    }));
+
+    const fulfillmentPayload = {
+      fulfillment: {
+        line_items_by_fulfillment_order: lineItemsByFulfillmentOrder,
+        tracking_info: {
+          number: trackingNumber,
+          company: trackingCompany,
+        },
+        notify_customer: false,
+      },
+    };
+
+    const fulfillmentRes = await fetch(
+      `https://${shopDomain}/admin/api/2024-01/fulfillments.json`,
+      {
+        method: 'POST',
+        headers: {
+          'X-Shopify-Access-Token': accessToken,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(fulfillmentPayload),
+      }
+    );
+
+    if (!fulfillmentRes.ok) {
+      const errText = await fulfillmentRes.text();
+      console.error(`[Shopify Fulfillment] Failed to create fulfillment: ${fulfillmentRes.status} ${errText}`);
+      return { success: false, error: `Failed to create fulfillment: ${fulfillmentRes.status}` };
+    }
+
+    const result = await fulfillmentRes.json();
+    console.log(`[Shopify Fulfillment] Created fulfillment for order ${shopifyOrderId}: tracking=${trackingNumber}`);
+    return { success: true };
+  } catch (error: any) {
+    console.error(`[Shopify Fulfillment] Error creating fulfillment:`, error);
+    return { success: false, error: error.message };
   }
 }
 
