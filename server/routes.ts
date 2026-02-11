@@ -4,7 +4,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
 import { shipmentPrintRecords, users, merchants, adminActionLogs, teamMembers, teamInvites, orders } from "@shared/schema";
-import { and, eq, inArray, ilike, or, sql, desc, count } from "drizzle-orm";
+import { and, eq, inArray, ilike, or, sql, desc, count, isNotNull } from "drizzle-orm";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { z } from "zod";
 import crypto from "crypto";
@@ -15,6 +15,15 @@ import { encryptToken, decryptToken } from './services/encryption';
 import { registerShopifyWebhooks } from './services/webhookRegistration';
 import { webhookHandler } from './services/webhookHandler';
 import { sendInviteEmail } from './services/email';
+
+function mapCourierSlugToName(slug: string): string | null {
+  const map: Record<string, string> = {
+    leopards: "Leopards Courier",
+    postex: "PostEx",
+    tcs: "TCS",
+  };
+  return map[slug.toLowerCase()] || null;
+}
 
 // Zod schemas for validation
 const remarkSchema = z.object({
@@ -886,7 +895,8 @@ export async function registerRoutes(
       }
 
       if (courier && courier !== "all") {
-        conditions.push(eq(orders.courierName, courier as string));
+        const mappedCourier = mapCourierSlugToName(courier as string) || courier as string;
+        conditions.push(eq(orders.courierName, mappedCourier));
       }
 
       if (search) {
@@ -964,6 +974,103 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching shipments:", error);
       res.status(500).json({ message: "Failed to fetch shipments" });
+    }
+  });
+
+  app.get("/api/booking-logs", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const { courier, status, dateFrom, dateTo, page: pageStr, pageSize: pageSizeStr } = req.query;
+      const page = parseInt(pageStr as string) || 1;
+      const pageSize = parseInt(pageSizeStr as string) || 20;
+
+      const result = await storage.getBookingLogs(merchantId, {
+        page,
+        pageSize,
+        courier: courier as string,
+        status: status as string,
+        dateFrom: dateFrom as string,
+        dateTo: dateTo as string,
+      });
+
+      res.json({ ...result, page, pageSize });
+    } catch (error) {
+      console.error("Error fetching booking logs:", error);
+      res.status(500).json({ message: "Failed to fetch booking logs" });
+    }
+  });
+
+  app.get("/api/shipper-advice", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const { courier, dateFrom, dateTo } = req.query;
+      const targetStatuses = ["FULFILLED", "DELIVERED", "RETURN"];
+
+      let conditions: any[] = [
+        eq(orders.merchantId, merchantId),
+        inArray(orders.workflowStatus, targetStatuses),
+        isNotNull(orders.courierTracking),
+      ];
+
+      if (courier && courier !== "all") {
+        const mappedCourier = mapCourierSlugToName(courier as string) || courier as string;
+        conditions.push(eq(orders.courierName, mappedCourier));
+      }
+      if (dateFrom) {
+        const fromDate = new Date(dateFrom as string);
+        fromDate.setHours(0, 0, 0, 0);
+        conditions.push(sql`${orders.orderDate} >= ${fromDate.toISOString()}`);
+      }
+      if (dateTo) {
+        const toDate = new Date(dateTo as string);
+        toDate.setHours(23, 59, 59, 999);
+        conditions.push(sql`${orders.orderDate} <= ${toDate.toISOString()}`);
+      }
+
+      const whereClause = and(...conditions);
+
+      const rows = await db.select({
+        id: orders.id,
+        orderNumber: orders.orderNumber,
+        customerName: orders.customerName,
+        customerPhone: orders.customerPhone,
+        city: orders.city,
+        courierName: orders.courierName,
+        courierTracking: orders.courierTracking,
+        totalAmount: orders.totalAmount,
+        codRemaining: orders.codRemaining,
+        codPaymentStatus: orders.codPaymentStatus,
+        workflowStatus: orders.workflowStatus,
+        paymentMethod: orders.paymentMethod,
+        prepaidAmount: orders.prepaidAmount,
+        dispatchedAt: orders.dispatchedAt,
+        deliveredAt: orders.deliveredAt,
+        orderDate: orders.orderDate,
+      }).from(orders).where(whereClause).orderBy(orders.courierName, desc(orders.orderDate));
+
+      const totalsByCourier: Record<string, { count: number; totalAmount: number; codCollected: number; codPending: number }> = {};
+      for (const row of rows) {
+        const cn = row.courierName || "Unknown";
+        if (!totalsByCourier[cn]) {
+          totalsByCourier[cn] = { count: 0, totalAmount: 0, codCollected: 0, codPending: 0 };
+        }
+        totalsByCourier[cn].count++;
+        totalsByCourier[cn].totalAmount += Number(row.totalAmount || 0);
+        if (row.codPaymentStatus === "PAID") {
+          totalsByCourier[cn].codCollected += Number(row.totalAmount || 0);
+        } else {
+          totalsByCourier[cn].codPending += Number(row.codRemaining || row.totalAmount || 0);
+        }
+      }
+
+      res.json({ rows, totalsByCourier, total: rows.length });
+    } catch (error) {
+      console.error("Error fetching shipper advice:", error);
+      res.status(500).json({ message: "Failed to fetch shipper advice" });
     }
   });
 

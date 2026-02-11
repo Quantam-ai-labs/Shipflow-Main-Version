@@ -28,7 +28,6 @@ import {
   RefreshCw,
   Package,
   CheckCircle2,
-  AlertCircle,
   ChevronLeft,
   ChevronRight,
   FileText,
@@ -37,6 +36,13 @@ import {
   Download,
   MessageSquare,
   RotateCcw,
+  ClipboardList,
+  BookOpen,
+  FileSpreadsheet,
+  AlertTriangle,
+  XCircle,
+  CheckCircle,
+  Clock,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
@@ -57,6 +63,14 @@ const courierOptions = [
   { value: "leopards", label: "Leopards" },
   { value: "postex", label: "PostEx" },
   { value: "tcs", label: "TCS" },
+];
+
+const bookingStatusOptions = [
+  { value: "all", label: "All Statuses" },
+  { value: "success", label: "Success" },
+  { value: "failed", label: "Failed" },
+  { value: "processing", label: "Processing" },
+  { value: "queued", label: "Queued" },
 ];
 
 const WORKFLOW_STATUS_CONFIG: Record<string, { color: string; icon: React.ElementType; label: string }> = {
@@ -102,6 +116,53 @@ interface ShipmentsResponse {
   counts: Record<string, number>;
 }
 
+interface BookingLog {
+  id: string;
+  orderId: string;
+  courierName: string;
+  status: string;
+  trackingNumber: string | null;
+  slipUrl: string | null;
+  errorMessage: string | null;
+  createdAt: string | null;
+  orderNumber: string | null;
+  customerName: string | null;
+  city: string | null;
+  totalAmount: string | null;
+}
+
+interface BookingLogsResponse {
+  logs: BookingLog[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+interface ShipperAdviceRow {
+  id: string;
+  orderNumber: string;
+  customerName: string;
+  customerPhone: string | null;
+  city: string | null;
+  courierName: string | null;
+  courierTracking: string | null;
+  totalAmount: string | null;
+  codRemaining: string | null;
+  codPaymentStatus: string | null;
+  workflowStatus: string;
+  paymentMethod: string | null;
+  prepaidAmount: string | null;
+  dispatchedAt: string | null;
+  deliveredAt: string | null;
+  orderDate: string | null;
+}
+
+interface ShipperAdviceResponse {
+  rows: ShipperAdviceRow[];
+  totalsByCourier: Record<string, { count: number; totalAmount: number; codCollected: number; codPending: number }>;
+  total: number;
+}
+
 const BATCH_STATUS_COLORS: Record<string, string> = {
   'SUCCESS': "bg-green-500/10 text-green-600 border-green-500/20",
   'PARTIAL_SUCCESS': "bg-amber-500/10 text-amber-600 border-amber-500/20",
@@ -113,6 +174,17 @@ function getBatchStatusBadge(status: string) {
   const color = BATCH_STATUS_COLORS[status] || "bg-muted text-muted-foreground";
   const label = status.replace(/_/g, " ");
   return <Badge className={color}>{label}</Badge>;
+}
+
+function getBookingStatusBadge(status: string) {
+  const config: Record<string, { color: string; icon: React.ElementType }> = {
+    success: { color: "bg-green-500/10 text-green-600 border-green-500/20", icon: CheckCircle },
+    failed: { color: "bg-red-500/10 text-red-600 border-red-500/20", icon: XCircle },
+    processing: { color: "bg-blue-500/10 text-blue-600 border-blue-500/20", icon: Clock },
+    queued: { color: "bg-amber-500/10 text-amber-600 border-amber-500/20", icon: Clock },
+  };
+  const c = config[status] || { color: "bg-muted text-muted-foreground", icon: Package };
+  return <Badge className={c.color}>{status.charAt(0).toUpperCase() + status.slice(1)}</Badge>;
 }
 
 interface BatchType {
@@ -158,15 +230,47 @@ interface BatchDetailResponse {
   items: BatchItemType[];
 }
 
+function Pagination({ page, totalPages, total, pageSize, onPrev, onNext, prevTestId, nextTestId }: {
+  page: number; totalPages: number; total: number; pageSize: number;
+  onPrev: () => void; onNext: () => void; prevTestId: string; nextTestId: string;
+}) {
+  if (totalPages <= 1) return null;
+  return (
+    <div className="flex items-center justify-between gap-4 p-4 border-t">
+      <p className="text-sm text-muted-foreground">
+        Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, total)} of {total}
+      </p>
+      <div className="flex items-center gap-2">
+        <Button variant="outline" size="sm" onClick={onPrev} disabled={page === 1} data-testid={prevTestId}>
+          <ChevronLeft className="w-4 h-4" />
+        </Button>
+        <span className="text-sm">Page {page} of {totalPages}</span>
+        <Button variant="outline" size="sm" onClick={onNext} disabled={page >= totalPages} data-testid={nextTestId}>
+          <ChevronRight className="w-4 h-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function Shipments() {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<string>("shipments");
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [courierFilter, setCourierFilter] = useState("all");
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [page, setPage] = useState(1);
   const pageSize = 20;
+
+  const [bkCourierFilter, setBkCourierFilter] = useState("all");
+  const [bkStatusFilter, setBkStatusFilter] = useState("all");
+  const [bkDateRange, setBkDateRange] = useState<DateRange | undefined>(undefined);
+  const [bkPage, setBkPage] = useState(1);
+
+  const [saCourierFilter, setSaCourierFilter] = useState("all");
+  const [saDateRange, setSaDateRange] = useState<DateRange | undefined>(undefined);
 
   const [batchCourierFilter, setBatchCourierFilter] = useState("all");
   const [batchPage, setBatchPage] = useState(1);
@@ -186,9 +290,7 @@ export default function Shipments() {
   const { data, isLoading, refetch } = useQuery<ShipmentsResponse>({
     queryKey: ["/api/shipments", queryParams.toString()],
     queryFn: async () => {
-      const res = await fetch(`/api/shipments?${queryParams.toString()}`, {
-        credentials: "include",
-      });
+      const res = await fetch(`/api/shipments?${queryParams.toString()}`, { credentials: "include" });
       if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
       return res.json();
     },
@@ -198,11 +300,53 @@ export default function Shipments() {
   const shipmentOrders = data?.orders ?? [];
   const totalPages = Math.ceil((data?.total ?? 0) / pageSize);
   const counts = data?.counts ?? {};
-
   const fulfilledCount = counts["FULFILLED"] ?? 0;
   const deliveredCount = counts["DELIVERED"] ?? 0;
   const returnCount = counts["RETURN"] ?? 0;
   const totalCount = fulfilledCount + deliveredCount + returnCount;
+
+  const bkDateParams = dateRangeToParams(bkDateRange);
+  const bkQueryParams = new URLSearchParams({
+    page: bkPage.toString(),
+    pageSize: "20",
+    ...(bkCourierFilter !== "all" && { courier: bkCourierFilter }),
+    ...(bkStatusFilter !== "all" && { status: bkStatusFilter }),
+    ...(bkDateParams.dateFrom && { dateFrom: bkDateParams.dateFrom }),
+    ...(bkDateParams.dateTo && { dateTo: bkDateParams.dateTo }),
+  });
+
+  const { data: bkData, isLoading: bkLoading } = useQuery<BookingLogsResponse>({
+    queryKey: ["/api/booking-logs", bkQueryParams.toString()],
+    queryFn: async () => {
+      const res = await fetch(`/api/booking-logs?${bkQueryParams.toString()}`, { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+      return res.json();
+    },
+    enabled: activeTab === "booking-logs",
+  });
+
+  const bookingLogs = bkData?.logs ?? [];
+  const bkTotalPages = Math.ceil((bkData?.total ?? 0) / 20);
+
+  const saDateParams = dateRangeToParams(saDateRange);
+  const saQueryParams = new URLSearchParams({
+    ...(saCourierFilter !== "all" && { courier: saCourierFilter }),
+    ...(saDateParams.dateFrom && { dateFrom: saDateParams.dateFrom }),
+    ...(saDateParams.dateTo && { dateTo: saDateParams.dateTo }),
+  });
+
+  const { data: saData, isLoading: saLoading } = useQuery<ShipperAdviceResponse>({
+    queryKey: ["/api/shipper-advice", saQueryParams.toString()],
+    queryFn: async () => {
+      const res = await fetch(`/api/shipper-advice?${saQueryParams.toString()}`, { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+      return res.json();
+    },
+    enabled: activeTab === "shipper-advice",
+  });
+
+  const saRows = saData?.rows ?? [];
+  const saTotals = saData?.totalsByCourier ?? {};
 
   const batchQueryParams = new URLSearchParams({
     page: batchPage.toString(),
@@ -211,15 +355,13 @@ export default function Shipments() {
   });
 
   const { data: batchesData, isLoading: batchesLoading } = useQuery<BatchesResponse>({
-    queryKey: ["/api/shipment-batches", { page: batchPage, courier: batchCourierFilter }],
+    queryKey: ["/api/shipment-batches", batchQueryParams.toString()],
     queryFn: async () => {
-      const res = await fetch(`/api/shipment-batches?${batchQueryParams.toString()}`, {
-        credentials: "include",
-      });
+      const res = await fetch(`/api/shipment-batches?${batchQueryParams.toString()}`, { credentials: "include" });
       if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
       return res.json();
     },
-    enabled: activeTab === "batches",
+    enabled: activeTab === "loadsheets",
   });
 
   const batches = batchesData?.batches ?? [];
@@ -228,14 +370,19 @@ export default function Shipments() {
   const { data: batchDetailData, isLoading: batchDetailLoading } = useQuery<BatchDetailResponse>({
     queryKey: ["/api/shipment-batches", "detail", selectedBatchId],
     queryFn: async () => {
-      const res = await fetch(`/api/shipment-batches/${selectedBatchId}`, {
-        credentials: "include",
-      });
+      const res = await fetch(`/api/shipment-batches/${selectedBatchId}`, { credentials: "include" });
       if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
       return res.json();
     },
     enabled: !!selectedBatchId,
   });
+
+  const courierGroupedRows = saRows.reduce<Record<string, ShipperAdviceRow[]>>((acc, row) => {
+    const cn = row.courierName || "Unknown";
+    if (!acc[cn]) acc[cn] = [];
+    acc[cn].push(row);
+    return acc;
+  }, {});
 
   return (
     <div className="space-y-6">
@@ -251,17 +398,26 @@ export default function Shipments() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList data-testid="tabs-shipments">
+        <TabsList data-testid="tabs-shipments" className="flex flex-wrap gap-1">
           <TabsTrigger value="shipments" data-testid="tab-shipments">
             <Truck className="w-4 h-4 mr-2" />
             Shipments
           </TabsTrigger>
-          <TabsTrigger value="batches" data-testid="tab-batch-logs">
-            <FileText className="w-4 h-4 mr-2" />
-            Batch Logs
+          <TabsTrigger value="shipper-advice" data-testid="tab-shipper-advice">
+            <ClipboardList className="w-4 h-4 mr-2" />
+            Shipper Advice
+          </TabsTrigger>
+          <TabsTrigger value="booking-logs" data-testid="tab-booking-logs">
+            <BookOpen className="w-4 h-4 mr-2" />
+            Booking Logs
+          </TabsTrigger>
+          <TabsTrigger value="loadsheets" data-testid="tab-loadsheets">
+            <FileSpreadsheet className="w-4 h-4 mr-2" />
+            Loadsheets
           </TabsTrigger>
         </TabsList>
 
+        {/* ====== SHIPMENTS TAB ====== */}
         <TabsContent value="shipments" className="space-y-6 mt-6">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <Card>
@@ -331,9 +487,7 @@ export default function Shipments() {
                     </SelectTrigger>
                     <SelectContent>
                       {workflowStatusOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
+                        <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -344,9 +498,7 @@ export default function Shipments() {
                     </SelectTrigger>
                     <SelectContent>
                       {courierOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
+                        <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -365,9 +517,7 @@ export default function Shipments() {
                 <Truck className="w-5 h-5" />
                 Shipments
                 {data?.total !== undefined && (
-                  <Badge variant="secondary" className="ml-2">
-                    {data.total} orders
-                  </Badge>
+                  <Badge variant="secondary" className="ml-2">{data.total} orders</Badge>
                 )}
               </CardTitle>
             </CardHeader>
@@ -415,32 +565,28 @@ export default function Shipments() {
                                 <p className="text-xs text-muted-foreground">{order.customerPhone || "-"}</p>
                               </div>
                             </TableCell>
-                            <TableCell className="text-muted-foreground" data-testid={`text-city-${order.id}`}>{order.city || "-"}</TableCell>
-                            <TableCell className="capitalize" data-testid={`text-courier-${order.id}`}>{order.courierName || "-"}</TableCell>
-                            <TableCell className="font-mono text-sm" data-testid={`text-tracking-${order.id}`}>
-                              {order.courierTracking || "-"}
-                            </TableCell>
-                            <TableCell className="text-right font-medium" data-testid={`text-amount-${order.id}`}>
+                            <TableCell className="text-muted-foreground">{order.city || "-"}</TableCell>
+                            <TableCell className="capitalize">{order.courierName || "-"}</TableCell>
+                            <TableCell className="font-mono text-sm">{order.courierTracking || "-"}</TableCell>
+                            <TableCell className="text-right font-medium">
                               {order.totalAmount ? `PKR ${Number(order.totalAmount).toLocaleString()}` : "-"}
                             </TableCell>
                             <TableCell data-testid={`badge-status-${order.id}`}>
                               {getWorkflowBadge(order.workflowStatus)}
                             </TableCell>
-                            <TableCell className="text-muted-foreground text-sm" data-testid={`text-courier-status-${order.id}`}>
+                            <TableCell className="text-muted-foreground text-sm">
                               {order.courierRawStatus || order.shipmentStatus || "-"}
                             </TableCell>
                             <TableCell data-testid={`text-remark-${order.id}`}>
                               {order.remark ? (
                                 <div className="max-w-[200px]">
-                                  <p className="text-sm text-muted-foreground truncate" title={order.remark}>
-                                    {order.remark}
-                                  </p>
+                                  <p className="text-sm text-muted-foreground truncate" title={order.remark}>{order.remark}</p>
                                 </div>
                               ) : (
                                 <span className="text-muted-foreground/50">-</span>
                               )}
                             </TableCell>
-                            <TableCell className="text-muted-foreground text-sm whitespace-nowrap" data-testid={`text-date-${order.id}`}>
+                            <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
                               {order.dispatchedAt
                                 ? format(new Date(order.dispatchedAt), "MMM dd, h:mm a")
                                 : order.orderDate
@@ -452,36 +598,9 @@ export default function Shipments() {
                       </TableBody>
                     </Table>
                   </div>
-                  {totalPages > 1 && (
-                    <div className="flex items-center justify-between gap-4 p-4 border-t">
-                      <p className="text-sm text-muted-foreground">
-                        Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, data?.total ?? 0)} of {data?.total} orders
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setPage(page - 1)}
-                          disabled={page === 1}
-                          data-testid="button-prev-page"
-                        >
-                          <ChevronLeft className="w-4 h-4" />
-                        </Button>
-                        <span className="text-sm">
-                          Page {page} of {totalPages}
-                        </span>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setPage(page + 1)}
-                          disabled={page >= totalPages}
-                          data-testid="button-next-page"
-                        >
-                          <ChevronRight className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  )}
+                  <Pagination page={page} totalPages={totalPages} total={data?.total ?? 0} pageSize={pageSize}
+                    onPrev={() => setPage(page - 1)} onNext={() => setPage(page + 1)}
+                    prevTestId="button-prev-page" nextTestId="button-next-page" />
                 </>
               ) : (
                 <div className="text-center py-16">
@@ -498,7 +617,282 @@ export default function Shipments() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="batches" className="space-y-6 mt-6">
+        {/* ====== SHIPPER ADVICE TAB ====== */}
+        <TabsContent value="shipper-advice" className="space-y-6 mt-6">
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex flex-col sm:flex-row gap-4">
+                <Select value={saCourierFilter} onValueChange={setSaCourierFilter}>
+                  <SelectTrigger className="w-[160px]" data-testid="select-sa-courier">
+                    <Truck className="w-4 h-4 mr-2" />
+                    <SelectValue placeholder="Courier" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {courierOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <DateRangePicker
+                  dateRange={saDateRange}
+                  onDateRangeChange={setSaDateRange}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {Object.keys(saTotals).length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {Object.entries(saTotals).map(([courier, totals]) => (
+                <Card key={courier}>
+                  <CardContent className="p-4">
+                    <h3 className="font-semibold capitalize mb-3" data-testid={`sa-courier-title-${courier}`}>{courier}</h3>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <p className="text-muted-foreground">Shipments</p>
+                        <p className="font-bold text-lg" data-testid={`sa-count-${courier}`}>{totals.count}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Total Amount</p>
+                        <p className="font-bold text-lg" data-testid={`sa-amount-${courier}`}>PKR {totals.totalAmount.toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">COD Collected</p>
+                        <p className="font-bold text-green-600" data-testid={`sa-collected-${courier}`}>PKR {totals.codCollected.toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">COD Pending</p>
+                        <p className="font-bold text-amber-600" data-testid={`sa-pending-${courier}`}>PKR {totals.codPending.toLocaleString()}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+
+          {saLoading ? (
+            <Card>
+              <CardContent className="p-4 space-y-4">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div key={i} className="flex items-center gap-4">
+                    <Skeleton className="h-4 w-20" />
+                    <Skeleton className="h-4 w-32 flex-1" />
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-4 w-20" />
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          ) : Object.keys(courierGroupedRows).length > 0 ? (
+            Object.entries(courierGroupedRows).map(([courier, rows]) => (
+              <Card key={courier}>
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-lg font-semibold flex items-center gap-2 capitalize">
+                    <Truck className="w-5 h-5" />
+                    {courier}
+                    <Badge variant="secondary" className="ml-2">{rows.length} shipments</Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Order</TableHead>
+                          <TableHead>Customer</TableHead>
+                          <TableHead>City</TableHead>
+                          <TableHead>Tracking #</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                          <TableHead>COD Status</TableHead>
+                          <TableHead>Stage</TableHead>
+                          <TableHead>Date</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {rows.map((row) => (
+                          <TableRow key={row.id} data-testid={`sa-row-${row.id}`}>
+                            <TableCell>
+                              <Link href={`/orders/detail/${row.id}`} className="text-primary hover:underline font-medium" data-testid={`sa-link-${row.id}`}>
+                                {row.orderNumber}
+                              </Link>
+                            </TableCell>
+                            <TableCell>
+                              <div>
+                                <p className="font-medium text-sm">{row.customerName}</p>
+                                <p className="text-xs text-muted-foreground">{row.customerPhone || "-"}</p>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">{row.city || "-"}</TableCell>
+                            <TableCell className="font-mono text-sm">{row.courierTracking || "-"}</TableCell>
+                            <TableCell className="text-right font-medium">
+                              {row.totalAmount ? `PKR ${Number(row.totalAmount).toLocaleString()}` : "-"}
+                            </TableCell>
+                            <TableCell>
+                              <Badge className={
+                                row.codPaymentStatus === "PAID"
+                                  ? "bg-green-500/10 text-green-600 border-green-500/20"
+                                  : "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                              }>
+                                {row.codPaymentStatus || "Pending"}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>{getWorkflowBadge(row.workflowStatus)}</TableCell>
+                            <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
+                              {row.orderDate ? format(new Date(row.orderDate), "MMM dd, yyyy") : "-"}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          ) : (
+            <Card>
+              <CardContent className="text-center py-16">
+                <ClipboardList className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
+                <h3 className="font-medium mb-1">No shipper advice data</h3>
+                <p className="text-sm text-muted-foreground">
+                  Select a date range to view shipment advice grouped by courier
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* ====== BOOKING LOGS TAB ====== */}
+        <TabsContent value="booking-logs" className="space-y-6 mt-6">
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex flex-col sm:flex-row gap-4 flex-wrap">
+                <Select value={bkCourierFilter} onValueChange={(v) => { setBkCourierFilter(v); setBkPage(1); }}>
+                  <SelectTrigger className="w-[160px]" data-testid="select-bk-courier">
+                    <Truck className="w-4 h-4 mr-2" />
+                    <SelectValue placeholder="Courier" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {courierOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={bkStatusFilter} onValueChange={(v) => { setBkStatusFilter(v); setBkPage(1); }}>
+                  <SelectTrigger className="w-[160px]" data-testid="select-bk-status">
+                    <Filter className="w-4 h-4 mr-2" />
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {bookingStatusOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <DateRangePicker
+                  dateRange={bkDateRange}
+                  onDateRangeChange={(range) => { setBkDateRange(range); setBkPage(1); }}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-4">
+              <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                <BookOpen className="w-5 h-5" />
+                Booking Logs
+                {bkData?.total !== undefined && (
+                  <Badge variant="secondary" className="ml-2">{bkData.total} entries</Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {bkLoading ? (
+                <div className="p-4 space-y-4">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <div key={i} className="flex items-center gap-4">
+                      <Skeleton className="h-4 w-20" />
+                      <Skeleton className="h-4 w-24" />
+                      <Skeleton className="h-4 w-32 flex-1" />
+                      <Skeleton className="h-6 w-24" />
+                    </div>
+                  ))}
+                </div>
+              ) : bookingLogs.length > 0 ? (
+                <>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Order</TableHead>
+                          <TableHead>Customer</TableHead>
+                          <TableHead>City</TableHead>
+                          <TableHead>Courier</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Tracking #</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                          <TableHead>Error</TableHead>
+                          <TableHead>Time</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {bookingLogs.map((log) => (
+                          <TableRow key={log.id} data-testid={`bk-row-${log.id}`}>
+                            <TableCell>
+                              <Link href={`/orders/detail/${log.orderId}`} className="text-primary hover:underline font-medium" data-testid={`bk-link-${log.id}`}>
+                                {log.orderNumber || "-"}
+                              </Link>
+                            </TableCell>
+                            <TableCell className="text-sm">{log.customerName || "-"}</TableCell>
+                            <TableCell className="text-muted-foreground text-sm">{log.city || "-"}</TableCell>
+                            <TableCell className="capitalize text-sm">{log.courierName}</TableCell>
+                            <TableCell data-testid={`bk-status-${log.id}`}>
+                              {getBookingStatusBadge(log.status)}
+                            </TableCell>
+                            <TableCell className="font-mono text-sm" data-testid={`bk-tracking-${log.id}`}>
+                              {log.trackingNumber || "-"}
+                            </TableCell>
+                            <TableCell className="text-right font-medium text-sm">
+                              {log.totalAmount ? `PKR ${Number(log.totalAmount).toLocaleString()}` : "-"}
+                            </TableCell>
+                            <TableCell data-testid={`bk-error-${log.id}`}>
+                              {log.errorMessage ? (
+                                <div className="max-w-[250px] flex items-start gap-1">
+                                  <AlertTriangle className="w-3.5 h-3.5 text-red-500 mt-0.5 shrink-0" />
+                                  <p className="text-sm text-red-600 truncate" title={log.errorMessage}>{log.errorMessage}</p>
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground/50">-</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
+                              {log.createdAt ? format(new Date(log.createdAt), "MMM dd, h:mm a") : "-"}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <Pagination page={bkPage} totalPages={bkTotalPages} total={bkData?.total ?? 0} pageSize={20}
+                    onPrev={() => setBkPage(bkPage - 1)} onNext={() => setBkPage(bkPage + 1)}
+                    prevTestId="button-bk-prev" nextTestId="button-bk-next" />
+                </>
+              ) : (
+                <div className="text-center py-16">
+                  <BookOpen className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
+                  <h3 className="font-medium mb-1">No booking logs found</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Booking attempts will appear here when orders are booked with couriers
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ====== LOADSHEETS TAB ====== */}
+        <TabsContent value="loadsheets" className="space-y-6 mt-6">
           <Card>
             <CardContent className="p-4">
               <div className="flex gap-2 flex-wrap">
@@ -509,9 +903,7 @@ export default function Shipments() {
                   </SelectTrigger>
                   <SelectContent>
                     {courierOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
+                      <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -522,12 +914,10 @@ export default function Shipments() {
           <Card>
             <CardHeader className="pb-4">
               <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                <FileText className="w-5 h-5" />
-                Batch Logs
+                <FileSpreadsheet className="w-5 h-5" />
+                Loadsheet Generation & Logs
                 {batchesData?.total !== undefined && (
-                  <Badge variant="secondary" className="ml-2">
-                    {batchesData.total} batches
-                  </Badge>
+                  <Badge variant="secondary" className="ml-2">{batchesData.total} batches</Badge>
                 )}
               </CardTitle>
             </CardHeader>
@@ -564,23 +954,17 @@ export default function Shipments() {
                       <TableBody>
                         {batches.map((batch) => (
                           <TableRow key={batch.id} data-testid={`batch-row-${batch.id}`}>
-                            <TableCell className="font-mono text-sm">
-                              {batch.id.substring(0, 8)}
-                            </TableCell>
+                            <TableCell className="font-mono text-sm">{batch.id.substring(0, 8)}</TableCell>
                             <TableCell className="capitalize">{batch.courierName}</TableCell>
                             <TableCell>
-                              <Badge variant="secondary" className="text-xs">
-                                {batch.batchType}
-                              </Badge>
+                              <Badge variant="secondary" className="text-xs">{batch.batchType}</Badge>
                             </TableCell>
                             <TableCell className="text-center">{batch.totalSelectedCount ?? "-"}</TableCell>
                             <TableCell className="text-center text-green-600">{batch.successCount ?? "-"}</TableCell>
                             <TableCell className="text-center text-red-600">{batch.failedCount ?? "-"}</TableCell>
                             <TableCell>{getBatchStatusBadge(batch.status)}</TableCell>
                             <TableCell className="text-muted-foreground text-sm">
-                              {batch.createdAt
-                                ? format(new Date(batch.createdAt), "MMM dd, h:mm a")
-                                : "-"}
+                              {batch.createdAt ? format(new Date(batch.createdAt), "MMM dd, h:mm a") : "-"}
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-1">
@@ -640,43 +1024,16 @@ export default function Shipments() {
                       </TableBody>
                     </Table>
                   </div>
-                  {batchTotalPages > 1 && (
-                    <div className="flex items-center justify-between gap-4 p-4 border-t">
-                      <p className="text-sm text-muted-foreground">
-                        Showing {(batchPage - 1) * 20 + 1} to {Math.min(batchPage * 20, batchesData?.total ?? 0)} of {batchesData?.total} batches
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setBatchPage(batchPage - 1)}
-                          disabled={batchPage === 1}
-                          data-testid="button-batch-prev"
-                        >
-                          <ChevronLeft className="w-4 h-4" />
-                        </Button>
-                        <span className="text-sm">
-                          Page {batchPage} of {batchTotalPages}
-                        </span>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setBatchPage(batchPage + 1)}
-                          disabled={batchPage >= batchTotalPages}
-                          data-testid="button-batch-next"
-                        >
-                          <ChevronRight className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  )}
+                  <Pagination page={batchPage} totalPages={batchTotalPages} total={batchesData?.total ?? 0} pageSize={20}
+                    onPrev={() => setBatchPage(batchPage - 1)} onNext={() => setBatchPage(batchPage + 1)}
+                    prevTestId="button-batch-prev" nextTestId="button-batch-next" />
                 </>
               ) : (
                 <div className="text-center py-16">
-                  <FileText className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
-                  <h3 className="font-medium mb-1">No batch logs found</h3>
+                  <FileSpreadsheet className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
+                  <h3 className="font-medium mb-1">No loadsheets found</h3>
                   <p className="text-sm text-muted-foreground">
-                    Batch booking logs will appear here after courier bookings
+                    Loadsheets are generated when orders are booked with couriers in bulk
                   </p>
                 </div>
               )}
@@ -685,8 +1042,8 @@ export default function Shipments() {
         </TabsContent>
       </Tabs>
 
-      <Dialog open={!!selectedBatchId} onOpenChange={(open) => !open && setSelectedBatchId(null)}>
-        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+      <Dialog open={!!selectedBatchId} onOpenChange={(open) => { if (!open) setSelectedBatchId(null); }}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="w-5 h-5" />
@@ -699,67 +1056,112 @@ export default function Shipments() {
             </DialogTitle>
           </DialogHeader>
           {batchDetailLoading ? (
-            <div className="space-y-4">
+            <div className="space-y-4 p-4">
               {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-12 w-full" />
+                <div key={i} className="flex items-center gap-4">
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-4 w-24 flex-1" />
+                  <Skeleton className="h-6 w-16" />
+                </div>
               ))}
             </div>
           ) : batchDetailData ? (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
                 <div>
-                  <p className="text-xs text-muted-foreground">Courier</p>
-                  <p className="capitalize font-medium">{batchDetailData.batch.courierName}</p>
+                  <p className="text-muted-foreground">Courier</p>
+                  <p className="font-medium capitalize">{batchDetailData.batch.courierName}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Status</p>
+                  <p className="text-muted-foreground">Status</p>
                   {getBatchStatusBadge(batchDetailData.batch.status)}
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Success</p>
-                  <p className="font-medium text-green-600">{batchDetailData.batch.successCount ?? 0}</p>
+                  <p className="text-muted-foreground">Success / Failed</p>
+                  <p className="font-medium">
+                    <span className="text-green-600">{batchDetailData.batch.successCount ?? 0}</span>
+                    {" / "}
+                    <span className="text-red-600">{batchDetailData.batch.failedCount ?? 0}</span>
+                  </p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Failed</p>
-                  <p className="font-medium text-red-600">{batchDetailData.batch.failedCount ?? 0}</p>
+                  <p className="text-muted-foreground">Created</p>
+                  <p className="font-medium">
+                    {batchDetailData.batch.createdAt
+                      ? format(new Date(batchDetailData.batch.createdAt), "MMM dd, h:mm a")
+                      : "-"}
+                  </p>
                 </div>
               </div>
-              <div className="overflow-x-auto">
+
+              <div className="overflow-x-auto border rounded-md">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Order</TableHead>
                       <TableHead>Customer</TableHead>
                       <TableHead>City</TableHead>
+                      <TableHead>Status</TableHead>
                       <TableHead>Tracking #</TableHead>
                       <TableHead className="text-right">COD</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead>Error</TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {batchDetailData.items.map((item) => (
-                      <TableRow key={item.id}>
+                      <TableRow key={item.id} data-testid={`batch-item-${item.id}`}>
                         <TableCell>
-                          <Link href={`/orders/detail/${item.orderId}`} className="text-primary hover:underline">
-                            {item.orderNumber || item.orderId.substring(0, 8)}
+                          <Link href={`/orders/detail/${item.orderId}`} className="text-primary hover:underline font-medium">
+                            {item.orderNumber || "-"}
                           </Link>
                         </TableCell>
-                        <TableCell>{item.consigneeName || "-"}</TableCell>
-                        <TableCell className="text-muted-foreground">{item.consigneeCity || "-"}</TableCell>
-                        <TableCell className="font-mono text-sm">{item.trackingNumber || "-"}</TableCell>
-                        <TableCell className="text-right font-medium">
-                          {item.codAmount ? `PKR ${Number(item.codAmount).toLocaleString()}` : "-"}
-                        </TableCell>
+                        <TableCell className="text-sm">{item.consigneeName || "-"}</TableCell>
+                        <TableCell className="text-muted-foreground text-sm">{item.consigneeCity || "-"}</TableCell>
                         <TableCell>
                           <Badge className={
-                            item.bookingStatus === "SUCCESS"
+                            item.bookingStatus === "BOOKED"
                               ? "bg-green-500/10 text-green-600 border-green-500/20"
-                              : "bg-red-500/10 text-red-600 border-red-500/20"
+                              : item.bookingStatus === "FAILED"
+                              ? "bg-red-500/10 text-red-600 border-red-500/20"
+                              : "bg-muted text-muted-foreground"
                           }>
                             {item.bookingStatus}
                           </Badge>
-                          {item.bookingError && (
-                            <p className="text-xs text-red-500 mt-1">{item.bookingError}</p>
+                        </TableCell>
+                        <TableCell className="font-mono text-sm">{item.trackingNumber || "-"}</TableCell>
+                        <TableCell className="text-right font-medium text-sm">
+                          {item.codAmount ? `PKR ${Number(item.codAmount).toLocaleString()}` : "-"}
+                        </TableCell>
+                        <TableCell>
+                          {item.bookingError ? (
+                            <div className="max-w-[200px]">
+                              <p className="text-sm text-red-600 truncate" title={item.bookingError}>{item.bookingError}</p>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground/50">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {item.slipUrl && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => window.open(item.slipUrl!, "_blank")}
+                              title="View Airway Bill"
+                            >
+                              <Printer className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {item.printRecordId && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => window.open(`/api/print/shipment/${item.printRecordId}.pdf`, "_blank")}
+                              title="Download Print Record"
+                            >
+                              <Download className="w-4 h-4" />
+                            </Button>
                           )}
                         </TableCell>
                       </TableRow>

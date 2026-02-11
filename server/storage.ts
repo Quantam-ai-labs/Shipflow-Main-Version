@@ -105,6 +105,7 @@ export interface IStorage {
   getBookingJobsByOrderIds(merchantId: string, orderIds: string[]): Promise<BookingJob[]>;
   createBookingJob(job: InsertBookingJob): Promise<BookingJob>;
   updateBookingJob(id: string, data: Partial<InsertBookingJob>): Promise<BookingJob | undefined>;
+  getBookingLogs(merchantId: string, options?: { page?: number; pageSize?: number; courier?: string; status?: string; dateFrom?: string; dateTo?: string }): Promise<{ logs: any[]; total: number }>;
   getOrdersByIds(merchantId: string, orderIds: string[]): Promise<Order[]>;
   updateOrderWorkflow(merchantId: string, orderId: string, data: Partial<InsertOrder>): Promise<Order | undefined>;
 
@@ -1061,6 +1062,56 @@ export class DatabaseStorage implements IStorage {
       .where(eq(bookingJobs.id, id))
       .returning();
     return updated;
+  }
+
+  async getBookingLogs(merchantId: string, options?: { page?: number; pageSize?: number; courier?: string; status?: string; dateFrom?: string; dateTo?: string }): Promise<{ logs: any[]; total: number }> {
+    const page = options?.page || 1;
+    const pageSize = options?.pageSize || 20;
+    const offset = (page - 1) * pageSize;
+
+    const conditions: any[] = [eq(bookingJobs.merchantId, merchantId)];
+    if (options?.courier && options.courier !== 'all') {
+      conditions.push(eq(bookingJobs.courierName, options.courier));
+    }
+    if (options?.status && options.status !== 'all') {
+      conditions.push(eq(bookingJobs.status, options.status));
+    }
+    if (options?.dateFrom) {
+      const fromDate = new Date(options.dateFrom);
+      fromDate.setHours(0, 0, 0, 0);
+      conditions.push(sql`${bookingJobs.createdAt} >= ${fromDate.toISOString()}`);
+    }
+    if (options?.dateTo) {
+      const toDate = new Date(options.dateTo);
+      toDate.setHours(23, 59, 59, 999);
+      conditions.push(sql`${bookingJobs.createdAt} <= ${toDate.toISOString()}`);
+    }
+
+    const whereClause = and(...conditions);
+
+    const [totalResult] = await db.select({ count: count() }).from(bookingJobs).where(whereClause);
+
+    const logs = await db.select({
+      id: bookingJobs.id,
+      orderId: bookingJobs.orderId,
+      courierName: bookingJobs.courierName,
+      status: bookingJobs.status,
+      trackingNumber: bookingJobs.trackingNumber,
+      slipUrl: bookingJobs.slipUrl,
+      errorMessage: bookingJobs.errorMessage,
+      createdAt: bookingJobs.createdAt,
+      orderNumber: orders.orderNumber,
+      customerName: orders.customerName,
+      city: orders.city,
+      totalAmount: orders.totalAmount,
+    }).from(bookingJobs)
+      .leftJoin(orders, eq(bookingJobs.orderId, orders.id))
+      .where(whereClause)
+      .orderBy(desc(bookingJobs.createdAt))
+      .limit(pageSize)
+      .offset(offset);
+
+    return { logs, total: totalResult?.count || 0 };
   }
 
   async getOrdersByIds(merchantId: string, orderIds: string[]): Promise<Order[]> {
