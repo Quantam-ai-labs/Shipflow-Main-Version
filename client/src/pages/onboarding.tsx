@@ -89,6 +89,9 @@ export default function Onboarding() {
 
   const shopifyConnected = integrations?.shopify?.isConnected;
 
+  const canonicalHost = "lala-logistics.replit.app";
+  const isNonCanonicalHost = typeof window !== 'undefined' && window.location.hostname !== canonicalHost && window.location.hostname !== 'localhost';
+
   const advanceStepMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/onboarding/advance-step");
@@ -190,6 +193,17 @@ export default function Onboarding() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-2xl">
+        {isNonCanonicalHost && currentStepIndex <= 1 && (
+          <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg flex items-center justify-between gap-2 flex-wrap" data-testid="banner-canonical-host">
+            <p className="text-sm text-amber-800 dark:text-amber-200">
+              <AlertCircle className="w-4 h-4 inline mr-1.5" />
+              For Shopify connect, please use the official app URL.
+            </p>
+            <Button size="sm" variant="outline" onClick={() => { window.location.href = `https://${canonicalHost}/onboarding`; }} data-testid="button-open-canonical">
+              <ExternalLink className="w-3.5 h-3.5 mr-1.5" />Open Canonical URL
+            </Button>
+          </div>
+        )}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-center mb-2" data-testid="text-onboarding-title">Welcome to ShipFlow</h1>
           <p className="text-muted-foreground text-center mb-6">Let's set up your logistics platform</p>
@@ -276,6 +290,10 @@ export default function Onboarding() {
                               const res = await apiRequest("GET", `/api/shopify/auth-url?shop=${encodeURIComponent(fullDomain)}`);
                               const data = await res.json();
                               if (data.authUrl) {
+                                if (data.canonicalHost && window.location.hostname !== data.canonicalHost) {
+                                  window.location.href = `https://${data.canonicalHost}/onboarding`;
+                                  return;
+                                }
                                 window.location.href = data.authUrl;
                               } else {
                                 toast({ title: "Error", description: "Failed to generate auth URL", variant: "destructive" });

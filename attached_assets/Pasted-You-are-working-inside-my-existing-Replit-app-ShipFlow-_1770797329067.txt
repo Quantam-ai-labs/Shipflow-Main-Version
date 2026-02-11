@@ -1,0 +1,124 @@
+You are working inside my existing Replit app “ShipFlow”. Fix Shopify OAuth error:
+
+“Oauth error invalid_request: The redirect_uri and application url must have matching hosts”
+
+This must be fixed from the ShipFlow app side (OAuth URL generation + callback), so it ALWAYS uses the deployed host:
+https://lala-logistics.replit.app
+
+IMPORTANT CONTEXT:
+- Shopify App URL is set to https://lala-logistics.replit.app
+- Redirect URL in Shopify is https://lala-logistics.replit.app/api/shopify/callback
+- Embed in Shopify admin is OFF.
+- Yet Shopify still throws host mismatch, which means ShipFlow is generating redirect_uri with a different host (often .replit.dev or derived from req.host).
+
+GOAL:
+1) ShipFlow must ALWAYS build the OAuth authorize URL using env vars (never dynamic host detection).
+2) redirect_uri must ALWAYS be exactly the env var value and must match Shopify’s App URL host.
+3) Add logging/diagnostics so we can see the generated OAuth URL + redirect_uri at runtime.
+4) Make it impossible to accidentally run OAuth using a .replit.dev host.
+
+========================================================
+A) ENV VARS (SINGLE SOURCE OF TRUTH)
+========================================================
+Ensure these exist and are used everywhere:
+- SHOPIFY_APP_URL = "https://lala-logistics.replit.app"
+- SHOPIFY_APP_REDIRECT_URL = "https://lala-logistics.replit.app/api/shopify/callback"
+- SHOPIFY_APP_CLIENT_ID
+- SHOPIFY_APP_CLIENT_SECRET
+- SHOPIFY_APP_SCOPES (comma-separated, minimal recommended: read_orders,read_fulfillments,write_webhooks)
+
+Do NOT auto-generate redirect urls from request headers.
+
+========================================================
+B) FIX OAUTH AUTH-URL GENERATION
+========================================================
+Find the backend endpoint that returns/redirects to Shopify’s authorize URL (e.g. /api/shopify/auth-url).
+
+Fix it to:
+1) Use redirect_uri ONLY from SHOPIFY_APP_REDIRECT_URL.
+2) Use client_id from env.
+3) Use scopes from env (Shopify expects comma-separated or space-separated depending on current implementation; ensure correct encoding).
+4) Generate a secure state and store it in the user’s session.
+5) Build authorize URL without using req.headers.host, req.hostname, req.protocol, or “current request base URL”.
+
+Add a runtime log line when creating the authorize URL:
+- log shop domain
+- log the final redirect_uri value (exact decoded string)
+- log the final authorize URL (safe; no secret)
+Do NOT log client secret or access tokens.
+
+========================================================
+C) FIX CALLBACK HANDLER CONSISTENCY
+========================================================
+Find /api/shopify/callback handler.
+
+Ensure it:
+1) Verifies state correctly against session.
+2) Exchanges code for token.
+3) Stores token properly.
+4) Uses shop from query correctly.
+5) Never constructs URLs based on incoming host for redirect_uri validation.
+6) If callback is hit on a host different than SHOPIFY_APP_URL host, do a safe redirect to the canonical host before continuing, OR reject with a clear message instructing to use the canonical URL.
+
+Canonical-host enforcement:
+- Parse SHOPIFY_APP_URL hostname (lala-logistics.replit.app)
+- If incoming request host != canonical host:
+   - redirect (302) to the same path+query on canonical host
+   - so OAuth flow continues on correct host and cookies/session stay consistent
+
+========================================================
+D) SESSION/COOKIE SAFETY FOR REPLIT
+========================================================
+Ensure auth sessions work across redirects:
+- Cookies should be httpOnly
+- If SameSite is set too strict and breaks OAuth redirects, adjust safely:
+  - SameSite=Lax is usually fine for OAuth redirects.
+- Ensure secure cookies when using https.
+(Do NOT implement embedded Shopify App Bridge here; we are not embedding.)
+
+========================================================
+E) FRONTEND CONNECT BUTTON
+========================================================
+In onboarding “Connect Shopify” UI:
+- Ensure the connect button calls the correct backend endpoint.
+- Ensure it uses SHOPIFY_APP_URL domain and not whatever host user opened from (.replit.dev).
+- If user opens the app from a non-canonical host, show a banner:
+  “Please use https://lala-logistics.replit.app for Shopify connect”
+  and provide a “Open Canonical URL” button.
+
+========================================================
+F) HARD FAIL IF ENV MISMATCH
+========================================================
+At server startup, validate:
+- SHOPIFY_APP_URL host == SHOPIFY_APP_REDIRECT_URL host
+If not, print a clear error and refuse to run OAuth connect (return 500 with instructions).
+
+========================================================
+G) SCOPES CLEANUP (DO NOT REQUEST ALL SCOPES)
+========================================================
+Do not request massive scopes.
+Use SHOPIFY_APP_SCOPES and default to:
+read_orders,read_fulfillments,write_webhooks
+Optional add read_customers ONLY if used.
+This is not the cause of the host mismatch, but it prevents install issues.
+
+========================================================
+H) VERIFICATION STEPS (MUST PASS)
+========================================================
+1) From https://lala-logistics.replit.app/onboarding click Connect Shopify.
+2) Confirm the generated authorize URL has redirect_uri:
+   https://lala-logistics.replit.app/api/shopify/callback
+3) Shopify should no longer show “hosts must match”.
+4) Callback completes and returns user to onboarding with Shopify connected.
+
+Also add a small debug endpoint (admin only):
+GET /api/shopify/debug/oauth-config
+Returns:
+- appUrl
+- redirectUrl
+- scopes
+- canonicalHost
+So we can confirm runtime values quickly (never return secrets).
+
+DELIVERABLE:
+ShipFlow OAuth must consistently work, with no host mismatch, regardless of whether the user previously opened a .replit.dev link.

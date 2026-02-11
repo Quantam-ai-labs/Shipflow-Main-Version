@@ -1351,8 +1351,20 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/shopify/debug/oauth-config", isAuthenticated, async (req, res) => {
+    try {
+      const config = shopifyService.getOAuthConfig();
+      res.json(config);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get OAuth config" });
+    }
+  });
+
   app.get("/api/shopify/auth-url", isAuthenticated, async (req, res) => {
     try {
+      if (shopifyService.hasHostMismatch()) {
+        return res.status(500).json({ message: "OAuth configuration error: SHOPIFY_APP_URL and SHOPIFY_APP_REDIRECT_URL hosts do not match. Contact admin." });
+      }
       const { shop } = req.query;
       if (!shop || typeof shop !== 'string') {
         return res.status(400).json({ message: "Shop parameter is required" });
@@ -1366,7 +1378,9 @@ export async function registerRoutes(
       (req.session as any).shopifyState = state;
       (req.session as any).shopDomain = shopDomain;
       const installUrl = shopifyService.getInstallUrl(shopDomain, state);
-      res.json({ authUrl: installUrl, state });
+
+      const canonicalHost = shopifyService.getCanonicalHost();
+      res.json({ authUrl: installUrl, state, canonicalHost });
     } catch (error) {
       console.error("Error generating Shopify auth URL:", error);
       res.status(500).json({ message: "Failed to generate auth URL" });
@@ -1403,6 +1417,14 @@ export async function registerRoutes(
 
   app.get("/api/shopify/callback", async (req: any, res) => {
     try {
+      const canonicalHost = shopifyService.getCanonicalHost();
+      const incomingHost = req.hostname || req.headers.host?.split(':')[0];
+      if (canonicalHost && incomingHost && incomingHost !== canonicalHost) {
+        const canonicalUrl = `https://${canonicalHost}${req.originalUrl}`;
+        console.log(`[Shopify OAuth] Redirecting callback from ${incomingHost} to canonical host ${canonicalHost}`);
+        return res.redirect(302, canonicalUrl);
+      }
+
       const { code, shop, state, hmac } = req.query;
 
       if (!code || !shop || !state) {
@@ -1411,7 +1433,7 @@ export async function registerRoutes(
 
       const savedState = req.session?.shopifyState;
       if (state !== savedState) {
-        console.warn("State mismatch - potential CSRF attack", { received: state, expected: savedState });
+        console.warn("State mismatch - potential CSRF attack", { received: state, expected: savedState, sessionId: req.sessionID });
         return res.redirect('/onboarding?shopify=error&message=Invalid+state+parameter');
       }
 

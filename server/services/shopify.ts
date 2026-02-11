@@ -5,7 +5,9 @@ interface ShopifyConfig {
   clientId: string;
   clientSecret: string;
   appUrl: string;
+  redirectUrl: string;
   scopes: string;
+  canonicalHost: string;
 }
 
 interface ShopifyOrderMetafield {
@@ -101,25 +103,69 @@ interface ShopifyOrdersResponse {
 
 export class ShopifyService {
   private config: ShopifyConfig;
+  private hostMismatch: boolean = false;
 
   constructor() {
+    const appUrl = (process.env.SHOPIFY_APP_URL || 'https://lala-logistics.replit.app').replace(/\/$/, '');
+    const redirectUrl = process.env.SHOPIFY_APP_REDIRECT_URL || `${appUrl}/api/shopify/callback`;
+    const scopes = process.env.SHOPIFY_APP_SCOPES || 'read_orders,read_fulfillments,write_webhooks';
+    let canonicalHost = '';
+    try {
+      canonicalHost = new URL(appUrl).hostname;
+    } catch {
+      canonicalHost = 'lala-logistics.replit.app';
+    }
+
     this.config = {
       clientId: process.env.SHOPIFY_CLIENT_ID || '',
       clientSecret: process.env.SHOPIFY_APP_SHARED_SECRET || '',
-      appUrl: process.env.SHOPIFY_APP_URL || 'https://lala-logistics.replit.app',
-      scopes: 'read_orders,read_products,read_customers,read_fulfillments,write_fulfillments',
+      appUrl,
+      redirectUrl,
+      scopes,
+      canonicalHost,
+    };
+
+    const redirectHost = (() => { try { return new URL(redirectUrl).hostname; } catch { return ''; } })();
+    this.hostMismatch = false;
+    if (canonicalHost && redirectHost && canonicalHost !== redirectHost) {
+      console.error(`[Shopify] FATAL: SHOPIFY_APP_URL host (${canonicalHost}) does not match SHOPIFY_APP_REDIRECT_URL host (${redirectHost}). OAuth will fail!`);
+      this.hostMismatch = true;
+    }
+
+    console.log(`[Shopify] OAuth config loaded: appUrl=${appUrl}, redirectUrl=${redirectUrl}, scopes=${scopes}, canonicalHost=${canonicalHost}`);
+  }
+
+  getCanonicalHost(): string {
+    return this.config.canonicalHost;
+  }
+
+  hasHostMismatch(): boolean {
+    return this.hostMismatch;
+  }
+
+  getOAuthConfig() {
+    return {
+      appUrl: this.config.appUrl,
+      redirectUrl: this.config.redirectUrl,
+      scopes: this.config.scopes,
+      canonicalHost: this.config.canonicalHost,
+      clientIdSet: !!this.config.clientId,
+      clientSecretSet: !!this.config.clientSecret,
+      hostMismatch: this.hostMismatch,
     };
   }
 
   getInstallUrl(shop: string, state: string): string {
-    const redirectUri = `${this.config.appUrl}/api/shopify/callback`;
     const params = new URLSearchParams({
       client_id: this.config.clientId,
       scope: this.config.scopes,
-      redirect_uri: redirectUri,
+      redirect_uri: this.config.redirectUrl,
       state: state,
     });
-    return `https://${shop}/admin/oauth/authorize?${params.toString()}`;
+    const authorizeUrl = `https://${shop}/admin/oauth/authorize?${params.toString()}`;
+    console.log(`[Shopify OAuth] Generated authorize URL for shop=${shop}, redirect_uri=${this.config.redirectUrl}`);
+    console.log(`[Shopify OAuth] Full URL: ${authorizeUrl}`);
+    return authorizeUrl;
   }
 
   validateHmac(query: Record<string, string>): boolean {
