@@ -1,0 +1,206 @@
+You are inside my existing Replit app “ShipFlow”. Implement Prompt 2 ONLY.
+
+GOAL (Prompt 2):
+Implement Shopify connection using the modern multi-merchant OAuth flow (Public App style), store per-merchant access tokens securely, sync orders into our DB, register webhooks, and process webhooks safely (no duplicates, no out-of-order corruption). Do NOT implement WebSockets/SSE realtime UI yet.
+
+========================================================
+0) IMPORTANT CONTEXT / EXPECTED UX
+========================================================
+- User logs in -> onboarding wizard exists (from Prompt 1).
+- Step 1: “Connect Shopify”
+- After Shopify connect, automatically register webhooks for that merchant and run initial orders sync.
+- Then onboarding advances to SHOPIFY_CONNECTED then ORDERS_SYNCED.
+
+========================================================
+1) CONFIG / ENV VARS
+========================================================
+Add required env vars (name them clearly and document them inside README/settings UI):
+- SHOPIFY_APP_CLIENT_ID
+- SHOPIFY_APP_CLIENT_SECRET
+- SHOPIFY_APP_SCOPES (comma separated, e.g. read_orders,read_customers,read_fulfillments,read_products,read_locations etc. only what needed)
+- SHOPIFY_APP_REDIRECT_URL (our backend callback endpoint)
+- SHOPIFY_APP_URL (public base URL of ShipFlow)
+- SHOPIFY_WEBHOOK_SECRET (optional if needed; HMAC uses client secret usually)
+
+Also ensure ShipFlow has a reliable PUBLIC URL for Shopify callbacks/webhooks (Replit deploy URL).
+
+========================================================
+2) DATABASE / PRISMA CHANGES
+========================================================
+Add fields to Merchant:
+- shopifyShopDomain (string, unique, nullable until connected)
+- shopifyAccessTokenEncrypted (text, nullable)
+- shopifyScopesGranted (string/text nullable)
+- shopifyConnectedAt (datetime nullable)
+- shopifyLastSyncAt (datetime nullable)
+- shopifyWebhookStatus (enum or text: NOT_REGISTERED / REGISTERED / ERROR, optional)
+
+Add table to store processed webhook events (idempotency):
+shopify_webhook_events:
+- id (uuid)
+- merchantId
+- shopDomain
+- topic (string)
+- webhookId (string nullable)  // if available from headers
+- payloadHash (string)         // sha256 of raw body + topic + shop
+- receivedAt
+- processedAt nullable
+- status enum: RECEIVED, PROCESSED, IGNORED_DUPLICATE, FAILED
+Unique constraint:
+- unique(payloadHash) (or unique(shopDomain, topic, webhookId) when webhookId exists)
+
+Add/update Order table mapping fields (if not already):
+- merchantId
+- shopifyOrderId (string/number stored as string) UNIQUE per merchant
+- shopifyName (order name like #1001)
+- email, phone, customerName
+- financialStatus
+- fulfillmentStatus
+- totalAmount (number)
+- currency
+- createdAtShopify, updatedAtShopify
+- rawJson (optional)
+Make sure order updates can be upserted by (merchantId + shopifyOrderId).
+
+========================================================
+3) SECURITY: TOKEN STORAGE
+========================================================
+- Never expose Shopify token to frontend.
+- Store encrypted token in DB using a server secret key (use existing encryption util; if none, implement AES-GCM with APP_ENCRYPTION_KEY env var).
+- Decrypt only on backend when calling Shopify.
+
+========================================================
+4) SHOPIFY OAUTH CONNECT FLOW (PUBLIC APP STYLE)
+========================================================
+Implement onboarding Step 1 “Connect Shopify” UI + backend routes:
+
+A) UI:
+- Input: store domain (e.g. mystore.myshopify.com)
+- Button: “Connect Shopify”
+- It should call backend to get auth URL then redirect user to Shopify.
+
+B) Backend endpoints:
+1) GET /api/shopify/auth-url?shop=...
+- Validate shop format
+- Generate Shopify OAuth install URL with:
+  client_id, scopes, redirect_uri, state (CSRF)
+- Save state in session (or DB) for verification
+
+2) GET /api/shopify/callback?shop=...&code=...&state=...
+- Verify state matches
+- Exchange code for access token using Shopify OAuth token endpoint
+- Save on merchant:
+  shopifyShopDomain, encrypted token, scopes, connectedAt
+- Immediately register webhooks (see section 6)
+- Advance onboardingStep to SHOPIFY_CONNECTED
+- Trigger initial sync job (section 5)
+- Redirect user back to /onboarding (or next step) with success toast
+
+IMPORTANT:
+- Handle errors cleanly (invalid shop, invalid state, token exchange fail).
+- Ensure multi-tenant: token belongs to the current logged-in merchant only.
+- If merchant reconnects, update token + re-register webhooks.
+
+========================================================
+5) INITIAL ORDER SYNC (after connect + on demand)
+========================================================
+Implement a backend service: syncShopifyOrders(merchantId, sinceDate?)
+- Default: sync last 60–90 days OR use since lastSyncAt.
+- Fetch orders pages from Shopify Admin API.
+- Upsert into our Orders table using (merchantId + shopifyOrderId).
+- Store createdAtShopify/updatedAtShopify.
+- Update merchant.shopifyLastSyncAt when done.
+- Advance onboardingStep to ORDERS_SYNCED when first successful sync completes.
+
+Add APIs:
+- POST /api/shopify/sync-orders (merchant auth required)
+  -> triggers sync now (for manual resync)
+Return summary: {createdCount, updatedCount, lastSyncAt}
+
+Edge safety:
+- Use rate limit handling (retry with backoff when 429).
+- If huge stores: limit initial sync to a date range and allow “sync more history” later.
+
+========================================================
+6) WEBHOOK REGISTRATION (AUTO AFTER CONNECT)
+========================================================
+After token is stored, register webhooks for merchant shop.
+
+Topics to register (minimum):
+- orders/create
+- orders/updated
+Optional:
+- refunds/create
+- fulfillments/create or fulfillment_events (only if you use these)
+- orders/cancelled (if needed)
+
+Implement registerShopifyWebhooks(merchantId):
+- Create webhook endpoints in our backend:
+  POST /webhooks/shopify/orders-create
+  POST /webhooks/shopify/orders-updated
+  (and others if added)
+- Use HTTPS public URL.
+- Save merchant.shopifyWebhookStatus = REGISTERED or ERROR.
+- If webhook already exists, update/replace (idempotent registration).
+
+========================================================
+7) WEBHOOK RECEIVING + DATA CONSISTENCY (CRITICAL)
+========================================================
+Webhook endpoints must:
+A) Verify authenticity:
+- Validate Shopify HMAC signature using the raw request body and app secret.
+- If invalid -> 401 reject.
+
+B) Idempotency:
+- Compute payloadHash = sha256(rawBody + topic + shop)
+- If payloadHash already exists -> respond 200 and mark IGNORED_DUPLICATE.
+
+C) Ordered update guard:
+- Ensure we do not overwrite newer DB data with older webhook payload.
+- Compare payload.updated_at with Order.updatedAtShopify:
+  - Only apply update if payload.updated_at >= current stored updatedAtShopify.
+  - Otherwise ignore.
+
+D) Hybrid “fetch full order” strategy:
+- For orders/updated webhook:
+  - Either trust payload if complete OR
+  - Fetch the full order from Shopify Admin API using shopifyOrderId for correctness, then upsert.
+Choose safest: fetch full order for updated events if your current payload processing is incomplete.
+
+E) Always respond fast (Shopify retries):
+- Return 200 quickly.
+- If needed, queue background processing (simple in-process queue is ok) but do not block too long.
+
+========================================================
+8) ONBOARDING INTEGRATION (STEP PROGRESSION)
+========================================================
+- After successful OAuth connect + webhook registration:
+  onboardingStep => SHOPIFY_CONNECTED
+- After successful initial order sync:
+  onboardingStep => ORDERS_SYNCED
+UI should reflect these statuses automatically.
+
+========================================================
+9) RECONCILIATION SAFETY NET (NO CRON YET, BUT PREP)
+========================================================
+Prepare a reconciliation function that can be called later:
+reconcileShopifyOrders(merchantId):
+- fetch orders updated since merchant.shopifyLastSyncAt
+- upsert
+This will become a scheduled job in Prompt 3 (or later).
+For now implement it as:
+POST /api/shopify/reconcile
+
+========================================================
+10) VERIFICATION CHECKLIST (MUST CONFIRM)
+========================================================
+After implementing Prompt 2, test:
+1) User in onboarding step 1 enters store domain -> Connect -> Shopify approval screen -> returns -> merchant saved with shop domain + token.
+2) Webhooks register successfully (status shows REGISTERED).
+3) Initial sync runs and Orders appear in New Orders page without manual refresh (initial fetch is fine; realtime is Prompt 3).
+4) Trigger a test order update in Shopify -> webhook hits our endpoint -> order updates in DB (verify no duplicates and correct updatedAt handling).
+5) Duplicate webhook deliveries do not create duplicate orders.
+6) Reconnect Shopify refreshes token and re-registers webhooks safely.
+
+STOP HERE.
+Do NOT implement SSE/WebSockets live UI streaming yet. That will be Prompt 3.
