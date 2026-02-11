@@ -647,3 +647,38 @@ export const remarksRelations = relations(remarks, ({ one }) => ({
     references: [orders.id],
   }),
 }));
+
+// ============================================
+// SHOPIFY IMPORT JOBS (Async batch imports)
+// ============================================
+export const shopifyImportJobs = pgTable("shopify_import_jobs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  shopDomain: varchar("shop_domain", { length: 255 }).notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("QUEUED"),
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date"),
+  nextCursor: text("next_cursor"),
+  currentPage: integer("current_page").default(0),
+  batchSize: integer("batch_size").default(100),
+  processedCount: integer("processed_count").default(0),
+  createdCount: integer("created_count").default(0),
+  updatedCount: integer("updated_count").default(0),
+  failedCount: integer("failed_count").default(0),
+  totalFetched: integer("total_fetched").default(0),
+  lastError: text("last_error"),
+  lastErrorStage: varchar("last_error_stage", { length: 30 }),
+  startedAt: timestamp("started_at"),
+  finishedAt: timestamp("finished_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_import_jobs_merchant").on(table.merchantId),
+  index("idx_import_jobs_status").on(table.status),
+]);
+
+export const insertShopifyImportJobSchema = createInsertSchema(shopifyImportJobs).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertShopifyImportJob = z.infer<typeof insertShopifyImportJobSchema>;
+export type ShopifyImportJob = typeof shopifyImportJobs.$inferSelect;
