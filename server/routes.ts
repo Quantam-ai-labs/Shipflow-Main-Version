@@ -516,6 +516,12 @@ export async function registerRoutes(
     'DELIVERY_ATTEMPTED', 'DELIVERED', 'DELIVERY_FAILED', 'RETURNED_TO_SHIPPER', 'RETURN_IN_TRANSIT'
   ];
 
+  const EDITABLE_ORDER_FIELDS = [
+    'customerName', 'customerPhone', 'customerEmail', 'shippingAddress',
+    'city', 'province', 'postalCode', 'notes', 'totalAmount',
+    'subtotalAmount', 'shippingAmount', 'discountAmount', 'lineItems', 'totalQuantity',
+  ];
+
   app.patch("/api/orders/:id/customer", isAuthenticated, async (req: any, res) => {
     try {
       const merchantId = await requireMerchant(req, res);
@@ -525,18 +531,37 @@ export async function registerRoutes(
       const order = await storage.getOrderById(merchantId, orderId);
       if (!order) return res.status(404).json({ message: "Order not found" });
 
+      if (order.workflowStatus === "FULFILLED" || order.workflowStatus === "CANCELLED") {
+        return res.status(403).json({ message: "Order is locked - already booked or cancelled" });
+      }
       if (order.shipmentStatus && PICKED_UP_OR_BEYOND_STATUSES.includes(order.shipmentStatus)) {
         return res.status(403).json({ message: "Order is locked - courier has picked up the shipment" });
       }
 
-      const { customerName, customerPhone, shippingAddress, city } = req.body;
-
       const updateData: any = {};
       const fieldsToCheck: Array<{ key: string; newVal: any }> = [];
-      if (customerName !== undefined) { updateData.customerName = customerName; fieldsToCheck.push({ key: 'customerName', newVal: customerName }); }
-      if (customerPhone !== undefined) { updateData.customerPhone = customerPhone; fieldsToCheck.push({ key: 'customerPhone', newVal: customerPhone }); }
-      if (shippingAddress !== undefined) { updateData.shippingAddress = shippingAddress; fieldsToCheck.push({ key: 'shippingAddress', newVal: shippingAddress }); }
-      if (city !== undefined) { updateData.city = city; fieldsToCheck.push({ key: 'city', newVal: city }); }
+      const numericFields = ['totalAmount', 'subtotalAmount', 'shippingAmount', 'discountAmount', 'totalQuantity'];
+
+      for (const field of EDITABLE_ORDER_FIELDS) {
+        if (req.body[field] !== undefined) {
+          let val = req.body[field];
+          if (numericFields.includes(field)) {
+            val = String(parseFloat(val) || 0);
+          }
+          if (field === 'lineItems') {
+            if (!Array.isArray(val)) {
+              return res.status(400).json({ message: "lineItems must be an array" });
+            }
+            val = val.filter((item: any) => item && typeof item === 'object' && item.name);
+          }
+          updateData[field] = val;
+          fieldsToCheck.push({ key: field, newVal: val });
+        }
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        return res.status(400).json({ message: "No fields to update" });
+      }
 
       const updated = await storage.updateOrderWorkflow(merchantId, orderId, updateData);
       if (!updated) return res.status(404).json({ message: "Order not found" });
@@ -546,14 +571,16 @@ export async function registerRoutes(
 
       for (const field of fieldsToCheck) {
         const oldValue = (order as any)[field.key];
-        if (String(oldValue ?? "") !== String(field.newVal ?? "")) {
+        const newValStr = field.key === 'lineItems' ? JSON.stringify(field.newVal) : String(field.newVal ?? "");
+        const oldValStr = field.key === 'lineItems' ? JSON.stringify(oldValue) : String(oldValue ?? "");
+        if (oldValStr !== newValStr) {
           await storage.createOrderChangeLog({
             orderId,
             merchantId,
             changeType: "FIELD_EDIT",
             fieldName: field.key,
-            oldValue: oldValue != null ? String(oldValue) : null,
-            newValue: field.newVal != null ? String(field.newVal) : null,
+            oldValue: oldValue != null ? oldValStr : null,
+            newValue: field.newVal != null ? newValStr : null,
             actorUserId,
             actorName,
             actorType: "user",
@@ -563,8 +590,8 @@ export async function registerRoutes(
 
       res.json(updated);
     } catch (error) {
-      console.error("Error updating customer info:", error);
-      res.status(500).json({ message: "Failed to update customer info" });
+      console.error("Error updating order:", error);
+      res.status(500).json({ message: "Failed to update order" });
     }
   });
 

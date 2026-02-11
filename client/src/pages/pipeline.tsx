@@ -19,6 +19,16 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Inbox,
@@ -191,6 +201,8 @@ export default function Pipeline() {
   const [paymentModal, setPaymentModal] = useState<{ open: boolean; orderId: string; orderNumber: string; totalAmount: number; prepaidAmount: number }>({ open: false, orderId: "", orderNumber: "", totalAmount: 0, prepaidAmount: 0 });
   const [quickPayAmount, setQuickPayAmount] = useState("");
   const [quickPayMethod, setQuickPayMethod] = useState("CASH");
+  const [prepaidConfirmOpen, setPrepaidConfirmOpen] = useState(false);
+  const [confirmActionModal, setConfirmActionModal] = useState<{ open: boolean; action: string; orderIds: string[]; description: string }>({ open: false, action: "", orderIds: [], description: "" });
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -240,11 +252,45 @@ export default function Pipeline() {
       const res = await apiRequest("POST", "/api/orders/bulk-workflow", { orderIds, action, ...extra });
       return res.json();
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       queryClient.invalidateQueries({ queryKey: ["/api/orders/workflow-counts"] });
+      const previousStatus = activeTab;
       setSelectedIds(new Set());
-      toast({ title: `${variables.orderIds.length} orders updated` });
+      const actionLabel: Record<string, string> = { confirm: "confirmed", cancel: "cancelled", pending: "set to pending", hold: "put on hold", "release-hold": "released" };
+      const label = actionLabel[variables.action] || "updated";
+      const canUndo = ["confirm", "release-hold"].includes(variables.action);
+      if (canUndo) {
+        const { dismiss } = toast({
+          title: `${variables.orderIds.length} order${variables.orderIds.length > 1 ? "s" : ""} ${label}`,
+          description: "Click Undo to revert.",
+          action: (
+            <Button
+              variant="outline"
+              size="sm"
+              data-testid="button-undo-workflow"
+              onClick={() => {
+                dismiss();
+                const revertAction = previousStatus === "NEW" ? "revert-new" : previousStatus === "HOLD" ? "hold" : "pending";
+                Promise.all(variables.orderIds.map(id =>
+                  apiRequest("POST", `/api/orders/${id}/workflow`, { action: "revert" })
+                )).then(() => {
+                  queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+                  queryClient.invalidateQueries({ queryKey: ["/api/orders/workflow-counts"] });
+                  toast({ title: "Action reverted", description: `${variables.orderIds.length} order${variables.orderIds.length > 1 ? "s" : ""} restored.` });
+                }).catch(() => {
+                  toast({ title: "Undo failed", description: "Some orders could not be reverted.", variant: "destructive" });
+                });
+              }}
+            >
+              <Undo2 className="w-3.5 h-3.5 mr-1" />Undo
+            </Button>
+          ),
+          duration: 10000,
+        });
+      } else {
+        toast({ title: `${variables.orderIds.length} order${variables.orderIds.length > 1 ? "s" : ""} ${label}` });
+      }
     },
   });
 
@@ -279,10 +325,35 @@ export default function Pipeline() {
     mutationFn: async ({ orderIds, method }: { orderIds: string[]; method: string }) => {
       return apiRequest("POST", "/api/orders/bulk-mark-prepaid", { orderIds, method });
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       setSelectedIds(new Set());
-      toast({ title: "Orders marked as prepaid" });
+      const { orderIds } = variables;
+      const { dismiss } = toast({
+        title: `${orderIds.length} order${orderIds.length > 1 ? "s" : ""} marked as prepaid`,
+        description: "Click Undo to revert this action.",
+        action: (
+          <Button
+            variant="outline"
+            size="sm"
+            data-testid="button-undo-prepaid"
+            onClick={() => {
+              dismiss();
+              Promise.all(orderIds.map(id =>
+                apiRequest("POST", `/api/orders/${id}/payments/reset`)
+              )).then(() => {
+                queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+                toast({ title: "Prepaid status reverted", description: `${orderIds.length} order${orderIds.length > 1 ? "s" : ""} reset to unpaid.` });
+              }).catch(() => {
+                toast({ title: "Undo failed", description: "Some orders could not be reverted.", variant: "destructive" });
+              });
+            }}
+          >
+            <Undo2 className="w-3.5 h-3.5 mr-1" />Undo
+          </Button>
+        ),
+        duration: 10000,
+      });
     },
     onError: (err: any) => {
       toast({ title: "Error", description: err.message || "Failed to mark as prepaid", variant: "destructive" });
@@ -342,6 +413,13 @@ export default function Pipeline() {
       setPendingModal({ open: true, orderIds: ids });
     } else if (action === "hold") {
       setHoldModal({ open: true, orderIds: ids });
+    } else if (action === "confirm") {
+      setConfirmActionModal({
+        open: true,
+        action: "confirm",
+        orderIds: ids,
+        description: `Move ${ids.length} order${ids.length > 1 ? "s" : ""} to Ready to Ship? This action can be undone.`,
+      });
     } else {
       bulkWorkflowMutation.mutate({ orderIds: ids, action });
     }
@@ -558,7 +636,7 @@ export default function Pipeline() {
               <Button
                 size="sm"
                 variant="secondary"
-                onClick={() => bulkMarkPrepaidMutation.mutate({ orderIds: Array.from(selectedIds), method: "CASH" })}
+                onClick={() => setPrepaidConfirmOpen(true)}
                 disabled={bulkMarkPrepaidMutation.isPending}
                 data-testid="bulk-mark-prepaid"
               >
@@ -1441,6 +1519,51 @@ export default function Pipeline() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* Mark Prepaid Confirmation */}
+      <AlertDialog open={prepaidConfirmOpen} onOpenChange={setPrepaidConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Mark {selectedIds.size} order{selectedIds.size > 1 ? "s" : ""} as prepaid?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will mark the selected order{selectedIds.size > 1 ? "s" : ""} as fully prepaid (COD = 0). You can undo this action immediately after via the notification.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-prepaid-confirm">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              data-testid="button-confirm-prepaid"
+              onClick={() => {
+                bulkMarkPrepaidMutation.mutate({ orderIds: Array.from(selectedIds), method: "CASH" });
+                setPrepaidConfirmOpen(false);
+              }}
+            >
+              Yes, Mark Prepaid
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Generic Confirm Action Dialog */}
+      <AlertDialog open={confirmActionModal.open} onOpenChange={(open) => !open && setConfirmActionModal({ open: false, action: "", orderIds: [], description: "" })}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Action</AlertDialogTitle>
+            <AlertDialogDescription>{confirmActionModal.description}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-generic-confirm">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              data-testid="button-confirm-generic-action"
+              onClick={() => {
+                bulkWorkflowMutation.mutate({ orderIds: confirmActionModal.orderIds, action: confirmActionModal.action });
+                setConfirmActionModal({ open: false, action: "", orderIds: [], description: "" });
+              }}
+            >
+              Confirm
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
