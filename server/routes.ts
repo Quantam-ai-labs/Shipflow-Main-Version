@@ -2252,6 +2252,51 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/orders/:orderId/tracking-history", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const order = await storage.getOrderById(merchantId, req.params.orderId);
+      if (!order) {
+        return res.status(404).json({ message: "Order not found" });
+      }
+
+      if (!order.courierName || !order.courierTracking) {
+        return res.json({ success: false, events: [], message: "No courier booking found for this order" });
+      }
+
+      const { trackShipment } = await import('./services/couriers');
+      const creds = await getCourierCredentials(merchantId, order.courierName);
+      const credObj = creds ? { apiKey: creds.apiKey || undefined, apiSecret: creds.apiSecret || undefined } : undefined;
+      const result = await trackShipment(order.courierName, order.courierTracking, credObj, order.shipmentStatus);
+
+      if (!result || !result.success) {
+        return res.json({
+          success: false,
+          events: [],
+          message: result?.statusDescription || "Could not fetch tracking data",
+          courierName: order.courierName,
+          trackingNumber: order.courierTracking,
+        });
+      }
+
+      res.json({
+        success: true,
+        courierName: order.courierName,
+        trackingNumber: order.courierTracking,
+        currentStatus: result.normalizedStatus,
+        rawStatus: result.rawCourierStatus,
+        statusDescription: result.statusDescription,
+        lastUpdate: result.lastUpdate,
+        events: result.events,
+      });
+    } catch (error) {
+      console.error("Error fetching tracking history:", error);
+      res.status(500).json({ message: "Failed to fetch tracking history" });
+    }
+  });
+
   // ============================================
   // COURIER CITIES ENDPOINT
   // ============================================

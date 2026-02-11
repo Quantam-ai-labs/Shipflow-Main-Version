@@ -33,6 +33,13 @@ import {
   CreditCard,
   Plus,
   Trash2,
+  RefreshCw,
+  PackageCheck,
+  MapPinned,
+  RotateCcw,
+  XCircle,
+  CircleDot,
+  AlertTriangle,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -76,6 +83,258 @@ function getTrackingIcon(status: string) {
     delivered: CheckCircle2,
   };
   return iconMap[status] || Clock;
+}
+
+interface TrackingEvent {
+  status: string;
+  date: string;
+  description: string;
+}
+
+interface TrackingHistoryData {
+  success: boolean;
+  courierName?: string;
+  trackingNumber?: string;
+  currentStatus?: string;
+  rawStatus?: string;
+  statusDescription?: string;
+  lastUpdate?: string;
+  events: TrackingEvent[];
+  message?: string;
+}
+
+const PIPELINE_STAGES = [
+  { key: "BOOKED", label: "Booked", icon: Package, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-600", ring: "ring-blue-600/20" },
+  { key: "PICKED_UP", label: "Picked Up", icon: PackageCheck, color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-600", ring: "ring-indigo-600/20" },
+  { key: "IN_TRANSIT", label: "In Transit", icon: Truck, color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-600", ring: "ring-purple-600/20" },
+  { key: "OUT_FOR_DELIVERY", label: "Out for Delivery", icon: MapPinned, color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-600", ring: "ring-amber-600/20" },
+  { key: "DELIVERED", label: "Delivered", icon: CheckCircle2, color: "text-green-600 dark:text-green-400", bg: "bg-green-600", ring: "ring-green-600/20" },
+];
+
+const RETURN_STAGES = [
+  { key: "DELIVERY_FAILED", label: "Failed", icon: AlertTriangle, color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-600", ring: "ring-orange-600/20" },
+  { key: "RETURN_IN_TRANSIT", label: "Return Transit", icon: RotateCcw, color: "text-rose-600 dark:text-rose-400", bg: "bg-rose-600", ring: "ring-rose-600/20" },
+  { key: "RETURNED_TO_SHIPPER", label: "Returned", icon: RotateCcw, color: "text-red-600 dark:text-red-400", bg: "bg-red-600", ring: "ring-red-600/20" },
+];
+
+const CANCELLED_STAGE = { key: "CANCELLED", label: "Cancelled", icon: XCircle, color: "text-gray-600 dark:text-gray-400", bg: "bg-gray-500", ring: "ring-gray-500/20" };
+
+function getStageIndex(status: string | undefined): { pipeline: typeof PIPELINE_STAGES; activeIndex: number; isReturn: boolean; isCancelled: boolean } {
+  if (!status) return { pipeline: PIPELINE_STAGES, activeIndex: -1, isReturn: false, isCancelled: false };
+
+  if (status === "CANCELLED") {
+    return { pipeline: PIPELINE_STAGES, activeIndex: -1, isReturn: false, isCancelled: true };
+  }
+
+  const returnKeys = RETURN_STAGES.map(s => s.key);
+  if (returnKeys.includes(status)) {
+    const combined = [...PIPELINE_STAGES.slice(0, 3), ...RETURN_STAGES];
+    const idx = combined.findIndex(s => s.key === status);
+    return { pipeline: combined, activeIndex: idx, isReturn: true, isCancelled: false };
+  }
+
+  const mainIdx = PIPELINE_STAGES.findIndex(s => s.key === status);
+  if (mainIdx >= 0) {
+    return { pipeline: PIPELINE_STAGES, activeIndex: mainIdx, isReturn: false, isCancelled: false };
+  }
+
+  const intermediateMap: Record<string, number> = {
+    "ARRIVED_AT_ORIGIN": 1,
+    "ARRIVED_AT_DESTINATION": 3,
+    "DELIVERY_ATTEMPTED": 3,
+  };
+  if (intermediateMap[status] !== undefined) {
+    return { pipeline: PIPELINE_STAGES, activeIndex: intermediateMap[status], isReturn: false, isCancelled: false };
+  }
+
+  return { pipeline: PIPELINE_STAGES, activeIndex: 0, isReturn: false, isCancelled: false };
+}
+
+function CourierTrackingJourney({ orderId, order }: { orderId: string; order: OrderDetails }) {
+  const { data: tracking, isLoading, refetch, isFetching } = useQuery<TrackingHistoryData>({
+    queryKey: ["/api/orders", orderId, "tracking-history"],
+    queryFn: async () => {
+      const res = await fetch(`/api/orders/${orderId}/tracking-history`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch tracking");
+      return res.json();
+    },
+    enabled: !!(order.courierName && order.courierTracking),
+    staleTime: 60000,
+  });
+
+  const hasCourier = !!(order.courierName && order.courierTracking);
+
+  if (!hasCourier) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Truck className="w-5 h-5" />
+            Shipment Tracking
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-6">
+            <Truck className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
+            <p className="text-sm font-medium">No courier assigned yet</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Book this order with a courier to see tracking updates.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const currentStatus = tracking?.currentStatus || order.shipmentStatus || "BOOKED";
+  const { pipeline, activeIndex, isCancelled } = getStageIndex(currentStatus);
+  const events = tracking?.events || [];
+  const reversedEvents = [...events].reverse();
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Truck className="w-5 h-5" />
+            Tracking Journey
+          </CardTitle>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge variant="outline" className="font-mono text-xs" data-testid="badge-tracking-number">
+              {order.courierTracking}
+            </Badge>
+            <Badge variant="secondary" className="text-xs capitalize" data-testid="badge-courier-name">
+              {order.courierName}
+            </Badge>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => refetch()}
+              disabled={isFetching}
+              data-testid="button-refresh-tracking"
+            >
+              <RefreshCw className={`w-4 h-4 ${isFetching ? "animate-spin" : ""}`} />
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {/* Pipeline Visualization */}
+        <div className="relative" data-testid="tracking-pipeline">
+          <div className="flex items-center justify-between relative">
+            {pipeline.map((stage, idx) => {
+              const Icon = stage.icon;
+              const isActive = idx <= activeIndex;
+              const isCurrent = idx === activeIndex;
+              return (
+                <div key={stage.key} className="flex flex-col items-center relative z-10" style={{ flex: 1 }}>
+                  <div
+                    className={`w-9 h-9 rounded-full flex items-center justify-center transition-all ${
+                      isCurrent
+                        ? `${stage.bg} text-white ring-4 ${stage.ring}`
+                        : isActive
+                          ? `${stage.bg} text-white`
+                          : "bg-muted text-muted-foreground"
+                    }`}
+                    data-testid={`tracking-stage-${stage.key}`}
+                  >
+                    <Icon className="w-4 h-4" />
+                  </div>
+                  <span className={`text-[10px] mt-1.5 text-center leading-tight max-w-[60px] ${
+                    isCurrent ? "font-semibold " + stage.color : isActive ? stage.color : "text-muted-foreground"
+                  }`}>
+                    {stage.label}
+                  </span>
+                </div>
+              );
+            })}
+            {isCancelled && (
+              <div className="flex flex-col items-center relative z-10" style={{ flex: 1 }}>
+                <div className={`w-9 h-9 rounded-full flex items-center justify-center ${CANCELLED_STAGE.bg} text-white ring-4 ${CANCELLED_STAGE.ring}`}>
+                  <XCircle className="w-4 h-4" />
+                </div>
+                <span className={`text-[10px] mt-1.5 text-center font-semibold ${CANCELLED_STAGE.color}`}>
+                  {CANCELLED_STAGE.label}
+                </span>
+              </div>
+            )}
+            {/* Progress line behind icons */}
+            <div className="absolute top-[18px] left-0 right-0 h-0.5 bg-muted mx-8" />
+            {activeIndex >= 0 && (
+              <div
+                className={`absolute top-[18px] left-0 h-0.5 mx-8 transition-all ${pipeline[Math.min(activeIndex, pipeline.length - 1)]?.bg || "bg-primary"}`}
+                style={{ width: `${Math.min((activeIndex / (pipeline.length - 1)) * 100, 100)}%` }}
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Current Status Badge */}
+        {tracking?.rawStatus && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground px-1">
+            <CircleDot className="w-3 h-3 shrink-0" />
+            <span>Current: <span className="font-medium text-foreground">{tracking.rawStatus}</span></span>
+            {tracking.lastUpdate && (
+              <span className="ml-auto shrink-0">{format(new Date(tracking.lastUpdate), "MMM dd, h:mm a")}</span>
+            )}
+          </div>
+        )}
+
+        <Separator />
+
+        {/* Event Timeline */}
+        <div>
+          <p className="text-sm font-medium mb-3">Activity Log</p>
+          {isLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="flex gap-3">
+                  <Skeleton className="w-2 h-2 rounded-full mt-1.5 shrink-0" />
+                  <div className="flex-1 space-y-1">
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-3 w-1/3" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : reversedEvents.length > 0 ? (
+            <div className="relative pl-5 space-y-0" data-testid="tracking-events-list">
+              <div className="absolute left-[3px] top-1 bottom-1 w-px bg-border" />
+              {reversedEvents.map((event, idx) => (
+                <div key={idx} className="relative flex items-start gap-3 py-2" data-testid={`tracking-event-${idx}`}>
+                  <div className={`absolute left-[-17px] w-[7px] h-[7px] rounded-full mt-1.5 shrink-0 ${
+                    idx === 0 ? "bg-primary ring-2 ring-primary/20" : "bg-muted-foreground/40"
+                  }`} />
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm leading-snug ${idx === 0 ? "font-medium" : ""}`}>{event.description || event.status}</p>
+                    {event.date && (
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {formatEventDate(event.date)}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No tracking events available from the courier.</p>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function formatEventDate(dateStr: string): string {
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) {
+      return dateStr;
+    }
+    return format(d, "MMM dd, yyyy 'at' h:mm a");
+  } catch {
+    return dateStr;
+  }
 }
 
 export default function OrderDetails() {
@@ -359,80 +618,8 @@ export default function OrderDetails() {
             </CardContent>
           </Card>
 
-          {/* Shipment Tracking */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Truck className="w-5 h-5" />
-                Shipment Tracking
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {shipment ? (
-                <div className="space-y-6">
-                  <div className="flex items-center justify-between flex-wrap gap-4">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Courier</p>
-                      <p className="font-medium capitalize">{shipment.courierName}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Tracking Number</p>
-                      <p className="font-medium font-mono">{shipment.trackingNumber || "-"}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Status</p>
-                      {getStatusBadge(shipment.status || "booked")}
-                    </div>
-                  </div>
-                  <Separator />
-                  {/* Timeline */}
-                  <div className="space-y-4">
-                    <p className="text-sm font-medium">Tracking History</p>
-                    {shipment.events && shipment.events.length > 0 ? (
-                      <div className="relative pl-6 space-y-4">
-                        <div className="absolute left-[11px] top-2 bottom-2 w-0.5 bg-border" />
-                        {shipment.events.map((event, index) => {
-                          const Icon = getTrackingIcon(event.status);
-                          return (
-                            <div key={event.id} className="relative flex items-start gap-4">
-                              <div className={`absolute left-[-15px] w-6 h-6 rounded-full flex items-center justify-center ${
-                                index === 0 ? "bg-primary text-primary-foreground" : "bg-muted"
-                              }`}>
-                                <Icon className="w-3 h-3" />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="font-medium text-sm">{event.status.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}</p>
-                                <p className="text-xs text-muted-foreground">{event.description}</p>
-                                <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-                                  {event.location && <span>{event.location}</span>}
-                                  {event.eventTime && (
-                                    <span>{format(new Date(event.eventTime), "MMM dd, h:mm a")}</span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">No tracking updates yet.</p>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <Truck className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
-                  <h3 className="font-medium mb-1">No shipment assigned</h3>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Assign a courier to start tracking this order.
-                  </p>
-                  <Button variant="outline" data-testid="button-assign-courier">
-                    Assign Courier
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          {/* Courier Tracking Journey */}
+          <CourierTrackingJourney orderId={id!} order={order} />
 
           {/* Remarks */}
           <Card>
