@@ -37,6 +37,7 @@ import {
   Store,
   LogOut,
   ChevronUp,
+  Shield,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery } from "@tanstack/react-query";
@@ -220,13 +221,30 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        {user?.role === "SUPER_ADMIN" && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Administration</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={location === "/admin"}>
+                    <Link href="/admin" data-testid="nav-admin">
+                      <Shield className="w-4 h-4" />
+                      <span>Admin Panel</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
       <SidebarFooter className="p-2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="w-full justify-start gap-2 px-2" data-testid="button-user-menu">
               <Avatar className="h-8 w-8">
-                <AvatarImage src={user?.profileImageUrl || undefined} alt={getUserDisplayName()} />
+                <AvatarImage src={undefined} alt={getUserDisplayName()} />
                 <AvatarFallback className="bg-primary/10 text-primary text-sm">
                   {getUserInitials()}
                 </AvatarFallback>

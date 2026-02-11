@@ -3,8 +3,8 @@ import express from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { shipmentPrintRecords } from "@shared/schema";
-import { and, eq, inArray } from "drizzle-orm";
+import { shipmentPrintRecords, users, merchants, adminActionLogs, teamMembers } from "@shared/schema";
+import { and, eq, inArray, ilike, or } from "drizzle-orm";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { z } from "zod";
 import crypto from "crypto";
@@ -183,39 +183,36 @@ async function syncShopifyOrders(merchantId: string, storeDomain: string): Promi
   return { synced: syncedCount, total: orderCount };
 }
 
-// Demo mode flag - set to false in production for strict tenant isolation
-const DEMO_MODE = process.env.NODE_ENV !== "production";
+// Helper to get user ID from session
+function getSessionUserId(req: any): string | null {
+  return req.session?.userId || null;
+}
+
+// Helper to get user name from DB for audit logging
+async function getSessionUserName(req: any): Promise<string> {
+  const userId = getSessionUserId(req);
+  if (!userId) return "Unknown";
+  try {
+    const user = await db.select({ firstName: users.firstName, lastName: users.lastName }).from(users).where(eq(users.id, userId));
+    if (user.length > 0) {
+      return ((user[0].firstName || "") + " " + (user[0].lastName || "")).trim() || "Unknown";
+    }
+  } catch {}
+  return "Unknown";
+}
 
 // Helper to get merchant ID from authenticated user
-// Uses explicit team membership lookup for tenant isolation
 async function getMerchantIdForUser(req: any): Promise<string | null> {
-  const userId = req.user?.claims?.sub;
+  const userId = getSessionUserId(req);
   if (!userId) {
     return null;
   }
 
-  // Check for existing team membership
   const existingMerchantId = await storage.getUserMerchantId(userId);
   if (existingMerchantId) {
     return existingMerchantId;
   }
 
-  // DEMO MODE ONLY: Auto-enroll new users into demo merchant for testing
-  // In production (DEMO_MODE=false), users must be explicitly invited to a merchant
-  if (DEMO_MODE) {
-    const demoMerchant = await storage.getMerchantBySlug("demo-fashion");
-    if (demoMerchant) {
-      await storage.createTeamMember({
-        userId,
-        merchantId: demoMerchant.id,
-        role: "admin",
-        isActive: true,
-      });
-      return demoMerchant.id;
-    }
-  }
-
-  // No merchant access - user must be invited to a merchant first
   return null;
 }
 
@@ -368,7 +365,7 @@ export async function registerRoutes(
       if (!merchantId) return;
       const orderId = req.params.id;
       const { action, cancelReason, pendingReasonType, pendingReason, holdUntil, customerPhone, shippingAddress, city } = req.body;
-      const userId = (req.user as any)?.id || "system";
+      const userId = getSessionUserId(req) || "system";
 
       let toStatus: string;
       let reason: string | undefined;
@@ -435,7 +432,7 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
       const { orderIds, action, cancelReason, pendingReasonType, pendingReason, holdUntil } = req.body;
-      const userId = (req.user as any)?.id || "system";
+      const userId = getSessionUserId(req) || "system";
 
       if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
         return res.status(400).json({ message: "Order IDs are required" });
@@ -539,10 +536,8 @@ export async function registerRoutes(
       const updated = await storage.updateOrderWorkflow(merchantId, orderId, updateData);
       if (!updated) return res.status(404).json({ message: "Order not found" });
 
-      const actorUserId = req.user?.claims?.sub || null;
-      const firstName = req.user?.claims?.first_name || "";
-      const lastName = req.user?.claims?.last_name || "";
-      const actorName = (firstName + " " + lastName).trim() || "Unknown";
+      const actorUserId = getSessionUserId(req) || null;
+      const actorName = await getSessionUserName(req);
 
       for (const field of fieldsToCheck) {
         const oldValue = (order as any)[field.key];
@@ -599,7 +594,7 @@ export async function registerRoutes(
         courierRawStatus: null,
       });
 
-      const userId = req.user?.claims?.sub || "system";
+      const userId = getSessionUserId(req) || "system";
       const result = await transitionOrder({
         merchantId,
         orderId,
@@ -614,9 +609,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: result.error });
       }
 
-      const firstName = req.user?.claims?.first_name || "";
-      const lastName = req.user?.claims?.last_name || "";
-      const actorName = (firstName + " " + lastName).trim() || "Unknown";
+      const actorName = await getSessionUserName(req);
 
       await storage.createOrderChangeLog({
         orderId,
@@ -691,7 +684,7 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Order not found" });
       }
 
-      const userId = req.user?.claims?.sub || "unknown";
+      const userId = getSessionUserId(req) || "unknown";
 
       // Create remark with merchantId scope check
       const remark = await storage.createRemark(merchantId, {
@@ -777,7 +770,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Amount must be a positive number" });
       }
       if (!method) return res.status(400).json({ message: "Payment method is required" });
-      const userId = req.user?.claims?.sub || "unknown";
+      const userId = getSessionUserId(req) || "unknown";
       const state = await addPayment(merchantId, req.params.id, amount, method, userId, reference, notes);
       res.json(state);
     } catch (error: any) {
@@ -803,7 +796,7 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
       const { method } = req.body;
-      const userId = req.user?.claims?.sub || "unknown";
+      const userId = getSessionUserId(req) || "unknown";
       const state = await markFullyPaid(merchantId, req.params.id, method || "CASH", userId);
       res.json(state);
     } catch (error: any) {
@@ -832,7 +825,7 @@ export async function registerRoutes(
       if (!Array.isArray(orderIds) || orderIds.length === 0) {
         return res.status(400).json({ message: "orderIds array is required" });
       }
-      const userId = req.user?.claims?.sub || "unknown";
+      const userId = getSessionUserId(req) || "unknown";
       const result = await bulkMarkPrepaid(merchantId, orderIds, method || "CASH", userId);
       res.json(result);
     } catch (error: any) {
@@ -918,7 +911,7 @@ export async function registerRoutes(
       }
 
       const { recordIds, settlementRef } = validated.data;
-      const userId = req.user?.claims?.sub || "unknown";
+      const userId = getSessionUserId(req) || "unknown";
 
       // Verify all records belong to this merchant using direct DB lookup
       for (const recordId of recordIds) {
@@ -1425,7 +1418,7 @@ export async function registerRoutes(
 
       const { accessToken, scope } = await shopifyService.exchangeCodeForToken(shop as string, code as string);
 
-      const userId = req.user?.claims?.sub;
+      const userId = getSessionUserId(req);
       let merchantId: string | null = null;
 
       if (userId) {
@@ -2085,7 +2078,7 @@ export async function registerRoutes(
       const { generateBatchLoadsheetPdf } = await import("./services/pdfGenerator");
 
       const fetchedOrders = await storage.getOrdersByIds(merchantId, orderIds);
-      const userId = (req.user as any)?.id || "system";
+      const userId = getSessionUserId(req) || "system";
 
       const batch = await storage.createShipmentBatch({
         merchantId,
@@ -2715,7 +2708,7 @@ export async function registerRoutes(
       const merchant = await storage.getMerchant(merchantId);
       if (!merchant) return res.status(400).json({ message: "Merchant not found" });
 
-      const userId = (req.user as any)?.id || "system";
+      const userId = getSessionUserId(req) || "system";
 
       const shipmentsList = await storage.getShipmentsByOrderId(merchantId, order.id);
       const shipment = shipmentsList.find(s => s.trackingNumber === order.courierTracking);
@@ -2736,6 +2729,233 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error regenerating PDF:", error);
       res.status(500).json({ message: "Failed to regenerate PDF" });
+    }
+  });
+
+  // ============================================
+  // ONBOARDING ROUTES
+  // ============================================
+  const ONBOARDING_ORDER = [
+    "ACCOUNT_CREATED",
+    "SHOPIFY_CONNECTED",
+    "ORDERS_SYNCED",
+    "LEOPARDS_CONNECTED",
+    "POSTEX_CONNECTED",
+    "COMPLETED",
+  ];
+
+  app.post("/api/onboarding/advance-step", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const merchant = await storage.getMerchant(merchantId);
+      if (!merchant) return res.status(404).json({ message: "Merchant not found" });
+
+      const currentIndex = ONBOARDING_ORDER.indexOf(merchant.onboardingStep || "ACCOUNT_CREATED");
+      if (currentIndex >= ONBOARDING_ORDER.length - 1) {
+        return res.json({ onboardingStep: "COMPLETED", message: "Already completed" });
+      }
+
+      const nextStep = ONBOARDING_ORDER[currentIndex + 1];
+      await db.update(merchants).set({ onboardingStep: nextStep }).where(eq(merchants.id, merchantId));
+
+      res.json({ onboardingStep: nextStep });
+    } catch (error) {
+      console.error("Error advancing onboarding:", error);
+      res.status(500).json({ message: "Failed to advance onboarding step" });
+    }
+  });
+
+  // ============================================
+  // ADMIN ROUTES (SUPER_ADMIN only)
+  // ============================================
+  async function requireSuperAdmin(req: any, res: any): Promise<string | null> {
+    const userId = getSessionUserId(req);
+    if (!userId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return null;
+    }
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    if (!user || user.role !== "SUPER_ADMIN") {
+      res.status(403).json({ message: "Admin access required" });
+      return null;
+    }
+    return userId;
+  }
+
+  app.get("/api/admin/merchants", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+
+      const search = req.query.search as string | undefined;
+      let merchantList;
+      if (search) {
+        merchantList = await db.select().from(merchants).where(
+          or(ilike(merchants.name, `%${search}%`), ilike(merchants.email, `%${search}%`))
+        );
+      } else {
+        merchantList = await db.select().from(merchants);
+      }
+
+      res.json(merchantList);
+    } catch (error) {
+      console.error("Error fetching merchants:", error);
+      res.status(500).json({ message: "Failed to fetch merchants" });
+    }
+  });
+
+  app.get("/api/admin/merchants/:id", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+
+      const [merchant] = await db.select().from(merchants).where(eq(merchants.id, req.params.id));
+      if (!merchant) return res.status(404).json({ message: "Merchant not found" });
+
+      const merchantUsers = await db.select({
+        id: users.id,
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        role: users.role,
+        isActive: users.isActive,
+        lastLoginAt: users.lastLoginAt,
+      }).from(users).where(eq(users.merchantId, merchant.id));
+
+      res.json({ ...merchant, users: merchantUsers });
+    } catch (error) {
+      console.error("Error fetching merchant:", error);
+      res.status(500).json({ message: "Failed to fetch merchant" });
+    }
+  });
+
+  app.post("/api/admin/merchants/:id/suspend", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+
+      await db.update(merchants).set({ status: "SUSPENDED" }).where(eq(merchants.id, req.params.id));
+      await db.insert(adminActionLogs).values({
+        adminUserId: adminId,
+        actionType: "SUSPEND_MERCHANT",
+        targetMerchantId: req.params.id,
+        details: "Merchant suspended by admin",
+      });
+
+      res.json({ message: "Merchant suspended" });
+    } catch (error) {
+      console.error("Error suspending merchant:", error);
+      res.status(500).json({ message: "Failed to suspend merchant" });
+    }
+  });
+
+  app.post("/api/admin/merchants/:id/unsuspend", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+
+      await db.update(merchants).set({ status: "ACTIVE" }).where(eq(merchants.id, req.params.id));
+      await db.insert(adminActionLogs).values({
+        adminUserId: adminId,
+        actionType: "UNSUSPEND_MERCHANT",
+        targetMerchantId: req.params.id,
+        details: "Merchant unsuspended by admin",
+      });
+
+      res.json({ message: "Merchant unsuspended" });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to unsuspend merchant" });
+    }
+  });
+
+  app.post("/api/admin/merchants/:id/advance-onboarding", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+
+      const [merchant] = await db.select().from(merchants).where(eq(merchants.id, req.params.id));
+      if (!merchant) return res.status(404).json({ message: "Merchant not found" });
+
+      const currentIndex = ONBOARDING_ORDER.indexOf(merchant.onboardingStep || "ACCOUNT_CREATED");
+      if (currentIndex >= ONBOARDING_ORDER.length - 1) {
+        return res.json({ onboardingStep: "COMPLETED" });
+      }
+
+      const nextStep = ONBOARDING_ORDER[currentIndex + 1];
+      await db.update(merchants).set({ onboardingStep: nextStep }).where(eq(merchants.id, req.params.id));
+      await db.insert(adminActionLogs).values({
+        adminUserId: adminId,
+        actionType: "ADVANCE_ONBOARDING",
+        targetMerchantId: req.params.id,
+        details: `Advanced onboarding from ${merchant.onboardingStep} to ${nextStep}`,
+      });
+
+      res.json({ onboardingStep: nextStep });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to advance onboarding" });
+    }
+  });
+
+  app.post("/api/admin/users/:id/block", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+
+      await db.update(users).set({ isActive: false }).where(eq(users.id, req.params.id));
+      await db.insert(adminActionLogs).values({
+        adminUserId: adminId,
+        actionType: "BLOCK_USER",
+        targetUserId: req.params.id,
+        details: "User blocked by admin",
+      });
+
+      res.json({ message: "User blocked" });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to block user" });
+    }
+  });
+
+  app.post("/api/admin/users/:id/unblock", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+
+      await db.update(users).set({ isActive: true }).where(eq(users.id, req.params.id));
+      await db.insert(adminActionLogs).values({
+        adminUserId: adminId,
+        actionType: "UNBLOCK_USER",
+        targetUserId: req.params.id,
+        details: "User unblocked by admin",
+      });
+
+      res.json({ message: "User unblocked" });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to unblock user" });
+    }
+  });
+
+  app.post("/api/admin/users/:id/reset-password", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+
+      const bcrypt = await import("bcrypt");
+      const tempPassword = crypto.randomBytes(8).toString("hex");
+      const passwordHash = await bcrypt.default.hash(tempPassword, 12);
+
+      await db.update(users).set({ passwordHash }).where(eq(users.id, req.params.id));
+      await db.insert(adminActionLogs).values({
+        adminUserId: adminId,
+        actionType: "RESET_PASSWORD",
+        targetUserId: req.params.id,
+        details: "Password reset by admin",
+      });
+
+      res.json({ message: "Password reset", tempPassword });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to reset password" });
     }
   });
 

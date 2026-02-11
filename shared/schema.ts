@@ -21,6 +21,8 @@ export const merchants = pgTable("merchants", {
   logoUrl: varchar("logo_url", { length: 500 }),
   subscriptionPlan: varchar("subscription_plan", { length: 50 }).default("free"),
   isActive: boolean("is_active").default(true),
+  status: varchar("status", { length: 20 }).notNull().default("ACTIVE"),
+  onboardingStep: varchar("onboarding_step", { length: 30 }).notNull().default("ACCOUNT_CREATED"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -540,6 +542,21 @@ export const insertShipmentPrintRecordSchema = createInsertSchema(shipmentPrintR
 });
 export type InsertShipmentPrintRecord = z.infer<typeof insertShipmentPrintRecordSchema>;
 export type ShipmentPrintRecord = typeof shipmentPrintRecords.$inferSelect;
+
+// ============================================
+// ADMIN ACTION LOGS
+// ============================================
+export const adminActionLogs = pgTable("admin_action_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  adminUserId: varchar("admin_user_id").notNull(),
+  actionType: varchar("action_type", { length: 50 }).notNull(),
+  targetMerchantId: varchar("target_merchant_id"),
+  targetUserId: varchar("target_user_id"),
+  details: text("details"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type AdminActionLog = typeof adminActionLogs.$inferSelect;
 
 // ============================================
 // RELATIONS
