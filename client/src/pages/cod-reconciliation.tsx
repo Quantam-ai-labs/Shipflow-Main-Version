@@ -396,7 +396,7 @@ export default function CodReconciliationPage() {
           ) : records.length > 0 ? (
             <>
               <div className="overflow-x-auto">
-                <Table style={{ tableLayout: "fixed" }}>
+                <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead style={{ width: 50 }}>

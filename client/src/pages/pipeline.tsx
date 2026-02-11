@@ -212,17 +212,17 @@ export default function Pipeline() {
   const [confirmActionModal, setConfirmActionModal] = useState<{ open: boolean; action: string; orderIds: string[]; description: string }>({ open: false, action: "", orderIds: [], description: "" });
 
   const pipelineColumns: ColumnDef[] = useMemo(() => [
-    { key: "order", defaultWidth: 140, minWidth: 80, maxWidth: 300 },
-    { key: "customer", defaultWidth: 160, minWidth: 80, maxWidth: 350 },
-    { key: "city", defaultWidth: 120, minWidth: 60, maxWidth: 250 },
-    { key: "amount", defaultWidth: 100, minWidth: 60, maxWidth: 200 },
-    { key: "items", defaultWidth: 60, minWidth: 40, maxWidth: 120 },
-    { key: "tags", defaultWidth: 150, minWidth: 60, maxWidth: 300 },
+    { key: "order", defaultWidth: 130, minWidth: 80, maxWidth: 300 },
+    { key: "customer", defaultWidth: 150, minWidth: 80, maxWidth: 350 },
+    { key: "city", defaultWidth: 110, minWidth: 60, maxWidth: 250 },
+    { key: "amount", defaultWidth: 90, minWidth: 60, maxWidth: 200 },
+    { key: "items", defaultWidth: 50, minWidth: 40, maxWidth: 120 },
+    { key: "tags", defaultWidth: 250, minWidth: 100, maxWidth: 500 },
     { key: "reason", defaultWidth: 140, minWidth: 80, maxWidth: 300 },
     { key: "holdUntil", defaultWidth: 130, minWidth: 80, maxWidth: 250 },
     { key: "courier", defaultWidth: 100, minWidth: 60, maxWidth: 200 },
     { key: "status", defaultWidth: 130, minWidth: 60, maxWidth: 250 },
-    { key: "actions", defaultWidth: 100, minWidth: 60, maxWidth: 200 },
+    { key: "actions", defaultWidth: 200, minWidth: 100, maxWidth: 400 },
   ], []);
 
   const { widths, getHeaderProps, getResizeHandleProps } = useResizableColumns(pipelineColumns, "pipeline");
@@ -762,7 +762,7 @@ export default function Pipeline() {
             )}
           </div>
         ) : (
-          <table className="w-full text-sm" style={{ tableLayout: "fixed" }}>
+          <table className="w-full text-sm">
             <thead className="bg-muted/50 sticky top-0 z-10">
               <tr className="border-b">
                 {activeTab !== "CANCELLED" && activeTab !== "DELIVERED" && activeTab !== "RETURN" && (
@@ -989,7 +989,7 @@ export default function Pipeline() {
 
                   {/* Action buttons */}
                   <td className="px-3 py-1.5 text-right">
-                    <div className="flex items-center justify-end gap-1">
+                    <div className="flex items-center justify-end gap-1 flex-wrap">
                       {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "HOLD") && (
                         <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-green-600"
                           onClick={() => handleSingleAction(order.id, activeTab === "HOLD" ? "release-hold" : activeTab === "PENDING" ? "fix-confirm" : "confirm")}

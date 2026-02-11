@@ -13,6 +13,8 @@ interface ResizeState {
   startWidth: number;
 }
 
+const STORAGE_VERSION = 2;
+
 export function useResizableColumns(
   columns: ColumnDef[],
   storageKey?: string
@@ -20,7 +22,7 @@ export function useResizableColumns(
   const [widths, setWidths] = useState<Record<string, number>>(() => {
     if (storageKey) {
       try {
-        const saved = localStorage.getItem(`col-widths-${storageKey}`);
+        const saved = localStorage.getItem(`col-widths-${storageKey}-v${STORAGE_VERSION}`);
         if (saved) return JSON.parse(saved);
       } catch {}
     }
@@ -38,7 +40,7 @@ export function useResizableColumns(
       if (storageKey) {
         try {
           localStorage.setItem(
-            `col-widths-${storageKey}`,
+            `col-widths-${storageKey}-v${STORAGE_VERSION}`,
             JSON.stringify(newWidths)
           );
         } catch {}
@@ -96,7 +98,7 @@ export function useResizableColumns(
 
   const getHeaderProps = useCallback(
     (columnKey: string) => ({
-      style: { width: widths[columnKey] || 150, position: "relative" as const },
+      style: { width: widths[columnKey] || 150, minWidth: widths[columnKey] || 150, position: "relative" as const, overflow: "hidden" as const },
     }),
     [widths]
   );

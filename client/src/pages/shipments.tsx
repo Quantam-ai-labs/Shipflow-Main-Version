@@ -412,7 +412,7 @@ export default function Shipments() {
               ) : shipments.length > 0 ? (
                 <>
                   <div className="overflow-x-auto">
-                    <Table style={{ tableLayout: "fixed" }}>
+                    <Table>
                       <TableHeader>
                         <TableRow>
                           <TableHead {...getShipHeaderProps("tracking")}>Tracking #<div {...getShipResizeProps("tracking")} /></TableHead>
