@@ -246,7 +246,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Orders - All scoped by merchantId
-  async getOrders(merchantId: string, options?: { search?: string; status?: string; courier?: string; city?: string; month?: string; page?: number; pageSize?: number; workflowStatus?: string; pendingReasonType?: string }): Promise<{ orders: Order[]; total: number }> {
+  async getOrders(merchantId: string, options?: { search?: string; status?: string; courier?: string; city?: string; month?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number; workflowStatus?: string; pendingReasonType?: string }): Promise<{ orders: Order[]; total: number }> {
     const page = options?.page || 1;
     const pageSize = options?.pageSize || 20;
     const offset = (page - 1) * pageSize;
@@ -278,22 +278,30 @@ export class DatabaseStorage implements IStorage {
       conditions.push(ilike(orders.courierName, `%${options.courier}%`));
     }
 
-    // City filter
     if (options?.city) {
       conditions.push(eq(orders.city, options.city));
     }
 
-    // Month filter - supports yyyy-MM format (e.g., "2026-01") or legacy values
-    if (options?.month && options.month !== "all") {
+    if (options?.dateFrom) {
+      const fromDate = new Date(options.dateFrom);
+      fromDate.setHours(0, 0, 0, 0);
+      conditions.push(sql`${orders.orderDate} >= ${fromDate.toISOString()}`);
+    }
+    if (options?.dateTo) {
+      const toDate = new Date(options.dateTo);
+      toDate.setHours(23, 59, 59, 999);
+      conditions.push(sql`${orders.orderDate} <= ${toDate.toISOString()}`);
+    }
+
+    if (!options?.dateFrom && !options?.dateTo && options?.month && options.month !== "all") {
       const now = new Date();
       let startDate: Date;
       let endDate: Date | null = null;
       
-      // Check if it's a yyyy-MM format
       if (/^\d{4}-\d{2}$/.test(options.month)) {
         const [year, month] = options.month.split("-").map(Number);
         startDate = new Date(year, month - 1, 1);
-        endDate = new Date(year, month, 1); // First day of next month (exclusive)
+        endDate = new Date(year, month, 1);
       } else if (options.month === "current") {
         startDate = new Date(now.getFullYear(), now.getMonth(), 1);
       } else if (options.month === "last") {
@@ -304,7 +312,7 @@ export class DatabaseStorage implements IStorage {
       } else if (options.month === "3months") {
         startDate = new Date(now.getFullYear(), now.getMonth() - 3, 1);
       } else {
-        startDate = new Date(0); // fallback to all time
+        startDate = new Date(0);
       }
       
       conditions.push(sql`${orders.orderDate} >= ${startDate.toISOString()}`);
@@ -561,7 +569,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Shipments - All scoped by merchantId
-  async getShipments(merchantId: string, options?: { search?: string; status?: string; courier?: string; page?: number; pageSize?: number }): Promise<{ shipments: Shipment[]; total: number }> {
+  async getShipments(merchantId: string, options?: { search?: string; status?: string; courier?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number }): Promise<{ shipments: Shipment[]; total: number }> {
     const page = options?.page || 1;
     const pageSize = options?.pageSize || 20;
     const offset = (page - 1) * pageSize;
@@ -574,6 +582,17 @@ export class DatabaseStorage implements IStorage {
 
     if (options?.courier && options.courier !== "all") {
       conditions.push(eq(shipments.courierName, options.courier));
+    }
+
+    if (options?.dateFrom) {
+      const fromDate = new Date(options.dateFrom);
+      fromDate.setHours(0, 0, 0, 0);
+      conditions.push(sql`${shipments.createdAt} >= ${fromDate.toISOString()}`);
+    }
+    if (options?.dateTo) {
+      const toDate = new Date(options.dateTo);
+      toDate.setHours(23, 59, 59, 999);
+      conditions.push(sql`${shipments.createdAt} <= ${toDate.toISOString()}`);
     }
 
     const whereClause = and(...conditions);
@@ -648,7 +667,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // COD Reconciliation - All scoped by merchantId
-  async getCodReconciliation(merchantId: string, options?: { search?: string; status?: string; page?: number; pageSize?: number }): Promise<{ records: CodReconciliation[]; total: number; summary: any }> {
+  async getCodReconciliation(merchantId: string, options?: { search?: string; status?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number }): Promise<{ records: CodReconciliation[]; total: number; summary: any }> {
     const page = options?.page || 1;
     const pageSize = options?.pageSize || 20;
     const offset = (page - 1) * pageSize;
@@ -659,6 +678,17 @@ export class DatabaseStorage implements IStorage {
       conditions.push(eq(codReconciliation.status, options.status));
     }
 
+    if (options?.dateFrom) {
+      const fromDate = new Date(options.dateFrom);
+      fromDate.setHours(0, 0, 0, 0);
+      conditions.push(sql`${codReconciliation.createdAt} >= ${fromDate.toISOString()}`);
+    }
+    if (options?.dateTo) {
+      const toDate = new Date(options.dateTo);
+      toDate.setHours(23, 59, 59, 999);
+      conditions.push(sql`${codReconciliation.createdAt} <= ${toDate.toISOString()}`);
+    }
+
     const whereClause = and(...conditions);
 
     const [result, totalResult] = await Promise.all([
@@ -666,8 +696,7 @@ export class DatabaseStorage implements IStorage {
       db.select({ count: count() }).from(codReconciliation).where(whereClause)
     ]);
 
-    // Calculate summary (scoped to merchant)
-    const allRecords = await db.select().from(codReconciliation).where(eq(codReconciliation.merchantId, merchantId));
+    const allRecords = await db.select().from(codReconciliation).where(whereClause);
     const summary = {
       totalPending: allRecords.filter(r => r.status === "pending").reduce((sum, r) => sum + Number(r.codAmount || 0), 0).toLocaleString(),
       totalReceived: allRecords.filter(r => r.status === "received").reduce((sum, r) => sum + Number(r.codAmount || 0), 0).toLocaleString(),
@@ -818,8 +847,21 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getAnalytics(merchantId: string, dateRange: string): Promise<any> {
-    const allOrders = await db.select().from(orders).where(eq(orders.merchantId, merchantId));
+  async getAnalytics(merchantId: string, dateRange: string, options?: { dateFrom?: string; dateTo?: string }): Promise<any> {
+    let conditions = [eq(orders.merchantId, merchantId)];
+    
+    if (options?.dateFrom) {
+      const fromDate = new Date(options.dateFrom);
+      fromDate.setHours(0, 0, 0, 0);
+      conditions.push(sql`${orders.orderDate} >= ${fromDate.toISOString()}`);
+    }
+    if (options?.dateTo) {
+      const toDate = new Date(options.dateTo);
+      toDate.setHours(23, 59, 59, 999);
+      conditions.push(sql`${orders.orderDate} <= ${toDate.toISOString()}`);
+    }
+    
+    const allOrders = await db.select().from(orders).where(and(...conditions));
 
     const totalDelivered = allOrders.filter(o => o.shipmentStatus === "DELIVERED").length;
     const totalReturned = allOrders.filter(o => o.shipmentStatus === "RETURNED_TO_SHIPPER" || o.shipmentStatus === "RETURN_IN_TRANSIT").length;

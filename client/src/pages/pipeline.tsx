@@ -51,6 +51,8 @@ import { useToast } from "@/hooks/use-toast";
 import type { Order } from "@shared/schema";
 import { Link, useParams } from "wouter";
 import { format, formatDistanceToNow, isPast } from "date-fns";
+import { DateRange } from "react-day-picker";
+import { DateRangePicker, dateRangeToParams } from "@/components/date-range-picker";
 
 const STAGE_TO_STATUS: Record<string, string> = {
   new: "NEW",
@@ -157,6 +159,9 @@ export default function Pipeline() {
   const [pageSize] = useState(300);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [pendingReasonFilter, setPendingReasonFilter] = useState("all");
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+
+  const dateParams = dateRangeToParams(dateRange);
 
   const [cancelModal, setCancelModal] = useState<{ open: boolean; orderIds: string[] }>({ open: false, orderIds: [] });
   const [cancelReason, setCancelReason] = useState("");
@@ -195,10 +200,11 @@ export default function Pipeline() {
     setSelectedIds(new Set());
     setSearch("");
     setPendingReasonFilter("all");
+    setDateRange(undefined);
   }, [activeTab]);
 
   const { data, isLoading, isFetching } = useQuery<{ orders: Order[]; total: number }>({
-    queryKey: ["/api/orders", { workflowStatus: activeTab, search: debouncedSearch, page, pageSize, pendingReasonType: activeTab === "PENDING" ? pendingReasonFilter : undefined }],
+    queryKey: ["/api/orders", { workflowStatus: activeTab, search: debouncedSearch, page, pageSize, pendingReasonType: activeTab === "PENDING" ? pendingReasonFilter : undefined, dateFrom: dateParams.dateFrom, dateTo: dateParams.dateTo }],
     queryFn: async () => {
       const params = new URLSearchParams();
       params.set("workflowStatus", activeTab);
@@ -206,6 +212,8 @@ export default function Pipeline() {
       params.set("pageSize", String(pageSize));
       if (debouncedSearch) params.set("search", debouncedSearch);
       if (activeTab === "PENDING" && pendingReasonFilter !== "all") params.set("pendingReasonType", pendingReasonFilter);
+      if (dateParams.dateFrom) params.set("dateFrom", dateParams.dateFrom);
+      if (dateParams.dateTo) params.set("dateTo", dateParams.dateTo);
       const res = await fetch(`/api/orders?${params.toString()}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
@@ -495,6 +503,16 @@ export default function Pipeline() {
               </SelectContent>
             </Select>
           )}
+
+          <DateRangePicker
+            dateRange={dateRange}
+            onDateRangeChange={(range) => {
+              setDateRange(range);
+              setPage(1);
+            }}
+            className="w-[250px]"
+            data-testid="date-range-picker-pipeline"
+          />
 
           {isFetching && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
         </div>

@@ -2,23 +2,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   BarChart3,
   TrendingUp,
   Package,
   Truck,
   CheckCircle2,
   MapPin,
-  Calendar,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { DateRange } from "react-day-picker";
+import { DateRangePicker, dateRangeToParams } from "@/components/date-range-picker";
 import {
   BarChart,
   Bar,
@@ -66,18 +60,20 @@ interface AnalyticsData {
 
 const COLORS = ["hsl(220, 70%, 50%)", "hsl(160, 60%, 45%)", "hsl(35, 90%, 50%)", "hsl(280, 60%, 55%)", "hsl(350, 70%, 55%)"];
 
-const dateRangeOptions = [
-  { value: "7d", label: "Last 7 days" },
-  { value: "30d", label: "Last 30 days" },
-  { value: "90d", label: "Last 90 days" },
-  { value: "1y", label: "Last year" },
-];
-
 export default function Analytics() {
-  const [dateRange, setDateRange] = useState("30d");
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+  const dateParams = dateRangeToParams(dateRange);
 
   const { data, isLoading } = useQuery<AnalyticsData>({
-    queryKey: [`/api/analytics?dateRange=${dateRange}`],
+    queryKey: ["/api/analytics", { dateFrom: dateParams.dateFrom, dateTo: dateParams.dateTo }],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (dateParams.dateFrom) params.set("dateFrom", dateParams.dateFrom);
+      if (dateParams.dateTo) params.set("dateTo", dateParams.dateTo);
+      const res = await fetch(`/api/analytics?${params.toString()}`, { credentials: "include" });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
   });
 
   const overview = data?.overview;
@@ -93,19 +89,10 @@ export default function Analytics() {
           <h1 className="text-2xl font-bold">Analytics</h1>
           <p className="text-muted-foreground">Track performance and insights across your operations.</p>
         </div>
-        <Select value={dateRange} onValueChange={setDateRange}>
-          <SelectTrigger className="w-[180px]" data-testid="select-date-range">
-            <Calendar className="w-4 h-4 mr-2" />
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {dateRangeOptions.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <DateRangePicker
+          dateRange={dateRange}
+          onDateRangeChange={setDateRange}
+        />
       </div>
 
       {/* Overview Stats */}

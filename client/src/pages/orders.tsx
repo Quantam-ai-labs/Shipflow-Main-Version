@@ -24,7 +24,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Package,
   Search,
@@ -39,14 +38,15 @@ import {
   X,
   Loader2,
   Filter,
-  Calendar,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Order } from "@shared/schema";
 import { Link } from "wouter";
-import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
+import { format } from "date-fns";
+import { DateRange } from "react-day-picker";
+import { DateRangePicker, dateRangeToParams } from "@/components/date-range-picker";
 
 const STATUS_COLORS: Record<string, string> = {
   'BOOKED': "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
@@ -88,26 +88,6 @@ function getStatusLabel(status: string): string {
   return STATUS_LABELS[status] || status;
 }
 
-// Generate month tabs from January 2026 to current month
-function getMonthTabs() {
-  const tabs = [{ value: "all", label: "Universal", shortLabel: "All" }];
-  const startDate = new Date(2026, 0, 1); // January 2026
-  const now = new Date();
-  
-  let current = new Date(startDate);
-  while (current <= now) {
-    const monthValue = format(current, "yyyy-MM");
-    const monthLabel = format(current, "MMMM yyyy");
-    const shortLabel = format(current, "MMM");
-    tabs.push({ value: monthValue, label: monthLabel, shortLabel });
-    current = new Date(current.getFullYear(), current.getMonth() + 1, 1);
-  }
-  
-  return tabs;
-}
-
-const monthTabs = getMonthTabs();
-
 const courierOptions = [
   { value: "all", label: "All Couriers" },
   { value: "leopards", label: "Leopards" },
@@ -137,7 +117,7 @@ export default function Orders() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [courierFilter, setCourierFilter] = useState("all");
   const [cityFilter, setCityFilter] = useState("");
-  const [monthFilter, setMonthFilter] = useState("all");
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(200);
   
@@ -154,15 +134,18 @@ export default function Orders() {
     return () => clearTimeout(timer);
   }, []);
 
+  const dateParams = dateRangeToParams(dateRange);
+
   const { data, isLoading, isFetching } = useQuery<OrdersResponse>({
-    queryKey: ["/api/orders", { search: debouncedSearch, status: statusFilter, courier: courierFilter, city: cityFilter, month: monthFilter, page, pageSize }],
+    queryKey: ["/api/orders", { search: debouncedSearch, status: statusFilter, courier: courierFilter, city: cityFilter, dateFrom: dateParams.dateFrom, dateTo: dateParams.dateTo, page, pageSize }],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (debouncedSearch) params.set("search", debouncedSearch);
       if (statusFilter && statusFilter !== "all") params.set("status", statusFilter);
       if (courierFilter && courierFilter !== "all") params.set("courier", courierFilter);
       if (cityFilter) params.set("city", cityFilter);
-      if (monthFilter && monthFilter !== "all") params.set("month", monthFilter);
+      if (dateParams.dateFrom) params.set("dateFrom", dateParams.dateFrom);
+      if (dateParams.dateTo) params.set("dateTo", dateParams.dateTo);
       params.set("page", String(page));
       params.set("pageSize", String(pageSize));
       const res = await fetch(`/api/orders?${params.toString()}`, { credentials: "include" });
@@ -298,11 +281,11 @@ export default function Orders() {
     setStatusFilter("all");
     setCourierFilter("all");
     setCityFilter("");
-    setMonthFilter("all");
+    setDateRange(undefined);
     setPage(1);
   };
 
-  const hasActiveFilters = debouncedSearch || statusFilter !== "all" || courierFilter !== "all" || cityFilter || monthFilter !== "all";
+  const hasActiveFilters = debouncedSearch || statusFilter !== "all" || courierFilter !== "all" || cityFilter || dateRange !== undefined;
 
   return (
     <div className="h-full flex flex-col">
@@ -435,23 +418,11 @@ export default function Orders() {
         </div>
       </div>
 
-      <div className="px-4 py-2 border-b bg-muted/30 overflow-x-auto">
-        <div className="flex gap-1 min-w-max">
-          {monthTabs.map((tab) => (
-            <button
-              key={tab.value}
-              onClick={() => { setMonthFilter(tab.value); setPage(1); }}
-              className={`px-3 py-1.5 text-sm rounded-t-md border-b-2 transition-colors whitespace-nowrap ${
-                monthFilter === tab.value
-                  ? "bg-background border-primary text-foreground font-medium shadow-sm"
-                  : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
-              }`}
-              data-testid={`tab-month-${tab.value}`}
-            >
-              {tab.shortLabel || tab.label}
-            </button>
-          ))}
-        </div>
+      <div className="px-4 py-2 border-b bg-muted/30 flex items-center gap-2 flex-wrap">
+        <DateRangePicker
+          dateRange={dateRange}
+          onDateRangeChange={(range) => { setDateRange(range); setPage(1); }}
+        />
       </div>
 
       <div className="flex-1 overflow-auto">

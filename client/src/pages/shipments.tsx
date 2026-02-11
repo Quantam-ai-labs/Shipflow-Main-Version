@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { DateRange } from "react-day-picker";
+import { DateRangePicker, dateRangeToParams } from "@/components/date-range-picker";
 import {
   Select,
   SelectContent,
@@ -170,6 +172,7 @@ export default function Shipments() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [courierFilter, setCourierFilter] = useState("all");
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [page, setPage] = useState(1);
   const pageSize = 20;
 
@@ -177,12 +180,15 @@ export default function Shipments() {
   const [batchPage, setBatchPage] = useState(1);
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
 
+  const dateParams = dateRangeToParams(dateRange);
   const queryParams = new URLSearchParams({
     page: page.toString(),
     pageSize: pageSize.toString(),
     ...(search && { search }),
     ...(statusFilter !== "all" && { status: statusFilter }),
     ...(courierFilter !== "all" && { courier: courierFilter }),
+    ...(dateParams.dateFrom && { dateFrom: dateParams.dateFrom }),
+    ...(dateParams.dateTo && { dateTo: dateParams.dateTo }),
   });
 
   const { data, isLoading, refetch } = useQuery<ShipmentsResponse>({
@@ -356,6 +362,10 @@ export default function Shipments() {
                       ))}
                     </SelectContent>
                   </Select>
+                  <DateRangePicker
+                    dateRange={dateRange}
+                    onDateRangeChange={(range) => { setDateRange(range); setPage(1); }}
+                  />
                 </div>
               </div>
             </CardContent>

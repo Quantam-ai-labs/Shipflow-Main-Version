@@ -303,7 +303,7 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
 
-      const { search, status, courier, city, month, page, pageSize, workflowStatus, pendingReasonType } = req.query;
+      const { search, status, courier, city, month, dateFrom, dateTo, page, pageSize, workflowStatus, pendingReasonType } = req.query;
       
       const result = await storage.getOrders(merchantId, {
         search: search as string,
@@ -311,6 +311,8 @@ export async function registerRoutes(
         courier: courier as string,
         city: city as string,
         month: month as string,
+        dateFrom: dateFrom as string,
+        dateTo: dateTo as string,
         page: parseInt(page as string) || 1,
         pageSize: parseInt(pageSize as string) || 20,
         workflowStatus: workflowStatus as string,
@@ -843,11 +845,13 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
 
-      const { search, status, courier, page, pageSize } = req.query;
+      const { search, status, courier, dateFrom, dateTo, page, pageSize } = req.query;
       const result = await storage.getShipments(merchantId, {
         search: search as string,
         status: status as string,
         courier: courier as string,
+        dateFrom: dateFrom as string,
+        dateTo: dateTo as string,
         page: parseInt(page as string) || 1,
         pageSize: parseInt(pageSize as string) || 20,
       });
@@ -874,7 +878,11 @@ export async function registerRoutes(
       if (!merchantId) return;
 
       const dateRange = (req.query.dateRange as string) || "30d";
-      const analytics = await storage.getAnalytics(merchantId, dateRange);
+      const { dateFrom, dateTo } = req.query;
+      const analytics = await storage.getAnalytics(merchantId, dateRange, {
+        dateFrom: dateFrom as string,
+        dateTo: dateTo as string,
+      });
       res.json(analytics);
     } catch (error) {
       console.error("Error fetching analytics:", error);
@@ -888,10 +896,12 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
 
-      const { search, status, page, pageSize } = req.query;
+      const { search, status, dateFrom, dateTo, page, pageSize } = req.query;
       const result = await storage.getCodReconciliation(merchantId, {
         search: search as string,
         status: status as string,
+        dateFrom: dateFrom as string,
+        dateTo: dateTo as string,
         page: parseInt(page as string) || 1,
         pageSize: parseInt(pageSize as string) || 20,
       });
