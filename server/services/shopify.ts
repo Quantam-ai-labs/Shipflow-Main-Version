@@ -179,9 +179,10 @@ export class ShopifyService {
     return result;
   }
 
-  getInstallUrl(shop: string, state: string): string {
+  getInstallUrl(shop: string, state: string, merchantCredentials?: { clientId: string }): string {
+    const clientId = merchantCredentials?.clientId || this.config.clientId;
     const params = new URLSearchParams({
-      client_id: this.config.clientId,
+      client_id: clientId,
       scope: this.config.scopes,
       redirect_uri: this.config.redirectUrl,
       state: state,
@@ -189,22 +190,24 @@ export class ShopifyService {
     const authorizeUrl = `https://${shop}/admin/oauth/authorize?${params.toString()}`;
     console.log(`[Shopify OAuth] Authorize URL generated:`);
     console.log(`[Shopify OAuth]   shop=${shop}`);
-    console.log(`[Shopify OAuth]   client_id=${this.config.clientId}`);
+    console.log(`[Shopify OAuth]   client_id=${clientId}`);
     console.log(`[Shopify OAuth]   redirect_uri=${this.config.redirectUrl}`);
     console.log(`[Shopify OAuth]   scopes=${this.config.scopes}`);
+    console.log(`[Shopify OAuth]   source=${merchantCredentials ? 'merchant-specific' : 'env-default'}`);
     console.log(`[Shopify OAuth]   full_url=${authorizeUrl}`);
     return authorizeUrl;
   }
 
-  validateHmac(query: Record<string, string>): boolean {
+  validateHmac(query: Record<string, string>, merchantCredentials?: { clientSecret: string }): boolean {
     const { hmac, ...rest } = query;
     if (!hmac) return false;
 
+    const secret = merchantCredentials?.clientSecret || this.config.clientSecret;
     const sortedKeys = Object.keys(rest).sort();
     const message = sortedKeys.map(key => `${key}=${rest[key]}`).join('&');
     
     const generatedHmac = crypto
-      .createHmac('sha256', this.config.clientSecret)
+      .createHmac('sha256', secret)
       .update(message)
       .digest('hex');
 
@@ -214,8 +217,12 @@ export class ShopifyService {
     );
   }
 
-  async exchangeCodeForToken(shop: string, code: string): Promise<{ accessToken: string; scope: string }> {
+  async exchangeCodeForToken(shop: string, code: string, merchantCredentials?: { clientId: string; clientSecret: string }): Promise<{ accessToken: string; scope: string }> {
+    const clientId = merchantCredentials?.clientId || this.config.clientId;
+    const clientSecret = merchantCredentials?.clientSecret || this.config.clientSecret;
     const url = `https://${shop}/admin/oauth/access_token`;
+    
+    console.log(`[Shopify OAuth] Exchanging code for token: shop=${shop}, client_id=${clientId}, source=${merchantCredentials ? 'merchant-specific' : 'env-default'}`);
     
     const response = await fetch(url, {
       method: 'POST',
@@ -223,8 +230,8 @@ export class ShopifyService {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        client_id: this.config.clientId,
-        client_secret: this.config.clientSecret,
+        client_id: clientId,
+        client_secret: clientSecret,
         code,
       }),
     });

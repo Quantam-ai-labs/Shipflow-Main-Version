@@ -64,6 +64,9 @@ export default function Onboarding() {
   const [syncProgress, setSyncProgress] = useState(0);
   const [syncResult, setSyncResult] = useState<{ synced: number; total: number } | null>(null);
   const [oauthLoading, setOauthLoading] = useState(false);
+  const [appClientId, setAppClientId] = useState("");
+  const [appClientSecret, setAppClientSecret] = useState("");
+  const [credentialsSaved, setCredentialsSaved] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -88,6 +91,38 @@ export default function Onboarding() {
   });
 
   const shopifyConnected = integrations?.shopify?.isConnected;
+
+  const { data: savedCreds } = useQuery<{ clientId: string; clientSecretSet: boolean }>({
+    queryKey: ["/api/merchants/shopify-credentials"],
+  });
+
+  useEffect(() => {
+    if (savedCreds?.clientId) {
+      setAppClientId(savedCreds.clientId);
+      if (savedCreds.clientSecretSet) {
+        setCredentialsSaved(true);
+      }
+    }
+  }, [savedCreds]);
+
+  const saveCredentialsMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/merchants/shopify-credentials", {
+        clientId: appClientId.trim(),
+        clientSecret: appClientSecret.trim(),
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Credentials Saved", description: "Your Shopify app credentials have been saved securely." });
+      setCredentialsSaved(true);
+      setAppClientSecret("");
+      queryClient.invalidateQueries({ queryKey: ["/api/merchants/shopify-credentials"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
 
   const canonicalHost = "lala-logistics.replit.app";
   const isNonCanonicalHost = typeof window !== 'undefined' && window.location.hostname !== canonicalHost && window.location.hostname !== 'localhost';
@@ -255,6 +290,54 @@ export default function Onboarding() {
                   </div>
                 ) : (
                   <>
+                    <div className="p-4 border rounded-lg space-y-3">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-2">
+                          <KeyRound className="w-4 h-4 text-muted-foreground" />
+                          <Label className="text-sm font-medium">Shopify App Credentials</Label>
+                        </div>
+                        {credentialsSaved && (
+                          <Badge variant="secondary" className="text-xs" data-testid="badge-credentials-saved">
+                            <CheckCircle className="w-3 h-3 mr-1" />Saved
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Enter your Shopify app's Client ID and Client Secret. You can find these in your Shopify Partners dashboard under App setup.
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Client ID</Label>
+                          <Input
+                            placeholder="e.g. 9e891f161c95eaf..."
+                            value={appClientId}
+                            onChange={e => { setAppClientId(e.target.value); setCredentialsSaved(false); }}
+                            data-testid="input-app-client-id"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Client Secret</Label>
+                          <Input
+                            type="password"
+                            placeholder={credentialsSaved ? "••••••••••••" : "Enter client secret"}
+                            value={appClientSecret}
+                            onChange={e => { setAppClientSecret(e.target.value); setCredentialsSaved(false); }}
+                            data-testid="input-app-client-secret"
+                          />
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => saveCredentialsMutation.mutate()}
+                        disabled={saveCredentialsMutation.isPending || !appClientId.trim() || (!appClientSecret.trim() && !credentialsSaved)}
+                        data-testid="button-save-credentials"
+                      >
+                        {saveCredentialsMutation.isPending ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Check className="w-3.5 h-3.5 mr-1.5" />}
+                        Save Credentials
+                      </Button>
+                    </div>
+
                     <div className="space-y-2">
                       <Label>Store Domain</Label>
                       <Input placeholder="your-store.myshopify.com" value={shopifyDomain} onChange={e => setShopifyDomain(e.target.value)} data-testid="input-shopify-domain" />

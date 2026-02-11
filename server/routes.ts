@@ -1375,10 +1375,23 @@ export async function registerRoutes(
       if (!shopDomainRegex.test(shopDomain)) {
         return res.status(400).json({ message: "Invalid shop domain format" });
       }
+
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const merchant = await storage.getMerchant(merchantId);
+      let merchantCreds: { clientId: string } | undefined;
+      const usingMerchantCreds = !!(merchant?.shopifyAppClientId && merchant?.shopifyAppClientSecret);
+      if (usingMerchantCreds) {
+        merchantCreds = { clientId: merchant.shopifyAppClientId! };
+        console.log(`[Shopify OAuth] Using merchant-specific clientId for merchant ${merchantId}`);
+      }
+
       const state = crypto.randomBytes(16).toString('hex');
       (req.session as any).shopifyState = state;
       (req.session as any).shopDomain = shopDomain;
-      const installUrl = shopifyService.getInstallUrl(shopDomain, state);
+      (req.session as any).shopifyCredSource = usingMerchantCreds ? 'merchant' : 'env';
+      (req.session as any).shopifyMerchantId = merchantId;
+      const installUrl = shopifyService.getInstallUrl(shopDomain, state, merchantCreds);
 
       const canonicalHost = shopifyService.getCanonicalHost();
       res.json({ authUrl: installUrl, state, canonicalHost });
@@ -1443,20 +1456,6 @@ export async function registerRoutes(
         return res.redirect('/onboarding?shopify=error&message=Invalid+shop+domain');
       }
 
-      if (hmac) {
-        const queryParams: Record<string, string> = {};
-        for (const [key, value] of Object.entries(req.query)) {
-          if (typeof value === 'string') {
-            queryParams[key] = value;
-          }
-        }
-        const isValid = shopifyService.validateHmac(queryParams);
-        if (!isValid) {
-          console.warn("HMAC validation failed");
-          return res.redirect('/onboarding?shopify=error&message=Invalid+signature');
-        }
-      }
-
       delete req.session.shopifyState;
 
       const userId = getSessionUserId(req);
@@ -1464,12 +1463,43 @@ export async function registerRoutes(
         return res.redirect('/onboarding?shopify=error&message=Not+authenticated');
       }
 
-      const merchantId = await storage.getUserMerchantId(userId);
+      const merchantId = (req.session as any).shopifyMerchantId || await storage.getUserMerchantId(userId);
       if (!merchantId) {
         return res.redirect('/onboarding?shopify=error&message=No+merchant+account');
       }
 
-      const { accessToken, scope } = await shopifyService.exchangeCodeForToken(shop as string, code as string);
+      const credSource = (req.session as any).shopifyCredSource || 'env';
+      let merchantCreds: { clientId: string; clientSecret: string } | undefined;
+      if (credSource === 'merchant') {
+        const merchant = await storage.getMerchant(merchantId);
+        if (merchant?.shopifyAppClientId && merchant?.shopifyAppClientSecret) {
+          merchantCreds = {
+            clientId: merchant.shopifyAppClientId,
+            clientSecret: decryptToken(merchant.shopifyAppClientSecret),
+          };
+          console.log(`[Shopify OAuth Callback] Using merchant-specific credentials for merchant ${merchantId}`);
+        } else {
+          console.warn(`[Shopify OAuth Callback] Session says merchant creds but none found, falling back to env`);
+        }
+      }
+      delete (req.session as any).shopifyCredSource;
+      delete (req.session as any).shopifyMerchantId;
+
+      if (hmac) {
+        const queryParams: Record<string, string> = {};
+        for (const [key, value] of Object.entries(req.query)) {
+          if (typeof value === 'string') {
+            queryParams[key] = value;
+          }
+        }
+        const isValid = shopifyService.validateHmac(queryParams, merchantCreds ? { clientSecret: merchantCreds.clientSecret } : undefined);
+        if (!isValid) {
+          console.warn("HMAC validation failed");
+          return res.redirect('/onboarding?shopify=error&message=Invalid+signature');
+        }
+      }
+
+      const { accessToken, scope } = await shopifyService.exchangeCodeForToken(shop as string, code as string, merchantCreds);
 
       const encryptedToken = encryptToken(accessToken);
 
@@ -2925,6 +2955,57 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error advancing onboarding:", error);
       res.status(500).json({ message: "Failed to advance onboarding step" });
+    }
+  });
+
+  app.post("/api/merchants/shopify-credentials", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const { clientId, clientSecret } = req.body;
+      if (!clientId || typeof clientId !== 'string') {
+        return res.status(400).json({ message: "clientId is required" });
+      }
+
+      const updateData: any = {
+        shopifyAppClientId: clientId.trim(),
+        updatedAt: new Date(),
+      };
+
+      if (clientSecret && typeof clientSecret === 'string' && clientSecret.trim()) {
+        updateData.shopifyAppClientSecret = encryptToken(clientSecret.trim());
+      } else {
+        const merchant = await storage.getMerchant(merchantId);
+        if (!merchant?.shopifyAppClientSecret) {
+          return res.status(400).json({ message: "clientSecret is required for first-time setup" });
+        }
+      }
+
+      await db.update(merchants).set(updateData).where(eq(merchants.id, merchantId));
+
+      console.log(`[Shopify] Merchant ${merchantId} saved their own Shopify app credentials (clientId=${clientId.trim().substring(0, 8)}...)`);
+      res.json({ message: "Shopify app credentials saved", clientIdSet: true, clientSecretSet: true });
+    } catch (error: any) {
+      console.error("Error saving Shopify credentials:", error);
+      res.status(500).json({ message: "Failed to save Shopify credentials" });
+    }
+  });
+
+  app.get("/api/merchants/shopify-credentials", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const merchant = await storage.getMerchant(merchantId);
+      if (!merchant) return res.status(404).json({ message: "Merchant not found" });
+
+      res.json({
+        clientId: merchant.shopifyAppClientId || '',
+        clientSecretSet: !!merchant.shopifyAppClientSecret,
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get Shopify credentials" });
     }
   });
 

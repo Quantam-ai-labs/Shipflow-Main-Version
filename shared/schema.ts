@@ -23,6 +23,8 @@ export const merchants = pgTable("merchants", {
   isActive: boolean("is_active").default(true),
   status: varchar("status", { length: 20 }).notNull().default("ACTIVE"),
   onboardingStep: varchar("onboarding_step", { length: 30 }).notNull().default("ACCOUNT_CREATED"),
+  shopifyAppClientId: varchar("shopify_app_client_id", { length: 255 }),
+  shopifyAppClientSecret: text("shopify_app_client_secret"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
