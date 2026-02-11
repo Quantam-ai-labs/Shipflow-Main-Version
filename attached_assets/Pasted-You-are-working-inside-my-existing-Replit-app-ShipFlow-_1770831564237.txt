@@ -1,0 +1,220 @@
+You are working inside my existing Replit app “ShipFlow”.
+
+TASK:
+Build a fool-proof “Share Access / Team Member Invite” system from scratch (replace current broken one). Current issue: invites are not sending by email and the whole journey is unreliable. I need a complete, production-grade flow:
+
+OWNER/ADMIN Journey:
+- Go to Team page → enter email + role → click “Send Invite”
+- System sends email reliably (and if email fails, still allows Copy Invite Link)
+- Owner can see Pending Invites, resend, revoke, and manage roles
+
+TEAM MEMBER Journey:
+- Receives email → clicks “Accept Invite” button
+- Opens ShipFlow invite accept page
+- If they are new: create password + name → account created and linked to the correct merchant as team member
+- If they already have an account: they login → accept invite → linked to the merchant
+- After acceptance: redirect to dashboard with correct role permissions
+- Invite cannot be used twice; expired invites show proper message and request resend.
+
+Must be mistake-proof with auditing, security, and clear UI messages.
+
+========================================================
+A) DATABASE / PRISMA (REQUIRED)
+========================================================
+1) team_invites table:
+- id (uuid)
+- merchantId
+- email (lowercased)
+- role enum: OWNER, ADMIN, STAFF (or existing roles)
+- tokenHash (string)  // store ONLY hashed token, never raw
+- status enum: PENDING, ACCEPTED, EXPIRED, REVOKED
+- invitedByUserId
+- createdAt
+- expiresAt (default now + 7 days)
+- acceptedAt (nullable)
+- acceptedByUserId (nullable)
+- lastSentAt (nullable)
+- sendCount (int default 0)
+- lastEmailError (text nullable)
+Constraints:
+- one active invite per merchant+email (prevent duplicates)
+Indexes:
+- merchantId, email, status, expiresAt
+
+2) (If not already correct) ensure users are scoped to merchant:
+- users: id, merchantId, email unique globally, passwordHash, name, role, isActive, createdAt
+(If you support multi-merchant membership, use a membership table instead; otherwise keep merchantId on user.)
+
+3) audit_logs table (or extend existing):
+- id
+- merchantId
+- actorUserId
+- actionType (INVITE_CREATED, INVITE_SENT, INVITE_RESENT, INVITE_REVOKED, INVITE_ACCEPTED, MEMBER_REMOVED, ROLE_CHANGED)
+- targetEmail / targetUserId
+- metadata json
+- createdAt
+
+========================================================
+B) EMAIL SENDING (MAKE IT RELIABLE + DIAGNOSTICS)
+========================================================
+Current email sending is failing; implement a reliable provider + health checks.
+
+1) Add env vars:
+- EMAIL_PROVIDER = resend | sendgrid | smtp
+- FROM_EMAIL
+- (Resend) RESEND_API_KEY
+- (Sendgrid) SENDGRID_API_KEY
+- (SMTP) SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_SECURE
+- APP_BASE_URL (e.g. https://lala-logistics.replit.app)
+
+2) Build an Admin-only endpoint:
+POST /api/admin/email/test { toEmail }
+- sends a test email
+- returns provider response
+- logs errors clearly (never logs secrets)
+
+3) If provider fails while sending invite:
+- still create invite record
+- show UI message “Email failed — copy invite link”
+- store lastEmailError in invite
+- allow resend later
+
+========================================================
+C) API ENDPOINTS (STRICT PERMISSIONS)
+========================================================
+All endpoints must enforce: only OWNER/ADMIN can manage team.
+
+1) POST /api/team/invite
+Body: { email, role }
+- validate email
+- lowercase+trim
+- if pending invite exists and not expired: return existing + allow resend
+- generate secure token (32+ bytes)
+- store tokenHash = sha256(token + serverPepper)
+- create invite PENDING with expiresAt
+- create audit INVITE_CREATED
+- send email (INVITE_SENT + lastSentAt, sendCount++)
+- return { inviteId, inviteLink } (inviteLink for copy fallback)
+
+2) POST /api/team/invite/resend
+Body: { inviteId }
+- if expired: generate NEW token + update tokenHash + expiresAt
+- send email
+- update lastSentAt, sendCount
+- audit INVITE_RESENT
+- if email fails: return inviteLink for manual copy
+
+3) POST /api/team/invite/revoke
+Body: { inviteId }
+- set status=REVOKED
+- audit INVITE_REVOKED
+
+4) GET /api/team/members
+- list active users for merchant + pending invites
+
+5) POST /api/team/member/role
+Body: { userId, role }
+- audit ROLE_CHANGED
+- prevent removing/changing OWNER incorrectly (must keep at least 1 owner)
+
+6) POST /api/team/member/remove
+Body: { userId }
+- do not allow removing OWNER unless transferring ownership
+- either deactivate or remove membership
+- audit MEMBER_REMOVED
+
+========================================================
+D) INVITE ACCEPT FLOW (FOOL-PROOF JOURNEY)
+========================================================
+Invite Link format:
+${APP_BASE_URL}/invite/accept?token=RAW_TOKEN&email=EMAIL
+
+1) Invite Accept Page (/invite/accept):
+- reads token + email from query
+- calls POST /api/team/invite/verify
+
+2) POST /api/team/invite/verify
+Body: { token, email }
+- hash token and find matching invite where status=PENDING and expiresAt>now
+- if not found: return friendly reason (expired/revoked/invalid) and “Ask admin to resend”
+- if found: return merchantName + role + inviteId
+
+3) Accept logic must support two cases:
+
+CASE A: New user (no account yet):
+- show “Create account” form:
+  name (optional), password, confirm password
+- submit POST /api/team/invite/accept
+Body: { token, email, password, name }
+
+Backend /accept:
+- verify invite still valid + pending
+- if user exists -> do NOT set password here; return “LOGIN_REQUIRED”
+- if not exists -> create user with passwordHash and merchantId
+- set role = invite.role
+- mark invite ACCEPTED with acceptedAt + acceptedByUserId
+- create audit INVITE_ACCEPTED
+- auto-login user and redirect to dashboard
+
+CASE B: Existing user (email already has account):
+- show “Login to accept invite” button
+- after login, call POST /api/team/invite/accept (without password)
+Body: { token, email }
+Backend:
+- verify invite valid
+- link user to merchant (or membership)
+- set role if needed
+- mark invite ACCEPTED
+- audit INVITE_ACCEPTED
+- redirect to dashboard
+
+Security rules:
+- Token is single-use: once ACCEPTED, it cannot be reused
+- Expired invites must not be accepted
+- Rate-limit verify/accept endpoints to prevent brute force
+
+========================================================
+E) UI REQUIREMENTS (TEAM PAGE)
+========================================================
+Team Page must have:
+1) Team Members table:
+- name, email, role, status
+- actions: change role, remove (role-based)
+
+2) Pending Invites table:
+- email, role, status, expiresAt, lastSentAt, sendCount
+- actions: resend, copy link, revoke
+
+3) “Send Invite” form:
+- email field
+- role dropdown
+- send button
+- show success toast “Invite sent”
+- if email fails, show “Email failed, copy link” with copy button
+
+========================================================
+F) EMAIL TEMPLATE (CLEAR + SAFE)
+========================================================
+Subject: “You’ve been invited to ShipFlow”
+Body includes:
+- Merchant name
+- Role
+- CTA button “Accept Invite”
+- Fallback plain link
+- Expiry date/time
+- Support note
+
+========================================================
+G) TESTS / VERIFICATION (MUST PASS)
+========================================================
+1) Invite new email → email sent → click → create password → joins correct merchant → role applied.
+2) Email provider down → invite still created → copy link works → user joins.
+3) Resend works; if expired, new token is generated.
+4) Revoke invite blocks acceptance.
+5) Invite cannot be used twice.
+6) Existing user can login then accept invite.
+7) Audit logs record all actions.
+8) No duplicate invites for same merchant+email.
+
+DELIVERABLE:
+A complete working Team Access system with reliable email invites + fallback copy link, secure tokens, strict permissions, invite accept journey, and audit logging.
