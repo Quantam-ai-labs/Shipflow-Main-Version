@@ -1312,6 +1312,151 @@ export async function registerRoutes(
     }
   });
 
+  // ============================================
+  // SHOPIFY IMPORT JOB ENDPOINTS
+  // ============================================
+  app.post("/api/shopify/import/start", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const store = await storage.getShopifyStore(merchantId);
+      if (!store || !store.isConnected || !store.accessToken) {
+        return res.status(400).json({ message: "Shopify store is not connected. Please connect your store first." });
+      }
+
+      const { getActiveImportJob, validateShopifyConnection, startImportJob } = await import('./services/importJobRunner');
+
+      const existingJob = await getActiveImportJob(merchantId);
+      if (existingJob) {
+        return res.json({ jobId: existingJob.id, message: "Import already in progress", alreadyRunning: true });
+      }
+
+      const validation = await validateShopifyConnection(store.shopDomain!, store.accessToken);
+      if (!validation.valid) {
+        return res.status(400).json({ message: validation.error || "Shopify connection failed" });
+      }
+
+      const job = await startImportJob({
+        merchantId,
+        shopDomain: store.shopDomain!,
+        accessToken: store.accessToken,
+        batchSize: 100,
+      });
+
+      res.json({ jobId: job.id, message: "Import started" });
+    } catch (error: any) {
+      console.error("Error starting import:", error);
+      res.status(500).json({ message: error.message || "Failed to start import" });
+    }
+  });
+
+  app.get("/api/shopify/import/status", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const jobId = req.query.jobId as string;
+
+      const { getImportJob, getLatestImportJob } = await import('./services/importJobRunner');
+      let job;
+      if (jobId) {
+        job = await getImportJob(jobId);
+        if (job && job.merchantId !== merchantId) {
+          return res.status(403).json({ message: "Not authorized to view this job" });
+        }
+      } else {
+        job = await getLatestImportJob(merchantId);
+      }
+
+      if (!job) {
+        return res.json({ job: null });
+      }
+
+      res.json({
+        job: {
+          id: job.id,
+          status: job.status,
+          processedCount: job.processedCount,
+          createdCount: job.createdCount,
+          updatedCount: job.updatedCount,
+          failedCount: job.failedCount,
+          totalFetched: job.totalFetched,
+          currentPage: job.currentPage,
+          batchSize: job.batchSize,
+          startDate: job.startDate,
+          lastError: job.lastError,
+          lastErrorStage: job.lastErrorStage,
+          startedAt: job.startedAt,
+          finishedAt: job.finishedAt,
+        },
+      });
+    } catch (error: any) {
+      console.error("Error getting import status:", error);
+      res.status(500).json({ message: "Failed to get import status" });
+    }
+  });
+
+  app.post("/api/shopify/import/cancel", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const { jobId } = req.body;
+      if (!jobId) {
+        return res.status(400).json({ message: "jobId is required" });
+      }
+
+      const { getImportJob, cancelImportJob } = await import('./services/importJobRunner');
+      const job = await getImportJob(jobId);
+      if (!job || job.merchantId !== merchantId) {
+        return res.status(404).json({ message: "Import job not found" });
+      }
+
+      await cancelImportJob(jobId);
+      res.json({ message: "Import cancelled" });
+    } catch (error: any) {
+      console.error("Error cancelling import:", error);
+      res.status(500).json({ message: "Failed to cancel import" });
+    }
+  });
+
+  app.post("/api/shopify/import/resume", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const { jobId } = req.body;
+      if (!jobId) {
+        return res.status(400).json({ message: "jobId is required" });
+      }
+
+      const store = await storage.getShopifyStore(merchantId);
+      if (!store || !store.accessToken) {
+        return res.status(400).json({ message: "Shopify store is not connected" });
+      }
+
+      const { getImportJob, resumeImportJob } = await import('./services/importJobRunner');
+      const job = await getImportJob(jobId);
+      if (!job || job.merchantId !== merchantId) {
+        return res.status(404).json({ message: "Import job not found" });
+      }
+      if (job.status !== 'FAILED') {
+        return res.status(400).json({ message: "Can only resume failed jobs" });
+      }
+
+      const resumed = await resumeImportJob(jobId, store.accessToken);
+      if (!resumed) {
+        return res.status(400).json({ message: "Could not resume job" });
+      }
+
+      res.json({ jobId: resumed.id, message: "Import resumed" });
+    } catch (error: any) {
+      console.error("Error resuming import:", error);
+      res.status(500).json({ message: "Failed to resume import" });
+    }
+  });
+
   // Fix city data for existing orders using GraphQL
   // This is needed because Shopify Basic plan restricts PII in REST API
   // but GraphQL returns some fields like city

@@ -60,9 +60,7 @@ export default function Onboarding() {
   const [leopardsApiKey, setLeopardsApiKey] = useState("");
   const [leopardsApiPassword, setLeopardsApiPassword] = useState("");
   const [postexToken, setPostexToken] = useState("");
-  const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "complete" | "error">("idle");
-  const [syncProgress, setSyncProgress] = useState(0);
-  const [syncResult, setSyncResult] = useState<{ synced: number; total: number } | null>(null);
+  const [importJobId, setImportJobId] = useState<string | null>(null);
   const [oauthLoading, setOauthLoading] = useState(false);
   const [appClientId, setAppClientId] = useState("");
   const [appClientSecret, setAppClientSecret] = useState("");
@@ -188,25 +186,69 @@ export default function Onboarding() {
     },
   });
 
-  const syncOrdersMutation = useMutation({
-    mutationFn: async () => {
-      setSyncStatus("syncing");
-      setSyncProgress(10);
-      const response = await apiRequest("POST", "/api/integrations/shopify/sync");
-      const result = await response.json();
-      setSyncProgress(100);
-      return result;
+  const importStatusQuery = useQuery<{ job: any }>({
+    queryKey: ["/api/shopify/import/status", importJobId],
+    queryFn: async () => {
+      const url = importJobId
+        ? `/api/shopify/import/status?jobId=${importJobId}`
+        : `/api/shopify/import/status`;
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch status");
+      return res.json();
     },
-    onSuccess: async (data) => {
-      setSyncStatus("complete");
-      setSyncResult(data);
+    enabled: currentStepIndex === 2,
+    refetchInterval: (query) => {
+      const job = query.state.data?.job;
+      if (job && (job.status === 'RUNNING' || job.status === 'QUEUED')) return 1500;
+      return false;
+    },
+  });
+
+  const importJob = importStatusQuery.data?.job;
+
+  useEffect(() => {
+    if (importJob?.status === 'COMPLETED') {
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
-      toast({ title: "Sync Complete", description: `Imported ${data.synced} orders.` });
-      await autoAdvance();
+    }
+  }, [importJob?.status]);
+
+  const startImportMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/shopify/import/start");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setImportJobId(data.jobId);
+      queryClient.invalidateQueries({ queryKey: ["/api/shopify/import/status"] });
     },
     onError: (error: Error) => {
-      setSyncStatus("error");
-      toast({ title: "Sync Failed", description: error.message, variant: "destructive" });
+      toast({ title: "Import Failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const resumeImportMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/shopify/import/resume", { jobId: importJob?.id });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setImportJobId(data.jobId);
+      queryClient.invalidateQueries({ queryKey: ["/api/shopify/import/status"] });
+      toast({ title: "Import Resumed", description: "Continuing from where it left off." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Resume Failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const cancelImportMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/shopify/import/cancel", { jobId: importJob?.id });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/shopify/import/status"] });
+      toast({ title: "Import Cancelled" });
     },
   });
 
@@ -445,38 +487,113 @@ export default function Onboarding() {
             <>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2"><Package className="w-5 h-5" />Sync Orders</CardTitle>
-                <CardDescription>Import your orders from Shopify.</CardDescription>
+                <CardDescription>Import your orders from Shopify. Orders from {new Date().getFullYear()} onwards will be imported in small batches.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                {syncStatus === "idle" && (
+                {(!importJob || importJob.status === 'CANCELLED') && (
                   <div className="text-center py-8">
                     <Package className="w-16 h-16 mx-auto text-muted-foreground/50 mb-4" />
-                    <h3 className="text-lg font-medium mb-2">Ready to Import Orders</h3>
-                    <p className="text-muted-foreground mb-6">Click below to import all your orders from Shopify.</p>
-                    <Button size="lg" onClick={() => syncOrdersMutation.mutate()} disabled={syncOrdersMutation.isPending} data-testid="button-start-sync">
-                      <RefreshCw className="w-5 h-5 mr-2" />Start Import
+                    <h3 className="text-lg font-medium mb-2" data-testid="text-ready-import">Ready to Import Orders</h3>
+                    <p className="text-muted-foreground mb-4">Orders from January 1, {new Date().getFullYear()} will be imported in batches.</p>
+                    <p className="text-xs text-muted-foreground mb-6">The import runs in the background — you can close this tab and come back anytime.</p>
+                    <Button size="lg" onClick={() => startImportMutation.mutate()} disabled={startImportMutation.isPending} data-testid="button-start-import">
+                      {startImportMutation.isPending ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <RefreshCw className="w-5 h-5 mr-2" />}
+                      Start Import
                     </Button>
                   </div>
                 )}
-                {syncStatus === "syncing" && (
-                  <div className="text-center py-8">
-                    <Loader2 className="w-16 h-16 mx-auto text-primary animate-spin mb-4" />
-                    <h3 className="text-lg font-medium mb-2">Importing Orders...</h3>
-                    <Progress value={syncProgress} className="max-w-xs mx-auto" />
+
+                {importJob && (importJob.status === 'QUEUED' || importJob.status === 'RUNNING') && (
+                  <div className="py-6 space-y-4">
+                    <div className="flex items-center justify-center gap-3 mb-2">
+                      <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                      <div>
+                        <h3 className="text-lg font-medium" data-testid="text-importing">Importing Orders...</h3>
+                        <p className="text-sm text-muted-foreground">
+                          {importJob.status === 'QUEUED' ? 'Starting up...' : `Fetching batch ${importJob.currentPage || 1}...`}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="text-center p-3 rounded-lg bg-muted/50">
+                        <p className="text-2xl font-bold" data-testid="text-processed-count">{(importJob.processedCount || 0).toLocaleString()}</p>
+                        <p className="text-xs text-muted-foreground">Processed</p>
+                      </div>
+                      <div className="text-center p-3 rounded-lg bg-muted/50">
+                        <p className="text-2xl font-bold text-green-600" data-testid="text-created-count">{(importJob.createdCount || 0).toLocaleString()}</p>
+                        <p className="text-xs text-muted-foreground">New</p>
+                      </div>
+                      <div className="text-center p-3 rounded-lg bg-muted/50">
+                        <p className="text-2xl font-bold text-blue-600" data-testid="text-updated-count">{(importJob.updatedCount || 0).toLocaleString()}</p>
+                        <p className="text-xs text-muted-foreground">Updated</p>
+                      </div>
+                      <div className="text-center p-3 rounded-lg bg-muted/50">
+                        <p className="text-2xl font-bold text-red-600" data-testid="text-failed-count">{(importJob.failedCount || 0).toLocaleString()}</p>
+                        <p className="text-xs text-muted-foreground">Failed</p>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-center text-muted-foreground">
+                      Importing from Jan 1, {importJob.startDate ? new Date(importJob.startDate).getFullYear() : new Date().getFullYear()} &middot; Page {importJob.currentPage || 0}
+                    </p>
+
+                    <div className="flex justify-center">
+                      <Button variant="ghost" size="sm" onClick={() => cancelImportMutation.mutate()} disabled={cancelImportMutation.isPending} data-testid="button-cancel-import">
+                        Cancel Import
+                      </Button>
+                    </div>
                   </div>
                 )}
-                {syncStatus === "complete" && syncResult && (
+
+                {importJob && importJob.status === 'COMPLETED' && (
                   <div className="text-center py-8">
                     <CheckCircle className="w-16 h-16 mx-auto text-green-500 mb-4" />
-                    <h3 className="text-lg font-medium mb-2">Import Complete!</h3>
-                    <p className="text-2xl font-bold text-green-600">{syncResult.synced.toLocaleString()} orders</p>
+                    <h3 className="text-lg font-medium mb-2" data-testid="text-import-complete">Import Complete!</h3>
+                    <div className="flex items-center justify-center gap-4 mb-2">
+                      <div>
+                        <p className="text-2xl font-bold text-green-600" data-testid="text-total-created">{(importJob.createdCount || 0).toLocaleString()}</p>
+                        <p className="text-xs text-muted-foreground">New Orders</p>
+                      </div>
+                      {(importJob.updatedCount || 0) > 0 && (
+                        <div>
+                          <p className="text-2xl font-bold text-blue-600">{(importJob.updatedCount || 0).toLocaleString()}</p>
+                          <p className="text-xs text-muted-foreground">Updated</p>
+                        </div>
+                      )}
+                    </div>
+                    {(importJob.failedCount || 0) > 0 && (
+                      <p className="text-sm text-red-500">{importJob.failedCount} orders had errors (they can be retried later)</p>
+                    )}
                   </div>
                 )}
-                {syncStatus === "error" && (
-                  <div className="text-center py-8">
-                    <AlertCircle className="w-16 h-16 mx-auto text-red-500 mb-4" />
-                    <h3 className="text-lg font-medium mb-2">Import Failed</h3>
-                    <Button onClick={() => syncOrdersMutation.mutate()}><RefreshCw className="w-4 h-4 mr-2" />Retry</Button>
+
+                {importJob && importJob.status === 'FAILED' && (
+                  <div className="text-center py-6 space-y-4">
+                    <AlertCircle className="w-16 h-16 mx-auto text-red-500 mb-2" />
+                    <h3 className="text-lg font-medium" data-testid="text-import-failed">Import Failed</h3>
+                    {importJob.lastError && (
+                      <div className="max-w-md mx-auto p-3 rounded-lg bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800">
+                        <p className="text-sm text-red-700 dark:text-red-300 break-words" data-testid="text-error-message">{importJob.lastError}</p>
+                        {importJob.lastErrorStage && (
+                          <p className="text-xs text-red-500 mt-1">Stage: {importJob.lastErrorStage}</p>
+                        )}
+                      </div>
+                    )}
+                    {(importJob.processedCount || 0) > 0 && (
+                      <p className="text-sm text-muted-foreground">
+                        Progress so far: {importJob.processedCount?.toLocaleString()} orders processed ({importJob.createdCount?.toLocaleString()} new, {importJob.updatedCount?.toLocaleString()} updated)
+                      </p>
+                    )}
+                    <div className="flex items-center justify-center gap-3">
+                      <Button onClick={() => resumeImportMutation.mutate()} disabled={resumeImportMutation.isPending} data-testid="button-resume-import">
+                        {resumeImportMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+                        Resume Import
+                      </Button>
+                      <Button variant="outline" onClick={() => startImportMutation.mutate()} disabled={startImportMutation.isPending} data-testid="button-restart-import">
+                        Start Over
+                      </Button>
+                    </div>
                   </div>
                 )}
               </CardContent>
@@ -488,7 +605,7 @@ export default function Onboarding() {
                       <SkipForward className="w-4 h-4 mr-1" />Skip (Admin)
                     </Button>
                   )}
-                  {syncStatus === "complete" && (
+                  {importJob?.status === 'COMPLETED' && (
                     <Button onClick={() => advanceStepMutation.mutate()} data-testid="button-next-step">Continue <ChevronRight className="w-4 h-4 ml-2" /></Button>
                   )}
                 </div>
