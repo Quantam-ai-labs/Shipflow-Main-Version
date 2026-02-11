@@ -58,7 +58,7 @@ Preferred communication style: Simple, everyday language.
 - **Pending Reasons**: INCOMPLETE_ADDRESS, MISSING_PHONE, WRONG_CITY, CUSTOMER_NOT_RESPONDING, CUSTOMER_REQUESTED_CHANGE, FRAUD_SUSPECTED, AUTO_24H, OTHER.
 
 ### Batch Import System (Onboarding)
-- **Async Import Jobs** (`server/services/importJobRunner.ts`): Background job runner for large Shopify order imports. Uses `shopify_import_jobs` table to track state, cursor, progress counts. Resumable: if job fails, user can resume from stored cursor. Default import window: Jan 1 of current year. Batch size: 100 orders per API call. Rate limit handling with exponential backoff. Clear error messages for auth/scope failures (401/403).
+- **Async Import Jobs** (`server/services/importJobRunner.ts`): Background job runner for large Shopify order imports. Uses `shopify_import_jobs` table to track state, cursor, progress counts. Resumable: if job fails, user can resume from stored cursor. Default import window: Jan 1 of current year. Batch size: 200 orders per API call. Rate limit handling with exponential backoff. Clear error messages for auth/scope failures (401/403).
 - **Import API**: `POST /api/shopify/import/start` (validates connection first, creates job, returns jobId), `GET /api/shopify/import/status?jobId=...` (poll for progress), `POST /api/shopify/import/cancel` (cancel running job), `POST /api/shopify/import/resume` (resume failed job from cursor).
 - **Onboarding UI**: Sync Orders step uses async import with 1.5s polling. Shows real-time progress (processed/created/updated/failed counts, page number). Failed jobs show error message with Resume/Start Over buttons. Completed jobs show summary and Continue button.
 

@@ -51,7 +51,7 @@ interface StartImportOptions {
 }
 
 export async function startImportJob(options: StartImportOptions): Promise<ShopifyImportJob> {
-  const { merchantId, shopDomain, accessToken, batchSize = 100 } = options;
+  const { merchantId, shopDomain, accessToken, batchSize = 200 } = options;
 
   const currentYear = new Date().getFullYear();
   const startDate = options.startDate || new Date(`${currentYear}-01-01T00:00:00.000Z`);
@@ -86,7 +86,7 @@ export async function resumeImportJob(jobId: string, accessToken: string): Promi
     lastErrorStage: null,
   }).where(eq(shopifyImportJobs.id, jobId));
 
-  runImportInBackground(jobId, job.shopDomain, accessToken, job.startDate, job.batchSize || 100);
+  runImportInBackground(jobId, job.shopDomain, accessToken, job.startDate, job.batchSize || 200);
 
   const [updated] = await db.select().from(shopifyImportJobs).where(eq(shopifyImportJobs.id, jobId));
   return updated;
