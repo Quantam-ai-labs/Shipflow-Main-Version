@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,7 +27,6 @@ import {
   Filter,
   RefreshCw,
   Package,
-  Clock,
   CheckCircle2,
   AlertCircle,
   ChevronLeft,
@@ -36,29 +35,21 @@ import {
   Printer,
   Eye,
   Download,
+  MessageSquare,
+  RotateCcw,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import type { Shipment, Order } from "@shared/schema";
 import { Link } from "wouter";
 import { format } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 
-const statusOptions = [
-  { value: "all", label: "All Statuses" },
-  { value: "BOOKED", label: "Booked" },
-  { value: "PICKED_UP", label: "Picked Up" },
-  { value: "ARRIVED_AT_ORIGIN", label: "At Origin" },
-  { value: "IN_TRANSIT", label: "In Transit" },
-  { value: "ARRIVED_AT_DESTINATION", label: "At Destination" },
-  { value: "OUT_FOR_DELIVERY", label: "Out for Delivery" },
-  { value: "DELIVERY_ATTEMPTED", label: "Attempted" },
+const workflowStatusOptions = [
+  { value: "all", label: "All Stages" },
+  { value: "FULFILLED", label: "Fulfilled" },
   { value: "DELIVERED", label: "Delivered" },
-  { value: "DELIVERY_FAILED", label: "Failed" },
-  { value: "RETURNED_TO_SHIPPER", label: "Returned" },
-  { value: "RETURN_IN_TRANSIT", label: "Return in Transit" },
-  { value: "CANCELLED", label: "Cancelled" },
+  { value: "RETURN", label: "Return" },
 ];
 
 const courierOptions = [
@@ -68,29 +59,48 @@ const courierOptions = [
   { value: "tcs", label: "TCS" },
 ];
 
-const SHIPMENT_STATUS_COLORS: Record<string, { color: string; icon: React.ElementType }> = {
-  'BOOKED': { color: "bg-blue-500/10 text-blue-600 border-blue-500/20", icon: Package },
-  'PICKED_UP': { color: "bg-indigo-500/10 text-indigo-600 border-indigo-500/20", icon: Package },
-  'ARRIVED_AT_ORIGIN': { color: "bg-purple-500/10 text-purple-600 border-purple-500/20", icon: Package },
-  'IN_TRANSIT': { color: "bg-amber-500/10 text-amber-600 border-amber-500/20", icon: Truck },
-  'ARRIVED_AT_DESTINATION': { color: "bg-purple-500/10 text-purple-600 border-purple-500/20", icon: Truck },
-  'OUT_FOR_DELIVERY': { color: "bg-amber-500/10 text-amber-600 border-amber-500/20", icon: Truck },
-  'DELIVERY_ATTEMPTED': { color: "bg-orange-500/10 text-orange-600 border-orange-500/20", icon: AlertCircle },
-  'DELIVERED': { color: "bg-green-500/10 text-green-600 border-green-500/20", icon: CheckCircle2 },
-  'DELIVERY_FAILED': { color: "bg-red-500/10 text-red-600 border-red-500/20", icon: AlertCircle },
-  'RETURNED_TO_SHIPPER': { color: "bg-red-500/10 text-red-600 border-red-500/20", icon: AlertCircle },
-  'RETURN_IN_TRANSIT': { color: "bg-red-500/10 text-red-600 border-red-500/20", icon: AlertCircle },
-  'CANCELLED': { color: "bg-red-500/10 text-red-600 border-red-500/20", icon: AlertCircle },
+const WORKFLOW_STATUS_CONFIG: Record<string, { color: string; icon: React.ElementType; label: string }> = {
+  'FULFILLED': { color: "bg-blue-500/10 text-blue-600 border-blue-500/20", icon: Truck, label: "Fulfilled" },
+  'DELIVERED': { color: "bg-green-500/10 text-green-600 border-green-500/20", icon: CheckCircle2, label: "Delivered" },
+  'RETURN': { color: "bg-red-500/10 text-red-600 border-red-500/20", icon: RotateCcw, label: "Return" },
 };
 
-const SHIPMENT_STATUS_LABELS: Record<string, string> = {
-  'BOOKED': 'Booked', 'PICKED_UP': 'Picked Up', 'ARRIVED_AT_ORIGIN': 'At Origin',
-  'IN_TRANSIT': 'In Transit', 'ARRIVED_AT_DESTINATION': 'At Destination',
-  'OUT_FOR_DELIVERY': 'Out for Delivery', 'DELIVERY_ATTEMPTED': 'Attempted',
-  'DELIVERED': 'Delivered', 'DELIVERY_FAILED': 'Failed',
-  'RETURNED_TO_SHIPPER': 'Returned', 'RETURN_IN_TRANSIT': 'Return in Transit',
-  'CANCELLED': 'Cancelled',
-};
+function getWorkflowBadge(status: string) {
+  const config = WORKFLOW_STATUS_CONFIG[status] || { color: "bg-muted text-muted-foreground", icon: Package, label: status };
+  return <Badge className={config.color}>{config.label}</Badge>;
+}
+
+interface ShipmentOrder {
+  id: string;
+  orderNumber: string;
+  customerName: string;
+  customerPhone: string | null;
+  city: string | null;
+  courierName: string | null;
+  courierTracking: string | null;
+  totalAmount: string | null;
+  codRemaining: string | null;
+  codPaymentStatus: string | null;
+  workflowStatus: string;
+  remark: string | null;
+  orderDate: string | null;
+  dispatchedAt: string | null;
+  deliveredAt: string | null;
+  returnedAt: string | null;
+  shipmentStatus: string | null;
+  courierRawStatus: string | null;
+  lastTrackingUpdate: string | null;
+  prepaidAmount: string | null;
+  paymentMethod: string | null;
+}
+
+interface ShipmentsResponse {
+  orders: ShipmentOrder[];
+  total: number;
+  page: number;
+  pageSize: number;
+  counts: Record<string, number>;
+}
 
 const BATCH_STATUS_COLORS: Record<string, string> = {
   'SUCCESS': "bg-green-500/10 text-green-600 border-green-500/20",
@@ -99,28 +109,10 @@ const BATCH_STATUS_COLORS: Record<string, string> = {
   'CREATED': "bg-blue-500/10 text-blue-600 border-blue-500/20",
 };
 
-function getStatusBadge(status: string) {
-  const config = SHIPMENT_STATUS_COLORS[status] || { color: "bg-gray-500/10 text-gray-600", icon: Clock };
-  const label = SHIPMENT_STATUS_LABELS[status] || status;
-
-  return <Badge className={config.color}>{label}</Badge>;
-}
-
 function getBatchStatusBadge(status: string) {
-  const color = BATCH_STATUS_COLORS[status] || "bg-gray-500/10 text-gray-600 border-gray-500/20";
+  const color = BATCH_STATUS_COLORS[status] || "bg-muted text-muted-foreground";
   const label = status.replace(/_/g, " ");
   return <Badge className={color}>{label}</Badge>;
-}
-
-interface ShipmentWithOrder extends Shipment {
-  order: Order;
-}
-
-interface ShipmentsResponse {
-  shipments: ShipmentWithOrder[];
-  total: number;
-  page: number;
-  pageSize: number;
 }
 
 interface BatchType {
@@ -185,7 +177,7 @@ export default function Shipments() {
     page: page.toString(),
     pageSize: pageSize.toString(),
     ...(search && { search }),
-    ...(statusFilter !== "all" && { status: statusFilter }),
+    ...(statusFilter !== "all" && { workflowStatus: statusFilter }),
     ...(courierFilter !== "all" && { courier: courierFilter }),
     ...(dateParams.dateFrom && { dateFrom: dateParams.dateFrom }),
     ...(dateParams.dateTo && { dateTo: dateParams.dateTo }),
@@ -196,14 +188,14 @@ export default function Shipments() {
     refetchInterval: 30000,
   });
 
-  const shipments = data?.shipments ?? [];
+  const shipmentOrders = data?.orders ?? [];
   const totalPages = Math.ceil((data?.total ?? 0) / pageSize);
+  const counts = data?.counts ?? {};
 
-  const bookedCount = shipments.filter(s => s.status === "BOOKED").length;
-  const inTransitCount = shipments.filter(s => ["IN_TRANSIT", "PICKED_UP", "ARRIVED_AT_ORIGIN", "ARRIVED_AT_DESTINATION"].includes(s.status || "")).length;
-  const outForDeliveryCount = shipments.filter(s => s.status === "OUT_FOR_DELIVERY").length;
-  const deliveredCount = shipments.filter(s => s.status === "DELIVERED").length;
-  const issuesCount = shipments.filter(s => ["DELIVERY_FAILED", "DELIVERY_ATTEMPTED", "RETURNED_TO_SHIPPER", "RETURN_IN_TRANSIT", "CANCELLED"].includes(s.status || "")).length;
+  const fulfilledCount = counts["FULFILLED"] ?? 0;
+  const deliveredCount = counts["DELIVERED"] ?? 0;
+  const returnCount = counts["RETURN"] ?? 0;
+  const totalCount = fulfilledCount + deliveredCount + returnCount;
 
   const batchQueryParams = new URLSearchParams({
     page: batchPage.toString(),
@@ -242,12 +234,12 @@ export default function Shipments() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Shipments</h1>
-          <p className="text-muted-foreground">Track and manage all shipments across couriers.</p>
+          <h1 className="text-2xl font-bold" data-testid="text-shipments-title">Shipments</h1>
+          <p className="text-muted-foreground">All dispatched orders handed over to couriers.</p>
         </div>
         <Button variant="outline" size="sm" onClick={() => refetch()} data-testid="button-sync-shipments">
           <RefreshCw className="w-4 h-4 mr-2" />
-          Sync Tracking
+          Refresh
         </Button>
       </div>
 
@@ -264,37 +256,26 @@ export default function Shipments() {
         </TabsList>
 
         <TabsContent value="shipments" className="space-y-6 mt-6">
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card>
+              <CardContent className="p-4 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
+                  <Package className="w-5 h-5 text-muted-foreground" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold" data-testid="stat-total">{totalCount}</p>
+                  <p className="text-xs text-muted-foreground">Total</p>
+                </div>
+              </CardContent>
+            </Card>
             <Card>
               <CardContent className="p-4 flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                  <Package className="w-5 h-5 text-blue-500" />
+                  <Truck className="w-5 h-5 text-blue-500" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold" data-testid="stat-booked">{bookedCount}</p>
-                  <p className="text-xs text-muted-foreground">Booked</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
-                  <Truck className="w-5 h-5 text-amber-500" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold" data-testid="stat-in-transit">{inTransitCount}</p>
-                  <p className="text-xs text-muted-foreground">In Transit</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
-                  <Truck className="w-5 h-5 text-purple-500" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold" data-testid="stat-out-for-delivery">{outForDeliveryCount}</p>
-                  <p className="text-xs text-muted-foreground">Out for Delivery</p>
+                  <p className="text-2xl font-bold" data-testid="stat-fulfilled">{fulfilledCount}</p>
+                  <p className="text-xs text-muted-foreground">Fulfilled</p>
                 </div>
               </CardContent>
             </Card>
@@ -309,14 +290,14 @@ export default function Shipments() {
                 </div>
               </CardContent>
             </Card>
-            <Card className="col-span-2 lg:col-span-1">
+            <Card>
               <CardContent className="p-4 flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center">
-                  <AlertCircle className="w-5 h-5 text-red-500" />
+                  <RotateCcw className="w-5 h-5 text-red-500" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold" data-testid="stat-issues">{issuesCount}</p>
-                  <p className="text-xs text-muted-foreground">Issues</p>
+                  <p className="text-2xl font-bold" data-testid="stat-return">{returnCount}</p>
+                  <p className="text-xs text-muted-foreground">Returns</p>
                 </div>
               </CardContent>
             </Card>
@@ -328,28 +309,28 @@ export default function Shipments() {
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
-                    placeholder="Search by tracking number, order, or customer..."
+                    placeholder="Search by tracking number, order, customer, or city..."
                     value={search}
-                    onChange={(e) => setSearch(e.target.value)}
+                    onChange={(e) => { setSearch(e.target.value); setPage(1); }}
                     className="pl-10"
                     data-testid="input-search-shipments"
                   />
                 </div>
                 <div className="flex gap-2 flex-wrap">
-                  <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger className="w-[180px]" data-testid="select-shipment-status">
+                  <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
+                    <SelectTrigger className="w-[160px]" data-testid="select-shipment-status">
                       <Filter className="w-4 h-4 mr-2" />
-                      <SelectValue placeholder="Status" />
+                      <SelectValue placeholder="Stage" />
                     </SelectTrigger>
                     <SelectContent>
-                      {statusOptions.map((option) => (
+                      {workflowStatusOptions.map((option) => (
                         <SelectItem key={option.value} value={option.value}>
                           {option.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  <Select value={courierFilter} onValueChange={setCourierFilter}>
+                  <Select value={courierFilter} onValueChange={(v) => { setCourierFilter(v); setPage(1); }}>
                     <SelectTrigger className="w-[160px]" data-testid="select-shipment-courier">
                       <Truck className="w-4 h-4 mr-2" />
                       <SelectValue placeholder="Courier" />
@@ -375,10 +356,10 @@ export default function Shipments() {
             <CardHeader className="pb-4">
               <CardTitle className="text-lg font-semibold flex items-center gap-2">
                 <Truck className="w-5 h-5" />
-                Shipments List
+                Shipments
                 {data?.total !== undefined && (
                   <Badge variant="secondary" className="ml-2">
-                    {data.total} shipments
+                    {data.total} orders
                   </Badge>
                 )}
               </CardTitle>
@@ -395,48 +376,68 @@ export default function Shipments() {
                     </div>
                   ))}
                 </div>
-              ) : shipments.length > 0 ? (
+              ) : shipmentOrders.length > 0 ? (
                 <>
                   <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Tracking #</TableHead>
                           <TableHead>Order</TableHead>
-                          <TableHead>Courier</TableHead>
                           <TableHead>Customer</TableHead>
-                          <TableHead>Destination</TableHead>
-                          <TableHead className="text-right">COD</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Last Update</TableHead>
+                          <TableHead>City</TableHead>
+                          <TableHead>Courier</TableHead>
+                          <TableHead>Tracking #</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                          <TableHead>Stage</TableHead>
+                          <TableHead>Courier Status</TableHead>
+                          <TableHead>Remarks</TableHead>
+                          <TableHead>Date</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {shipments.map((shipment) => (
-                          <TableRow key={shipment.id} className="hover-elevate cursor-pointer" data-testid={`shipment-row-${shipment.id}`}>
-                            <TableCell className="font-mono text-sm">
-                              {shipment.trackingNumber || "-"}
-                            </TableCell>
+                        {shipmentOrders.map((order) => (
+                          <TableRow key={order.id} data-testid={`shipment-row-${order.id}`}>
                             <TableCell>
-                              <Link href={`/orders/detail/${shipment.orderId}`} className="text-primary hover:underline">
-                                #{shipment.order?.orderNumber}
+                              <Link href={`/orders/detail/${order.id}`} className="text-primary hover:underline font-medium" data-testid={`link-order-${order.id}`}>
+                                {order.orderNumber}
                               </Link>
                             </TableCell>
-                            <TableCell className="capitalize">{shipment.courierName}</TableCell>
                             <TableCell>
                               <div>
-                                <p className="font-medium text-sm">{shipment.order?.customerName}</p>
-                                <p className="text-xs text-muted-foreground">{shipment.order?.customerPhone}</p>
+                                <p className="font-medium text-sm" data-testid={`text-customer-${order.id}`}>{order.customerName}</p>
+                                <p className="text-xs text-muted-foreground">{order.customerPhone || "-"}</p>
                               </div>
                             </TableCell>
-                            <TableCell className="text-muted-foreground">{shipment.order?.city}</TableCell>
-                            <TableCell className="text-right font-medium">
-                              {shipment.codAmount ? `PKR ${Number(shipment.codAmount).toLocaleString()}` : "-"}
+                            <TableCell className="text-muted-foreground" data-testid={`text-city-${order.id}`}>{order.city || "-"}</TableCell>
+                            <TableCell className="capitalize" data-testid={`text-courier-${order.id}`}>{order.courierName || "-"}</TableCell>
+                            <TableCell className="font-mono text-sm" data-testid={`text-tracking-${order.id}`}>
+                              {order.courierTracking || "-"}
                             </TableCell>
-                            <TableCell>{getStatusBadge(shipment.status || "booked")}</TableCell>
-                            <TableCell className="text-muted-foreground text-sm">
-                              {shipment.lastStatusUpdate
-                                ? format(new Date(shipment.lastStatusUpdate), "MMM dd, h:mm a")
+                            <TableCell className="text-right font-medium" data-testid={`text-amount-${order.id}`}>
+                              {order.totalAmount ? `PKR ${Number(order.totalAmount).toLocaleString()}` : "-"}
+                            </TableCell>
+                            <TableCell data-testid={`badge-status-${order.id}`}>
+                              {getWorkflowBadge(order.workflowStatus)}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground text-sm" data-testid={`text-courier-status-${order.id}`}>
+                              {order.courierRawStatus || order.shipmentStatus || "-"}
+                            </TableCell>
+                            <TableCell data-testid={`text-remark-${order.id}`}>
+                              {order.remark ? (
+                                <div className="max-w-[200px]">
+                                  <p className="text-sm text-muted-foreground truncate" title={order.remark}>
+                                    {order.remark}
+                                  </p>
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground/50">-</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground text-sm whitespace-nowrap" data-testid={`text-date-${order.id}`}>
+                              {order.dispatchedAt
+                                ? format(new Date(order.dispatchedAt), "MMM dd, h:mm a")
+                                : order.orderDate
+                                ? format(new Date(order.orderDate), "MMM dd, yyyy")
                                 : "-"}
                             </TableCell>
                           </TableRow>
@@ -447,7 +448,7 @@ export default function Shipments() {
                   {totalPages > 1 && (
                     <div className="flex items-center justify-between gap-4 p-4 border-t">
                       <p className="text-sm text-muted-foreground">
-                        Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, data?.total ?? 0)} of {data?.total} shipments
+                        Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, data?.total ?? 0)} of {data?.total} orders
                       </p>
                       <div className="flex items-center gap-2">
                         <Button
@@ -455,6 +456,7 @@ export default function Shipments() {
                           size="sm"
                           onClick={() => setPage(page - 1)}
                           disabled={page === 1}
+                          data-testid="button-prev-page"
                         >
                           <ChevronLeft className="w-4 h-4" />
                         </Button>
@@ -466,6 +468,7 @@ export default function Shipments() {
                           size="sm"
                           onClick={() => setPage(page + 1)}
                           disabled={page >= totalPages}
+                          data-testid="button-next-page"
                         >
                           <ChevronRight className="w-4 h-4" />
                         </Button>
@@ -480,7 +483,7 @@ export default function Shipments() {
                   <p className="text-sm text-muted-foreground">
                     {search || statusFilter !== "all" || courierFilter !== "all"
                       ? "Try adjusting your filters"
-                      : "Shipments will appear here once orders are assigned to couriers"}
+                      : "Dispatched orders will appear here once they are fulfilled"}
                   </p>
                 </div>
               )}
@@ -666,9 +669,7 @@ export default function Shipments() {
                   <FileText className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
                   <h3 className="font-medium mb-1">No batch logs found</h3>
                   <p className="text-sm text-muted-foreground">
-                    {batchCourierFilter !== "all"
-                      ? "Try adjusting your filter"
-                      : "Batch logs will appear here after booking shipments"}
+                    Batch booking logs will appear here after courier bookings
                   </p>
                 </div>
               )}
@@ -677,118 +678,68 @@ export default function Shipments() {
         </TabsContent>
       </Tabs>
 
-      <Dialog open={!!selectedBatchId} onOpenChange={(open) => { if (!open) setSelectedBatchId(null); }}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto" data-testid="dialog-batch-details">
+      <Dialog open={!!selectedBatchId} onOpenChange={(open) => !open && setSelectedBatchId(null)}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center justify-between gap-4 flex-wrap">
-              <span className="flex items-center gap-2">
-                <FileText className="w-5 h-5" />
-                Batch Details
-              </span>
-              <div className="flex items-center gap-2 flex-wrap">
-                {(batchDetailData?.batch?.successCount ?? 0) > 0 && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={async () => {
-                      try {
-                        const resp = await fetch(`/api/print/batch-awb/${selectedBatchId}.pdf`);
-                        if (!resp.ok) {
-                          const err = await resp.json().catch(() => ({ message: "Failed to fetch airway bills" }));
-                          toast({ title: "Invoice Error", description: err.message, variant: "destructive" });
-                          return;
-                        }
-                        const blob = await resp.blob();
-                        if (blob.size === 0 || blob.type.includes("json")) {
-                          toast({ title: "Invoice Error", description: "Invoices not available for this batch", variant: "destructive" });
-                          return;
-                        }
-                        const url = URL.createObjectURL(blob);
-                        window.open(url, "_blank");
-                        setTimeout(() => URL.revokeObjectURL(url), 60000);
-                      } catch {
-                        toast({ title: "Error", description: "Could not fetch airway bills", variant: "destructive" });
-                      }
-                    }}
-                    data-testid="button-download-batch-awb"
-                  >
-                    <Printer className="w-4 h-4 mr-2" />
-                    Print Courier AWBs
-                  </Button>
-                )}
-                {batchDetailData?.batch?.pdfBatchPath && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => window.open(`/api/print/batch/${selectedBatchId}.pdf`, "_blank")}
-                    data-testid="button-download-batch-pdf"
-                  >
-                    <Download className="w-4 h-4 mr-2" />
-                    Loadsheet
-                  </Button>
-                )}
-              </div>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5" />
+              Batch Details
+              {batchDetailData?.batch && (
+                <Badge variant="secondary" className="ml-2">
+                  {batchDetailData.batch.id.substring(0, 8)}
+                </Badge>
+              )}
             </DialogTitle>
           </DialogHeader>
-
           {batchDetailLoading ? (
             <div className="space-y-4">
               {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-8 w-full" />
+                <Skeleton key={i} className="h-12 w-full" />
               ))}
             </div>
           ) : batchDetailData ? (
-            <div className="space-y-6">
+            <div className="space-y-4">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div>
-                  <p className="text-xs text-muted-foreground">Batch ID</p>
-                  <p className="font-mono text-sm" data-testid="text-batch-id">{batchDetailData.batch.id.substring(0, 8)}</p>
-                </div>
-                <div>
                   <p className="text-xs text-muted-foreground">Courier</p>
-                  <p className="capitalize text-sm" data-testid="text-batch-courier">{batchDetailData.batch.courierName}</p>
+                  <p className="capitalize font-medium">{batchDetailData.batch.courierName}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Status</p>
-                  <div data-testid="text-batch-status">{getBatchStatusBadge(batchDetailData.batch.status)}</div>
+                  {getBatchStatusBadge(batchDetailData.batch.status)}
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Counts</p>
-                  <p className="text-sm" data-testid="text-batch-counts">
-                    <span className="text-muted-foreground">{batchDetailData.batch.totalSelectedCount ?? 0} total</span>
-                    {" / "}
-                    <span className="text-green-600">{batchDetailData.batch.successCount ?? 0} ok</span>
-                    {" / "}
-                    <span className="text-red-600">{batchDetailData.batch.failedCount ?? 0} fail</span>
-                  </p>
+                  <p className="text-xs text-muted-foreground">Success</p>
+                  <p className="font-medium text-green-600">{batchDetailData.batch.successCount ?? 0}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Failed</p>
+                  <p className="font-medium text-red-600">{batchDetailData.batch.failedCount ?? 0}</p>
                 </div>
               </div>
-
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Order #</TableHead>
-                      <TableHead>Tracking #</TableHead>
-                      <TableHead>Name</TableHead>
+                      <TableHead>Order</TableHead>
+                      <TableHead>Customer</TableHead>
                       <TableHead>City</TableHead>
+                      <TableHead>Tracking #</TableHead>
                       <TableHead className="text-right">COD</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead>Error</TableHead>
-                      <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {batchDetailData.items.map((item) => (
-                      <TableRow key={item.id} data-testid={`batch-item-row-${item.id}`}>
-                        <TableCell className="font-mono text-sm">
-                          {item.orderNumber || "-"}
-                        </TableCell>
-                        <TableCell className="font-mono text-sm">
-                          {item.trackingNumber || "-"}
+                      <TableRow key={item.id}>
+                        <TableCell>
+                          <Link href={`/orders/detail/${item.orderId}`} className="text-primary hover:underline">
+                            {item.orderNumber || item.orderId.substring(0, 8)}
+                          </Link>
                         </TableCell>
                         <TableCell>{item.consigneeName || "-"}</TableCell>
                         <TableCell className="text-muted-foreground">{item.consigneeCity || "-"}</TableCell>
+                        <TableCell className="font-mono text-sm">{item.trackingNumber || "-"}</TableCell>
                         <TableCell className="text-right font-medium">
                           {item.codAmount ? `PKR ${Number(item.codAmount).toLocaleString()}` : "-"}
                         </TableCell>
@@ -796,56 +747,12 @@ export default function Shipments() {
                           <Badge className={
                             item.bookingStatus === "SUCCESS"
                               ? "bg-green-500/10 text-green-600 border-green-500/20"
-                              : item.bookingStatus === "FAILED"
-                                ? "bg-red-500/10 text-red-600 border-red-500/20"
-                                : "bg-gray-500/10 text-gray-600 border-gray-500/20"
+                              : "bg-red-500/10 text-red-600 border-red-500/20"
                           }>
                             {item.bookingStatus}
                           </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {item.bookingError ? (
-                            <span className="text-xs text-red-600 max-w-[200px] truncate block" title={item.bookingError}>
-                              {item.bookingError}
-                            </span>
-                          ) : "-"}
-                        </TableCell>
-                        <TableCell>
-                          {item.bookingStatus === "BOOKED" && item.trackingNumber && item.orderId && (
-                            <div className="flex items-center gap-1">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={async () => {
-                                  try {
-                                    const isPostEx = (batchDetailData?.batch?.courierName || "").toLowerCase().includes("postex");
-                                    const fetchUrl = isPostEx && item.trackingNumber
-                                      ? `/api/couriers/postex/invoice?trackingNumber=${encodeURIComponent(item.trackingNumber)}`
-                                      : `/api/print/native-slip/${item.orderId}.pdf`;
-                                    const resp = await fetch(fetchUrl);
-                                    if (!resp.ok) {
-                                      const err = await resp.json().catch(() => ({ message: "Failed to fetch airway bill" }));
-                                      toast({ title: "Invoice Error", description: err.message, variant: "destructive" });
-                                      return;
-                                    }
-                                    const blob = await resp.blob();
-                                    if (blob.size === 0 || blob.type.includes("json")) {
-                                      toast({ title: "Invoice Error", description: "Invoice not available for this order", variant: "destructive" });
-                                      return;
-                                    }
-                                    const url = URL.createObjectURL(blob);
-                                    window.open(url, "_blank");
-                                    setTimeout(() => URL.revokeObjectURL(url), 60000);
-                                  } catch {
-                                    toast({ title: "Error", description: "Could not fetch airway bill", variant: "destructive" });
-                                  }
-                                }}
-                                title="Download Courier Airway Bill"
-                                data-testid={`button-download-awb-${item.id}`}
-                              >
-                                <Download className="w-4 h-4" />
-                              </Button>
-                            </div>
+                          {item.bookingError && (
+                            <p className="text-xs text-red-500 mt-1">{item.bookingError}</p>
                           )}
                         </TableCell>
                       </TableRow>

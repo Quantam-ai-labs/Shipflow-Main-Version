@@ -3,8 +3,8 @@ import express from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { shipmentPrintRecords, users, merchants, adminActionLogs, teamMembers, teamInvites } from "@shared/schema";
-import { and, eq, inArray, ilike, or, sql } from "drizzle-orm";
+import { shipmentPrintRecords, users, merchants, adminActionLogs, teamMembers, teamInvites, orders } from "@shared/schema";
+import { and, eq, inArray, ilike, or, sql, desc, count } from "drizzle-orm";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { z } from "zod";
 import crypto from "crypto";
@@ -870,26 +870,97 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
 
-      const { search, status, courier, dateFrom, dateTo, page, pageSize } = req.query;
-      const result = await storage.getShipments(merchantId, {
-        search: search as string,
-        status: status as string,
-        courier: courier as string,
-        dateFrom: dateFrom as string,
-        dateTo: dateTo as string,
-        page: parseInt(page as string) || 1,
-        pageSize: parseInt(pageSize as string) || 20,
+      const { search, status, courier, dateFrom, dateTo, page: pageStr, pageSize: pageSizeStr, workflowStatus: wfStatus } = req.query;
+      const page = parseInt(pageStr as string) || 1;
+      const pageSize = parseInt(pageSizeStr as string) || 20;
+      const offset = (page - 1) * pageSize;
+
+      const targetStatuses = ["FULFILLED", "DELIVERED", "RETURN"];
+      let conditions: any[] = [
+        eq(orders.merchantId, merchantId),
+        inArray(orders.workflowStatus, targetStatuses),
+      ];
+
+      if (wfStatus && wfStatus !== "all") {
+        conditions.push(eq(orders.workflowStatus, wfStatus as string));
+      }
+
+      if (courier && courier !== "all") {
+        conditions.push(eq(orders.courierName, courier as string));
+      }
+
+      if (search) {
+        const searchTerm = `%${search}%`;
+        conditions.push(
+          or(
+            ilike(orders.orderNumber, searchTerm),
+            ilike(orders.customerName, searchTerm),
+            ilike(orders.customerPhone || '', searchTerm),
+            ilike(orders.courierTracking || '', searchTerm),
+            ilike(orders.city || '', searchTerm),
+          )
+        );
+      }
+
+      if (dateFrom) {
+        const fromDate = new Date(dateFrom as string);
+        fromDate.setHours(0, 0, 0, 0);
+        conditions.push(sql`${orders.orderDate} >= ${fromDate.toISOString()}`);
+      }
+      if (dateTo) {
+        const toDate = new Date(dateTo as string);
+        toDate.setHours(23, 59, 59, 999);
+        conditions.push(sql`${orders.orderDate} <= ${toDate.toISOString()}`);
+      }
+
+      const whereClause = and(...conditions);
+
+      const [result, totalResult] = await Promise.all([
+        db.select({
+          id: orders.id,
+          orderNumber: orders.orderNumber,
+          customerName: orders.customerName,
+          customerPhone: orders.customerPhone,
+          city: orders.city,
+          courierName: orders.courierName,
+          courierTracking: orders.courierTracking,
+          totalAmount: orders.totalAmount,
+          codRemaining: orders.codRemaining,
+          codPaymentStatus: orders.codPaymentStatus,
+          workflowStatus: orders.workflowStatus,
+          remark: orders.remark,
+          orderDate: orders.orderDate,
+          dispatchedAt: orders.dispatchedAt,
+          deliveredAt: orders.deliveredAt,
+          returnedAt: orders.returnedAt,
+          shipmentStatus: orders.shipmentStatus,
+          courierRawStatus: orders.courierRawStatus,
+          lastTrackingUpdate: orders.lastTrackingUpdate,
+          prepaidAmount: orders.prepaidAmount,
+          paymentMethod: orders.paymentMethod,
+        }).from(orders).where(whereClause).orderBy(desc(orders.orderDate)).limit(pageSize).offset(offset),
+        db.select({ count: count() }).from(orders).where(whereClause),
+      ]);
+
+      const countsByStatus = await db.select({
+        workflowStatus: orders.workflowStatus,
+        count: count(),
+      }).from(orders).where(
+        and(eq(orders.merchantId, merchantId), inArray(orders.workflowStatus, targetStatuses))
+      ).groupBy(orders.workflowStatus);
+
+      const counts: Record<string, number> = {};
+      for (const row of countsByStatus) {
+        counts[row.workflowStatus] = row.count;
+      }
+
+      res.json({
+        orders: result,
+        total: totalResult[0]?.count || 0,
+        page,
+        pageSize,
+        counts,
       });
-
-      // Attach order data to shipments (already scoped by merchantId)
-      const shipmentsWithOrders = await Promise.all(
-        result.shipments.map(async (shipment) => ({
-          ...shipment,
-          order: await storage.getOrderById(merchantId, shipment.orderId),
-        }))
-      );
-
-      res.json({ ...result, shipments: shipmentsWithOrders });
     } catch (error) {
       console.error("Error fetching shipments:", error);
       res.status(500).json({ message: "Failed to fetch shipments" });
