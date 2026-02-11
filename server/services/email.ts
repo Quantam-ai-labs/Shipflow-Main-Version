@@ -1,37 +1,48 @@
 import { Resend } from 'resend';
 
 async function getCredentials(): Promise<{ apiKey: string; fromEmail: string }> {
-  const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
-  if (!hostname) {
-    throw new Error('REPLIT_CONNECTORS_HOSTNAME not configured. Email service is unavailable.');
-  }
+  let apiKey: string | undefined;
+  let fromEmail: string | undefined;
 
-  const xReplitToken = process.env.REPL_IDENTITY
-    ? 'repl ' + process.env.REPL_IDENTITY
-    : process.env.WEB_REPL_RENEWAL
-    ? 'depl ' + process.env.WEB_REPL_RENEWAL
-    : null;
+  try {
+    const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
+    const xReplitToken = process.env.REPL_IDENTITY
+      ? 'repl ' + process.env.REPL_IDENTITY
+      : process.env.WEB_REPL_RENEWAL
+      ? 'depl ' + process.env.WEB_REPL_RENEWAL
+      : null;
 
-  if (!xReplitToken) {
-    throw new Error('Authentication token not available for email service.');
-  }
+    if (hostname && xReplitToken) {
+      const freshSettings = await fetch(
+        'https://' + hostname + '/api/v2/connection?include_secrets=true&connector_names=resend',
+        {
+          headers: {
+            'Accept': 'application/json',
+            'X_REPLIT_TOKEN': xReplitToken,
+          },
+        }
+      ).then(res => res.json()).then(data => data.items?.[0]);
 
-  const freshSettings = await fetch(
-    'https://' + hostname + '/api/v2/connection?include_secrets=true&connector_names=resend',
-    {
-      headers: {
-        'Accept': 'application/json',
-        'X_REPLIT_TOKEN': xReplitToken,
-      },
+      if (freshSettings?.settings?.api_key && freshSettings.settings.api_key.startsWith('re_')) {
+        apiKey = freshSettings.settings.api_key;
+        fromEmail = freshSettings.settings.from_email;
+      }
     }
-  ).then(res => res.json()).then(data => data.items?.[0]);
-
-  if (!freshSettings || !freshSettings.settings?.api_key) {
-    throw new Error('Resend not connected. Please set up the Resend integration.');
+  } catch (e) {
+    console.warn('[Email] Connector fetch failed, falling back to env secret');
   }
+
+  if (!apiKey && process.env.RESEND_API_KEY) {
+    apiKey = process.env.RESEND_API_KEY;
+  }
+
+  if (!apiKey) {
+    throw new Error('No valid Resend API key found. Set RESEND_API_KEY secret or configure the Resend integration.');
+  }
+
   return {
-    apiKey: freshSettings.settings.api_key,
-    fromEmail: freshSettings.settings.from_email || 'ShipFlow <onboarding@resend.dev>',
+    apiKey,
+    fromEmail: fromEmail || 'ShipFlow <onboarding@resend.dev>',
   };
 }
 
