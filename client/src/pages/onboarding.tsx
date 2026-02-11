@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,8 @@ import {
   CheckCircle,
   AlertCircle,
   SkipForward,
+  ExternalLink,
+  KeyRound,
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -54,13 +56,29 @@ export default function Onboarding() {
   const [shopifyToken, setShopifyToken] = useState("");
   const [shopifyApiKey, setShopifyApiKey] = useState("");
   const [shopifyApiPassword, setShopifyApiPassword] = useState("");
-  const [useAccessToken, setUseAccessToken] = useState(true);
+  const [connectMode, setConnectMode] = useState<"oauth" | "token" | "legacy">("oauth");
   const [leopardsApiKey, setLeopardsApiKey] = useState("");
   const [leopardsApiPassword, setLeopardsApiPassword] = useState("");
   const [postexToken, setPostexToken] = useState("");
   const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "complete" | "error">("idle");
   const [syncProgress, setSyncProgress] = useState(0);
   const [syncResult, setSyncResult] = useState<{ synced: number; total: number } | null>(null);
+  const [oauthLoading, setOauthLoading] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const shopifyStatus = params.get("shopify");
+    if (shopifyStatus === "connected") {
+      toast({ title: "Shopify Connected", description: "Your store has been connected and initial sync is running." });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (shopifyStatus === "error") {
+      const message = params.get("message") || "Connection failed";
+      toast({ title: "Shopify Error", description: decodeURIComponent(message), variant: "destructive" });
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
 
   const { data: integrations } = useQuery<{
     shopify: { isConnected: boolean; shopDomain: string | null };
@@ -104,7 +122,7 @@ export default function Onboarding() {
       const fullDomain = shopifyDomain.includes(".myshopify.com")
         ? shopifyDomain : `${shopifyDomain}.myshopify.com`;
       const payload: any = { storeDomain: fullDomain };
-      if (useAccessToken) { payload.accessToken = shopifyToken; }
+      if (connectMode === "token") { payload.accessToken = shopifyToken; }
       else { payload.apiKey = shopifyApiKey; payload.apiPassword = shopifyApiPassword; }
       const response = await apiRequest("POST", "/api/integrations/shopify/manual-connect", payload);
       return response.json();
@@ -217,7 +235,7 @@ export default function Onboarding() {
                   <div className="flex items-center gap-3 p-4 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200 dark:border-green-800">
                     <CheckCircle className="w-6 h-6 text-green-600" />
                     <div>
-                      <p className="font-medium text-green-800 dark:text-green-200">Shopify Already Connected</p>
+                      <p className="font-medium text-green-800 dark:text-green-200">Shopify Connected</p>
                       <p className="text-sm text-green-600 dark:text-green-400">{integrations?.shopify?.shopDomain}</p>
                     </div>
                   </div>
@@ -227,16 +245,67 @@ export default function Onboarding() {
                       <Label>Store Domain</Label>
                       <Input placeholder="your-store.myshopify.com" value={shopifyDomain} onChange={e => setShopifyDomain(e.target.value)} data-testid="input-shopify-domain" />
                     </div>
-                    <div className="flex gap-2 mb-4">
-                      <Button variant={useAccessToken ? "default" : "outline"} size="sm" onClick={() => setUseAccessToken(true)}>Access Token</Button>
-                      <Button variant={!useAccessToken ? "default" : "outline"} size="sm" onClick={() => setUseAccessToken(false)}>API Key/Password</Button>
+
+                    <div className="flex gap-2">
+                      <Button variant={connectMode === "oauth" ? "default" : "outline"} size="sm" onClick={() => setConnectMode("oauth")} data-testid="button-mode-oauth">
+                        <ExternalLink className="w-3.5 h-3.5 mr-1.5" />OAuth Connect
+                      </Button>
+                      <Button variant={connectMode === "token" ? "default" : "outline"} size="sm" onClick={() => setConnectMode("token")} data-testid="button-mode-token">
+                        <KeyRound className="w-3.5 h-3.5 mr-1.5" />Access Token
+                      </Button>
+                      <Button variant={connectMode === "legacy" ? "default" : "outline"} size="sm" onClick={() => setConnectMode("legacy")} data-testid="button-mode-legacy">
+                        <KeyRound className="w-3.5 h-3.5 mr-1.5" />API Key/Password
+                      </Button>
                     </div>
-                    {useAccessToken ? (
+
+                    {connectMode === "oauth" && (
+                      <div className="p-4 bg-muted/50 rounded-lg space-y-3">
+                        <p className="text-sm text-muted-foreground">
+                          Connect securely via Shopify OAuth. You'll be redirected to Shopify to authorize ShipFlow, then sent back here automatically.
+                        </p>
+                        <Button
+                          className="w-full"
+                          onClick={async () => {
+                            if (!shopifyDomain) {
+                              toast({ title: "Missing Domain", description: "Please enter your store domain first.", variant: "destructive" });
+                              return;
+                            }
+                            setOauthLoading(true);
+                            try {
+                              const fullDomain = shopifyDomain.includes(".myshopify.com") ? shopifyDomain : `${shopifyDomain}.myshopify.com`;
+                              const res = await apiRequest("GET", `/api/shopify/auth-url?shop=${encodeURIComponent(fullDomain)}`);
+                              const data = await res.json();
+                              if (data.authUrl) {
+                                window.location.href = data.authUrl;
+                              } else {
+                                toast({ title: "Error", description: "Failed to generate auth URL", variant: "destructive" });
+                              }
+                            } catch (err: any) {
+                              toast({ title: "Error", description: err.message || "Failed to start OAuth", variant: "destructive" });
+                            } finally {
+                              setOauthLoading(false);
+                            }
+                          }}
+                          disabled={oauthLoading || !shopifyDomain}
+                          data-testid="button-oauth-connect"
+                        >
+                          {oauthLoading ? (
+                            <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Redirecting to Shopify...</>
+                          ) : (
+                            <><ExternalLink className="w-4 h-4 mr-2" />Connect with Shopify</>
+                          )}
+                        </Button>
+                      </div>
+                    )}
+
+                    {connectMode === "token" && (
                       <div className="space-y-2">
                         <Label>Admin API Access Token</Label>
                         <Input type="password" placeholder="shpat_xxxxx..." value={shopifyToken} onChange={e => setShopifyToken(e.target.value)} data-testid="input-shopify-token" />
                       </div>
-                    ) : (
+                    )}
+
+                    {connectMode === "legacy" && (
                       <div className="space-y-3">
                         <div className="space-y-2">
                           <Label>API Key</Label>
@@ -261,11 +330,11 @@ export default function Onboarding() {
                   )}
                   {shopifyConnected ? (
                     <Button onClick={() => advanceStepMutation.mutate()} data-testid="button-next-step">Continue <ChevronRight className="w-4 h-4 ml-2" /></Button>
-                  ) : (
-                    <Button onClick={() => connectShopifyMutation.mutate()} disabled={connectShopifyMutation.isPending || !shopifyDomain || (!shopifyToken && (!shopifyApiKey || !shopifyApiPassword))} data-testid="button-connect-shopify">
+                  ) : connectMode !== "oauth" ? (
+                    <Button onClick={() => connectShopifyMutation.mutate()} disabled={connectShopifyMutation.isPending || !shopifyDomain || (connectMode === "token" ? !shopifyToken : (!shopifyApiKey || !shopifyApiPassword))} data-testid="button-connect-shopify">
                       {connectShopifyMutation.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Connecting...</> : <>Connect Shopify<ChevronRight className="w-4 h-4 ml-2" /></>}
                     </Button>
-                  )}
+                  ) : null}
                 </div>
               </CardFooter>
             </>

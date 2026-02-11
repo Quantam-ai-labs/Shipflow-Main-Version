@@ -70,6 +70,7 @@ export const shopifyStores = pgTable("shopify_stores", {
   isConnected: boolean("is_connected").default(false),
   lastSyncAt: timestamp("last_sync_at"),
   webhookSubscriptions: jsonb("webhook_subscriptions"),
+  webhookStatus: varchar("webhook_status", { length: 30 }).default("NOT_REGISTERED"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
@@ -148,8 +149,12 @@ export const orders = pgTable("orders", {
   referringSite: text("referring_site"),
   browserIp: varchar("browser_ip", { length: 100 }),
   rawShopifyData: jsonb("raw_shopify_data"),
+  rawWebhookData: jsonb("raw_webhook_data"),
   lastApiSyncAt: timestamp("last_api_sync_at"),
+  lastWebhookAt: timestamp("last_webhook_at"),
   shopifyUpdatedAt: timestamp("shopify_updated_at"),
+  resolvedSource: jsonb("resolved_source"),
+  dataQualityFlags: jsonb("data_quality_flags"),
   lastTrackingUpdate: timestamp("last_tracking_update"),
   orderDate: timestamp("order_date").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
@@ -542,6 +547,34 @@ export const insertShipmentPrintRecordSchema = createInsertSchema(shipmentPrintR
 });
 export type InsertShipmentPrintRecord = z.infer<typeof insertShipmentPrintRecordSchema>;
 export type ShipmentPrintRecord = typeof shipmentPrintRecords.$inferSelect;
+
+// ============================================
+// SHOPIFY WEBHOOK EVENTS (Idempotency tracking)
+// ============================================
+export const shopifyWebhookEvents = pgTable("shopify_webhook_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  shopDomain: varchar("shop_domain", { length: 255 }).notNull(),
+  topic: varchar("topic", { length: 100 }).notNull(),
+  shopifyWebhookId: varchar("shopify_webhook_id", { length: 255 }),
+  payloadHash: varchar("payload_hash", { length: 64 }).notNull(),
+  processingStatus: varchar("processing_status", { length: 30 }).notNull().default("received"),
+  errorMessage: text("error_message"),
+  receivedAt: timestamp("received_at").defaultNow(),
+  processedAt: timestamp("processed_at"),
+}, (table) => [
+  index("idx_webhook_events_merchant").on(table.merchantId),
+  index("idx_webhook_events_hash").on(table.payloadHash),
+  index("idx_webhook_events_webhook_id").on(table.shopifyWebhookId),
+]);
+
+export const insertShopifyWebhookEventSchema = createInsertSchema(shopifyWebhookEvents).omit({
+  id: true,
+  receivedAt: true,
+  processedAt: true,
+});
+export type InsertShopifyWebhookEvent = z.infer<typeof insertShopifyWebhookEventSchema>;
+export type ShopifyWebhookEvent = typeof shopifyWebhookEvents.$inferSelect;
 
 // ============================================
 // ADMIN ACTION LOGS

@@ -2,6 +2,7 @@ import {
   merchants, teamMembers, shopifyStores, courierAccounts,
   orders, shipments, shipmentEvents, remarks, codReconciliation, syncLogs, workflowAuditLog, bookingJobs,
   shipmentBatches, shipmentBatchItems, shipmentPrintRecords, orderPayments, orderChangeLog,
+  shopifyWebhookEvents,
   type Merchant, type InsertMerchant,
   type TeamMember, type InsertTeamMember,
   type ShopifyStore, type InsertShopifyStore,
@@ -18,6 +19,7 @@ import {
   type ShipmentPrintRecord, type InsertShipmentPrintRecord,
   type OrderPayment, type InsertOrderPayment,
   type OrderChangeLog, type InsertOrderChangeLog,
+  type ShopifyWebhookEvent, type InsertShopifyWebhookEvent,
   users,
 } from "@shared/schema";
 import { db } from "./db";
@@ -135,6 +137,12 @@ export interface IStorage {
   createOrderPayment(payment: InsertOrderPayment): Promise<OrderPayment>;
   deleteOrderPayment(merchantId: string, id: string): Promise<void>;
   getOrderPaymentSum(merchantId: string, orderId: string): Promise<number>;
+
+  // Webhook Events
+  createWebhookEvent(event: InsertShopifyWebhookEvent): Promise<ShopifyWebhookEvent>;
+  getWebhookEventByWebhookId(merchantId: string, webhookId: string): Promise<ShopifyWebhookEvent | undefined>;
+  isDuplicateWebhook(merchantId: string, topic: string, payloadHash: string): Promise<boolean>;
+  updateWebhookEventStatus(id: string, status: string, errorMessage?: string): Promise<void>;
 
   // Seed
   seedDemoData(): Promise<void>;
@@ -940,13 +948,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getMerchantByShopDomain(shopDomain: string): Promise<{ merchantId: string; storeId: string; accessToken: string } | null> {
+    const { decryptToken } = await import('./services/encryption');
     const [store] = await db.select().from(shopifyStores)
       .where(and(
         eq(shopifyStores.shopDomain, shopDomain),
         eq(shopifyStores.isConnected, true)
       ));
     if (!store || !store.accessToken) return null;
-    return { merchantId: store.merchantId, storeId: store.id, accessToken: store.accessToken };
+    return { merchantId: store.merchantId, storeId: store.id, accessToken: decryptToken(store.accessToken) };
   }
 
   async getOrdersUpdatedSince(merchantId: string, since: Date, limit = 1000): Promise<Order[]> {
@@ -1105,6 +1114,45 @@ export class DatabaseStorage implements IStorage {
       and(eq(orderPayments.merchantId, merchantId), eq(orderPayments.orderId, orderId))
     );
     return parseFloat(result[0]?.total || "0");
+  }
+
+  // Webhook Events
+  async createWebhookEvent(event: InsertShopifyWebhookEvent): Promise<ShopifyWebhookEvent> {
+    const [created] = await db.insert(shopifyWebhookEvents).values(event).returning();
+    return created;
+  }
+
+  async getWebhookEventByWebhookId(merchantId: string, webhookId: string): Promise<ShopifyWebhookEvent | undefined> {
+    const [event] = await db.select().from(shopifyWebhookEvents)
+      .where(and(
+        eq(shopifyWebhookEvents.merchantId, merchantId),
+        eq(shopifyWebhookEvents.shopifyWebhookId, webhookId)
+      ));
+    return event;
+  }
+
+  async isDuplicateWebhook(merchantId: string, topic: string, payloadHash: string): Promise<boolean> {
+    const [existing] = await db.select({ id: shopifyWebhookEvents.id }).from(shopifyWebhookEvents)
+      .where(and(
+        eq(shopifyWebhookEvents.merchantId, merchantId),
+        eq(shopifyWebhookEvents.topic, topic),
+        eq(shopifyWebhookEvents.payloadHash, payloadHash)
+      ))
+      .limit(1);
+    return !!existing;
+  }
+
+  async updateWebhookEventStatus(id: string, status: string, errorMessage?: string): Promise<void> {
+    const updateData: any = {
+      processingStatus: status,
+      processedAt: status === 'processed' || status === 'failed' ? new Date() : undefined,
+    };
+    if (errorMessage) {
+      updateData.errorMessage = errorMessage;
+    }
+    await db.update(shopifyWebhookEvents)
+      .set(updateData)
+      .where(eq(shopifyWebhookEvents.id, id));
   }
 
   async seedDemoData(): Promise<void> {

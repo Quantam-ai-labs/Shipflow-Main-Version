@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { decryptToken } from './encryption';
 
 interface ShopifyConfig {
   clientId: string;
@@ -332,6 +333,7 @@ export class ShopifyService {
       throw new Error("Shopify store is not connected or missing access token");
     }
 
+    const plainToken = decryptToken(store.accessToken);
     const isIncremental = !forceFullSync && store.lastSyncAt != null;
     const syncStartTime = new Date();
 
@@ -347,7 +349,7 @@ export class ShopifyService {
       console.log(`[Shopify] Starting FULL sync for merchant ${merchantId}...`);
     }
 
-    const shopifyOrders = await this.fetchAllOrders(shopDomain, store.accessToken, fetchParams);
+    const shopifyOrders = await this.fetchAllOrders(shopDomain, plainToken, fetchParams);
     
     if (shopifyOrders.length === 0 && isIncremental) {
       await storage.updateShopifyStore(store.id, { lastSyncAt: syncStartTime });

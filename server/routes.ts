@@ -11,6 +11,9 @@ import crypto from "crypto";
 import { shopifyService } from "./services/shopify";
 import { transitionOrder, bulkTransitionOrders, revertOrder } from "./services/workflowTransition";
 import { addPayment, deletePayment, markFullyPaid, resetPayments, bulkMarkPrepaid, recalculateOrderPayment } from "./services/payments";
+import { encryptToken, decryptToken } from './services/encryption';
+import { registerShopifyWebhooks } from './services/webhookRegistration';
+import { webhookHandler } from './services/webhookHandler';
 
 // Zod schemas for validation
 const remarkSchema = z.object({
@@ -1206,16 +1209,15 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Could not verify credentials with Shopify" });
       }
 
-      // Store credentials - for legacy apps, store as "apiKey:apiPassword" format
       const tokenToStore = hasModernToken ? accessToken : `${apiKey}:${apiPassword}`;
+      const encryptedTokenToStore = encryptToken(tokenToStore);
 
-      // Store or update the Shopify connection
       const existingStore = await storage.getShopifyStore(merchantId);
       
       if (existingStore) {
         await storage.updateShopifyStore(existingStore.id, {
           shopDomain: storeDomain,
-          accessToken: tokenToStore,
+          accessToken: encryptedTokenToStore,
           isConnected: true,
           lastSyncAt: new Date(),
         });
@@ -1223,7 +1225,7 @@ export async function registerRoutes(
         await storage.createShopifyStore({
           merchantId,
           shopDomain: storeDomain,
-          accessToken: tokenToStore,
+          accessToken: encryptedTokenToStore,
           scopes: 'read_orders',
           isConnected: true,
         });
@@ -1349,6 +1351,28 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/shopify/auth-url", isAuthenticated, async (req, res) => {
+    try {
+      const { shop } = req.query;
+      if (!shop || typeof shop !== 'string') {
+        return res.status(400).json({ message: "Shop parameter is required" });
+      }
+      const shopDomain = shop.includes('.myshopify.com') ? shop : `${shop}.myshopify.com`;
+      const shopDomainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com$/;
+      if (!shopDomainRegex.test(shopDomain)) {
+        return res.status(400).json({ message: "Invalid shop domain format" });
+      }
+      const state = crypto.randomBytes(16).toString('hex');
+      (req.session as any).shopifyState = state;
+      (req.session as any).shopDomain = shopDomain;
+      const installUrl = shopifyService.getInstallUrl(shopDomain, state);
+      res.json({ authUrl: installUrl, state });
+    } catch (error) {
+      console.error("Error generating Shopify auth URL:", error);
+      res.status(500).json({ message: "Failed to generate auth URL" });
+    }
+  });
+
   app.get("/api/shopify/install", async (req, res) => {
     try {
       const { shop } = req.query;
@@ -1382,23 +1406,20 @@ export async function registerRoutes(
       const { code, shop, state, hmac } = req.query;
 
       if (!code || !shop || !state) {
-        return res.redirect('/integrations?shopify=error&message=Missing+required+parameters');
+        return res.redirect('/onboarding?shopify=error&message=Missing+required+parameters');
       }
 
-      // Validate state to prevent CSRF attacks
       const savedState = req.session?.shopifyState;
       if (state !== savedState) {
         console.warn("State mismatch - potential CSRF attack", { received: state, expected: savedState });
-        return res.redirect('/integrations?shopify=error&message=Invalid+state+parameter');
+        return res.redirect('/onboarding?shopify=error&message=Invalid+state+parameter');
       }
 
-      // Validate shop domain format
       const shopDomainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com$/;
       if (!shopDomainRegex.test(shop as string)) {
-        return res.redirect('/integrations?shopify=error&message=Invalid+shop+domain');
+        return res.redirect('/onboarding?shopify=error&message=Invalid+shop+domain');
       }
 
-      // Validate HMAC if provided (Shopify signs the callback)
       if (hmac) {
         const queryParams: Record<string, string> = {};
         for (const [key, value] of Object.entries(req.query)) {
@@ -1409,37 +1430,32 @@ export async function registerRoutes(
         const isValid = shopifyService.validateHmac(queryParams);
         if (!isValid) {
           console.warn("HMAC validation failed");
-          return res.redirect('/integrations?shopify=error&message=Invalid+signature');
+          return res.redirect('/onboarding?shopify=error&message=Invalid+signature');
         }
       }
 
-      // Clear the state from session after validation
       delete req.session.shopifyState;
+
+      const userId = getSessionUserId(req);
+      if (!userId) {
+        return res.redirect('/onboarding?shopify=error&message=Not+authenticated');
+      }
+
+      const merchantId = await storage.getUserMerchantId(userId);
+      if (!merchantId) {
+        return res.redirect('/onboarding?shopify=error&message=No+merchant+account');
+      }
 
       const { accessToken, scope } = await shopifyService.exchangeCodeForToken(shop as string, code as string);
 
-      const userId = getSessionUserId(req);
-      let merchantId: string | null = null;
-
-      if (userId) {
-        merchantId = await storage.getUserMerchantId(userId);
-      }
-
-      if (!merchantId) {
-        const demoMerchant = await storage.getMerchantBySlug("demo-fashion");
-        merchantId = demoMerchant?.id || null;
-      }
-
-      if (!merchantId) {
-        return res.status(400).send("No merchant found. Please create a merchant account first.");
-      }
+      const encryptedToken = encryptToken(accessToken);
 
       const existingStore = await storage.getShopifyStore(merchantId);
       
       if (existingStore) {
         await storage.updateShopifyStore(existingStore.id, {
           shopDomain: shop as string,
-          accessToken,
+          accessToken: encryptedToken,
           scopes: scope,
           isConnected: true,
           lastSyncAt: new Date(),
@@ -1448,19 +1464,141 @@ export async function registerRoutes(
         await storage.createShopifyStore({
           merchantId,
           shopDomain: shop as string,
-          accessToken,
+          accessToken: encryptedToken,
           scopes: scope,
           isConnected: true,
         });
       }
 
+      try {
+        await storage.updateMerchant(merchantId, { onboardingStep: 'SHOPIFY_CONNECTED' } as any);
+      } catch (e) {
+        console.error("Error advancing onboarding to SHOPIFY_CONNECTED:", e);
+      }
+
+      try {
+        await registerShopifyWebhooks(merchantId);
+      } catch (webhookErr) {
+        console.error("Error registering Shopify webhooks:", webhookErr);
+      }
+
+      shopifyService.syncOrders(merchantId, shop as string)
+        .then(() => {
+          storage.updateMerchant(merchantId!, { onboardingStep: 'ORDERS_SYNCED' } as any)
+            .catch(e => console.error("Error advancing onboarding to ORDERS_SYNCED:", e));
+        })
+        .catch(err => console.error("Background sync error:", err));
+
       delete req.session.shopifyState;
       delete req.session.shopDomain;
 
-      res.redirect('/integrations?shopify=connected');
+      res.redirect('/onboarding?shopify=connected');
     } catch (error) {
       console.error("Error in Shopify callback:", error);
-      res.redirect('/integrations?shopify=error&message=' + encodeURIComponent(String(error)));
+      res.redirect('/onboarding?shopify=error&message=' + encodeURIComponent(String(error)));
+    }
+  });
+
+  // Shopify Webhook Routes (no auth - verified via HMAC)
+  app.post("/webhooks/shopify/orders-create", async (req: any, res) => {
+    try {
+      const hmac = req.headers['x-shopify-hmac-sha256'] as string;
+      const topic = req.headers['x-shopify-topic'] as string;
+      const shopDomain = req.headers['x-shopify-shop-domain'] as string;
+      const webhookId = req.headers['x-shopify-webhook-id'] as string;
+      const rawBody = req.rawBody as Buffer;
+      
+      if (!rawBody || !hmac) {
+        return res.status(401).json({ message: "Missing HMAC or body" });
+      }
+      
+      if (!webhookHandler.verifyHmac(rawBody, hmac)) {
+        console.warn("[Webhook] HMAC verification failed for orders/create");
+        return res.status(401).json({ message: "Invalid HMAC" });
+      }
+      
+      res.status(200).json({ received: true });
+      
+      webhookHandler.processOrderWebhook('orders/create', shopDomain, rawBody, webhookId)
+        .catch(err => console.error("[Webhook] Background processing error:", err));
+    } catch (error) {
+      console.error("[Webhook] orders/create error:", error);
+      res.status(200).json({ received: true });
+    }
+  });
+
+  app.post("/webhooks/shopify/orders-updated", async (req: any, res) => {
+    try {
+      const hmac = req.headers['x-shopify-hmac-sha256'] as string;
+      const topic = req.headers['x-shopify-topic'] as string;
+      const shopDomain = req.headers['x-shopify-shop-domain'] as string;
+      const webhookId = req.headers['x-shopify-webhook-id'] as string;
+      const rawBody = req.rawBody as Buffer;
+      
+      if (!rawBody || !hmac) {
+        return res.status(401).json({ message: "Missing HMAC or body" });
+      }
+      
+      if (!webhookHandler.verifyHmac(rawBody, hmac)) {
+        console.warn("[Webhook] HMAC verification failed for orders/updated");
+        return res.status(401).json({ message: "Invalid HMAC" });
+      }
+      
+      res.status(200).json({ received: true });
+      
+      webhookHandler.processOrderWebhook('orders/updated', shopDomain, rawBody, webhookId)
+        .catch(err => console.error("[Webhook] Background processing error:", err));
+    } catch (error) {
+      console.error("[Webhook] orders/updated error:", error);
+      res.status(200).json({ received: true });
+    }
+  });
+
+  app.post("/webhooks/shopify/fulfillments-create", async (req: any, res) => {
+    try {
+      const hmac = req.headers['x-shopify-hmac-sha256'] as string;
+      const shopDomain = req.headers['x-shopify-shop-domain'] as string;
+      const webhookId = req.headers['x-shopify-webhook-id'] as string;
+      const rawBody = req.rawBody as Buffer;
+      
+      if (!rawBody || !hmac) {
+        return res.status(401).json({ message: "Missing HMAC or body" });
+      }
+      
+      if (!webhookHandler.verifyHmac(rawBody, hmac)) {
+        console.warn("[Webhook] HMAC verification failed for fulfillments/create");
+        return res.status(401).json({ message: "Invalid HMAC" });
+      }
+      
+      res.status(200).json({ received: true });
+      
+      webhookHandler.processFulfillmentWebhook('fulfillments/create', shopDomain, rawBody, webhookId)
+        .catch(err => console.error("[Webhook] Background processing error:", err));
+    } catch (error) {
+      console.error("[Webhook] fulfillments/create error:", error);
+      res.status(200).json({ received: true });
+    }
+  });
+
+  app.post("/api/shopify/reconcile", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      
+      const store = await storage.getShopifyStore(merchantId);
+      if (!store || !store.isConnected || !store.shopDomain) {
+        return res.status(400).json({ message: "Shopify store not connected" });
+      }
+      
+      const result = await shopifyService.syncOrders(merchantId, store.shopDomain, false);
+      res.json({ 
+        success: true,
+        ...result,
+        lastSyncAt: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("Error reconciling orders:", error);
+      res.status(500).json({ message: error.message || "Reconciliation failed" });
     }
   });
 

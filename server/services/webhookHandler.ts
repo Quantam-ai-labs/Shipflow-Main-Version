@@ -26,8 +26,8 @@ export class WebhookHandler {
 
     try {
       return crypto.timingSafeEqual(
-        Buffer.from(hmacHeader),
-        Buffer.from(generatedHmac)
+        Buffer.from(hmacHeader, 'base64'),
+        Buffer.from(generatedHmac, 'base64')
       );
     } catch {
       return false;

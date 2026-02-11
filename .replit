@@ -46,3 +46,4 @@ integrations = ["javascript_database:1.0.0", "javascript_log_in_with_replit:2.0.
 [userenv.shared]
 SHOPIFY_CLIENT_ID = "278e5818e8675db69d1cbb46eea2a420"
 SHOPIFY_APP_URL = "https://lala-logistics.replit.app"
+APP_ENCRYPTION_KEY = "243e5a9bba9853b5b32cf2ae5828f22de1ec5fe2e6b32c24102f3c94206daa57"
