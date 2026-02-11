@@ -2024,97 +2024,50 @@ export async function registerRoutes(
     }
   });
 
-  // Sync courier statuses for orders with tracking numbers (batched)
   app.post("/api/couriers/sync-statuses", isAuthenticated, async (req, res) => {
     try {
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
 
-      const { trackShipment } = await import('./services/couriers');
-      const forceRefresh = req.body?.forceRefresh === true;
-      
-      const trackableOrders = await storage.getOrdersForCourierSync(merchantId, {
-        forceRefresh,
-        limit: 1500,
-      });
+      const { syncMerchantCourierStatuses } = await import('./services/courierSyncScheduler');
+      const result = await syncMerchantCourierStatuses(merchantId);
 
-      if (trackableOrders.length === 0) {
-        return res.json({ success: true, updated: 0, failed: 0, skipped: 0, total: 0, message: "No orders need status updates" });
-      }
-
-      console.log(`[Courier Sync] Syncing ${trackableOrders.length} orders (forceRefresh=${forceRefresh})...`);
-
-      const courierCredsCache = new Map<string, { apiKey: string | null; apiSecret: string | null } | null>();
-      for (const order of trackableOrders) {
-        const cn = normalizeCourierName(order.courierName!);
-        if (!courierCredsCache.has(cn)) {
-          courierCredsCache.set(cn, await getCourierCredentials(merchantId, cn));
-        }
-      }
-
-      let updated = 0;
-      let failed = 0;
-      let skipped = 0;
-
-      const batchSize = 10;
-      for (let i = 0; i < trackableOrders.length; i += batchSize) {
-        const batch = trackableOrders.slice(i, i + batchSize);
-        
-        const results = await Promise.allSettled(
-          batch.map(async (order) => {
-            try {
-              const cn = normalizeCourierName(order.courierName!);
-              const creds = courierCredsCache.get(cn);
-              if (!creds) {
-                return 'skipped';
-              }
-              const credObj = { apiKey: creds.apiKey || undefined, apiSecret: creds.apiSecret || undefined };
-              
-              const result = await trackShipment(order.courierName!, order.courierTracking!, credObj, order.shipmentStatus);
-              
-              if (result && result.success) {
-                await storage.updateOrder(merchantId, order.id, {
-                  shipmentStatus: result.normalizedStatus,
-                  courierRawStatus: result.rawCourierStatus,
-                  lastTrackingUpdate: new Date(),
-                });
-                return 'updated';
-              }
-              return 'failed';
-            } catch (err) {
-              console.error(`[Courier Sync] Error for ${order.courierTracking}:`, err);
-              return 'failed';
-            }
-          })
-        );
-
-        for (const result of results) {
-          if (result.status === 'fulfilled') {
-            if (result.value === 'updated') updated++;
-            else if (result.value === 'skipped') skipped++;
-            else failed++;
-          } else {
-            failed++;
-          }
-        }
-        
-        if (i + batchSize < trackableOrders.length) {
-          await new Promise(resolve => setTimeout(resolve, 300));
-        }
-      }
-
-      console.log(`[Courier Sync] Complete: ${updated} updated, ${failed} failed, ${skipped} skipped (no creds)`);
-
-      res.json({ 
-        success: true, 
-        updated, 
-        failed,
-        skipped,
-        total: trackableOrders.length 
+      res.json({
+        success: true,
+        updated: result.updated,
+        failed: result.failed,
+        skipped: result.skipped,
+        total: result.total,
       });
     } catch (error) {
       console.error("Error syncing courier statuses:", error);
       res.status(500).json({ message: "Failed to sync courier statuses" });
+    }
+  });
+
+  app.get("/api/couriers/sync-status", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const { getLastCourierSyncResult, isCourierSyncRunning } = await import('./services/courierSyncScheduler');
+      const lastResult = getLastCourierSyncResult(merchantId);
+
+      res.json({
+        autoSyncEnabled: true,
+        intervalSeconds: 300,
+        isRunning: isCourierSyncRunning(),
+        lastResult: lastResult ? {
+          timestamp: lastResult.timestamp,
+          updated: lastResult.updated,
+          failed: lastResult.failed,
+          skipped: lastResult.skipped,
+          total: lastResult.total,
+          error: lastResult.error,
+        } : null,
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get courier sync status" });
     }
   });
 
