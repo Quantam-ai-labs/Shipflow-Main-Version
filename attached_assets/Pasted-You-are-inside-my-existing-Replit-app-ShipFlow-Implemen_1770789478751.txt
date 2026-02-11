@@ -1,0 +1,156 @@
+You are inside my existing Replit app “ShipFlow”. Implement Prompt 1 ONLY.
+
+GOAL (Prompt 1):
+Bring back a proper Authentication system (free signup/login) and remove the “demo user” workaround, then add a step-by-step Onboarding skeleton (UI + DB state) and a secure Admin panel for internal management. Do NOT implement Shopify OAuth or webhooks yet—only the onboarding framework and gating.
+
+========================================================
+1) REMOVE DEMO USER MODE (IMPORTANT)
+========================================================
+- Remove any hardcoded/demo user auto-login.
+- App must require auth for all merchant data pages.
+- If not logged in, redirect to /auth (login page).
+- After login:
+  - If onboarding not completed -> redirect to /onboarding
+  - Else -> redirect to main dashboard (e.g., /orders/new)
+
+========================================================
+2) DATABASE / PRISMA CHANGES
+========================================================
+Add/ensure models (adapt naming to existing schema but keep meaning):
+
+A) User model
+- id (uuid)
+- merchantId (nullable initially until merchant created)
+- name (optional)
+- email (unique)
+- passwordHash
+- role enum: USER, ADMIN, SUPER_ADMIN
+- isActive boolean default true
+- lastLoginAt datetime nullable
+- createdAt
+
+B) Merchant model (if already exists, update it)
+- id (uuid)
+- name (optional)
+- status enum: ACTIVE, SUSPENDED (default ACTIVE)
+- onboardingStep enum:
+   ACCOUNT_CREATED
+   SHOPIFY_CONNECTED
+   ORDERS_SYNCED
+   LEOPARDS_CONNECTED
+   POSTEX_CONNECTED
+   COMPLETED
+  default ACCOUNT_CREATED
+- createdAt
+- updatedAt
+
+C) Relations
+- Merchant has many Users
+- User belongs to Merchant
+
+Notes:
+- If merchant already exists as a concept, map to it. If not, create it.
+- Multi-tenancy rule: every order/payment/shipment record must be scoped to merchantId; enforce it in API layer later. For now, ensure core user->merchant association exists.
+
+========================================================
+3) AUTH SYSTEM (SESSION-BASED, NOT ANNOYING)
+========================================================
+Implement:
+- Register (free) + Login + Logout
+- Password hashing (bcrypt/argon2)
+- Persistent sessions via secure httpOnly cookies:
+  - Session duration 14–30 days
+  - “Remember me” optional (if easy)
+
+Routes/API (adapt to your stack):
+- POST /api/auth/register
+  - create Merchant + User in one flow
+  - set role USER
+  - merchant.onboardingStep = ACCOUNT_CREATED
+- POST /api/auth/login
+  - verify credentials
+  - create session cookie
+  - update lastLoginAt
+- POST /api/auth/logout
+- GET /api/auth/me
+  - returns current user + merchant basic info
+
+Security:
+- Block login if user.isActive=false OR merchant.status=SUSPENDED
+- Do not expose passwordHash ever.
+
+========================================================
+4) ONBOARDING WIZARD (SKELETON ONLY)
+========================================================
+Create /onboarding UI with stepper and state read from merchant.onboardingStep.
+
+Steps to show (even if not functional yet):
+1) Connect Shopify
+2) Sync Orders
+3) Connect Leopards
+4) Connect PostEx
+5) Complete
+
+For Prompt 1:
+- Create the pages/components and API placeholders (no real integration):
+  - Step 1 page shows “Connect Shopify (coming in Prompt 2)”
+  - Step 2 shows “Sync Orders (coming in Prompt 2/3)”
+  - Step 3 “Connect Leopards (existing integration will be wired later)”
+  - Step 4 “Connect PostEx (existing integration will be wired later)”
+- Add a safe “Mark Step as Done” button ONLY for SUPER_ADMIN (for testing) that advances onboardingStep to the next value.
+- Regular users should NOT be able to skip steps yet.
+
+Navigation rules:
+- If onboardingStep != COMPLETED:
+  - user can still view onboarding route
+  - main app pages should show a banner: “Setup incomplete — Continue Setup”
+  - optionally restrict booking actions until completed (can be enforced later)
+
+========================================================
+5) BASIC ADMIN PANEL (INTERNAL USE)
+========================================================
+Create an admin area at /admin (route-guarded).
+Only SUPER_ADMIN can access /admin.
+
+Admin features (Prompt 1 scope):
+- Merchant list + search (by email / merchantId / storeDomain if exists later)
+- View merchant profile + onboardingStep + status
+- Suspend/unsuspend merchant (status ACTIVE/SUSPENDED)
+- View users of merchant
+- Block/unblock user (user.isActive)
+- Force password reset flow (simple version):
+  - Admin sets a temporary password OR triggers “mustResetPassword” flag (if you add this flag)
+
+IMPORTANT:
+- Add audit logs for admin actions (minimal):
+  admin_action_logs:
+   - id
+   - adminUserId
+   - actionType (SUSPEND_MERCHANT, UNSUSPEND_MERCHANT, BLOCK_USER, UNBLOCK_USER, RESET_PASSWORD, ADVANCE_ONBOARDING_STEP)
+   - targetMerchantId / targetUserId
+   - createdAt
+
+========================================================
+6) ROUTE GUARDS + UX
+========================================================
+- If not logged in: redirect to /auth/login
+- If logged in and merchant SUSPENDED: show “Account suspended, contact support” and block app.
+- If logged in and onboarding not completed:
+  - default landing -> /onboarding
+- Ensure app is SPA-style navigation (no full page reload between routes).
+
+========================================================
+7) DELIVERABLE CHECKLIST (YOU MUST CONFIRM)
+========================================================
+After implementing Prompt 1, verify:
+- Register -> creates merchant + user -> logs in -> goes to onboarding
+- Login persists session (refresh page stays logged in)
+- Logout works
+- Suspended merchant cannot access app
+- /admin exists and is protected (only SUPER_ADMIN)
+- Onboarding stepper renders and reads merchant.onboardingStep
+- “Advance step” test button works only for SUPER_ADMIN
+- No demo user code remains
+
+STOP HERE.
+Do not implement Shopify OAuth, webhooks, realtime streaming, or courier wiring changes yet. Those will come in Prompt 2/3.
