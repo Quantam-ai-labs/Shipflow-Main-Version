@@ -518,10 +518,9 @@ export default function Pipeline() {
         </div>
 
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          {total > 0 && <span>{total.toLocaleString()} orders</span>}
+          {total > 0 && <span className="text-[#000000] font-extrabold bg-[#ffffff00]">{total.toLocaleString()} orders</span>}
         </div>
       </div>
-
       {/* Bulk Actions Bar */}
       {selectedIds.size > 0 && (
         <div className="flex items-center gap-3 px-4 py-2.5 bg-primary/5 border-b" data-testid="bulk-actions-bar">
@@ -628,7 +627,6 @@ export default function Pipeline() {
           </Button>
         </div>
       )}
-
       {/* Expired Holds Banner */}
       {activeTab === "HOLD" && expiredHolds > 0 && (
         <div className="flex items-center gap-3 px-4 py-2.5 bg-red-50 dark:bg-red-950 border-b border-red-200 dark:border-red-800" data-testid="banner-expired-holds">
@@ -638,7 +636,6 @@ export default function Pipeline() {
           </span>
         </div>
       )}
-
       {/* Orders Table */}
       <div className="flex-1 overflow-auto">
         {isLoading ? (
@@ -940,7 +937,6 @@ export default function Pipeline() {
           </table>
         )}
       </div>
-
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between px-4 py-1.5 border-t bg-background">
@@ -973,7 +969,6 @@ export default function Pipeline() {
           </div>
         </div>
       )}
-
       {/* Cancel Modal */}
       <Dialog open={cancelModal.open} onOpenChange={open => { if (!open) setCancelModal({ open: false, orderIds: [] }); }}>
         <DialogContent>
@@ -996,7 +991,6 @@ export default function Pipeline() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
       {/* Pending Modal */}
       <Dialog open={pendingModal.open} onOpenChange={open => { if (!open) setPendingModal({ open: false, orderIds: [] }); }}>
         <DialogContent>
@@ -1031,7 +1025,6 @@ export default function Pipeline() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
       {/* Hold Modal */}
       <Dialog open={holdModal.open} onOpenChange={open => { if (!open) setHoldModal({ open: false, orderIds: [] }); }}>
         <DialogContent>
@@ -1057,7 +1050,6 @@ export default function Pipeline() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
       {/* Booking Confirmation Modal */}
       <Dialog open={bookingConfirmModal.open} onOpenChange={open => { if (!open) setBookingConfirmModal({ open: false, preview: null }); }}>
         <DialogContent className="max-w-[95vw] w-[1200px]">
@@ -1296,7 +1288,6 @@ export default function Pipeline() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
       {/* Booking Results Modal */}
       <Dialog open={bookingResultsModal.open} onOpenChange={open => { if (!open) setBookingResultsModal({ open: false, results: null }); }}>
         <DialogContent className="max-w-lg">
@@ -1389,7 +1380,6 @@ export default function Pipeline() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
       {/* Quick Payment Modal */}
       <Dialog open={paymentModal.open} onOpenChange={(open) => !open && setPaymentModal({ open: false, orderId: "", orderNumber: "", totalAmount: 0, prepaidAmount: 0 })}>
         <DialogContent className="sm:max-w-[400px]">
