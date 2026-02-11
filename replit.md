@@ -1,7 +1,7 @@
 # ShipFlow - Logistics Operations Platform
 
 ## Overview
-ShipFlow is a production-grade, multi-tenant logistics operations platform designed for Shopify merchants in Pakistan. It offers an all-in-one dashboard for syncing Shopify orders, tracking courier shipments (Leopards, PostEx, TCS), managing COD reconciliation, and facilitating team collaboration. The platform is envisioned as a scalable SaaS product with robust role-based access control and merchant isolation, aiming to streamline logistics operations for e-commerce businesses.
+ShipFlow is a production-grade, multi-tenant logistics operations platform designed for Shopify merchants in Pakistan. It offers an all-in-one dashboard for syncing Shopify orders, tracking courier shipments (Leopards, PostEx, TCS), managing COD reconciliation, and facilitating team collaboration. The platform aims to streamline logistics operations for e-commerce businesses as a scalable SaaS product with robust role-based access control and merchant isolation.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
@@ -33,52 +33,21 @@ Preferred communication style: Simple, everyday language.
 - **Isolation**: Merchant-based, all data scoped by `merchantId`.
 - **Team Structure**: Users linked to merchants via `teamMembers` table.
 - **Roles**: Admin, Manager, Agent with tiered permissions.
-- **Development**: Relaxed isolation, strict in production.
 
 ### Core Features & Data Models
 - **Merchant Management**: Root tenant entity with subscription and profile.
-- **Team Collaboration**: `teamMembers` for user-to-merchant links and roles. **Team Invites**: `team_invites` table with token-based invite system. Admin invites by email → token generated → invite link shareable. If invited email already has an account, auto-joins. Otherwise, user visits `/invite/:token` to accept. Pending invites shown on Team page with copy-link buttons. API: `POST /api/team/invite`, `GET /api/team/invites`, `GET /api/team/invite/:token`, `POST /api/team/invite/:token/accept`. Invites expire after 7 days.
-- **Shopify Integration**: OAuth credentials and sync state. **Per-merchant Shopify app credentials**: Each merchant can enter their own Client ID and Client Secret via onboarding wizard or integrations page (`POST /api/merchants/shopify-credentials`, `GET /api/merchants/shopify-credentials`). Credentials stored encrypted (AES-256-GCM) in `merchants.shopify_app_client_id` and `merchants.shopify_app_client_secret`. OAuth flow uses merchant-specific credentials when available, falls back to global `SHOPIFY_APP_CLIENT_ID`/`SHOPIFY_APP_CLIENT_SECRET` env vars. Session persists `shopifyCredSource` flag to ensure callback uses same credential source as auth-url. Supports OAuth connect flow (`GET /api/shopify/auth-url` → Shopify OAuth → `GET /api/shopify/callback`) and manual token entry. Access tokens encrypted at rest via AES-256-GCM (`server/services/encryption.ts`, key from `APP_ENCRYPTION_KEY` env var). Webhook registration (`server/services/webhookRegistration.ts`) auto-registers `orders/create`, `orders/updated`, `fulfillments/create` after OAuth connect. Webhooks verified via HMAC-SHA256, processed with idempotency tracking in `shopify_webhook_events` table (`server/services/webhookHandler.ts`). Webhook receiving routes: `POST /webhooks/shopify/orders-create`, `/orders-updated`, `/fulfillments-create` (no auth, HMAC-verified). Reconciliation: `POST /api/shopify/reconcile`.
-- **Courier Management**: Per-courier API credentials with env secret fallback. Leopards uses `apiKey` + `apiSecret` (API Password). PostEx uses `apiKey` (API Token). Credentials resolved via `getCourierCredentials()` helper: DB custom creds > env secrets. **PostEx Booking**: Only `pickupAddressCode` is sent in create-order payload (NOT `storeAddressCode` — PostEx rejects it with "INVALID MERCHANT STORE ADDRESS CODE"). `invoicePayment` must be a number, not string. Address codes auto-fetched from PostEx API and persisted to DB if missing.
-- **Order Management**: Syncs from Shopify, tracks status, allows remarks.
-- **Shipment Tracking**: Records courier tracking and events.
-- **COD Reconciliation**: Tracks payment settlements.
-- **Payment Tracking System**: `order_payments` table records individual payments (amount, method, reference, notes). Orders have computed payment fields: `prepaidAmount`, `codRemaining`, `codPaymentStatus` (UNPAID/PARTIAL/PREPAID), `lastPaymentAt`. Payment service (`server/services/payments.ts`) handles `computePaymentState()`, add/delete payment, mark fully paid, reset, and bulk mark prepaid. Payments locked after booking (BOOKED/FULFILLED/DELIVERED/RETURN). Courier booking uses `codRemaining` for accurate COD. Shipments record `codSentToCourier` and `prepaidAtBooking` for audit. All order creation paths (Shopify sync, webhook, manual) initialize payment defaults. API: `GET/POST /api/orders/:id/payments`, `DELETE /api/orders/:orderId/payments/:paymentId`, `POST /api/orders/:id/payments/mark-paid`, `POST /api/orders/:id/payments/reset`, `POST /api/orders/bulk-mark-prepaid`.
-- **Onboarding Wizard**: Guides initial setup (Shopify connection, courier config, initial sync).
-- **Courier Status Tracking**: Universal status normalization system converts all courier-specific statuses into 12 fixed universal statuses: BOOKED, PICKED_UP, ARRIVED_AT_ORIGIN, IN_TRANSIT, ARRIVED_AT_DESTINATION, OUT_FOR_DELIVERY, DELIVERY_ATTEMPTED, DELIVERED, DELIVERY_FAILED, RETURNED_TO_SHIPPER, RETURN_IN_TRANSIT, CANCELLED. Raw courier statuses preserved in `courier_raw_status` column for reference. Normalization via `server/services/statusNormalization.ts` with per-courier mapping tables, partial matching, keyword fallback, and final state protection (DELIVERED/RETURNED_TO_SHIPPER/CANCELLED cannot be overwritten). Status flow: Unfulfilled → Universal Status (via courier API) / CANCELLED (voided orders). Batched syncing via `trackBookedPacket` (Leopards) and `track-order` (PostEx). Credentials resolved per-merchant with env fallback. Test connectivity at `POST /api/integrations/couriers/test`.
-- **Background Courier Sync Scheduler** (`server/services/courierSyncScheduler.ts`): Runs every 5 minutes. Fetches latest tracking statuses from Leopards (batches of 10) and PostEx (1-by-1 with 300ms delays). Skips finalized orders (DELIVERED, RETURNED_TO_SHIPPER, CANCELLED) to reduce API load. Manual trigger via `POST /api/couriers/sync-statuses`. Status via `GET /api/couriers/sync-status`. UI button on Integrations page shows last sync time and results.
-- **Customer Data Extraction**: Priority chain: `shipping_address` > `customer` > `billing_address` > `customer.default_address` > order-level fields > `note_attributes` (last resort for PII, used directly for courier tracking: `hxs_courier_name`, `hxs_courier_tracking`).
-- **Shopify Permissions Handling**: Grow plan provides full customer data access via REST API.
-
-### Workflow Transition System
-- **9-Stage Pipeline**: NEW → PENDING → HOLD → READY_TO_SHIP → BOOKED → FULFILLED → DELIVERED / RETURN / CANCELLED.
-  - BOOKED = AWB created (courier booking done). FULFILLED = dispatched/picked up by courier. DELIVERED = delivery confirmed. RETURN = return confirmed.
-  - FINAL_STATUSES: DELIVERED, RETURN (cannot be overwritten). CANCELLED is also terminal.
-  - Orders editable until DELIVERED/RETURN/CANCELLED. BOOKED and FULFILLED orders remain editable.
-  - Auto-transitions via courier sync: BOOKED→FULFILLED on pickup/dispatch statuses, FULFILLED→DELIVERED on delivery, FULFILLED→RETURN on return.
-  - Shopify fulfillment created at FULFILLED stage (dispatch), not at booking. `shopifyFulfillmentId` stored on order.
-  - Timestamps: `bookedAt` on booking, `dispatchedAt` on FULFILLED, `deliveredAt` on DELIVERED, `returnedAt` on RETURN.
-- **Centralized Service** (`server/services/workflowTransition.ts`): All order status changes go through `transitionOrder()` / `bulkTransitionOrders()` with automatic audit logging, idempotency checks (won't change if already in target status), and DELIVERED/RETURN protection (prevents changes to final orders).
-- **Revert**: `revertOrder()` restores `previousWorkflowStatus` with audit trail. Cannot revert DELIVERED/RETURN orders.
-- **Audit Log**: `workflow_audit_log` table records every transition (from/to status, action, reason, actor user/type, timestamp). Viewable in order details page under "Status History".
-- **Robo-tag Processing**: Applied during Shopify sync. Tags: Robo-Cancel→CANCELLED, Robo-Confirm→READY_TO_SHIP, Robo-Pending→PENDING. Priority: Cancel > Confirm > Pending. Only affects NEW/PENDING orders.
-- **24h Auto-Move**: Background scheduler (every 5 min) moves NEW orders older than 24h to PENDING with reason AUTO_24H and audit log entry.
-- **Pending Reasons**: INCOMPLETE_ADDRESS, MISSING_PHONE, WRONG_CITY, CUSTOMER_NOT_RESPONDING, CUSTOMER_REQUESTED_CHANGE, FRAUD_SUSPECTED, AUTO_24H, OTHER.
-
-### Batch Import System (Onboarding)
-- **Async Import Jobs** (`server/services/importJobRunner.ts`): Background job runner for large Shopify order imports. Uses `shopify_import_jobs` table to track state, cursor, progress counts. Resumable: if job fails, user can resume from stored cursor. Default import window: Jan 1 of current year. Batch size: 200 orders per API call. Rate limit handling with exponential backoff. Clear error messages for auth/scope failures (401/403).
-- **Import API**: `POST /api/shopify/import/start` (validates connection first, creates job, returns jobId), `GET /api/shopify/import/status?jobId=...` (poll for progress), `POST /api/shopify/import/cancel` (cancel running job), `POST /api/shopify/import/resume` (resume failed job from cursor).
-- **Onboarding UI**: Sync Orders step uses async import with 1.5s polling. Shows real-time progress (processed/created/updated/failed counts, page number). Failed jobs show error message with Resume/Start Over buttons. Completed jobs show summary and Continue button.
-
-### API-Only Sync System (Auto-Sync)
-- **Auto-Sync Scheduler** (`server/services/autoSync.ts`): Background polling every 30 seconds for new/updated orders. Per-merchant sync status tracking. Starts automatically on server boot. Also runs 24h stale order check every 5 minutes.
-- **Incremental Sync**: Uses `updated_at_min` parameter to only fetch orders changed since last sync. Quiet logging when no changes found.
-- **Manual Sync**: `POST /api/integrations/shopify/sync` endpoint still available as fallback with optional `forceFullSync` body parameter.
-- **Sync Status API**: `GET /api/integrations/shopify/sync-status` returns per-merchant auto-sync state (enabled, interval, running, last result with created/updated counts).
-- **Live Indicator**: Orders page shows green pulsing "Live" indicator with last sync timestamp. Auto-refreshes order data when new orders arrive.
-- **Data Health Dashboard**: Integrations page shows data quality metrics (% of orders with name/phone/address/city).
-- **Direct Courier Booking**: Ready-to-Ship orders can be booked with Leopards (batch) or PostEx (per-order). Booking flow: select orders → preview → confirm → results. Default shipment weight: 200g. Preview modal shows detailed table with all order info (Order ID, Name, Phone, Address, City, COD, Weight, Description, Pieces, Mode). Checkboxes allow selecting/deselecting individual orders. Per-order weight and mode (Overnight/Overland) overrides. Invalid orders shown inline with errors instead of blocking batch. Book endpoint accepts `orderOverrides` map for per-order weight/mode. Successful bookings auto-transition to BOOKED. Booking jobs tracked in `booking_jobs` table for idempotency. Leopards uses `shipment_id` (Shipper ID) from courier account settings (default: 2125655) instead of individual shipper fields. Each booking creates a `shipment_batches` record with items for audit trail. **Shopify Fulfillment Write-back**: After successful courier booking, automatically creates fulfillment on Shopify with tracking number and courier company. Uses Fulfillment Orders API (2024-01). Non-blocking — failures only log warnings, never block booking. Requires `write_fulfillments` scope (existing merchants may need to reconnect).
-- **Print & Logs System**: Native courier airway bills fetched directly from courier APIs. Leopards uses `slip_link` URL from booking response. **PostEx uses `GET /services/integration/api/order/v1/get-invoice?trackingNumbers=...`** (comma-separated, max 10 per request, token header required). Bulk PostEx downloads auto-chunk into groups of 10 and merge PDFs server-side via `pdf-lib`. Dedicated PostEx invoice routes: `GET /api/couriers/postex/invoice?trackingNumber=...` (single), `POST /api/couriers/postex/invoices` (bulk with `{trackingNumbers: string[]}`). Legacy routes still work: `GET /api/print/native-slip/:orderId.pdf` (single order), `GET /api/print/batch-awb/:batchId.pdf` (batch). `shipment_batches` table logs each booking action. `shipment_batch_items` records individual order results. Native slip service (`server/services/courierSlips.ts`) handles fetching/chunking/merging. Frontend detects PostEx orders and uses dedicated endpoint. Batch Loadsheet PDF still generated locally via `pdf-lib`. Print info available via `GET /api/print/order/:orderId`. Shipments page has "Batch Logs" tab with batch details and PDF actions. Order Details page shows "Shipping & Print" card with Print/Download buttons for booked orders.
+- **Team Collaboration**: `teamMembers` for user-to-merchant links and roles; token-based team invite system with email integration.
+- **Shopify Integration**: OAuth-based credentials per merchant, encrypted access tokens, webhook processing for orders and fulfillments, and reconciliation.
+- **Courier Management**: Per-courier API credentials (Leopards, PostEx, TCS) with environment secret fallback, specific handling for PostEx booking parameters.
+- **Order Management**: Syncs from Shopify, tracks status, and allows remarks.
+- **Shipment Tracking**: Records courier tracking and events with universal status normalization.
+- **COD Reconciliation**: Tracks payment settlements, including `prepaidAmount`, `codRemaining`, and `codPaymentStatus`. Payment records are immutable after booking.
+- **Onboarding Wizard**: Guides initial setup including Shopify connection and courier configuration.
+- **Workflow Transition System**: A 9-stage pipeline (NEW to DELIVERED/RETURN/CANCELLED) with automated transitions based on courier updates, audit logging, and final state protection. Supports Robo-tag processing for status changes and a 24h auto-move for new orders.
+- **Batch Import System**: Asynchronous, resumable background jobs for large Shopify order imports, with progress tracking and error handling.
+- **API-Only Sync System**: Background polling every 30 seconds for incremental Shopify order updates, with manual sync option and live sync status indicator.
+- **Direct Courier Booking**: Allows batch booking of "Ready-to-Ship" orders with Leopards and PostEx, including preview, confirmation, per-order overrides, and Shopify fulfillment write-back with tracking information.
+- **Print & Logs System**: Generates native courier airway bills from courier APIs (e.g., Leopards slip_link, PostEx get-invoice) and batch loadsheets, with support for single and bulk PDF generation.
 
 ## External Dependencies
 
@@ -89,7 +58,8 @@ Preferred communication style: Simple, everyday language.
 - Replit OIDC provider
 
 ### Third-Party Integrations
-- Shopify Admin API (OAuth-based)
+- Shopify Admin API
 - Leopards Courier API
 - PostEx Courier API
 - TCS Courier API
+- Resend (for email services)

@@ -14,6 +14,7 @@ import { addPayment, deletePayment, markFullyPaid, resetPayments, bulkMarkPrepai
 import { encryptToken, decryptToken } from './services/encryption';
 import { registerShopifyWebhooks } from './services/webhookRegistration';
 import { webhookHandler } from './services/webhookHandler';
+import { sendInviteEmail } from './services/email';
 
 // Zod schemas for validation
 const remarkSchema = z.object({
@@ -1037,10 +1038,11 @@ export async function registerRoutes(
           eq(teamInvites.status, "pending")
         ));
       if (existingInvite.length > 0) {
-        return res.status(400).json({ message: "An invitation has already been sent to this email" });
+        return res.status(400).json({ message: "An invitation has already been sent to this email. Use resend to send again." });
       }
 
       const token = crypto.randomBytes(32).toString("hex");
+      const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
       const [invite] = await db.insert(teamInvites).values({
@@ -1048,9 +1050,11 @@ export async function registerRoutes(
         email,
         role: role || "agent",
         token,
+        tokenHash,
         status: "pending",
         invitedBy: userId,
         expiresAt,
+        sendCount: 0,
       }).returning();
 
       if (existingUser) {
@@ -1066,19 +1070,129 @@ export async function registerRoutes(
           await db.update(users).set({ merchantId }).where(eq(users.id, existingUser.id));
         }
 
-        await db.update(teamInvites).set({ status: "accepted" }).where(eq(teamInvites.id, invite.id));
+        await db.update(teamInvites).set({
+          status: "accepted",
+          acceptedAt: new Date(),
+          acceptedByUserId: existingUser.id,
+        }).where(eq(teamInvites.id, invite.id));
       }
 
       const inviteUrl = `${req.protocol}://${req.get("host")}/invite/${token}`;
 
+      let emailSent = false;
+      let emailError: string | undefined;
+      if (!existingUser) {
+        const [merchant] = await db.select().from(merchants).where(eq(merchants.id, merchantId));
+        const [inviter] = await db.select().from(users).where(eq(users.id, userId));
+        const inviterName = inviter ? `${inviter.firstName || ''} ${inviter.lastName || ''}`.trim() || inviter.email || 'A team admin' : 'A team admin';
+
+        const emailResult = await sendInviteEmail({
+          toEmail: email,
+          merchantName: merchant?.name || 'ShipFlow Team',
+          role: role || 'agent',
+          inviteUrl,
+          expiresAt,
+          invitedByName: inviterName,
+        });
+
+        emailSent = emailResult.success;
+        emailError = emailResult.error;
+
+        await db.update(teamInvites).set({
+          sendCount: 1,
+          lastSentAt: new Date(),
+          lastEmailError: emailError || null,
+        }).where(eq(teamInvites.id, invite.id));
+      }
+
       res.json({
-        invite,
+        invite: { ...invite, token: undefined },
         inviteUrl,
         autoJoined: !!existingUser,
+        emailSent,
+        emailError,
       });
     } catch (error) {
       console.error("Error inviting team member:", error);
       res.status(500).json({ message: "Failed to invite team member" });
+    }
+  });
+
+  app.post("/api/team/invite/:inviteId/resend", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const { inviteId } = req.params;
+      const [invite] = await db.select().from(teamInvites)
+        .where(and(eq(teamInvites.id, inviteId), eq(teamInvites.merchantId, merchantId)));
+
+      if (!invite) {
+        return res.status(404).json({ message: "Invite not found" });
+      }
+      if (invite.status !== "pending") {
+        return res.status(400).json({ message: "Can only resend pending invitations" });
+      }
+
+      if (invite.lastSentAt && Date.now() - invite.lastSentAt.getTime() < 60000) {
+        return res.status(429).json({ message: "Please wait at least 1 minute before resending" });
+      }
+
+      const inviteUrl = `${req.protocol}://${req.get("host")}/invite/${invite.token}`;
+      const [merchant] = await db.select().from(merchants).where(eq(merchants.id, merchantId));
+
+      const userId = (req.session as any).userId;
+      const [inviter] = await db.select().from(users).where(eq(users.id, userId));
+      const inviterName = inviter ? `${inviter.firstName || ''} ${inviter.lastName || ''}`.trim() || inviter.email || 'A team admin' : 'A team admin';
+
+      const emailResult = await sendInviteEmail({
+        toEmail: invite.email,
+        merchantName: merchant?.name || 'ShipFlow Team',
+        role: invite.role,
+        inviteUrl,
+        expiresAt: invite.expiresAt || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        invitedByName: inviterName,
+      });
+
+      await db.update(teamInvites).set({
+        sendCount: (invite.sendCount || 0) + 1,
+        lastSentAt: new Date(),
+        lastEmailError: emailResult.error || null,
+      }).where(eq(teamInvites.id, invite.id));
+
+      res.json({
+        success: emailResult.success,
+        emailError: emailResult.error,
+        sendCount: (invite.sendCount || 0) + 1,
+      });
+    } catch (error) {
+      console.error("Error resending invite:", error);
+      res.status(500).json({ message: "Failed to resend invitation" });
+    }
+  });
+
+  app.delete("/api/team/invite/:inviteId", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const { inviteId } = req.params;
+      const [invite] = await db.select().from(teamInvites)
+        .where(and(eq(teamInvites.id, inviteId), eq(teamInvites.merchantId, merchantId)));
+
+      if (!invite) {
+        return res.status(404).json({ message: "Invite not found" });
+      }
+      if (invite.status !== "pending") {
+        return res.status(400).json({ message: "Can only revoke pending invitations" });
+      }
+
+      await db.update(teamInvites).set({ status: "revoked" }).where(eq(teamInvites.id, invite.id));
+
+      res.json({ message: "Invitation revoked" });
+    } catch (error) {
+      console.error("Error revoking invite:", error);
+      res.status(500).json({ message: "Failed to revoke invitation" });
     }
   });
 
@@ -1087,13 +1201,49 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
 
-      const invites = await db.select().from(teamInvites)
-        .where(and(eq(teamInvites.merchantId, merchantId), eq(teamInvites.status, "pending")));
+      const invites = await db.select({
+        id: teamInvites.id,
+        email: teamInvites.email,
+        role: teamInvites.role,
+        status: teamInvites.status,
+        createdAt: teamInvites.createdAt,
+        expiresAt: teamInvites.expiresAt,
+        sendCount: teamInvites.sendCount,
+        lastSentAt: teamInvites.lastSentAt,
+        lastEmailError: teamInvites.lastEmailError,
+        acceptedAt: teamInvites.acceptedAt,
+      }).from(teamInvites)
+        .where(eq(teamInvites.merchantId, merchantId))
+        .orderBy(teamInvites.createdAt);
 
       res.json({ invites });
     } catch (error) {
       console.error("Error fetching invites:", error);
       res.status(500).json({ message: "Failed to fetch invites" });
+    }
+  });
+
+  app.get("/api/team/invite/:inviteId/link", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const { inviteId } = req.params;
+      const [invite] = await db.select().from(teamInvites)
+        .where(and(eq(teamInvites.id, inviteId), eq(teamInvites.merchantId, merchantId)));
+
+      if (!invite) {
+        return res.status(404).json({ message: "Invite not found" });
+      }
+      if (invite.status !== "pending") {
+        return res.status(400).json({ message: "This invitation is no longer active" });
+      }
+
+      const inviteUrl = `${req.protocol}://${req.get("host")}/invite/${invite.token}`;
+      res.json({ inviteUrl });
+    } catch (error) {
+      console.error("Error getting invite link:", error);
+      res.status(500).json({ message: "Failed to get invite link" });
     }
   });
 
@@ -1103,15 +1253,23 @@ export async function registerRoutes(
       const [invite] = await db.select().from(teamInvites).where(eq(teamInvites.token, token));
 
       if (!invite) {
-        return res.status(404).json({ message: "Invite not found" });
+        return res.status(404).json({ message: "This invitation link is invalid or has been revoked." });
+      }
+
+      if (invite.status === "revoked") {
+        return res.status(400).json({ message: "This invitation has been revoked by the team admin." });
+      }
+
+      if (invite.status === "accepted") {
+        return res.status(400).json({ message: "This invitation has already been accepted." });
       }
 
       if (invite.status !== "pending") {
-        return res.status(400).json({ message: "This invitation has already been used" });
+        return res.status(400).json({ message: "This invitation is no longer valid." });
       }
 
       if (invite.expiresAt && new Date() > invite.expiresAt) {
-        return res.status(400).json({ message: "This invitation has expired" });
+        return res.status(400).json({ message: "This invitation has expired. Please ask the team admin to send a new one." });
       }
 
       const [merchant] = await db.select().from(merchants).where(eq(merchants.id, invite.merchantId));
@@ -1121,6 +1279,7 @@ export async function registerRoutes(
         role: invite.role,
         merchantName: merchant?.name || "Unknown",
         merchantId: invite.merchantId,
+        expiresAt: invite.expiresAt,
       });
     } catch (error) {
       console.error("Error fetching invite:", error);
@@ -1139,8 +1298,16 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Invite not found" });
       }
 
+      if (invite.status === "revoked") {
+        return res.status(400).json({ message: "This invitation has been revoked" });
+      }
+
+      if (invite.status === "accepted") {
+        return res.status(400).json({ message: "This invitation has already been accepted" });
+      }
+
       if (invite.status !== "pending") {
-        return res.status(400).json({ message: "This invitation has already been used" });
+        return res.status(400).json({ message: "This invitation is no longer valid" });
       }
 
       if (invite.expiresAt && new Date() > invite.expiresAt) {
@@ -1160,8 +1327,12 @@ export async function registerRoutes(
         .where(and(eq(teamMembers.userId, userId), eq(teamMembers.merchantId, invite.merchantId)));
 
       if (existing.length > 0) {
-        await db.update(teamInvites).set({ status: "accepted" }).where(eq(teamInvites.id, invite.id));
-        return res.json({ message: "You are already a member of this team" });
+        await db.update(teamInvites).set({
+          status: "accepted",
+          acceptedAt: new Date(),
+          acceptedByUserId: userId,
+        }).where(eq(teamInvites.id, invite.id));
+        return res.json({ message: "You are already a member of this team", merchantId: invite.merchantId });
       }
 
       await db.insert(teamMembers).values({
@@ -1174,7 +1345,11 @@ export async function registerRoutes(
 
       await db.update(users).set({ merchantId: invite.merchantId }).where(eq(users.id, userId));
 
-      await db.update(teamInvites).set({ status: "accepted" }).where(eq(teamInvites.id, invite.id));
+      await db.update(teamInvites).set({
+        status: "accepted",
+        acceptedAt: new Date(),
+        acceptedByUserId: userId,
+      }).where(eq(teamInvites.id, invite.id));
 
       res.json({ message: "You have joined the team!", merchantId: invite.merchantId });
     } catch (error) {
