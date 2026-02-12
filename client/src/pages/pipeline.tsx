@@ -262,7 +262,6 @@ export default function Pipeline() {
       { value: "all", label: "All" },
       { value: "RETURN_IN_TRANSIT", label: "Return in Transit" },
       { value: "RETURNED_TO_SHIPPER", label: "Returned to Shipper" },
-      { value: "READY_FOR_RETURN", label: "Ready for Return" },
     ],
   };
 
