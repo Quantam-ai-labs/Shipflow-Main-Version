@@ -125,21 +125,21 @@ interface TrackingHistoryData {
 }
 
 const PIPELINE_STAGES = [
-  { key: "BOOKED", label: "Booked", icon: Package, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-600", ring: "ring-blue-600/20" },
-  { key: "PICKED_UP", label: "Picked Up", icon: PackageCheck, color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-600", ring: "ring-indigo-600/20" },
-  { key: "IN_TRANSIT", label: "In Transit", icon: Truck, color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-600", ring: "ring-purple-600/20" },
-  { key: "OUT_FOR_DELIVERY", label: "Out for Delivery", icon: MapPinned, color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-600", ring: "ring-amber-600/20" },
-  { key: "DELIVERED", label: "Delivered", icon: CheckCircle2, color: "text-green-600 dark:text-green-400", bg: "bg-green-600", ring: "ring-green-600/20" },
+  { key: "BOOKED", label: "Booked", icon: Package, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-600", lightBg: "bg-blue-100 dark:bg-blue-950", ring: "ring-blue-600/30" },
+  { key: "PICKED_UP", label: "Picked Up", icon: PackageCheck, color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-600", lightBg: "bg-indigo-100 dark:bg-indigo-950", ring: "ring-indigo-600/30" },
+  { key: "IN_TRANSIT", label: "In Transit", icon: Truck, color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-600", lightBg: "bg-purple-100 dark:bg-purple-950", ring: "ring-purple-600/30" },
+  { key: "OUT_FOR_DELIVERY", label: "Out for Delivery", icon: MapPinned, color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-600", lightBg: "bg-amber-100 dark:bg-amber-950", ring: "ring-amber-600/30" },
+  { key: "DELIVERED", label: "Delivered", icon: CheckCircle2, color: "text-green-600 dark:text-green-400", bg: "bg-green-600", lightBg: "bg-green-100 dark:bg-green-950", ring: "ring-green-600/30" },
 ];
 
 const RETURN_STAGES = [
-  { key: "DELIVERY_FAILED", label: "Failed", icon: AlertTriangle, color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-600", ring: "ring-orange-600/20" },
-  { key: "READY_FOR_RETURN", label: "Ready for Return", icon: AlertTriangle, color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-600", ring: "ring-orange-600/20" },
-  { key: "RETURN_IN_TRANSIT", label: "Return Transit", icon: RotateCcw, color: "text-rose-600 dark:text-rose-400", bg: "bg-rose-600", ring: "ring-rose-600/20" },
-  { key: "RETURNED_TO_SHIPPER", label: "Returned", icon: RotateCcw, color: "text-red-600 dark:text-red-400", bg: "bg-red-600", ring: "ring-red-600/20" },
+  { key: "DELIVERY_FAILED", label: "Failed", icon: AlertTriangle, color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-600", lightBg: "bg-orange-100 dark:bg-orange-950", ring: "ring-orange-600/30" },
+  { key: "READY_FOR_RETURN", label: "Ready for Return", icon: AlertTriangle, color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-600", lightBg: "bg-orange-100 dark:bg-orange-950", ring: "ring-orange-600/30" },
+  { key: "RETURN_IN_TRANSIT", label: "Return Transit", icon: RotateCcw, color: "text-rose-600 dark:text-rose-400", bg: "bg-rose-600", lightBg: "bg-rose-100 dark:bg-rose-950", ring: "ring-rose-600/30" },
+  { key: "RETURNED_TO_SHIPPER", label: "Returned", icon: RotateCcw, color: "text-red-600 dark:text-red-400", bg: "bg-red-600", lightBg: "bg-red-100 dark:bg-red-950", ring: "ring-red-600/30" },
 ];
 
-const CANCELLED_STAGE = { key: "CANCELLED", label: "Cancelled", icon: XCircle, color: "text-gray-600 dark:text-gray-400", bg: "bg-gray-500", ring: "ring-gray-500/20" };
+const CANCELLED_STAGE = { key: "CANCELLED", label: "Cancelled", icon: XCircle, color: "text-gray-600 dark:text-gray-400", bg: "bg-gray-500", lightBg: "bg-gray-100 dark:bg-gray-900", ring: "ring-gray-500/30" };
 
 function getStageIndex(status: string | undefined): { pipeline: typeof PIPELINE_STAGES; activeIndex: number; isReturn: boolean; isCancelled: boolean } {
   if (!status) return { pipeline: PIPELINE_STAGES, activeIndex: -1, isReturn: false, isCancelled: false };
@@ -172,7 +172,45 @@ function getStageIndex(status: string | undefined): { pipeline: typeof PIPELINE_
   return { pipeline: PIPELINE_STAGES, activeIndex: 0, isReturn: false, isCancelled: false };
 }
 
+function TrackingStageNode({ stage, isActive, isCurrent, isLast }: {
+  stage: typeof PIPELINE_STAGES[0];
+  isActive: boolean;
+  isCurrent: boolean;
+  isLast: boolean;
+}) {
+  const Icon = stage.icon;
+  return (
+    <div className="flex items-center" style={{ flex: isLast ? 0 : 1 }}>
+      <div className="flex flex-col items-center gap-1.5 shrink-0">
+        <div
+          className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+            isCurrent
+              ? `${stage.bg} text-white ring-[3px] ${stage.ring} shadow-sm`
+              : isActive
+                ? `${stage.bg} text-white opacity-80`
+                : "bg-muted text-muted-foreground/50"
+          }`}
+          data-testid={`tracking-stage-${stage.key}`}
+        >
+          <Icon className="w-3.5 h-3.5" />
+        </div>
+        <span className={`text-[10px] text-center leading-tight whitespace-nowrap ${
+          isCurrent ? "font-semibold " + stage.color : isActive ? "font-medium " + stage.color : "text-muted-foreground/60"
+        }`}>
+          {stage.label}
+        </span>
+      </div>
+      {!isLast && (
+        <div className="flex-1 h-[2px] mx-1.5 mt-[-18px]">
+          <div className={`h-full rounded-full transition-all ${isActive ? stage.bg + " opacity-60" : "bg-muted"}`} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CourierTrackingJourney({ orderId, order }: { orderId: string; order: OrderDetails }) {
+  const [showAllEvents, setShowAllEvents] = useState(false);
   const { data: tracking, isLoading, refetch, isFetching } = useQuery<TrackingHistoryData>({
     queryKey: ["/api/orders", orderId, "tracking-history"],
     queryFn: async () => {
@@ -196,8 +234,10 @@ function CourierTrackingJourney({ orderId, order }: { orderId: string; order: Or
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-center py-6">
-            <Truck className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
+          <div className="text-center py-8">
+            <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto mb-3">
+              <Truck className="w-6 h-6 text-muted-foreground/40" />
+            </div>
             <p className="text-sm font-medium">No courier assigned yet</p>
             <p className="text-xs text-muted-foreground mt-1">
               Book this order with a courier to see tracking updates.
@@ -212,20 +252,28 @@ function CourierTrackingJourney({ orderId, order }: { orderId: string; order: Or
   const { pipeline, activeIndex, isCancelled } = getStageIndex(currentStatus);
   const events = tracking?.events || [];
   const reversedEvents = [...events].reverse();
+  const visibleEvents = showAllEvents ? reversedEvents : reversedEvents.slice(0, 4);
+  const hasMoreEvents = reversedEvents.length > 4;
+
+  const currentStage = isCancelled
+    ? CANCELLED_STAGE
+    : activeIndex >= 0 ? pipeline[activeIndex] : null;
 
   return (
     <Card>
-      <CardHeader className="pb-3">
+      <CardHeader className="pb-2">
         <div className="flex items-center justify-between gap-2 flex-wrap">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Truck className="w-5 h-5" />
-            Tracking Journey
-          </CardTitle>
-          <div className="flex items-center gap-2 flex-wrap">
-            <Badge variant="outline" className="font-mono text-xs" data-testid="badge-tracking-number">
+          <div className="flex items-center gap-3">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Truck className="w-5 h-5" />
+              Tracking
+            </CardTitle>
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <Badge variant="outline" className="font-mono text-[11px] px-2" data-testid="badge-tracking-number">
               {order.courierTracking}
             </Badge>
-            <Badge variant="secondary" className="text-xs capitalize" data-testid="badge-courier-name">
+            <Badge variant="secondary" className="text-[11px] capitalize px-2" data-testid="badge-courier-name">
               {order.courierName}
             </Badge>
             <Button
@@ -235,113 +283,112 @@ function CourierTrackingJourney({ orderId, order }: { orderId: string; order: Or
               disabled={isFetching}
               data-testid="button-refresh-tracking"
             >
-              <RefreshCw className={`w-4 h-4 ${isFetching ? "animate-spin" : ""}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} />
             </Button>
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-5">
-        {/* Pipeline Visualization */}
-        <div className="relative" data-testid="tracking-pipeline">
-          <div className="flex items-center justify-between relative">
-            {pipeline.map((stage, idx) => {
-              const Icon = stage.icon;
-              const isActive = idx <= activeIndex;
-              const isCurrent = idx === activeIndex;
-              return (
-                <div key={stage.key} className="flex flex-col items-center relative z-10" style={{ flex: 1 }}>
-                  <div
-                    className={`w-9 h-9 rounded-full flex items-center justify-center transition-all ${
-                      isCurrent
-                        ? `${stage.bg} text-white ring-4 ${stage.ring}`
-                        : isActive
-                          ? `${stage.bg} text-white`
-                          : "bg-muted text-muted-foreground"
-                    }`}
-                    data-testid={`tracking-stage-${stage.key}`}
-                  >
-                    <Icon className="w-4 h-4" />
-                  </div>
-                  <span className={`text-[10px] mt-1.5 text-center leading-tight max-w-[60px] ${
-                    isCurrent ? "font-semibold " + stage.color : isActive ? stage.color : "text-muted-foreground"
-                  }`}>
-                    {stage.label}
-                  </span>
-                </div>
-              );
-            })}
+      <CardContent className="space-y-4">
+        {tracking?.rawStatus && currentStage && (
+          <div className={`flex items-center gap-3 rounded-md px-3 py-2.5 ${currentStage.lightBg}`} data-testid="tracking-current-status">
+            <CircleDot className={`w-4 h-4 shrink-0 ${currentStage.color}`} />
+            <div className="flex-1 min-w-0">
+              <p className={`text-sm font-medium ${currentStage.color}`}>{tracking.rawStatus}</p>
+              {tracking.lastUpdate && (
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  {format(new Date(tracking.lastUpdate), "MMM dd, yyyy 'at' h:mm a")}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div className="relative px-2 pt-2 pb-1 overflow-x-auto" data-testid="tracking-pipeline">
+          <div className="flex items-start min-w-[400px]">
+            {pipeline.map((stage, idx) => (
+              <TrackingStageNode
+                key={stage.key}
+                stage={stage}
+                isActive={idx <= activeIndex}
+                isCurrent={idx === activeIndex}
+                isLast={idx === pipeline.length - 1 && !isCancelled}
+              />
+            ))}
             {isCancelled && (
-              <div className="flex flex-col items-center relative z-10" style={{ flex: 1 }}>
-                <div className={`w-9 h-9 rounded-full flex items-center justify-center ${CANCELLED_STAGE.bg} text-white ring-4 ${CANCELLED_STAGE.ring}`}>
-                  <XCircle className="w-4 h-4" />
-                </div>
-                <span className={`text-[10px] mt-1.5 text-center font-semibold ${CANCELLED_STAGE.color}`}>
-                  {CANCELLED_STAGE.label}
-                </span>
-              </div>
-            )}
-            {/* Progress line behind icons */}
-            <div className="absolute top-[18px] left-0 right-0 h-0.5 bg-muted mx-8" />
-            {activeIndex >= 0 && (
-              <div
-                className={`absolute top-[18px] left-0 h-0.5 mx-8 transition-all ${pipeline[Math.min(activeIndex, pipeline.length - 1)]?.bg || "bg-primary"}`}
-                style={{ width: `${Math.min((activeIndex / (pipeline.length - 1)) * 100, 100)}%` }}
+              <TrackingStageNode
+                stage={CANCELLED_STAGE}
+                isActive={true}
+                isCurrent={true}
+                isLast={true}
               />
             )}
           </div>
         </div>
 
-        {/* Current Status Badge */}
-        {tracking?.rawStatus && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground px-1">
-            <CircleDot className="w-3 h-3 shrink-0" />
-            <span>Current: <span className="font-medium text-foreground">{tracking.rawStatus}</span></span>
-            {tracking.lastUpdate && (
-              <span className="ml-auto shrink-0">{format(new Date(tracking.lastUpdate), "MMM dd, h:mm a")}</span>
-            )}
-          </div>
+        {reversedEvents.length > 0 && (
+          <>
+            <Separator />
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Activity Log</p>
+                {hasMoreEvents && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs h-auto py-1 px-2"
+                    onClick={() => setShowAllEvents(!showAllEvents)}
+                    data-testid="button-toggle-events"
+                  >
+                    {showAllEvents ? "Show less" : `Show all (${reversedEvents.length})`}
+                  </Button>
+                )}
+              </div>
+              {isLoading ? (
+                <div className="space-y-3">
+                  {[1, 2, 3].map(i => (
+                    <div key={i} className="flex gap-3">
+                      <Skeleton className="w-2 h-2 rounded-full mt-1.5 shrink-0" />
+                      <div className="flex-1 space-y-1">
+                        <Skeleton className="h-4 w-3/4" />
+                        <Skeleton className="h-3 w-1/3" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="relative pl-6" data-testid="tracking-events-list">
+                  <div className="absolute left-[7px] top-2 bottom-2 w-px bg-border" />
+                  {visibleEvents.map((event, idx) => (
+                    <div key={idx} className="relative flex items-start gap-3 pb-4 last:pb-0" data-testid={`tracking-event-${idx}`}>
+                      <div className={`absolute left-[-17px] mt-1 shrink-0 ${
+                        idx === 0
+                          ? "w-[9px] h-[9px] rounded-full bg-primary ring-[3px] ring-primary/20"
+                          : "w-[7px] h-[7px] rounded-full bg-muted-foreground/30 ml-px"
+                      }`} />
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm leading-snug ${idx === 0 ? "font-medium" : "text-muted-foreground"}`}>
+                          {event.description || event.status}
+                        </p>
+                        {event.date && (
+                          <p className="text-[11px] text-muted-foreground/70 mt-0.5">
+                            {formatEventDate(event.date)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
         )}
 
-        <Separator />
-
-        {/* Event Timeline */}
-        <div>
-          <p className="text-sm font-medium mb-3">Activity Log</p>
-          {isLoading ? (
-            <div className="space-y-3">
-              {[1, 2, 3].map(i => (
-                <div key={i} className="flex gap-3">
-                  <Skeleton className="w-2 h-2 rounded-full mt-1.5 shrink-0" />
-                  <div className="flex-1 space-y-1">
-                    <Skeleton className="h-4 w-3/4" />
-                    <Skeleton className="h-3 w-1/3" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : reversedEvents.length > 0 ? (
-            <div className="relative pl-5 space-y-0" data-testid="tracking-events-list">
-              <div className="absolute left-[3px] top-1 bottom-1 w-px bg-border" />
-              {reversedEvents.map((event, idx) => (
-                <div key={idx} className="relative flex items-start gap-3 py-2" data-testid={`tracking-event-${idx}`}>
-                  <div className={`absolute left-[-17px] w-[7px] h-[7px] rounded-full mt-1.5 shrink-0 ${
-                    idx === 0 ? "bg-primary ring-2 ring-primary/20" : "bg-muted-foreground/40"
-                  }`} />
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-sm leading-snug ${idx === 0 ? "font-medium" : ""}`}>{event.description || event.status}</p>
-                    {event.date && (
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {formatEventDate(event.date)}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">No tracking events available from the courier.</p>
-          )}
-        </div>
+        {!isLoading && reversedEvents.length === 0 && (
+          <>
+            <Separator />
+            <p className="text-sm text-muted-foreground text-center py-2">No tracking events available from the courier.</p>
+          </>
+        )}
       </CardContent>
     </Card>
   );
