@@ -148,10 +148,31 @@ function getCourierMap(courier: CourierType): Record<string, UniversalStatus> {
   return courier === 'leopards' ? LEOPARDS_STATUS_MAP : POSTEX_STATUS_MAP;
 }
 
+const AMBIGUOUS_ORIGIN_STATUSES = ['arrived at station', 'at station', 'arrived at origin', 'at origin facility'];
+const POST_ORIGIN_STATUSES: UniversalStatus[] = ['PICKED_UP', 'IN_TRANSIT', 'ARRIVED_AT_DESTINATION', 'OUT_FOR_DELIVERY', 'DELIVERY_ATTEMPTED', 'DELIVERY_FAILED', 'READY_FOR_RETURN', 'RETURN_IN_TRANSIT', 'RETURNED_TO_ORIGIN'];
+const POST_BOOKING_WORKFLOWS = ['FULFILLED', 'DELIVERED', 'RETURN'];
+const TRANSIT_INDICATORS = ['in transit', 'dispatched', 'dispatched to destination', 'in transit to destination', 'shipment in transit', 'package on route', 'out for delivery', 'delivery attempted', 'attempt failed', 'delivery attempt', 'enroute for delivery', 'arrived at destination', 'at destination'];
+
+function hasPassedThroughTransit(currentStatus?: string | null, workflowStatus?: string | null, events?: Array<{ status: string; date?: string; description?: string }>): boolean {
+  if (currentStatus && POST_ORIGIN_STATUSES.includes(currentStatus as UniversalStatus)) {
+    return true;
+  }
+  if (workflowStatus && POST_BOOKING_WORKFLOWS.includes(workflowStatus)) {
+    return true;
+  }
+  if (!events || events.length === 0) return false;
+  return events.some(e => {
+    const s = (e.status || '').toLowerCase().trim();
+    return TRANSIT_INDICATORS.some(t => s.includes(t));
+  });
+}
+
 export function normalizeStatus(
   rawStatus: string,
   courier: CourierType,
   currentStatus?: string | null,
+  events?: Array<{ status: string; date?: string; description?: string }>,
+  workflowStatus?: string | null,
 ): { normalizedStatus: UniversalStatus; mapped: boolean } {
   if (currentStatus && FINAL_STATUSES.includes(currentStatus as UniversalStatus)) {
     return { normalizedStatus: currentStatus as UniversalStatus, mapped: true };
@@ -162,17 +183,31 @@ export function normalizeStatus(
 
   const directMatch = map[key];
   if (directMatch) {
+    if (directMatch === 'ARRIVED_AT_ORIGIN' && AMBIGUOUS_ORIGIN_STATUSES.includes(key)) {
+      if (hasPassedThroughTransit(currentStatus, workflowStatus, events)) {
+        return { normalizedStatus: 'ARRIVED_AT_DESTINATION', mapped: true };
+      }
+    }
     return { normalizedStatus: directMatch, mapped: true };
   }
 
   for (const [mapKey, mapValue] of Object.entries(map)) {
     if (key.includes(mapKey) && mapKey.length >= 4) {
+      if (mapValue === 'ARRIVED_AT_ORIGIN' && AMBIGUOUS_ORIGIN_STATUSES.some(a => key.includes(a))) {
+        if (hasPassedThroughTransit(currentStatus, workflowStatus, events)) {
+          return { normalizedStatus: 'ARRIVED_AT_DESTINATION', mapped: true };
+        }
+      }
       return { normalizedStatus: mapValue, mapped: true };
     }
   }
 
   const fallback = keywordFallback(rawStatus);
   if (fallback) {
+    if (fallback === 'ARRIVED_AT_ORIGIN' && hasPassedThroughTransit(currentStatus, workflowStatus, events)) {
+      console.log(`[StatusNorm] Keyword fallback for "${rawStatus}" (${courier}) -> ARRIVED_AT_DESTINATION (post-transit)`);
+      return { normalizedStatus: 'ARRIVED_AT_DESTINATION', mapped: true };
+    }
     console.log(`[StatusNorm] Keyword fallback for "${rawStatus}" (${courier}) -> ${fallback}`);
     return { normalizedStatus: fallback, mapped: true };
   }

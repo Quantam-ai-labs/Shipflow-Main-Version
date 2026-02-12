@@ -2915,7 +2915,7 @@ export async function registerRoutes(
       const { trackShipment } = await import('./services/couriers');
       const creds = await getCourierCredentials(merchantId, order.courierName);
       const credObj = creds ? { apiKey: creds.apiKey || undefined, apiSecret: creds.apiSecret || undefined } : undefined;
-      const result = await trackShipment(order.courierName, order.courierTracking, credObj, order.shipmentStatus);
+      const result = await trackShipment(order.courierName, order.courierTracking, credObj, order.shipmentStatus, order.workflowStatus);
 
       if (!result || !result.success) {
         return res.json({

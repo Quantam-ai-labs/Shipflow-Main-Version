@@ -34,6 +34,7 @@ export async function trackShipment(
   trackingNumber: string,
   credentials?: CourierCredentials,
   currentStatus?: string | null,
+  workflowStatus?: string | null,
 ): Promise<NormalizedTrackingResult | null> {
   const name = courierName.toLowerCase();
   let result: TrackingResult | null = null;
@@ -65,7 +66,7 @@ export async function trackShipment(
   }
 
   const rawCourierStatus = result.courierStatus || result.status;
-  const { normalizedStatus, mapped } = normalizeStatus(rawCourierStatus, courierType, currentStatus);
+  const { normalizedStatus, mapped } = normalizeStatus(rawCourierStatus, courierType, currentStatus, result.events, workflowStatus);
 
   return {
     ...result,
