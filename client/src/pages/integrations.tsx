@@ -353,6 +353,39 @@ export default function Integrations() {
     },
   });
 
+  const { data: webhookHealth, isLoading: isWebhookHealthLoading, refetch: refetchWebhookHealth } = useQuery<{
+    status: 'healthy' | 'partial' | 'missing' | 'error';
+    registered: string[];
+    missing: string[];
+    callbackUrl: string;
+  }>({
+    queryKey: ["/api/shopify/webhooks/health"],
+    enabled: !!data?.shopify?.isConnected,
+    refetchInterval: 60000,
+  });
+
+  const registerWebhooksMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/shopify/webhooks/register", {});
+    },
+    onSuccess: async (res) => {
+      const result = await res.json();
+      refetchWebhookHealth();
+      toast({
+        title: result.success ? "Webhooks Registered" : "Partial Registration",
+        description: result.message,
+        variant: result.success ? "default" : "destructive",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Registration Failed",
+        description: "Could not register webhooks. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const syncShopifyMutation = useMutation({
     mutationFn: async () => {
       return apiRequest("POST", "/api/integrations/shopify/sync", {});
@@ -605,6 +638,55 @@ export default function Integrations() {
                   </div>
                 )}
               </div>
+              {data?.shopify.isConnected && (
+                <div className="flex items-center gap-2 flex-wrap text-sm p-3 rounded-md border" data-testid="webhook-health-status">
+                  <Zap className="w-4 h-4 shrink-0" />
+                  <span className="text-muted-foreground">Webhooks:</span>
+                  {isWebhookHealthLoading ? (
+                    <Skeleton className="h-5 w-20" />
+                  ) : webhookHealth?.status === 'healthy' ? (
+                    <Badge className="bg-green-500/10 text-green-600 border-green-500/20">
+                      <CheckCircle2 className="w-3 h-3 mr-1" />
+                      All Active ({webhookHealth.registered.length})
+                    </Badge>
+                  ) : webhookHealth?.status === 'partial' ? (
+                    <Badge className="bg-yellow-500/10 text-yellow-600 border-yellow-500/20">
+                      <Activity className="w-3 h-3 mr-1" />
+                      {webhookHealth.missing.length} Missing
+                    </Badge>
+                  ) : (
+                    <Badge variant="destructive">
+                      <XCircle className="w-3 h-3 mr-1" />
+                      Not Registered
+                    </Badge>
+                  )}
+                  {webhookHealth && webhookHealth.status !== 'healthy' && (
+                    <Button
+                      size="sm"
+                      onClick={() => registerWebhooksMutation.mutate()}
+                      disabled={registerWebhooksMutation.isPending}
+                      data-testid="button-register-webhooks"
+                    >
+                      {registerWebhooksMutation.isPending ? (
+                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                      ) : (
+                        <Zap className="w-3 h-3 mr-1" />
+                      )}
+                      Re-register
+                    </Button>
+                  )}
+                  {webhookHealth?.status === 'healthy' && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => refetchWebhookHealth()}
+                      data-testid="button-refresh-webhook-health"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                    </Button>
+                  )}
+                </div>
+              )}
               <div className="flex items-center gap-2 flex-wrap">
                 <Button
                   variant="outline"

@@ -13,7 +13,7 @@ import { cancelCourierBooking } from "./services/couriers";
 import { transitionOrder, bulkTransitionOrders, revertOrder } from "./services/workflowTransition";
 import { addPayment, deletePayment, markFullyPaid, resetPayments, bulkMarkPrepaid, recalculateOrderPayment } from "./services/payments";
 import { encryptToken, decryptToken } from './services/encryption';
-import { registerShopifyWebhooks } from './services/webhookRegistration';
+import { registerShopifyWebhooks, checkWebhookHealth } from './services/webhookRegistration';
 import { webhookHandler } from './services/webhookHandler';
 import { sendInviteEmail } from './services/email';
 
@@ -2408,82 +2408,77 @@ export async function registerRoutes(
 
   // Shopify Webhook Routes (no auth - verified via HMAC)
   app.post("/webhooks/shopify/orders-create", async (req: any, res) => {
+    res.status(200).json({ received: true });
     try {
       const hmac = req.headers['x-shopify-hmac-sha256'] as string;
-      const topic = req.headers['x-shopify-topic'] as string;
       const shopDomain = req.headers['x-shopify-shop-domain'] as string;
       const webhookId = req.headers['x-shopify-webhook-id'] as string;
       const rawBody = req.rawBody as Buffer;
-      
+
       if (!rawBody || !hmac) {
-        return res.status(401).json({ message: "Missing HMAC or body" });
+        console.warn("[Webhook] orders/create: Missing HMAC or body");
+        return;
       }
-      
+
       if (!webhookHandler.verifyHmac(rawBody, hmac)) {
         console.warn("[Webhook] HMAC verification failed for orders/create");
-        return res.status(401).json({ message: "Invalid HMAC" });
+        return;
       }
-      
-      res.status(200).json({ received: true });
-      
+
       webhookHandler.processOrderWebhook('orders/create', shopDomain, rawBody, webhookId)
         .catch(err => console.error("[Webhook] Background processing error:", err));
     } catch (error) {
       console.error("[Webhook] orders/create error:", error);
-      res.status(200).json({ received: true });
     }
   });
 
   app.post("/webhooks/shopify/orders-updated", async (req: any, res) => {
+    res.status(200).json({ received: true });
     try {
       const hmac = req.headers['x-shopify-hmac-sha256'] as string;
-      const topic = req.headers['x-shopify-topic'] as string;
       const shopDomain = req.headers['x-shopify-shop-domain'] as string;
       const webhookId = req.headers['x-shopify-webhook-id'] as string;
       const rawBody = req.rawBody as Buffer;
-      
+
       if (!rawBody || !hmac) {
-        return res.status(401).json({ message: "Missing HMAC or body" });
+        console.warn("[Webhook] orders/updated: Missing HMAC or body");
+        return;
       }
-      
+
       if (!webhookHandler.verifyHmac(rawBody, hmac)) {
         console.warn("[Webhook] HMAC verification failed for orders/updated");
-        return res.status(401).json({ message: "Invalid HMAC" });
+        return;
       }
-      
-      res.status(200).json({ received: true });
-      
+
       webhookHandler.processOrderWebhook('orders/updated', shopDomain, rawBody, webhookId)
         .catch(err => console.error("[Webhook] Background processing error:", err));
     } catch (error) {
       console.error("[Webhook] orders/updated error:", error);
-      res.status(200).json({ received: true });
     }
   });
 
   app.post("/webhooks/shopify/fulfillments-create", async (req: any, res) => {
+    res.status(200).json({ received: true });
     try {
       const hmac = req.headers['x-shopify-hmac-sha256'] as string;
       const shopDomain = req.headers['x-shopify-shop-domain'] as string;
       const webhookId = req.headers['x-shopify-webhook-id'] as string;
       const rawBody = req.rawBody as Buffer;
-      
+
       if (!rawBody || !hmac) {
-        return res.status(401).json({ message: "Missing HMAC or body" });
+        console.warn("[Webhook] fulfillments/create: Missing HMAC or body");
+        return;
       }
-      
+
       if (!webhookHandler.verifyHmac(rawBody, hmac)) {
         console.warn("[Webhook] HMAC verification failed for fulfillments/create");
-        return res.status(401).json({ message: "Invalid HMAC" });
+        return;
       }
-      
-      res.status(200).json({ received: true });
-      
+
       webhookHandler.processFulfillmentWebhook('fulfillments/create', shopDomain, rawBody, webhookId)
         .catch(err => console.error("[Webhook] Background processing error:", err));
     } catch (error) {
       console.error("[Webhook] fulfillments/create error:", error);
-      res.status(200).json({ received: true });
     }
   });
 
@@ -2506,6 +2501,42 @@ export async function registerRoutes(
     } catch (error: any) {
       console.error("Error reconciling orders:", error);
       res.status(500).json({ message: error.message || "Reconciliation failed" });
+    }
+  });
+
+  // ============================================
+  // WEBHOOK MANAGEMENT ENDPOINTS
+  // ============================================
+  app.get("/api/shopify/webhooks/health", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const health = await checkWebhookHealth(merchantId);
+      res.json(health);
+    } catch (error: any) {
+      console.error("Error checking webhook health:", error);
+      res.status(500).json({ message: error.message || "Failed to check webhook health" });
+    }
+  });
+
+  app.post("/api/shopify/webhooks/register", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const result = await registerShopifyWebhooks(merchantId);
+      res.json({
+        success: result.failed.length === 0,
+        registered: result.registered,
+        failed: result.failed,
+        message: result.failed.length === 0
+          ? `All ${result.registered.length} webhooks registered successfully`
+          : `${result.registered.length} registered, ${result.failed.length} failed`,
+      });
+    } catch (error: any) {
+      console.error("Error registering webhooks:", error);
+      res.status(500).json({ message: error.message || "Failed to register webhooks" });
     }
   });
 

@@ -133,6 +133,50 @@ async function updateWebhook(shop: string, accessToken: string, webhookId: numbe
   }
 }
 
+export async function checkWebhookHealth(merchantId: string): Promise<{
+  status: 'healthy' | 'partial' | 'missing' | 'error';
+  registered: string[];
+  missing: string[];
+  callbackUrl: string;
+}> {
+  const store = await storage.getShopifyStore(merchantId);
+  if (!store || !store.accessToken || !store.shopDomain) {
+    throw new Error('Shopify store not connected or missing credentials');
+  }
+
+  const accessToken = decryptToken(store.accessToken);
+  const baseUrl = getWebhookBaseUrl();
+  const existingWebhooks = await listExistingWebhooks(store.shopDomain, accessToken);
+
+  const registered: string[] = [];
+  const missing: string[] = [];
+
+  for (const topic of WEBHOOK_TOPICS) {
+    const callbackUrl = `${baseUrl}/webhooks/shopify/${topicToEndpoint(topic)}`;
+    const found = existingWebhooks.find(
+      (w: any) => w.topic === topic && w.address === callbackUrl
+    );
+    if (found) {
+      registered.push(topic);
+    } else {
+      missing.push(topic);
+    }
+  }
+
+  const status = missing.length === 0
+    ? 'healthy'
+    : registered.length === 0
+      ? 'missing'
+      : 'partial';
+
+  return {
+    status,
+    registered,
+    missing,
+    callbackUrl: `${baseUrl}/webhooks/shopify/...`,
+  };
+}
+
 async function deleteWebhook(shop: string, accessToken: string, webhookId: number): Promise<void> {
   const url = `https://${shop}/admin/api/2024-01/webhooks/${webhookId}.json`;
   const response = await fetch(url, {
