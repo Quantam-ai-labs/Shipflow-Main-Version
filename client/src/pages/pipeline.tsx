@@ -760,7 +760,7 @@ export default function Pipeline() {
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Order</th>
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Customer</th>
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground hidden md:table-cell">City</th>
-                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Amount</th>
+                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Amount (PKR)</th>
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground hidden lg:table-cell">Items</th>
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground hidden md:table-cell" data-testid="header-tags">Tags</th>
                 {activeTab === "PENDING" && (
@@ -862,12 +862,12 @@ export default function Pipeline() {
                   </td>
                   <td className="px-3 py-1.5 hidden md:table-cell text-sm">{order.city || "-"}</td>
                   <td className="px-3 py-1.5">
-                    <div className="font-medium text-sm">PKR {Number(order.totalAmount).toLocaleString()}</div>
+                    <div className="font-medium text-sm">{Number(order.totalAmount).toLocaleString()}</div>
                     {order.codPaymentStatus === "PAID" ? (
                       <Badge className="text-xs bg-green-500/10 text-green-600 border-green-500/20" data-testid={`badge-prepaid-${order.id}`}>Prepaid</Badge>
                     ) : order.codPaymentStatus === "PARTIALLY_PAID" ? (
                       <div className="flex items-center gap-1">
-                        <span className="text-xs text-amber-600">COD: PKR {Number(order.codRemaining ?? order.totalAmount).toLocaleString()}</span>
+                        <span className="text-xs text-amber-600">COD: {Number(order.codRemaining ?? order.totalAmount).toLocaleString()}</span>
                       </div>
                     ) : (
                       <div className="text-xs text-muted-foreground capitalize">{order.paymentMethod}</div>
