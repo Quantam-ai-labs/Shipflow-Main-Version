@@ -631,7 +631,7 @@ export default function OrderDetails() {
           </Link>
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold">Order #{order.orderNumber}</h1>
+              <h1 className="text-2xl font-bold">Order # {order.orderNumber}</h1>
               {getStatusBadge(order.shipmentStatus)}
             </div>
             <p className="text-muted-foreground text-sm">
