@@ -48,6 +48,13 @@ Preferred communication style: Simple, everyday language.
 - **API-Only Sync System**: Background polling every 30 seconds for incremental Shopify order updates, with manual sync option and live sync status indicator.
 - **Direct Courier Booking**: Allows batch booking of "Ready-to-Ship" orders with Leopards and PostEx, including preview, confirmation, per-order overrides, and Shopify fulfillment write-back with tracking information.
 - **Print & Logs System**: Generates native courier airway bills from courier APIs (e.g., Leopards slip_link, PostEx get-invoice) and batch loadsheets, with support for single and bulk PDF generation.
+- **Shopify Write-Back System**: Bi-directional sync via `server/services/shopifyWriteBack.ts`:
+  - Address/phone/email edits push to Shopify shipping_address
+  - Order cancellation in ShipFlow cancels on Shopify
+  - Workflow status changes update Shopify tags (SF-Confirmed, SF-Hold, SF-Cancelled, etc.)
+  - Loop prevention via in-memory cooldown map (10s) to skip webhook echoes from our own writes
+  - Bulk write-backs are serialized with 500ms delay for Shopify API rate limit compliance
+- **Webhook Resilience**: All webhook endpoints respond 200 immediately before processing, preventing Shopify from removing webhooks due to timeouts. Webhook health check API and re-register UI button in Integrations page.
 
 ## External Dependencies
 

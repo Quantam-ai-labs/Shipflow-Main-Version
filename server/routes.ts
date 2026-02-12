@@ -16,6 +16,7 @@ import { encryptToken, decryptToken } from './services/encryption';
 import { registerShopifyWebhooks, checkWebhookHealth } from './services/webhookRegistration';
 import { webhookHandler } from './services/webhookHandler';
 import { sendInviteEmail } from './services/email';
+import { writeBackAddress, writeBackCancel, writeBackTags } from './services/shopifyWriteBack';
 
 function mapCourierSlugToName(slug: string): string | null {
   const map: Record<string, string> = {
@@ -595,6 +596,20 @@ export async function registerRoutes(
             actorName,
             actorType: "user",
           });
+        }
+      }
+
+      if (order.shopifyOrderId) {
+        const addressFields = ['customerName', 'customerPhone', 'customerEmail', 'shippingAddress', 'city', 'province', 'postalCode'];
+        const hasAddressChange = addressFields.some(f => updateData[f] !== undefined);
+        if (hasAddressChange) {
+          writeBackAddress(merchantId, order.shopifyOrderId, updateData)
+            .then(result => {
+              if (!result.success) {
+                console.warn(`[ShopifyWriteBack] Address sync failed for order ${orderId}: ${result.error}`);
+              }
+            })
+            .catch(err => console.error(`[ShopifyWriteBack] Address sync error:`, err));
         }
       }
 

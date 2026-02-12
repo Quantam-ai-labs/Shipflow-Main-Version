@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { storage } from '../storage';
 import { shopifyService } from './shopify';
+import { isRecentWriteBack } from './shopifyWriteBack';
 
 interface WebhookProcessResult {
   success: boolean;
@@ -80,6 +81,12 @@ export class WebhookHandler {
     try {
       const payload = JSON.parse(rawBody.toString());
       const shopifyOrderId = String(payload.id);
+
+      if (topic === 'orders/updated' && isRecentWriteBack(shopifyOrderId)) {
+        console.log(`[Webhook] Skipping orders/updated for ${shopifyOrderId} - recent ShipFlow write-back`);
+        await storage.updateWebhookEventStatus(webhookEvent.id, 'processed');
+        return { success: true, action: 'skipped_duplicate' };
+      }
 
       await storage.updateWebhookEventStatus(webhookEvent.id, 'processing');
 
