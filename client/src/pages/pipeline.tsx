@@ -391,10 +391,14 @@ export default function Pipeline() {
       const res = await apiRequest("POST", `/api/orders/${orderId}/cancel-shopify`, { reason: "other" });
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       queryClient.invalidateQueries({ queryKey: ["/api/orders/workflow-counts"] });
-      toast({ title: "Shopify order cancelled", description: "Order cancelled on Shopify and moved to Cancelled" });
+      if (data.shopifyWarning) {
+        toast({ title: "Order cancelled locally", description: "Shopify sync failed but order is cancelled in ShipFlow. You may need to reconnect your Shopify store.", variant: "destructive" });
+      } else {
+        toast({ title: "Shopify order cancelled", description: "Order cancelled on Shopify and moved to Cancelled" });
+      }
       setCancelConfirm(null);
     },
     onError: (err: any) => {

@@ -743,6 +743,9 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Shopify store is not connected" });
       }
 
+      let shopifyCancelled = false;
+      let shopifyError: string | undefined;
+
       const cancelResult = await cancelShopifyOrder(
         store.shopDomain,
         store.accessToken,
@@ -750,11 +753,11 @@ export async function registerRoutes(
         reason,
       );
 
-      if (!cancelResult.success) {
-        return res.status(400).json({
-          message: `Shopify cancellation failed: ${cancelResult.error}`,
-          shopifyError: cancelResult.error,
-        });
+      if (cancelResult.success) {
+        shopifyCancelled = true;
+      } else {
+        shopifyError = cancelResult.error;
+        console.warn(`[Cancel] Shopify cancellation failed for order ${orderId}, proceeding with local cancel: ${cancelResult.error}`);
       }
 
       await storage.updateOrderWorkflow(merchantId, orderId, {
@@ -771,7 +774,9 @@ export async function registerRoutes(
         actorUserId: userId,
         actorName,
         actorType: "user",
-        reason: `Shopify order cancelled via API (reason: ${reason})`,
+        reason: shopifyCancelled
+          ? `Shopify order cancelled via API (reason: ${reason})`
+          : `Order cancelled locally (Shopify cancel failed: ${shopifyError})`,
       });
 
       await storage.createOrderChangeLog({
@@ -781,10 +786,15 @@ export async function registerRoutes(
         actorUserId: userId,
         actorName,
         actorType: "user",
-        metadata: { shopifyOrderId: order.shopifyOrderId, reason },
+        metadata: { shopifyOrderId: order.shopifyOrderId, reason, shopifyCancelled, shopifyError },
       });
 
-      res.json({ success: true, order: result.order });
+      res.json({
+        success: true,
+        order: result.order,
+        shopifyCancelled,
+        ...(shopifyError && { shopifyWarning: `Order cancelled locally but Shopify cancellation failed: ${shopifyError}` }),
+      });
     } catch (error) {
       console.error("Error cancelling Shopify order:", error);
       res.status(500).json({ message: "Failed to cancel Shopify order" });
