@@ -181,7 +181,7 @@ export async function revertOrder(merchantId: string, orderId: string, actorUser
 }
 
 export async function autoMoveStalePending(merchantId: string): Promise<number> {
-  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const cutoff = new Date(Date.now() - 12 * 60 * 60 * 1000);
 
   const staleOrders = await db.select({ id: orders.id, workflowStatus: orders.workflowStatus })
     .from(orders)
@@ -200,8 +200,8 @@ export async function autoMoveStalePending(merchantId: string): Promise<number> 
     .set({
       workflowStatus: "PENDING",
       previousWorkflowStatus: "NEW",
-      pendingReasonType: "AUTO_24H",
-      pendingReason: "Auto-moved: not finalized within 24 hours",
+      pendingReasonType: "AUTO_12H",
+      pendingReason: "Auto-moved: not finalized within 12 hours",
       lastStatusChangedAt: now,
       lastStatusChangedByUserId: null,
       updatedAt: now,
@@ -217,8 +217,8 @@ export async function autoMoveStalePending(merchantId: string): Promise<number> 
     merchantId,
     fromStatus: "NEW",
     toStatus: "PENDING",
-    action: "auto_24h_pending",
-    reason: "Auto-moved: not finalized within 24 hours",
+    action: "auto_12h_pending",
+    reason: "Auto-moved: not finalized within 12 hours",
     actorUserId: null,
     actorType: "system",
   }));

@@ -43,7 +43,7 @@ Preferred communication style: Simple, everyday language.
 - **Shipment Tracking**: Records courier tracking and events with universal status normalization.
 - **COD Reconciliation**: Tracks payment settlements, including `prepaidAmount`, `codRemaining`, and `codPaymentStatus`. Payment records are immutable after booking.
 - **Onboarding Wizard**: Guides initial setup including Shopify connection and courier configuration.
-- **Workflow Transition System**: A 9-stage pipeline (NEW to DELIVERED/RETURN/CANCELLED) with automated transitions based on courier updates, audit logging, and final state protection. Supports Robo-tag processing for status changes and a 24h auto-move for new orders.
+- **Workflow Transition System**: A 9-stage pipeline (NEW to DELIVERED/RETURN/CANCELLED) with automated transitions based on courier updates, audit logging, and final state protection. Supports Robo-tag processing for status changes and a 12h auto-move for new orders.
 - **Batch Import System**: Asynchronous, resumable background jobs for large Shopify order imports, with progress tracking and error handling.
 - **API-Only Sync System**: Background polling every 30 seconds for incremental Shopify order updates, with manual sync option and live sync status indicator.
 - **Direct Courier Booking**: Allows batch booking of "Ready-to-Ship" orders with Leopards and PostEx, including preview, confirmation, per-order overrides, and Shopify fulfillment write-back with tracking information.

@@ -95,7 +95,7 @@ const PENDING_REASON_TYPES = [
   { value: "CUSTOMER_NOT_RESPONDING", label: "Customer Not Responding" },
   { value: "CUSTOMER_REQUESTED_CHANGE", label: "Customer Requested Change" },
   { value: "FRAUD_SUSPECTED", label: "Fraud Suspected" },
-  { value: "AUTO_24H", label: "Auto (24h)" },
+  { value: "AUTO_12H", label: "Auto (12h)" },
   { value: "OTHER", label: "Other" },
 ];
 
