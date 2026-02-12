@@ -8,8 +8,9 @@ export const UNIVERSAL_STATUSES = [
   'DELIVERY_ATTEMPTED',
   'DELIVERED',
   'DELIVERY_FAILED',
-  'RETURNED_TO_SHIPPER',
+  'READY_FOR_RETURN',
   'RETURN_IN_TRANSIT',
+  'RETURNED_TO_SHIPPER',
   'CANCELLED',
 ] as const;
 
@@ -44,17 +45,17 @@ const POSTEX_STATUS_MAP: Record<string, UniversalStatus> = {
   'delivery failed': 'DELIVERY_FAILED',
   'refused': 'DELIVERY_FAILED',
   'not accepted': 'DELIVERY_FAILED',
+  'ready for return': 'READY_FOR_RETURN',
+  'waiting for return': 'READY_FOR_RETURN',
+  'return process initiated': 'READY_FOR_RETURN',
+  'return in transit': 'RETURN_IN_TRANSIT',
+  'being return': 'RETURN_IN_TRANSIT',
+  'being returned': 'RETURN_IN_TRANSIT',
+  'return dispatched': 'RETURN_IN_TRANSIT',
   'returned': 'RETURNED_TO_SHIPPER',
   'returned to shipper': 'RETURNED_TO_SHIPPER',
   'returned at merchant warehouse': 'RETURNED_TO_SHIPPER',
   'returned to merchant': 'RETURNED_TO_SHIPPER',
-  'return in transit': 'RETURN_IN_TRANSIT',
-  'being return': 'RETURN_IN_TRANSIT',
-  'ready for return': 'RETURN_IN_TRANSIT',
-  'waiting for return': 'RETURN_IN_TRANSIT',
-  'return process initiated': 'RETURN_IN_TRANSIT',
-  'being returned': 'RETURN_IN_TRANSIT',
-  'return dispatched': 'RETURN_IN_TRANSIT',
   'cancelled': 'CANCELLED',
   'booking cancelled by merchant': 'CANCELLED',
   'booking cancelled by merchant ': 'CANCELLED',
@@ -85,6 +86,7 @@ const LEOPARDS_STATUS_MAP: Record<string, UniversalStatus> = {
   'at destination': 'ARRIVED_AT_DESTINATION',
   'arrived at destination station': 'ARRIVED_AT_DESTINATION',
   'out for delivery': 'OUT_FOR_DELIVERY',
+  'enroute for delivery': 'OUT_FOR_DELIVERY',
   'delivery attempted': 'DELIVERY_ATTEMPTED',
   'attempt failed': 'DELIVERY_ATTEMPTED',
   'delivery attempt': 'DELIVERY_ATTEMPTED',
@@ -94,11 +96,12 @@ const LEOPARDS_STATUS_MAP: Record<string, UniversalStatus> = {
   'delivery failed': 'DELIVERY_FAILED',
   'refused': 'DELIVERY_FAILED',
   'not delivered': 'DELIVERY_FAILED',
+  'ready for return': 'READY_FOR_RETURN',
+  'waiting for return': 'READY_FOR_RETURN',
+  'return process initiated': 'READY_FOR_RETURN',
   'return in transit': 'RETURN_IN_TRANSIT',
-  'return to lahore': 'RETURN_IN_TRANSIT',
   'return dispatched': 'RETURN_IN_TRANSIT',
   'being returned': 'RETURN_IN_TRANSIT',
-  'enroute for delivery': 'OUT_FOR_DELIVERY',
   'returned to shipper': 'RETURNED_TO_SHIPPER',
   'returned': 'RETURNED_TO_SHIPPER',
   'return completed': 'RETURNED_TO_SHIPPER',
@@ -117,7 +120,9 @@ function keywordFallback(rawStatus: string): UniversalStatus | null {
   if (s.includes('refused') || s.includes('not accepted')) return 'DELIVERY_FAILED';
   if (s.includes('return') && (s.includes('shipper') || s.includes('merchant') || s.includes('completed'))) return 'RETURNED_TO_SHIPPER';
   if (s.includes('return') && s.includes('transit')) return 'RETURN_IN_TRANSIT';
-  if (s.includes('return') || s.includes('reverse')) return 'RETURN_IN_TRANSIT';
+  if (s.includes('return') && (s.includes('ready') || s.includes('waiting') || s.includes('initiated') || s.includes('process'))) return 'READY_FOR_RETURN';
+  if (s.includes('return') && (s.includes('being') || s.includes('dispatched'))) return 'RETURN_IN_TRANSIT';
+  if (s.includes('return to ')) return 'RETURN_IN_TRANSIT';
   if (s.includes('cancel')) return 'CANCELLED';
   if (s.includes('arrived') && s.includes('destination')) return 'ARRIVED_AT_DESTINATION';
   if (s.includes('destination')) return 'ARRIVED_AT_DESTINATION';
@@ -194,8 +199,9 @@ export function getStatusDisplayLabel(status: string): string {
     'DELIVERY_ATTEMPTED': 'Delivery Attempted',
     'DELIVERED': 'Delivered',
     'DELIVERY_FAILED': 'Delivery Failed',
-    'RETURNED_TO_SHIPPER': 'Returned',
+    'READY_FOR_RETURN': 'Ready for Return',
     'RETURN_IN_TRANSIT': 'Return in Transit',
+    'RETURNED_TO_SHIPPER': 'Returned',
     'CANCELLED': 'Cancelled',
   };
   return labels[status] || status;

@@ -115,6 +115,7 @@ const PIPELINE_STAGES = [
 
 const RETURN_STAGES = [
   { key: "DELIVERY_FAILED", label: "Failed", icon: AlertTriangle, color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-600", ring: "ring-orange-600/20" },
+  { key: "READY_FOR_RETURN", label: "Ready for Return", icon: AlertTriangle, color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-600", ring: "ring-orange-600/20" },
   { key: "RETURN_IN_TRANSIT", label: "Return Transit", icon: RotateCcw, color: "text-rose-600 dark:text-rose-400", bg: "bg-rose-600", ring: "ring-rose-600/20" },
   { key: "RETURNED_TO_SHIPPER", label: "Returned", icon: RotateCcw, color: "text-red-600 dark:text-red-400", bg: "bg-red-600", ring: "ring-red-600/20" },
 ];
@@ -526,7 +527,7 @@ export default function OrderDetails() {
     addRemarkMutation.mutate({ content: newRemark, remarkType });
   };
 
-  const PICKED_UP_STATUSES = ['PICKED_UP', 'IN_TRANSIT', 'ARRIVED_AT_DESTINATION', 'OUT_FOR_DELIVERY', 'DELIVERY_ATTEMPTED', 'DELIVERED', 'DELIVERY_FAILED', 'RETURNED_TO_SHIPPER', 'RETURN_IN_TRANSIT'];
+  const PICKED_UP_STATUSES = ['PICKED_UP', 'IN_TRANSIT', 'ARRIVED_AT_DESTINATION', 'OUT_FOR_DELIVERY', 'DELIVERY_ATTEMPTED', 'DELIVERED', 'DELIVERY_FAILED', 'RETURNED_TO_SHIPPER', 'READY_FOR_RETURN', 'RETURN_IN_TRANSIT'];
   const isLocked = order?.workflowStatus === "DELIVERED" || order?.workflowStatus === "RETURN" || order?.workflowStatus === "CANCELLED";
 
   const startEditingCustomer = () => {

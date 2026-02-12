@@ -978,7 +978,7 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
 
-      const { search, status, courier, dateFrom, dateTo, page: pageStr, pageSize: pageSizeStr, workflowStatus: wfStatus } = req.query;
+      const { search, status, courier, dateFrom, dateTo, page: pageStr, pageSize: pageSizeStr, workflowStatus: wfStatus, shipmentStatus: shipStatusParam } = req.query;
       const page = parseInt(pageStr as string) || 1;
       const pageSize = parseInt(pageSizeStr as string) || 20;
       const offset = (page - 1) * pageSize;
@@ -991,6 +991,10 @@ export async function registerRoutes(
 
       if (wfStatus && wfStatus !== "all") {
         conditions.push(eq(orders.workflowStatus, wfStatus as string));
+      }
+
+      if (shipStatusParam && shipStatusParam !== "all") {
+        conditions.push(eq(orders.shipmentStatus, shipStatusParam as string));
       }
 
       if (courier && courier !== "all") {

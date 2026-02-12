@@ -13,6 +13,7 @@ const BATCH_DELAY_MS = 500;
 const DISPATCH_STATUSES = ['PICKED_UP', 'IN_TRANSIT', 'ARRIVED_AT_ORIGIN', 'ARRIVED_AT_DESTINATION', 'OUT_FOR_DELIVERY', 'DELIVERY_ATTEMPTED', 'DELIVERY_FAILED'];
 const DELIVERED_STATUSES = ['DELIVERED'];
 const RETURN_STATUSES = ['RETURNED_TO_SHIPPER', 'RETURN_IN_TRANSIT'];
+const READY_FOR_RETURN_STATUS = 'READY_FOR_RETURN';
 
 interface CourierSyncResult {
   timestamp: Date;
@@ -479,12 +480,42 @@ async function oneTimeRepairFulfilledWithBookedShipment() {
   }
 }
 
+async function oneTimeRepairReadyForReturn() {
+  try {
+    const readyForReturnRawStatuses = ['ready for return', 'waiting for return', 'return process initiated'];
+    const misclassified = await db.select()
+      .from(orders)
+      .where(and(
+        eq(orders.shipmentStatus, 'RETURN_IN_TRANSIT'),
+        sql`LOWER(${orders.courierRawStatus}) IN ('ready for return', 'waiting for return', 'return process initiated')`
+      ));
+
+    if (misclassified.length === 0) {
+      console.log('[Repair] No RETURN_IN_TRANSIT orders with ready-for-return raw status found');
+      return;
+    }
+
+    console.log(`[Repair] Found ${misclassified.length} orders incorrectly mapped as RETURN_IN_TRANSIT that should be READY_FOR_RETURN`);
+    let fixed = 0;
+    for (const order of misclassified) {
+      await db.update(orders)
+        .set({ shipmentStatus: 'READY_FOR_RETURN', updatedAt: new Date() })
+        .where(eq(orders.id, order.id));
+      fixed++;
+    }
+    console.log(`[Repair] Reclassified ${fixed}/${misclassified.length} orders to READY_FOR_RETURN`);
+  } catch (err) {
+    console.error('[Repair] Error during ready-for-return repair:', err);
+  }
+}
+
 export function startCourierSyncScheduler() {
   if (syncTimer) return;
 
   console.log(`[CourierSync] Starting courier status sync every ${COURIER_SYNC_INTERVAL_MS / 1000}s`);
 
   oneTimeRepairFulfilledWithBookedShipment();
+  oneTimeRepairReadyForReturn();
 
   setTimeout(() => runCourierSync(), 30000);
   syncTimer = setInterval(runCourierSync, COURIER_SYNC_INTERVAL_MS);

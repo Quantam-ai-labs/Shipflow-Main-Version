@@ -58,6 +58,23 @@ const workflowStatusOptions = [
   { value: "RETURN", label: "Return" },
 ];
 
+const shipmentStatusOptions = [
+  { value: "all", label: "All Shipment Statuses" },
+  { value: "BOOKED", label: "Booked" },
+  { value: "PICKED_UP", label: "Picked Up" },
+  { value: "ARRIVED_AT_ORIGIN", label: "At Origin" },
+  { value: "IN_TRANSIT", label: "In Transit" },
+  { value: "ARRIVED_AT_DESTINATION", label: "At Destination" },
+  { value: "OUT_FOR_DELIVERY", label: "Out for Delivery" },
+  { value: "DELIVERY_ATTEMPTED", label: "Delivery Attempted" },
+  { value: "DELIVERED", label: "Delivered" },
+  { value: "DELIVERY_FAILED", label: "Delivery Failed" },
+  { value: "READY_FOR_RETURN", label: "Ready for Return" },
+  { value: "RETURN_IN_TRANSIT", label: "Return in Transit" },
+  { value: "RETURNED_TO_SHIPPER", label: "Returned" },
+  { value: "CANCELLED", label: "Cancelled" },
+];
+
 const courierOptions = [
   { value: "all", label: "All Couriers" },
   { value: "leopards", label: "Leopards" },
@@ -259,6 +276,7 @@ export default function Shipments() {
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [shipmentStatusFilter, setShipmentStatusFilter] = useState("all");
   const [courierFilter, setCourierFilter] = useState("all");
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [page, setPage] = useState(1);
@@ -282,6 +300,7 @@ export default function Shipments() {
     pageSize: pageSize.toString(),
     ...(search && { search }),
     ...(statusFilter !== "all" && { workflowStatus: statusFilter }),
+    ...(shipmentStatusFilter !== "all" && { shipmentStatus: shipmentStatusFilter }),
     ...(courierFilter !== "all" && { courier: courierFilter }),
     ...(dateParams.dateFrom && { dateFrom: dateParams.dateFrom }),
     ...(dateParams.dateTo && { dateTo: dateParams.dateTo }),
@@ -487,6 +506,17 @@ export default function Shipments() {
                     </SelectTrigger>
                     <SelectContent>
                       {workflowStatusOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={shipmentStatusFilter} onValueChange={(v) => { setShipmentStatusFilter(v); setPage(1); }}>
+                    <SelectTrigger className="w-[200px]" data-testid="select-shipment-status-filter">
+                      <Package className="w-4 h-4 mr-2" />
+                      <SelectValue placeholder="Shipment Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {shipmentStatusOptions.map((option) => (
                         <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                       ))}
                     </SelectContent>
