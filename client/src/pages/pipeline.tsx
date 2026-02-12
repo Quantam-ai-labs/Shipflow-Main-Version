@@ -176,6 +176,7 @@ export default function Pipeline() {
   const [pageSize] = useState(300);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [pendingReasonFilter, setPendingReasonFilter] = useState("all");
+  const [shipmentSubFilter, setShipmentSubFilter] = useState("all");
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
 
   const dateParams = dateRangeToParams(dateRange);
@@ -219,6 +220,7 @@ export default function Pipeline() {
     setSelectedIds(new Set());
     setSearch("");
     setPendingReasonFilter("all");
+    setShipmentSubFilter("all");
     setDateRange(undefined);
   }, [activeTab]);
 
@@ -239,9 +241,49 @@ export default function Pipeline() {
     },
   });
 
-  const orders = data?.orders || [];
+  const SHIPMENT_SUB_TABS: Record<string, { value: string; label: string }[]> = {
+    BOOKED: [
+      { value: "all", label: "All" },
+      { value: "BOOKED", label: "Awaiting Pickup" },
+      { value: "PICKED_UP", label: "Picked Up" },
+    ],
+    FULFILLED: [
+      { value: "all", label: "All" },
+      { value: "PICKED_UP", label: "Picked Up" },
+      { value: "ARRIVED_AT_ORIGIN", label: "At Origin" },
+      { value: "IN_TRANSIT", label: "In Transit" },
+      { value: "ARRIVED_AT_DESTINATION", label: "At Destination" },
+      { value: "OUT_FOR_DELIVERY", label: "Out for Delivery" },
+      { value: "DELIVERY_ATTEMPTED", label: "Attempted" },
+      { value: "DELIVERY_FAILED", label: "Failed" },
+      { value: "READY_FOR_RETURN", label: "Ready for Return" },
+    ],
+    RETURN: [
+      { value: "all", label: "All" },
+      { value: "RETURN_IN_TRANSIT", label: "Return in Transit" },
+      { value: "RETURNED_TO_SHIPPER", label: "Returned to Shipper" },
+      { value: "READY_FOR_RETURN", label: "Ready for Return" },
+    ],
+  };
+
+  const rawOrders = data?.orders || [];
   const total = data?.total || 0;
   const totalPages = Math.ceil(total / pageSize);
+
+  const orders = useMemo(() => {
+    if (shipmentSubFilter === "all" || !SHIPMENT_SUB_TABS[activeTab]) return rawOrders;
+    return rawOrders.filter(o => o.shipmentStatus === shipmentSubFilter);
+  }, [rawOrders, shipmentSubFilter, activeTab]);
+
+  const shipmentCounts = useMemo(() => {
+    if (!SHIPMENT_SUB_TABS[activeTab]) return {};
+    const counts: Record<string, number> = { all: rawOrders.length };
+    for (const order of rawOrders) {
+      const s = order.shipmentStatus || "UNKNOWN";
+      counts[s] = (counts[s] || 0) + 1;
+    }
+    return counts;
+  }, [rawOrders, activeTab]);
 
   const workflowMutation = useMutation({
     mutationFn: async ({ orderId, action, extra }: { orderId: string; action: string; extra?: any }) => {
@@ -746,6 +788,34 @@ export default function Pipeline() {
           </span>
         </div>
       )}
+      {/* Shipment Status Sub-Tabs */}
+      {SHIPMENT_SUB_TABS[activeTab] && (
+        <div className="flex items-center gap-1.5 px-4 py-2 border-b bg-muted/30 flex-wrap" data-testid="shipment-sub-tabs">
+          {SHIPMENT_SUB_TABS[activeTab].map(tab => {
+            const count = shipmentCounts[tab.value] || 0;
+            if (tab.value !== "all" && count === 0) return null;
+            const isActive = shipmentSubFilter === tab.value;
+            return (
+              <Button
+                key={tab.value}
+                size="sm"
+                variant={isActive ? "default" : "outline"}
+                className="text-xs gap-1"
+                onClick={() => {
+                  setShipmentSubFilter(tab.value);
+                  setSelectedIds(new Set());
+                }}
+                data-testid={`shipment-filter-${tab.value}`}
+              >
+                {tab.label}
+                <Badge variant={isActive ? "secondary" : "outline"} className="text-[10px] min-w-[1.25rem] justify-center">
+                  {count}
+                </Badge>
+              </Button>
+            );
+          })}
+        </div>
+      )}
       {/* Orders Table */}
       <div className="flex-1 overflow-auto">
         {isLoading ? (
@@ -1059,7 +1129,7 @@ export default function Pipeline() {
       {totalPages > 1 && (
         <div className="flex items-center justify-between px-4 py-1.5 border-t bg-background">
           <div className="text-xs text-muted-foreground" data-testid="text-total-orders">
-            {total} orders
+            {shipmentSubFilter !== "all" ? `${orders.length} of ${total}` : total} orders
           </div>
           <div className="flex items-center gap-1">
             <Button size="icon" variant="ghost" onClick={() => setPage(1)} disabled={page <= 1} data-testid="button-first-page">

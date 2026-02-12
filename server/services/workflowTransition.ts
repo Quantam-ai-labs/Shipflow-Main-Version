@@ -4,8 +4,55 @@ import { eq, and, inArray, lt, sql } from "drizzle-orm";
 import type { Order } from "@shared/schema";
 import { writeBackCancel, writeBackTags } from './shopifyWriteBack';
 
-const FINAL_STATUSES = ["DELIVERED", "RETURN"];
-const VALID_STATUSES = ["NEW", "PENDING", "HOLD", "READY_TO_SHIP", "BOOKED", "FULFILLED", "DELIVERED", "RETURN", "CANCELLED"];
+const VALID_STATUSES = ["NEW", "PENDING", "HOLD", "READY_TO_SHIP", "BOOKED", "FULFILLED", "DELIVERED", "RETURN", "CANCELLED"] as const;
+type WorkflowStatus = typeof VALID_STATUSES[number];
+
+const ALLOWED_TRANSITIONS: Record<WorkflowStatus, WorkflowStatus[]> = {
+  NEW:           ["PENDING", "READY_TO_SHIP", "CANCELLED"],
+  PENDING:       ["NEW", "HOLD", "READY_TO_SHIP", "CANCELLED"],
+  HOLD:          ["PENDING", "READY_TO_SHIP", "CANCELLED"],
+  READY_TO_SHIP: ["PENDING", "HOLD", "BOOKED", "CANCELLED"],
+  BOOKED:        ["FULFILLED", "CANCELLED"],
+  FULFILLED:     ["DELIVERED", "RETURN"],
+  DELIVERED:     [],
+  RETURN:        [],
+  CANCELLED:     [],
+};
+
+const SYSTEM_ALLOWED_TRANSITIONS: Record<WorkflowStatus, WorkflowStatus[]> = {
+  NEW:           ["PENDING", "READY_TO_SHIP", "CANCELLED"],
+  PENDING:       ["READY_TO_SHIP", "CANCELLED"],
+  HOLD:          ["PENDING", "READY_TO_SHIP", "CANCELLED"],
+  READY_TO_SHIP: ["BOOKED", "CANCELLED"],
+  BOOKED:        ["FULFILLED", "CANCELLED"],
+  FULFILLED:     ["DELIVERED", "RETURN"],
+  DELIVERED:     [],
+  RETURN:        [],
+  CANCELLED:     [],
+};
+
+function isTransitionAllowed(from: string, to: string, actorType: string, action: string): { allowed: boolean; reason?: string } {
+  if (action === "revert" || action === "admin_override" || action === "data_repair") {
+    return { allowed: true };
+  }
+
+  if (!VALID_STATUSES.includes(from as WorkflowStatus) || !VALID_STATUSES.includes(to as WorkflowStatus)) {
+    return { allowed: false, reason: `Invalid status: ${from} -> ${to}` };
+  }
+
+  if (from === to) {
+    return { allowed: true };
+  }
+
+  const transitionMap = actorType === "system" ? SYSTEM_ALLOWED_TRANSITIONS : ALLOWED_TRANSITIONS;
+  const allowed = transitionMap[from as WorkflowStatus];
+
+  if (!allowed || !allowed.includes(to as WorkflowStatus)) {
+    return { allowed: false, reason: `Transition ${from} -> ${to} is not allowed (actor: ${actorType}, action: ${action})` };
+  }
+
+  return { allowed: true };
+}
 
 interface TransitionParams {
   merchantId: string;
@@ -28,7 +75,7 @@ interface TransitionResult {
 export async function transitionOrder(params: TransitionParams): Promise<TransitionResult> {
   const { merchantId, orderId, toStatus, action, actorUserId, actorName, actorType = "user", reason, extraData } = params;
 
-  if (!VALID_STATUSES.includes(toStatus)) {
+  if (!VALID_STATUSES.includes(toStatus as WorkflowStatus)) {
     return { success: false, error: `Invalid status: ${toStatus}` };
   }
 
@@ -39,12 +86,14 @@ export async function transitionOrder(params: TransitionParams): Promise<Transit
     return { success: false, error: "Order not found" };
   }
 
-  if (FINAL_STATUSES.includes(order.workflowStatus) && action !== "revert" && action !== "admin_override") {
-    return { success: false, error: `Cannot change status of ${order.workflowStatus} order` };
-  }
-
   if (order.workflowStatus === toStatus) {
     return { success: true, order };
+  }
+
+  const check = isTransitionAllowed(order.workflowStatus, toStatus, actorType, action);
+  if (!check.allowed) {
+    console.warn(`[Workflow] BLOCKED transition: ${check.reason} for order ${orderId}`);
+    return { success: false, error: check.reason || `Transition not allowed` };
   }
 
   const now = new Date();
@@ -101,6 +150,10 @@ export async function bulkTransitionOrders(params: {
 }): Promise<{ updated: number; skipped: number }> {
   const { merchantId, orderIds, toStatus, action, actorUserId, actorName, actorType = "user", reason, extraData } = params;
 
+  if (!VALID_STATUSES.includes(toStatus as WorkflowStatus)) {
+    return { updated: 0, skipped: orderIds.length };
+  }
+
   const existingOrders = await db.select({
     id: orders.id,
     workflowStatus: orders.workflowStatus,
@@ -111,9 +164,14 @@ export async function bulkTransitionOrders(params: {
       eq(orders.merchantId, merchantId)
     ));
 
-  const eligible = existingOrders.filter(o =>
-    !FINAL_STATUSES.includes(o.workflowStatus) && o.workflowStatus !== toStatus
-  );
+  const eligible = existingOrders.filter(o => {
+    if (o.workflowStatus === toStatus) return false;
+    const check = isTransitionAllowed(o.workflowStatus, toStatus, actorType || "user", action);
+    if (!check.allowed) {
+      console.warn(`[Workflow] BLOCKED bulk transition for order ${o.id}: ${check.reason}`);
+    }
+    return check.allowed;
+  });
 
   if (eligible.length === 0) {
     return { updated: 0, skipped: orderIds.length };
@@ -187,10 +245,6 @@ export async function revertOrder(merchantId: string, orderId: string, actorUser
 
   if (!order.previousWorkflowStatus) {
     return { success: false, error: "No previous status to revert to" };
-  }
-
-  if (FINAL_STATUSES.includes(order.workflowStatus)) {
-    return { success: false, error: `Cannot revert ${order.workflowStatus} orders` };
   }
 
   const now = new Date();

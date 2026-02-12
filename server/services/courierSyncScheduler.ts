@@ -13,7 +13,6 @@ const BATCH_DELAY_MS = 500;
 const DISPATCH_STATUSES = ['PICKED_UP', 'IN_TRANSIT', 'ARRIVED_AT_ORIGIN', 'ARRIVED_AT_DESTINATION', 'OUT_FOR_DELIVERY', 'DELIVERY_ATTEMPTED', 'DELIVERY_FAILED'];
 const DELIVERED_STATUSES = ['DELIVERED'];
 const RETURN_STATUSES = ['RETURNED_TO_SHIPPER', 'RETURN_IN_TRANSIT'];
-const READY_FOR_RETURN_STATUS = 'READY_FOR_RETURN';
 
 interface CourierSyncResult {
   timestamp: Date;
@@ -104,25 +103,13 @@ async function autoTransitionOrder(merchantId: string, order: any, newShipmentSt
     if (result.success) {
       const courierDisplayName = normalizeCourierName(order.courierName || '') === 'leopards' ? 'Leopards' : 'PostEx';
       await createShopifyFulfillmentForOrder(merchantId, order, order.courierTracking, courierDisplayName);
-      console.log(`[CourierSync] Order ${order.orderNumber} transitioned BOOKED → FULFILLED`);
+      console.log(`[CourierSync] Order ${order.orderNumber} transitioned BOOKED -> FULFILLED`);
       return 'FULFILLED';
     }
+    return null;
   }
 
-  if ((currentWorkflow === 'BOOKED' || currentWorkflow === 'FULFILLED') && DELIVERED_STATUSES.includes(newShipmentStatus)) {
-    if (currentWorkflow === 'BOOKED') {
-      await transitionOrder({
-        merchantId,
-        orderId: order.id,
-        toStatus: 'FULFILLED',
-        action: 'courier_dispatched',
-        actorType: 'system',
-        reason: `Auto-dispatched before delivery`,
-        extraData: { dispatchedAt: new Date() },
-      });
-      const courierDisplayName = normalizeCourierName(order.courierName || '') === 'leopards' ? 'Leopards' : 'PostEx';
-      await createShopifyFulfillmentForOrder(merchantId, order, order.courierTracking, courierDisplayName);
-    }
+  if (currentWorkflow === 'FULFILLED' && DELIVERED_STATUSES.includes(newShipmentStatus)) {
     const result = await transitionOrder({
       merchantId,
       orderId: order.id,
@@ -133,25 +120,42 @@ async function autoTransitionOrder(merchantId: string, order: any, newShipmentSt
       extraData: { deliveredAt: new Date() },
     });
     if (result.success) {
-      console.log(`[CourierSync] Order ${order.orderNumber} transitioned → DELIVERED`);
+      console.log(`[CourierSync] Order ${order.orderNumber} transitioned FULFILLED -> DELIVERED`);
       return 'DELIVERED';
     }
+    return null;
   }
 
-  if ((currentWorkflow === 'BOOKED' || currentWorkflow === 'FULFILLED') && RETURN_STATUSES.includes(newShipmentStatus)) {
-    if (currentWorkflow === 'BOOKED') {
-      await transitionOrder({
-        merchantId,
-        orderId: order.id,
-        toStatus: 'FULFILLED',
-        action: 'courier_dispatched',
-        actorType: 'system',
-        reason: `Auto-dispatched before return`,
-        extraData: { dispatchedAt: new Date() },
-      });
-      const courierDisplayName = normalizeCourierName(order.courierName || '') === 'leopards' ? 'Leopards' : 'PostEx';
-      await createShopifyFulfillmentForOrder(merchantId, order, order.courierTracking, courierDisplayName);
+  if (currentWorkflow === 'BOOKED' && DELIVERED_STATUSES.includes(newShipmentStatus)) {
+    const step1 = await transitionOrder({
+      merchantId,
+      orderId: order.id,
+      toStatus: 'FULFILLED',
+      action: 'courier_dispatched',
+      actorType: 'system',
+      reason: `Auto-dispatched before delivery`,
+      extraData: { dispatchedAt: new Date() },
+    });
+    if (!step1.success) return null;
+    const courierDisplayName = normalizeCourierName(order.courierName || '') === 'leopards' ? 'Leopards' : 'PostEx';
+    await createShopifyFulfillmentForOrder(merchantId, order, order.courierTracking, courierDisplayName);
+    const step2 = await transitionOrder({
+      merchantId,
+      orderId: order.id,
+      toStatus: 'DELIVERED',
+      action: 'courier_delivered',
+      actorType: 'system',
+      reason: `Courier confirmed delivery`,
+      extraData: { deliveredAt: new Date() },
+    });
+    if (step2.success) {
+      console.log(`[CourierSync] Order ${order.orderNumber} transitioned BOOKED -> FULFILLED -> DELIVERED`);
+      return 'DELIVERED';
     }
+    return 'FULFILLED';
+  }
+
+  if (currentWorkflow === 'FULFILLED' && RETURN_STATUSES.includes(newShipmentStatus)) {
     const result = await transitionOrder({
       merchantId,
       orderId: order.id,
@@ -162,135 +166,45 @@ async function autoTransitionOrder(merchantId: string, order: any, newShipmentSt
       extraData: { returnedAt: new Date() },
     });
     if (result.success) {
-      console.log(`[CourierSync] Order ${order.orderNumber} transitioned → RETURN`);
+      console.log(`[CourierSync] Order ${order.orderNumber} transitioned FULFILLED -> RETURN`);
       return 'RETURN';
     }
+    return null;
+  }
+
+  if (currentWorkflow === 'BOOKED' && RETURN_STATUSES.includes(newShipmentStatus)) {
+    const step1 = await transitionOrder({
+      merchantId,
+      orderId: order.id,
+      toStatus: 'FULFILLED',
+      action: 'courier_dispatched',
+      actorType: 'system',
+      reason: `Auto-dispatched before return`,
+      extraData: { dispatchedAt: new Date() },
+    });
+    if (!step1.success) return null;
+    const courierDisplayName = normalizeCourierName(order.courierName || '') === 'leopards' ? 'Leopards' : 'PostEx';
+    await createShopifyFulfillmentForOrder(merchantId, order, order.courierTracking, courierDisplayName);
+    const step2 = await transitionOrder({
+      merchantId,
+      orderId: order.id,
+      toStatus: 'RETURN',
+      action: 'courier_returned',
+      actorType: 'system',
+      reason: `Courier confirmed return`,
+      extraData: { returnedAt: new Date() },
+    });
+    if (step2.success) {
+      console.log(`[CourierSync] Order ${order.orderNumber} transitioned BOOKED -> FULFILLED -> RETURN`);
+      return 'RETURN';
+    }
+    return 'FULFILLED';
   }
 
   return null;
 }
 
-async function repairMismatchedOrders(merchantId: string): Promise<number> {
-  try {
-    const stuckOrders = await db.select()
-      .from(orders)
-      .where(and(
-        eq(orders.merchantId, merchantId),
-        eq(orders.workflowStatus, 'BOOKED'),
-        sql`${orders.courierTracking} IS NOT NULL AND ${orders.courierTracking} != ''`,
-        sql`${orders.shipmentStatus} IN ('PICKED_UP', 'IN_TRANSIT', 'ARRIVED_AT_ORIGIN', 'ARRIVED_AT_DESTINATION', 'OUT_FOR_DELIVERY', 'DELIVERY_ATTEMPTED', 'DELIVERY_FAILED')`
-      ));
-
-    if (stuckOrders.length === 0) return 0;
-
-    let repaired = 0;
-    for (const order of stuckOrders) {
-      const result = await transitionOrder({
-        merchantId,
-        orderId: order.id,
-        toStatus: 'FULFILLED',
-        action: 'status_repair',
-        actorType: 'system',
-        reason: `Auto-repair: shipment status was ${order.shipmentStatus} but workflow was stuck at BOOKED`,
-        extraData: { dispatchedAt: new Date() },
-      });
-      if (result.success) {
-        const courierDisplayName = normalizeCourierName(order.courierName || '') === 'leopards' ? 'Leopards' : 'PostEx';
-        await createShopifyFulfillmentForOrder(merchantId, order, order.courierTracking!, courierDisplayName);
-        repaired++;
-        console.log(`[CourierSync] Repaired order ${order.orderNumber}: BOOKED → FULFILLED (shipment was ${order.shipmentStatus})`);
-      }
-    }
-
-    const deliveredOrders = await db.select()
-      .from(orders)
-      .where(and(
-        eq(orders.merchantId, merchantId),
-        sql`${orders.workflowStatus} IN ('BOOKED', 'FULFILLED')`,
-        sql`${orders.courierTracking} IS NOT NULL AND ${orders.courierTracking} != ''`,
-        eq(orders.shipmentStatus, 'DELIVERED')
-      ));
-
-    for (const order of deliveredOrders) {
-      if (order.workflowStatus === 'BOOKED') {
-        await transitionOrder({
-          merchantId,
-          orderId: order.id,
-          toStatus: 'FULFILLED',
-          action: 'status_repair',
-          actorType: 'system',
-          reason: 'Auto-repair: dispatched before delivery',
-          extraData: { dispatchedAt: new Date() },
-        });
-        const courierDisplayName = normalizeCourierName(order.courierName || '') === 'leopards' ? 'Leopards' : 'PostEx';
-        await createShopifyFulfillmentForOrder(merchantId, order, order.courierTracking!, courierDisplayName);
-      }
-      const result = await transitionOrder({
-        merchantId,
-        orderId: order.id,
-        toStatus: 'DELIVERED',
-        action: 'status_repair',
-        actorType: 'system',
-        reason: 'Auto-repair: shipment was DELIVERED but workflow was not',
-        extraData: { deliveredAt: new Date() },
-      });
-      if (result.success) {
-        repaired++;
-        console.log(`[CourierSync] Repaired order ${order.orderNumber}: → DELIVERED`);
-      }
-    }
-
-    const returnOrders = await db.select()
-      .from(orders)
-      .where(and(
-        eq(orders.merchantId, merchantId),
-        sql`${orders.workflowStatus} IN ('BOOKED', 'FULFILLED')`,
-        sql`${orders.courierTracking} IS NOT NULL AND ${orders.courierTracking} != ''`,
-        sql`${orders.shipmentStatus} IN ('RETURNED_TO_SHIPPER', 'RETURN_IN_TRANSIT')`
-      ));
-
-    for (const order of returnOrders) {
-      if (order.workflowStatus === 'BOOKED') {
-        await transitionOrder({
-          merchantId,
-          orderId: order.id,
-          toStatus: 'FULFILLED',
-          action: 'status_repair',
-          actorType: 'system',
-          reason: 'Auto-repair: dispatched before return',
-          extraData: { dispatchedAt: new Date() },
-        });
-        const courierDisplayName = normalizeCourierName(order.courierName || '') === 'leopards' ? 'Leopards' : 'PostEx';
-        await createShopifyFulfillmentForOrder(merchantId, order, order.courierTracking!, courierDisplayName);
-      }
-      const result = await transitionOrder({
-        merchantId,
-        orderId: order.id,
-        toStatus: 'RETURN',
-        action: 'status_repair',
-        actorType: 'system',
-        reason: 'Auto-repair: shipment was returned but workflow was not',
-        extraData: { returnedAt: new Date() },
-      });
-      if (result.success) {
-        repaired++;
-        console.log(`[CourierSync] Repaired order ${order.orderNumber}: → RETURN`);
-      }
-    }
-
-    return repaired;
-  } catch (err: any) {
-    console.error(`[CourierSync] Repair error for merchant ${merchantId}:`, err.message);
-    return 0;
-  }
-}
-
 async function syncMerchantCourierStatuses(merchantId: string): Promise<CourierSyncResult> {
-  const repaired = await repairMismatchedOrders(merchantId);
-  if (repaired > 0) {
-    console.log(`[CourierSync] Repaired ${repaired} mismatched orders for merchant ${merchantId}`);
-  }
-
   const trackableOrders = await storage.getOrdersForCourierSync(merchantId, {
     forceRefresh: false,
     limit: 500,
@@ -444,78 +358,10 @@ export function isCourierSyncRunning() {
   return isSyncing;
 }
 
-async function oneTimeRepairFulfilledWithBookedShipment() {
-  try {
-    const stuckOrders = await db.select()
-      .from(orders)
-      .where(and(
-        eq(orders.workflowStatus, 'FULFILLED'),
-        eq(orders.shipmentStatus, 'BOOKED'),
-        sql`${orders.courierTracking} IS NOT NULL AND ${orders.courierTracking} != ''`
-      ));
-
-    if (stuckOrders.length === 0) {
-      console.log('[Repair] No FULFILLED orders with BOOKED shipment status found - nothing to fix');
-      return;
-    }
-
-    console.log(`[Repair] Found ${stuckOrders.length} orders in FULFILLED with BOOKED shipment status - moving back to BOOKED`);
-    let fixed = 0;
-    for (const order of stuckOrders) {
-      const result = await transitionOrder({
-        merchantId: order.merchantId,
-        orderId: order.id,
-        toStatus: 'BOOKED',
-        action: 'data_repair',
-        actorType: 'system',
-        reason: 'Correcting premature FULFILLED transition: shipment status is still BOOKED (courier not yet dispatched)',
-      });
-      if (result.success) {
-        fixed++;
-      }
-    }
-    console.log(`[Repair] Successfully moved ${fixed}/${stuckOrders.length} orders back to BOOKED`);
-  } catch (err) {
-    console.error('[Repair] Error during one-time repair:', err);
-  }
-}
-
-async function oneTimeRepairReadyForReturn() {
-  try {
-    const readyForReturnRawStatuses = ['ready for return', 'waiting for return', 'return process initiated'];
-    const misclassified = await db.select()
-      .from(orders)
-      .where(and(
-        eq(orders.shipmentStatus, 'RETURN_IN_TRANSIT'),
-        sql`LOWER(${orders.courierRawStatus}) IN ('ready for return', 'waiting for return', 'return process initiated')`
-      ));
-
-    if (misclassified.length === 0) {
-      console.log('[Repair] No RETURN_IN_TRANSIT orders with ready-for-return raw status found');
-      return;
-    }
-
-    console.log(`[Repair] Found ${misclassified.length} orders incorrectly mapped as RETURN_IN_TRANSIT that should be READY_FOR_RETURN`);
-    let fixed = 0;
-    for (const order of misclassified) {
-      await db.update(orders)
-        .set({ shipmentStatus: 'READY_FOR_RETURN', updatedAt: new Date() })
-        .where(eq(orders.id, order.id));
-      fixed++;
-    }
-    console.log(`[Repair] Reclassified ${fixed}/${misclassified.length} orders to READY_FOR_RETURN`);
-  } catch (err) {
-    console.error('[Repair] Error during ready-for-return repair:', err);
-  }
-}
-
 export function startCourierSyncScheduler() {
   if (syncTimer) return;
 
   console.log(`[CourierSync] Starting courier status sync every ${COURIER_SYNC_INTERVAL_MS / 1000}s`);
-
-  oneTimeRepairFulfilledWithBookedShipment();
-  oneTimeRepairReadyForReturn();
 
   setTimeout(() => runCourierSync(), 30000);
   syncTimer = setInterval(runCourierSync, COURIER_SYNC_INTERVAL_MS);

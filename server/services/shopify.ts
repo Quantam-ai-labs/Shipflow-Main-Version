@@ -523,18 +523,7 @@ export class ShopifyService {
                 cancelReason: 'Cancelled in Shopify',
               },
             });
-          } else if (initialWorkflowStatus === 'FULFILLED') {
-            if (!hasCourierStatus && !isInManagedWorkflow) {
-              await transitionOrder({
-                merchantId,
-                orderId: existingOrderId,
-                toStatus: 'FULFILLED',
-                action: 'shopify_sync_fulfill',
-                actorType: 'system',
-                reason: 'Fulfilled in Shopify',
-              });
-            }
-          } else {
+          } else if (initialWorkflowStatus !== 'FULFILLED') {
             await applyRoboTags(merchantId, existingOrderId, transformedOrder.tags);
           }
         } catch (e) {}
