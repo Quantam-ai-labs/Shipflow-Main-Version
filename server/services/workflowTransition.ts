@@ -12,6 +12,7 @@ interface TransitionParams {
   toStatus: string;
   action: string;
   actorUserId?: string;
+  actorName?: string;
   actorType?: string;
   reason?: string;
   extraData?: Partial<Order>;
@@ -24,7 +25,7 @@ interface TransitionResult {
 }
 
 export async function transitionOrder(params: TransitionParams): Promise<TransitionResult> {
-  const { merchantId, orderId, toStatus, action, actorUserId, actorType = "user", reason, extraData } = params;
+  const { merchantId, orderId, toStatus, action, actorUserId, actorName, actorType = "user", reason, extraData } = params;
 
   if (!VALID_STATUSES.includes(toStatus)) {
     return { success: false, error: `Invalid status: ${toStatus}` };
@@ -68,6 +69,7 @@ export async function transitionOrder(params: TransitionParams): Promise<Transit
     action,
     reason: reason || null,
     actorUserId: actorUserId || null,
+    actorName: actorName || (actorType === "system" ? "System" : null),
     actorType,
   });
 
@@ -80,11 +82,12 @@ export async function bulkTransitionOrders(params: {
   toStatus: string;
   action: string;
   actorUserId?: string;
+  actorName?: string;
   actorType?: string;
   reason?: string;
   extraData?: Partial<Order>;
 }): Promise<{ updated: number; skipped: number }> {
-  const { merchantId, orderIds, toStatus, action, actorUserId, actorType = "user", reason, extraData } = params;
+  const { merchantId, orderIds, toStatus, action, actorUserId, actorName, actorType = "user", reason, extraData } = params;
 
   const existingOrders = await db.select({
     id: orders.id,
@@ -128,6 +131,7 @@ export async function bulkTransitionOrders(params: {
     action,
     reason: reason || null,
     actorUserId: actorUserId || null,
+    actorName: actorName || (actorType === "system" ? "System" : null),
     actorType,
   }));
 
@@ -138,7 +142,7 @@ export async function bulkTransitionOrders(params: {
   return { updated: eligible.length, skipped: orderIds.length - eligible.length };
 }
 
-export async function revertOrder(merchantId: string, orderId: string, actorUserId?: string, reason?: string): Promise<TransitionResult> {
+export async function revertOrder(merchantId: string, orderId: string, actorUserId?: string, reason?: string, actorName?: string): Promise<TransitionResult> {
   const [order] = await db.select().from(orders)
     .where(and(eq(orders.id, orderId), eq(orders.merchantId, merchantId)));
 
@@ -174,6 +178,7 @@ export async function revertOrder(merchantId: string, orderId: string, actorUser
     action: "revert",
     reason: reason || "User reverted status",
     actorUserId: actorUserId || null,
+    actorName: actorName || null,
     actorType: "user",
   });
 

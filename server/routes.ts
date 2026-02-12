@@ -382,6 +382,7 @@ export async function registerRoutes(
       const orderId = req.params.id;
       const { action, cancelReason, pendingReasonType, pendingReason, holdUntil, customerPhone, shippingAddress, city } = req.body;
       const userId = getSessionUserId(req) || "system";
+      const actorName = await getSessionUserName(req);
 
       let toStatus: string;
       let reason: string | undefined;
@@ -427,14 +428,14 @@ export async function registerRoutes(
           extraData = { pendingReasonType, pendingReason: pendingReason || "", holdUntil: null };
           break;
         case "revert":
-          const revertResult = await revertOrder(merchantId, orderId, userId, req.body.reason);
+          const revertResult = await revertOrder(merchantId, orderId, userId, req.body.reason, actorName);
           if (!revertResult.success) return res.status(400).json({ message: revertResult.error });
           return res.json(revertResult.order);
         default:
           return res.status(400).json({ message: "Invalid action" });
       }
 
-      const result = await transitionOrder({ merchantId, orderId, toStatus, action, actorUserId: userId, reason, extraData });
+      const result = await transitionOrder({ merchantId, orderId, toStatus, action, actorUserId: userId, actorName, reason, extraData });
       if (!result.success) return res.status(400).json({ message: result.error });
       res.json(result.order);
     } catch (error) {
@@ -449,6 +450,7 @@ export async function registerRoutes(
       if (!merchantId) return;
       const { orderIds, action, cancelReason, pendingReasonType, pendingReason, holdUntil } = req.body;
       const userId = getSessionUserId(req) || "system";
+      const actorName = await getSessionUserName(req);
 
       if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
         return res.status(400).json({ message: "Order IDs are required" });
@@ -488,7 +490,7 @@ export async function registerRoutes(
           return res.status(400).json({ message: "Invalid action" });
       }
 
-      const result = await bulkTransitionOrders({ merchantId, orderIds, toStatus, action, actorUserId: userId, reason, extraData });
+      const result = await bulkTransitionOrders({ merchantId, orderIds, toStatus, action, actorUserId: userId, actorName, reason, extraData });
       res.json(result);
     } catch (error) {
       console.error("Error bulk updating workflow:", error);
@@ -655,12 +657,14 @@ export async function registerRoutes(
       });
 
       const userId = getSessionUserId(req) || "system";
+      const actorName = await getSessionUserName(req);
       const result = await transitionOrder({
         merchantId,
         orderId,
         toStatus: "PENDING",
         action: "cancel_booking",
         actorUserId: userId,
+        actorName,
         actorType: "user",
         reason: courierCancelResult
           ? `Booking cancelled with courier API (${courierCancelResult.message})`
@@ -670,8 +674,6 @@ export async function registerRoutes(
       if (!result.success) {
         return res.status(400).json({ message: result.error });
       }
-
-      const actorName = await getSessionUserName(req);
 
       await storage.createOrderChangeLog({
         orderId,
@@ -737,17 +739,17 @@ export async function registerRoutes(
       });
 
       const userId = getSessionUserId(req) || "system";
+      const actorName = await getSessionUserName(req);
       const result = await transitionOrder({
         merchantId,
         orderId,
         toStatus: "CANCELLED",
         action: "shopify_cancel",
         actorUserId: userId,
+        actorName,
         actorType: "user",
         reason: `Shopify order cancelled via API (reason: ${reason})`,
       });
-
-      const actorName = await getSessionUserName(req);
 
       await storage.createOrderChangeLog({
         orderId,
@@ -833,6 +835,19 @@ export async function registerRoutes(
         isInternal: true,
       });
 
+      const actorName = await getSessionUserName(req);
+      await storage.createOrderChangeLog({
+        orderId: req.params.id,
+        merchantId,
+        changeType: "REMARK_ADDED",
+        fieldName: "remarks",
+        newValue: validated.data.content,
+        actorUserId: userId,
+        actorName,
+        actorType: "user",
+        metadata: { remarkType: validated.data.remarkType },
+      });
+
       res.json(remark);
     } catch (error) {
       console.error("Error creating remark:", error);
@@ -909,7 +924,22 @@ export async function registerRoutes(
       }
       if (!method) return res.status(400).json({ message: "Payment method is required" });
       const userId = getSessionUserId(req) || "unknown";
+      const actorName = await getSessionUserName(req);
       const state = await addPayment(merchantId, req.params.id, amount, method, userId, reference, notes);
+
+      await storage.createOrderChangeLog({
+        orderId: req.params.id,
+        merchantId,
+        changeType: "PAYMENT_ADDED",
+        fieldName: "prepaidAmount",
+        oldValue: order.prepaidAmount || "0",
+        newValue: String(state.prepaidAmount),
+        actorUserId: userId,
+        actorName,
+        actorType: "user",
+        metadata: { amount, method, reference, notes },
+      });
+
       res.json(state);
     } catch (error: any) {
       console.error("Error adding payment:", error);
@@ -921,7 +951,22 @@ export async function registerRoutes(
     try {
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
+      const orderBefore = await storage.getOrderById(merchantId, req.params.orderId);
       const state = await deletePayment(merchantId, req.params.paymentId, req.params.orderId);
+      const userId = getSessionUserId(req) || "unknown";
+      const actorName = await getSessionUserName(req);
+      await storage.createOrderChangeLog({
+        orderId: req.params.orderId,
+        merchantId,
+        changeType: "PAYMENT_DELETED",
+        fieldName: "prepaidAmount",
+        oldValue: orderBefore?.prepaidAmount || "0",
+        newValue: String(state.prepaidAmount),
+        actorUserId: userId,
+        actorName,
+        actorType: "user",
+        metadata: { paymentId: req.params.paymentId },
+      });
       res.json(state);
     } catch (error: any) {
       console.error("Error deleting payment:", error);
@@ -935,7 +980,21 @@ export async function registerRoutes(
       if (!merchantId) return;
       const { method } = req.body;
       const userId = getSessionUserId(req) || "unknown";
+      const actorName = await getSessionUserName(req);
+      const orderBefore = await storage.getOrderById(merchantId, req.params.id);
       const state = await markFullyPaid(merchantId, req.params.id, method || "CASH", userId);
+      await storage.createOrderChangeLog({
+        orderId: req.params.id,
+        merchantId,
+        changeType: "PAYMENT_MARK_PAID",
+        fieldName: "codPaymentStatus",
+        oldValue: orderBefore?.codPaymentStatus || "UNPAID",
+        newValue: "PAID",
+        actorUserId: userId,
+        actorName,
+        actorType: "user",
+        metadata: { method: method || "CASH" },
+      });
       res.json(state);
     } catch (error: any) {
       console.error("Error marking fully paid:", error);
@@ -947,7 +1006,21 @@ export async function registerRoutes(
     try {
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
+      const orderBefore = await storage.getOrderById(merchantId, req.params.id);
       const state = await resetPayments(merchantId, req.params.id);
+      const userId = getSessionUserId(req) || "unknown";
+      const actorName = await getSessionUserName(req);
+      await storage.createOrderChangeLog({
+        orderId: req.params.id,
+        merchantId,
+        changeType: "PAYMENT_RESET",
+        fieldName: "prepaidAmount",
+        oldValue: orderBefore?.prepaidAmount || "0",
+        newValue: "0",
+        actorUserId: userId,
+        actorName,
+        actorType: "user",
+      });
       res.json(state);
     } catch (error: any) {
       console.error("Error resetting payments:", error);
@@ -3049,6 +3122,7 @@ export async function registerRoutes(
 
       const fetchedOrders = await storage.getOrdersByIds(merchantId, orderIds);
       const userId = getSessionUserId(req) || "system";
+      const bookingActorName = await getSessionUserName(req);
 
       const batch = await storage.createShipmentBatch({
         merchantId,
@@ -3200,6 +3274,7 @@ export async function registerRoutes(
             toStatus: "BOOKED",
             action: "courier_booked",
             actorUserId: userId,
+            actorName: bookingActorName,
             actorType: "user",
             reason: `Booked with ${courier === "leopards" ? "Leopards" : "PostEx"} - ${br.trackingNumber}`,
           });

@@ -42,6 +42,13 @@ import {
   AlertTriangle,
   Edit3,
   Lock,
+  ArrowRightLeft,
+  DollarSign,
+  Ban,
+  ChevronDown,
+  ChevronUp,
+  Bot,
+  UserCircle,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -170,6 +177,201 @@ function getStageIndex(status: string | undefined): { pipeline: typeof PIPELINE_
   }
 
   return { pipeline: PIPELINE_STAGES, activeIndex: 0, isReturn: false, isCancelled: false };
+}
+
+function getActivityIcon(entry: any) {
+  if (entry._type === "status") {
+    if (entry.actorType === "system") return Bot;
+    if (entry.action === "revert") return RotateCcw;
+    if (entry.toStatus === "CANCELLED") return XCircle;
+    if (entry.toStatus === "BOOKED") return Truck;
+    if (entry.toStatus === "DELIVERED") return CheckCircle2;
+    return ArrowRightLeft;
+  }
+  switch (entry.changeType) {
+    case "PAYMENT_ADDED":
+    case "PAYMENT_MARK_PAID":
+      return DollarSign;
+    case "PAYMENT_DELETED":
+    case "PAYMENT_RESET":
+      return Ban;
+    case "BOOKING_CANCELLED":
+    case "SHOPIFY_CANCELLED":
+      return XCircle;
+    case "REMARK_ADDED":
+      return MessageSquare;
+    case "FIELD_EDIT":
+      return Edit3;
+    default:
+      return History;
+  }
+}
+
+function getActivityColor(entry: any): string {
+  if (entry._type === "status") {
+    if (entry.toStatus === "CANCELLED") return "text-red-500 bg-red-100 dark:bg-red-950";
+    if (entry.toStatus === "DELIVERED") return "text-green-500 bg-green-100 dark:bg-green-950";
+    if (entry.toStatus === "BOOKED") return "text-blue-500 bg-blue-100 dark:bg-blue-950";
+    if (entry.toStatus === "RETURN") return "text-rose-500 bg-rose-100 dark:bg-rose-950";
+    if (entry.actorType === "system") return "text-sky-500 bg-sky-100 dark:bg-sky-950";
+    return "text-indigo-500 bg-indigo-100 dark:bg-indigo-950";
+  }
+  switch (entry.changeType) {
+    case "PAYMENT_ADDED":
+    case "PAYMENT_MARK_PAID":
+      return "text-emerald-500 bg-emerald-100 dark:bg-emerald-950";
+    case "PAYMENT_DELETED":
+    case "PAYMENT_RESET":
+      return "text-orange-500 bg-orange-100 dark:bg-orange-950";
+    case "BOOKING_CANCELLED":
+    case "SHOPIFY_CANCELLED":
+      return "text-red-500 bg-red-100 dark:bg-red-950";
+    case "REMARK_ADDED":
+      return "text-violet-500 bg-violet-100 dark:bg-violet-950";
+    case "FIELD_EDIT":
+      return "text-amber-500 bg-amber-100 dark:bg-amber-950";
+    default:
+      return "text-muted-foreground bg-muted";
+  }
+}
+
+function getActivityLabel(entry: any): string {
+  if (entry._type === "status") {
+    if (entry.action === "revert") return "Status Reverted";
+    if (entry.action === "auto_12h_pending") return "Auto-moved to Pending";
+    if (entry.action === "courier_booked") return "Courier Booked";
+    if (entry.action === "cancel_booking") return "Booking Cancelled";
+    if (entry.action === "shopify_cancel") return "Shopify Cancelled";
+    return "Status Changed";
+  }
+  switch (entry.changeType) {
+    case "PAYMENT_ADDED": return "Payment Added";
+    case "PAYMENT_DELETED": return "Payment Removed";
+    case "PAYMENT_MARK_PAID": return "Marked Fully Paid";
+    case "PAYMENT_RESET": return "Payments Reset";
+    case "BOOKING_CANCELLED": return "Booking Cancelled";
+    case "SHOPIFY_CANCELLED": return "Shopify Cancelled";
+    case "REMARK_ADDED": return "Remark Added";
+    case "FIELD_EDIT": return "Field Edited";
+    default: return entry.changeType || "Change";
+  }
+}
+
+function ActivityTimeline({ auditLog, changeLog }: { auditLog: any[] | undefined; changeLog: any[] | undefined }) {
+  const [expanded, setExpanded] = useState(false);
+  const COLLAPSED_COUNT = 5;
+
+  const timeline: any[] = [];
+  if (auditLog) {
+    auditLog.forEach((e: any) => timeline.push({ ...e, _type: "status" as const, _time: new Date(e.createdAt).getTime() }));
+  }
+  if (changeLog) {
+    changeLog.forEach((e: any) => timeline.push({ ...e, _type: "change" as const, _time: new Date(e.createdAt).getTime() }));
+  }
+  timeline.sort((a, b) => b._time - a._time);
+
+  if (timeline.length === 0) return null;
+
+  const visible = expanded ? timeline : timeline.slice(0, COLLAPSED_COUNT);
+  const hasMore = timeline.length > COLLAPSED_COUNT;
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+        <CardTitle className="text-lg flex items-center gap-2">
+          <History className="w-5 h-5" />
+          Activity History
+        </CardTitle>
+        <Badge variant="secondary" className="text-xs">{timeline.length}</Badge>
+      </CardHeader>
+      <CardContent>
+        <div className="relative" data-testid="audit-log-list">
+          <div className="absolute left-4 top-0 bottom-0 w-px bg-border" />
+          <div className="space-y-4">
+            {visible.map((entry: any, idx: number) => {
+              const Icon = getActivityIcon(entry);
+              const colorCls = getActivityColor(entry);
+              const label = getActivityLabel(entry);
+              const actorDisplay = entry.actorName || (entry.actorType === "system" ? "System" : null);
+              const timeStr = entry.createdAt ? formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true }) : "";
+
+              return (
+                <div key={`${entry._type}-${entry.id || idx}`} className="flex items-start gap-3 relative" data-testid={`activity-entry-${idx}`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 z-10 ${colorCls}`}>
+                    <Icon className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="flex-1 min-w-0 pt-0.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-medium">{label}</span>
+                      {actorDisplay && (
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <UserCircle className="w-3 h-3" />
+                          {actorDisplay}
+                        </span>
+                      )}
+                    </div>
+                    {entry._type === "status" && (
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                        <Badge variant="outline" className="text-xs">{entry.fromStatus}</Badge>
+                        <ArrowRightLeft className="w-3 h-3 text-muted-foreground" />
+                        <Badge variant="secondary" className="text-xs">{entry.toStatus}</Badge>
+                      </div>
+                    )}
+                    {entry._type === "change" && entry.changeType === "FIELD_EDIT" && (
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                        <span className="text-xs font-medium capitalize">{(entry.fieldName || "").replace(/([A-Z])/g, ' $1').trim()}</span>
+                        {entry.oldValue && (
+                          <>
+                            <span className="text-xs text-muted-foreground">from</span>
+                            <span className="text-xs line-through text-muted-foreground/70 max-w-[120px] truncate">{entry.oldValue}</span>
+                          </>
+                        )}
+                        <span className="text-xs text-muted-foreground">to</span>
+                        <span className="text-xs font-medium max-w-[120px] truncate">{entry.newValue}</span>
+                      </div>
+                    )}
+                    {entry._type === "change" && (entry.changeType === "PAYMENT_ADDED" || entry.changeType === "PAYMENT_DELETED") && entry.metadata && (
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {entry.metadata.amount ? `Rs ${entry.metadata.amount}` : ""}{entry.metadata.method ? ` via ${entry.metadata.method}` : ""}
+                      </p>
+                    )}
+                    {entry._type === "change" && entry.changeType === "REMARK_ADDED" && entry.newValue && (
+                      <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-[300px]">"{entry.newValue}"</p>
+                    )}
+                    {entry.reason && entry._type === "status" && (
+                      <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-[300px]">{entry.reason}</p>
+                    )}
+                    <p className="text-xs text-muted-foreground/60 mt-0.5">{timeStr}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        {hasMore && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full mt-3"
+            onClick={() => setExpanded(!expanded)}
+            data-testid="button-toggle-activity"
+          >
+            {expanded ? (
+              <>
+                <ChevronUp className="w-4 h-4 mr-1" />
+                Show Less
+              </>
+            ) : (
+              <>
+                <ChevronDown className="w-4 h-4 mr-1" />
+                Show All ({timeline.length})
+              </>
+            )}
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 function TrackingStageNode({ stage, isActive, isCurrent, isLast }: {
@@ -901,93 +1103,7 @@ export default function OrderDetails() {
           </Card>
 
           {/* Combined Activity History */}
-          {((auditLog && auditLog.length > 0) || (order?.changeLog && order.changeLog.length > 0)) && (() => {
-            const timeline: any[] = [];
-            if (auditLog) {
-              auditLog.forEach((e: any) => timeline.push({ ...e, _type: "status" as const, _time: new Date(e.createdAt).getTime() }));
-            }
-            if (order?.changeLog) {
-              order.changeLog.forEach((e: any) => timeline.push({ ...e, _type: "change" as const, _time: new Date(e.createdAt).getTime() }));
-            }
-            timeline.sort((a, b) => b._time - a._time);
-
-            return (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <History className="w-5 h-5" />
-                    Activity History
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3" data-testid="audit-log-list">
-                    {timeline.map((entry: any, idx: number) => (
-                      <div key={`${entry._type}-${entry.id || idx}`} className="flex items-start gap-3 text-sm" data-testid={`activity-entry-${idx}`}>
-                        <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
-                          entry._type === "status" ? "bg-blue-400" :
-                          entry.changeType === "BOOKING_CANCELLED" ? "bg-red-400" :
-                          entry.changeType === "PAYMENT_ADDED" || entry.changeType === "PAYMENT_REMOVED" ? "bg-green-400" :
-                          "bg-amber-400"
-                        }`} />
-                        <div className="flex-1 min-w-0">
-                          {entry._type === "status" ? (
-                            <>
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <Badge variant="outline" className="text-xs">{entry.fromStatus}</Badge>
-                                <span className="text-muted-foreground text-xs">to</span>
-                                <Badge variant="secondary" className="text-xs">{entry.toStatus}</Badge>
-                                {entry.actorType === "system" && (
-                                  <Badge variant="outline" className="text-xs bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400">auto</Badge>
-                                )}
-                              </div>
-                              {entry.reason && (
-                                <p className="text-xs text-muted-foreground mt-0.5 truncate">{entry.reason}</p>
-                              )}
-                            </>
-                          ) : (
-                            <>
-                              {entry.changeType === "FIELD_EDIT" && (
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className="text-xs font-medium capitalize">{(entry.fieldName || "").replace(/([A-Z])/g, ' $1').trim()}</span>
-                                  <span className="text-xs text-muted-foreground">changed</span>
-                                  {entry.oldValue && (
-                                    <>
-                                      <span className="text-xs text-muted-foreground">from</span>
-                                      <span className="text-xs line-through text-muted-foreground/70 max-w-[120px] truncate">{entry.oldValue}</span>
-                                    </>
-                                  )}
-                                  <span className="text-xs text-muted-foreground">to</span>
-                                  <span className="text-xs font-medium max-w-[120px] truncate">{entry.newValue}</span>
-                                </div>
-                              )}
-                              {entry.changeType === "BOOKING_CANCELLED" && (
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <Badge variant="destructive" className="text-xs">Booking Cancelled</Badge>
-                                  {entry.oldValue && <span className="text-xs text-muted-foreground">{entry.oldValue}</span>}
-                                </div>
-                              )}
-                              {(entry.changeType === "PAYMENT_ADDED" || entry.changeType === "PAYMENT_REMOVED") && (
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <Badge variant="outline" className="text-xs">{entry.changeType === "PAYMENT_ADDED" ? "Payment Added" : "Payment Removed"}</Badge>
-                                  {entry.newValue && <span className="text-xs">{entry.newValue}</span>}
-                                </div>
-                              )}
-                              {entry.actorName && (
-                                <span className="text-xs text-muted-foreground">by {entry.actorName}</span>
-                              )}
-                            </>
-                          )}
-                          <p className="text-xs text-muted-foreground/70 mt-0.5">
-                            {entry.createdAt ? formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true }) : ""}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })()}
+          <ActivityTimeline auditLog={auditLog} changeLog={order?.changeLog} />
         </div>
 
         {/* Sidebar */}
