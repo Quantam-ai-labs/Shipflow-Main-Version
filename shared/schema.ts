@@ -253,6 +253,7 @@ export const workflowAuditLog = pgTable("workflow_audit_log", {
   action: varchar("action", { length: 50 }).notNull(),
   reason: text("reason"),
   actorUserId: varchar("actor_user_id"),
+  actorName: varchar("actor_name", { length: 255 }),
   actorType: varchar("actor_type", { length: 20 }).notNull().default("user"),
   metadata: jsonb("metadata"),
   createdAt: timestamp("created_at").defaultNow(),
