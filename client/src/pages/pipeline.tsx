@@ -250,7 +250,6 @@ export default function Pipeline() {
     ],
     FULFILLED: [
       { value: "all", label: "All" },
-      { value: "BOOKED", label: "Awaiting Dispatch" },
       { value: "PICKED_UP", label: "Picked Up" },
       { value: "ARRIVED_AT_ORIGIN", label: "At Origin" },
       { value: "IN_TRANSIT", label: "In Transit" },

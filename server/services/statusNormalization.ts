@@ -60,6 +60,7 @@ const POSTEX_STATUS_MAP: Record<string, UniversalStatus> = {
   'returned to shipper': 'RETURNED_TO_SHIPPER',
   'returned at merchant warehouse': 'RETURNED_TO_SHIPPER',
   'returned to merchant': 'RETURNED_TO_SHIPPER',
+  'en route to merchant warehouse': 'RETURN_IN_TRANSIT',
   'cancelled': 'CANCELLED',
   'booking cancelled by merchant': 'CANCELLED',
   'booking cancelled by merchant ': 'CANCELLED',
@@ -181,6 +182,16 @@ export function normalizeStatus(
   const map = getCourierMap(courier);
   const key = rawStatus.toLowerCase().trim();
 
+  const applyRegressionGuard = (newStatus: UniversalStatus): UniversalStatus => {
+    if (newStatus === 'BOOKED' && currentStatus && currentStatus !== 'BOOKED' && POST_ORIGIN_STATUSES.includes(currentStatus as UniversalStatus)) {
+      return currentStatus as UniversalStatus;
+    }
+    if (newStatus === 'BOOKED' && workflowStatus && POST_BOOKING_WORKFLOWS.includes(workflowStatus)) {
+      return (currentStatus as UniversalStatus) || 'PICKED_UP';
+    }
+    return newStatus;
+  };
+
   const directMatch = map[key];
   if (directMatch) {
     if (directMatch === 'ARRIVED_AT_ORIGIN' && AMBIGUOUS_ORIGIN_STATUSES.includes(key)) {
@@ -188,7 +199,8 @@ export function normalizeStatus(
         return { normalizedStatus: 'ARRIVED_AT_DESTINATION', mapped: true };
       }
     }
-    return { normalizedStatus: directMatch, mapped: true };
+    const guarded = applyRegressionGuard(directMatch);
+    return { normalizedStatus: guarded, mapped: true };
   }
 
   for (const [mapKey, mapValue] of Object.entries(map)) {
@@ -198,7 +210,8 @@ export function normalizeStatus(
           return { normalizedStatus: 'ARRIVED_AT_DESTINATION', mapped: true };
         }
       }
-      return { normalizedStatus: mapValue, mapped: true };
+      const guarded = applyRegressionGuard(mapValue);
+      return { normalizedStatus: guarded, mapped: true };
     }
   }
 
@@ -208,8 +221,9 @@ export function normalizeStatus(
       console.log(`[StatusNorm] Keyword fallback for "${rawStatus}" (${courier}) -> ARRIVED_AT_DESTINATION (post-transit)`);
       return { normalizedStatus: 'ARRIVED_AT_DESTINATION', mapped: true };
     }
-    console.log(`[StatusNorm] Keyword fallback for "${rawStatus}" (${courier}) -> ${fallback}`);
-    return { normalizedStatus: fallback, mapped: true };
+    const guarded = applyRegressionGuard(fallback);
+    console.log(`[StatusNorm] Keyword fallback for "${rawStatus}" (${courier}) -> ${guarded}`);
+    return { normalizedStatus: guarded, mapped: true };
   }
 
   console.warn(`[StatusNorm] UNMAPPED STATUS: "${rawStatus}" from ${courier} - keeping previous status`);
