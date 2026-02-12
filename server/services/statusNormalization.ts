@@ -10,6 +10,7 @@ export const UNIVERSAL_STATUSES = [
   'DELIVERY_FAILED',
   'READY_FOR_RETURN',
   'RETURN_IN_TRANSIT',
+  'RETURNED_TO_ORIGIN',
   'RETURNED_TO_SHIPPER',
   'CANCELLED',
 ] as const;
@@ -52,6 +53,9 @@ const POSTEX_STATUS_MAP: Record<string, UniversalStatus> = {
   'being return': 'RETURN_IN_TRANSIT',
   'being returned': 'RETURN_IN_TRANSIT',
   'return dispatched': 'RETURN_IN_TRANSIT',
+  'returned to origin': 'RETURNED_TO_ORIGIN',
+  'arrived at origin city': 'RETURNED_TO_ORIGIN',
+  'return arrived at origin': 'RETURNED_TO_ORIGIN',
   'returned': 'RETURNED_TO_SHIPPER',
   'returned to shipper': 'RETURNED_TO_SHIPPER',
   'returned at merchant warehouse': 'RETURNED_TO_SHIPPER',
@@ -102,6 +106,9 @@ const LEOPARDS_STATUS_MAP: Record<string, UniversalStatus> = {
   'return in transit': 'RETURN_IN_TRANSIT',
   'return dispatched': 'RETURN_IN_TRANSIT',
   'being returned': 'RETURN_IN_TRANSIT',
+  'returned to origin': 'RETURNED_TO_ORIGIN',
+  'return arrived at origin': 'RETURNED_TO_ORIGIN',
+  'arrived at origin city': 'RETURNED_TO_ORIGIN',
   'returned to shipper': 'RETURNED_TO_SHIPPER',
   'returned': 'RETURNED_TO_SHIPPER',
   'return completed': 'RETURNED_TO_SHIPPER',
@@ -119,6 +126,7 @@ function keywordFallback(rawStatus: string): UniversalStatus | null {
   if (s.includes('undeliver') || (s.includes('delivery') && s.includes('fail'))) return 'DELIVERY_FAILED';
   if (s.includes('refused') || s.includes('not accepted')) return 'DELIVERY_FAILED';
   if (s.includes('return') && (s.includes('shipper') || s.includes('merchant') || s.includes('completed'))) return 'RETURNED_TO_SHIPPER';
+  if (s.includes('return') && s.includes('origin')) return 'RETURNED_TO_ORIGIN';
   if (s.includes('return') && s.includes('transit')) return 'RETURN_IN_TRANSIT';
   if (s.includes('return') && (s.includes('ready') || s.includes('waiting') || s.includes('initiated') || s.includes('process'))) return 'READY_FOR_RETURN';
   if (s.includes('return') && (s.includes('being') || s.includes('dispatched'))) return 'RETURN_IN_TRANSIT';
@@ -201,6 +209,7 @@ export function getStatusDisplayLabel(status: string): string {
     'DELIVERY_FAILED': 'Delivery Failed',
     'READY_FOR_RETURN': 'Ready for Return',
     'RETURN_IN_TRANSIT': 'Return in Transit',
+    'RETURNED_TO_ORIGIN': 'Returned to Origin',
     'RETURNED_TO_SHIPPER': 'Returned',
     'CANCELLED': 'Cancelled',
   };

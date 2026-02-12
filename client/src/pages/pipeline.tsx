@@ -112,6 +112,7 @@ const UNIVERSAL_STATUS_COLORS: Record<string, string> = {
   'RETURNED_TO_SHIPPER': "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
   'READY_FOR_RETURN': "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300",
   'RETURN_IN_TRANSIT': "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
+  'RETURNED_TO_ORIGIN': "bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300",
   'CANCELLED': "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
   'Unfulfilled': "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
 };
@@ -133,7 +134,7 @@ const UNIVERSAL_STATUS_LABELS: Record<string, string> = {
   'OUT_FOR_DELIVERY': 'Out for Delivery', 'DELIVERY_ATTEMPTED': 'Attempted',
   'DELIVERED': 'Delivered', 'DELIVERY_FAILED': 'Failed',
   'RETURNED_TO_SHIPPER': 'Returned', 'READY_FOR_RETURN': 'Ready for Return', 'RETURN_IN_TRANSIT': 'Return in Transit',
-  'CANCELLED': 'Cancelled', 'Unfulfilled': 'Unfulfilled',
+  'RETURNED_TO_ORIGIN': 'Returned to Origin', 'CANCELLED': 'Cancelled', 'Unfulfilled': 'Unfulfilled',
 };
 
 function useDebounce(value: string, delay: number) {
@@ -261,6 +262,7 @@ export default function Pipeline() {
     RETURN: [
       { value: "all", label: "All" },
       { value: "RETURN_IN_TRANSIT", label: "Return in Transit" },
+      { value: "RETURNED_TO_ORIGIN", label: "Returned to Origin" },
       { value: "RETURNED_TO_SHIPPER", label: "Returned to Shipper" },
     ],
   };
