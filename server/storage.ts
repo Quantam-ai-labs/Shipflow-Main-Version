@@ -2,7 +2,7 @@ import {
   merchants, teamMembers, shopifyStores, courierAccounts,
   orders, shipments, shipmentEvents, remarks, codReconciliation, syncLogs, workflowAuditLog, bookingJobs,
   shipmentBatches, shipmentBatchItems, shipmentPrintRecords, orderPayments, orderChangeLog,
-  shopifyWebhookEvents,
+  shopifyWebhookEvents, cancellationJobs, cancellationJobItems,
   type Merchant, type InsertMerchant,
   type TeamMember, type InsertTeamMember,
   type ShopifyStore, type InsertShopifyStore,
@@ -20,6 +20,8 @@ import {
   type OrderPayment, type InsertOrderPayment,
   type OrderChangeLog, type InsertOrderChangeLog,
   type ShopifyWebhookEvent, type InsertShopifyWebhookEvent,
+  type CancellationJob, type InsertCancellationJob,
+  type CancellationJobItem, type InsertCancellationJobItem,
   users,
 } from "@shared/schema";
 import { db } from "./db";
@@ -144,6 +146,15 @@ export interface IStorage {
   getWebhookEventByWebhookId(merchantId: string, webhookId: string): Promise<ShopifyWebhookEvent | undefined>;
   isDuplicateWebhook(merchantId: string, topic: string, payloadHash: string): Promise<boolean>;
   updateWebhookEventStatus(id: string, status: string, errorMessage?: string): Promise<void>;
+
+  // Cancellation Jobs
+  createCancellationJob(job: InsertCancellationJob): Promise<CancellationJob>;
+  getCancellationJob(merchantId: string, jobId: string): Promise<CancellationJob | undefined>;
+  updateCancellationJob(id: string, data: Partial<CancellationJob>): Promise<CancellationJob | undefined>;
+  getCancellationJobs(merchantId: string, options?: { page?: number; pageSize?: number }): Promise<{ jobs: CancellationJob[]; total: number }>;
+  createCancellationJobItem(item: InsertCancellationJobItem): Promise<CancellationJobItem>;
+  getCancellationJobItems(jobId: string): Promise<CancellationJobItem[]>;
+  updateCancellationJobItem(id: string, data: Partial<CancellationJobItem>): Promise<CancellationJobItem | undefined>;
 
   // Seed
   seedDemoData(): Promise<void>;
@@ -1264,6 +1275,54 @@ export class DatabaseStorage implements IStorage {
     await db.update(shopifyWebhookEvents)
       .set(updateData)
       .where(eq(shopifyWebhookEvents.id, id));
+  }
+
+  async createCancellationJob(job: InsertCancellationJob): Promise<CancellationJob> {
+    const [created] = await db.insert(cancellationJobs).values(job).returning();
+    return created;
+  }
+
+  async getCancellationJob(merchantId: string, jobId: string): Promise<CancellationJob | undefined> {
+    const [job] = await db.select().from(cancellationJobs)
+      .where(and(eq(cancellationJobs.id, jobId), eq(cancellationJobs.merchantId, merchantId)));
+    return job;
+  }
+
+  async updateCancellationJob(id: string, data: Partial<CancellationJob>): Promise<CancellationJob | undefined> {
+    const [updated] = await db.update(cancellationJobs).set(data).where(eq(cancellationJobs.id, id)).returning();
+    return updated;
+  }
+
+  async getCancellationJobs(merchantId: string, options?: { page?: number; pageSize?: number }): Promise<{ jobs: CancellationJob[]; total: number }> {
+    const page = options?.page || 1;
+    const pageSize = options?.pageSize || 20;
+    const offset = (page - 1) * pageSize;
+
+    const [totalResult] = await db.select({ count: count() }).from(cancellationJobs)
+      .where(eq(cancellationJobs.merchantId, merchantId));
+
+    const jobs = await db.select().from(cancellationJobs)
+      .where(eq(cancellationJobs.merchantId, merchantId))
+      .orderBy(desc(cancellationJobs.createdAt))
+      .limit(pageSize).offset(offset);
+
+    return { jobs, total: totalResult?.count || 0 };
+  }
+
+  async createCancellationJobItem(item: InsertCancellationJobItem): Promise<CancellationJobItem> {
+    const [created] = await db.insert(cancellationJobItems).values(item).returning();
+    return created;
+  }
+
+  async getCancellationJobItems(jobId: string): Promise<CancellationJobItem[]> {
+    return db.select().from(cancellationJobItems)
+      .where(eq(cancellationJobItems.jobId, jobId))
+      .orderBy(cancellationJobItems.createdAt);
+  }
+
+  async updateCancellationJobItem(id: string, data: Partial<CancellationJobItem>): Promise<CancellationJobItem | undefined> {
+    const [updated] = await db.update(cancellationJobItems).set(data).where(eq(cancellationJobItems.id, id)).returning();
+    return updated;
   }
 
   async seedDemoData(): Promise<void> {

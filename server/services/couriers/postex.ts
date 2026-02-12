@@ -104,6 +104,51 @@ export class PostExService {
     }
   }
 
+  async cancelOrder(trackingNumber: string, credentials?: { apiToken?: string }): Promise<{ success: boolean; message: string; rawResponse?: any }> {
+    const token = this.getToken(credentials);
+
+    if (!token) {
+      return { success: false, message: 'PostEx API token not configured' };
+    }
+
+    try {
+      console.log(`[PostEx] Cancelling order: ${trackingNumber}`);
+
+      const response = await fetch(`${this.baseUrl}/v1/cancel-order`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'token': token,
+        },
+        body: JSON.stringify({ trackingNumber }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`PostEx API error ${response.status}: ${errorText}`);
+      }
+
+      const data = await response.json();
+      console.log(`[PostEx] Cancel response:`, JSON.stringify(data).substring(0, 500));
+
+      if (data.statusCode === '200' || data.statusCode === 200) {
+        return { success: true, message: data.statusMessage || data.message || 'Cancelled successfully', rawResponse: data };
+      }
+
+      return {
+        success: false,
+        message: data.statusMessage || data.message || 'Cancel request failed',
+        rawResponse: data,
+      };
+    } catch (error) {
+      console.error('[PostEx] Cancel error:', error);
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
   async trackMultiple(trackingNumbers: string[], credentials?: { apiToken?: string }): Promise<Map<string, TrackingResult>> {
     const results = new Map<string, TrackingResult>();
     

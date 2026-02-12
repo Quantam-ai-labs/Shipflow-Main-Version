@@ -719,3 +719,61 @@ export const insertShopifyImportJobSchema = createInsertSchema(shopifyImportJobs
 });
 export type InsertShopifyImportJob = z.infer<typeof insertShopifyImportJobSchema>;
 export type ShopifyImportJob = typeof shopifyImportJobs.$inferSelect;
+
+// ============================================
+// CANCELLATION JOBS (Async bulk cancellation)
+// ============================================
+export const cancellationJobs = pgTable("cancellation_jobs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  jobType: varchar("job_type", { length: 30 }).notNull(), // COURIER_CANCEL, SHOPIFY_CANCEL, BOTH
+  status: varchar("status", { length: 20 }).notNull().default("QUEUED"), // QUEUED, RUNNING, COMPLETED, FAILED, PARTIAL
+  createdByUserId: varchar("created_by_user_id"),
+  inputType: varchar("input_type", { length: 30 }).notNull(), // ORDER_IDS, SHOPIFY_NAMES, TRACKING_NUMBERS
+  totalCount: integer("total_count").default(0),
+  successCount: integer("success_count").default(0),
+  failedCount: integer("failed_count").default(0),
+  skippedCount: integer("skipped_count").default(0),
+  lastError: text("last_error"),
+  forceShopifyCancel: boolean("force_shopify_cancel").default(false),
+  startedAt: timestamp("started_at"),
+  finishedAt: timestamp("finished_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_cancel_jobs_merchant").on(table.merchantId),
+  index("idx_cancel_jobs_status").on(table.status),
+]);
+
+export const insertCancellationJobSchema = createInsertSchema(cancellationJobs).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertCancellationJob = z.infer<typeof insertCancellationJobSchema>;
+export type CancellationJob = typeof cancellationJobs.$inferSelect;
+
+// ============================================
+// CANCELLATION JOB ITEMS (Per-order results)
+// ============================================
+export const cancellationJobItems = pgTable("cancellation_job_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull().references(() => cancellationJobs.id, { onDelete: "cascade" }),
+  orderId: varchar("order_id"),
+  trackingNumber: varchar("tracking_number", { length: 100 }),
+  shopifyOrderId: varchar("shopify_order_id", { length: 100 }),
+  orderNumber: varchar("order_number", { length: 50 }),
+  action: varchar("action", { length: 30 }).notNull(), // COURIER_CANCEL, SHOPIFY_CANCEL
+  status: varchar("status", { length: 20 }).notNull().default("PENDING"), // PENDING, SUCCESS, FAILED, SKIPPED
+  errorMessage: text("error_message"),
+  courierResponse: jsonb("courier_response"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_cancel_items_job").on(table.jobId),
+  index("idx_cancel_items_order").on(table.orderId),
+]);
+
+export const insertCancellationJobItemSchema = createInsertSchema(cancellationJobItems).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertCancellationJobItem = z.infer<typeof insertCancellationJobItemSchema>;
+export type CancellationJobItem = typeof cancellationJobItems.$inferSelect;

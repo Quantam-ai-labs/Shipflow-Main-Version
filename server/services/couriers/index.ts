@@ -75,6 +75,36 @@ export async function trackShipment(
   };
 }
 
+export interface CancelResult {
+  success: boolean;
+  message: string;
+  rawResponse?: any;
+}
+
+export async function cancelCourierBooking(
+  courierName: string,
+  trackingNumber: string,
+  credentials?: CourierCredentials,
+): Promise<CancelResult> {
+  const name = courierName.toLowerCase();
+
+  if (name.includes('leopard')) {
+    return leopardsService.cancelBooking(
+      [trackingNumber],
+      credentials ? { apiKey: credentials.apiKey, apiPassword: credentials.apiSecret } : undefined,
+    );
+  }
+
+  if (name.includes('postex')) {
+    return postexService.cancelOrder(
+      trackingNumber,
+      credentials ? { apiToken: credentials.apiKey } : undefined,
+    );
+  }
+
+  return { success: false, message: `Unsupported courier: ${courierName}` };
+}
+
 export { leopardsService, postexService };
 export { normalizeStatus, detectCourierType, isFinalStatus, UNIVERSAL_STATUSES } from '../statusNormalization';
 export type { UniversalStatus } from '../statusNormalization';

@@ -111,6 +111,52 @@ export class LeopardsService {
     }
   }
 
+  async cancelBooking(trackingNumbers: string[], credentials?: { apiKey?: string; apiPassword?: string }): Promise<{ success: boolean; message: string; rawResponse?: any }> {
+    const creds = this.getCredentials(credentials);
+
+    if (!creds.apiKey || !creds.apiPassword) {
+      return { success: false, message: 'Leopards API credentials not configured' };
+    }
+
+    try {
+      const cnNumbers = Array.isArray(trackingNumbers) ? trackingNumbers.join(',') : trackingNumbers;
+      console.log(`[Leopards] Cancelling packets: ${cnNumbers}`);
+
+      const response = await fetch(`${this.baseUrl}/cancelBookedPackets/format/json/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          api_key: creds.apiKey,
+          api_password: creds.apiPassword,
+          cn_numbers: cnNumbers,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Leopards API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log(`[Leopards] Cancel response:`, JSON.stringify(data).substring(0, 500));
+
+      if (data.status === 1 || data.status === '1') {
+        return { success: true, message: data.message || 'Cancelled successfully', rawResponse: data };
+      }
+
+      return {
+        success: false,
+        message: data.message || data.error || 'Cancel request failed',
+        rawResponse: data,
+      };
+    } catch (error) {
+      console.error('[Leopards] Cancel error:', error);
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
   async trackMultiple(trackingNumbers: string[], credentials?: { apiKey?: string; apiPassword?: string }): Promise<Map<string, TrackingResult>> {
     const results = new Map<string, TrackingResult>();
     const creds = this.getCredentials(credentials);

@@ -366,6 +366,8 @@ export default function Pipeline() {
     },
   });
 
+  const [cancelConfirm, setCancelConfirm] = useState<{ open: boolean; orderId: string; type: "courier" | "shopify"; orderNumber?: string } | null>(null);
+
   const cancelBookingMutation = useMutation({
     mutationFn: async (orderId: string) => {
       const res = await apiRequest("POST", `/api/orders/${orderId}/cancel-booking`);
@@ -374,10 +376,29 @@ export default function Pipeline() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       queryClient.invalidateQueries({ queryKey: ["/api/orders/workflow-counts"] });
-      toast({ title: "Booking cancelled", description: "Order moved back to Pending" });
+      toast({ title: "Booking cancelled", description: "Courier AWB cancelled and order moved back to Pending" });
+      setCancelConfirm(null);
     },
     onError: (err: any) => {
       toast({ title: "Cannot cancel", description: err.message || "Failed to cancel booking", variant: "destructive" });
+      setCancelConfirm(null);
+    },
+  });
+
+  const cancelShopifyMutation = useMutation({
+    mutationFn: async (orderId: string) => {
+      const res = await apiRequest("POST", `/api/orders/${orderId}/cancel-shopify`, { reason: "other" });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders/workflow-counts"] });
+      toast({ title: "Shopify order cancelled", description: "Order cancelled on Shopify and moved to Cancelled" });
+      setCancelConfirm(null);
+    },
+    onError: (err: any) => {
+      toast({ title: "Cannot cancel", description: err.message || "Failed to cancel on Shopify", variant: "destructive" });
+      setCancelConfirm(null);
     },
   });
 
@@ -990,11 +1011,19 @@ export default function Pipeline() {
                         <Badge variant="secondary" className="text-xs">Ready</Badge>
                       )}
                       {activeTab === "BOOKED" && (
-                        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-red-600"
-                          onClick={() => cancelBookingMutation.mutate(order.id)}
+                        <Button size="sm" variant="ghost" className="text-xs text-red-600"
+                          onClick={() => setCancelConfirm({ open: true, orderId: order.id, type: "courier", orderNumber: order.orderNumber })}
                           disabled={cancelBookingMutation.isPending}
                           data-testid={`button-cancel-booking-${order.id}`}>
-                          <Undo2 className="w-3.5 h-3.5 mr-1" />Cancel
+                          <Undo2 className="w-3.5 h-3.5 mr-1" />Cancel AWB
+                        </Button>
+                      )}
+                      {order.shopifyOrderId && !order.cancelledAt && (activeTab === "PENDING" || activeTab === "HOLD" || activeTab === "BOOKED") && (
+                        <Button size="sm" variant="ghost" className="text-xs text-orange-600"
+                          onClick={() => setCancelConfirm({ open: true, orderId: order.id, type: "shopify", orderNumber: order.orderNumber })}
+                          disabled={cancelShopifyMutation.isPending}
+                          data-testid={`button-cancel-shopify-${order.id}`}>
+                          <XCircle className="w-3.5 h-3.5 mr-1" />Cancel Shopify
                         </Button>
                       )}
                       {activeTab !== "NEW" && activeTab !== "BOOKED" && activeTab !== "FULFILLED" && activeTab !== "DELIVERED" && activeTab !== "RETURN" && order.previousWorkflowStatus && (
@@ -1565,6 +1594,44 @@ export default function Pipeline() {
               }}
             >
               Confirm
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      {/* Cancel Confirmation Dialog */}
+      <AlertDialog open={!!cancelConfirm?.open} onOpenChange={(open) => !open && setCancelConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {cancelConfirm?.type === "courier" ? "Cancel Courier Booking?" : "Cancel Shopify Order?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {cancelConfirm?.type === "courier" ? (
+                <>This will cancel the AWB/tracking number with the courier (Leopards/PostEx) and move order <span className="font-medium">{cancelConfirm?.orderNumber}</span> back to Pending. The courier will be notified via their API.</>
+              ) : (
+                <>This will cancel order <span className="font-medium">{cancelConfirm?.orderNumber}</span> on Shopify. This action cannot be easily undone. The order will be marked as cancelled both on Shopify and in ShipFlow.</>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-confirm-dismiss">Go Back</AlertDialogCancel>
+            <AlertDialogAction
+              data-testid="button-cancel-confirm-proceed"
+              className="bg-red-600 hover:bg-red-700"
+              disabled={cancelBookingMutation.isPending || cancelShopifyMutation.isPending}
+              onClick={() => {
+                if (!cancelConfirm) return;
+                if (cancelConfirm.type === "courier") {
+                  cancelBookingMutation.mutate(cancelConfirm.orderId);
+                } else {
+                  cancelShopifyMutation.mutate(cancelConfirm.orderId);
+                }
+              }}
+            >
+              {(cancelBookingMutation.isPending || cancelShopifyMutation.isPending) && (
+                <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+              )}
+              {cancelConfirm?.type === "courier" ? "Cancel AWB" : "Cancel on Shopify"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

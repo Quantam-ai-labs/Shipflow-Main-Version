@@ -8,7 +8,8 @@ import { and, eq, inArray, ilike, or, sql, desc, count, isNotNull } from "drizzl
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { z } from "zod";
 import crypto from "crypto";
-import { shopifyService } from "./services/shopify";
+import { shopifyService, cancelShopifyOrder } from "./services/shopify";
+import { cancelCourierBooking } from "./services/couriers";
 import { transitionOrder, bulkTransitionOrders, revertOrder } from "./services/workflowTransition";
 import { addPayment, deletePayment, markFullyPaid, resetPayments, bulkMarkPrepaid, recalculateOrderPayment } from "./services/payments";
 import { encryptToken, decryptToken } from './services/encryption';
@@ -607,6 +608,7 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
       const orderId = req.params.id;
+      const skipCourierApi = req.body?.skipCourierApi === true;
 
       const order = await storage.getOrderById(merchantId, orderId);
       if (!order) return res.status(404).json({ message: "Order not found" });
@@ -621,6 +623,25 @@ export async function registerRoutes(
 
       const oldCourierTracking = order.courierTracking;
       const oldCourierName = order.courierName;
+      let courierCancelResult: { success: boolean; message: string } | null = null;
+
+      if (!skipCourierApi && oldCourierTracking && oldCourierName) {
+        const creds = await getCourierCredentials(merchantId, oldCourierName);
+        if (creds) {
+          courierCancelResult = await cancelCourierBooking(
+            oldCourierName,
+            oldCourierTracking,
+            { apiKey: creds.apiKey || undefined, apiSecret: creds.apiSecret || undefined },
+          );
+          console.log(`[Cancel] Courier cancel result for ${oldCourierTracking}:`, courierCancelResult);
+          if (!courierCancelResult.success) {
+            return res.status(400).json({
+              message: `Courier cancellation failed: ${courierCancelResult.message}`,
+              courierError: courierCancelResult.message,
+            });
+          }
+        }
+      }
 
       await storage.updateOrderWorkflow(merchantId, orderId, {
         courierName: null,
@@ -641,7 +662,9 @@ export async function registerRoutes(
         action: "cancel_booking",
         actorUserId: userId,
         actorType: "user",
-        reason: "Booking cancelled by user",
+        reason: courierCancelResult
+          ? `Booking cancelled with courier API (${courierCancelResult.message})`
+          : "Booking cancelled by user (local only)",
       });
 
       if (!result.success) {
@@ -657,13 +680,89 @@ export async function registerRoutes(
         actorUserId: userId,
         actorName,
         actorType: "user",
-        metadata: { oldCourierTracking, oldCourierName },
+        metadata: {
+          oldCourierTracking,
+          oldCourierName,
+          courierApiCalled: !!courierCancelResult,
+          courierCancelResult: courierCancelResult || undefined,
+        },
       });
 
-      res.json(result.order);
+      res.json({ ...result.order, courierCancelResult });
     } catch (error) {
       console.error("Error cancelling booking:", error);
       res.status(500).json({ message: "Failed to cancel booking" });
+    }
+  });
+
+  app.post("/api/orders/:id/cancel-shopify", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const orderId = req.params.id;
+      const reason = req.body?.reason || "other";
+
+      const order = await storage.getOrderById(merchantId, orderId);
+      if (!order) return res.status(404).json({ message: "Order not found" });
+
+      if (!order.shopifyOrderId) {
+        return res.status(400).json({ message: "Order has no Shopify ID - not linked to Shopify" });
+      }
+
+      if (order.cancelledAt) {
+        return res.status(400).json({ message: "Order is already cancelled" });
+      }
+
+      const store = await storage.getShopifyStore(merchantId);
+      if (!store || !store.isConnected || !store.accessToken || !store.shopDomain) {
+        return res.status(400).json({ message: "Shopify store is not connected" });
+      }
+
+      const cancelResult = await cancelShopifyOrder(
+        store.shopDomain,
+        store.accessToken,
+        order.shopifyOrderId,
+        reason,
+      );
+
+      if (!cancelResult.success) {
+        return res.status(400).json({
+          message: `Shopify cancellation failed: ${cancelResult.error}`,
+          shopifyError: cancelResult.error,
+        });
+      }
+
+      await storage.updateOrderWorkflow(merchantId, orderId, {
+        cancelledAt: new Date(),
+      });
+
+      const userId = getSessionUserId(req) || "system";
+      const result = await transitionOrder({
+        merchantId,
+        orderId,
+        toStatus: "CANCELLED",
+        action: "shopify_cancel",
+        actorUserId: userId,
+        actorType: "user",
+        reason: `Shopify order cancelled via API (reason: ${reason})`,
+      });
+
+      const actorName = await getSessionUserName(req);
+
+      await storage.createOrderChangeLog({
+        orderId,
+        merchantId,
+        changeType: "SHOPIFY_CANCELLED",
+        actorUserId: userId,
+        actorName,
+        actorType: "user",
+        metadata: { shopifyOrderId: order.shopifyOrderId, reason },
+      });
+
+      res.json({ success: true, order: result.order });
+    } catch (error) {
+      console.error("Error cancelling Shopify order:", error);
+      res.status(500).json({ message: "Failed to cancel Shopify order" });
     }
   });
 
@@ -3934,6 +4033,329 @@ export async function registerRoutes(
       res.status(500).json({ message: "Failed to reset password" });
     }
   });
+
+  // ============================================
+  // BULK CANCELLATION JOB ENDPOINTS
+  // ============================================
+
+  app.post("/api/cancellation-jobs/preview", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const { identifiers, inputType } = req.body;
+      if (!identifiers || !Array.isArray(identifiers) || identifiers.length === 0) {
+        return res.status(400).json({ message: "identifiers array is required" });
+      }
+      if (!["ORDER_IDS", "SHOPIFY_NAMES", "TRACKING_NUMBERS"].includes(inputType)) {
+        return res.status(400).json({ message: "inputType must be ORDER_IDS, SHOPIFY_NAMES, or TRACKING_NUMBERS" });
+      }
+
+      const { orders: allOrders } = await storage.getOrders(merchantId, { pageSize: 10000 });
+      const matched: any[] = [];
+      const notFound: string[] = [];
+
+      for (const identifier of identifiers) {
+        const trimmed = String(identifier).trim();
+        if (!trimmed) continue;
+
+        let found: any = null;
+        if (inputType === "ORDER_IDS") {
+          found = allOrders.find((o: any) => o.id === trimmed);
+        } else if (inputType === "SHOPIFY_NAMES") {
+          found = allOrders.find((o: any) =>
+            o.orderNumber === trimmed
+          );
+        } else if (inputType === "TRACKING_NUMBERS") {
+          found = allOrders.find((o: any) => o.courierTracking === trimmed);
+        }
+
+        if (found) {
+          matched.push({
+            id: found.id,
+            orderNumber: found.orderNumber,
+            courierName: found.courierName,
+            courierTracking: found.courierTracking,
+            workflowStatus: found.workflowStatus,
+            shopifyOrderId: found.shopifyOrderId,
+            totalAmount: found.totalAmount,
+            customerName: found.customerName,
+            cancelledAt: found.cancelledAt,
+            canCancelCourier: found.workflowStatus === "BOOKED" && !!found.courierTracking,
+            canCancelShopify: !!found.shopifyOrderId && !found.cancelledAt,
+          });
+        } else {
+          notFound.push(trimmed);
+        }
+      }
+
+      res.json({ matched, notFound, totalMatched: matched.length, totalNotFound: notFound.length });
+    } catch (error) {
+      console.error("Error previewing cancellation:", error);
+      res.status(500).json({ message: "Failed to preview cancellation" });
+    }
+  });
+
+  app.post("/api/cancellation-jobs", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const { orderIds, jobType, inputType, forceShopifyCancel } = req.body;
+      if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
+        return res.status(400).json({ message: "orderIds array is required" });
+      }
+      if (!["COURIER_CANCEL", "SHOPIFY_CANCEL", "BOTH"].includes(jobType)) {
+        return res.status(400).json({ message: "jobType must be COURIER_CANCEL, SHOPIFY_CANCEL, or BOTH" });
+      }
+
+      const userId = getSessionUserId(req) || "system";
+
+      const job = await storage.createCancellationJob({
+        merchantId,
+        jobType,
+        status: "QUEUED",
+        createdByUserId: userId,
+        inputType: inputType || "ORDER_IDS",
+        totalCount: orderIds.length,
+        successCount: 0,
+        failedCount: 0,
+        skippedCount: 0,
+        forceShopifyCancel: forceShopifyCancel || false,
+      });
+
+      const matchedOrders = await storage.getOrdersByIds(merchantId, orderIds);
+
+      for (const order of matchedOrders) {
+        const actions: string[] = [];
+        if ((jobType === "COURIER_CANCEL" || jobType === "BOTH") && order.courierTracking && order.workflowStatus === "BOOKED") {
+          actions.push("COURIER_CANCEL");
+        }
+        if ((jobType === "SHOPIFY_CANCEL" || jobType === "BOTH") && order.shopifyOrderId && !order.cancelledAt) {
+          actions.push("SHOPIFY_CANCEL");
+        }
+
+        if (actions.length === 0) {
+          await storage.createCancellationJobItem({
+            jobId: job.id,
+            orderId: order.id,
+            trackingNumber: order.courierTracking,
+            shopifyOrderId: order.shopifyOrderId,
+            orderNumber: order.orderNumber,
+            action: jobType === "BOTH" ? "COURIER_CANCEL" : jobType,
+            status: "SKIPPED",
+            errorMessage: "No cancellable action available for this order",
+          });
+          continue;
+        }
+
+        for (const action of actions) {
+          await storage.createCancellationJobItem({
+            jobId: job.id,
+            orderId: order.id,
+            trackingNumber: order.courierTracking,
+            shopifyOrderId: order.shopifyOrderId,
+            orderNumber: order.orderNumber,
+            action,
+            status: "PENDING",
+          });
+        }
+      }
+
+      runCancellationJob(job.id, merchantId).catch(err =>
+        console.error(`[CancelJob] Background job error for ${job.id}:`, err)
+      );
+
+      res.json({ jobId: job.id, message: "Cancellation job started" });
+    } catch (error) {
+      console.error("Error creating cancellation job:", error);
+      res.status(500).json({ message: "Failed to create cancellation job" });
+    }
+  });
+
+  app.get("/api/cancellation-jobs", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const page = parseInt(String(req.query.page)) || 1;
+      const pageSize = parseInt(String(req.query.pageSize)) || 20;
+
+      const result = await storage.getCancellationJobs(merchantId, { page, pageSize });
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching cancellation jobs:", error);
+      res.status(500).json({ message: "Failed to fetch cancellation jobs" });
+    }
+  });
+
+  app.get("/api/cancellation-jobs/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const job = await storage.getCancellationJob(merchantId, req.params.id);
+      if (!job) return res.status(404).json({ message: "Job not found" });
+
+      const items = await storage.getCancellationJobItems(job.id);
+      res.json({ ...job, items });
+    } catch (error) {
+      console.error("Error fetching cancellation job:", error);
+      res.status(500).json({ message: "Failed to fetch cancellation job" });
+    }
+  });
+
+  async function runCancellationJob(jobId: string, merchantId: string) {
+    console.log(`[CancelJob] Starting job ${jobId}`);
+
+    await storage.updateCancellationJob(jobId, { status: "RUNNING", startedAt: new Date() });
+
+    const items = await storage.getCancellationJobItems(jobId);
+    const pendingItems = items.filter(i => i.status === "PENDING");
+    let successCount = 0;
+    let failedCount = 0;
+    let skippedCount = items.filter(i => i.status === "SKIPPED").length;
+
+    const store = await storage.getShopifyStore(merchantId);
+
+    for (let i = 0; i < pendingItems.length; i++) {
+      const item = pendingItems[i];
+
+      try {
+        if (item.action === "COURIER_CANCEL") {
+          if (!item.trackingNumber) {
+            await storage.updateCancellationJobItem(item.id, { status: "SKIPPED", errorMessage: "No tracking number" });
+            skippedCount++;
+            continue;
+          }
+
+          const order = item.orderId ? await storage.getOrderById(merchantId, item.orderId) : null;
+          const courierName = order?.courierName || "";
+
+          if (!courierName) {
+            await storage.updateCancellationJobItem(item.id, { status: "SKIPPED", errorMessage: "No courier name on order" });
+            skippedCount++;
+            continue;
+          }
+
+          const creds = await getCourierCredentials(merchantId, courierName);
+          if (!creds) {
+            await storage.updateCancellationJobItem(item.id, { status: "FAILED", errorMessage: "Courier credentials not configured" });
+            failedCount++;
+            continue;
+          }
+
+          const result = await cancelCourierBooking(
+            courierName,
+            item.trackingNumber,
+            { apiKey: creds.apiKey || undefined, apiSecret: creds.apiSecret || undefined },
+          );
+
+          if (result.success) {
+            await storage.updateCancellationJobItem(item.id, {
+              status: "SUCCESS",
+              courierResponse: result.rawResponse || { message: result.message },
+            });
+
+            if (order && order.workflowStatus === "BOOKED") {
+              await storage.updateOrderWorkflow(merchantId, order.id, {
+                courierName: null,
+                courierTracking: null,
+                courierSlipUrl: null,
+                bookingStatus: null,
+                bookingError: null,
+                bookedAt: null,
+                shipmentStatus: "Unfulfilled",
+                courierRawStatus: null,
+              });
+              await transitionOrder({
+                merchantId,
+                orderId: order.id,
+                toStatus: "PENDING",
+                action: "bulk_cancel_booking",
+                actorUserId: "system",
+                actorType: "system",
+                reason: `Bulk cancellation job ${jobId}`,
+              });
+            }
+
+            successCount++;
+          } else {
+            await storage.updateCancellationJobItem(item.id, {
+              status: "FAILED",
+              errorMessage: result.message,
+              courierResponse: result.rawResponse,
+            });
+            failedCount++;
+          }
+        } else if (item.action === "SHOPIFY_CANCEL") {
+          if (!item.shopifyOrderId || !store?.shopDomain || !store?.accessToken) {
+            await storage.updateCancellationJobItem(item.id, {
+              status: "SKIPPED",
+              errorMessage: !item.shopifyOrderId ? "No Shopify order ID" : "Shopify store not connected",
+            });
+            skippedCount++;
+            continue;
+          }
+
+          const result = await cancelShopifyOrder(
+            store.shopDomain,
+            store.accessToken,
+            item.shopifyOrderId,
+            "other",
+          );
+
+          if (result.success) {
+            await storage.updateCancellationJobItem(item.id, { status: "SUCCESS" });
+
+            if (item.orderId) {
+              await storage.updateOrderWorkflow(merchantId, item.orderId, { cancelledAt: new Date() });
+              await transitionOrder({
+                merchantId,
+                orderId: item.orderId,
+                toStatus: "CANCELLED",
+                action: "bulk_shopify_cancel",
+                actorUserId: "system",
+                actorType: "system",
+                reason: `Bulk Shopify cancellation job ${jobId}`,
+              });
+            }
+            successCount++;
+          } else {
+            await storage.updateCancellationJobItem(item.id, {
+              status: "FAILED",
+              errorMessage: result.error,
+            });
+            failedCount++;
+          }
+        }
+
+        await storage.updateCancellationJob(jobId, { successCount, failedCount, skippedCount });
+
+        if (i < pendingItems.length - 1) {
+          await new Promise(r => setTimeout(r, 500));
+        }
+      } catch (err: any) {
+        console.error(`[CancelJob] Item ${item.id} error:`, err);
+        await storage.updateCancellationJobItem(item.id, {
+          status: "FAILED",
+          errorMessage: err.message || "Unexpected error",
+        });
+        failedCount++;
+      }
+    }
+
+    const finalStatus = failedCount === 0 ? "COMPLETED" : (successCount > 0 ? "PARTIAL" : "FAILED");
+    await storage.updateCancellationJob(jobId, {
+      status: finalStatus,
+      successCount,
+      failedCount,
+      skippedCount,
+      finishedAt: new Date(),
+    });
+
+    console.log(`[CancelJob] Job ${jobId} finished: ${finalStatus} (success=${successCount}, failed=${failedCount}, skipped=${skippedCount})`);
+  }
 
   return httpServer;
 }

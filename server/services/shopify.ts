@@ -902,4 +902,45 @@ export async function createShopifyFulfillment(
   }
 }
 
+export async function cancelShopifyOrder(
+  shopDomain: string,
+  accessToken: string,
+  shopifyOrderId: string,
+  reason?: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    console.log(`[Shopify Cancel] Cancelling order ${shopifyOrderId} on ${shopDomain}`);
+
+    const url = `https://${shopDomain}/admin/api/2024-01/orders/${shopifyOrderId}/cancel.json`;
+    const body: Record<string, any> = {};
+    if (reason) {
+      body.reason = reason;
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'X-Shopify-Access-Token': accessToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error(`[Shopify Cancel] Failed: ${response.status} ${errText}`);
+      if (response.status === 422) {
+        return { success: false, error: `Order cannot be cancelled (may already be cancelled or fulfilled): ${errText}` };
+      }
+      return { success: false, error: `Shopify API error ${response.status}: ${errText}` };
+    }
+
+    console.log(`[Shopify Cancel] Successfully cancelled order ${shopifyOrderId}`);
+    return { success: true };
+  } catch (error: any) {
+    console.error(`[Shopify Cancel] Error:`, error);
+    return { success: false, error: error.message || 'Unknown error' };
+  }
+}
+
 export const shopifyService = new ShopifyService();
