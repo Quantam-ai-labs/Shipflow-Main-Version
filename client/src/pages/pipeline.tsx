@@ -602,7 +602,7 @@ export default function Pipeline() {
         </div>
 
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          {total > 0 && <span className="text-[#000000] font-extrabold bg-[#ffffff00]">{total.toLocaleString()} orders</span>}
+          {total > 0 && <span className="font-extrabold text-[#ffffff] bg-[#00000000]">{total.toLocaleString()} orders</span>}
         </div>
       </div>
       {/* Bulk Actions Bar */}
@@ -1548,7 +1548,6 @@ export default function Pipeline() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
       {/* Generic Confirm Action Dialog */}
       <AlertDialog open={confirmActionModal.open} onOpenChange={(open) => !open && setConfirmActionModal({ open: false, action: "", orderIds: [], description: "" })}>
         <AlertDialogContent>
