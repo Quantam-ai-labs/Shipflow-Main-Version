@@ -522,14 +522,16 @@ export class ShopifyService {
               },
             });
           } else if (initialWorkflowStatus === 'FULFILLED') {
-            await transitionOrder({
-              merchantId,
-              orderId: existingOrderId,
-              toStatus: 'FULFILLED',
-              action: 'shopify_sync_fulfill',
-              actorType: 'system',
-              reason: 'Fulfilled in Shopify',
-            });
+            if (!hasCourierStatus) {
+              await transitionOrder({
+                merchantId,
+                orderId: existingOrderId,
+                toStatus: 'FULFILLED',
+                action: 'shopify_sync_fulfill',
+                actorType: 'system',
+                reason: 'Fulfilled in Shopify',
+              });
+            }
           } else {
             await applyRoboTags(merchantId, existingOrderId, transformedOrder.tags);
           }
