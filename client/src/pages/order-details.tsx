@@ -56,24 +56,43 @@ interface OrderDetails extends Order {
   changeLog?: any[];
 }
 
-function getStatusBadge(status: string | null) {
-  const normalizedStatus = status || "unfulfilled";
+function getWorkflowBadge(workflowStatus: string | null) {
+  const status = workflowStatus || "NEW";
+  const config: Record<string, { bg: string; label: string }> = {
+    NEW: { bg: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300", label: "New" },
+    PENDING: { bg: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300", label: "Pending" },
+    HOLD: { bg: "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300", label: "Hold" },
+    READY_TO_SHIP: { bg: "bg-cyan-100 text-cyan-700 dark:bg-cyan-900 dark:text-cyan-300", label: "Ready to Ship" },
+    BOOKED: { bg: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300", label: "Booked" },
+    FULFILLED: { bg: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300", label: "Fulfilled" },
+    DELIVERED: { bg: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300", label: "Delivered" },
+    RETURN: { bg: "bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300", label: "Return" },
+    CANCELLED: { bg: "bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-400", label: "Cancelled" },
+  };
+  const c = config[status] || config.NEW;
+  return <Badge className={c.bg} data-testid="badge-workflow-stage">{c.label}</Badge>;
+}
+
+function getShipmentStatusBadge(status: string | null) {
+  if (!status || status === "Unfulfilled" || status === "pending") return null;
   const statusConfig: Record<string, { bg: string; label: string }> = {
-    unfulfilled: { bg: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300", label: "Unfulfilled" },
-    pending: { bg: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300", label: "Pending" },
-    booked: { bg: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300", label: "Booked" },
-    dispatched: { bg: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300", label: "Dispatched" },
-    arrived: { bg: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300", label: "Arrived" },
-    out_for_delivery: { bg: "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300", label: "Out for Delivery" },
-    delivered: { bg: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300", label: "Delivered" },
-    failed: { bg: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300", label: "Failed" },
-    reattempt: { bg: "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300", label: "Reattempt" },
-    returned: { bg: "bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300", label: "Returned" },
-    cancelled: { bg: "bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-400", label: "Cancelled" },
+    BOOKED: { bg: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300", label: "Booked" },
+    ARRIVED_AT_ORIGIN: { bg: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300", label: "At Origin" },
+    PICKED_UP: { bg: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300", label: "Picked Up" },
+    IN_TRANSIT: { bg: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300", label: "In Transit" },
+    ARRIVED_AT_DESTINATION: { bg: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300", label: "At Destination" },
+    OUT_FOR_DELIVERY: { bg: "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300", label: "Out for Delivery" },
+    DELIVERY_ATTEMPTED: { bg: "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300", label: "Delivery Attempted" },
+    DELIVERED: { bg: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300", label: "Delivered" },
+    DELIVERY_FAILED: { bg: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300", label: "Failed" },
+    READY_FOR_RETURN: { bg: "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300", label: "Ready for Return" },
+    RETURN_IN_TRANSIT: { bg: "bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300", label: "Return in Transit" },
+    RETURNED_TO_SHIPPER: { bg: "bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300", label: "Returned" },
+    CANCELLED: { bg: "bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-400", label: "Cancelled" },
   };
 
-  const config = statusConfig[normalizedStatus] || statusConfig.pending;
-  return <Badge className={config.bg}>{config.label}</Badge>;
+  const config = statusConfig[status] || { bg: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300", label: status.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase()) };
+  return <Badge variant="outline" className={config.bg} data-testid="badge-shipment-status">{config.label}</Badge>;
 }
 
 function getTrackingIcon(status: string) {
@@ -630,9 +649,10 @@ export default function OrderDetails() {
             </Button>
           </Link>
           <div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-2xl font-bold">Order # {order.orderNumber}</h1>
-              {getStatusBadge(order.shipmentStatus)}
+              {getWorkflowBadge(order.workflowStatus)}
+              {getShipmentStatusBadge(order.shipmentStatus)}
             </div>
             <p className="text-muted-foreground text-sm">
               {order.orderDate ? format(new Date(order.orderDate), "MMMM dd, yyyy 'at' h:mm a") : ""}
