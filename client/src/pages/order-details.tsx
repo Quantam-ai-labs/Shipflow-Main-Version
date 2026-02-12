@@ -193,6 +193,7 @@ function getActivityIcon(entry: any) {
     case "PAYMENT_MARK_PAID":
       return DollarSign;
     case "PAYMENT_DELETED":
+    case "PAYMENT_REMOVED":
     case "PAYMENT_RESET":
       return Ban;
     case "BOOKING_CANCELLED":
@@ -221,6 +222,7 @@ function getActivityColor(entry: any): string {
     case "PAYMENT_MARK_PAID":
       return "text-emerald-500 bg-emerald-100 dark:bg-emerald-950";
     case "PAYMENT_DELETED":
+    case "PAYMENT_REMOVED":
     case "PAYMENT_RESET":
       return "text-orange-500 bg-orange-100 dark:bg-orange-950";
     case "BOOKING_CANCELLED":
@@ -246,7 +248,8 @@ function getActivityLabel(entry: any): string {
   }
   switch (entry.changeType) {
     case "PAYMENT_ADDED": return "Payment Added";
-    case "PAYMENT_DELETED": return "Payment Removed";
+    case "PAYMENT_DELETED":
+    case "PAYMENT_REMOVED": return "Payment Removed";
     case "PAYMENT_MARK_PAID": return "Marked Fully Paid";
     case "PAYMENT_RESET": return "Payments Reset";
     case "BOOKING_CANCELLED": return "Booking Cancelled";
@@ -330,7 +333,7 @@ function ActivityTimeline({ auditLog, changeLog }: { auditLog: any[] | undefined
                         <span className="text-xs font-medium max-w-[120px] truncate">{entry.newValue}</span>
                       </div>
                     )}
-                    {entry._type === "change" && (entry.changeType === "PAYMENT_ADDED" || entry.changeType === "PAYMENT_DELETED") && entry.metadata && (
+                    {entry._type === "change" && (entry.changeType === "PAYMENT_ADDED" || entry.changeType === "PAYMENT_DELETED" || entry.changeType === "PAYMENT_REMOVED") && entry.metadata && (
                       <p className="text-xs text-muted-foreground mt-0.5">
                         {entry.metadata.amount ? `Rs ${entry.metadata.amount}` : ""}{entry.metadata.method ? ` via ${entry.metadata.method}` : ""}
                       </p>

@@ -225,6 +225,7 @@ export async function autoMoveStalePending(merchantId: string): Promise<number> 
     action: "auto_12h_pending",
     reason: "Auto-moved: not finalized within 12 hours",
     actorUserId: null,
+    actorName: "System",
     actorType: "system",
   }));
 
