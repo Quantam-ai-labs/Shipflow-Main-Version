@@ -1,0 +1,224 @@
+You are working inside my existing Replit app “ShipFlow”.
+
+PROBLEM:
+Right now “Cancel” only reverts the order back to Pending in ShipFlow, but it does NOT cancel the booking with the courier. I need a proper cancellation system with TWO separate actions:
+
+A) Cancel Courier Booking (cancel shipment/booking with courier) → order goes back to “Pending/Ready” (NOT Shopify cancelled)
+B) Cancel Shopify Order (cancel order on Shopify) → order moves to “Cancelled/Return/Failed” pipeline depending on our logic and is cancelled on Shopify
+
+We also need BULK cancellation:
+- I should be able to paste/search order IDs (or tracking numbers) and cancel 10/50/100 at once.
+- Must show job progress, per-item success/failure, and must be safe (no accidental wrong cancellations).
+
+Additionally:
+- Whenever we book a shipment, ShipFlow must update Shopify with tracking + tracking URL + note/tag and fulfillment ONLY when appropriate according to our current pipeline rules.
+- Whenever we update tracking or cancel fulfillment, Shopify must be updated too.
+
+IMPORTANT:
+We have different pipeline tabs: New, Pending, Hold, Ready to Ship, Booked, Fulfilled (Dispatched), Delivered, Return.
+Booked means AWB created.
+Fulfilled means courier picked/dispatched.
+Delivered & Return are final.
+
+========================================================
+1) DATA MODEL CHANGES (PRISMA)
+========================================================
+A) shipments table must include:
+- id
+- merchantId
+- orderId
+- courier enum: POSTEX|LEOPARDS
+- trackingNumber (string)
+- courierBookingReference (string nullable) // any courier order id if available
+- bookingStatus enum: BOOKED, CANCELLED, FAILED_CANCEL
+- bookedAt
+- cancelledAt nullable
+- cancelReason nullable
+- lastCourierSyncAt nullable
+
+B) orders table must include:
+- workflowStatus enum: NEW,PENDING,HOLD,READY_TO_SHIP,BOOKED,FULFILLED,DELIVERED,RETURN,CANCELLED_SHOPIFY(optional)
+- shopifyOrderId
+- shopifyName (#15413)
+- shopifyCancelledAt nullable
+- lastShopifySyncAt nullable
+- tags (string or json)
+- notes (string) / internalNotes
+
+C) cancellation_jobs table (async job system):
+- id (uuid)
+- merchantId
+- jobType enum: COURIER_CANCEL, SHOPIFY_CANCEL, MIXED
+- status enum: QUEUED, RUNNING, COMPLETED, FAILED, PARTIAL
+- createdByUserId
+- createdAt, finishedAt
+- inputType enum: ORDER_IDS, SHOPIFY_NAMES, TRACKING_NUMBERS
+- totalCount, successCount, failedCount
+- lastError nullable
+- results json (store per-item result summary)
+
+D) cancellation_job_items table:
+- id
+- jobId
+- orderId nullable
+- shipmentId nullable
+- trackingNumber nullable
+- shopifyOrderId nullable
+- action enum: COURIER_CANCEL, SHOPIFY_CANCEL
+- status enum: PENDING, SUCCESS, FAILED, SKIPPED
+- errorMessage nullable
+
+========================================================
+2) UI REQUIREMENTS (FOOL-PROOF)
+========================================================
+A) Per-order actions (Order Details + Orders Table):
+- Button 1: “Cancel Courier Booking”
+- Button 2: “Cancel Shopify Order”
+- Button 3 (optional): “Cancel Both” (admin only)
+
+When clicked:
+- Show confirmation modal with exact meaning:
+  1) Cancel Courier Booking: cancels shipment with courier, keeps Shopify order active
+  2) Cancel Shopify Order: cancels Shopify order, does NOT necessarily cancel courier unless user selects both
+- Show warnings:
+  - If shipment already Dispatched/Fulfilled/Delivered: courier cancel may not be allowed; show message.
+  - If already Shopify-cancelled: skip.
+
+B) Bulk Cancellation Tool (NEW page):
+Create a page: “Bulk Cancellation”
+Features:
+- Input textbox where I can paste:
+  - order numbers like #15413 (Shopify name)
+  - or Shopify order IDs
+  - or tracking numbers
+- Auto-detect input type OR let user select type
+- Fetch and preview matching orders BEFORE executing:
+  - show list: order #, customer, amount, courier, tracking, current status
+  - show which ones are eligible and which will be skipped
+- Choose action:
+  - Cancel Courier Booking ONLY
+  - Cancel Shopify Order ONLY
+  - Cancel Both (admin only)
+- Button: “Start Bulk Cancellation”
+- Show async progress (job status) + per-item results + downloadable CSV of failures
+
+C) No silent failures:
+- If courier API fails, show exact error per order.
+- If Shopify API fails, show exact error per order.
+- If some succeed and some fail, job status becomes PARTIAL.
+
+========================================================
+3) COURIER CANCELLATION (REAL CANCELLATION, NOT UI ONLY)
+========================================================
+Implement real courier booking cancellation for BOTH couriers, and only then update ShipFlow.
+
+A) PostEx:
+- Use the PostEx cancellation endpoint from their documentation (cancel order / cancel shipment) using token auth.
+- Identify required payload (trackingNumber or courier order id).
+- If PostEx returns “already dispatched / cannot cancel”, mark as FAILED with message and do not change workflowStatus.
+- On success:
+  - shipments.bookingStatus = CANCELLED
+  - shipments.cancelledAt = now
+  - order.workflowStatus moves from BOOKED -> READY_TO_SHIP or PENDING (based on your rules)
+  - Keep trackingNumber stored but mark cancelled.
+  - Log audit event.
+
+B) Leopards:
+- Use the Leopards cancel CN / booking cancellation API if available in docs.
+- If Leopards does not support cancellation via API for certain states:
+  - handle gracefully: FAILED with clear message
+- On success:
+  - shipments.bookingStatus = CANCELLED
+  - order.workflowStatus reverts to READY_TO_SHIP/PENDING
+  - Log audit
+
+IMPORTANT RULE:
+If courier booking is cancelled, the order should NOT remain in Booked tab.
+It must move back to the correct pre-booking stage (READY_TO_SHIP if confirmed, otherwise PENDING/NEW).
+
+========================================================
+4) SHOPIFY ORDER CANCELLATION (SEPARATE ACTION)
+========================================================
+Implement Shopify cancel order:
+- Use Shopify Admin API order cancellation endpoint (REST or GraphQL).
+- Support options:
+  - reason (customer/declined/inventory/other)
+  - refund false by default (do not refund automatically)
+  - restock optional
+- After successful cancellation:
+  - order.workflowStatus = CANCELLED_SHOPIFY (or move to Return/Failed if you prefer)
+  - order.shopifyCancelledAt = now
+  - Add Shopify note/tag: “Cancelled from ShipFlow”
+  - Log audit
+
+IMPORTANT:
+Cancelling Shopify order does NOT automatically cancel courier booking unless the user selected “Cancel Both”.
+
+If Shopify cancellation is chosen and shipment is still BOOKED (not dispatched):
+- show warning: “Courier is still booked; choose Cancel Both if you want to cancel courier too.”
+
+========================================================
+5) “CANCEL BOTH” (ADMIN ONLY)
+========================================================
+If user selects Cancel Both:
+- Execute in safe order:
+  1) Cancel Courier booking first (if possible)
+  2) Then cancel Shopify order
+- If courier cancel fails because already dispatched:
+  - DO NOT cancel Shopify automatically unless user confirmed “Force Shopify cancel anyway”
+Provide checkbox: “Force Shopify cancel even if courier cancel fails” (admin only)
+
+========================================================
+6) SHOPIFY WRITE-BACK FOR BOOKING / TRACKING UPDATES
+========================================================
+Whenever booking happens in ShipFlow:
+- Update Shopify order notes/tags with:
+  - tracking number
+  - tracking URL
+  - courier name
+- Fulfillment logic must follow your pipeline rules:
+  - If stage is BOOKED (AWB created): DO NOT fulfill Shopify yet
+  - When stage becomes FULFILLED (courier dispatched/picked): create fulfillment with tracking in Shopify
+- If tracking changes or courier changes:
+  - Update Shopify note + tracking info (if allowed)
+- If courier booking is cancelled and Shopify fulfillment was NOT created yet:
+  - Only remove/append note: “Booking cancelled”
+- If courier booking is cancelled AFTER Shopify fulfillment exists (edge case):
+  - Provide admin tool: “Cancel fulfillment” or add note; follow Shopify API limitations.
+
+========================================================
+7) ASYNC JOB EXECUTION + SAFETY
+========================================================
+All bulk actions must run as background jobs:
+- Start job endpoint returns jobId quickly
+- UI polls job status
+- Implement rate limiting + retry:
+  - handle Shopify 429 with backoff
+  - handle courier 429/5xx with backoff
+- Store per-item result with error messages
+
+Prevent accidental cancellation:
+- Add “Type CONFIRM” step for bulk jobs over N=20 orders
+- Log everything in audit logs
+
+========================================================
+8) TEST CASES (MUST PASS)
+========================================================
+1) Single: Booked order -> Cancel Courier Booking:
+   - courier booking cancelled successfully
+   - order leaves Booked and returns to Ready/Pending
+2) Single: Cancel Shopify Order:
+   - Shopify order cancelled
+   - order moves to cancelled state in ShipFlow
+3) Bulk: 50 orders pasted by #numbers:
+   - preview shows matches + eligibility
+   - job runs with progress
+   - partial failures are shown clearly
+4) If shipment already dispatched:
+   - courier cancel should fail with clear message
+   - order must not revert incorrectly
+5) Shopify rate limit:
+   - job retries and continues
+
+DELIVERABLE:
+A full, safe, bulk-capable cancellation system with separate “Cancel Courier Booking” and “Cancel Shopify Order” options, correct pipeline movements, courier/API real cancellations, Shopify write-backs for notes/tracking/fulfillment, async jobs, and clear UI + logs.
