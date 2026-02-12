@@ -873,8 +873,8 @@ export default function Pipeline() {
                       <div className="text-xs text-muted-foreground capitalize">{order.paymentMethod}</div>
                     )}
                   </td>
-                  <td className="px-3 py-1.5 hidden lg:table-cell text-xs text-muted-foreground max-w-[150px] truncate">
-                    {order.totalQuantity || 1} item{(order.totalQuantity || 1) > 1 ? "s" : ""}
+                  <td className="px-3 py-1.5 hidden lg:table-cell max-w-[150px] truncate">
+                    <span className="text-sm font-medium">{order.totalQuantity || 1}</span>
                   </td>
                   <td className="px-3 py-1.5 hidden md:table-cell" data-testid={`cell-tags-${order.id}`}>
                     <div className="flex flex-wrap gap-1">
