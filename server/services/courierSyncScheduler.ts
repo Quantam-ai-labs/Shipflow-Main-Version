@@ -443,10 +443,48 @@ export function isCourierSyncRunning() {
   return isSyncing;
 }
 
+async function oneTimeRepairFulfilledWithBookedShipment() {
+  try {
+    const stuckOrders = await db.select()
+      .from(orders)
+      .where(and(
+        eq(orders.workflowStatus, 'FULFILLED'),
+        eq(orders.shipmentStatus, 'BOOKED'),
+        sql`${orders.courierTracking} IS NOT NULL AND ${orders.courierTracking} != ''`
+      ));
+
+    if (stuckOrders.length === 0) {
+      console.log('[Repair] No FULFILLED orders with BOOKED shipment status found - nothing to fix');
+      return;
+    }
+
+    console.log(`[Repair] Found ${stuckOrders.length} orders in FULFILLED with BOOKED shipment status - moving back to BOOKED`);
+    let fixed = 0;
+    for (const order of stuckOrders) {
+      const result = await transitionOrder({
+        merchantId: order.merchantId,
+        orderId: order.id,
+        toStatus: 'BOOKED',
+        action: 'data_repair',
+        actorType: 'system',
+        reason: 'Correcting premature FULFILLED transition: shipment status is still BOOKED (courier not yet dispatched)',
+      });
+      if (result.success) {
+        fixed++;
+      }
+    }
+    console.log(`[Repair] Successfully moved ${fixed}/${stuckOrders.length} orders back to BOOKED`);
+  } catch (err) {
+    console.error('[Repair] Error during one-time repair:', err);
+  }
+}
+
 export function startCourierSyncScheduler() {
   if (syncTimer) return;
 
   console.log(`[CourierSync] Starting courier status sync every ${COURIER_SYNC_INTERVAL_MS / 1000}s`);
+
+  oneTimeRepairFulfilledWithBookedShipment();
 
   setTimeout(() => runCourierSync(), 30000);
   syncTimer = setInterval(runCourierSync, COURIER_SYNC_INTERVAL_MS);
