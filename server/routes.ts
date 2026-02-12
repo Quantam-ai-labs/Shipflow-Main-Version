@@ -18,6 +18,14 @@ import { webhookHandler } from './services/webhookHandler';
 import { sendInviteEmail } from './services/email';
 import { writeBackAddress, writeBackCancel, writeBackTags } from './services/shopifyWriteBack';
 
+const oauthStateStore = new Map<string, { merchantId: string; shopDomain: string; credSource: string; createdAt: number }>();
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, val] of oauthStateStore) {
+    if (now - val.createdAt > 10 * 60 * 1000) oauthStateStore.delete(key);
+  }
+}, 60 * 1000);
+
 function mapCourierSlugToName(slug: string): string | null {
   const map: Record<string, string> = {
     leopards: "Leopards Courier",
@@ -2256,6 +2264,12 @@ export async function registerRoutes(
       }
 
       const state = crypto.randomBytes(16).toString('hex');
+      oauthStateStore.set(state, {
+        merchantId,
+        shopDomain,
+        credSource: usingMerchantCreds ? 'merchant' : 'env',
+        createdAt: Date.now(),
+      });
       (req.session as any).shopifyState = state;
       (req.session as any).shopDomain = shopDomain;
       (req.session as any).shopifyCredSource = usingMerchantCreds ? 'merchant' : 'env';
@@ -2311,33 +2325,47 @@ export async function registerRoutes(
       const { code, shop, state, hmac } = req.query;
 
       if (!code || !shop || !state) {
-        return res.redirect('/onboarding?shopify=error&message=Missing+required+parameters');
+        return res.redirect('/integrations?shopify=error&message=Missing+required+parameters');
       }
 
       const savedState = req.session?.shopifyState;
-      if (state !== savedState) {
-        console.warn("State mismatch - potential CSRF attack", { received: state, expected: savedState, sessionId: req.sessionID });
-        return res.redirect('/onboarding?shopify=error&message=Invalid+state+parameter');
+      const storedOAuth = oauthStateStore.get(state as string);
+      
+      if (state !== savedState && !storedOAuth) {
+        console.warn("State mismatch - no matching state found", { received: state, sessionState: savedState, sessionId: req.sessionID });
+        return res.redirect('/integrations?shopify=error&message=Invalid+state+parameter');
+      }
+
+      if (storedOAuth) {
+        oauthStateStore.delete(state as string);
       }
 
       const shopDomainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com$/;
       if (!shopDomainRegex.test(shop as string)) {
-        return res.redirect('/onboarding?shopify=error&message=Invalid+shop+domain');
+        return res.redirect('/integrations?shopify=error&message=Invalid+shop+domain');
       }
 
       delete req.session.shopifyState;
 
-      const userId = getSessionUserId(req);
-      if (!userId) {
-        return res.redirect('/onboarding?shopify=error&message=Not+authenticated');
+      let merchantId: string | undefined;
+      let credSource = 'env';
+
+      if (storedOAuth) {
+        merchantId = storedOAuth.merchantId;
+        credSource = storedOAuth.credSource;
+      } else {
+        const userId = getSessionUserId(req);
+        if (!userId) {
+          return res.redirect('/integrations?shopify=error&message=Not+authenticated');
+        }
+        merchantId = (req.session as any).shopifyMerchantId || await storage.getUserMerchantId(userId);
+        credSource = (req.session as any).shopifyCredSource || 'env';
       }
 
-      const merchantId = (req.session as any).shopifyMerchantId || await storage.getUserMerchantId(userId);
       if (!merchantId) {
-        return res.redirect('/onboarding?shopify=error&message=No+merchant+account');
+        return res.redirect('/integrations?shopify=error&message=No+merchant+account');
       }
 
-      const credSource = (req.session as any).shopifyCredSource || 'env';
       let merchantCreds: { clientId: string; clientSecret: string } | undefined;
       if (credSource === 'merchant') {
         const merchant = await storage.getMerchant(merchantId);
@@ -2392,10 +2420,15 @@ export async function registerRoutes(
         });
       }
 
-      try {
-        await storage.updateMerchant(merchantId, { onboardingStep: 'SHOPIFY_CONNECTED' } as any);
-      } catch (e) {
-        console.error("Error advancing onboarding to SHOPIFY_CONNECTED:", e);
+      const merchantBeforeUpdate = await storage.getMerchant(merchantId);
+      const isOnboardingComplete = merchantBeforeUpdate?.onboardingStep === 'COMPLETED';
+
+      if (!isOnboardingComplete) {
+        try {
+          await storage.updateMerchant(merchantId, { onboardingStep: 'SHOPIFY_CONNECTED' } as any);
+        } catch (e) {
+          console.error("Error advancing onboarding to SHOPIFY_CONNECTED:", e);
+        }
       }
 
       try {
@@ -2406,16 +2439,17 @@ export async function registerRoutes(
 
       shopifyService.syncOrders(merchantId, shop as string)
         .then(() => {
-          storage.updateMerchant(merchantId!, { onboardingStep: 'ORDERS_SYNCED' } as any)
-            .catch(e => console.error("Error advancing onboarding to ORDERS_SYNCED:", e));
+          if (!isOnboardingComplete) {
+            storage.updateMerchant(merchantId!, { onboardingStep: 'ORDERS_SYNCED' } as any)
+              .catch(e => console.error("Error advancing onboarding to ORDERS_SYNCED:", e));
+          }
         })
         .catch(err => console.error("Background sync error:", err));
 
       delete req.session.shopifyState;
       delete req.session.shopDomain;
 
-      const merchant = await storage.getMerchant(merchantId);
-      const redirectPath = merchant?.onboardingStep === 'COMPLETED' ? '/integrations' : '/onboarding';
+      const redirectPath = isOnboardingComplete ? '/integrations' : '/onboarding';
       res.redirect(`${redirectPath}?shopify=connected`);
     } catch (error) {
       console.error("Error in Shopify callback:", error);
