@@ -447,6 +447,7 @@ export class ShopifyService {
     const allShopifyIds = shopifyOrders.map(o => String(o.id));
     const existingOrdersMap = await storage.getExistingOrdersByShopifyIds(merchantId, allShopifyIds);
     const courierConfirmedIds = await storage.getOrdersWithCourierStatus(merchantId, allShopifyIds);
+    const managedWorkflowIds = await storage.getOrdersInManagedWorkflow(merchantId, allShopifyIds);
     
     let newCount = 0;
     let updatedCount = 0;
@@ -464,6 +465,7 @@ export class ShopifyService {
       const transformedOrder = this.transformOrderForStorage(shopifyOrder);
       const existingOrderId = existingOrdersMap.get(shopifyOrderId);
       const hasCourierStatus = courierConfirmedIds.has(shopifyOrderId);
+      const isInManagedWorkflow = managedWorkflowIds.has(shopifyOrderId);
       
       const initialWorkflowStatus = this.determineWorkflowStatus(shopifyOrder);
 
@@ -486,8 +488,6 @@ export class ShopifyService {
           paymentStatus: transformedOrder.paymentStatus,
           fulfillmentStatus: transformedOrder.fulfillmentStatus,
           orderStatus: transformedOrder.orderStatus,
-          courierName: transformedOrder.courierName,
-          courierTracking: transformedOrder.courierTracking,
           lineItems: transformedOrder.lineItems,
           totalQuantity: transformedOrder.totalQuantity,
           tags: transformedOrder.tags,
@@ -502,6 +502,8 @@ export class ShopifyService {
         
         if (!hasCourierStatus) {
           updateData.shipmentStatus = transformedOrder.shipmentStatus;
+          updateData.courierName = transformedOrder.courierName;
+          updateData.courierTracking = transformedOrder.courierTracking;
         }
 
         await storage.updateOrder(merchantId, existingOrderId, updateData);
@@ -522,7 +524,7 @@ export class ShopifyService {
               },
             });
           } else if (initialWorkflowStatus === 'FULFILLED') {
-            if (!hasCourierStatus) {
+            if (!hasCourierStatus && !isInManagedWorkflow) {
               await transitionOrder({
                 merchantId,
                 orderId: existingOrderId,

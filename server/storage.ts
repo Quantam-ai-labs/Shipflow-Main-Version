@@ -62,6 +62,7 @@ export interface IStorage {
   getExistingShopifyOrderIds(merchantId: string, shopifyOrderIds: string[]): Promise<Set<string>>;
   getExistingOrdersByShopifyIds(merchantId: string, shopifyOrderIds: string[]): Promise<Map<string, string>>;
   getOrdersWithCourierStatus(merchantId: string, shopifyOrderIds: string[]): Promise<Set<string>>;
+  getOrdersInManagedWorkflow(merchantId: string, shopifyOrderIds: string[]): Promise<Set<string>>;
   getRecentOrders(merchantId: string, limit?: number): Promise<Order[]>;
   getOrdersWithMissingCity(merchantId: string, limit?: number): Promise<{ id: string; shopifyOrderId: string }[]>;
   getOrdersForCourierSync(merchantId: string, options?: { forceRefresh?: boolean; limit?: number }): Promise<Order[]>;
@@ -475,6 +476,33 @@ export class DatabaseStorage implements IStorage {
     }
     
     return existingMap;
+  }
+
+  async getOrdersInManagedWorkflow(merchantId: string, shopifyOrderIds: string[]): Promise<Set<string>> {
+    if (shopifyOrderIds.length === 0) return new Set();
+    
+    const managedStatuses = ['PENDING', 'HOLD', 'READY_TO_SHIP', 'BOOKED', 'FULFILLED', 'DELIVERED', 'RETURN', 'CANCELLED'];
+    const chunkSize = 500;
+    const managedIds = new Set<string>();
+    
+    for (let i = 0; i < shopifyOrderIds.length; i += chunkSize) {
+      const chunk = shopifyOrderIds.slice(i, i + chunkSize);
+      const existing = await db.select({ shopifyOrderId: orders.shopifyOrderId })
+        .from(orders)
+        .where(and(
+          eq(orders.merchantId, merchantId),
+          inArray(orders.shopifyOrderId, chunk),
+          inArray(orders.workflowStatus, managedStatuses)
+        ));
+      
+      for (const order of existing) {
+        if (order.shopifyOrderId) {
+          managedIds.add(order.shopifyOrderId);
+        }
+      }
+    }
+    
+    return managedIds;
   }
 
   async getOrdersWithCourierStatus(merchantId: string, shopifyOrderIds: string[]): Promise<Set<string>> {
