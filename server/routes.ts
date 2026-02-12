@@ -2414,10 +2414,13 @@ export async function registerRoutes(
       delete req.session.shopifyState;
       delete req.session.shopDomain;
 
-      res.redirect('/onboarding?shopify=connected');
+      const merchant = await storage.getMerchant(merchantId);
+      const redirectPath = merchant?.onboardingStep === 'COMPLETED' ? '/integrations' : '/onboarding';
+      res.redirect(`${redirectPath}?shopify=connected`);
     } catch (error) {
       console.error("Error in Shopify callback:", error);
-      res.redirect('/onboarding?shopify=error&message=' + encodeURIComponent(String(error)));
+      const errorRedirect = '/integrations';
+      res.redirect(`${errorRedirect}?shopify=error&message=` + encodeURIComponent(String(error)));
     }
   });
 
