@@ -465,10 +465,14 @@ export default function Pipeline() {
       const res = await apiRequest("POST", `/api/orders/${orderId}/cancel-booking`);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       queryClient.invalidateQueries({ queryKey: ["/api/orders/workflow-counts"] });
-      toast({ title: "Booking cancelled", description: "Courier AWB cancelled and order moved back to Pending" });
+      if (data.fulfillmentWarning) {
+        toast({ title: "Booking cancelled", description: "Courier AWB cancelled and order moved to Ready to Ship, but Shopify fulfillment could not be reversed. You may need to cancel it manually in Shopify.", variant: "destructive" });
+      } else {
+        toast({ title: "Booking cancelled", description: "Courier AWB cancelled, Shopify fulfillment reversed, and order moved back to Ready to Ship" });
+      }
       setCancelConfirm(null);
     },
     onError: (err: any) => {

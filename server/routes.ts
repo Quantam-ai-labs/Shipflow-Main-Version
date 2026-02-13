@@ -8,7 +8,7 @@ import { and, eq, inArray, ilike, or, sql, desc, count, isNotNull } from "drizzl
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { z } from "zod";
 import crypto from "crypto";
-import { shopifyService, cancelShopifyOrder } from "./services/shopify";
+import { shopifyService, cancelShopifyOrder, cancelShopifyFulfillment } from "./services/shopify";
 import { cancelCourierBooking } from "./services/couriers";
 import { transitionOrder, bulkTransitionOrders, revertOrder } from "./services/workflowTransition";
 import { addPayment, deletePayment, markFullyPaid, resetPayments, bulkMarkPrepaid, recalculateOrderPayment } from "./services/payments";
@@ -714,6 +714,22 @@ export async function registerRoutes(
         }
       }
 
+      let fulfillmentCancelResult: { success: boolean; error?: string } | null = null;
+      if (order.shopifyFulfillmentId && order.shopifyOrderId) {
+        const store = await storage.getShopifyStore(merchantId);
+        if (store?.isConnected && store?.accessToken && store?.shopDomain) {
+          fulfillmentCancelResult = await cancelShopifyFulfillment(
+            store.shopDomain,
+            store.accessToken,
+            order.shopifyFulfillmentId,
+          );
+          console.log(`[Cancel] Shopify fulfillment cancel result for ${order.shopifyFulfillmentId}:`, fulfillmentCancelResult);
+          if (!fulfillmentCancelResult.success) {
+            console.warn(`[Cancel] Shopify fulfillment cancel failed (non-blocking): ${fulfillmentCancelResult.error}`);
+          }
+        }
+      }
+
       await storage.updateOrderWorkflow(merchantId, orderId, {
         courierName: null,
         courierTracking: null,
@@ -723,6 +739,7 @@ export async function registerRoutes(
         bookedAt: null,
         shipmentStatus: 'Unfulfilled',
         courierRawStatus: null,
+        shopifyFulfillmentId: null,
       });
 
       const userId = getSessionUserId(req) || "system";
@@ -730,7 +747,7 @@ export async function registerRoutes(
       const result = await transitionOrder({
         merchantId,
         orderId,
-        toStatus: "PENDING",
+        toStatus: "READY_TO_SHIP",
         action: "cancel_booking",
         actorUserId: userId,
         actorName,
@@ -756,10 +773,14 @@ export async function registerRoutes(
           oldCourierName,
           courierApiCalled: !!courierCancelResult,
           courierCancelResult: courierCancelResult || undefined,
+          fulfillmentCancelled: fulfillmentCancelResult?.success || false,
         },
       });
 
-      res.json({ ...result.order, courierCancelResult });
+      const fulfillmentWarning = fulfillmentCancelResult && !fulfillmentCancelResult.success
+        ? `Shopify fulfillment cancel failed: ${fulfillmentCancelResult.error}`
+        : undefined;
+      res.json({ ...result.order, courierCancelResult, fulfillmentCancelled: fulfillmentCancelResult?.success || false, fulfillmentWarning });
     } catch (error) {
       console.error("Error cancelling booking:", error);
       res.status(500).json({ message: "Failed to cancel booking" });

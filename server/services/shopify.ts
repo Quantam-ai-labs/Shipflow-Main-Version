@@ -900,6 +900,41 @@ export async function createShopifyFulfillment(
   }
 }
 
+export async function cancelShopifyFulfillment(
+  shopDomain: string,
+  accessToken: string,
+  fulfillmentId: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    console.log(`[Shopify Fulfillment Cancel] Cancelling fulfillment ${fulfillmentId} on ${shopDomain}`);
+
+    const url = `https://${shopDomain}/admin/api/2025-01/fulfillments/${fulfillmentId}/cancel.json`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'X-Shopify-Access-Token': accessToken,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error(`[Shopify Fulfillment Cancel] Failed: ${response.status} ${errText}`);
+      if (response.status === 422) {
+        return { success: false, error: `Fulfillment cannot be cancelled (may already be cancelled): ${errText}` };
+      }
+      return { success: false, error: `Shopify API error ${response.status}: ${errText}` };
+    }
+
+    console.log(`[Shopify Fulfillment Cancel] Successfully cancelled fulfillment ${fulfillmentId}`);
+    return { success: true };
+  } catch (error: any) {
+    console.error(`[Shopify Fulfillment Cancel] Error:`, error);
+    return { success: false, error: error.message || 'Unknown error' };
+  }
+}
+
 export async function cancelShopifyOrder(
   shopDomain: string,
   accessToken: string,
