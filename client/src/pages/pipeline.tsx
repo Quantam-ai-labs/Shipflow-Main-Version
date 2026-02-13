@@ -472,7 +472,21 @@ export default function Pipeline() {
       setCancelConfirm(null);
     },
     onError: (err: any) => {
-      toast({ title: "Cannot cancel", description: err.message || "Failed to cancel booking", variant: "destructive" });
+      let description = "Failed to cancel booking";
+      try {
+        const raw = err.message || "";
+        const jsonPart = raw.includes(": {") ? raw.substring(raw.indexOf(": {") + 2) : raw.includes(":{") ? raw.substring(raw.indexOf(":{") + 1) : "";
+        if (jsonPart) {
+          const parsed = JSON.parse(jsonPart);
+          description = parsed.message || description;
+        } else if (raw) {
+          description = raw.replace(/^\d+:\s*/, "");
+        }
+      } catch {
+        const raw = err.message || "";
+        description = raw.replace(/^\d+:\s*/, "") || description;
+      }
+      toast({ title: "Cannot cancel", description, variant: "destructive" });
       setCancelConfirm(null);
     },
   });

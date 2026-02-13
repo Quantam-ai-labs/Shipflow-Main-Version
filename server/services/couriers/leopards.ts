@@ -148,12 +148,23 @@ export class LeopardsService {
       console.log(`[Leopards] Cancel response:`, JSON.stringify(data).substring(0, 500));
 
       if (data.status === 1 || data.status === '1') {
-        return { success: true, message: data.message || 'Cancelled successfully', rawResponse: data };
+        const msg = typeof data.message === 'string' ? data.message : JSON.stringify(data.message);
+        return { success: true, message: msg || 'Cancelled successfully', rawResponse: data };
+      }
+
+      let errorMsg = 'Cancel request failed';
+      if (typeof data.message === 'string') {
+        errorMsg = data.message;
+      } else if (typeof data.error === 'string') {
+        errorMsg = data.error;
+      } else if (data.message && typeof data.message === 'object') {
+        const entries = Object.entries(data.message);
+        errorMsg = entries.map(([k, v]) => `${k}: ${v}`).join(', ');
       }
 
       return {
         success: false,
-        message: data.message || data.error || 'Cancel request failed',
+        message: errorMsg,
         rawResponse: data,
       };
     } catch (error) {

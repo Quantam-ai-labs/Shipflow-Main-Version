@@ -704,9 +704,11 @@ export async function registerRoutes(
           );
           console.log(`[Cancel] Courier cancel result for ${oldCourierTracking}:`, courierCancelResult);
           if (!courierCancelResult.success) {
+            const cleanMsg = typeof courierCancelResult.message === 'string' 
+              ? courierCancelResult.message 
+              : JSON.stringify(courierCancelResult.message);
             return res.status(400).json({
-              message: `Courier cancellation failed: ${courierCancelResult.message}`,
-              courierError: courierCancelResult.message,
+              message: `Courier cancellation failed: ${cleanMsg}`,
             });
           }
         }
