@@ -107,7 +107,7 @@ export async function transitionOrder(params: TransitionParams): Promise<Transit
   };
 
   if (order.workflowStatus === "BOOKED" && toStatus === "FULFILLED") {
-    const staleStatuses = ["BOOKED", "Booked", "booked", "Unfulfilled", "pending", null, undefined, ""];
+    const staleStatuses = ["Unfulfilled", "pending", null, undefined, ""];
     if (staleStatuses.includes(order.shipmentStatus as any)) {
       updateData.shipmentStatus = "IN_TRANSIT";
     }
@@ -203,7 +203,7 @@ export async function bulkTransitionOrders(params: {
     ));
 
   if (toStatus === "FULFILLED") {
-    const staleStatuses = ["BOOKED", "Booked", "booked", "Unfulfilled", "pending", "", null];
+    const staleStatuses = ["Unfulfilled", "pending", "", null];
     const staleIds = eligible
       .filter(o => o.workflowStatus === "BOOKED" && staleStatuses.includes(o.shipmentStatus as any))
       .map(o => o.id);
