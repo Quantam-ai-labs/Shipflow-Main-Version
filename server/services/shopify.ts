@@ -543,6 +543,11 @@ export class ShopifyService {
           createData.cancelledAt = shopifyOrder.cancelled_at ? new Date(shopifyOrder.cancelled_at) : now;
           createData.cancelReason = 'Cancelled in Shopify';
         }
+        if (initialWorkflowStatus === 'FULFILLED') {
+          if (!createData.shipmentStatus || createData.shipmentStatus === 'Unfulfilled' || createData.shipmentStatus === 'pending') {
+            createData.shipmentStatus = 'IN_TRANSIT';
+          }
+        }
         const created = await storage.createOrder(createData);
         if (created?.id && initialWorkflowStatus === 'NEW') {
           try {
