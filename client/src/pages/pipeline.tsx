@@ -149,13 +149,13 @@ const STAGE_TITLES: Record<string, string> = {
 };
 
 const PENDING_REASON_TYPES = [
-  { value: "INCOMPLETE_ADDRESS", label: "Incomplete Address" },
-  { value: "MISSING_PHONE", label: "Missing Phone" },
-  { value: "WRONG_CITY", label: "Wrong City" },
-  { value: "CUSTOMER_NOT_RESPONDING", label: "Customer Not Responding" },
-  { value: "CUSTOMER_REQUESTED_CHANGE", label: "Customer Requested Change" },
-  { value: "FRAUD_SUSPECTED", label: "Fraud Suspected" },
-  { value: "AUTO_12H", label: "Auto (12h)" },
+  { value: "INCOMPLETE_ADDRESS", label: "Address" },
+  { value: "MISSING_PHONE", label: "Phone" },
+  { value: "WRONG_CITY", label: "City" },
+  { value: "CUSTOMER_NOT_RESPONDING", label: "No Response" },
+  { value: "CUSTOMER_REQUESTED_CHANGE", label: "Change Req" },
+  { value: "FRAUD_SUSPECTED", label: "Fraud" },
+  { value: "AUTO_12H", label: "Auto" },
   { value: "OTHER", label: "Other" },
 ];
 
@@ -242,8 +242,9 @@ export default function Pipeline() {
 
   const dateParams = dateRangeToParams(dateRange);
 
-  const [cancelModal, setCancelModal] = useState<{ open: boolean; orderIds: string[] }>({ open: false, orderIds: [] });
+  const [cancelModal, setCancelModal] = useState<{ open: boolean; orderIds: string[]; fromTab?: string }>({ open: false, orderIds: [] });
   const [cancelReason, setCancelReason] = useState("");
+  const [cancelAlsoShopify, setCancelAlsoShopify] = useState(false);
   const [pendingModal, setPendingModal] = useState<{ open: boolean; orderIds: string[] }>({ open: false, orderIds: [] });
   const [pendingReasonType, setPendingReasonType] = useState("");
   const [pendingReason, setPendingReason] = useState("");
@@ -566,7 +567,8 @@ export default function Pipeline() {
 
   const handleSingleAction = useCallback((orderId: string, action: string) => {
     if (action === "cancel") {
-      setCancelModal({ open: true, orderIds: [orderId] });
+      setCancelModal({ open: true, orderIds: [orderId], fromTab: activeTab });
+      setCancelAlsoShopify(false);
     } else if (action === "pending") {
       setPendingModal({ open: true, orderIds: [orderId] });
     } else if (action === "hold") {
@@ -581,7 +583,8 @@ export default function Pipeline() {
     if (ids.length === 0) return;
 
     if (action === "cancel") {
-      setCancelModal({ open: true, orderIds: ids });
+      setCancelModal({ open: true, orderIds: ids, fromTab: activeTab });
+      setCancelAlsoShopify(false);
     } else if (action === "pending") {
       setPendingModal({ open: true, orderIds: ids });
     } else if (action === "hold") {
@@ -600,14 +603,19 @@ export default function Pipeline() {
 
   const submitCancel = useCallback(() => {
     if (!cancelReason.trim()) return;
+    const extra: any = { cancelReason };
+    if (cancelAlsoShopify) {
+      extra.cancelOnShopify = true;
+    }
     if (cancelModal.orderIds.length === 1) {
-      workflowMutation.mutate({ orderId: cancelModal.orderIds[0], action: "cancel", extra: { cancelReason } });
+      workflowMutation.mutate({ orderId: cancelModal.orderIds[0], action: "cancel", extra });
     } else {
-      bulkWorkflowMutation.mutate({ orderIds: cancelModal.orderIds, action: "cancel", extra: { cancelReason } });
+      bulkWorkflowMutation.mutate({ orderIds: cancelModal.orderIds, action: "cancel", extra });
     }
     setCancelModal({ open: false, orderIds: [] });
     setCancelReason("");
-  }, [cancelReason, cancelModal, workflowMutation, bulkWorkflowMutation]);
+    setCancelAlsoShopify(false);
+  }, [cancelReason, cancelAlsoShopify, cancelModal, workflowMutation, bulkWorkflowMutation]);
 
   const submitPending = useCallback(() => {
     if (!pendingReasonType) return;
@@ -786,11 +794,6 @@ export default function Pipeline() {
           {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "HOLD") && (
             <Button size="sm" variant="destructive" onClick={() => handleBulkAction("cancel")} disabled={isPending} data-testid="bulk-cancel">
               <XCircle className="w-3.5 h-3.5 mr-1.5" />Cancel
-            </Button>
-          )}
-          {activeTab === "NEW" && (
-            <Button size="sm" variant="secondary" onClick={() => handleBulkAction("pending")} disabled={isPending} data-testid="bulk-pending">
-              <Clock className="w-3.5 h-3.5 mr-1.5" />Pending
             </Button>
           )}
           {(activeTab === "NEW" || activeTab === "PENDING") && (
@@ -977,6 +980,9 @@ export default function Pipeline() {
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Order</th>
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Customer</th>
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground hidden md:table-cell">City</th>
+                {(activeTab === "NEW" || activeTab === "PENDING") && (
+                  <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Address / Products</th>
+                )}
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Amount (PKR)</th>
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground hidden lg:table-cell">Items</th>
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground hidden md:table-cell" data-testid="header-tags">Tags</th>
@@ -1078,6 +1084,18 @@ export default function Pipeline() {
                     )}
                   </td>
                   <td className="px-3 py-1.5 hidden md:table-cell text-sm">{order.city || "-"}</td>
+                  {(activeTab === "NEW" || activeTab === "PENDING") && (
+                    <td className="px-3 py-1.5 max-w-[250px]" data-testid={`cell-address-products-${order.id}`}>
+                      <div className="text-xs text-muted-foreground whitespace-normal leading-tight">
+                        {order.shippingAddress || "-"}
+                      </div>
+                      {order.itemSummary && (
+                        <div className="text-[11px] text-muted-foreground/70 whitespace-normal leading-tight mt-0.5">
+                          {order.itemSummary}
+                        </div>
+                      )}
+                    </td>
+                  )}
                   <td className="px-3 py-1.5">
                     <div className="font-medium text-sm">{Number(order.totalAmount).toLocaleString()}</div>
                     {order.codPaymentStatus === "PAID" ? (
@@ -1106,12 +1124,9 @@ export default function Pipeline() {
                   {/* Pending-specific columns */}
                   {activeTab === "PENDING" && (
                     <td className="px-3 py-1.5">
-                      <Badge variant="secondary" className="text-xs mb-1" data-testid={`badge-pending-reason-${order.id}`}>
+                      <Badge variant="secondary" className="text-xs" data-testid={`badge-pending-reason-${order.id}`}>
                         {PENDING_REASON_TYPES.find(r => r.value === order.pendingReasonType)?.label || order.pendingReasonType || "Unknown"}
                       </Badge>
-                      {order.pendingReason && (
-                        <div className="text-xs text-muted-foreground truncate max-w-[200px]">{order.pendingReason}</div>
-                      )}
                     </td>
                   )}
 
@@ -1157,16 +1172,16 @@ export default function Pipeline() {
                   <td className="px-3 py-1.5 text-right">
                     <div className="flex items-center justify-end gap-1">
                       {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "HOLD") && (
-                        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-green-600"
+                        <Button size="icon" variant="ghost" className="text-green-600"
                           onClick={() => handleSingleAction(order.id, activeTab === "HOLD" ? "release-hold" : activeTab === "PENDING" ? "fix-confirm" : "confirm")}
                           disabled={isPending}
+                          title={activeTab === "HOLD" ? "Release" : "Confirm"}
                           data-testid={`button-confirm-${order.id}`}>
-                          <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
-                          {activeTab === "HOLD" ? "Release" : "Confirm"}
+                          <CheckCircle2 className="w-4 h-4" />
                         </Button>
                       )}
                       {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "READY_TO_SHIP" || activeTab === "BOOKED" || activeTab === "FULFILLED") && (
-                        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs"
+                        <Button size="icon" variant="ghost"
                           onClick={() => {
                             setEditingOrder(order.id);
                             setEditName(order.customerName || "");
@@ -1174,24 +1189,18 @@ export default function Pipeline() {
                             setEditAddress(order.shippingAddress || "");
                             setEditCity(order.city || "");
                           }}
+                          title="Edit"
                           data-testid={`button-edit-${order.id}`}>
-                          <Edit3 className="w-3.5 h-3.5" />
-                        </Button>
-                      )}
-                      {activeTab === "NEW" && (
-                        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-amber-600"
-                          onClick={() => handleSingleAction(order.id, "pending")}
-                          disabled={isPending}
-                          data-testid={`button-pending-${order.id}`}>
-                          <Clock className="w-3.5 h-3.5 mr-1" />Pending
+                          <Edit3 className="w-4 h-4" />
                         </Button>
                       )}
                       {(activeTab === "NEW" || activeTab === "PENDING") && (
-                        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-purple-600"
+                        <Button size="icon" variant="ghost" className="text-purple-600"
                           onClick={() => handleSingleAction(order.id, "hold")}
                           disabled={isPending}
+                          title="Hold"
                           data-testid={`button-hold-${order.id}`}>
-                          <Pause className="w-3.5 h-3.5 mr-1" />Hold
+                          <Pause className="w-4 h-4" />
                         </Button>
                       )}
                       {activeTab === "HOLD" && (
@@ -1222,11 +1231,12 @@ export default function Pipeline() {
                         </Button>
                       )}
                       {activeTab !== "NEW" && activeTab !== "BOOKED" && activeTab !== "FULFILLED" && activeTab !== "DELIVERED" && activeTab !== "RETURN" && order.previousWorkflowStatus && (
-                        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-muted-foreground"
+                        <Button size="icon" variant="ghost" className="text-muted-foreground"
                           onClick={() => workflowMutation.mutate({ orderId: order.id, action: "revert" })}
                           disabled={isPending}
+                          title="Revert"
                           data-testid={`button-revert-${order.id}`}>
-                          <Undo2 className="w-3.5 h-3.5 mr-1" />Revert
+                          <Undo2 className="w-4 h-4" />
                         </Button>
                       )}
                       {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "HOLD") && (
@@ -1278,21 +1288,37 @@ export default function Pipeline() {
         </div>
       )}
       {/* Cancel Modal */}
-      <Dialog open={cancelModal.open} onOpenChange={open => { if (!open) setCancelModal({ open: false, orderIds: [] }); }}>
+      <Dialog open={cancelModal.open} onOpenChange={open => { if (!open) { setCancelModal({ open: false, orderIds: [] }); setCancelAlsoShopify(false); } }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Cancel {cancelModal.orderIds.length > 1 ? `${cancelModal.orderIds.length} Orders` : "Order"}</DialogTitle>
-            <DialogDescription>Please provide a reason for cancellation.</DialogDescription>
+            <DialogDescription>Choose how to cancel and provide a reason.</DialogDescription>
           </DialogHeader>
-          <Textarea
-            placeholder="Cancel reason..."
-            value={cancelReason}
-            onChange={e => setCancelReason(e.target.value)}
-            className="min-h-[80px]"
-            data-testid="input-cancel-reason"
-          />
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <Checkbox checked={true} disabled data-testid="checkbox-move-to-cancel" />
+                <span>Move to Cancel</span>
+              </label>
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <Checkbox
+                  checked={cancelAlsoShopify}
+                  onCheckedChange={(v) => setCancelAlsoShopify(!!v)}
+                  data-testid="checkbox-cancel-shopify"
+                />
+                <span>Also cancel on Shopify</span>
+              </label>
+            </div>
+            <Textarea
+              placeholder="Cancel reason..."
+              value={cancelReason}
+              onChange={e => setCancelReason(e.target.value)}
+              className="min-h-[80px]"
+              data-testid="input-cancel-reason"
+            />
+          </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setCancelModal({ open: false, orderIds: [] })}>Back</Button>
+            <Button variant="ghost" onClick={() => { setCancelModal({ open: false, orderIds: [] }); setCancelAlsoShopify(false); }}>Back</Button>
             <Button variant="destructive" onClick={submitCancel} disabled={!cancelReason.trim()} data-testid="button-submit-cancel">
               Cancel Order{cancelModal.orderIds.length > 1 ? "s" : ""}
             </Button>

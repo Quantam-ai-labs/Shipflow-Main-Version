@@ -299,16 +299,6 @@ export async function registerRoutes(
   await setupAuth(app);
   registerAuthRoutes(app);
 
-  // Temporary: serve project zip for download
-  app.get("/download-project-zip", (_req, res) => {
-    const zipPath = require("path").join(process.cwd(), "shipflow-project.zip");
-    if (require("fs").existsSync(zipPath)) {
-      res.download(zipPath, "shipflow-project.zip");
-    } else {
-      res.status(404).send("Zip file not found. Please ask the agent to regenerate it.");
-    }
-  });
-
   // Seed demo data on startup
   await storage.seedDemoData();
 
@@ -447,7 +437,7 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
       const orderId = req.params.id;
-      const { action, cancelReason, pendingReasonType, pendingReason, holdUntil, customerPhone, shippingAddress, city } = req.body;
+      const { action, cancelReason, cancelOnShopify, pendingReasonType, pendingReason, holdUntil, customerPhone, shippingAddress, city } = req.body;
       const userId = getSessionUserId(req) || "system";
       const actorName = await getSessionUserName(req);
 
@@ -504,6 +494,20 @@ export async function registerRoutes(
 
       const result = await transitionOrder({ merchantId, orderId, toStatus, action, actorUserId: userId, actorName, reason, extraData });
       if (!result.success) return res.status(400).json({ message: result.error });
+
+      if (action === "cancel" && cancelOnShopify && result.order?.shopifyOrderId) {
+        try {
+          const store = await storage.getShopifyStore(merchantId);
+          if (store?.accessToken) {
+            const shopifyToken = decryptToken(store.accessToken);
+            await cancelShopifyOrder(store.shopDomain, shopifyToken, result.order.shopifyOrderId);
+            console.log(`[Cancel+Shopify] Order ${orderId} cancelled on Shopify`);
+          }
+        } catch (shopifyError: any) {
+          console.error(`[Cancel+Shopify] Failed to cancel on Shopify for order ${orderId}:`, shopifyError?.message);
+        }
+      }
+
       res.json(result.order);
     } catch (error) {
       console.error("Error updating workflow:", error);
@@ -515,7 +519,7 @@ export async function registerRoutes(
     try {
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
-      const { orderIds, action, cancelReason, pendingReasonType, pendingReason, holdUntil } = req.body;
+      const { orderIds, action, cancelReason, cancelOnShopify, pendingReasonType, pendingReason, holdUntil } = req.body;
       const userId = getSessionUserId(req) || "system";
       const actorName = await getSessionUserName(req);
 
@@ -558,6 +562,29 @@ export async function registerRoutes(
       }
 
       const result = await bulkTransitionOrders({ merchantId, orderIds, toStatus, action, actorUserId: userId, actorName, reason, extraData });
+
+      if (action === "cancel" && cancelOnShopify) {
+        try {
+          const store = await storage.getShopifyStore(merchantId);
+          if (store?.accessToken) {
+            const shopifyToken = decryptToken(store.accessToken);
+            for (const oid of orderIds) {
+              const order = await storage.getOrderById(merchantId, oid);
+              if (order?.shopifyOrderId) {
+                try {
+                  await cancelShopifyOrder(store.shopDomain, shopifyToken, order.shopifyOrderId);
+                  console.log(`[BulkCancel+Shopify] Order ${oid} cancelled on Shopify`);
+                } catch (e: any) {
+                  console.error(`[BulkCancel+Shopify] Failed for ${oid}:`, e?.message);
+                }
+              }
+            }
+          }
+        } catch (e: any) {
+          console.error("[BulkCancel+Shopify] Store fetch failed:", e?.message);
+        }
+      }
+
       res.json(result);
     } catch (error) {
       console.error("Error bulk updating workflow:", error);
