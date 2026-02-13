@@ -1229,7 +1229,7 @@ export default function Pipeline() {
                           <Undo2 className="w-3.5 h-3.5 mr-1" />Cancel AWB
                         </Button>
                       )}
-                      {order.shopifyOrderId && !order.cancelledAt && (activeTab === "PENDING" || activeTab === "HOLD" || activeTab === "BOOKED") && (
+                      {order.shopifyOrderId && !order.cancelledAt && activeTab === "BOOKED" && (
                         <Button size="sm" variant="ghost" className="text-xs text-orange-600"
                           onClick={() => setCancelConfirm({ open: true, orderId: order.id, type: "shopify", orderNumber: order.orderNumber })}
                           disabled={cancelShopifyMutation.isPending}
