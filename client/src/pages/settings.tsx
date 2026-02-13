@@ -36,6 +36,7 @@ import {
   Truck,
   ChevronDown,
   ChevronRight,
+  RefreshCw,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -227,6 +228,22 @@ function CourierStatusMappingSection() {
     },
   });
 
+  const resyncMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/courier-status-mappings/resync");
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/courier-status-mappings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/pipeline"] });
+      toast({ title: "ReSync complete", description: `Updated ${data.updated || 0} orders, skipped ${data.skipped || 0}, failed ${data.failed || 0}.` });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to resync courier statuses.", variant: "destructive" });
+    },
+  });
+
   const mappings = data?.mappings || [];
 
   const filteredMappings = mappings.filter((m) => {
@@ -291,6 +308,16 @@ function CourierStatusMappingSection() {
             </CardDescription>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => resyncMutation.mutate()}
+              disabled={resyncMutation.isPending}
+              data-testid="button-save-resync"
+            >
+              <RefreshCw className={`w-4 h-4 mr-1 ${resyncMutation.isPending ? "animate-spin" : ""}`} />
+              {resyncMutation.isPending ? "Syncing..." : "Save & ReSync"}
+            </Button>
             <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline" size="sm" data-testid="button-add-mapping">

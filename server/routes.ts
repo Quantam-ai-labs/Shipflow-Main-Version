@@ -4399,6 +4399,30 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/courier-status-mappings/resync", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const { clearMappingsCache } = await import('./services/couriers/index');
+      clearMappingsCache(merchantId);
+
+      const { syncMerchantCourierStatuses } = await import('./services/courierSyncScheduler');
+      const result = await syncMerchantCourierStatuses(merchantId);
+
+      res.json({
+        success: true,
+        updated: result.updated,
+        failed: result.failed,
+        skipped: result.skipped,
+        total: result.total,
+      });
+    } catch (error) {
+      console.error("Error during save & resync:", error);
+      res.status(500).json({ message: "Failed to resync courier statuses" });
+    }
+  });
+
   app.post("/api/onboarding/advance-step", isAuthenticated, async (req, res) => {
     try {
       const merchantId = await requireMerchant(req, res);

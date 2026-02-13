@@ -55,6 +55,18 @@ async function getCustomMappings(merchantId: string, courierType: string): Promi
   return Object.keys(customNormalization).length > 0 ? customNormalization : undefined;
 }
 
+export function clearMappingsCache(merchantId?: string) {
+  if (merchantId) {
+    for (const key of customMappingsCache.keys()) {
+      if (key.startsWith(`${merchantId}:`)) {
+        customMappingsCache.delete(key);
+      }
+    }
+  } else {
+    customMappingsCache.clear();
+  }
+}
+
 export async function getWorkflowStageMapping(merchantId: string, courierType: string, normalizedStatus: string): Promise<string | null> {
   const { workflowStages } = await loadMerchantMappings(merchantId, courierType);
   return workflowStages[normalizedStatus] || null;
