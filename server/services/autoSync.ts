@@ -18,6 +18,21 @@ let syncTimer: ReturnType<typeof setInterval> | null = null;
 let staleTimer: ReturnType<typeof setInterval> | null = null;
 let isSyncing = false;
 const lastSyncResults = new Map<string, SyncResult>();
+const merchantSyncLocks = new Set<string>();
+
+export function acquireMerchantSyncLock(merchantId: string): boolean {
+  if (merchantSyncLocks.has(merchantId)) return false;
+  merchantSyncLocks.add(merchantId);
+  return true;
+}
+
+export function releaseMerchantSyncLock(merchantId: string): void {
+  merchantSyncLocks.delete(merchantId);
+}
+
+export function isMerchantSyncing(merchantId: string): boolean {
+  return merchantSyncLocks.has(merchantId);
+}
 
 async function runStaleOrderCheck() {
   try {
@@ -66,6 +81,10 @@ async function runAutoSync() {
         continue;
       }
 
+      if (!acquireMerchantSyncLock(store.merchantId)) {
+        continue;
+      }
+
       try {
         const shopifyService = new ShopifyService();
         const result = await shopifyService.syncOrders(store.merchantId, store.shopDomain, false);
@@ -89,6 +108,8 @@ async function runAutoSync() {
           totalFetched: 0,
           error: error.message,
         });
+      } finally {
+        releaseMerchantSyncLock(store.merchantId);
       }
     }
   } catch (error: any) {

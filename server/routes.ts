@@ -2021,16 +2021,24 @@ export async function registerRoutes(
         });
       }
 
-      // Otherwise use the real Shopify service
-      const forceFullSync = req.body?.forceFullSync === true;
-      const result = await shopifyService.syncOrders(merchantId, store.shopDomain!, forceFullSync);
-      res.json({ 
-        success: true, 
-        message: `Successfully synced ${result.synced} new orders, ${result.updated} updated`,
-        synced: result.synced,
-        updated: result.updated,
-        total: result.total
-      });
+      const { acquireMerchantSyncLock, releaseMerchantSyncLock } = await import('./services/autoSync');
+      if (!acquireMerchantSyncLock(merchantId)) {
+        return res.status(409).json({ message: "A sync is already in progress. Please wait and try again." });
+      }
+
+      try {
+        const forceFullSync = req.body?.forceFullSync === true;
+        const result = await shopifyService.syncOrders(merchantId, store.shopDomain!, forceFullSync);
+        res.json({ 
+          success: true, 
+          message: `Successfully synced ${result.synced} new orders, ${result.updated} updated`,
+          synced: result.synced,
+          updated: result.updated,
+          total: result.total
+        });
+      } finally {
+        releaseMerchantSyncLock(merchantId);
+      }
     } catch (error: any) {
       console.error("Error syncing Shopify:", error);
       res.status(500).json({ message: error.message || "Failed to sync Shopify" });
