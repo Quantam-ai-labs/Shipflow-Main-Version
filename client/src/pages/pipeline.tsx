@@ -174,7 +174,7 @@ export default function Pipeline() {
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 300);
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(300);
+  const [pageSize] = useState(50);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [pendingReasonFilter, setPendingReasonFilter] = useState("all");
   const [shipmentSubFilter, setShipmentSubFilter] = useState("all");
@@ -226,14 +226,16 @@ export default function Pipeline() {
   }, [activeTab]);
 
   const { data, isLoading, isFetching } = useQuery<{ orders: Order[]; total: number }>({
-    queryKey: ["/api/orders", { workflowStatus: activeTab, search: debouncedSearch, page, pageSize, pendingReasonType: activeTab === "PENDING" ? pendingReasonFilter : undefined, dateFrom: dateParams.dateFrom, dateTo: dateParams.dateTo }],
+    queryKey: ["/api/orders", { workflowStatus: activeTab, search: debouncedSearch, page, pageSize, pendingReasonType: activeTab === "PENDING" ? pendingReasonFilter : undefined, shipmentStatus: shipmentSubFilter !== "all" ? shipmentSubFilter : undefined, dateFrom: dateParams.dateFrom, dateTo: dateParams.dateTo }],
     queryFn: async () => {
       const params = new URLSearchParams();
       params.set("workflowStatus", activeTab);
       params.set("page", String(page));
       params.set("pageSize", String(pageSize));
+      params.set("light", "1");
       if (debouncedSearch) params.set("search", debouncedSearch);
       if (activeTab === "PENDING" && pendingReasonFilter !== "all") params.set("pendingReasonType", pendingReasonFilter);
+      if (shipmentSubFilter !== "all") params.set("shipmentStatus", shipmentSubFilter);
       if (dateParams.dateFrom) params.set("dateFrom", dateParams.dateFrom);
       if (dateParams.dateTo) params.set("dateTo", dateParams.dateTo);
       const res = await fetch(`/api/orders?${params.toString()}`, { credentials: "include" });
@@ -268,24 +270,9 @@ export default function Pipeline() {
     ],
   };
 
-  const rawOrders = data?.orders || [];
+  const orders = data?.orders || [];
   const total = data?.total || 0;
   const totalPages = Math.ceil(total / pageSize);
-
-  const orders = useMemo(() => {
-    if (shipmentSubFilter === "all" || !SHIPMENT_SUB_TABS[activeTab]) return rawOrders;
-    return rawOrders.filter(o => o.shipmentStatus === shipmentSubFilter);
-  }, [rawOrders, shipmentSubFilter, activeTab]);
-
-  const shipmentCounts = useMemo(() => {
-    if (!SHIPMENT_SUB_TABS[activeTab]) return {};
-    const counts: Record<string, number> = { all: rawOrders.length };
-    for (const order of rawOrders) {
-      const s = order.shipmentStatus || "UNKNOWN";
-      counts[s] = (counts[s] || 0) + 1;
-    }
-    return counts;
-  }, [rawOrders, activeTab]);
 
   const workflowMutation = useMutation({
     mutationFn: async ({ orderId, action, extra }: { orderId: string; action: string; extra?: any }) => {
@@ -794,8 +781,6 @@ export default function Pipeline() {
       {SHIPMENT_SUB_TABS[activeTab] && (
         <div className="flex items-center gap-1.5 px-4 py-2 border-b bg-muted/30 flex-wrap" data-testid="shipment-sub-tabs">
           {SHIPMENT_SUB_TABS[activeTab].map(tab => {
-            const count = shipmentCounts[tab.value] || 0;
-            if (tab.value !== "all" && count === 0) return null;
             const isActive = shipmentSubFilter === tab.value;
             return (
               <Button
@@ -805,14 +790,17 @@ export default function Pipeline() {
                 className="text-xs gap-1"
                 onClick={() => {
                   setShipmentSubFilter(tab.value);
+                  setPage(1);
                   setSelectedIds(new Set());
                 }}
                 data-testid={`shipment-filter-${tab.value}`}
               >
                 {tab.label}
-                <Badge variant={isActive ? "secondary" : "outline"} className="text-[10px] min-w-[1.25rem] justify-center">
-                  {count}
-                </Badge>
+                {isActive && (
+                  <Badge variant="secondary" className="text-[10px] min-w-[1.25rem] justify-center">
+                    {total}
+                  </Badge>
+                )}
               </Button>
             );
           })}

@@ -1,0 +1,208 @@
+Replit Agent — STOP changing logic tab-by-tab. This app has ONE simple pipeline and you must hard-code and strictly follow it forever. Do not invent new stages, do not “optimize” the workflow, do not mix Shopify fulfillment status with our internal pipeline status. Keep it simple and deterministic.
+
+========================
+SHIPFLOW PIPELINE (FINAL)
+========================
+Tabs (exact order):
+1) New Orders
+2) Confirmation Pending
+3) Hold
+4) Ready to Ship
+5) Booked
+6) Fulfilled
+7) Delivered
+8) Return
+9) Cancelled
+
+This is the ONLY workflow. No extra hidden logic. No alternative criteria.
+
+=========================================
+CORE RULE: OUR STATUS ≠ SHOPIFY FULFILLMENT
+=========================================
+Shopify can be “fulfilled” but that does NOT decide our internal pipeline tab.
+
+Our internal pipeline is driven by:
+- Shopify TAGS (robo tags) for confirmation/cancel
+- Courier tracking status for dispatch/delivered/return
+That’s it.
+
+=============================
+A) NEW ORDERS (Fresh from Shopify)
+=============================
+Definition:
+- Every new Shopify order initially lands in New Orders (unless it is older than our import rules).
+
+Auto-move rules using Shopify tags (ONLY these tags control this part):
+- If Shopify tags contain "Robo-Confirm" → move order to Ready to Ship immediately.
+- If Shopify tags contain "Robo-Cancel" → move order to Cancelled immediately.
+- If Shopify tags contain "Robo-Pending" → keep in New Orders for up to 12 hours.
+
+Time rule:
+- If order stays "Robo-Pending" for 12 hours (still not confirmed) → move it to Confirmation Pending.
+
+Manual actions inside New Orders:
+1) Confirm button:
+   - Move order → Ready to Ship
+   - Update Shopify tags: remove "Robo-Pending" / "Robo-Cancel" and add "Robo-Confirm"
+2) Cancel button:
+   - Move order → Cancelled
+   - Update Shopify tags: remove "Robo-Pending" / "Robo-Confirm" and add "Robo-Cancel"
+   - Also provide separate optional action: “Cancel on Shopify” (real Shopify cancellation)
+
+=============================
+B) CONFIRMATION PENDING
+=============================
+Definition:
+- Orders that are still not confirmed after 12 hours OR moved here manually.
+
+Auto-move rules (still only tags):
+- If Shopify tag becomes "Robo-Confirm" → move to Ready to Ship.
+- If Shopify tag becomes "Robo-Cancel" → move to Cancelled.
+- If Shopify tag is still "Robo-Pending" → keep it here until confirmed or cancelled.
+
+Manual actions inside Confirmation Pending:
+1) Confirm button:
+   - Move → Ready to Ship
+   - Update Shopify tags to "Robo-Confirm"
+2) Cancel button:
+   - Move → Cancelled
+   - Update Shopify tags to "Robo-Cancel"
+3) Hold button:
+   - Ask for hold-until date/time
+   - Move → Hold and store holdUntil timestamp
+
+=============================
+C) HOLD
+=============================
+Definition:
+- Orders intentionally delayed with a holdUntil date/time.
+
+Rule:
+- Do NOT keep in Hold forever.
+- When holdUntil expires → move order automatically back to Confirmation Pending (NOT to Ready to Ship directly).
+
+Then Confirmation Pending rules apply again (confirm/cancel/tags).
+
+=============================
+D) READY TO SHIP
+=============================
+Definition:
+- Orders that are confirmed (tag "Robo-Confirm" OR manually confirmed).
+
+Only purpose:
+- These are ready to be booked with couriers.
+
+Actions:
+- Book with Leopards or PostEx (single or bulk).
+- Booking must create shipment/tracking number.
+
+IMPORTANT:
+- When booking succeeds:
+  - Move order → Booked (always)
+  - Save tracking number + courier
+  - Add tracking number + tracking URL to Shopify order NOTE
+  - Mark Shopify as fulfilled if needed for tracking visibility, BUT DO NOT move our internal status to Fulfilled because of Shopify fulfillment.
+  - Our internal tab after booking is always Booked.
+
+=============================
+E) BOOKED
+=============================
+Definition:
+- Shipment is created (AWB exists) but courier has NOT picked it up yet.
+
+Rules:
+- Booked tab must contain ONLY those orders where courier status indicates: “label created / booked / manifested / pickup pending”
+- Orders must stay in Booked until courier tracking confirms pickup/dispatch.
+
+Printing rules (must be fixed, not broken):
+- Provide BULK AWB printing in ONE PDF (courier-native).
+- Do NOT open new pages for each label.
+- Use courier’s native bulk label generation:
+  - PostEx: invoice PDF supports multiple tracking numbers (chunking if limit) and return one combined PDF/ZIP.
+  - Leopards: use slip_link PDFs and merge/zip into one download.
+- Add Loadsheet generation from Booked (courier-native loadsheet PDF).
+-Loadsheet can be generated for 1 or more orders by selecting them and pressing button of “Generate Loadsheet - Remember Loadsheet can be generated only for one courier’s shipment at a time.
+
+=============================
+F) FULFILLED (Courier picked / dispatched)
+=============================
+Definition:
+- Courier has physically picked the parcel / dispatched it from us.
+- This is based ONLY on courier tracking status.
+
+Move rule:
+- If courier tracking status shows PICKED / DISPATCHED / IN TRANSIT / ARRIVED AT ORIGIN / OUT FOR DELIVERY → move from Booked to Fulfilled.
+
+Fulfilled tab meaning:
+- Parcel is now with courier. Our “handover done”.
+
+IMPORTANT:
+- An order can be “fulfilled” in Shopify earlier, but it must still remain in Booked if courier hasn’t dispatched it.
+- Never move to Fulfilled just because Shopify shows fulfilled.
+
+=============================
+G) DELIVERED
+=============================
+Definition:
+- Courier tracking confirms delivered.
+
+Move rule:
+- Fulfilled → Delivered when courier tracking says DELIVERED.
+- Delivered is final.
+
+=============================
+H) RETURN
+=============================
+Definition:
+- Courier tracking confirms returned / RTO.
+
+Move rule:
+- Fulfilled → Return when courier tracking says RETURNED/RTO.
+- Return is final.
+
+=============================
+I) CANCELLED
+=============================
+Definition:
+- Orders cancelled (Robo-Cancel tag or manual cancel).
+- Cancelled is final.
+-Orders that are not cancelled in  shopify and only came here bcz it contained Robo-Cancel has a chance t get confirmed so add button of confirm and cancel on shopify.
+
+Two separate actions must exist:
+1) Cancel internally (pipeline cancel) + update Shopify tag toRobo-Cancel.
+2) Cancel on Shopify (real Shopify cancellation) — optional, separate button.
+
+=============================
+NON-NEGOTIABLE VALIDATIONS
+=============================
+1) An order must exist in ONE tab only.
+2) Delivered/Return/Cancelled are final — never move them back.
+3) Do not duplicate orders. Enforce DB uniqueness: (merchantId + shopifyOrderId).
+4) Never fetch orders before January 1 of current year. Hard block.
+5) Never decide Booked/Fulfilled/Delivered/Return using Shopify fulfillment status. Courier status only.
+
+=============================
+IMPLEMENTATION REQUIREMENT
+=============================
+Hard-code a single function that decides the tab for every order:
+
+getPipelineStage(order):
+- If Cancelled (robo cancel) → Cancelled
+- Else if Delivered (courier delivered) → Delivered
+- Else if Return (courier returned) → Return
+- Else if courier has dispatch/pick → Fulfilled
+- Else if shipment exists (tracking created) → Booked
+- Else if holdUntil in future → Hold
+- Else if confirmed (robo confirm) → Ready to Ship
+- Else if older than 12h and still pending → Confirmation Pending
+- Else → New Orders
+
+Use this function everywhere (queries, UI, counts). Do not create separate inconsistent filters per page.
+
+=============================
+FINAL INSTRUCTION
+=============================
+Store this flow as the permanent “Single Source of Truth”. Do not change it in future prompts.
+If a future prompt conflicts with this flow, reject the conflicting changes and keep this flow.
+Never mix Shopify fulfillment with internal pipeline status.
+

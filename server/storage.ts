@@ -54,7 +54,7 @@ export interface IStorage {
   updateCourierAccount(id: string, data: Partial<InsertCourierAccount>): Promise<CourierAccount | undefined>;
 
   // Orders - All scoped by merchantId
-  getOrders(merchantId: string, options?: { search?: string; status?: string; courier?: string; city?: string; month?: string; page?: number; pageSize?: number }): Promise<{ orders: Order[]; total: number }>;
+  getOrders(merchantId: string, options?: { search?: string; status?: string; courier?: string; city?: string; month?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number; workflowStatus?: string; pendingReasonType?: string; shipmentStatus?: string; excludeHeavyFields?: boolean }): Promise<{ orders: Order[]; total: number }>;
   getUniqueCities(merchantId: string): Promise<string[]>;
   getUniqueStatuses(merchantId: string): Promise<string[]>;
   getOrderById(merchantId: string, id: string): Promise<Order | undefined>;
@@ -259,7 +259,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Orders - All scoped by merchantId
-  async getOrders(merchantId: string, options?: { search?: string; status?: string; courier?: string; city?: string; month?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number; workflowStatus?: string; pendingReasonType?: string }): Promise<{ orders: Order[]; total: number }> {
+  async getOrders(merchantId: string, options?: { search?: string; status?: string; courier?: string; city?: string; month?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number; workflowStatus?: string; pendingReasonType?: string; shipmentStatus?: string; excludeHeavyFields?: boolean }): Promise<{ orders: Order[]; total: number }> {
     const page = options?.page || 1;
     const pageSize = options?.pageSize || 20;
     const offset = (page - 1) * pageSize;
@@ -272,6 +272,10 @@ export class DatabaseStorage implements IStorage {
 
     if (options?.pendingReasonType && options.pendingReasonType !== "all") {
       conditions.push(eq(orders.pendingReasonType, options.pendingReasonType));
+    }
+
+    if (options?.shipmentStatus && options.shipmentStatus !== "all") {
+      conditions.push(eq(orders.shipmentStatus, options.shipmentStatus));
     }
 
     if (options?.status && options.status !== "all") {
@@ -347,12 +351,78 @@ export class DatabaseStorage implements IStorage {
 
     const whereClause = and(...conditions);
 
+    const lightColumns = {
+      id: orders.id,
+      merchantId: orders.merchantId,
+      shopifyOrderId: orders.shopifyOrderId,
+      orderNumber: orders.orderNumber,
+      customerName: orders.customerName,
+      customerEmail: orders.customerEmail,
+      customerPhone: orders.customerPhone,
+      shippingAddress: orders.shippingAddress,
+      city: orders.city,
+      province: orders.province,
+      postalCode: orders.postalCode,
+      country: orders.country,
+      totalAmount: orders.totalAmount,
+      subtotalAmount: orders.subtotalAmount,
+      shippingAmount: orders.shippingAmount,
+      discountAmount: orders.discountAmount,
+      currency: orders.currency,
+      paymentMethod: orders.paymentMethod,
+      paymentStatus: orders.paymentStatus,
+      fulfillmentStatus: orders.fulfillmentStatus,
+      orderStatus: orders.orderStatus,
+      totalQuantity: orders.totalQuantity,
+      tags: orders.tags,
+      notes: orders.notes,
+      courierName: orders.courierName,
+      courierTracking: orders.courierTracking,
+      shipmentStatus: orders.shipmentStatus,
+      courierRawStatus: orders.courierRawStatus,
+      remark: orders.remark,
+      lastApiSyncAt: orders.lastApiSyncAt,
+      lastWebhookAt: orders.lastWebhookAt,
+      shopifyUpdatedAt: orders.shopifyUpdatedAt,
+      lastTrackingUpdate: orders.lastTrackingUpdate,
+      orderDate: orders.orderDate,
+      createdAt: orders.createdAt,
+      updatedAt: orders.updatedAt,
+      workflowStatus: orders.workflowStatus,
+      pendingReason: orders.pendingReason,
+      pendingReasonType: orders.pendingReasonType,
+      holdUntil: orders.holdUntil,
+      holdCreatedAt: orders.holdCreatedAt,
+      confirmedAt: orders.confirmedAt,
+      cancelledAt: orders.cancelledAt,
+      cancelReason: orders.cancelReason,
+      previousWorkflowStatus: orders.previousWorkflowStatus,
+      lastStatusChangedAt: orders.lastStatusChangedAt,
+      itemSummary: orders.itemSummary,
+      courierSlipUrl: orders.courierSlipUrl,
+      bookingStatus: orders.bookingStatus,
+      bookingError: orders.bookingError,
+      bookedAt: orders.bookedAt,
+      dispatchedAt: orders.dispatchedAt,
+      deliveredAt: orders.deliveredAt,
+      returnedAt: orders.returnedAt,
+      shopifyFulfillmentId: orders.shopifyFulfillmentId,
+      prepaidAmount: orders.prepaidAmount,
+      codRemaining: orders.codRemaining,
+      codPaymentStatus: orders.codPaymentStatus,
+      lastPaymentAt: orders.lastPaymentAt,
+    };
+
+    const selectQuery = options?.excludeHeavyFields
+      ? db.select(lightColumns).from(orders)
+      : db.select().from(orders);
+
     const [result, totalResult] = await Promise.all([
-      db.select().from(orders).where(whereClause).orderBy(desc(orders.orderDate)).limit(pageSize).offset(offset),
+      selectQuery.where(whereClause).orderBy(desc(orders.orderDate)).limit(pageSize).offset(offset),
       db.select({ count: count() }).from(orders).where(whereClause)
     ]);
 
-    return { orders: result, total: totalResult[0]?.count || 0 };
+    return { orders: result as Order[], total: totalResult[0]?.count || 0 };
   }
 
   async getUniqueCities(merchantId: string): Promise<string[]> {

@@ -229,6 +229,8 @@ export const orders = pgTable("orders", {
   index("idx_orders_date").on(table.orderDate),
   index("idx_orders_courier").on(table.courierName),
   index("idx_orders_workflow_status").on(table.workflowStatus),
+  index("idx_orders_merchant_workflow_date").on(table.merchantId, table.workflowStatus, table.orderDate),
+  index("idx_orders_merchant_shipment").on(table.merchantId, table.workflowStatus, table.shipmentStatus),
   uniqueIndex("idx_orders_merchant_shopify_unique").on(table.merchantId, table.shopifyOrderId).where(sql`shopify_order_id IS NOT NULL`),
 ]);
 

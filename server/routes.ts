@@ -323,7 +323,7 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
 
-      const { search, status, courier, city, month, dateFrom, dateTo, page, pageSize, workflowStatus, pendingReasonType } = req.query;
+      const { search, status, courier, city, month, dateFrom, dateTo, page, pageSize, workflowStatus, pendingReasonType, shipmentStatus, light } = req.query;
       
       const result = await storage.getOrders(merchantId, {
         search: search as string,
@@ -334,9 +334,11 @@ export async function registerRoutes(
         dateFrom: dateFrom as string,
         dateTo: dateTo as string,
         page: parseInt(page as string) || 1,
-        pageSize: parseInt(pageSize as string) || 20,
+        pageSize: Math.min(parseInt(pageSize as string) || 50, 200),
         workflowStatus: workflowStatus as string,
         pendingReasonType: pendingReasonType as string,
+        shipmentStatus: shipmentStatus as string,
+        excludeHeavyFields: light === "1" || light === "true",
       });
       
       res.json(result);
