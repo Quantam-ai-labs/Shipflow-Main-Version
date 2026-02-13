@@ -350,6 +350,9 @@ export const shipments = pgTable("shipments", {
   deliveryAttempts: integer("delivery_attempts").default(0),
   lastStatusUpdate: timestamp("last_status_update"),
   courierResponse: jsonb("courier_response"), // Raw API response
+  loadsheetBatchId: varchar("loadsheet_batch_id", { length: 100 }),
+  loadsheetGeneratedAt: timestamp("loadsheet_generated_at"),
+  loadsheetData: jsonb("loadsheet_data"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [

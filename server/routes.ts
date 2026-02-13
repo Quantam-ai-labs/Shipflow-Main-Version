@@ -3,7 +3,7 @@ import express from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { shipmentPrintRecords, users, merchants, adminActionLogs, teamMembers, teamInvites, orders } from "@shared/schema";
+import { shipmentPrintRecords, users, merchants, adminActionLogs, teamMembers, teamInvites, orders, shipments as shipmentsTable } from "@shared/schema";
 import { and, eq, inArray, ilike, or, sql, desc, count, isNotNull } from "drizzle-orm";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { z } from "zod";
@@ -3869,6 +3869,153 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error regenerating PDF:", error);
       res.status(500).json({ message: "Failed to regenerate PDF" });
+    }
+  });
+
+  // ============================================
+  // LOADSHEET GENERATION (from Booked tab)
+  // ============================================
+  app.post("/api/orders/generate-loadsheet", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const { orderIds } = req.body;
+      if (!Array.isArray(orderIds) || orderIds.length === 0) {
+        return res.status(400).json({ message: "No order IDs provided" });
+      }
+
+      const merchant = await storage.getMerchant(merchantId);
+      if (!merchant) return res.status(400).json({ message: "Merchant not found" });
+
+      const userId = getSessionUserId(req) || "system";
+      const fetchedOrders = await storage.getOrdersByIds(merchantId, orderIds);
+
+      if (fetchedOrders.length === 0) {
+        return res.status(400).json({ message: "No orders found" });
+      }
+
+      const bookedOrders = fetchedOrders.filter(o =>
+        o.courierTracking && (o.workflowStatus === "BOOKED" || o.workflowStatus === "FULFILLED" || o.workflowStatus === "DELIVERED" || o.workflowStatus === "RETURN")
+      );
+
+      if (bookedOrders.length === 0) {
+        return res.status(400).json({ message: "No booked orders with tracking numbers found in selection" });
+      }
+
+      const batchId = crypto.randomUUID();
+      const courierNames = [...new Set(bookedOrders.map(o => o.courierName || "Unknown"))];
+      const courierLabel = courierNames.length === 1 ? courierNames[0] : "Mixed";
+
+      const batch = await storage.createShipmentBatch({
+        merchantId,
+        createdByUserId: userId,
+        courierName: courierLabel,
+        batchType: "LOADSHEET",
+        status: "COMPLETED",
+        totalSelectedCount: bookedOrders.length,
+        successCount: bookedOrders.length,
+        failedCount: 0,
+        notes: `Loadsheet generated for ${bookedOrders.length} order(s)`,
+      });
+
+      const loadsheetItems: Array<{
+        orderNumber: string;
+        trackingNumber: string;
+        consigneeName: string;
+        consigneeCity: string;
+        consigneePhone: string;
+        codAmount: number;
+        status: string;
+      }> = [];
+
+      for (const order of bookedOrders) {
+        const itemData = {
+          orderNumber: order.orderNumber || "N/A",
+          trackingNumber: order.courierTracking || "N/A",
+          consigneeName: order.customerName || "N/A",
+          consigneeCity: order.city || "N/A",
+          consigneePhone: order.customerPhone || "N/A",
+          codAmount: Number(order.totalAmount || 0),
+          status: "BOOKED",
+        };
+        loadsheetItems.push(itemData);
+
+        await storage.createShipmentBatchItem({
+          batchId: batch.id,
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          bookingStatus: "SUCCESS",
+          trackingNumber: order.courierTracking,
+          consigneeName: order.customerName,
+          consigneePhone: order.customerPhone,
+          consigneeCity: order.city,
+          codAmount: order.totalAmount,
+        });
+
+        const existingShipments = await storage.getShipmentsByOrderId(merchantId, order.id);
+        const matchingShipment = existingShipments.find(s => s.trackingNumber === order.courierTracking);
+
+        const loadsheetRecord = {
+          batchId: batch.id,
+          generatedAt: new Date().toISOString(),
+          generatedBy: userId,
+          orderNumber: order.orderNumber,
+          trackingNumber: order.courierTracking,
+          courierName: order.courierName,
+          customerName: order.customerName,
+          city: order.city,
+          codAmount: Number(order.totalAmount || 0),
+        };
+
+        if (matchingShipment) {
+          await storage.updateShipment(merchantId, matchingShipment.id, {
+            loadsheetBatchId: batch.id,
+            loadsheetGeneratedAt: new Date(),
+            loadsheetData: loadsheetRecord,
+          } as any);
+        } else {
+          await storage.createShipment({
+            orderId: order.id,
+            merchantId,
+            courierName: order.courierName || "Unknown",
+            trackingNumber: order.courierTracking,
+            status: order.shipmentStatus || "booked",
+            codAmount: order.totalAmount,
+            loadsheetBatchId: batch.id,
+            loadsheetGeneratedAt: new Date(),
+            loadsheetData: loadsheetRecord,
+          } as any);
+        }
+      }
+
+      const { generateBatchLoadsheetPdf } = await import("./services/pdfGenerator");
+      const pdfPath = await generateBatchLoadsheetPdf({
+        batchId: batch.id,
+        courierName: courierLabel,
+        createdBy: userId,
+        createdAt: new Date().toISOString(),
+        merchantName: merchant.businessName || merchant.displayName || "Merchant",
+        totalCount: bookedOrders.length,
+        successCount: bookedOrders.length,
+        failedCount: 0,
+        items: loadsheetItems,
+      });
+
+      await storage.updateShipmentBatch(batch.id, {
+        pdfBatchPath: pdfPath,
+      });
+
+      res.json({
+        success: true,
+        batchId: batch.id,
+        pdfUrl: `/api/print/batch/${batch.id}.pdf`,
+        totalOrders: bookedOrders.length,
+        courierName: courierLabel,
+      });
+    } catch (error) {
+      console.error("Error generating loadsheet:", error);
+      res.status(500).json({ message: "Failed to generate loadsheet" });
     }
   });
 

@@ -72,6 +72,7 @@ export interface IStorage {
   // Shipments - All scoped by merchantId
   getShipments(merchantId: string, options?: { search?: string; status?: string; courier?: string; page?: number; pageSize?: number }): Promise<{ shipments: Shipment[]; total: number }>;
   getShipmentsByOrderId(merchantId: string, orderId: string): Promise<Shipment[]>;
+  getShipmentsByOrderIds(merchantId: string, orderIds: string[]): Promise<Shipment[]>;
   createShipment(shipment: InsertShipment): Promise<Shipment>;
   updateShipment(merchantId: string, id: string, data: Partial<InsertShipment>): Promise<Shipment | undefined>;
 
@@ -716,6 +717,12 @@ export class DatabaseStorage implements IStorage {
   async getShipmentsByOrderId(merchantId: string, orderId: string): Promise<Shipment[]> {
     return db.select().from(shipments)
       .where(and(eq(shipments.orderId, orderId), eq(shipments.merchantId, merchantId)));
+  }
+
+  async getShipmentsByOrderIds(merchantId: string, orderIds: string[]): Promise<Shipment[]> {
+    if (orderIds.length === 0) return [];
+    return db.select().from(shipments)
+      .where(and(eq(shipments.merchantId, merchantId), inArray(shipments.orderId, orderIds)));
   }
 
   async createShipment(shipment: InsertShipment): Promise<Shipment> {
