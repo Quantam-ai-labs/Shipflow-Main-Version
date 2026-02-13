@@ -280,7 +280,7 @@ export default function Shipments() {
   const [courierFilter, setCourierFilter] = useState("all");
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [page, setPage] = useState(1);
-  const pageSize = 20;
+  const pageSize = 100;
 
   const [bkCourierFilter, setBkCourierFilter] = useState("all");
   const [bkStatusFilter, setBkStatusFilter] = useState("all");
@@ -327,7 +327,7 @@ export default function Shipments() {
   const bkDateParams = dateRangeToParams(bkDateRange);
   const bkQueryParams = new URLSearchParams({
     page: bkPage.toString(),
-    pageSize: "20",
+    pageSize: "100",
     ...(bkCourierFilter !== "all" && { courier: bkCourierFilter }),
     ...(bkStatusFilter !== "all" && { status: bkStatusFilter }),
     ...(bkDateParams.dateFrom && { dateFrom: bkDateParams.dateFrom }),
@@ -345,7 +345,7 @@ export default function Shipments() {
   });
 
   const bookingLogs = bkData?.logs ?? [];
-  const bkTotalPages = Math.ceil((bkData?.total ?? 0) / 20);
+  const bkTotalPages = Math.ceil((bkData?.total ?? 0) / 100);
 
   const saDateParams = dateRangeToParams(saDateRange);
   const saQueryParams = new URLSearchParams({
@@ -369,7 +369,7 @@ export default function Shipments() {
 
   const batchQueryParams = new URLSearchParams({
     page: batchPage.toString(),
-    pageSize: "20",
+    pageSize: "100",
     ...(batchCourierFilter !== "all" && { courier: batchCourierFilter }),
   });
 
@@ -904,7 +904,7 @@ export default function Shipments() {
                       </TableBody>
                     </Table>
                   </div>
-                  <Pagination page={bkPage} totalPages={bkTotalPages} total={bkData?.total ?? 0} pageSize={20}
+                  <Pagination page={bkPage} totalPages={bkTotalPages} total={bkData?.total ?? 0} pageSize={100}
                     onPrev={() => setBkPage(bkPage - 1)} onNext={() => setBkPage(bkPage + 1)}
                     prevTestId="button-bk-prev" nextTestId="button-bk-next" />
                 </>
@@ -1054,7 +1054,7 @@ export default function Shipments() {
                       </TableBody>
                     </Table>
                   </div>
-                  <Pagination page={batchPage} totalPages={batchTotalPages} total={batchesData?.total ?? 0} pageSize={20}
+                  <Pagination page={batchPage} totalPages={batchTotalPages} total={batchesData?.total ?? 0} pageSize={100}
                     onPrev={() => setBatchPage(batchPage - 1)} onNext={() => setBatchPage(batchPage + 1)}
                     prevTestId="button-batch-prev" nextTestId="button-batch-next" />
                 </>

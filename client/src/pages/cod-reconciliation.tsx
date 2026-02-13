@@ -89,7 +89,7 @@ export default function CodReconciliationPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [page, setPage] = useState(1);
-  const pageSize = 20;
+  const pageSize = 100;
   const [selectedRecords, setSelectedRecords] = useState<string[]>([]);
   const [isReconcileDialogOpen, setIsReconcileDialogOpen] = useState(false);
   const [settlementRef, setSettlementRef] = useState("");
