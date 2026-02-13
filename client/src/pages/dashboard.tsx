@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -173,132 +173,223 @@ const WORKFLOW_STAGE_COLORS: Record<string, string> = {
   CANCELLED: "bg-red-500/10 text-red-600 border-red-500/20",
 };
 
-function OrderSearchBar() {
-  const [query, setQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [isOpen, setIsOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+function getStageFeatures(order: Order): string {
+  const stage = order.workflowStatus || "NEW";
+  switch (stage) {
+    case "BOOKED":
+    case "FULFILLED":
+      return [order.courierName, order.courierTracking, order.shipmentStatus ? UNIVERSAL_STATUS_LABELS[order.shipmentStatus] || order.shipmentStatus : null].filter(Boolean).join(" | ");
+    case "DELIVERED":
+      return [order.courierName, order.courierTracking, "Delivered"].filter(Boolean).join(" | ");
+    case "RETURN":
+      return [order.courierName, order.courierTracking, order.shipmentStatus ? UNIVERSAL_STATUS_LABELS[order.shipmentStatus] || order.shipmentStatus : "Return"].filter(Boolean).join(" | ");
+    case "CANCELLED":
+      return "Cancelled";
+    case "PENDING":
+      return order.pendingReasonType || "Pending review";
+    case "HOLD":
+      return order.remark || "On hold";
+    case "READY_TO_SHIP":
+      return "Awaiting booking";
+    default:
+      return order.fulfillmentStatus || "";
+  }
+}
+
+function OrderSearchSection() {
+  const [searchOrderNumber, setSearchOrderNumber] = useState("");
+  const [searchTracking, setSearchTracking] = useState("");
+  const [searchName, setSearchName] = useState("");
+  const [searchPhone, setSearchPhone] = useState("");
+  const [debouncedParams, setDebouncedParams] = useState({ searchOrderNumber: "", searchTracking: "", searchName: "", searchPhone: "" });
   const [, setLocation] = useLocation();
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      setDebouncedQuery(query.trim());
-    }, 300);
+      setDebouncedParams({
+        searchOrderNumber: searchOrderNumber.trim(),
+        searchTracking: searchTracking.trim(),
+        searchName: searchName.trim(),
+        searchPhone: searchPhone.trim(),
+      });
+    }, 400);
     return () => clearTimeout(timer);
-  }, [query]);
+  }, [searchOrderNumber, searchTracking, searchName, searchPhone]);
+
+  const hasSearch = Object.values(debouncedParams).some((v) => v.length >= 2);
+
+  const queryParams = new URLSearchParams();
+  if (debouncedParams.searchOrderNumber) queryParams.set("searchOrderNumber", debouncedParams.searchOrderNumber);
+  if (debouncedParams.searchTracking) queryParams.set("searchTracking", debouncedParams.searchTracking);
+  if (debouncedParams.searchName) queryParams.set("searchName", debouncedParams.searchName);
+  if (debouncedParams.searchPhone) queryParams.set("searchPhone", debouncedParams.searchPhone);
+  queryParams.set("light", "1");
+  queryParams.set("pageSize", "20");
 
   const { data, isLoading } = useQuery<{ orders: Order[]; total: number }>({
-    queryKey: [`/api/orders?search=${encodeURIComponent(debouncedQuery)}&light=1&pageSize=8`],
-    enabled: debouncedQuery.length >= 2,
+    queryKey: [`/api/orders?${queryParams.toString()}`],
+    enabled: hasSearch,
   });
 
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const handleSelect = useCallback((order: Order) => {
-    setIsOpen(false);
-    setQuery("");
-    setLocation(`/orders/detail/${order.id}`);
-  }, [setLocation]);
-
   const results = data?.orders || [];
-  const showDropdown = isOpen && debouncedQuery.length >= 2;
+
+  const handleClear = () => {
+    setSearchOrderNumber("");
+    setSearchTracking("");
+    setSearchName("");
+    setSearchPhone("");
+  };
+
+  const hasAnyInput = searchOrderNumber || searchTracking || searchName || searchPhone;
 
   return (
-    <div ref={containerRef} className="relative w-full max-w-xl">
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          ref={inputRef}
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setIsOpen(true);
-          }}
-          onFocus={() => { if (query.trim().length >= 2) setIsOpen(true); }}
-          placeholder="Search orders by name, phone, order #, or tracking..."
-          className="pl-9 pr-9"
-          data-testid="input-order-search"
-        />
-        {query && (
-          <button
-            onClick={() => { setQuery(""); setIsOpen(false); }}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-            data-testid="button-clear-search"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        )}
-      </div>
-      {showDropdown && (
-        <Card className="absolute z-50 top-full mt-1 w-full shadow-lg border overflow-hidden">
-          <CardContent className="p-0">
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Search className="w-5 h-5" />
+            Order Search
+          </CardTitle>
+          {hasAnyInput && (
+            <Button variant="ghost" size="sm" onClick={handleClear} data-testid="button-clear-search">
+              <X className="w-4 h-4 mr-1" />
+              Clear
+            </Button>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Order ID</label>
+            <div className="relative">
+              <Package className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Input
+                value={searchOrderNumber}
+                onChange={(e) => setSearchOrderNumber(e.target.value)}
+                placeholder="e.g. 23409"
+                className="pl-8 text-sm"
+                data-testid="input-search-order-id"
+              />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Tracking Number</label>
+            <div className="relative">
+              <Truck className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Input
+                value={searchTracking}
+                onChange={(e) => setSearchTracking(e.target.value)}
+                placeholder="e.g. PW7513503972"
+                className="pl-8 text-sm"
+                data-testid="input-search-tracking"
+              />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Customer Name</label>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Input
+                value={searchName}
+                onChange={(e) => setSearchName(e.target.value)}
+                placeholder="e.g. Ahmed"
+                className="pl-8 text-sm"
+                data-testid="input-search-name"
+              />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Contact Number</label>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Input
+                value={searchPhone}
+                onChange={(e) => setSearchPhone(e.target.value)}
+                placeholder="e.g. 03001234567"
+                className="pl-8 text-sm"
+                data-testid="input-search-phone"
+              />
+            </div>
+          </div>
+        </div>
+
+        {hasSearch && (
+          <div className="border rounded-md">
             {isLoading ? (
-              <div className="flex items-center justify-center gap-2 p-4 text-sm text-muted-foreground">
+              <div className="flex items-center justify-center gap-2 p-6 text-sm text-muted-foreground">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 Searching...
               </div>
             ) : results.length === 0 ? (
-              <div className="p-4 text-sm text-muted-foreground text-center" data-testid="text-no-results">
-                No orders found for "{debouncedQuery}"
+              <div className="p-6 text-sm text-muted-foreground text-center" data-testid="text-no-results">
+                No orders found matching your search criteria
               </div>
             ) : (
-              <div className="max-h-[360px] overflow-y-auto">
-                {results.map((order) => {
-                  const stage = order.workflowStatus || "NEW";
-                  return (
-                    <button
-                      key={order.id}
-                      onClick={() => handleSelect(order)}
-                      className="w-full text-left px-4 py-3 hover-elevate flex items-center justify-between gap-3 border-b last:border-b-0"
-                      data-testid={`search-result-${order.id}`}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-medium text-sm" data-testid={`text-order-number-${order.id}`}>#{order.orderNumber}</span>
-                          <span className="text-sm text-muted-foreground truncate">{order.customerName}</span>
+              <>
+                <div className="hidden sm:grid grid-cols-[100px_1fr_140px_1fr_100px_1fr] gap-2 px-4 py-2 border-b text-xs font-medium text-muted-foreground">
+                  <span>Order #</span>
+                  <span>Customer</span>
+                  <span>Contact</span>
+                  <span>Address</span>
+                  <span>Stage</span>
+                  <span>Details</span>
+                </div>
+                <div className="max-h-[500px] overflow-y-auto divide-y">
+                  {results.map((order) => {
+                    const stage = order.workflowStatus || "NEW";
+                    const features = getStageFeatures(order);
+                    return (
+                      <button
+                        key={order.id}
+                        onClick={() => setLocation(`/orders/detail/${order.id}`)}
+                        className="w-full text-left px-4 py-3 hover-elevate"
+                        data-testid={`search-result-${order.id}`}
+                      >
+                        <div className="sm:grid sm:grid-cols-[100px_1fr_140px_1fr_100px_1fr] gap-2 items-center">
+                          <span className="font-medium text-sm" data-testid={`text-order-number-${order.id}`}>
+                            #{order.orderNumber}
+                          </span>
+                          <span className="text-sm truncate" data-testid={`text-customer-name-${order.id}`}>
+                            {order.customerName}
+                          </span>
+                          <span className="text-sm text-muted-foreground" data-testid={`text-customer-phone-${order.id}`}>
+                            {order.customerPhone || "-"}
+                          </span>
+                          <span className="text-sm text-muted-foreground truncate" data-testid={`text-address-${order.id}`}>
+                            {[order.shippingAddress, order.city].filter(Boolean).join(", ") || "-"}
+                          </span>
+                          <span>
+                            <Badge className={`text-[10px] ${WORKFLOW_STAGE_COLORS[stage] || ""}`} data-testid={`badge-stage-${order.id}`}>
+                              {WORKFLOW_STAGE_LABELS[stage] || stage}
+                            </Badge>
+                          </span>
+                          <span className="text-xs text-muted-foreground truncate" data-testid={`text-features-${order.id}`}>
+                            {features || "-"}
+                          </span>
                         </div>
-                        <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground flex-wrap">
-                          {order.customerPhone && <span>{order.customerPhone}</span>}
-                          {order.courierTracking && (
-                            <>
-                              <span>·</span>
-                              <span>{order.courierTracking}</span>
-                            </>
-                          )}
-                          {order.city && (
-                            <>
-                              <span>·</span>
-                              <span>{order.city}</span>
-                            </>
-                          )}
+                        <div className="sm:hidden mt-1 text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
+                          <span>{order.customerPhone || ""}</span>
+                          {order.city && <span>· {order.city}</span>}
+                          <Badge className={`text-[10px] ${WORKFLOW_STAGE_COLORS[stage] || ""}`}>
+                            {WORKFLOW_STAGE_LABELS[stage] || stage}
+                          </Badge>
                         </div>
-                      </div>
-                      <Badge className={`shrink-0 text-[10px] ${WORKFLOW_STAGE_COLORS[stage] || ""}`}>
-                        {WORKFLOW_STAGE_LABELS[stage] || stage}
-                      </Badge>
-                    </button>
-                  );
-                })}
+                      </button>
+                    );
+                  })}
+                </div>
                 {(data?.total || 0) > results.length && (
                   <div className="px-4 py-2 text-xs text-muted-foreground text-center border-t">
                     Showing {results.length} of {data?.total} results
                   </div>
                 )}
-              </div>
+              </>
             )}
-          </CardContent>
-        </Card>
-      )}
-    </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -334,7 +425,7 @@ export default function Dashboard() {
       </div>
 
       {/* Search */}
-      <OrderSearchBar />
+      <OrderSearchSection />
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

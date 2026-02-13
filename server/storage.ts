@@ -56,7 +56,7 @@ export interface IStorage {
   updateCourierAccount(id: string, data: Partial<InsertCourierAccount>): Promise<CourierAccount | undefined>;
 
   // Orders - All scoped by merchantId
-  getOrders(merchantId: string, options?: { search?: string; status?: string; courier?: string; city?: string; month?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number; workflowStatus?: string; pendingReasonType?: string; shipmentStatus?: string; excludeHeavyFields?: boolean }): Promise<{ orders: Order[]; total: number }>;
+  getOrders(merchantId: string, options?: { search?: string; searchOrderNumber?: string; searchTracking?: string; searchName?: string; searchPhone?: string; status?: string; courier?: string; city?: string; month?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number; workflowStatus?: string; pendingReasonType?: string; shipmentStatus?: string; excludeHeavyFields?: boolean }): Promise<{ orders: Order[]; total: number }>;
   getUniqueCities(merchantId: string): Promise<string[]>;
   getUniqueStatuses(merchantId: string): Promise<string[]>;
   getOrderById(merchantId: string, id: string): Promise<Order | undefined>;
@@ -269,7 +269,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Orders - All scoped by merchantId
-  async getOrders(merchantId: string, options?: { search?: string; status?: string; courier?: string; city?: string; month?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number; workflowStatus?: string; pendingReasonType?: string; shipmentStatus?: string; excludeHeavyFields?: boolean }): Promise<{ orders: Order[]; total: number }> {
+  async getOrders(merchantId: string, options?: { search?: string; searchOrderNumber?: string; searchTracking?: string; searchName?: string; searchPhone?: string; status?: string; courier?: string; city?: string; month?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number; workflowStatus?: string; pendingReasonType?: string; shipmentStatus?: string; excludeHeavyFields?: boolean }): Promise<{ orders: Order[]; total: number }> {
     const page = options?.page || 1;
     const pageSize = options?.pageSize || 20;
     const offset = (page - 1) * pageSize;
@@ -358,6 +358,19 @@ export class DatabaseStorage implements IStorage {
           ilike(orders.courierTracking, `%${options.search}%`)
         )!
       );
+    }
+
+    if (options?.searchOrderNumber) {
+      conditions.push(ilike(orders.orderNumber, `%${options.searchOrderNumber}%`));
+    }
+    if (options?.searchTracking) {
+      conditions.push(ilike(orders.courierTracking, `%${options.searchTracking}%`));
+    }
+    if (options?.searchName) {
+      conditions.push(ilike(orders.customerName, `%${options.searchName}%`));
+    }
+    if (options?.searchPhone) {
+      conditions.push(ilike(orders.customerPhone, `%${options.searchPhone}%`));
     }
 
     const whereClause = and(...conditions);

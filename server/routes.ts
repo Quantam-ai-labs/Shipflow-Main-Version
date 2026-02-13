@@ -365,10 +365,14 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
 
-      const { search, status, courier, city, month, dateFrom, dateTo, page, pageSize, workflowStatus, pendingReasonType, shipmentStatus, light } = req.query;
+      const { search, searchOrderNumber, searchTracking, searchName, searchPhone, status, courier, city, month, dateFrom, dateTo, page, pageSize, workflowStatus, pendingReasonType, shipmentStatus, light } = req.query;
       
       const result = await storage.getOrders(merchantId, {
         search: search as string,
+        searchOrderNumber: searchOrderNumber as string,
+        searchTracking: searchTracking as string,
+        searchName: searchName as string,
+        searchPhone: searchPhone as string,
         status: status as string,
         courier: courier as string,
         city: city as string,
