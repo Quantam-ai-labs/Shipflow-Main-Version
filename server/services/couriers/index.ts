@@ -33,11 +33,9 @@ async function loadMerchantMappings(merchantId: string, courierType: string): Pr
 
     for (const row of rows) {
       const key = row.courierStatus.toLowerCase().trim();
-      if (row.isCustom) {
-        customNormalization[key] = row.normalizedStatus;
-      }
+      customNormalization[key] = row.normalizedStatus;
       if (row.workflowStage) {
-        workflowStages[row.normalizedStatus] = row.workflowStage;
+        workflowStages[key] = row.workflowStage;
       }
     }
 
@@ -67,9 +65,15 @@ export function clearMappingsCache(merchantId?: string) {
   }
 }
 
-export async function getWorkflowStageMapping(merchantId: string, courierType: string, normalizedStatus: string): Promise<string | null> {
+export async function getWorkflowStageMapping(merchantId: string, courierType: string, normalizedStatus: string, rawCourierStatus?: string): Promise<string | null> {
   const { workflowStages } = await loadMerchantMappings(merchantId, courierType);
-  return workflowStages[normalizedStatus] || null;
+  if (rawCourierStatus) {
+    const rawKey = rawCourierStatus.toLowerCase().trim();
+    if (workflowStages[rawKey]) {
+      return workflowStages[rawKey];
+    }
+  }
+  return null;
 }
 
 export type TrackingResult = LeopardsTrackingResult | PostExTrackingResult;

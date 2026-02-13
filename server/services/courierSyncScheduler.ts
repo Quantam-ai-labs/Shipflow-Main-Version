@@ -85,12 +85,12 @@ async function createShopifyFulfillmentForOrder(merchantId: string, order: any, 
   }
 }
 
-async function resolveTargetWorkflowStage(merchantId: string, courierName: string, normalizedStatus: string): Promise<string | null> {
+async function resolveTargetWorkflowStage(merchantId: string, courierName: string, normalizedStatus: string, rawCourierStatus?: string): Promise<string | null> {
   const courierType = detectCourierType(courierName || '');
   if (courierType) {
-    const custom = await getWorkflowStageMapping(merchantId, courierType, normalizedStatus);
+    const custom = await getWorkflowStageMapping(merchantId, courierType, normalizedStatus, rawCourierStatus);
     if (custom) {
-      console.log(`[CourierSync] Custom stage mapping: ${normalizedStatus} → ${custom} (courier: ${courierType})`);
+      console.log(`[CourierSync] Custom stage mapping: ${rawCourierStatus || normalizedStatus} → ${normalizedStatus} → ${custom} (courier: ${courierType})`);
       return custom;
     }
   }
@@ -127,9 +127,9 @@ async function cancelShopifyFulfillmentForOrder(merchantId: string, order: any):
   }
 }
 
-async function autoTransitionOrder(merchantId: string, order: any, newShipmentStatus: string): Promise<string | null> {
+async function autoTransitionOrder(merchantId: string, order: any, newShipmentStatus: string, rawCourierStatus?: string): Promise<string | null> {
   const currentWorkflow = order.workflowStatus;
-  const targetWorkflow = await resolveTargetWorkflowStage(merchantId, order.courierName || '', newShipmentStatus);
+  const targetWorkflow = await resolveTargetWorkflowStage(merchantId, order.courierName || '', newShipmentStatus, rawCourierStatus);
 
   if (currentWorkflow === 'BOOKED' && newShipmentStatus === 'CANCELLED') {
     const result = await transitionOrder({
@@ -252,7 +252,7 @@ async function syncMerchantCourierStatuses(merchantId: string): Promise<CourierS
               lastTrackingUpdate: new Date(),
             });
 
-            const newWorkflow = await autoTransitionOrder(merchantId, order, result.normalizedStatus);
+            const newWorkflow = await autoTransitionOrder(merchantId, order, result.normalizedStatus, result.rawCourierStatus);
             if (newWorkflow) transitioned++;
 
             return 'updated';
@@ -295,7 +295,7 @@ async function syncMerchantCourierStatuses(merchantId: string): Promise<CourierS
           lastTrackingUpdate: new Date(),
         });
 
-        const newWorkflow = await autoTransitionOrder(merchantId, order, result.normalizedStatus);
+        const newWorkflow = await autoTransitionOrder(merchantId, order, result.normalizedStatus, result.rawCourierStatus);
         if (newWorkflow) transitioned++;
 
         updated++;
