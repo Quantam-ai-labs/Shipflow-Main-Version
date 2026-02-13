@@ -981,7 +981,10 @@ export default function Pipeline() {
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Customer</th>
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground hidden md:table-cell">City</th>
                 {(activeTab === "NEW" || activeTab === "PENDING") && (
-                  <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Address / Products</th>
+                  <>
+                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Address</th>
+                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Products</th>
+                  </>
                 )}
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Amount (PKR)</th>
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground hidden lg:table-cell">Items</th>
@@ -1085,16 +1088,18 @@ export default function Pipeline() {
                   </td>
                   <td className="px-3 py-1.5 hidden md:table-cell text-sm">{order.city || "-"}</td>
                   {(activeTab === "NEW" || activeTab === "PENDING") && (
-                    <td className="px-3 py-1.5 max-w-[250px]" data-testid={`cell-address-products-${order.id}`}>
-                      <div className="text-xs text-muted-foreground whitespace-normal leading-tight">
-                        {order.shippingAddress || "-"}
-                      </div>
-                      {order.itemSummary && (
-                        <div className="text-[11px] text-muted-foreground/70 whitespace-normal leading-tight mt-0.5">
-                          {order.itemSummary}
+                    <>
+                      <td className="px-3 py-1.5 max-w-[220px]" data-testid={`cell-address-${order.id}`}>
+                        <div className="text-xs text-muted-foreground whitespace-normal leading-tight">
+                          {order.shippingAddress || "-"}
                         </div>
-                      )}
-                    </td>
+                      </td>
+                      <td className="px-3 py-1.5 max-w-[200px]" data-testid={`cell-products-${order.id}`}>
+                        <div className="text-xs text-muted-foreground whitespace-normal leading-tight">
+                          {order.itemSummary || "-"}
+                        </div>
+                      </td>
+                    </>
                   )}
                   <td className="px-3 py-1.5">
                     <div className="font-medium text-sm">{Number(order.totalAmount).toLocaleString()}</div>
