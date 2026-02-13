@@ -82,7 +82,12 @@ export class LeopardsService {
       const packet = data.packet_list[0];
       const headerStatus = packet.booked_packet_status;
 
-      const events = (packet.Tracking_Detail || []).map(detail => ({
+      const trackingDetails = packet.Tracking_Detail || [];
+      if (trackingDetails.length === 0) {
+        console.log(`[Leopards] ${trackingNumber}: No Tracking_Detail, using header status: "${headerStatus}"`);
+      }
+
+      const events = trackingDetails.map(detail => ({
         status: detail.Status,
         date: detail.Activity_Date,
         description: detail.Reason || detail.Status,

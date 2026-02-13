@@ -78,6 +78,7 @@ const LEOPARDS_STATUS_MAP: Record<string, UniversalStatus> = {
   'posted for consignment booking': 'BOOKED',
   'consignment booked': 'BOOKED',
   'picked up': 'PICKED_UP',
+  'shipment picked': 'PICKED_UP',
   'assign to courier': 'PICKED_UP',
   'assigned to courier': 'PICKED_UP',
   'pickup done': 'PICKED_UP',
@@ -140,7 +141,7 @@ function keywordFallback(rawStatus: string): UniversalStatus | null {
   if (s.includes('destination')) return 'ARRIVED_AT_DESTINATION';
   if (s.includes('arrived') || s.includes('at station') || s.includes('at hub')) return 'ARRIVED_AT_ORIGIN';
   if (s.includes('in transit') || s.includes('dispatched') || s.includes('on route') || s.includes('in-transit')) return 'IN_TRANSIT';
-  if (s.includes('picked up') || s.includes('pickup done') || s.includes('assign')) return 'PICKED_UP';
+  if (s.includes('picked up') || s.includes('pickup done') || s.includes('assign') || s.includes('shipment picked')) return 'PICKED_UP';
   if (s.includes('booked') || s.includes('booking') || s.includes('created') || s.includes('pending')) return 'BOOKED';
 
   return null;
