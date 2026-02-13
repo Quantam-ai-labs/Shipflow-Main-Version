@@ -36,6 +36,10 @@ async function loadMerchantMappings(merchantId: string, courierType: string): Pr
       customNormalization[key] = row.normalizedStatus;
       if (row.workflowStage) {
         workflowStages[key] = row.workflowStage;
+        const normalizedKey = `__normalized__${row.normalizedStatus.toLowerCase().trim()}`;
+        if (!workflowStages[normalizedKey]) {
+          workflowStages[normalizedKey] = row.workflowStage;
+        }
       }
     }
 
@@ -72,6 +76,10 @@ export async function getWorkflowStageMapping(merchantId: string, courierType: s
     if (workflowStages[rawKey]) {
       return workflowStages[rawKey];
     }
+  }
+  const normalizedKey = `__normalized__${normalizedStatus.toLowerCase().trim()}`;
+  if (workflowStages[normalizedKey]) {
+    return workflowStages[normalizedKey];
   }
   return null;
 }
