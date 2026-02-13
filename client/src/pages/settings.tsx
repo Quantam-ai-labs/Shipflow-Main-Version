@@ -37,6 +37,8 @@ import {
   ChevronDown,
   ChevronRight,
   RefreshCw,
+  AlertTriangle,
+  X,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -193,6 +195,8 @@ function CourierStatusMappingSection() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/courier-status-mappings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/unmapped-courier-statuses?resolved=false"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/unmapped-courier-statuses/count"] });
       setAddDialogOpen(false);
       setNewCourierStatus("");
       toast({ title: "Mapping added", description: "New status mapping has been created." });
@@ -663,6 +667,32 @@ export default function Settings() {
     });
   };
 
+  interface UnmappedStatus {
+    id: string;
+    courierName: string;
+    rawStatus: string;
+    sampleTrackingNumber: string | null;
+    occurrenceCount: number;
+    resolved: boolean;
+    createdAt: string;
+    updatedAt: string;
+  }
+
+  const { data: unmappedStatuses } = useQuery<UnmappedStatus[]>({
+    queryKey: ["/api/unmapped-courier-statuses?resolved=false"],
+  });
+
+  const dismissUnmappedMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest("DELETE", `/api/unmapped-courier-statuses/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/unmapped-courier-statuses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/unmapped-courier-statuses/count"] });
+      toast({ title: "Dismissed", description: "Unmapped status has been dismissed." });
+    },
+  });
+
   return (
     <div className="space-y-6">
       <div>
@@ -831,6 +861,50 @@ export default function Settings() {
           )}
         </CardContent>
       </Card>
+
+      {unmappedStatuses && unmappedStatuses.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-500" />
+              Unmapped Courier Statuses
+              <Badge variant="destructive" className="text-xs" data-testid="badge-unmapped-count">{unmappedStatuses.length}</Badge>
+            </CardTitle>
+            <CardDescription>
+              These courier statuses were encountered during tracking sync but don't have a mapping. Add a mapping in the Courier Status Mappings section above, then dismiss them here.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {unmappedStatuses.map((status) => (
+                <div key={status.id} className="flex items-center justify-between p-3 border rounded-md gap-3" data-testid={`unmapped-status-${status.id}`}>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge variant="outline" className="no-default-active-elevate">{status.courierName}</Badge>
+                      <span className="font-mono text-sm font-medium truncate">{status.rawStatus}</span>
+                    </div>
+                    <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                      <span>Seen {status.occurrenceCount}x</span>
+                      {status.sampleTrackingNumber && (
+                        <span>Sample: {status.sampleTrackingNumber}</span>
+                      )}
+                    </div>
+                  </div>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => dismissUnmappedMutation.mutate(status.id)}
+                    disabled={dismissUnmappedMutation.isPending}
+                    data-testid={`button-dismiss-unmapped-${status.id}`}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

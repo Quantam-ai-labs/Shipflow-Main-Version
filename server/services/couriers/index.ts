@@ -4,6 +4,7 @@ import { normalizeStatus, detectCourierType, isFinalStatus, type UniversalStatus
 import { db } from '../../db';
 import { courierStatusMappings } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
+import { storage } from '../../storage';
 
 interface CachedMappings {
   customNormalization: Record<string, string>;
@@ -151,6 +152,14 @@ export async function trackShipment(
   const rawCourierStatus = result.courierStatus || result.status;
   const customMappings = merchantId ? await getCustomMappings(merchantId, courierType) : undefined;
   const { normalizedStatus, mapped } = normalizeStatus(rawCourierStatus, courierType, currentStatus, result.events, workflowStatus, customMappings);
+
+  if (!mapped && merchantId && rawCourierStatus) {
+    try {
+      await storage.recordUnmappedStatus(merchantId, courierType, rawCourierStatus, trackingNumber);
+    } catch (err) {
+      console.warn('[Courier] Failed to record unmapped status:', err);
+    }
+  }
 
   return {
     ...result,

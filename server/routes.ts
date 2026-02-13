@@ -4346,14 +4346,22 @@ export async function registerRoutes(
       });
 
       const parsed = schema.parse(req.body);
+      const courierStatusKey = parsed.courierStatus.toLowerCase().trim();
       const mapping = await storage.upsertCourierStatusMapping({
         merchantId,
         courierName: parsed.courierName,
-        courierStatus: parsed.courierStatus.toLowerCase().trim(),
+        courierStatus: courierStatusKey,
         normalizedStatus: parsed.normalizedStatus,
         workflowStage: parsed.workflowStage || null,
         isCustom: true,
       });
+
+      const unmapped = await storage.getUnmappedStatuses(merchantId, false);
+      for (const u of unmapped) {
+        if (u.courierName === parsed.courierName && u.rawStatus === courierStatusKey) {
+          await storage.resolveUnmappedStatus(merchantId, u.id);
+        }
+      }
 
       res.json({ mapping });
     } catch (error) {
@@ -4461,6 +4469,55 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error during save & resync:", error);
       res.status(500).json({ message: "Failed to resync courier statuses" });
+    }
+  });
+
+  app.get("/api/unmapped-courier-statuses", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const resolved = req.query.resolved === 'true' ? true : req.query.resolved === 'false' ? false : undefined;
+      const statuses = await storage.getUnmappedStatuses(merchantId, resolved);
+      res.json(statuses);
+    } catch (error) {
+      console.error("Error fetching unmapped statuses:", error);
+      res.status(500).json({ message: "Failed to fetch unmapped statuses" });
+    }
+  });
+
+  app.get("/api/unmapped-courier-statuses/count", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const count = await storage.getUnmappedStatusCount(merchantId);
+      res.json({ count });
+    } catch (error) {
+      console.error("Error fetching unmapped status count:", error);
+      res.status(500).json({ message: "Failed to fetch unmapped status count" });
+    }
+  });
+
+  app.post("/api/unmapped-courier-statuses/:id/resolve", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      await storage.resolveUnmappedStatus(merchantId, req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error resolving unmapped status:", error);
+      res.status(500).json({ message: "Failed to resolve unmapped status" });
+    }
+  });
+
+  app.delete("/api/unmapped-courier-statuses/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      await storage.dismissUnmappedStatus(merchantId, req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error dismissing unmapped status:", error);
+      res.status(500).json({ message: "Failed to dismiss unmapped status" });
     }
   });
 

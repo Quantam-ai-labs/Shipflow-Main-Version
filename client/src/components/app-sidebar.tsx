@@ -133,6 +133,11 @@ export function AppSidebar() {
     refetchInterval: 30000,
   });
 
+  const { data: unmappedCount } = useQuery<{ count: number }>({
+    queryKey: ["/api/unmapped-courier-statuses/count"],
+    refetchInterval: 60000,
+  });
+
   const isOrdersRouteActive = location.startsWith("/orders");
   const totalOrderCount = counts
     ? Object.values(counts).reduce((sum, c) => sum + (c || 0), 0)
@@ -249,7 +254,12 @@ export function AppSidebar() {
                   >
                     <Link href={item.url} data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
                       <item.icon className="w-4 h-4" />
-                      <span>{item.title}</span>
+                      <span className="flex-1">{item.title}</span>
+                      {item.title === "Settings" && (unmappedCount?.count ?? 0) > 0 && (
+                        <Badge variant="destructive" className="text-[10px] px-1.5 py-0 min-w-[18px] justify-center" data-testid="badge-unmapped-statuses">
+                          {unmappedCount!.count}
+                        </Badge>
+                      )}
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

@@ -105,12 +105,16 @@ export const LEOPARDS_STATUS_MAP: Record<string, UniversalStatus> = {
   'delivery failed': 'DELIVERY_FAILED',
   'refused': 'DELIVERY_FAILED',
   'not delivered': 'DELIVERY_FAILED',
+  'pending': 'DELIVERY_ATTEMPTED',
   'ready for return': 'READY_FOR_RETURN',
   'waiting for return': 'READY_FOR_RETURN',
   'return process initiated': 'READY_FOR_RETURN',
+  'being return': 'RETURN_IN_TRANSIT',
   'return in transit': 'RETURN_IN_TRANSIT',
   'return dispatched': 'RETURN_IN_TRANSIT',
   'being returned': 'RETURN_IN_TRANSIT',
+  'return to sender': 'RETURN_IN_TRANSIT',
+  'return to origin': 'RETURNED_TO_ORIGIN',
   'returned to origin': 'RETURNED_TO_ORIGIN',
   'return arrived at origin': 'RETURNED_TO_ORIGIN',
   'arrived at origin city': 'RETURNED_TO_ORIGIN',
@@ -142,7 +146,8 @@ function keywordFallback(rawStatus: string): UniversalStatus | null {
   if (s.includes('arrived') || s.includes('at station') || s.includes('at hub')) return 'ARRIVED_AT_ORIGIN';
   if (s.includes('in transit') || s.includes('dispatched') || s.includes('on route') || s.includes('in-transit')) return 'IN_TRANSIT';
   if (s.includes('picked up') || s.includes('pickup done') || s.includes('assign') || s.includes('shipment picked')) return 'PICKED_UP';
-  if (s.includes('booked') || s.includes('booking') || s.includes('created') || s.includes('pending')) return 'BOOKED';
+  if (s.startsWith('pending')) return 'DELIVERY_ATTEMPTED';
+  if (s.includes('booked') || s.includes('booking') || s.includes('created')) return 'BOOKED';
 
   return null;
 }
@@ -205,6 +210,16 @@ export function normalizeStatus(
     return newStatus;
   };
 
+  if (key === 'pending' && courier === 'leopards') {
+    if (!events || events.length === 0) {
+      return { normalizedStatus: 'BOOKED', mapped: true };
+    }
+    if (hasPassedThroughTransit(currentStatus, workflowStatus, events)) {
+      return { normalizedStatus: 'DELIVERY_ATTEMPTED', mapped: true };
+    }
+    return { normalizedStatus: 'BOOKED', mapped: true };
+  }
+
   const directMatch = map[key];
   if (directMatch) {
     if (directMatch === 'ARRIVED_AT_ORIGIN' && AMBIGUOUS_ORIGIN_STATUSES.includes(key)) {
@@ -257,7 +272,7 @@ export const DEFAULT_WORKFLOW_STAGE_MAP: Record<string, string> = {
   'DELIVERY_ATTEMPTED': 'FULFILLED',
   'DELIVERED': 'DELIVERED',
   'DELIVERY_FAILED': 'FULFILLED',
-  'READY_FOR_RETURN': 'RETURN',
+  'READY_FOR_RETURN': 'FULFILLED',
   'RETURN_IN_TRANSIT': 'RETURN',
   'RETURNED_TO_ORIGIN': 'RETURN',
   'RETURNED_TO_SHIPPER': 'RETURN',

@@ -24,6 +24,8 @@ import {
   type CancellationJobItem, type InsertCancellationJobItem,
   courierStatusMappings,
   type CourierStatusMapping, type InsertCourierStatusMapping,
+  unmappedCourierStatuses,
+  type UnmappedCourierStatus,
   users,
 } from "@shared/schema";
 import { db } from "./db";
@@ -166,6 +168,13 @@ export interface IStorage {
   deleteCourierStatusMapping(merchantId: string, id: string): Promise<void>;
   resetCourierStatusMappings(merchantId: string, courierName?: string): Promise<void>;
   seedDefaultMappings(merchantId: string): Promise<{ created: number; existing: number }>;
+
+  // Unmapped Courier Statuses
+  recordUnmappedStatus(merchantId: string, courierName: string, rawStatus: string, trackingNumber?: string): Promise<void>;
+  getUnmappedStatuses(merchantId: string, resolved?: boolean): Promise<UnmappedCourierStatus[]>;
+  getUnmappedStatusCount(merchantId: string): Promise<number>;
+  resolveUnmappedStatus(merchantId: string, id: string): Promise<void>;
+  dismissUnmappedStatus(merchantId: string, id: string): Promise<void>;
 
   // Seed
   seedDemoData(): Promise<void>;
@@ -1523,6 +1532,53 @@ export class DatabaseStorage implements IStorage {
       .where(eq(courierStatusMappings.merchantId, merchantId));
 
     return { created: actualCount[0]?.count || 0, existing };
+  }
+
+  async recordUnmappedStatus(merchantId: string, courierName: string, rawStatus: string, trackingNumber?: string): Promise<void> {
+    await db.insert(unmappedCourierStatuses)
+      .values({
+        merchantId,
+        courierName,
+        rawStatus: rawStatus.toLowerCase().trim(),
+        sampleTrackingNumber: trackingNumber || null,
+        occurrenceCount: 1,
+        resolved: false,
+      })
+      .onConflictDoUpdate({
+        target: [unmappedCourierStatuses.merchantId, unmappedCourierStatuses.courierName, unmappedCourierStatuses.rawStatus],
+        set: {
+          occurrenceCount: sql`${unmappedCourierStatuses.occurrenceCount} + 1`,
+          sampleTrackingNumber: trackingNumber || sql`${unmappedCourierStatuses.sampleTrackingNumber}`,
+          updatedAt: new Date(),
+        },
+      });
+  }
+
+  async getUnmappedStatuses(merchantId: string, resolved?: boolean): Promise<UnmappedCourierStatus[]> {
+    const conditions = [eq(unmappedCourierStatuses.merchantId, merchantId)];
+    if (resolved !== undefined) {
+      conditions.push(eq(unmappedCourierStatuses.resolved, resolved));
+    }
+    return db.select().from(unmappedCourierStatuses)
+      .where(and(...conditions))
+      .orderBy(desc(unmappedCourierStatuses.updatedAt));
+  }
+
+  async getUnmappedStatusCount(merchantId: string): Promise<number> {
+    const result = await db.select({ count: count() }).from(unmappedCourierStatuses)
+      .where(and(eq(unmappedCourierStatuses.merchantId, merchantId), eq(unmappedCourierStatuses.resolved, false)));
+    return result[0]?.count || 0;
+  }
+
+  async resolveUnmappedStatus(merchantId: string, id: string): Promise<void> {
+    await db.update(unmappedCourierStatuses)
+      .set({ resolved: true, updatedAt: new Date() })
+      .where(and(eq(unmappedCourierStatuses.id, id), eq(unmappedCourierStatuses.merchantId, merchantId)));
+  }
+
+  async dismissUnmappedStatus(merchantId: string, id: string): Promise<void> {
+    await db.delete(unmappedCourierStatuses)
+      .where(and(eq(unmappedCourierStatuses.id, id), eq(unmappedCourierStatuses.merchantId, merchantId)));
   }
 
   async seedDemoData(): Promise<void> {

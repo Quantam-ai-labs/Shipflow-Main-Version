@@ -810,3 +810,29 @@ export const insertCourierStatusMappingSchema = createInsertSchema(courierStatus
 });
 export type InsertCourierStatusMapping = z.infer<typeof insertCourierStatusMappingSchema>;
 export type CourierStatusMapping = typeof courierStatusMappings.$inferSelect;
+
+// ============================================
+// UNMAPPED COURIER STATUSES (Track unknown statuses for resolution)
+// ============================================
+export const unmappedCourierStatuses = pgTable("unmapped_courier_statuses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  courierName: varchar("courier_name", { length: 50 }).notNull(),
+  rawStatus: varchar("raw_status", { length: 255 }).notNull(),
+  sampleTrackingNumber: varchar("sample_tracking_number", { length: 100 }),
+  occurrenceCount: integer("occurrence_count").default(1),
+  resolved: boolean("resolved").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_ucs_merchant").on(table.merchantId),
+  uniqueIndex("idx_ucs_unique").on(table.merchantId, table.courierName, table.rawStatus),
+]);
+
+export const insertUnmappedCourierStatusSchema = createInsertSchema(unmappedCourierStatuses).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertUnmappedCourierStatus = z.infer<typeof insertUnmappedCourierStatusSchema>;
+export type UnmappedCourierStatus = typeof unmappedCourierStatuses.$inferSelect;

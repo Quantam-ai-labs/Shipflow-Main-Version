@@ -38,7 +38,7 @@ Preferred communication style: Simple, everyday language.
 - **Merchant Management**: Root tenant entity with subscription and profile.
 - **Team Collaboration**: `teamMembers` for user-to-merchant links and roles; token-based team invite system with email integration.
 - **Shopify Integration**: OAuth-based credentials per merchant, encrypted access tokens, webhook processing for orders and fulfillments, and reconciliation.
-- **Courier Management**: Per-courier API credentials (Leopards, PostEx, TCS) with environment secret fallback, specific handling for PostEx booking parameters.
+- **Courier Management**: Per-courier API credentials (Leopards, PostEx, TCS) with environment secret fallback, specific handling for PostEx booking parameters. Leopards parser combines "Pending" status with Reason field for granular mapping (e.g., "Pending - CONSIGNEE NOT AVAILABLE"). Unmapped courier statuses are tracked in `unmapped_courier_statuses` table with notification badge on Settings sidebar and auto-resolution when mappings are created.
 - **Order Management**: Syncs from Shopify, tracks status, and allows remarks.
 - **Shipment Tracking**: Records courier tracking and events with universal status normalization.
 - **COD Reconciliation**: Tracks payment settlements, including `prepaidAmount`, `codRemaining`, and `codPaymentStatus`. Payment records are immutable after booking.

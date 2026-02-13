@@ -102,7 +102,11 @@ export class LeopardsService {
       }));
 
       const latestEvent = events.length > 0 ? events[events.length - 1] : null;
-      const rawStatus = latestEvent ? latestEvent.status : headerStatus;
+      let rawStatus = latestEvent ? latestEvent.status : headerStatus;
+
+      if (latestEvent && latestEvent.status.toLowerCase() === 'pending' && latestEvent.description && latestEvent.description.toLowerCase() !== 'pending') {
+        rawStatus = `Pending - ${latestEvent.description}`;
+      }
 
       return {
         success: true,
@@ -234,7 +238,11 @@ export class LeopardsService {
               description: detail.Reason || detail.Status,
             }));
             const latestEvent = events.length > 0 ? events[events.length - 1] : null;
-            const rawStatus = latestEvent ? latestEvent.status : headerStatus;
+            let rawStatus = latestEvent ? latestEvent.status : headerStatus;
+
+            if (latestEvent && latestEvent.status.toLowerCase() === 'pending' && latestEvent.description && latestEvent.description.toLowerCase() !== 'pending') {
+              rawStatus = `Pending - ${latestEvent.description}`;
+            }
             results.set(packet.track_number, {
               success: true,
               trackingNumber: packet.track_number,
