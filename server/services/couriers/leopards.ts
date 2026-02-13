@@ -1,20 +1,28 @@
+interface LeopardsTrackingDetail {
+  Status: string;
+  Activity_Date: string;
+  Activity_Time?: string;
+  Activity_datetime?: string;
+  Reason?: string;
+  Reciever_Name?: string | null;
+}
+
+interface LeopardsPacket {
+  track_number: string;
+  booked_packet_status: string;
+  booked_packet_collect_amount: string;
+  destination_city_name: string;
+  consignment_name_eng: string;
+  activity_date: string;
+  status_remarks: string;
+  "Tracking Detail"?: LeopardsTrackingDetail[];
+  Tracking_Detail?: LeopardsTrackingDetail[];
+}
+
 interface LeopardsTrackingResponse {
   status: number;
   message: string;
-  packet_list?: Array<{
-    track_number: string;
-    booked_packet_status: string;
-    booked_packet_collect_amount: string;
-    destination_city_name: string;
-    consignment_name_eng: string;
-    activity_date: string;
-    status_remarks: string;
-    Tracking_Detail?: Array<{
-      Status: string;
-      Activity_Date: string;
-      Reason: string;
-    }>;
-  }>;
+  packet_list?: LeopardsPacket[];
 }
 
 export interface TrackingResult {
@@ -82,9 +90,9 @@ export class LeopardsService {
       const packet = data.packet_list[0];
       const headerStatus = packet.booked_packet_status;
 
-      const trackingDetails = packet.Tracking_Detail || [];
+      const trackingDetails = packet["Tracking Detail"] || packet.Tracking_Detail || [];
       if (trackingDetails.length === 0) {
-        console.log(`[Leopards] ${trackingNumber}: No Tracking_Detail, using header status: "${headerStatus}"`);
+        console.log(`[Leopards] ${trackingNumber}: No Tracking Detail, using header status: "${headerStatus}"`);
       }
 
       const events = trackingDetails.map(detail => ({
@@ -219,7 +227,8 @@ export class LeopardsService {
         if (data.status === 1 && data.packet_list) {
           for (const packet of data.packet_list) {
             const headerStatus = packet.booked_packet_status;
-            const events = (packet.Tracking_Detail || []).map(detail => ({
+            const trackingDetails = packet["Tracking Detail"] || packet.Tracking_Detail || [];
+            const events = trackingDetails.map(detail => ({
               status: detail.Status,
               date: detail.Activity_Date,
               description: detail.Reason || detail.Status,
