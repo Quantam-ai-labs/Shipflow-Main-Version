@@ -111,6 +111,22 @@ const COURIER_CONFIG: Record<string, {
         envVar: "",
         required: false,
       },
+      {
+        key: "shipperCity",
+        label: "Shipper City (Origin)",
+        placeholder: "Enter your pickup/origin city (e.g. Lahore, Karachi)",
+        type: "text",
+        envVar: "",
+        required: false,
+      },
+      {
+        key: "shipperAddress",
+        label: "Shipper Address (Pickup)",
+        placeholder: "Enter your pickup/warehouse address",
+        type: "text",
+        envVar: "",
+        required: false,
+      },
     ],
   },
   postex: {
@@ -497,6 +513,8 @@ export default function Integrations() {
       useEnvCredentials: useEnvCreds,
       settings: {
         ...(courierFormData.shipperId ? { shipperId: courierFormData.shipperId } : {}),
+        ...(courierFormData.shipperCity ? { shipperCity: courierFormData.shipperCity } : {}),
+        ...(courierFormData.shipperAddress ? { shipperAddress: courierFormData.shipperAddress } : {}),
         ...(courierFormData.pickupAddressCode ? { pickupAddressCode: courierFormData.pickupAddressCode } : {}),
         ...(courierFormData.storeAddressCode ? { storeAddressCode: courierFormData.storeAddressCode } : {}),
       },
@@ -513,6 +531,12 @@ export default function Integrations() {
       const s = connectedCourier.settings as Record<string, any>;
       if (s.shipperId) {
         setCourierFormData(prev => ({ ...prev, shipperId: s.shipperId }));
+      }
+      if (s.shipperCity) {
+        setCourierFormData(prev => ({ ...prev, shipperCity: s.shipperCity }));
+      }
+      if (s.shipperAddress) {
+        setCourierFormData(prev => ({ ...prev, shipperAddress: s.shipperAddress }));
       }
       if (s.pickupAddressCode) {
         setCourierFormData(prev => ({ ...prev, pickupAddressCode: s.pickupAddressCode }));

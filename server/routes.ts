@@ -3213,15 +3213,29 @@ export async function registerRoutes(
       const shipperInfo = {
         name: merchant.name || "ShipFlow Merchant",
         phone: merchant.phone || "",
-        address: merchant.address || "",
-        city: merchant.city || "Lahore",
+        address: courierSettings?.shipperAddress || merchant.address || "",
+        city: courierSettings?.shipperCity || merchant.city || "Lahore",
         shipperId: courierSettings?.shipperId || "2125655",
         pickupAddressCode,
         storeAddressCode,
       };
 
-      const { validateOrderForBooking, orderToPacket, bookLeopardsBatch, bookPostExBulk } = await import("./services/couriers/booking");
+      const { validateOrderForBooking, orderToPacket, bookLeopardsBatch, bookPostExBulk, loadLeopardsCities, findLeopardsCity } = await import("./services/couriers/booking");
       const { generateBatchLoadsheetPdf } = await import("./services/pdfGenerator");
+
+      if (courier === "leopards") {
+        const leopCities = await loadLeopardsCities(creds.apiKey!, creds.apiSecret!);
+        const originMatch = findLeopardsCity(shipperInfo.city, leopCities);
+        if (!originMatch && !shipperInfo.shipperId) {
+          return res.status(400).json({
+            message: `Shipper city "${shipperInfo.city}" does not match any Leopards city and no Shipper ID is configured. Please go to Integrations > Leopards and set a valid Shipper City or Shipper ID.`,
+          });
+        } else if (!originMatch && shipperInfo.shipperId) {
+          console.warn(`[Leopards] Shipper city "${shipperInfo.city}" does not match any Leopards city, but Shipper ID ${shipperInfo.shipperId} is set — Leopards will use registered origin.`);
+        } else if (originMatch) {
+          console.log(`[Leopards] Shipper city "${shipperInfo.city}" matched to Leopards city: ${originMatch.name} (ID: ${originMatch.id})`);
+        }
+      }
 
       const fetchedOrders = await storage.getOrdersByIds(merchantId, orderIds);
       const userId = getSessionUserId(req) || "system";
