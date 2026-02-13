@@ -354,7 +354,8 @@ export class DatabaseStorage implements IStorage {
           ilike(orders.orderNumber, `%${options.search}%`),
           ilike(orders.customerName, `%${options.search}%`),
           ilike(orders.city, `%${options.search}%`),
-          ilike(orders.customerPhone, `%${options.search}%`)
+          ilike(orders.customerPhone, `%${options.search}%`),
+          ilike(orders.courierTracking, `%${options.search}%`)
         )!
       );
     }

@@ -1,6 +1,8 @@
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Package,
@@ -12,10 +14,13 @@ import {
   TrendingDown,
   ArrowUpRight,
   RefreshCw,
+  Search,
+  X,
+  Loader2,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import type { Order, Shipment } from "@shared/schema";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 
 interface DashboardStats {
   totalOrders: number;
@@ -144,15 +149,168 @@ function getStatusBadge(status: string) {
   );
 }
 
+const WORKFLOW_STAGE_LABELS: Record<string, string> = {
+  NEW: "New",
+  PENDING: "Pending",
+  HOLD: "Hold",
+  READY_TO_SHIP: "Ready to Ship",
+  BOOKED: "Booked",
+  FULFILLED: "Fulfilled",
+  DELIVERED: "Delivered",
+  RETURN: "Return",
+  CANCELLED: "Cancelled",
+};
+
+const WORKFLOW_STAGE_COLORS: Record<string, string> = {
+  NEW: "bg-gray-500/10 text-gray-600 border-gray-500/20",
+  PENDING: "bg-yellow-500/10 text-yellow-600 border-yellow-500/20",
+  HOLD: "bg-orange-500/10 text-orange-600 border-orange-500/20",
+  READY_TO_SHIP: "bg-blue-500/10 text-blue-600 border-blue-500/20",
+  BOOKED: "bg-indigo-500/10 text-indigo-600 border-indigo-500/20",
+  FULFILLED: "bg-purple-500/10 text-purple-600 border-purple-500/20",
+  DELIVERED: "bg-green-500/10 text-green-600 border-green-500/20",
+  RETURN: "bg-red-500/10 text-red-600 border-red-500/20",
+  CANCELLED: "bg-red-500/10 text-red-600 border-red-500/20",
+};
+
+function OrderSearchBar() {
+  const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedQuery(query.trim());
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  const { data, isLoading } = useQuery<{ orders: Order[]; total: number }>({
+    queryKey: [`/api/orders?search=${encodeURIComponent(debouncedQuery)}&light=1&pageSize=8`],
+    enabled: debouncedQuery.length >= 2,
+  });
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleSelect = useCallback((order: Order) => {
+    setIsOpen(false);
+    setQuery("");
+    setLocation(`/orders/detail/${order.id}`);
+  }, [setLocation]);
+
+  const results = data?.orders || [];
+  const showDropdown = isOpen && debouncedQuery.length >= 2;
+
+  return (
+    <div ref={containerRef} className="relative w-full max-w-xl">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input
+          ref={inputRef}
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setIsOpen(true);
+          }}
+          onFocus={() => { if (query.trim().length >= 2) setIsOpen(true); }}
+          placeholder="Search orders by name, phone, order #, or tracking..."
+          className="pl-9 pr-9"
+          data-testid="input-order-search"
+        />
+        {query && (
+          <button
+            onClick={() => { setQuery(""); setIsOpen(false); }}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+            data-testid="button-clear-search"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+      {showDropdown && (
+        <Card className="absolute z-50 top-full mt-1 w-full shadow-lg border overflow-hidden">
+          <CardContent className="p-0">
+            {isLoading ? (
+              <div className="flex items-center justify-center gap-2 p-4 text-sm text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Searching...
+              </div>
+            ) : results.length === 0 ? (
+              <div className="p-4 text-sm text-muted-foreground text-center" data-testid="text-no-results">
+                No orders found for "{debouncedQuery}"
+              </div>
+            ) : (
+              <div className="max-h-[360px] overflow-y-auto">
+                {results.map((order) => {
+                  const stage = order.workflowStatus || "NEW";
+                  return (
+                    <button
+                      key={order.id}
+                      onClick={() => handleSelect(order)}
+                      className="w-full text-left px-4 py-3 hover-elevate flex items-center justify-between gap-3 border-b last:border-b-0"
+                      data-testid={`search-result-${order.id}`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium text-sm" data-testid={`text-order-number-${order.id}`}>#{order.orderNumber}</span>
+                          <span className="text-sm text-muted-foreground truncate">{order.customerName}</span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground flex-wrap">
+                          {order.customerPhone && <span>{order.customerPhone}</span>}
+                          {order.courierTracking && (
+                            <>
+                              <span>·</span>
+                              <span>{order.courierTracking}</span>
+                            </>
+                          )}
+                          {order.city && (
+                            <>
+                              <span>·</span>
+                              <span>{order.city}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <Badge className={`shrink-0 text-[10px] ${WORKFLOW_STAGE_COLORS[stage] || ""}`}>
+                        {WORKFLOW_STAGE_LABELS[stage] || stage}
+                      </Badge>
+                    </button>
+                  );
+                })}
+                {(data?.total || 0) > results.length && (
+                  <div className="px-4 py-2 text-xs text-muted-foreground text-center border-t">
+                    Showing {results.length} of {data?.total} results
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery<DashboardStats>({
     queryKey: ["/api/dashboard/stats"],
-    refetchInterval: 30000, // Auto-refresh every 30 seconds
+    refetchInterval: 30000,
   });
 
   const { data: recentOrders, isLoading: ordersLoading } = useQuery<RecentOrder[]>({
     queryKey: ["/api/orders/recent"],
-    refetchInterval: 30000, // Auto-refresh every 30 seconds
+    refetchInterval: 30000,
   });
 
   const handleRefresh = () => {
@@ -167,11 +325,16 @@ export default function Dashboard() {
           <h1 className="text-2xl font-bold">Dashboard</h1>
           <p className="text-muted-foreground">Welcome back! Here's your logistics overview.</p>
         </div>
-        <Button onClick={handleRefresh} variant="outline" size="sm" data-testid="button-refresh-dashboard">
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button onClick={handleRefresh} variant="outline" size="sm" data-testid="button-refresh-dashboard">
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Refresh
+          </Button>
+        </div>
       </div>
+
+      {/* Search */}
+      <OrderSearchBar />
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
