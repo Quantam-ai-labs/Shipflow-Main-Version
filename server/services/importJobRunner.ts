@@ -146,7 +146,7 @@ async function executeImport(
       order: 'created_at asc',
       created_at_min: startDate.toISOString(),
     });
-    nextUrl = `https://${shopDomain}/admin/api/2024-01/orders.json?${queryParams.toString()}`;
+    nextUrl = `https://${shopDomain}/admin/api/2025-01/orders.json?${queryParams.toString()}`;
   }
 
   let currentPage = job.currentPage || 0;
@@ -466,7 +466,7 @@ function sleep(ms: number): Promise<void> {
 export async function validateShopifyConnection(shopDomain: string, accessToken: string): Promise<{ valid: boolean; error?: string }> {
   try {
     const plainToken = decryptToken(accessToken);
-    const response = await fetch(`https://${shopDomain}/admin/api/2024-01/shop.json`, {
+    const response = await fetch(`https://${shopDomain}/admin/api/2025-01/shop.json`, {
       headers: {
         'Content-Type': 'application/json',
         'X-Shopify-Access-Token': plainToken,

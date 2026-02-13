@@ -1926,7 +1926,7 @@ export async function registerRoutes(
         
         if (hasModernToken) {
           // Modern access token auth
-          testResponse = await fetch(`https://${storeDomain}/admin/api/2024-01/shop.json`, {
+          testResponse = await fetch(`https://${storeDomain}/admin/api/2025-01/shop.json`, {
             headers: {
               'X-Shopify-Access-Token': accessToken,
               'Content-Type': 'application/json',
@@ -1935,7 +1935,7 @@ export async function registerRoutes(
         } else {
           // Legacy API key/password auth (Basic Auth)
           const credentials = Buffer.from(`${apiKey}:${apiPassword}`).toString('base64');
-          testResponse = await fetch(`https://${storeDomain}/admin/api/2024-01/shop.json`, {
+          testResponse = await fetch(`https://${storeDomain}/admin/api/2025-01/shop.json`, {
             headers: {
               'Authorization': `Basic ${credentials}`,
               'Content-Type': 'application/json',

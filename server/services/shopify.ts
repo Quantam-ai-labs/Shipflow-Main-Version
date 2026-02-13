@@ -317,7 +317,7 @@ export class ShopifyService {
       queryParams.set('updated_at_min', params.updated_at_min);
     }
 
-    let url: string | null = `https://${shop}/admin/api/2024-01/orders.json?${queryParams.toString()}`;
+    let url: string | null = `https://${shop}/admin/api/2025-01/orders.json?${queryParams.toString()}`;
     let pageCount = 0;
     let retryCount = 0;
     const maxRetries = 3;
@@ -392,7 +392,7 @@ export class ShopifyService {
       queryParams.set('created_at_min', params.created_at_min);
     }
 
-    const url = `https://${shop}/admin/api/2024-01/orders.json?${queryParams.toString()}`;
+    const url = `https://${shop}/admin/api/2025-01/orders.json?${queryParams.toString()}`;
     const headers = this.getAuthHeaders(accessToken);
 
     const response = await fetch(url, { headers });
@@ -823,7 +823,7 @@ export async function createShopifyFulfillment(
     const trackingCompany = trackingCompanyMap[courierName] || courierName;
 
     const fulfillmentOrdersRes = await fetch(
-      `https://${shopDomain}/admin/api/2024-01/orders/${shopifyOrderId}/fulfillment_orders.json`,
+      `https://${shopDomain}/admin/api/2025-01/orders/${shopifyOrderId}/fulfillment_orders.json`,
       {
         headers: {
           'X-Shopify-Access-Token': accessToken,
@@ -873,7 +873,7 @@ export async function createShopifyFulfillment(
     };
 
     const fulfillmentRes = await fetch(
-      `https://${shopDomain}/admin/api/2024-01/fulfillments.json`,
+      `https://${shopDomain}/admin/api/2025-01/fulfillments.json`,
       {
         method: 'POST',
         headers: {
@@ -909,7 +909,7 @@ export async function cancelShopifyOrder(
   try {
     console.log(`[Shopify Cancel] Cancelling order ${shopifyOrderId} on ${shopDomain}`);
 
-    const url = `https://${shopDomain}/admin/api/2024-01/orders/${shopifyOrderId}/cancel.json`;
+    const url = `https://${shopDomain}/admin/api/2025-01/orders/${shopifyOrderId}/cancel.json`;
     const body: Record<string, any> = {};
     if (reason) {
       body.reason = reason;

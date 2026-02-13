@@ -2,7 +2,7 @@ import { storage } from '../storage';
 import { decryptToken } from './encryption';
 import { cancelShopifyOrder } from './shopify';
 
-const API_VERSION = '2024-01';
+const API_VERSION = '2025-01';
 
 const recentWriteBacks = new Map<string, number>();
 const WRITEBACK_COOLDOWN_MS = 10_000;

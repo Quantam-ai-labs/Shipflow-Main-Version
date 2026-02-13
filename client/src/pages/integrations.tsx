@@ -754,6 +754,28 @@ export default function Integrations() {
                   Update Token
                 </Button>
                 <Button
+                  variant="outline"
+                  onClick={async () => {
+                    const shopDomain = data?.shopify.shopDomain;
+                    if (!shopDomain) {
+                      toast({ title: "Error", description: "No Shopify store domain found.", variant: "destructive" });
+                      return;
+                    }
+                    try {
+                      const res = await fetch(`/api/shopify/auth-url?shop=${encodeURIComponent(shopDomain)}`, { credentials: 'include' });
+                      const result = await res.json();
+                      if (!res.ok) throw new Error(result.message || "Failed to start re-authorization");
+                      window.location.href = result.authUrl;
+                    } catch (error: any) {
+                      toast({ title: "Re-authorization Failed", description: error.message, variant: "destructive" });
+                    }
+                  }}
+                  data-testid="button-reauthorize-shopify"
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Re-authorize Permissions
+                </Button>
+                <Button
                   variant="ghost"
                   onClick={() => disconnectShopifyMutation.mutate()}
                   disabled={disconnectShopifyMutation.isPending}

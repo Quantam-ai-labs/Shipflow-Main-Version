@@ -71,7 +71,7 @@ export async function registerShopifyWebhooks(merchantId: string): Promise<{ reg
 }
 
 async function listExistingWebhooks(shop: string, accessToken: string): Promise<any[]> {
-  const url = `https://${shop}/admin/api/2024-01/webhooks.json`;
+  const url = `https://${shop}/admin/api/2025-01/webhooks.json`;
   const response = await fetch(url, {
     headers: {
       'X-Shopify-Access-Token': accessToken,
@@ -89,7 +89,7 @@ async function listExistingWebhooks(shop: string, accessToken: string): Promise<
 }
 
 async function createWebhook(shop: string, accessToken: string, topic: string, callbackUrl: string): Promise<void> {
-  const url = `https://${shop}/admin/api/2024-01/webhooks.json`;
+  const url = `https://${shop}/admin/api/2025-01/webhooks.json`;
   const response = await fetch(url, {
     method: 'POST',
     headers: {
@@ -112,7 +112,7 @@ async function createWebhook(shop: string, accessToken: string, topic: string, c
 }
 
 async function updateWebhook(shop: string, accessToken: string, webhookId: number, callbackUrl: string): Promise<void> {
-  const url = `https://${shop}/admin/api/2024-01/webhooks/${webhookId}.json`;
+  const url = `https://${shop}/admin/api/2025-01/webhooks/${webhookId}.json`;
   const response = await fetch(url, {
     method: 'PUT',
     headers: {
@@ -178,7 +178,7 @@ export async function checkWebhookHealth(merchantId: string): Promise<{
 }
 
 async function deleteWebhook(shop: string, accessToken: string, webhookId: number): Promise<void> {
-  const url = `https://${shop}/admin/api/2024-01/webhooks/${webhookId}.json`;
+  const url = `https://${shop}/admin/api/2025-01/webhooks/${webhookId}.json`;
   const response = await fetch(url, {
     method: 'DELETE',
     headers: {
