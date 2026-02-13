@@ -24,7 +24,49 @@ setInterval(() => {
   for (const [key, val] of oauthStateStore) {
     if (now - val.createdAt > 10 * 60 * 1000) oauthStateStore.delete(key);
   }
+  cleanupDbOAuthStates().catch(() => {});
 }, 60 * 1000);
+
+async function storeOAuthStateInDb(state: string, data: { merchantId: string; shopDomain: string; credSource: string }) {
+  try {
+    const { pool } = await import('./db');
+    await pool.query(
+      `INSERT INTO oauth_states (state, merchant_id, shop_domain, cred_source, created_at) VALUES ($1, $2, $3, $4, NOW()) ON CONFLICT (state) DO UPDATE SET merchant_id=$2, shop_domain=$3, cred_source=$4, created_at=NOW()`,
+      [state, data.merchantId, data.shopDomain, data.credSource]
+    );
+  } catch (e: any) {
+    if (e.code === '42P01') {
+      const { pool } = await import('./db');
+      await pool.query(`CREATE TABLE IF NOT EXISTS oauth_states (state VARCHAR(64) PRIMARY KEY, merchant_id VARCHAR(255) NOT NULL, shop_domain VARCHAR(255) NOT NULL, cred_source VARCHAR(32) NOT NULL, created_at TIMESTAMP NOT NULL DEFAULT NOW())`);
+      await pool.query(
+        `INSERT INTO oauth_states (state, merchant_id, shop_domain, cred_source, created_at) VALUES ($1, $2, $3, $4, NOW())`,
+        [state, data.merchantId, data.shopDomain, data.credSource]
+      );
+    } else {
+      console.warn('[OAuth] Failed to store state in DB:', e.message);
+    }
+  }
+}
+
+async function getOAuthStateFromDb(state: string): Promise<{ merchantId: string; shopDomain: string; credSource: string } | null> {
+  try {
+    const { pool } = await import('./db');
+    const result = await pool.query(`DELETE FROM oauth_states WHERE state=$1 RETURNING merchant_id, shop_domain, cred_source`, [state]);
+    if (result.rows.length > 0) {
+      return { merchantId: result.rows[0].merchant_id, shopDomain: result.rows[0].shop_domain, credSource: result.rows[0].cred_source };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function cleanupDbOAuthStates() {
+  try {
+    const { pool } = await import('./db');
+    await pool.query(`DELETE FROM oauth_states WHERE created_at < NOW() - INTERVAL '10 minutes'`);
+  } catch {}
+}
 
 function mapCourierSlugToName(slug: string): string | null {
   const map: Record<string, string> = {
@@ -2284,12 +2326,15 @@ export async function registerRoutes(
       }
 
       const state = crypto.randomBytes(16).toString('hex');
+      const credSource = usingMerchantCreds ? 'merchant' : 'env';
       oauthStateStore.set(state, {
         merchantId,
         shopDomain,
-        credSource: usingMerchantCreds ? 'merchant' : 'env',
+        credSource,
         createdAt: Date.now(),
       });
+      await storeOAuthStateInDb(state, { merchantId, shopDomain, credSource });
+      console.log(`[Shopify OAuth] Generated state ${state.substring(0, 8)}... for merchant ${merchantId}, stored in memory + DB`);
       (req.session as any).shopifyState = state;
       (req.session as any).shopDomain = shopDomain;
       (req.session as any).shopifyCredSource = usingMerchantCreds ? 'merchant' : 'env';
@@ -2297,7 +2342,10 @@ export async function registerRoutes(
       const installUrl = shopifyService.getInstallUrl(shopDomain, state, merchantCreds);
 
       const canonicalHost = shopifyService.getCanonicalHost();
-      res.json({ authUrl: installUrl, state, canonicalHost });
+      req.session.save((err: any) => {
+        if (err) console.warn('[Shopify OAuth] Session save error:', err);
+        res.json({ authUrl: installUrl, state, canonicalHost });
+      });
     } catch (error) {
       console.error("Error generating Shopify auth URL:", error);
       res.status(500).json({ message: "Failed to generate auth URL" });
@@ -2348,24 +2396,43 @@ export async function registerRoutes(
         return res.redirect('/integrations?shopify=error&message=Missing+required+parameters');
       }
 
-      const savedState = req.session?.shopifyState;
-      const storedOAuth = oauthStateStore.get(state as string);
+      let storedOAuth = oauthStateStore.get(state as string);
       
-      if (state !== savedState && !storedOAuth) {
-        console.warn("State mismatch - no matching state found", { received: state, sessionState: savedState, sessionId: req.sessionID });
+      if (!storedOAuth) {
+        const dbState = await getOAuthStateFromDb(state as string);
+        if (dbState) {
+          storedOAuth = { ...dbState, createdAt: Date.now() };
+          console.log(`[Shopify OAuth Callback] State recovered from DB for ${(state as string).substring(0, 8)}...`);
+        }
+      }
+      
+      const savedState = req.session?.shopifyState;
+      const sessionMatch = state === savedState;
+      
+      console.log(`[Shopify OAuth Callback] State check: received=${(state as string).substring(0, 8)}..., sessionMatch=${sessionMatch}, memoryHit=${oauthStateStore.has(state as string)}, dbHit=${!!storedOAuth}`);
+      
+      if (!storedOAuth && !sessionMatch) {
+        console.warn("[Shopify OAuth Callback] State mismatch - no matching state found", { received: state, sessionId: req.sessionID });
         return res.redirect('/integrations?shopify=error&message=Invalid+state+parameter');
       }
 
-      if (storedOAuth) {
-        oauthStateStore.delete(state as string);
+      oauthStateStore.delete(state as string);
+      try {
+        const { pool } = await import('./db');
+        pool.query(`DELETE FROM oauth_states WHERE state=$1`, [state]).catch(() => {});
+      } catch {}
+      delete req.session.shopifyState;
+
+      const expectedShop = storedOAuth?.shopDomain || (req.session as any)?.shopDomain;
+      if (expectedShop && expectedShop !== shop) {
+        console.warn(`[Shopify OAuth Callback] Shop domain mismatch: expected=${expectedShop}, received=${shop}`);
+        return res.redirect('/integrations?shopify=error&message=Shop+domain+mismatch');
       }
 
       const shopDomainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com$/;
       if (!shopDomainRegex.test(shop as string)) {
         return res.redirect('/integrations?shopify=error&message=Invalid+shop+domain');
       }
-
-      delete req.session.shopifyState;
 
       let merchantId: string | undefined;
       let credSource = 'env';
