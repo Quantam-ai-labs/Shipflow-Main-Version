@@ -10,7 +10,11 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubItem,
+  SidebarMenuSubButton,
 } from "@/components/ui/sidebar";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@radix-ui/react-collapsible";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,6 +41,7 @@ import {
   Store,
   LogOut,
   ChevronUp,
+  ChevronRight,
   Shield,
   BookmarkCheck,
   Send,
@@ -128,6 +133,11 @@ export function AppSidebar() {
     refetchInterval: 30000,
   });
 
+  const isOrdersRouteActive = location.startsWith("/orders");
+  const totalOrderCount = counts
+    ? Object.values(counts).reduce((sum, c) => sum + (c || 0), 0)
+    : 0;
+
   return (
     <Sidebar>
       <SidebarHeader className="p-4">
@@ -161,30 +171,49 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
         <SidebarGroup>
-          <SidebarGroupLabel>Pipeline</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {pipelineItems.map((item) => {
-                const count = counts?.[item.key] || 0;
-                return (
-                  <SidebarMenuItem key={item.key}>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={location === item.url}
-                    >
-                      <Link href={item.url} data-testid={`nav-pipeline-${item.key.toLowerCase()}`}>
-                        <item.icon className="w-4 h-4" />
-                        <span className="flex-1">{item.title}</span>
-                        {count > 0 && (
-                          <Badge variant="secondary" className="h-5 min-w-[20px] px-1.5 text-xs ml-auto">
-                            {count}
-                          </Badge>
-                        )}
-                      </Link>
+              <Collapsible defaultOpen={isOrdersRouteActive} asChild className="group/collapsible">
+                <SidebarMenuItem>
+                  <CollapsibleTrigger asChild>
+                    <SidebarMenuButton data-testid="nav-orders-toggle" tooltip="Orders">
+                      <Package className="w-4 h-4" />
+                      <span className="flex-1">Orders</span>
+                      {totalOrderCount > 0 && (
+                        <Badge variant="secondary" className="h-5 min-w-[20px] px-1.5 text-xs">
+                          {totalOrderCount}
+                        </Badge>
+                      )}
+                      <ChevronRight className="w-4 h-4 ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
                     </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <SidebarMenuSub>
+                      {pipelineItems.map((item) => {
+                        const count = counts?.[item.key] || 0;
+                        return (
+                          <SidebarMenuSubItem key={item.key}>
+                            <SidebarMenuSubButton
+                              asChild
+                              isActive={location === item.url}
+                            >
+                              <Link href={item.url} data-testid={`nav-pipeline-${item.key.toLowerCase()}`}>
+                                <item.icon className="w-3.5 h-3.5" />
+                                <span className="flex-1">{item.title}</span>
+                                {count > 0 && (
+                                  <Badge variant="secondary" className="h-5 min-w-[20px] px-1.5 text-xs ml-auto">
+                                    {count}
+                                  </Badge>
+                                )}
+                              </Link>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        );
+                      })}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </SidebarMenuItem>
+              </Collapsible>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
