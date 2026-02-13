@@ -495,6 +495,21 @@ export default function Pipeline() {
     },
   });
 
+  const bulkCleanupMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/orders/bulk-cleanup-cancelled");
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders/workflow-counts"] });
+      toast({ title: "Cleanup complete", description: `${data.cleaned} cancelled order(s) moved back to Ready to Ship` });
+    },
+    onError: () => {
+      toast({ title: "Cleanup failed", description: "Could not clean up cancelled orders", variant: "destructive" });
+    },
+  });
+
   const loadsheetMutation = useMutation({
     mutationFn: async (orderIds: string[]) => {
       const res = await apiRequest("POST", "/api/orders/generate-loadsheet", { orderIds });
@@ -846,6 +861,16 @@ export default function Pipeline() {
                 data-testid="bulk-cancel-booking"
               >
                 <Undo2 className="w-3.5 h-3.5 mr-1.5" />Cancel Booking
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => bulkCleanupMutation.mutate()}
+                disabled={bulkCleanupMutation.isPending}
+                data-testid="bulk-cleanup-cancelled"
+              >
+                {bulkCleanupMutation.isPending ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Undo2 className="w-3.5 h-3.5 mr-1.5" />}
+                Cleanup Cancelled
               </Button>
             </>
           )}

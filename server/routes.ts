@@ -789,6 +789,97 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/orders/bulk-cleanup-cancelled", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const cancelledOrders: any[] = [];
+      let page = 1;
+      const pageSize = 200;
+      while (true) {
+        const { orders: batch } = await storage.getOrders(merchantId, {
+          workflowStatus: 'BOOKED',
+          page,
+          pageSize,
+        });
+        for (const o of batch) {
+          const raw = (o.courierRawStatus || '').toLowerCase();
+          const ship = (o.shipmentStatus || '').toUpperCase();
+          if (raw.includes('cancel') || ship === 'CANCELLED') {
+            cancelledOrders.push(o);
+          }
+        }
+        if (batch.length < pageSize) break;
+        page++;
+      }
+
+      if (cancelledOrders.length === 0) {
+        return res.json({ cleaned: 0, message: "No cancelled BOOKED orders found" });
+      }
+
+      const userId = getSessionUserId(req) || "system";
+      const actorName = await getSessionUserName(req);
+      let cleaned = 0;
+      const errors: string[] = [];
+
+      const store = await storage.getShopifyStore(merchantId);
+      let shopifyToken: string | null = null;
+      if (store?.isConnected && store?.accessToken && store?.shopDomain) {
+        try { shopifyToken = decryptToken(store.accessToken); } catch { shopifyToken = store.accessToken; }
+      }
+
+      for (const order of cancelledOrders) {
+        try {
+          if (order.shopifyFulfillmentId && shopifyToken && store?.shopDomain) {
+            try {
+              await cancelShopifyFulfillment(store.shopDomain, shopifyToken, order.shopifyFulfillmentId);
+            } catch (e: any) {
+              console.warn(`[BulkCleanup] Fulfillment cancel failed for ${order.orderNumber}: ${e.message}`);
+            }
+          }
+
+          await storage.updateOrderWorkflow(merchantId, order.id, {
+            courierName: null,
+            courierTracking: null,
+            courierSlipUrl: null,
+            bookingStatus: null,
+            bookingError: null,
+            bookedAt: null,
+            shipmentStatus: 'Unfulfilled',
+            courierRawStatus: null,
+            shopifyFulfillmentId: null,
+          });
+
+          const result = await transitionOrder({
+            merchantId,
+            orderId: order.id,
+            toStatus: "READY_TO_SHIP",
+            action: "bulk_cleanup",
+            actorUserId: userId,
+            actorName,
+            actorType: "user",
+            reason: "Bulk cleanup: courier-cancelled order reverted to Ready to Ship",
+          });
+
+          if (result.success) {
+            cleaned++;
+          } else {
+            errors.push(`${order.orderNumber}: transition failed - ${result.error}`);
+          }
+        } catch (e: any) {
+          errors.push(`${order.orderNumber}: ${e.message}`);
+        }
+      }
+
+      console.log(`[BulkCleanup] Cleaned ${cleaned}/${cancelledOrders.length} cancelled BOOKED orders`);
+      res.json({ cleaned, total: cancelledOrders.length, errors: errors.length > 0 ? errors : undefined });
+    } catch (error) {
+      console.error("Error in bulk cleanup:", error);
+      res.status(500).json({ message: "Failed to run bulk cleanup" });
+    }
+  });
+
   app.post("/api/orders/:id/cancel-shopify", isAuthenticated, async (req: any, res) => {
     try {
       const merchantId = await requireMerchant(req, res);
