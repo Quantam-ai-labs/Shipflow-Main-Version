@@ -299,6 +299,16 @@ export async function registerRoutes(
   await setupAuth(app);
   registerAuthRoutes(app);
 
+  // Temporary: serve project zip for download
+  app.get("/download-project-zip", (_req, res) => {
+    const zipPath = require("path").join(process.cwd(), "shipflow-project.zip");
+    if (require("fs").existsSync(zipPath)) {
+      res.download(zipPath, "shipflow-project.zip");
+    } else {
+      res.status(404).send("Zip file not found. Please ask the agent to regenerate it.");
+    }
+  });
+
   // Seed demo data on startup
   await storage.seedDemoData();
 
