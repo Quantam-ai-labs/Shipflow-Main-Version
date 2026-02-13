@@ -3262,7 +3262,7 @@ export async function registerRoutes(
           continue;
         }
 
-        if (bookedOrderIds.has(order.id) || order.courierTracking) {
+        if (order.courierTracking || (bookedOrderIds.has(order.id) && order.workflowStatus === 'BOOKED')) {
           const existingJob = existingJobs.find(j => j.orderId === order.id && j.status === "success");
           alreadyBooked.push({
             orderId: order.id,
