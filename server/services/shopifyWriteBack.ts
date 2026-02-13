@@ -6,6 +6,43 @@ const API_VERSION = '2024-01';
 
 const recentWriteBacks = new Map<string, number>();
 const WRITEBACK_COOLDOWN_MS = 10_000;
+const RATE_LIMIT_DELAY_MS = 750;
+
+type WriteBackTask = {
+  fn: () => Promise<{ success: boolean; error?: string }>;
+  resolve: (result: { success: boolean; error?: string }) => void;
+  label: string;
+};
+
+const writeBackQueue: WriteBackTask[] = [];
+let isProcessingQueue = false;
+
+async function processQueue() {
+  if (isProcessingQueue) return;
+  isProcessingQueue = true;
+
+  while (writeBackQueue.length > 0) {
+    const task = writeBackQueue.shift()!;
+    try {
+      const result = await task.fn();
+      task.resolve(result);
+    } catch (error: any) {
+      task.resolve({ success: false, error: error.message });
+    }
+    if (writeBackQueue.length > 0) {
+      await new Promise(r => setTimeout(r, RATE_LIMIT_DELAY_MS));
+    }
+  }
+
+  isProcessingQueue = false;
+}
+
+function enqueueWriteBack(label: string, fn: () => Promise<{ success: boolean; error?: string }>): Promise<{ success: boolean; error?: string }> {
+  return new Promise((resolve) => {
+    writeBackQueue.push({ fn, resolve, label });
+    processQueue();
+  });
+}
 
 export function isRecentWriteBack(shopifyOrderId: string): boolean {
   const timestamp = recentWriteBacks.get(shopifyOrderId);
@@ -44,73 +81,75 @@ export async function writeBackAddress(
     postalCode?: string;
   }
 ): Promise<{ success: boolean; error?: string }> {
-  const creds = await getShopifyCredentials(merchantId);
-  if (!creds) {
-    return { success: false, error: 'Shopify not connected' };
+  const shippingAddress: Record<string, any> = {};
+
+  if (updates.customerName) {
+    const parts = updates.customerName.trim().split(/\s+/);
+    shippingAddress.first_name = parts[0] || '';
+    shippingAddress.last_name = parts.slice(1).join(' ') || '';
+    shippingAddress.name = updates.customerName.trim();
+  }
+  if (updates.customerPhone) {
+    shippingAddress.phone = updates.customerPhone;
+  }
+  if (updates.shippingAddress) {
+    shippingAddress.address1 = updates.shippingAddress;
+  }
+  if (updates.city) {
+    shippingAddress.city = updates.city;
+  }
+  if (updates.province) {
+    shippingAddress.province = updates.province;
+  }
+  if (updates.postalCode) {
+    shippingAddress.zip = updates.postalCode;
   }
 
-  try {
-    const shippingAddress: Record<string, any> = {};
-
-    if (updates.customerName) {
-      const parts = updates.customerName.trim().split(/\s+/);
-      shippingAddress.first_name = parts[0] || '';
-      shippingAddress.last_name = parts.slice(1).join(' ') || '';
-      shippingAddress.name = updates.customerName.trim();
-    }
-    if (updates.customerPhone) {
-      shippingAddress.phone = updates.customerPhone;
-    }
-    if (updates.shippingAddress) {
-      shippingAddress.address1 = updates.shippingAddress;
-    }
-    if (updates.city) {
-      shippingAddress.city = updates.city;
-    }
-    if (updates.province) {
-      shippingAddress.province = updates.province;
-    }
-    if (updates.postalCode) {
-      shippingAddress.zip = updates.postalCode;
-    }
-
-    if (Object.keys(shippingAddress).length === 0 && !updates.customerEmail) {
-      return { success: true };
-    }
-
-    const orderUpdate: Record<string, any> = { order: { id: shopifyOrderId } };
-
-    if (Object.keys(shippingAddress).length > 0) {
-      orderUpdate.order.shipping_address = shippingAddress;
-    }
-    if (updates.customerEmail) {
-      orderUpdate.order.email = updates.customerEmail;
-    }
-
-    markWriteBack(shopifyOrderId);
-
-    const url = `https://${creds.shopDomain}/admin/api/${API_VERSION}/orders/${shopifyOrderId}.json`;
-    const response = await fetch(url, {
-      method: 'PUT',
-      headers: {
-        'X-Shopify-Access-Token': creds.accessToken,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(orderUpdate),
-    });
-
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error(`[ShopifyWriteBack] Address update failed: ${response.status} ${errText}`);
-      return { success: false, error: `Shopify API error ${response.status}: ${errText}` };
-    }
-
-    console.log(`[ShopifyWriteBack] Address updated for order ${shopifyOrderId}`);
+  if (Object.keys(shippingAddress).length === 0 && !updates.customerEmail) {
     return { success: true };
-  } catch (error: any) {
-    console.error(`[ShopifyWriteBack] Address update error:`, error);
-    return { success: false, error: error.message || 'Unknown error' };
   }
+
+  return enqueueWriteBack(`address:${shopifyOrderId}`, async () => {
+    const creds = await getShopifyCredentials(merchantId);
+    if (!creds) {
+      return { success: false, error: 'Shopify not connected' };
+    }
+
+    try {
+      const orderUpdate: Record<string, any> = { order: { id: shopifyOrderId } };
+
+      if (Object.keys(shippingAddress).length > 0) {
+        orderUpdate.order.shipping_address = shippingAddress;
+      }
+      if (updates.customerEmail) {
+        orderUpdate.order.email = updates.customerEmail;
+      }
+
+      markWriteBack(shopifyOrderId);
+
+      const url = `https://${creds.shopDomain}/admin/api/${API_VERSION}/orders/${shopifyOrderId}.json`;
+      const response = await fetch(url, {
+        method: 'PUT',
+        headers: {
+          'X-Shopify-Access-Token': creds.accessToken,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(orderUpdate),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        console.error(`[ShopifyWriteBack] Address update failed: ${response.status} ${errText}`);
+        return { success: false, error: `Shopify API error ${response.status}: ${errText}` };
+      }
+
+      console.log(`[ShopifyWriteBack] Address updated for order ${shopifyOrderId}`);
+      return { success: true };
+    } catch (error: any) {
+      console.error(`[ShopifyWriteBack] Address update error:`, error);
+      return { success: false, error: error.message || 'Unknown error' };
+    }
+  });
 }
 
 export async function writeBackCancel(
@@ -118,13 +157,14 @@ export async function writeBackCancel(
   shopifyOrderId: string,
   reason?: string,
 ): Promise<{ success: boolean; error?: string }> {
-  const creds = await getShopifyCredentials(merchantId);
-  if (!creds) {
-    return { success: false, error: 'Shopify not connected' };
-  }
-
-  markWriteBack(shopifyOrderId);
-  return cancelShopifyOrder(creds.shopDomain, creds.accessToken, shopifyOrderId, reason);
+  return enqueueWriteBack(`cancel:${shopifyOrderId}`, async () => {
+    const creds = await getShopifyCredentials(merchantId);
+    if (!creds) {
+      return { success: false, error: 'Shopify not connected' };
+    }
+    markWriteBack(shopifyOrderId);
+    return cancelShopifyOrder(creds.shopDomain, creds.accessToken, shopifyOrderId, reason);
+  });
 }
 
 const STATUS_TAG_MAP: Record<string, string> = {
@@ -145,65 +185,69 @@ export async function writeBackTags(
   shopifyOrderId: string,
   newStatus: string,
 ): Promise<{ success: boolean; error?: string }> {
-  const creds = await getShopifyCredentials(merchantId);
-  if (!creds) {
-    return { success: false, error: 'Shopify not connected' };
-  }
-
   const newTag = STATUS_TAG_MAP[newStatus];
   if (!newTag) {
     return { success: true };
   }
 
-  try {
-    const getUrl = `https://${creds.shopDomain}/admin/api/${API_VERSION}/orders/${shopifyOrderId}.json?fields=id,tags`;
-    const getRes = await fetch(getUrl, {
-      headers: {
-        'X-Shopify-Access-Token': creds.accessToken,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!getRes.ok) {
-      const errText = await getRes.text();
-      console.error(`[ShopifyWriteBack] Failed to get order tags: ${getRes.status} ${errText}`);
-      return { success: false, error: `Failed to get order: ${getRes.status}` };
+  return enqueueWriteBack(`tags:${shopifyOrderId}`, async () => {
+    const creds = await getShopifyCredentials(merchantId);
+    if (!creds) {
+      return { success: false, error: 'Shopify not connected' };
     }
 
-    const orderData = await getRes.json();
-    const existingTags = (orderData.order?.tags || '')
-      .split(',')
-      .map((t: string) => t.trim())
-      .filter((t: string) => t.length > 0);
+    try {
+      const getUrl = `https://${creds.shopDomain}/admin/api/${API_VERSION}/orders/${shopifyOrderId}.json?fields=id,tags`;
+      const getRes = await fetch(getUrl, {
+        headers: {
+          'X-Shopify-Access-Token': creds.accessToken,
+          'Content-Type': 'application/json',
+        },
+      });
 
-    const filteredTags = existingTags.filter((t: string) => !ALL_SF_TAGS.includes(t));
-    filteredTags.push(newTag);
-    const updatedTags = filteredTags.join(', ');
+      if (!getRes.ok) {
+        const errText = await getRes.text();
+        console.error(`[ShopifyWriteBack] Failed to get order tags: ${getRes.status} ${errText}`);
+        return { success: false, error: `Failed to get order: ${getRes.status}` };
+      }
 
-    markWriteBack(shopifyOrderId);
+      const orderData = await getRes.json();
+      const existingTags = (orderData.order?.tags || '')
+        .split(',')
+        .map((t: string) => t.trim())
+        .filter((t: string) => t.length > 0);
 
-    const putUrl = `https://${creds.shopDomain}/admin/api/${API_VERSION}/orders/${shopifyOrderId}.json`;
-    const putRes = await fetch(putUrl, {
-      method: 'PUT',
-      headers: {
-        'X-Shopify-Access-Token': creds.accessToken,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        order: { id: shopifyOrderId, tags: updatedTags },
-      }),
-    });
+      const filteredTags = existingTags.filter((t: string) => !ALL_SF_TAGS.includes(t));
+      filteredTags.push(newTag);
+      const updatedTags = filteredTags.join(', ');
 
-    if (!putRes.ok) {
-      const errText = await putRes.text();
-      console.error(`[ShopifyWriteBack] Tag update failed: ${putRes.status} ${errText}`);
-      return { success: false, error: `Shopify API error ${putRes.status}: ${errText}` };
+      markWriteBack(shopifyOrderId);
+
+      await new Promise(r => setTimeout(r, 550));
+
+      const putUrl = `https://${creds.shopDomain}/admin/api/${API_VERSION}/orders/${shopifyOrderId}.json`;
+      const putRes = await fetch(putUrl, {
+        method: 'PUT',
+        headers: {
+          'X-Shopify-Access-Token': creds.accessToken,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          order: { id: shopifyOrderId, tags: updatedTags },
+        }),
+      });
+
+      if (!putRes.ok) {
+        const errText = await putRes.text();
+        console.error(`[ShopifyWriteBack] Tag update failed: ${putRes.status} ${errText}`);
+        return { success: false, error: `Shopify API error ${putRes.status}: ${errText}` };
+      }
+
+      console.log(`[ShopifyWriteBack] Tags updated for order ${shopifyOrderId}: ${updatedTags}`);
+      return { success: true };
+    } catch (error: any) {
+      console.error(`[ShopifyWriteBack] Tag update error:`, error);
+      return { success: false, error: error.message || 'Unknown error' };
     }
-
-    console.log(`[ShopifyWriteBack] Tags updated for order ${shopifyOrderId}: ${updatedTags}`);
-    return { success: true };
-  } catch (error: any) {
-    console.error(`[ShopifyWriteBack] Tag update error:`, error);
-    return { success: false, error: error.message || 'Unknown error' };
-  }
+  });
 }
