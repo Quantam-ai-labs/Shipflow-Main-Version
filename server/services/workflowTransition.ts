@@ -130,15 +130,18 @@ export async function transitionOrder(params: TransitionParams): Promise<Transit
     actorType,
   });
 
-  if (order.shopifyOrderId) {
+  if (order.shopifyOrderId && action !== 'courier_status_sync') {
     if (toStatus === "CANCELLED") {
       writeBackCancel(merchantId, order.shopifyOrderId, reason || "Cancelled in ShipFlow")
         .then(r => { if (!r.success) console.warn(`[ShopifyWriteBack] Cancel failed for ${orderId}: ${r.error}`); })
         .catch(e => console.error(`[ShopifyWriteBack] Cancel error:`, e));
     }
-    writeBackTags(merchantId, order.shopifyOrderId, toStatus)
-      .then(r => { if (!r.success) console.warn(`[ShopifyWriteBack] Tag sync failed for ${orderId}: ${r.error}`); })
-      .catch(e => console.error(`[ShopifyWriteBack] Tag sync error:`, e));
+    const ROBO_TAG_STATUSES = ['READY_TO_SHIP', 'PENDING', 'CANCELLED'];
+    if (ROBO_TAG_STATUSES.includes(toStatus)) {
+      writeBackTags(merchantId, order.shopifyOrderId, toStatus)
+        .then(r => { if (!r.success) console.warn(`[ShopifyWriteBack] Tag sync failed for ${orderId}: ${r.error}`); })
+        .catch(e => console.error(`[ShopifyWriteBack] Tag sync error:`, e));
+    }
   }
 
   return { success: true, order: updated };
@@ -240,8 +243,11 @@ export async function bulkTransitionOrders(params: {
             const r = await writeBackCancel(merchantId, o.shopifyOrderId!, reason || "Cancelled in ShipFlow");
             if (!r.success) console.warn(`[ShopifyWriteBack] Bulk cancel failed for ${o.id}: ${r.error}`);
           }
-          const r = await writeBackTags(merchantId, o.shopifyOrderId!, toStatus);
-          if (!r.success) console.warn(`[ShopifyWriteBack] Bulk tag sync failed for ${o.id}: ${r.error}`);
+          const ROBO_BULK_STATUSES = ['READY_TO_SHIP', 'PENDING', 'CANCELLED'];
+          if (ROBO_BULK_STATUSES.includes(toStatus)) {
+            const r = await writeBackTags(merchantId, o.shopifyOrderId!, toStatus);
+            if (!r.success) console.warn(`[ShopifyWriteBack] Bulk tag sync failed for ${o.id}: ${r.error}`);
+          }
         } catch (e) {
           console.error(`[ShopifyWriteBack] Bulk write-back error for ${o.id}:`, e);
         }
@@ -291,7 +297,8 @@ export async function revertOrder(merchantId: string, orderId: string, actorUser
     actorType: "user",
   });
 
-  if (order.shopifyOrderId) {
+  const ROBO_REVERT_STATUSES = ['READY_TO_SHIP', 'PENDING', 'CANCELLED'];
+  if (order.shopifyOrderId && ROBO_REVERT_STATUSES.includes(order.previousWorkflowStatus)) {
     writeBackTags(merchantId, order.shopifyOrderId, order.previousWorkflowStatus)
       .then(r => { if (!r.success) console.warn(`[ShopifyWriteBack] Revert tag sync failed for ${orderId}: ${r.error}`); })
       .catch(e => console.error(`[ShopifyWriteBack] Revert tag sync error:`, e));

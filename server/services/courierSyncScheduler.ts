@@ -94,20 +94,11 @@ async function resolveTargetWorkflowStage(merchantId: string, courierName: strin
   return DEFAULT_WORKFLOW_STAGE_MAP[normalizedStatus] || 'FULFILLED';
 }
 
-const COURIER_MANAGED_STAGES = new Set(['BOOKED', 'FULFILLED', 'DELIVERED', 'RETURN', 'CANCELLED']);
-
 async function autoTransitionOrder(merchantId: string, order: any, newShipmentStatus: string): Promise<string | null> {
   const currentWorkflow = order.workflowStatus;
-
-  if (!COURIER_MANAGED_STAGES.has(currentWorkflow)) {
-    return null;
-  }
-
   const targetWorkflow = await resolveTargetWorkflowStage(merchantId, order.courierName || '', newShipmentStatus);
 
   if (currentWorkflow === targetWorkflow) return null;
-
-  if (!COURIER_MANAGED_STAGES.has(targetWorkflow)) return null;
 
   const extraData: Record<string, any> = {};
 

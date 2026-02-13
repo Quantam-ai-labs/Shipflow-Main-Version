@@ -638,7 +638,7 @@ export class DatabaseStorage implements IStorage {
       eq(orders.merchantId, merchantId),
       sql`${orders.courierTracking} IS NOT NULL AND ${orders.courierTracking} != ''`,
       sql`${orders.courierName} IS NOT NULL AND ${orders.courierName} != ''`,
-      sql`${orders.workflowStatus} IN ('BOOKED', 'FULFILLED')`,
+      sql`${orders.workflowStatus} IN ('BOOKED', 'FULFILLED', 'DELIVERED', 'RETURN', 'CANCELLED')`,
     ];
 
     if (!forceRefresh) {

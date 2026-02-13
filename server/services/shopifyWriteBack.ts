@@ -168,17 +168,12 @@ export async function writeBackCancel(
 }
 
 const STATUS_TAG_MAP: Record<string, string> = {
-  'READY_TO_SHIP': 'SF-Confirmed',
-  'HOLD': 'SF-Hold',
-  'CANCELLED': 'SF-Cancelled',
-  'PENDING': 'SF-Pending',
-  'BOOKED': 'SF-Booked',
-  'FULFILLED': 'SF-Fulfilled',
-  'DELIVERED': 'SF-Delivered',
-  'RETURN': 'SF-Return',
+  'READY_TO_SHIP': 'Robo-Confirm',
+  'PENDING': 'Robo-Pending',
+  'CANCELLED': 'Robo-Cancel',
 };
 
-const ALL_SF_TAGS = Object.values(STATUS_TAG_MAP);
+const ALL_ROBO_TAGS = ['Robo-Confirm', 'Robo-Pending', 'Robo-Cancel'];
 
 export async function writeBackTags(
   merchantId: string,
@@ -217,7 +212,7 @@ export async function writeBackTags(
         .map((t: string) => t.trim())
         .filter((t: string) => t.length > 0);
 
-      const filteredTags = existingTags.filter((t: string) => !ALL_SF_TAGS.includes(t));
+      const filteredTags = existingTags.filter((t: string) => !ALL_ROBO_TAGS.includes(t));
       filteredTags.push(newTag);
       const updatedTags = filteredTags.join(', ');
 
