@@ -64,6 +64,65 @@ import { Link, useParams } from "wouter";
 import { format, formatDistanceToNow, isPast } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { DateRangePicker, dateRangeToParams } from "@/components/date-range-picker";
+import { useRef } from "react";
+
+function CityAutocomplete({ value, onChange, cities, hasWarning, testId }: {
+  value: string;
+  onChange: (val: string) => void;
+  cities: Array<{ id?: number; name: string }>;
+  hasWarning?: boolean;
+  testId?: string;
+}) {
+  const [query, setQuery] = useState(value || "");
+  const [open, setOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { setQuery(value || ""); }, [value]);
+
+  const filtered = useMemo(() => {
+    if (!query) return cities.slice(0, 30);
+    const q = query.toLowerCase();
+    return cities.filter(c => c.name.toLowerCase().includes(q)).slice(0, 30);
+  }, [query, cities]);
+
+  return (
+    <div ref={containerRef} className="relative">
+      <Input
+        ref={inputRef}
+        className={`h-6 text-xs px-1 min-w-[110px] ${hasWarning ? "border-orange-400 dark:border-orange-600" : ""}`}
+        value={query}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => { setTimeout(() => setOpen(false), 150); }}
+        placeholder="Type city..."
+        data-testid={testId}
+      />
+      {open && filtered.length > 0 && (
+        <div className="absolute z-50 top-full left-0 w-[200px] max-h-[180px] overflow-y-auto bg-popover border rounded-md shadow-lg mt-0.5">
+          {filtered.map((c) => (
+            <div
+              key={c.name}
+              className={`px-2 py-1 text-xs cursor-pointer hover-elevate ${c.name === value ? "bg-primary/10 font-medium" : ""}`}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                onChange(c.name);
+                setQuery(c.name);
+                setOpen(false);
+              }}
+              data-testid={`city-option-${c.name}`}
+            >
+              {c.name}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 const STAGE_TO_STATUS: Record<string, string> = {
   new: "NEW",
@@ -1258,7 +1317,7 @@ export default function Pipeline() {
       </Dialog>
       {/* Booking Confirmation Modal */}
       <Dialog open={bookingConfirmModal.open} onOpenChange={open => { if (!open) setBookingConfirmModal({ open: false, preview: null }); }}>
-        <DialogContent className="max-w-[95vw] w-[1200px]">
+        <DialogContent className="max-w-[95vw] w-[1400px]">
           <DialogHeader>
             <DialogTitle>Confirm Booking via {selectedCourier === "leopards" ? "Leopards" : "PostEx"}</DialogTitle>
             <DialogDescription>Review and edit order details before booking. All fields except Order ID are editable.</DialogDescription>
@@ -1301,8 +1360,9 @@ export default function Pipeline() {
                           <th className="px-1 py-2 text-left font-medium">Order</th>
                           <th className="px-1 py-2 text-left font-medium min-w-[100px]">Name</th>
                           <th className="px-1 py-2 text-left font-medium min-w-[100px]">Phone</th>
-                          <th className="px-1 py-2 text-left font-medium min-w-[140px]">Address</th>
-                          <th className="px-1 py-2 text-left font-medium min-w-[120px]">City</th>
+                          <th className="px-1 py-2 text-left font-medium min-w-[250px]">Address</th>
+                          <th className="px-1 py-2 text-left font-medium min-w-[80px]">Entered City</th>
+                          <th className="px-1 py-2 text-left font-medium min-w-[120px]">Courier City</th>
                           <th className="px-1 py-2 text-left font-medium min-w-[70px]">COD</th>
                           <th className="px-1 py-2 text-left font-medium w-16">Gram</th>
                           <th className="px-1 py-2 text-left font-medium min-w-[100px]">Description</th>
@@ -1360,35 +1420,26 @@ export default function Pipeline() {
                               </td>
                               <td className="px-1 py-1">
                                 <Input
-                                  className="h-6 text-xs px-1 min-w-[130px]"
+                                  className="h-6 text-xs px-1 min-w-[240px]"
                                   value={ovr?.address ?? order.address ?? ""}
                                   onChange={(e) => updateField(order.orderId, "address", e.target.value)}
                                   data-testid={`input-address-${order.orderId}`}
                                 />
                               </td>
                               <td className="px-1 py-1">
+                                <span className={`text-xs whitespace-nowrap ${!order.cityMatched ? "text-orange-500 font-medium" : "text-muted-foreground"}`} data-testid={`text-entered-city-${order.orderId}`}>
+                                  {order.city || "-"}
+                                </span>
+                              </td>
+                              <td className="px-1 py-1">
                                 {courierCities.length > 0 ? (
-                                  <div className="flex flex-col gap-0.5">
-                                    <Select
-                                      value={ovr?.city ?? order.city ?? ""}
-                                      onValueChange={(val) => updateField(order.orderId, "city", val)}
-                                    >
-                                      <SelectTrigger
-                                        className={`h-6 text-xs px-1 min-w-[110px] ${cityNotMatched && !(ovr?.city && courierCities.some(c => c.name === ovr.city)) ? "border-orange-400 dark:border-orange-600" : ""}`}
-                                        data-testid={`select-city-${order.orderId}`}
-                                      >
-                                        <SelectValue placeholder="Select city" />
-                                      </SelectTrigger>
-                                      <SelectContent className="max-h-[200px]">
-                                        {courierCities.map((c) => (
-                                          <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                    {cityNotMatched && !(ovr?.city && courierCities.some(c => c.name === ovr.city)) && (
-                                      <span className="text-[9px] text-orange-500 leading-tight">No match: "{order.city}"</span>
-                                    )}
-                                  </div>
+                                  <CityAutocomplete
+                                    value={ovr?.city ?? order.city ?? ""}
+                                    onChange={(val) => updateField(order.orderId, "city", val)}
+                                    cities={courierCities}
+                                    hasWarning={cityNotMatched && !(ovr?.city && courierCities.some(c => c.name === ovr.city))}
+                                    testId={`input-city-${order.orderId}`}
+                                  />
                                 ) : (
                                   <Input
                                     className="h-6 text-xs px-1 min-w-[90px]"

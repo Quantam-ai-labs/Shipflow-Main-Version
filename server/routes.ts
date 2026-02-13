@@ -3381,6 +3381,37 @@ export async function registerRoutes(
             actorType: "user",
             reason: `Booked with ${courier === "leopards" ? "Leopards" : "PostEx"} - ${br.trackingNumber}`,
           });
+
+          try {
+            const orderForFulfill = fetchedOrders.find(o => o.id === br.orderId);
+            if (orderForFulfill?.shopifyOrderId && !orderForFulfill.shopifyFulfillmentId) {
+              const shopifyStore = await storage.getShopifyStore(merchantId);
+              if (shopifyStore?.accessToken && shopifyStore?.shopDomain) {
+                const { decryptToken } = await import('./services/encryption');
+                const { createShopifyFulfillment } = await import('./services/shopify');
+                const decryptedToken = decryptToken(shopifyStore.accessToken);
+                const courierDisplayName = courier === "leopards" ? "Leopards Courier" : "PostEx";
+                const fulfillResult = await createShopifyFulfillment(
+                  shopifyStore.shopDomain,
+                  decryptedToken,
+                  orderForFulfill.shopifyOrderId,
+                  br.trackingNumber!,
+                  courierDisplayName,
+                );
+                if (fulfillResult.success && fulfillResult.fulfillmentId) {
+                  await storage.updateOrder(merchantId, br.orderId, {
+                    shopifyFulfillmentId: fulfillResult.fulfillmentId,
+                    fulfillmentStatus: "fulfilled",
+                  });
+                  console.log(`[Booking] Shopify fulfillment created for ${orderForFulfill.orderNumber}: ${fulfillResult.fulfillmentId}`);
+                } else {
+                  console.warn(`[Booking] Shopify fulfillment failed for ${orderForFulfill.orderNumber}: ${fulfillResult.error}`);
+                }
+              }
+            }
+          } catch (fulfillErr: any) {
+            console.warn(`[Booking] Shopify fulfillment error for order ${br.orderId}:`, fulfillErr.message);
+          }
         } else {
           await storage.updateOrder(merchantId, br.orderId, {
             bookingStatus: "FAILED",
