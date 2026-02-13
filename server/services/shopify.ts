@@ -489,6 +489,7 @@ export class ShopifyService {
           fulfillmentStatus: transformedOrder.fulfillmentStatus,
           orderStatus: transformedOrder.orderStatus,
           lineItems: transformedOrder.lineItems,
+          itemSummary: transformedOrder.itemSummary,
           totalQuantity: transformedOrder.totalQuantity,
           tags: transformedOrder.tags,
           notes: transformedOrder.notes,
@@ -602,6 +603,7 @@ export class ShopifyService {
     orderStatus: string;
     shipmentStatus: string;
     lineItems: Array<{ name: string; quantity: number; price: number; sku?: string; variantTitle?: string }>;
+    itemSummary: string;
     tags: string[];
     notes: string | null;
     orderDate: Date;
@@ -734,6 +736,10 @@ export class ShopifyService {
 
     const totalQuantity = shopifyOrder.line_items.reduce((sum, item) => sum + item.quantity, 0);
 
+    const itemSummary = shopifyOrder.line_items
+      .map(item => `${item.title} x ${item.quantity}`)
+      .join(' || ');
+
     const isCod = shopifyOrder.financial_status === 'pending' || 
                   shopifyOrder.tags.toLowerCase().includes('cod');
 
@@ -783,6 +789,7 @@ export class ShopifyService {
       courierName,
       courierTracking,
       totalQuantity,
+      itemSummary,
       paymentStatus,
       fulfillmentStatus,
       orderStatus,
