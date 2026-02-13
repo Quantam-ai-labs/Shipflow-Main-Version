@@ -94,9 +94,69 @@ async function resolveTargetWorkflowStage(merchantId: string, courierName: strin
   return DEFAULT_WORKFLOW_STAGE_MAP[normalizedStatus] || 'FULFILLED';
 }
 
+async function cancelShopifyFulfillmentForOrder(merchantId: string, order: any): Promise<void> {
+  try {
+    if (!order.shopifyFulfillmentId) return;
+
+    const shopifyStore = await storage.getShopifyStore(merchantId);
+    if (!shopifyStore?.accessToken || !shopifyStore?.shopDomain) return;
+
+    const { decryptToken } = await import('./encryption');
+    const { cancelShopifyFulfillment } = await import('./shopify');
+    const decryptedToken = decryptToken(shopifyStore.accessToken);
+
+    const result = await cancelShopifyFulfillment(
+      shopifyStore.shopDomain,
+      decryptedToken,
+      order.shopifyFulfillmentId,
+    );
+
+    if (result.success) {
+      console.log(`[CourierSync] Shopify fulfillment cancelled for order ${order.orderNumber}: ${order.shopifyFulfillmentId}`);
+    } else {
+      console.warn(`[CourierSync] Shopify fulfillment cancel failed for order ${order.orderNumber}: ${result.error}`);
+    }
+  } catch (err: any) {
+    console.warn(`[CourierSync] Shopify fulfillment cancel error for order ${order.orderNumber}:`, err.message);
+  }
+}
+
 async function autoTransitionOrder(merchantId: string, order: any, newShipmentStatus: string): Promise<string | null> {
   const currentWorkflow = order.workflowStatus;
-  const targetWorkflow = await resolveTargetWorkflowStage(merchantId, order.courierName || '', newShipmentStatus);
+  let targetWorkflow = await resolveTargetWorkflowStage(merchantId, order.courierName || '', newShipmentStatus);
+
+  if (currentWorkflow === 'BOOKED' && newShipmentStatus === 'CANCELLED') {
+    const result = await transitionOrder({
+      merchantId,
+      orderId: order.id,
+      toStatus: 'READY_TO_SHIP',
+      action: 'courier_status_sync',
+      actorType: 'system',
+      reason: `Courier booking cancelled — auto-reverted to Ready to Ship (was ${currentWorkflow})`,
+    });
+
+    if (result.success) {
+      await cancelShopifyFulfillmentForOrder(merchantId, order);
+
+      await storage.updateOrderWorkflow(merchantId, order.id, {
+        courierName: null,
+        courierTracking: null,
+        courierSlipUrl: null,
+        bookingStatus: null,
+        bookingError: null,
+        bookedAt: null,
+        shipmentStatus: 'Unfulfilled',
+        courierRawStatus: null,
+        shopifyFulfillmentId: null,
+      });
+
+      console.log(`[CourierSync] Order ${order.orderNumber} courier-cancelled: BOOKED -> READY_TO_SHIP (courier data cleared, fulfillment cancelled)`);
+      return 'READY_TO_SHIP';
+    }
+
+    console.warn(`[CourierSync] Failed to revert order ${order.orderNumber} from BOOKED -> READY_TO_SHIP after courier cancellation`);
+    return null;
+  }
 
   if (currentWorkflow === targetWorkflow) return null;
 

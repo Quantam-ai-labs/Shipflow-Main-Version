@@ -718,9 +718,11 @@ export async function registerRoutes(
       if (order.shopifyFulfillmentId && order.shopifyOrderId) {
         const store = await storage.getShopifyStore(merchantId);
         if (store?.isConnected && store?.accessToken && store?.shopDomain) {
+          let token = store.accessToken;
+          try { token = decryptToken(store.accessToken); } catch {}
           fulfillmentCancelResult = await cancelShopifyFulfillment(
             store.shopDomain,
-            store.accessToken,
+            token,
             order.shopifyFulfillmentId,
           );
           console.log(`[Cancel] Shopify fulfillment cancel result for ${order.shopifyFulfillmentId}:`, fulfillmentCancelResult);
