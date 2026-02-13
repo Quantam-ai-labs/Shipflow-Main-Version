@@ -3,7 +3,7 @@ import express from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { shipmentPrintRecords, users, merchants, adminActionLogs, teamMembers, teamInvites, orders, shipments as shipmentsTable } from "@shared/schema";
+import { shipmentPrintRecords, users, merchants, adminActionLogs, teamMembers, teamInvites, orders } from "@shared/schema";
 import { and, eq, inArray, ilike, or, sql, desc, count, isNotNull } from "drizzle-orm";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { z } from "zod";

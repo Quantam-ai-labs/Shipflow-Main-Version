@@ -54,6 +54,7 @@ import {
   Download,
   CreditCard,
   Plus,
+  FileText,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -417,6 +418,23 @@ export default function Pipeline() {
     },
   });
 
+  const loadsheetMutation = useMutation({
+    mutationFn: async (orderIds: string[]) => {
+      const res = await apiRequest("POST", "/api/orders/generate-loadsheet", { orderIds });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      if (data.pdfUrl) {
+        window.open(data.pdfUrl, "_blank");
+      }
+      toast({ title: "Loadsheet generated", description: `Loadsheet created for ${data.totalOrders} order(s)` });
+      setSelectedIds(new Set());
+    },
+    onError: (err: any) => {
+      toast({ title: "Loadsheet failed", description: err.message || "Failed to generate loadsheet", variant: "destructive" });
+    },
+  });
+
   const cancelShopifyMutation = useMutation({
     mutationFn: async (orderId: string) => {
       const res = await apiRequest("POST", `/api/orders/${orderId}/cancel-shopify`, { reason: "other" });
@@ -731,17 +749,28 @@ export default function Pipeline() {
           )}
 
           {activeTab === "BOOKED" && selectedIds.size > 0 && (
-            <Button
-              size="sm"
-              variant="destructive"
-              onClick={() => {
-                Array.from(selectedIds).forEach(id => cancelBookingMutation.mutate(id));
-              }}
-              disabled={cancelBookingMutation.isPending}
-              data-testid="bulk-cancel-booking"
-            >
-              <Undo2 className="w-3.5 h-3.5 mr-1.5" />Cancel Booking
-            </Button>
+            <>
+              <Button
+                size="sm"
+                onClick={() => loadsheetMutation.mutate(Array.from(selectedIds))}
+                disabled={loadsheetMutation.isPending}
+                data-testid="bulk-generate-loadsheet"
+              >
+                {loadsheetMutation.isPending ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <FileText className="w-3.5 h-3.5 mr-1.5" />}
+                Generate Loadsheet
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => {
+                  Array.from(selectedIds).forEach(id => cancelBookingMutation.mutate(id));
+                }}
+                disabled={cancelBookingMutation.isPending}
+                data-testid="bulk-cancel-booking"
+              >
+                <Undo2 className="w-3.5 h-3.5 mr-1.5" />Cancel Booking
+              </Button>
+            </>
           )}
 
           {activeTab === "READY_TO_SHIP" && (
