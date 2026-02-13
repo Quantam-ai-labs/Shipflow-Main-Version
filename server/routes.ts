@@ -2895,7 +2895,7 @@ export async function registerRoutes(
       
       const creds = await getCourierCredentials(merchantId, courier);
       const credObj = creds ? { apiKey: creds.apiKey || undefined, apiSecret: creds.apiSecret || undefined } : undefined;
-      const result = await trackShipment(courier, trackingNumber, credObj);
+      const result = await trackShipment(courier, trackingNumber, credObj, undefined, undefined, merchantId);
       
       if (!result) {
         return res.status(400).json({ message: "Unknown courier" });
@@ -2925,7 +2925,7 @@ export async function registerRoutes(
       const { trackShipment } = await import('./services/couriers');
       const creds = await getCourierCredentials(merchantId, order.courierName);
       const credObj = creds ? { apiKey: creds.apiKey || undefined, apiSecret: creds.apiSecret || undefined } : undefined;
-      const result = await trackShipment(order.courierName, order.courierTracking, credObj, order.shipmentStatus, order.workflowStatus);
+      const result = await trackShipment(order.courierName, order.courierTracking, credObj, order.shipmentStatus, order.workflowStatus, merchantId);
 
       if (!result || !result.success) {
         return res.json({
@@ -4038,6 +4038,134 @@ export async function registerRoutes(
     "POSTEX_CONNECTED",
     "COMPLETED",
   ];
+
+  // ============================================
+  // COURIER STATUS MAPPINGS
+  // ============================================
+
+  app.get("/api/courier-status-mappings", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const courierName = req.query.courier as string | undefined;
+      const mappings = await storage.getCourierStatusMappings(merchantId, courierName);
+
+      if (mappings.length === 0) {
+        const seeded = await storage.seedDefaultMappings(merchantId);
+        const freshMappings = await storage.getCourierStatusMappings(merchantId, courierName);
+        return res.json({ mappings: freshMappings, seeded: true, ...seeded });
+      }
+
+      res.json({ mappings });
+    } catch (error) {
+      console.error("Error fetching courier status mappings:", error);
+      res.status(500).json({ message: "Failed to fetch courier status mappings" });
+    }
+  });
+
+  app.post("/api/courier-status-mappings", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const schema = z.object({
+        courierName: z.string().min(1),
+        courierStatus: z.string().min(1),
+        normalizedStatus: z.string().min(1),
+      });
+
+      const parsed = schema.parse(req.body);
+      const mapping = await storage.upsertCourierStatusMapping({
+        merchantId,
+        courierName: parsed.courierName,
+        courierStatus: parsed.courierStatus.toLowerCase().trim(),
+        normalizedStatus: parsed.normalizedStatus,
+        isCustom: true,
+      });
+
+      res.json({ mapping });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid mapping data", errors: error.errors });
+      }
+      console.error("Error creating courier status mapping:", error);
+      res.status(500).json({ message: "Failed to create courier status mapping" });
+    }
+  });
+
+  app.put("/api/courier-status-mappings/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const schema = z.object({
+        normalizedStatus: z.string().min(1),
+      });
+
+      const parsed = schema.parse(req.body);
+      const existing = await storage.getCourierStatusMappings(merchantId);
+      const target = existing.find(m => m.id === req.params.id);
+      if (!target) return res.status(404).json({ message: "Mapping not found" });
+
+      const mapping = await storage.upsertCourierStatusMapping({
+        merchantId,
+        courierName: target.courierName,
+        courierStatus: target.courierStatus,
+        normalizedStatus: parsed.normalizedStatus,
+        isCustom: true,
+      });
+
+      res.json({ mapping });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid mapping data", errors: error.errors });
+      }
+      console.error("Error updating courier status mapping:", error);
+      res.status(500).json({ message: "Failed to update courier status mapping" });
+    }
+  });
+
+  app.delete("/api/courier-status-mappings/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      await storage.deleteCourierStatusMapping(merchantId, req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting courier status mapping:", error);
+      res.status(500).json({ message: "Failed to delete courier status mapping" });
+    }
+  });
+
+  app.post("/api/courier-status-mappings/seed", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const result = await storage.seedDefaultMappings(merchantId);
+      res.json(result);
+    } catch (error) {
+      console.error("Error seeding default mappings:", error);
+      res.status(500).json({ message: "Failed to seed default mappings" });
+    }
+  });
+
+  app.post("/api/courier-status-mappings/reset", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const courierName = req.body.courierName as string | undefined;
+      await storage.resetCourierStatusMappings(merchantId, courierName);
+      const result = await storage.seedDefaultMappings(merchantId);
+      res.json({ ...result, reset: true });
+    } catch (error) {
+      console.error("Error resetting courier status mappings:", error);
+      res.status(500).json({ message: "Failed to reset courier status mappings" });
+    }
+  });
 
   app.post("/api/onboarding/advance-step", isAuthenticated, async (req, res) => {
     try {

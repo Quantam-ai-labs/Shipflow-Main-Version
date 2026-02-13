@@ -1,6 +1,39 @@
 import { leopardsService, type TrackingResult as LeopardsTrackingResult } from './leopards';
 import { postexService, type TrackingResult as PostExTrackingResult } from './postex';
 import { normalizeStatus, detectCourierType, isFinalStatus, type UniversalStatus } from '../statusNormalization';
+import { db } from '../../db';
+import { courierStatusMappings } from '@shared/schema';
+import { eq, and } from 'drizzle-orm';
+
+const customMappingsCache = new Map<string, { data: Record<string, string>; expiry: number }>();
+const CACHE_TTL = 60_000;
+
+async function getCustomMappings(merchantId: string, courierType: string): Promise<Record<string, string> | undefined> {
+  const cacheKey = `${merchantId}:${courierType}`;
+  const cached = customMappingsCache.get(cacheKey);
+  if (cached && cached.expiry > Date.now()) {
+    return Object.keys(cached.data).length > 0 ? cached.data : undefined;
+  }
+
+  try {
+    const rows = await db.select().from(courierStatusMappings)
+      .where(and(
+        eq(courierStatusMappings.merchantId, merchantId),
+        eq(courierStatusMappings.courierName, courierType),
+        eq(courierStatusMappings.isCustom, true),
+      ));
+
+    const map: Record<string, string> = {};
+    for (const row of rows) {
+      map[row.courierStatus.toLowerCase().trim()] = row.normalizedStatus;
+    }
+    customMappingsCache.set(cacheKey, { data: map, expiry: Date.now() + CACHE_TTL });
+    return Object.keys(map).length > 0 ? map : undefined;
+  } catch (error) {
+    console.error('[Courier] Error fetching custom mappings:', error);
+    return undefined;
+  }
+}
 
 export type TrackingResult = LeopardsTrackingResult | PostExTrackingResult;
 
@@ -35,6 +68,7 @@ export async function trackShipment(
   credentials?: CourierCredentials,
   currentStatus?: string | null,
   workflowStatus?: string | null,
+  merchantId?: string,
 ): Promise<NormalizedTrackingResult | null> {
   const name = courierName.toLowerCase();
   let result: TrackingResult | null = null;
@@ -66,7 +100,8 @@ export async function trackShipment(
   }
 
   const rawCourierStatus = result.courierStatus || result.status;
-  const { normalizedStatus, mapped } = normalizeStatus(rawCourierStatus, courierType, currentStatus, result.events, workflowStatus);
+  const customMappings = merchantId ? await getCustomMappings(merchantId, courierType) : undefined;
+  const { normalizedStatus, mapped } = normalizeStatus(rawCourierStatus, courierType, currentStatus, result.events, workflowStatus, customMappings);
 
   return {
     ...result,

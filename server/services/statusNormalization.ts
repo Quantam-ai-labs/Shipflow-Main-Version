@@ -19,7 +19,7 @@ export type UniversalStatus = typeof UNIVERSAL_STATUSES[number];
 
 const FINAL_STATUSES: UniversalStatus[] = ['DELIVERED', 'RETURNED_TO_SHIPPER', 'CANCELLED'];
 
-const POSTEX_STATUS_MAP: Record<string, UniversalStatus> = {
+export const POSTEX_STATUS_MAP: Record<string, UniversalStatus> = {
   'unbooked': 'BOOKED',
   'booked': 'BOOKED',
   'consignment booked': 'BOOKED',
@@ -67,7 +67,7 @@ const POSTEX_STATUS_MAP: Record<string, UniversalStatus> = {
   'order cancelled': 'CANCELLED',
 };
 
-const LEOPARDS_STATUS_MAP: Record<string, UniversalStatus> = {
+export const LEOPARDS_STATUS_MAP: Record<string, UniversalStatus> = {
   'booking created': 'BOOKED',
   'booked': 'BOOKED',
   'shipment created': 'BOOKED',
@@ -178,13 +178,22 @@ export function normalizeStatus(
   currentStatus?: string | null,
   events?: Array<{ status: string; date?: string; description?: string }>,
   workflowStatus?: string | null,
+  customMappings?: Record<string, string>,
 ): { normalizedStatus: UniversalStatus; mapped: boolean } {
   if (currentStatus && FINAL_STATUSES.includes(currentStatus as UniversalStatus)) {
     return { normalizedStatus: currentStatus as UniversalStatus, mapped: true };
   }
 
-  const map = getCourierMap(courier);
   const key = rawStatus.toLowerCase().trim();
+
+  if (customMappings && customMappings[key]) {
+    const customResult = customMappings[key] as UniversalStatus;
+    if (UNIVERSAL_STATUSES.includes(customResult)) {
+      return { normalizedStatus: customResult, mapped: true };
+    }
+  }
+
+  const map = getCourierMap(courier);
 
   const applyRegressionGuard = (newStatus: UniversalStatus): UniversalStatus => {
     if (newStatus === 'BOOKED' && currentStatus && currentStatus !== 'BOOKED' && POST_ORIGIN_STATUSES.includes(currentStatus as UniversalStatus)) {

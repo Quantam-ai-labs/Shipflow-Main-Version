@@ -22,6 +22,8 @@ import {
   type ShopifyWebhookEvent, type InsertShopifyWebhookEvent,
   type CancellationJob, type InsertCancellationJob,
   type CancellationJobItem, type InsertCancellationJobItem,
+  courierStatusMappings,
+  type CourierStatusMapping, type InsertCourierStatusMapping,
   users,
 } from "@shared/schema";
 import { db } from "./db";
@@ -157,6 +159,13 @@ export interface IStorage {
   createCancellationJobItem(item: InsertCancellationJobItem): Promise<CancellationJobItem>;
   getCancellationJobItems(jobId: string): Promise<CancellationJobItem[]>;
   updateCancellationJobItem(id: string, data: Partial<CancellationJobItem>): Promise<CancellationJobItem | undefined>;
+
+  // Courier Status Mappings
+  getCourierStatusMappings(merchantId: string, courierName?: string): Promise<CourierStatusMapping[]>;
+  upsertCourierStatusMapping(mapping: InsertCourierStatusMapping): Promise<CourierStatusMapping>;
+  deleteCourierStatusMapping(merchantId: string, id: string): Promise<void>;
+  resetCourierStatusMappings(merchantId: string, courierName?: string): Promise<void>;
+  seedDefaultMappings(merchantId: string): Promise<{ created: number; existing: number }>;
 
   // Seed
   seedDemoData(): Promise<void>;
@@ -1422,6 +1431,82 @@ export class DatabaseStorage implements IStorage {
   async updateCancellationJobItem(id: string, data: Partial<CancellationJobItem>): Promise<CancellationJobItem | undefined> {
     const [updated] = await db.update(cancellationJobItems).set(data).where(eq(cancellationJobItems.id, id)).returning();
     return updated;
+  }
+
+  async getCourierStatusMappings(merchantId: string, courierName?: string): Promise<CourierStatusMapping[]> {
+    const conditions = [eq(courierStatusMappings.merchantId, merchantId)];
+    if (courierName) {
+      conditions.push(eq(courierStatusMappings.courierName, courierName));
+    }
+    return db.select().from(courierStatusMappings)
+      .where(and(...conditions))
+      .orderBy(courierStatusMappings.courierName, courierStatusMappings.courierStatus);
+  }
+
+  async upsertCourierStatusMapping(mapping: InsertCourierStatusMapping): Promise<CourierStatusMapping> {
+    const [result] = await db.insert(courierStatusMappings)
+      .values({ ...mapping, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: [courierStatusMappings.merchantId, courierStatusMappings.courierName, courierStatusMappings.courierStatus],
+        set: {
+          normalizedStatus: mapping.normalizedStatus,
+          isCustom: mapping.isCustom ?? true,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return result;
+  }
+
+  async deleteCourierStatusMapping(merchantId: string, id: string): Promise<void> {
+    await db.delete(courierStatusMappings)
+      .where(and(eq(courierStatusMappings.id, id), eq(courierStatusMappings.merchantId, merchantId)));
+  }
+
+  async resetCourierStatusMappings(merchantId: string, courierName?: string): Promise<void> {
+    const conditions = [eq(courierStatusMappings.merchantId, merchantId)];
+    if (courierName) {
+      conditions.push(eq(courierStatusMappings.courierName, courierName));
+    }
+    await db.delete(courierStatusMappings).where(and(...conditions));
+  }
+
+  async seedDefaultMappings(merchantId: string): Promise<{ created: number; existing: number }> {
+    const { LEOPARDS_STATUS_MAP, POSTEX_STATUS_MAP } = await import('./services/statusNormalization');
+
+    const allDefaults: { courierName: string; courierStatus: string; normalizedStatus: string }[] = [];
+
+    for (const [status, normalized] of Object.entries(LEOPARDS_STATUS_MAP)) {
+      allDefaults.push({ courierName: 'leopards', courierStatus: status, normalizedStatus: normalized });
+    }
+    for (const [status, normalized] of Object.entries(POSTEX_STATUS_MAP)) {
+      allDefaults.push({ courierName: 'postex', courierStatus: status, normalizedStatus: normalized });
+    }
+
+    let created = 0;
+    let existing = 0;
+
+    for (const def of allDefaults) {
+      try {
+        await db.insert(courierStatusMappings)
+          .values({
+            merchantId,
+            courierName: def.courierName,
+            courierStatus: def.courierStatus,
+            normalizedStatus: def.normalizedStatus,
+            isCustom: false,
+          })
+          .onConflictDoNothing();
+        created++;
+      } catch {
+        existing++;
+      }
+    }
+
+    const actualCount = await db.select({ count: count() }).from(courierStatusMappings)
+      .where(eq(courierStatusMappings.merchantId, merchantId));
+
+    return { created: actualCount[0]?.count || 0, existing };
   }
 
   async seedDemoData(): Promise<void> {

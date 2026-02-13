@@ -783,3 +783,29 @@ export const insertCancellationJobItemSchema = createInsertSchema(cancellationJo
 });
 export type InsertCancellationJobItem = z.infer<typeof insertCancellationJobItemSchema>;
 export type CancellationJobItem = typeof cancellationJobItems.$inferSelect;
+
+// ============================================
+// COURIER STATUS MAPPINGS (Per-merchant customizable)
+// ============================================
+export const courierStatusMappings = pgTable("courier_status_mappings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  courierName: varchar("courier_name", { length: 50 }).notNull(),
+  courierStatus: varchar("courier_status", { length: 255 }).notNull(),
+  normalizedStatus: varchar("normalized_status", { length: 50 }).notNull(),
+  isCustom: boolean("is_custom").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_csm_merchant").on(table.merchantId),
+  index("idx_csm_merchant_courier").on(table.merchantId, table.courierName),
+  uniqueIndex("idx_csm_unique_mapping").on(table.merchantId, table.courierName, table.courierStatus),
+]);
+
+export const insertCourierStatusMappingSchema = createInsertSchema(courierStatusMappings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertCourierStatusMapping = z.infer<typeof insertCourierStatusMappingSchema>;
+export type CourierStatusMapping = typeof courierStatusMappings.$inferSelect;

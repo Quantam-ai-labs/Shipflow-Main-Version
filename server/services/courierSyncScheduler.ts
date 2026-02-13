@@ -246,7 +246,7 @@ async function syncMerchantCourierStatuses(merchantId: string): Promise<CourierS
       batch.map(async (order) => {
         try {
           const credObj: CourierCredentials = { apiKey: creds.apiKey || undefined, apiSecret: creds.apiSecret || undefined };
-          const result = await trackShipment(order.courierName!, order.courierTracking!, credObj, order.shipmentStatus, order.workflowStatus);
+          const result = await trackShipment(order.courierName!, order.courierTracking!, credObj, order.shipmentStatus, order.workflowStatus, merchantId);
           if (result && result.success) {
             await storage.updateOrder(merchantId, order.id, {
               shipmentStatus: result.normalizedStatus,
@@ -289,7 +289,7 @@ async function syncMerchantCourierStatuses(merchantId: string): Promise<CourierS
 
     try {
       const credObj: CourierCredentials = { apiKey: creds.apiKey || undefined, apiSecret: creds.apiSecret || undefined };
-      const result = await trackShipment(order.courierName!, order.courierTracking!, credObj, order.shipmentStatus, order.workflowStatus);
+      const result = await trackShipment(order.courierName!, order.courierTracking!, credObj, order.shipmentStatus, order.workflowStatus, merchantId);
       if (result && result.success) {
         await storage.updateOrder(merchantId, order.id, {
           shipmentStatus: result.normalizedStatus,
