@@ -987,8 +987,8 @@ export default function Pipeline() {
                   </>
                 )}
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Amount (PKR)</th>
-                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground hidden lg:table-cell">Items</th>
-                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground hidden md:table-cell" data-testid="header-tags">Tags</th>
+                <th className="px-3 py-2.5 text-center font-medium text-muted-foreground hidden lg:table-cell w-[40px]">Items</th>
+                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground hidden md:table-cell max-w-[100px]" data-testid="header-tags">Tags</th>
                 {activeTab === "PENDING" && (
                   <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Reason</th>
                 )}
@@ -1081,12 +1081,12 @@ export default function Pipeline() {
                       </div>
                     ) : (
                       <div>
-                        <div className="font-medium text-sm truncate max-w-[150px]">{order.customerName}</div>
+                        <div className="font-medium text-sm truncate max-w-[120px]" title={order.customerName}>{order.customerName && order.customerName.length > 15 ? order.customerName.slice(0, 13) + ".." : order.customerName}</div>
                         <div className="text-xs text-muted-foreground">{order.customerPhone || "No phone"}</div>
                       </div>
                     )}
                   </td>
-                  <td className="px-3 py-1.5 hidden md:table-cell text-sm">{order.city || "-"}</td>
+                  <td className="px-3 py-1.5 hidden md:table-cell text-sm truncate max-w-[100px]" title={order.city || ""}>{order.city && order.city.length > 15 ? order.city.slice(0, 13) + ".." : (order.city || "-")}</td>
                   {(activeTab === "NEW" || activeTab === "PENDING") && (
                     <>
                       <td className="px-3 py-1.5 max-w-[220px]" data-testid={`cell-address-${order.id}`}>
@@ -1094,9 +1094,11 @@ export default function Pipeline() {
                           {order.shippingAddress || "-"}
                         </div>
                       </td>
-                      <td className="px-3 py-1.5 max-w-[200px]" data-testid={`cell-products-${order.id}`}>
-                        <div className="text-xs text-muted-foreground whitespace-normal leading-tight">
-                          {order.itemSummary || "-"}
+                      <td className="px-3 py-1.5 max-w-[180px]" data-testid={`cell-products-${order.id}`}>
+                        <div className="text-xs text-muted-foreground leading-tight">
+                          {order.itemSummary ? order.itemSummary.split(' || ').map((item, i) => (
+                            <div key={i} className="truncate">{item}</div>
+                          )) : "-"}
                         </div>
                       </td>
                     </>
@@ -1113,13 +1115,13 @@ export default function Pipeline() {
                       <div className="text-xs text-muted-foreground capitalize">{order.paymentMethod}</div>
                     )}
                   </td>
-                  <td className="px-3 py-1.5 hidden lg:table-cell max-w-[150px] truncate">
+                  <td className="px-3 py-1.5 hidden lg:table-cell text-center w-[40px]">
                     <span className="text-sm font-medium">{order.totalQuantity || 1}</span>
                   </td>
-                  <td className="px-3 py-1.5 hidden md:table-cell" data-testid={`cell-tags-${order.id}`}>
-                    <div className="flex flex-wrap gap-1">
+                  <td className="px-3 py-1.5 hidden md:table-cell max-w-[100px]" data-testid={`cell-tags-${order.id}`}>
+                    <div className="flex flex-wrap gap-0.5">
                       {getRoboTags(order.tags as string[]).map(tag => (
-                        <Badge key={tag} className={`text-xs ${ROBO_TAG_CONFIG[tag]?.className}`} data-testid={`badge-tag-${tag}-${order.id}`}>
+                        <Badge key={tag} className={`text-[10px] px-1.5 py-0 leading-4 ${ROBO_TAG_CONFIG[tag]?.className}`} data-testid={`badge-tag-${tag}-${order.id}`}>
                           {ROBO_TAG_CONFIG[tag]?.label}
                         </Badge>
                       ))}
