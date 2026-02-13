@@ -80,7 +80,7 @@ export class LeopardsService {
       }
 
       const packet = data.packet_list[0];
-      const rawStatus = packet.booked_packet_status;
+      const headerStatus = packet.booked_packet_status;
 
       const events = (packet.Tracking_Detail || []).map(detail => ({
         status: detail.Status,
@@ -88,13 +88,16 @@ export class LeopardsService {
         description: detail.Reason || detail.Status,
       }));
 
+      const latestEvent = events.length > 0 ? events[events.length - 1] : null;
+      const rawStatus = latestEvent ? latestEvent.status : headerStatus;
+
       return {
         success: true,
         trackingNumber: packet.track_number,
         status: rawStatus,
         statusDescription: packet.status_remarks || rawStatus,
         courierStatus: rawStatus,
-        lastUpdate: packet.activity_date || null,
+        lastUpdate: latestEvent?.date || packet.activity_date || null,
         events,
       };
     } catch (error) {
@@ -199,19 +202,21 @@ export class LeopardsService {
 
         if (data.status === 1 && data.packet_list) {
           for (const packet of data.packet_list) {
-            const rawStatus = packet.booked_packet_status;
+            const headerStatus = packet.booked_packet_status;
             const events = (packet.Tracking_Detail || []).map(detail => ({
               status: detail.Status,
               date: detail.Activity_Date,
               description: detail.Reason || detail.Status,
             }));
+            const latestEvent = events.length > 0 ? events[events.length - 1] : null;
+            const rawStatus = latestEvent ? latestEvent.status : headerStatus;
             results.set(packet.track_number, {
               success: true,
               trackingNumber: packet.track_number,
               status: rawStatus,
               statusDescription: packet.status_remarks || rawStatus,
               courierStatus: rawStatus,
-              lastUpdate: packet.activity_date || null,
+              lastUpdate: latestEvent?.date || packet.activity_date || null,
               events,
             });
           }

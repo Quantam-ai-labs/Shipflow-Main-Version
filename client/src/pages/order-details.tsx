@@ -80,26 +80,30 @@ function getWorkflowBadge(workflowStatus: string | null) {
   return <Badge className={c.bg} data-testid="badge-workflow-stage">{c.label}</Badge>;
 }
 
-function getShipmentStatusBadge(status: string | null) {
-  if (!status || status === "Unfulfilled" || status === "pending") return null;
-  const statusConfig: Record<string, { bg: string; label: string }> = {
-    BOOKED: { bg: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300", label: "Booked" },
-    ARRIVED_AT_ORIGIN: { bg: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300", label: "At Origin" },
-    PICKED_UP: { bg: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300", label: "Picked Up" },
-    IN_TRANSIT: { bg: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300", label: "In Transit" },
-    ARRIVED_AT_DESTINATION: { bg: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300", label: "At Destination" },
-    OUT_FOR_DELIVERY: { bg: "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300", label: "Out for Delivery" },
-    DELIVERY_ATTEMPTED: { bg: "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300", label: "Delivery Attempted" },
-    DELIVERED: { bg: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300", label: "Delivered" },
-    DELIVERY_FAILED: { bg: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300", label: "Failed" },
-    READY_FOR_RETURN: { bg: "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300", label: "Ready for Return" },
-    RETURN_IN_TRANSIT: { bg: "bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300", label: "Return in Transit" },
-    RETURNED_TO_SHIPPER: { bg: "bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300", label: "Returned" },
-    CANCELLED: { bg: "bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-400", label: "Cancelled" },
+function getShipmentStatusColor(status: string): string {
+  const colorMap: Record<string, string> = {
+    BOOKED: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
+    ARRIVED_AT_ORIGIN: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300",
+    PICKED_UP: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300",
+    IN_TRANSIT: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
+    ARRIVED_AT_DESTINATION: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
+    OUT_FOR_DELIVERY: "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300",
+    DELIVERY_ATTEMPTED: "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300",
+    DELIVERED: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
+    DELIVERY_FAILED: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
+    READY_FOR_RETURN: "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300",
+    RETURN_IN_TRANSIT: "bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300",
+    RETURNED_TO_SHIPPER: "bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300",
+    CANCELLED: "bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-400",
   };
+  return colorMap[status] || "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300";
+}
 
-  const config = statusConfig[status] || { bg: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300", label: status.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase()) };
-  return <Badge variant="outline" className={config.bg} data-testid="badge-shipment-status">{config.label}</Badge>;
+function getShipmentStatusBadge(normalizedStatus: string | null, rawStatus?: string | null) {
+  if (!normalizedStatus || normalizedStatus === "Unfulfilled" || normalizedStatus === "pending") return null;
+  const bg = getShipmentStatusColor(normalizedStatus);
+  const label = rawStatus || normalizedStatus.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
+  return <Badge variant="outline" className={bg} data-testid="badge-shipment-status">{label}</Badge>;
 }
 
 function getTrackingIcon(status: string) {
@@ -904,7 +908,7 @@ export default function OrderDetails() {
             <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-2xl font-bold">Order # {String(order.orderNumber).replace(/^#/, '')}</h1>
               {getWorkflowBadge(order.workflowStatus)}
-              {getShipmentStatusBadge(order.shipmentStatus)}
+              {getShipmentStatusBadge(order.shipmentStatus, (order as any).courierRawStatus)}
             </div>
             <p className="text-muted-foreground text-sm">
               {order.orderDate ? format(new Date(order.orderDate), "MMMM dd, yyyy 'at' h:mm a") : ""}
