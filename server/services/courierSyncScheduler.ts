@@ -1,18 +1,16 @@
 import { db } from '../db';
 import { orders, merchants, courierAccounts } from '../../shared/schema';
 import { eq, and, or, isNull, sql, desc, notInArray } from 'drizzle-orm';
-import { trackShipment, type CourierCredentials } from './couriers';
+import { trackShipment, getWorkflowStageMapping, detectCourierType, type CourierCredentials } from './couriers';
 import { storage } from '../storage';
 import { transitionOrder } from './workflowTransition';
+import { DEFAULT_WORKFLOW_STAGE_MAP } from './statusNormalization';
 
 const COURIER_SYNC_INTERVAL_MS = 5 * 60 * 1000;
 const LEOPARDS_BATCH_SIZE = 10;
 const POSTEX_DELAY_MS = 300;
 const BATCH_DELAY_MS = 500;
 
-const DISPATCH_STATUSES = ['PICKED_UP', 'IN_TRANSIT', 'ARRIVED_AT_ORIGIN', 'ARRIVED_AT_DESTINATION', 'OUT_FOR_DELIVERY', 'DELIVERY_ATTEMPTED', 'DELIVERY_FAILED', 'READY_FOR_RETURN', 'RETURN_PROCESSING'];
-const DELIVERED_STATUSES = ['DELIVERED'];
-const RETURN_STATUSES = ['RETURNED_TO_SHIPPER', 'RETURN_IN_TRANSIT', 'RETURNED_TO_ORIGIN'];
 
 interface CourierSyncResult {
   timestamp: Date;
@@ -87,10 +85,23 @@ async function createShopifyFulfillmentForOrder(merchantId: string, order: any, 
   }
 }
 
+async function resolveTargetWorkflowStage(merchantId: string, courierName: string, normalizedStatus: string): Promise<string> {
+  const courierType = detectCourierType(courierName || '');
+  if (courierType) {
+    const custom = await getWorkflowStageMapping(merchantId, courierType, normalizedStatus);
+    if (custom) return custom;
+  }
+  return DEFAULT_WORKFLOW_STAGE_MAP[normalizedStatus] || 'FULFILLED';
+}
+
 async function autoTransitionOrder(merchantId: string, order: any, newShipmentStatus: string): Promise<string | null> {
   const currentWorkflow = order.workflowStatus;
 
-  if (currentWorkflow === 'BOOKED' && DISPATCH_STATUSES.includes(newShipmentStatus)) {
+  const targetWorkflow = await resolveTargetWorkflowStage(merchantId, order.courierName || '', newShipmentStatus);
+
+  if (currentWorkflow === targetWorkflow) return null;
+
+  if (currentWorkflow === 'BOOKED' && targetWorkflow === 'FULFILLED') {
     const result = await transitionOrder({
       merchantId,
       orderId: order.id,
@@ -109,7 +120,7 @@ async function autoTransitionOrder(merchantId: string, order: any, newShipmentSt
     return null;
   }
 
-  if (currentWorkflow === 'FULFILLED' && DELIVERED_STATUSES.includes(newShipmentStatus)) {
+  if (currentWorkflow === 'FULFILLED' && targetWorkflow === 'DELIVERED') {
     const result = await transitionOrder({
       merchantId,
       orderId: order.id,
@@ -126,7 +137,7 @@ async function autoTransitionOrder(merchantId: string, order: any, newShipmentSt
     return null;
   }
 
-  if (currentWorkflow === 'BOOKED' && DELIVERED_STATUSES.includes(newShipmentStatus)) {
+  if (currentWorkflow === 'BOOKED' && targetWorkflow === 'DELIVERED') {
     const step1 = await transitionOrder({
       merchantId,
       orderId: order.id,
@@ -155,7 +166,7 @@ async function autoTransitionOrder(merchantId: string, order: any, newShipmentSt
     return 'FULFILLED';
   }
 
-  if (currentWorkflow === 'FULFILLED' && RETURN_STATUSES.includes(newShipmentStatus)) {
+  if (currentWorkflow === 'FULFILLED' && targetWorkflow === 'RETURN') {
     const result = await transitionOrder({
       merchantId,
       orderId: order.id,
@@ -172,7 +183,7 @@ async function autoTransitionOrder(merchantId: string, order: any, newShipmentSt
     return null;
   }
 
-  if (currentWorkflow === 'BOOKED' && RETURN_STATUSES.includes(newShipmentStatus)) {
+  if (currentWorkflow === 'BOOKED' && targetWorkflow === 'RETURN') {
     const step1 = await transitionOrder({
       merchantId,
       orderId: order.id,
@@ -199,6 +210,23 @@ async function autoTransitionOrder(merchantId: string, order: any, newShipmentSt
       return 'RETURN';
     }
     return 'FULFILLED';
+  }
+
+  if (currentWorkflow === 'FULFILLED' && targetWorkflow === 'CANCELLED') {
+    const result = await transitionOrder({
+      merchantId,
+      orderId: order.id,
+      toStatus: 'CANCELLED',
+      action: 'courier_cancelled',
+      actorType: 'system',
+      reason: `Courier confirmed cancellation`,
+      extraData: { cancelledAt: new Date() },
+    });
+    if (result.success) {
+      console.log(`[CourierSync] Order ${order.orderNumber} transitioned FULFILLED -> CANCELLED`);
+      return 'CANCELLED';
+    }
+    return null;
   }
 
   return null;

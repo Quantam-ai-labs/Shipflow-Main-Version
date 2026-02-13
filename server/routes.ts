@@ -4073,6 +4073,7 @@ export async function registerRoutes(
         courierName: z.string().min(1),
         courierStatus: z.string().min(1),
         normalizedStatus: z.string().min(1),
+        workflowStage: z.string().optional(),
       });
 
       const parsed = schema.parse(req.body);
@@ -4081,6 +4082,7 @@ export async function registerRoutes(
         courierName: parsed.courierName,
         courierStatus: parsed.courierStatus.toLowerCase().trim(),
         normalizedStatus: parsed.normalizedStatus,
+        workflowStage: parsed.workflowStage || null,
         isCustom: true,
       });
 
@@ -4100,7 +4102,8 @@ export async function registerRoutes(
       if (!merchantId) return;
 
       const schema = z.object({
-        normalizedStatus: z.string().min(1),
+        normalizedStatus: z.string().optional(),
+        workflowStage: z.string().optional(),
       });
 
       const parsed = schema.parse(req.body);
@@ -4112,7 +4115,8 @@ export async function registerRoutes(
         merchantId,
         courierName: target.courierName,
         courierStatus: target.courierStatus,
-        normalizedStatus: parsed.normalizedStatus,
+        normalizedStatus: parsed.normalizedStatus || target.normalizedStatus,
+        workflowStage: parsed.workflowStage !== undefined ? (parsed.workflowStage || null) : target.workflowStage,
         isCustom: true,
       });
 

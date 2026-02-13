@@ -793,6 +793,7 @@ export const courierStatusMappings = pgTable("courier_status_mappings", {
   courierName: varchar("courier_name", { length: 50 }).notNull(),
   courierStatus: varchar("courier_status", { length: 255 }).notNull(),
   normalizedStatus: varchar("normalized_status", { length: 50 }).notNull(),
+  workflowStage: varchar("workflow_stage", { length: 50 }),
   isCustom: boolean("is_custom").default(false),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

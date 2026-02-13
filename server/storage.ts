@@ -1450,6 +1450,7 @@ export class DatabaseStorage implements IStorage {
         target: [courierStatusMappings.merchantId, courierStatusMappings.courierName, courierStatusMappings.courierStatus],
         set: {
           normalizedStatus: mapping.normalizedStatus,
+          workflowStage: mapping.workflowStage ?? null,
           isCustom: mapping.isCustom ?? true,
           updatedAt: new Date(),
         },
@@ -1472,15 +1473,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async seedDefaultMappings(merchantId: string): Promise<{ created: number; existing: number }> {
-    const { LEOPARDS_STATUS_MAP, POSTEX_STATUS_MAP } = await import('./services/statusNormalization');
+    const { LEOPARDS_STATUS_MAP, POSTEX_STATUS_MAP, DEFAULT_WORKFLOW_STAGE_MAP } = await import('./services/statusNormalization');
 
-    const allDefaults: { courierName: string; courierStatus: string; normalizedStatus: string }[] = [];
+    const allDefaults: { courierName: string; courierStatus: string; normalizedStatus: string; workflowStage: string }[] = [];
 
     for (const [status, normalized] of Object.entries(LEOPARDS_STATUS_MAP)) {
-      allDefaults.push({ courierName: 'leopards', courierStatus: status, normalizedStatus: normalized });
+      allDefaults.push({ courierName: 'leopards', courierStatus: status, normalizedStatus: normalized, workflowStage: DEFAULT_WORKFLOW_STAGE_MAP[normalized] || 'FULFILLED' });
     }
     for (const [status, normalized] of Object.entries(POSTEX_STATUS_MAP)) {
-      allDefaults.push({ courierName: 'postex', courierStatus: status, normalizedStatus: normalized });
+      allDefaults.push({ courierName: 'postex', courierStatus: status, normalizedStatus: normalized, workflowStage: DEFAULT_WORKFLOW_STAGE_MAP[normalized] || 'FULFILLED' });
     }
 
     let created = 0;
@@ -1494,6 +1495,7 @@ export class DatabaseStorage implements IStorage {
             courierName: def.courierName,
             courierStatus: def.courierStatus,
             normalizedStatus: def.normalizedStatus,
+            workflowStage: def.workflowStage,
             isCustom: false,
           })
           .onConflictDoNothing();

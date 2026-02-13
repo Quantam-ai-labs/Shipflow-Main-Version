@@ -62,10 +62,20 @@ interface StatusMapping {
   courierName: string;
   courierStatus: string;
   normalizedStatus: string;
+  workflowStage: string | null;
   isCustom: boolean | null;
   createdAt: string;
   updatedAt: string;
 }
+
+const WORKFLOW_STAGES = ['BOOKED', 'FULFILLED', 'DELIVERED', 'RETURN', 'CANCELLED'] as const;
+const WORKFLOW_STAGE_LABELS: Record<string, string> = {
+  'BOOKED': 'Booked',
+  'FULFILLED': 'Fulfilled',
+  'DELIVERED': 'Delivered',
+  'RETURN': 'Return',
+  'CANCELLED': 'Cancelled',
+};
 
 const NORMALIZED_STATUSES = [
   'BOOKED',
@@ -157,14 +167,15 @@ function CourierStatusMappingSection() {
   const [newCourierName, setNewCourierName] = useState("leopards");
   const [newCourierStatus, setNewCourierStatus] = useState("");
   const [newNormalizedStatus, setNewNormalizedStatus] = useState("BOOKED");
+  const [newWorkflowStage, setNewWorkflowStage] = useState("BOOKED");
 
   const { data, isLoading } = useQuery<{ mappings: StatusMapping[] }>({
     queryKey: ["/api/courier-status-mappings"],
   });
 
   const updateMappingMutation = useMutation({
-    mutationFn: async ({ id, normalizedStatus }: { id: string; normalizedStatus: string }) => {
-      return apiRequest("PUT", `/api/courier-status-mappings/${id}`, { normalizedStatus });
+    mutationFn: async ({ id, normalizedStatus, workflowStage }: { id: string; normalizedStatus?: string; workflowStage?: string }) => {
+      return apiRequest("PUT", `/api/courier-status-mappings/${id}`, { normalizedStatus, workflowStage });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/courier-status-mappings"] });
@@ -176,7 +187,7 @@ function CourierStatusMappingSection() {
   });
 
   const addMappingMutation = useMutation({
-    mutationFn: async (data: { courierName: string; courierStatus: string; normalizedStatus: string }) => {
+    mutationFn: async (data: { courierName: string; courierStatus: string; normalizedStatus: string; workflowStage?: string }) => {
       return apiRequest("POST", "/api/courier-status-mappings", data);
     },
     onSuccess: () => {
@@ -242,6 +253,7 @@ function CourierStatusMappingSection() {
       courierName: newCourierName,
       courierStatus: newCourierStatus.trim(),
       normalizedStatus: newNormalizedStatus,
+      workflowStage: newWorkflowStage,
     });
   };
 
@@ -320,18 +332,39 @@ function CourierStatusMappingSection() {
                   </div>
                   <div className="space-y-2">
                     <Label>Normalized Status</Label>
-                    <Select value={newNormalizedStatus} onValueChange={setNewNormalizedStatus}>
+                    <Select value={newNormalizedStatus} onValueChange={(v) => {
+                      setNewNormalizedStatus(v);
+                      setNewWorkflowStage(WORKFLOW_STAGE_MAP[v] || 'FULFILLED');
+                    }}>
                       <SelectTrigger data-testid="select-new-normalized-status">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         {NORMALIZED_STATUSES.map((s) => (
                           <SelectItem key={s} value={s}>
-                            {STATUS_LABELS[s]} ({WORKFLOW_STAGE_MAP[s]})
+                            {STATUS_LABELS[s]}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Workflow Stage</Label>
+                    <Select value={newWorkflowStage} onValueChange={setNewWorkflowStage}>
+                      <SelectTrigger data-testid="select-new-workflow-stage">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {WORKFLOW_STAGES.map((s) => (
+                          <SelectItem key={s} value={s}>
+                            {WORKFLOW_STAGE_LABELS[s]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Choose which pipeline stage this status should map to.
+                    </p>
                   </div>
                 </div>
                 <DialogFooter>
@@ -442,7 +475,7 @@ function CourierStatusMappingSection() {
                   </div>
                   <div className="divide-y max-h-[500px] overflow-y-auto">
                     {courierMappings.map((mapping) => {
-                      const workflowStage = WORKFLOW_STAGE_MAP[mapping.normalizedStatus] || 'UNKNOWN';
+                      const workflowStage = mapping.workflowStage || WORKFLOW_STAGE_MAP[mapping.normalizedStatus] || 'FULFILLED';
                       return (
                         <div
                           key={mapping.id}
@@ -480,12 +513,27 @@ function CourierStatusMappingSection() {
                               </SelectContent>
                             </Select>
                           </div>
-                          <Badge
-                            variant="secondary"
-                            className={`text-[10px] whitespace-nowrap ${WORKFLOW_STAGE_COLORS[workflowStage] || ''}`}
+                          <Select
+                            value={workflowStage}
+                            onValueChange={(value) => updateMappingMutation.mutate({ id: mapping.id, workflowStage: value })}
                           >
-                            {workflowStage}
-                          </Badge>
+                            <SelectTrigger
+                              className={`h-8 text-[11px] min-w-[110px] ${WORKFLOW_STAGE_COLORS[workflowStage] || ''}`}
+                              data-testid={`select-workflow-${mapping.id}`}
+                            >
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {WORKFLOW_STAGES.map((s) => (
+                                <SelectItem key={s} value={s}>
+                                  <span className="flex items-center gap-2">
+                                    <span className={`inline-block w-2 h-2 rounded-full ${WORKFLOW_STAGE_COLORS[s]?.split(' ')[0] || 'bg-gray-200'}`} />
+                                    {WORKFLOW_STAGE_LABELS[s]}
+                                  </span>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                           {mapping.isCustom && (
                             <Button
                               variant="ghost"

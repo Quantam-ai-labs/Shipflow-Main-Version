@@ -247,6 +247,23 @@ export function normalizeStatus(
   return { normalizedStatus: 'BOOKED', mapped: false };
 }
 
+export const DEFAULT_WORKFLOW_STAGE_MAP: Record<string, string> = {
+  'BOOKED': 'BOOKED',
+  'PICKED_UP': 'FULFILLED',
+  'ARRIVED_AT_ORIGIN': 'FULFILLED',
+  'IN_TRANSIT': 'FULFILLED',
+  'ARRIVED_AT_DESTINATION': 'FULFILLED',
+  'OUT_FOR_DELIVERY': 'FULFILLED',
+  'DELIVERY_ATTEMPTED': 'FULFILLED',
+  'DELIVERED': 'DELIVERED',
+  'DELIVERY_FAILED': 'FULFILLED',
+  'READY_FOR_RETURN': 'RETURN',
+  'RETURN_IN_TRANSIT': 'RETURN',
+  'RETURNED_TO_ORIGIN': 'RETURN',
+  'RETURNED_TO_SHIPPER': 'RETURN',
+  'CANCELLED': 'CANCELLED',
+};
+
 export function detectCourierType(courierName: string): CourierType | null {
   const name = courierName.toLowerCase();
   if (name.includes('leopard')) return 'leopards';

@@ -5,14 +5,20 @@ import { db } from '../../db';
 import { courierStatusMappings } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
 
-const customMappingsCache = new Map<string, { data: Record<string, string>; expiry: number }>();
+interface CachedMappings {
+  customNormalization: Record<string, string>;
+  workflowStages: Record<string, string>;
+  expiry: number;
+}
+
+const customMappingsCache = new Map<string, CachedMappings>();
 const CACHE_TTL = 60_000;
 
-async function getCustomMappings(merchantId: string, courierType: string): Promise<Record<string, string> | undefined> {
+async function loadMerchantMappings(merchantId: string, courierType: string): Promise<CachedMappings> {
   const cacheKey = `${merchantId}:${courierType}`;
   const cached = customMappingsCache.get(cacheKey);
   if (cached && cached.expiry > Date.now()) {
-    return Object.keys(cached.data).length > 0 ? cached.data : undefined;
+    return cached;
   }
 
   try {
@@ -20,19 +26,38 @@ async function getCustomMappings(merchantId: string, courierType: string): Promi
       .where(and(
         eq(courierStatusMappings.merchantId, merchantId),
         eq(courierStatusMappings.courierName, courierType),
-        eq(courierStatusMappings.isCustom, true),
       ));
 
-    const map: Record<string, string> = {};
+    const customNormalization: Record<string, string> = {};
+    const workflowStages: Record<string, string> = {};
+
     for (const row of rows) {
-      map[row.courierStatus.toLowerCase().trim()] = row.normalizedStatus;
+      const key = row.courierStatus.toLowerCase().trim();
+      if (row.isCustom) {
+        customNormalization[key] = row.normalizedStatus;
+      }
+      if (row.workflowStage) {
+        workflowStages[row.normalizedStatus] = row.workflowStage;
+      }
     }
-    customMappingsCache.set(cacheKey, { data: map, expiry: Date.now() + CACHE_TTL });
-    return Object.keys(map).length > 0 ? map : undefined;
+
+    const result: CachedMappings = { customNormalization, workflowStages, expiry: Date.now() + CACHE_TTL };
+    customMappingsCache.set(cacheKey, result);
+    return result;
   } catch (error) {
     console.error('[Courier] Error fetching custom mappings:', error);
-    return undefined;
+    return { customNormalization: {}, workflowStages: {}, expiry: Date.now() + CACHE_TTL };
   }
+}
+
+async function getCustomMappings(merchantId: string, courierType: string): Promise<Record<string, string> | undefined> {
+  const { customNormalization } = await loadMerchantMappings(merchantId, courierType);
+  return Object.keys(customNormalization).length > 0 ? customNormalization : undefined;
+}
+
+export async function getWorkflowStageMapping(merchantId: string, courierType: string, normalizedStatus: string): Promise<string | null> {
+  const { workflowStages } = await loadMerchantMappings(merchantId, courierType);
+  return workflowStages[normalizedStatus] || null;
 }
 
 export type TrackingResult = LeopardsTrackingResult | PostExTrackingResult;
