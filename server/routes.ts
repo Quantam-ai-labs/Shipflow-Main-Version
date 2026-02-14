@@ -3,24 +3,77 @@ import express from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { shipmentPrintRecords, users, merchants, adminActionLogs, teamMembers, teamInvites, orders, codReconciliation } from "@shared/schema";
-import { and, eq, inArray, ilike, or, sql, desc, count, isNotNull } from "drizzle-orm";
-import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
+import {
+  shipmentPrintRecords,
+  users,
+  merchants,
+  adminActionLogs,
+  teamMembers,
+  teamInvites,
+  orders,
+  codReconciliation,
+} from "@shared/schema";
+import {
+  and,
+  eq,
+  inArray,
+  ilike,
+  or,
+  sql,
+  desc,
+  count,
+  isNotNull,
+} from "drizzle-orm";
+import {
+  setupAuth,
+  registerAuthRoutes,
+  isAuthenticated,
+} from "./replit_integrations/auth";
 import { z } from "zod";
 import crypto from "crypto";
-import { shopifyService, cancelShopifyOrder, cancelShopifyFulfillment } from "./services/shopify";
+import {
+  shopifyService,
+  cancelShopifyOrder,
+  cancelShopifyFulfillment,
+} from "./services/shopify";
 import { cancelCourierBooking } from "./services/couriers";
-import { transitionOrder, bulkTransitionOrders, revertOrder } from "./services/workflowTransition";
-import { addPayment, deletePayment, markFullyPaid, resetPayments, bulkMarkPrepaid, recalculateOrderPayment } from "./services/payments";
-import { encryptToken, decryptToken } from './services/encryption';
-import { registerShopifyWebhooks, checkWebhookHealth } from './services/webhookRegistration';
-import { webhookHandler } from './services/webhookHandler';
-import { sendInviteEmail } from './services/email';
-import { writeBackAddress, writeBackCancel, writeBackTags } from './services/shopifyWriteBack';
-import { leopardsService } from './services/couriers/leopards';
-import { postexService } from './services/couriers/postex';
+import {
+  transitionOrder,
+  bulkTransitionOrders,
+  revertOrder,
+} from "./services/workflowTransition";
+import {
+  addPayment,
+  deletePayment,
+  markFullyPaid,
+  resetPayments,
+  bulkMarkPrepaid,
+  recalculateOrderPayment,
+} from "./services/payments";
+import { encryptToken, decryptToken } from "./services/encryption";
+import {
+  registerShopifyWebhooks,
+  checkWebhookHealth,
+} from "./services/webhookRegistration";
+import { webhookHandler } from "./services/webhookHandler";
+import { sendInviteEmail } from "./services/email";
+import {
+  writeBackAddress,
+  writeBackCancel,
+  writeBackTags,
+} from "./services/shopifyWriteBack";
+import { leopardsService } from "./services/couriers/leopards";
+import { postexService } from "./services/couriers/postex";
 
-const oauthStateStore = new Map<string, { merchantId: string; shopDomain: string; credSource: string; createdAt: number }>();
+const oauthStateStore = new Map<
+  string,
+  {
+    merchantId: string;
+    shopDomain: string;
+    credSource: string;
+    createdAt: number;
+  }
+>();
 setInterval(() => {
   const now = Date.now();
   for (const [key, val] of oauthStateStore) {
@@ -29,33 +82,51 @@ setInterval(() => {
   cleanupDbOAuthStates().catch(() => {});
 }, 60 * 1000);
 
-async function storeOAuthStateInDb(state: string, data: { merchantId: string; shopDomain: string; credSource: string }) {
+async function storeOAuthStateInDb(
+  state: string,
+  data: { merchantId: string; shopDomain: string; credSource: string },
+) {
   try {
-    const { pool } = await import('./db');
+    const { pool } = await import("./db");
     await pool.query(
       `INSERT INTO oauth_states (state, merchant_id, shop_domain, cred_source, created_at) VALUES ($1, $2, $3, $4, NOW()) ON CONFLICT (state) DO UPDATE SET merchant_id=$2, shop_domain=$3, cred_source=$4, created_at=NOW()`,
-      [state, data.merchantId, data.shopDomain, data.credSource]
+      [state, data.merchantId, data.shopDomain, data.credSource],
     );
   } catch (e: any) {
-    if (e.code === '42P01') {
-      const { pool } = await import('./db');
-      await pool.query(`CREATE TABLE IF NOT EXISTS oauth_states (state VARCHAR(64) PRIMARY KEY, merchant_id VARCHAR(255) NOT NULL, shop_domain VARCHAR(255) NOT NULL, cred_source VARCHAR(32) NOT NULL, created_at TIMESTAMP NOT NULL DEFAULT NOW())`);
+    if (e.code === "42P01") {
+      const { pool } = await import("./db");
+      await pool.query(
+        `CREATE TABLE IF NOT EXISTS oauth_states (state VARCHAR(64) PRIMARY KEY, merchant_id VARCHAR(255) NOT NULL, shop_domain VARCHAR(255) NOT NULL, cred_source VARCHAR(32) NOT NULL, created_at TIMESTAMP NOT NULL DEFAULT NOW())`,
+      );
       await pool.query(
         `INSERT INTO oauth_states (state, merchant_id, shop_domain, cred_source, created_at) VALUES ($1, $2, $3, $4, NOW())`,
-        [state, data.merchantId, data.shopDomain, data.credSource]
+        [state, data.merchantId, data.shopDomain, data.credSource],
       );
     } else {
-      console.warn('[OAuth] Failed to store state in DB:', e.message);
+      console.warn("[OAuth] Failed to store state in DB:", e.message);
     }
   }
 }
 
-async function getOAuthStateFromDb(state: string): Promise<{ merchantId: string; shopDomain: string; credSource: string } | null> {
+async function getOAuthStateFromDb(
+  state: string,
+): Promise<{
+  merchantId: string;
+  shopDomain: string;
+  credSource: string;
+} | null> {
   try {
-    const { pool } = await import('./db');
-    const result = await pool.query(`DELETE FROM oauth_states WHERE state=$1 RETURNING merchant_id, shop_domain, cred_source`, [state]);
+    const { pool } = await import("./db");
+    const result = await pool.query(
+      `DELETE FROM oauth_states WHERE state=$1 RETURNING merchant_id, shop_domain, cred_source`,
+      [state],
+    );
     if (result.rows.length > 0) {
-      return { merchantId: result.rows[0].merchant_id, shopDomain: result.rows[0].shop_domain, credSource: result.rows[0].cred_source };
+      return {
+        merchantId: result.rows[0].merchant_id,
+        shopDomain: result.rows[0].shop_domain,
+        credSource: result.rows[0].cred_source,
+      };
     }
     return null;
   } catch {
@@ -65,8 +136,10 @@ async function getOAuthStateFromDb(state: string): Promise<{ merchantId: string;
 
 async function cleanupDbOAuthStates() {
   try {
-    const { pool } = await import('./db');
-    await pool.query(`DELETE FROM oauth_states WHERE created_at < NOW() - INTERVAL '10 minutes'`);
+    const { pool } = await import("./db");
+    await pool.query(
+      `DELETE FROM oauth_states WHERE created_at < NOW() - INTERVAL '10 minutes'`,
+    );
   } catch {}
 }
 
@@ -82,7 +155,10 @@ function mapCourierSlugToName(slug: string): string | null {
 // Zod schemas for validation
 const remarkSchema = z.object({
   content: z.string().min(1, "Content is required"),
-  remarkType: z.enum(["general", "delivery", "payment", "return"]).optional().default("general"),
+  remarkType: z
+    .enum(["general", "delivery", "payment", "return"])
+    .optional()
+    .default("general"),
 });
 
 const reconcileSchema = z.object({
@@ -114,11 +190,13 @@ const settingsUpdateSchema = z.object({
   phone: z.string().optional(),
   address: z.string().optional(),
   city: z.string().optional(),
-  notifications: z.object({
-    emailOrderUpdates: z.boolean(),
-    emailDeliveryAlerts: z.boolean(),
-    emailCodReminders: z.boolean(),
-  }).optional(),
+  notifications: z
+    .object({
+      emailOrderUpdates: z.boolean(),
+      emailDeliveryAlerts: z.boolean(),
+      emailCodReminders: z.boolean(),
+    })
+    .optional(),
 });
 
 // Helper function to generate unique order number
@@ -141,15 +219,35 @@ function generateTrackingNumber(courier: string): string {
 }
 
 // Simulate syncing orders from Shopify (generates demo data for testing)
-async function syncShopifyOrders(merchantId: string, storeDomain: string): Promise<{ synced: number; total: number }> {
+async function syncShopifyOrders(
+  merchantId: string,
+  storeDomain: string,
+): Promise<{ synced: number; total: number }> {
   // Generate realistic demo orders (simulating Shopify API response)
   const customerNames = [
-    "Ahmad Ali", "Sara Khan", "Muhammad Hassan", "Fatima Zahra", "Ali Raza",
-    "Ayesha Malik", "Usman Ahmed", "Hira Noor", "Bilal Qureshi", "Zainab Shah"
+    "Ahmad Ali",
+    "Sara Khan",
+    "Muhammad Hassan",
+    "Fatima Zahra",
+    "Ali Raza",
+    "Ayesha Malik",
+    "Usman Ahmed",
+    "Hira Noor",
+    "Bilal Qureshi",
+    "Zainab Shah",
   ];
-  
-  const cities = ["Karachi", "Lahore", "Islamabad", "Rawalpindi", "Faisalabad", "Multan", "Peshawar", "Quetta"];
-  
+
+  const cities = [
+    "Karachi",
+    "Lahore",
+    "Islamabad",
+    "Rawalpindi",
+    "Faisalabad",
+    "Multan",
+    "Peshawar",
+    "Quetta",
+  ];
+
   const products = [
     { name: "Designer Kurta", price: 2500 },
     { name: "Silk Dupatta", price: 1800 },
@@ -161,9 +259,16 @@ async function syncShopifyOrders(merchantId: string, storeDomain: string): Promi
     { name: "Casual Kurti", price: 1500 },
   ];
 
-  const statuses: Array<"pending" | "confirmed" | "processing" | "shipped" | "delivered" | "cancelled" | "returned"> = 
-    ["pending", "confirmed", "processing", "shipped", "delivered"];
-  
+  const statuses: Array<
+    | "pending"
+    | "confirmed"
+    | "processing"
+    | "shipped"
+    | "delivered"
+    | "cancelled"
+    | "returned"
+  > = ["pending", "confirmed", "processing", "shipped", "delivered"];
+
   const couriers = ["leopards", "postex", "tcs"];
 
   // Generate 5-10 new orders
@@ -171,19 +276,20 @@ async function syncShopifyOrders(merchantId: string, storeDomain: string): Promi
   let syncedCount = 0;
 
   for (let i = 0; i < orderCount; i++) {
-    const customer = customerNames[Math.floor(Math.random() * customerNames.length)];
+    const customer =
+      customerNames[Math.floor(Math.random() * customerNames.length)];
     const city = cities[Math.floor(Math.random() * cities.length)];
     const product = products[Math.floor(Math.random() * products.length)];
     const quantity = Math.floor(Math.random() * 3) + 1;
     const status = statuses[Math.floor(Math.random() * statuses.length)];
     const courier = couriers[Math.floor(Math.random() * couriers.length)];
-    
+
     const subtotal = product.price * quantity;
     const shippingCost = Math.random() > 0.5 ? 200 : 0;
     const total = subtotal + shippingCost;
-    
+
     const isCod = Math.random() > 0.3; // 70% COD orders
-    
+
     // Create order
     const order = await storage.createOrder({
       merchantId,
@@ -207,16 +313,22 @@ async function syncShopifyOrders(merchantId: string, storeDomain: string): Promi
 
     // Create shipment for non-pending orders
     if (status !== "pending") {
-      const shipmentStatus = status === "delivered" ? "delivered" : 
-                            status === "shipped" ? "in_transit" : "booked";
-      
+      const shipmentStatus =
+        status === "delivered"
+          ? "delivered"
+          : status === "shipped"
+            ? "in_transit"
+            : "booked";
+
       await storage.createShipment({
         merchantId,
         orderId: order.id,
         courierName: courier,
         trackingNumber: generateTrackingNumber(courier),
         status: shipmentStatus,
-        estimatedDelivery: new Date(Date.now() + Math.random() * 7 * 24 * 60 * 60 * 1000),
+        estimatedDelivery: new Date(
+          Date.now() + Math.random() * 7 * 24 * 60 * 60 * 1000,
+        ),
         shippingCost: shippingCost.toString(),
         weight: (Math.random() * 2 + 0.5).toFixed(2),
       });
@@ -260,9 +372,15 @@ async function getSessionUserName(req: any): Promise<string> {
   const userId = getSessionUserId(req);
   if (!userId) return "Unknown";
   try {
-    const user = await db.select({ firstName: users.firstName, lastName: users.lastName }).from(users).where(eq(users.id, userId));
+    const user = await db
+      .select({ firstName: users.firstName, lastName: users.lastName })
+      .from(users)
+      .where(eq(users.id, userId));
     if (user.length > 0) {
-      return ((user[0].firstName || "") + " " + (user[0].lastName || "")).trim() || "Unknown";
+      return (
+        ((user[0].firstName || "") + " " + (user[0].lastName || "")).trim() ||
+        "Unknown"
+      );
     }
   } catch {}
   return "Unknown";
@@ -295,7 +413,7 @@ async function requireMerchant(req: any, res: any): Promise<string | null> {
 
 export async function registerRoutes(
   httpServer: Server,
-  app: Express
+  app: Express,
 ): Promise<Server> {
   // Setup authentication
   await setupAuth(app);
@@ -306,27 +424,39 @@ export async function registerRoutes(
 
   function normalizeCourierName(raw: string): string {
     const name = raw.toLowerCase().trim();
-    if (name.includes('leopard')) return 'leopards';
-    if (name.includes('postex') || name.includes('post ex')) return 'postex';
-    if (name.includes('tcs')) return 'tcs';
+    if (name.includes("leopard")) return "leopards";
+    if (name.includes("postex") || name.includes("post ex")) return "postex";
+    if (name.includes("tcs")) return "tcs";
     return name;
   }
 
-  async function getCourierCredentials(merchantId: string, courierName: string): Promise<{ apiKey: string | null; apiSecret: string | null } | null> {
+  async function getCourierCredentials(
+    merchantId: string,
+    courierName: string,
+  ): Promise<{ apiKey: string | null; apiSecret: string | null } | null> {
     const normalized = normalizeCourierName(courierName);
     const accounts = await storage.getCourierAccounts(merchantId);
-    const account = accounts.find(a => a.courierName === normalized);
+    const account = accounts.find((a) => a.courierName === normalized);
     const settings = (account?.settings as Record<string, any>) || {};
 
-    if (normalized === 'leopards') {
-      const apiKey = (!settings.useEnvCredentials && account?.apiKey) || process.env.LEOPARDS_API_KEY || null;
-      const apiSecret = (!settings.useEnvCredentials && account?.apiSecret) || process.env.LEOPARDS_API_PASSWORD || null;
+    if (normalized === "leopards") {
+      const apiKey =
+        (!settings.useEnvCredentials && account?.apiKey) ||
+        process.env.LEOPARDS_API_KEY ||
+        null;
+      const apiSecret =
+        (!settings.useEnvCredentials && account?.apiSecret) ||
+        process.env.LEOPARDS_API_PASSWORD ||
+        null;
       if (!apiKey || !apiSecret) return null;
       return { apiKey, apiSecret };
     }
 
-    if (normalized === 'postex') {
-      const apiKey = (!settings.useEnvCredentials && account?.apiKey) || process.env.POSTEX_API_TOKEN || null;
+    if (normalized === "postex") {
+      const apiKey =
+        (!settings.useEnvCredentials && account?.apiKey) ||
+        process.env.POSTEX_API_TOKEN ||
+        null;
       if (!apiKey) return null;
       return { apiKey, apiSecret: null };
     }
@@ -371,8 +501,26 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
 
-      const { search, searchOrderNumber, searchTracking, searchName, searchPhone, status, courier, city, month, dateFrom, dateTo, page, pageSize, workflowStatus, pendingReasonType, shipmentStatus, light } = req.query;
-      
+      const {
+        search,
+        searchOrderNumber,
+        searchTracking,
+        searchName,
+        searchPhone,
+        status,
+        courier,
+        city,
+        month,
+        dateFrom,
+        dateTo,
+        page,
+        pageSize,
+        workflowStatus,
+        pendingReasonType,
+        shipmentStatus,
+        light,
+      } = req.query;
+
       const result = await storage.getOrders(merchantId, {
         search: search as string,
         searchOrderNumber: searchOrderNumber as string,
@@ -392,7 +540,7 @@ export async function registerRoutes(
         shipmentStatus: shipmentStatus as string,
         excludeHeavyFields: light === "1" || light === "true",
       });
-      
+
       res.json(result);
     } catch (error) {
       console.error("Error fetching orders:", error);
@@ -404,7 +552,7 @@ export async function registerRoutes(
     try {
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
-      
+
       const cities = await storage.getUniqueCities(merchantId);
       res.json({ cities });
     } catch (error) {
@@ -415,10 +563,17 @@ export async function registerRoutes(
 
   app.get("/api/orders/statuses", isAuthenticated, async (req, res) => {
     try {
-      const { UNIVERSAL_STATUSES } = await import('./services/statusNormalization');
-      const { getStatusDisplayLabel } = await import('./services/statusNormalization');
-      res.json({ 
-        statuses: UNIVERSAL_STATUSES.map(s => ({ value: s, label: getStatusDisplayLabel(s) }))
+      const { UNIVERSAL_STATUSES } = await import(
+        "./services/statusNormalization"
+      );
+      const { getStatusDisplayLabel } = await import(
+        "./services/statusNormalization"
+      );
+      res.json({
+        statuses: UNIVERSAL_STATUSES.map((s) => ({
+          value: s,
+          label: getStatusDisplayLabel(s),
+        })),
       });
     } catch (error) {
       console.error("Error fetching statuses:", error);
@@ -430,8 +585,14 @@ export async function registerRoutes(
     try {
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
-      const { dateFrom, dateTo } = req.query as { dateFrom?: string; dateTo?: string };
-      const counts = await storage.getWorkflowCounts(merchantId, { dateFrom, dateTo });
+      const { dateFrom, dateTo } = req.query as {
+        dateFrom?: string;
+        dateTo?: string;
+      };
+      const counts = await storage.getWorkflowCounts(merchantId, {
+        dateFrom,
+        dateTo,
+      });
       res.json(counts);
     } catch (error) {
       console.error("Error fetching workflow counts:", error);
@@ -444,7 +605,17 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
       const orderId = req.params.id;
-      const { action, cancelReason, cancelOnShopify, pendingReasonType, pendingReason, holdUntil, customerPhone, shippingAddress, city } = req.body;
+      const {
+        action,
+        cancelReason,
+        cancelOnShopify,
+        pendingReasonType,
+        pendingReason,
+        holdUntil,
+        customerPhone,
+        shippingAddress,
+        city,
+      } = req.body;
       const userId = getSessionUserId(req) || "system";
       const actorName = await getSessionUserName(req);
 
@@ -458,60 +629,123 @@ export async function registerRoutes(
           extraData = { confirmedAt: new Date(), confirmedByUserId: userId };
           break;
         case "cancel":
-          if (!cancelReason) return res.status(400).json({ message: "Cancel reason is required" });
+          if (!cancelReason)
+            return res
+              .status(400)
+              .json({ message: "Cancel reason is required" });
           toStatus = "CANCELLED";
           reason = cancelReason;
-          extraData = { cancelledAt: new Date(), cancelledByUserId: userId, cancelReason };
+          extraData = {
+            cancelledAt: new Date(),
+            cancelledByUserId: userId,
+            cancelReason,
+          };
           break;
         case "pending":
-          if (!pendingReasonType) return res.status(400).json({ message: "Pending reason type is required" });
+          if (!pendingReasonType)
+            return res
+              .status(400)
+              .json({ message: "Pending reason type is required" });
           toStatus = "PENDING";
           reason = pendingReason;
           extraData = { pendingReasonType, pendingReason: pendingReason || "" };
           break;
         case "hold":
-          if (!holdUntil) return res.status(400).json({ message: "Hold until date is required" });
+          if (!holdUntil)
+            return res
+              .status(400)
+              .json({ message: "Hold until date is required" });
           toStatus = "HOLD";
-          extraData = { holdUntil: new Date(holdUntil), holdCreatedAt: new Date(), holdCreatedByUserId: userId };
+          extraData = {
+            holdUntil: new Date(holdUntil),
+            holdCreatedAt: new Date(),
+            holdCreatedByUserId: userId,
+          };
           break;
         case "release-hold":
           toStatus = "READY_TO_SHIP";
-          extraData = { confirmedAt: new Date(), confirmedByUserId: userId, holdUntil: null };
+          extraData = {
+            confirmedAt: new Date(),
+            confirmedByUserId: userId,
+            holdUntil: null,
+          };
           break;
         case "fix-confirm":
           toStatus = "READY_TO_SHIP";
-          extraData = { confirmedAt: new Date(), confirmedByUserId: userId, pendingReason: null, pendingReasonType: null };
+          extraData = {
+            confirmedAt: new Date(),
+            confirmedByUserId: userId,
+            pendingReason: null,
+            pendingReasonType: null,
+          };
           if (customerPhone) extraData.customerPhone = customerPhone;
           if (shippingAddress) extraData.shippingAddress = shippingAddress;
           if (city) extraData.city = city;
           break;
         case "move-to-pending":
-          if (!pendingReasonType) return res.status(400).json({ message: "Pending reason type is required" });
+          if (!pendingReasonType)
+            return res
+              .status(400)
+              .json({ message: "Pending reason type is required" });
           toStatus = "PENDING";
           reason = pendingReason;
-          extraData = { pendingReasonType, pendingReason: pendingReason || "", holdUntil: null };
+          extraData = {
+            pendingReasonType,
+            pendingReason: pendingReason || "",
+            holdUntil: null,
+          };
           break;
         case "revert":
-          const revertResult = await revertOrder(merchantId, orderId, userId, req.body.reason, actorName);
-          if (!revertResult.success) return res.status(400).json({ message: revertResult.error });
+          const revertResult = await revertOrder(
+            merchantId,
+            orderId,
+            userId,
+            req.body.reason,
+            actorName,
+          );
+          if (!revertResult.success)
+            return res.status(400).json({ message: revertResult.error });
           return res.json(revertResult.order);
         default:
           return res.status(400).json({ message: "Invalid action" });
       }
 
-      const result = await transitionOrder({ merchantId, orderId, toStatus, action, actorUserId: userId, actorName, reason, extraData });
-      if (!result.success) return res.status(400).json({ message: result.error });
+      const result = await transitionOrder({
+        merchantId,
+        orderId,
+        toStatus,
+        action,
+        actorUserId: userId,
+        actorName,
+        reason,
+        extraData,
+      });
+      if (!result.success)
+        return res.status(400).json({ message: result.error });
 
-      if (action === "cancel" && cancelOnShopify && result.order?.shopifyOrderId) {
+      if (
+        action === "cancel" &&
+        cancelOnShopify &&
+        result.order?.shopifyOrderId
+      ) {
         try {
           const store = await storage.getShopifyStore(merchantId);
           if (store?.accessToken) {
             const shopifyToken = decryptToken(store.accessToken);
-            await cancelShopifyOrder(store.shopDomain, shopifyToken, result.order.shopifyOrderId);
-            console.log(`[Cancel+Shopify] Order ${orderId} cancelled on Shopify`);
+            await cancelShopifyOrder(
+              store.shopDomain,
+              shopifyToken,
+              result.order.shopifyOrderId,
+            );
+            console.log(
+              `[Cancel+Shopify] Order ${orderId} cancelled on Shopify`,
+            );
           }
         } catch (shopifyError: any) {
-          console.error(`[Cancel+Shopify] Failed to cancel on Shopify for order ${orderId}:`, shopifyError?.message);
+          console.error(
+            `[Cancel+Shopify] Failed to cancel on Shopify for order ${orderId}:`,
+            shopifyError?.message,
+          );
         }
       }
 
@@ -526,7 +760,15 @@ export async function registerRoutes(
     try {
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
-      const { orderIds, action, cancelReason, cancelOnShopify, pendingReasonType, pendingReason, holdUntil } = req.body;
+      const {
+        orderIds,
+        action,
+        cancelReason,
+        cancelOnShopify,
+        pendingReasonType,
+        pendingReason,
+        holdUntil,
+      } = req.body;
       const userId = getSessionUserId(req) || "system";
       const actorName = await getSessionUserName(req);
 
@@ -544,31 +786,61 @@ export async function registerRoutes(
           extraData = { confirmedAt: new Date(), confirmedByUserId: userId };
           break;
         case "cancel":
-          if (!cancelReason) return res.status(400).json({ message: "Cancel reason is required" });
+          if (!cancelReason)
+            return res
+              .status(400)
+              .json({ message: "Cancel reason is required" });
           toStatus = "CANCELLED";
           reason = cancelReason;
-          extraData = { cancelledAt: new Date(), cancelledByUserId: userId, cancelReason };
+          extraData = {
+            cancelledAt: new Date(),
+            cancelledByUserId: userId,
+            cancelReason,
+          };
           break;
         case "pending":
-          if (!pendingReasonType) return res.status(400).json({ message: "Pending reason type is required" });
+          if (!pendingReasonType)
+            return res
+              .status(400)
+              .json({ message: "Pending reason type is required" });
           toStatus = "PENDING";
           reason = pendingReason;
           extraData = { pendingReasonType, pendingReason: pendingReason || "" };
           break;
         case "hold":
-          if (!holdUntil) return res.status(400).json({ message: "Hold until date is required" });
+          if (!holdUntil)
+            return res
+              .status(400)
+              .json({ message: "Hold until date is required" });
           toStatus = "HOLD";
-          extraData = { holdUntil: new Date(holdUntil), holdCreatedAt: new Date(), holdCreatedByUserId: userId };
+          extraData = {
+            holdUntil: new Date(holdUntil),
+            holdCreatedAt: new Date(),
+            holdCreatedByUserId: userId,
+          };
           break;
         case "release-hold":
           toStatus = "READY_TO_SHIP";
-          extraData = { confirmedAt: new Date(), confirmedByUserId: userId, holdUntil: null };
+          extraData = {
+            confirmedAt: new Date(),
+            confirmedByUserId: userId,
+            holdUntil: null,
+          };
           break;
         default:
           return res.status(400).json({ message: "Invalid action" });
       }
 
-      const result = await bulkTransitionOrders({ merchantId, orderIds, toStatus, action, actorUserId: userId, actorName, reason, extraData });
+      const result = await bulkTransitionOrders({
+        merchantId,
+        orderIds,
+        toStatus,
+        action,
+        actorUserId: userId,
+        actorName,
+        reason,
+        extraData,
+      });
 
       if (action === "cancel" && cancelOnShopify) {
         try {
@@ -579,10 +851,19 @@ export async function registerRoutes(
               const order = await storage.getOrderById(merchantId, oid);
               if (order?.shopifyOrderId) {
                 try {
-                  await cancelShopifyOrder(store.shopDomain, shopifyToken, order.shopifyOrderId);
-                  console.log(`[BulkCancel+Shopify] Order ${oid} cancelled on Shopify`);
+                  await cancelShopifyOrder(
+                    store.shopDomain,
+                    shopifyToken,
+                    order.shopifyOrderId,
+                  );
+                  console.log(
+                    `[BulkCancel+Shopify] Order ${oid} cancelled on Shopify`,
+                  );
                 } catch (e: any) {
-                  console.error(`[BulkCancel+Shopify] Failed for ${oid}:`, e?.message);
+                  console.error(
+                    `[BulkCancel+Shopify] Failed for ${oid}:`,
+                    e?.message,
+                  );
                 }
               }
             }
@@ -626,388 +907,546 @@ export async function registerRoutes(
   });
 
   const PICKED_UP_OR_BEYOND_STATUSES = [
-    'PICKED_UP', 'IN_TRANSIT', 'ARRIVED_AT_DESTINATION', 'OUT_FOR_DELIVERY',
-    'DELIVERY_ATTEMPTED', 'DELIVERED', 'DELIVERY_FAILED', 'RETURNED_TO_SHIPPER', 'RETURN_IN_TRANSIT'
+    "PICKED_UP",
+    "IN_TRANSIT",
+    "ARRIVED_AT_DESTINATION",
+    "OUT_FOR_DELIVERY",
+    "DELIVERY_ATTEMPTED",
+    "DELIVERED",
+    "DELIVERY_FAILED",
+    "RETURNED_TO_SHIPPER",
+    "RETURN_IN_TRANSIT",
   ];
 
   const EDITABLE_ORDER_FIELDS = [
-    'customerName', 'customerPhone', 'customerEmail', 'shippingAddress',
-    'city', 'province', 'postalCode', 'notes', 'totalAmount',
-    'subtotalAmount', 'shippingAmount', 'discountAmount', 'lineItems', 'totalQuantity',
+    "customerName",
+    "customerPhone",
+    "customerEmail",
+    "shippingAddress",
+    "city",
+    "province",
+    "postalCode",
+    "notes",
+    "totalAmount",
+    "subtotalAmount",
+    "shippingAmount",
+    "discountAmount",
+    "lineItems",
+    "totalQuantity",
   ];
 
-  app.patch("/api/orders/:id/customer", isAuthenticated, async (req: any, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-      const orderId = req.params.id;
+  app.patch(
+    "/api/orders/:id/customer",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+        const orderId = req.params.id;
 
-      const order = await storage.getOrderById(merchantId, orderId);
-      if (!order) return res.status(404).json({ message: "Order not found" });
+        const order = await storage.getOrderById(merchantId, orderId);
+        if (!order) return res.status(404).json({ message: "Order not found" });
 
-      if (order.workflowStatus === "DELIVERED" || order.workflowStatus === "RETURN" || order.workflowStatus === "CANCELLED") {
-        return res.status(403).json({ message: "Order is locked - delivered, returned, or cancelled" });
-      }
+        if (
+          order.workflowStatus === "DELIVERED" ||
+          order.workflowStatus === "RETURN" ||
+          order.workflowStatus === "CANCELLED"
+        ) {
+          return res
+            .status(403)
+            .json({
+              message: "Order is locked - delivered, returned, or cancelled",
+            });
+        }
 
-      const updateData: any = {};
-      const fieldsToCheck: Array<{ key: string; newVal: any }> = [];
-      const numericFields = ['totalAmount', 'subtotalAmount', 'shippingAmount', 'discountAmount', 'totalQuantity'];
+        const updateData: any = {};
+        const fieldsToCheck: Array<{ key: string; newVal: any }> = [];
+        const numericFields = [
+          "totalAmount",
+          "subtotalAmount",
+          "shippingAmount",
+          "discountAmount",
+          "totalQuantity",
+        ];
 
-      for (const field of EDITABLE_ORDER_FIELDS) {
-        if (req.body[field] !== undefined) {
-          let val = req.body[field];
-          if (numericFields.includes(field)) {
-            val = String(parseFloat(val) || 0);
-          }
-          if (field === 'lineItems') {
-            if (!Array.isArray(val)) {
-              return res.status(400).json({ message: "lineItems must be an array" });
+        for (const field of EDITABLE_ORDER_FIELDS) {
+          if (req.body[field] !== undefined) {
+            let val = req.body[field];
+            if (numericFields.includes(field)) {
+              val = String(parseFloat(val) || 0);
             }
-            val = val.filter((item: any) => item && typeof item === 'object' && item.name);
-          }
-          updateData[field] = val;
-          fieldsToCheck.push({ key: field, newVal: val });
-        }
-      }
-
-      if (Object.keys(updateData).length === 0) {
-        return res.status(400).json({ message: "No fields to update" });
-      }
-
-      const updated = await storage.updateOrderWorkflow(merchantId, orderId, updateData);
-      if (!updated) return res.status(404).json({ message: "Order not found" });
-
-      const actorUserId = getSessionUserId(req) || null;
-      const actorName = await getSessionUserName(req);
-
-      for (const field of fieldsToCheck) {
-        const oldValue = (order as any)[field.key];
-        const newValStr = field.key === 'lineItems' ? JSON.stringify(field.newVal) : String(field.newVal ?? "");
-        const oldValStr = field.key === 'lineItems' ? JSON.stringify(oldValue) : String(oldValue ?? "");
-        if (oldValStr !== newValStr) {
-          await storage.createOrderChangeLog({
-            orderId,
-            merchantId,
-            changeType: "FIELD_EDIT",
-            fieldName: field.key,
-            oldValue: oldValue != null ? oldValStr : null,
-            newValue: field.newVal != null ? newValStr : null,
-            actorUserId,
-            actorName,
-            actorType: "user",
-          });
-        }
-      }
-
-      if (order.shopifyOrderId) {
-        const addressFields = ['customerName', 'customerPhone', 'customerEmail', 'shippingAddress', 'city', 'province', 'postalCode'];
-        const hasAddressChange = addressFields.some(f => updateData[f] !== undefined);
-        if (hasAddressChange) {
-          writeBackAddress(merchantId, order.shopifyOrderId, updateData)
-            .then(result => {
-              if (!result.success) {
-                console.warn(`[ShopifyWriteBack] Address sync failed for order ${orderId}: ${result.error}`);
+            if (field === "lineItems") {
+              if (!Array.isArray(val)) {
+                return res
+                  .status(400)
+                  .json({ message: "lineItems must be an array" });
               }
-            })
-            .catch(err => console.error(`[ShopifyWriteBack] Address sync error:`, err));
+              val = val.filter(
+                (item: any) => item && typeof item === "object" && item.name,
+              );
+            }
+            updateData[field] = val;
+            fieldsToCheck.push({ key: field, newVal: val });
+          }
         }
-      }
 
-      res.json(updated);
-    } catch (error) {
-      console.error("Error updating order:", error);
-      res.status(500).json({ message: "Failed to update order" });
-    }
-  });
+        if (Object.keys(updateData).length === 0) {
+          return res.status(400).json({ message: "No fields to update" });
+        }
 
-  app.post("/api/orders/:id/cancel-booking", isAuthenticated, async (req: any, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-      const orderId = req.params.id;
-      const skipCourierApi = req.body?.skipCourierApi === true;
+        const updated = await storage.updateOrderWorkflow(
+          merchantId,
+          orderId,
+          updateData,
+        );
+        if (!updated)
+          return res.status(404).json({ message: "Order not found" });
 
-      const order = await storage.getOrderById(merchantId, orderId);
-      if (!order) return res.status(404).json({ message: "Order not found" });
+        const actorUserId = getSessionUserId(req) || null;
+        const actorName = await getSessionUserName(req);
 
-      if (order.workflowStatus !== "BOOKED") {
-        return res.status(400).json({ message: "Order must be in BOOKED status to cancel booking" });
-      }
-
-      if (order.shipmentStatus && PICKED_UP_OR_BEYOND_STATUSES.includes(order.shipmentStatus)) {
-        return res.status(403).json({ message: "Cannot cancel - courier has already picked up" });
-      }
-
-      const oldCourierTracking = order.courierTracking;
-      const oldCourierName = order.courierName;
-      let courierCancelResult: { success: boolean; message: string } | null = null;
-
-      if (!skipCourierApi && oldCourierTracking && oldCourierName) {
-        const creds = await getCourierCredentials(merchantId, oldCourierName);
-        if (creds) {
-          courierCancelResult = await cancelCourierBooking(
-            oldCourierName,
-            oldCourierTracking,
-            { apiKey: creds.apiKey || undefined, apiSecret: creds.apiSecret || undefined },
-          );
-          console.log(`[Cancel] Courier cancel result for ${oldCourierTracking}:`, courierCancelResult);
-          if (!courierCancelResult.success) {
-            const cleanMsg = typeof courierCancelResult.message === 'string' 
-              ? courierCancelResult.message 
-              : JSON.stringify(courierCancelResult.message);
-            return res.status(400).json({
-              message: `Courier cancellation failed: ${cleanMsg}`,
+        for (const field of fieldsToCheck) {
+          const oldValue = (order as any)[field.key];
+          const newValStr =
+            field.key === "lineItems"
+              ? JSON.stringify(field.newVal)
+              : String(field.newVal ?? "");
+          const oldValStr =
+            field.key === "lineItems"
+              ? JSON.stringify(oldValue)
+              : String(oldValue ?? "");
+          if (oldValStr !== newValStr) {
+            await storage.createOrderChangeLog({
+              orderId,
+              merchantId,
+              changeType: "FIELD_EDIT",
+              fieldName: field.key,
+              oldValue: oldValue != null ? oldValStr : null,
+              newValue: field.newVal != null ? newValStr : null,
+              actorUserId,
+              actorName,
+              actorType: "user",
             });
           }
         }
-      }
 
-      let fulfillmentCancelResult: { success: boolean; error?: string } | null = null;
-      if (order.shopifyFulfillmentId && order.shopifyOrderId) {
-        const store = await storage.getShopifyStore(merchantId);
-        if (store?.isConnected && store?.accessToken && store?.shopDomain) {
-          let token = store.accessToken;
-          try { token = decryptToken(store.accessToken); } catch {}
-          fulfillmentCancelResult = await cancelShopifyFulfillment(
-            store.shopDomain,
-            token,
-            order.shopifyFulfillmentId,
+        if (order.shopifyOrderId) {
+          const addressFields = [
+            "customerName",
+            "customerPhone",
+            "customerEmail",
+            "shippingAddress",
+            "city",
+            "province",
+            "postalCode",
+          ];
+          const hasAddressChange = addressFields.some(
+            (f) => updateData[f] !== undefined,
           );
-          console.log(`[Cancel] Shopify fulfillment cancel result for ${order.shopifyFulfillmentId}:`, fulfillmentCancelResult);
-          if (!fulfillmentCancelResult.success) {
-            console.warn(`[Cancel] Shopify fulfillment cancel failed (non-blocking): ${fulfillmentCancelResult.error}`);
+          if (hasAddressChange) {
+            writeBackAddress(merchantId, order.shopifyOrderId, updateData)
+              .then((result) => {
+                if (!result.success) {
+                  console.warn(
+                    `[ShopifyWriteBack] Address sync failed for order ${orderId}: ${result.error}`,
+                  );
+                }
+              })
+              .catch((err) =>
+                console.error(`[ShopifyWriteBack] Address sync error:`, err),
+              );
           }
         }
+
+        res.json(updated);
+      } catch (error) {
+        console.error("Error updating order:", error);
+        res.status(500).json({ message: "Failed to update order" });
       }
+    },
+  );
 
-      await storage.updateOrderWorkflow(merchantId, orderId, {
-        courierName: null,
-        courierTracking: null,
-        courierSlipUrl: null,
-        bookingStatus: null,
-        bookingError: null,
-        bookedAt: null,
-        shipmentStatus: 'Unfulfilled',
-        courierRawStatus: null,
-        shopifyFulfillmentId: null,
-      });
+  app.post(
+    "/api/orders/:id/cancel-booking",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+        const orderId = req.params.id;
+        const skipCourierApi = req.body?.skipCourierApi === true;
 
-      const userId = getSessionUserId(req) || "system";
-      const actorName = await getSessionUserName(req);
-      const result = await transitionOrder({
-        merchantId,
-        orderId,
-        toStatus: "READY_TO_SHIP",
-        action: "cancel_booking",
-        actorUserId: userId,
-        actorName,
-        actorType: "user",
-        reason: courierCancelResult
-          ? `Booking cancelled with courier API (${courierCancelResult.message})`
-          : "Booking cancelled by user (local only)",
-      });
+        const order = await storage.getOrderById(merchantId, orderId);
+        if (!order) return res.status(404).json({ message: "Order not found" });
 
-      if (!result.success) {
-        return res.status(400).json({ message: result.error });
-      }
-
-      await storage.createOrderChangeLog({
-        orderId,
-        merchantId,
-        changeType: "BOOKING_CANCELLED",
-        actorUserId: userId,
-        actorName,
-        actorType: "user",
-        metadata: {
-          oldCourierTracking,
-          oldCourierName,
-          courierApiCalled: !!courierCancelResult,
-          courierCancelResult: courierCancelResult || undefined,
-          fulfillmentCancelled: fulfillmentCancelResult?.success || false,
-        },
-      });
-
-      const fulfillmentWarning = fulfillmentCancelResult && !fulfillmentCancelResult.success
-        ? `Shopify fulfillment cancel failed: ${fulfillmentCancelResult.error}`
-        : undefined;
-      res.json({ ...result.order, courierCancelResult, fulfillmentCancelled: fulfillmentCancelResult?.success || false, fulfillmentWarning });
-    } catch (error) {
-      console.error("Error cancelling booking:", error);
-      res.status(500).json({ message: "Failed to cancel booking" });
-    }
-  });
-
-  app.post("/api/orders/bulk-cleanup-cancelled", isAuthenticated, async (req: any, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-
-      const cancelledOrders: any[] = [];
-      let page = 1;
-      const pageSize = 200;
-      while (true) {
-        const { orders: batch } = await storage.getOrders(merchantId, {
-          workflowStatus: 'BOOKED',
-          page,
-          pageSize,
-        });
-        for (const o of batch) {
-          const raw = (o.courierRawStatus || '').toLowerCase();
-          const ship = (o.shipmentStatus || '').toUpperCase();
-          if (raw.includes('cancel') || ship === 'CANCELLED') {
-            cancelledOrders.push(o);
-          }
+        if (order.workflowStatus !== "BOOKED") {
+          return res
+            .status(400)
+            .json({
+              message: "Order must be in BOOKED status to cancel booking",
+            });
         }
-        if (batch.length < pageSize) break;
-        page++;
-      }
 
-      if (cancelledOrders.length === 0) {
-        return res.json({ cleaned: 0, message: "No cancelled BOOKED orders found" });
-      }
+        if (
+          order.shipmentStatus &&
+          PICKED_UP_OR_BEYOND_STATUSES.includes(order.shipmentStatus)
+        ) {
+          return res
+            .status(403)
+            .json({ message: "Cannot cancel - courier has already picked up" });
+        }
 
-      const userId = getSessionUserId(req) || "system";
-      const actorName = await getSessionUserName(req);
-      let cleaned = 0;
-      const errors: string[] = [];
+        const oldCourierTracking = order.courierTracking;
+        const oldCourierName = order.courierName;
+        let courierCancelResult: { success: boolean; message: string } | null =
+          null;
 
-      const store = await storage.getShopifyStore(merchantId);
-      let shopifyToken: string | null = null;
-      if (store?.isConnected && store?.accessToken && store?.shopDomain) {
-        try { shopifyToken = decryptToken(store.accessToken); } catch { shopifyToken = store.accessToken; }
-      }
-
-      for (const order of cancelledOrders) {
-        try {
-          if (order.shopifyFulfillmentId && shopifyToken && store?.shopDomain) {
-            try {
-              await cancelShopifyFulfillment(store.shopDomain, shopifyToken, order.shopifyFulfillmentId);
-            } catch (e: any) {
-              console.warn(`[BulkCleanup] Fulfillment cancel failed for ${order.orderNumber}: ${e.message}`);
+        if (!skipCourierApi && oldCourierTracking && oldCourierName) {
+          const creds = await getCourierCredentials(merchantId, oldCourierName);
+          if (creds) {
+            courierCancelResult = await cancelCourierBooking(
+              oldCourierName,
+              oldCourierTracking,
+              {
+                apiKey: creds.apiKey || undefined,
+                apiSecret: creds.apiSecret || undefined,
+              },
+            );
+            console.log(
+              `[Cancel] Courier cancel result for ${oldCourierTracking}:`,
+              courierCancelResult,
+            );
+            if (!courierCancelResult.success) {
+              const cleanMsg =
+                typeof courierCancelResult.message === "string"
+                  ? courierCancelResult.message
+                  : JSON.stringify(courierCancelResult.message);
+              return res.status(400).json({
+                message: `Courier cancellation failed: ${cleanMsg}`,
+              });
             }
           }
-
-          await storage.updateOrderWorkflow(merchantId, order.id, {
-            courierName: null,
-            courierTracking: null,
-            courierSlipUrl: null,
-            bookingStatus: null,
-            bookingError: null,
-            bookedAt: null,
-            shipmentStatus: 'Unfulfilled',
-            courierRawStatus: null,
-            shopifyFulfillmentId: null,
-          });
-
-          const result = await transitionOrder({
-            merchantId,
-            orderId: order.id,
-            toStatus: "READY_TO_SHIP",
-            action: "bulk_cleanup",
-            actorUserId: userId,
-            actorName,
-            actorType: "user",
-            reason: "Bulk cleanup: courier-cancelled order reverted to Ready to Ship",
-          });
-
-          if (result.success) {
-            cleaned++;
-          } else {
-            errors.push(`${order.orderNumber}: transition failed - ${result.error}`);
-          }
-        } catch (e: any) {
-          errors.push(`${order.orderNumber}: ${e.message}`);
         }
+
+        let fulfillmentCancelResult: {
+          success: boolean;
+          error?: string;
+        } | null = null;
+        if (order.shopifyFulfillmentId && order.shopifyOrderId) {
+          const store = await storage.getShopifyStore(merchantId);
+          if (store?.isConnected && store?.accessToken && store?.shopDomain) {
+            let token = store.accessToken;
+            try {
+              token = decryptToken(store.accessToken);
+            } catch {}
+            fulfillmentCancelResult = await cancelShopifyFulfillment(
+              store.shopDomain,
+              token,
+              order.shopifyFulfillmentId,
+            );
+            console.log(
+              `[Cancel] Shopify fulfillment cancel result for ${order.shopifyFulfillmentId}:`,
+              fulfillmentCancelResult,
+            );
+            if (!fulfillmentCancelResult.success) {
+              console.warn(
+                `[Cancel] Shopify fulfillment cancel failed (non-blocking): ${fulfillmentCancelResult.error}`,
+              );
+            }
+          }
+        }
+
+        await storage.updateOrderWorkflow(merchantId, orderId, {
+          courierName: null,
+          courierTracking: null,
+          courierSlipUrl: null,
+          bookingStatus: null,
+          bookingError: null,
+          bookedAt: null,
+          shipmentStatus: "Unfulfilled",
+          courierRawStatus: null,
+          shopifyFulfillmentId: null,
+        });
+
+        const userId = getSessionUserId(req) || "system";
+        const actorName = await getSessionUserName(req);
+        const result = await transitionOrder({
+          merchantId,
+          orderId,
+          toStatus: "READY_TO_SHIP",
+          action: "cancel_booking",
+          actorUserId: userId,
+          actorName,
+          actorType: "user",
+          reason: courierCancelResult
+            ? `Booking cancelled with courier API (${courierCancelResult.message})`
+            : "Booking cancelled by user (local only)",
+        });
+
+        if (!result.success) {
+          return res.status(400).json({ message: result.error });
+        }
+
+        await storage.createOrderChangeLog({
+          orderId,
+          merchantId,
+          changeType: "BOOKING_CANCELLED",
+          actorUserId: userId,
+          actorName,
+          actorType: "user",
+          metadata: {
+            oldCourierTracking,
+            oldCourierName,
+            courierApiCalled: !!courierCancelResult,
+            courierCancelResult: courierCancelResult || undefined,
+            fulfillmentCancelled: fulfillmentCancelResult?.success || false,
+          },
+        });
+
+        const fulfillmentWarning =
+          fulfillmentCancelResult && !fulfillmentCancelResult.success
+            ? `Shopify fulfillment cancel failed: ${fulfillmentCancelResult.error}`
+            : undefined;
+        res.json({
+          ...result.order,
+          courierCancelResult,
+          fulfillmentCancelled: fulfillmentCancelResult?.success || false,
+          fulfillmentWarning,
+        });
+      } catch (error) {
+        console.error("Error cancelling booking:", error);
+        res.status(500).json({ message: "Failed to cancel booking" });
       }
+    },
+  );
 
-      console.log(`[BulkCleanup] Cleaned ${cleaned}/${cancelledOrders.length} cancelled BOOKED orders`);
-      res.json({ cleaned, total: cancelledOrders.length, errors: errors.length > 0 ? errors : undefined });
-    } catch (error) {
-      console.error("Error in bulk cleanup:", error);
-      res.status(500).json({ message: "Failed to run bulk cleanup" });
-    }
-  });
+  app.post(
+    "/api/orders/bulk-cleanup-cancelled",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
 
-  app.post("/api/orders/:id/cancel-shopify", isAuthenticated, async (req: any, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-      const orderId = req.params.id;
-      const reason = req.body?.reason || "other";
+        const cancelledOrders: any[] = [];
+        let page = 1;
+        const pageSize = 200;
+        while (true) {
+          const { orders: batch } = await storage.getOrders(merchantId, {
+            workflowStatus: "BOOKED",
+            page,
+            pageSize,
+          });
+          for (const o of batch) {
+            const raw = (o.courierRawStatus || "").toLowerCase();
+            const ship = (o.shipmentStatus || "").toUpperCase();
+            if (raw.includes("cancel") || ship === "CANCELLED") {
+              cancelledOrders.push(o);
+            }
+          }
+          if (batch.length < pageSize) break;
+          page++;
+        }
 
-      const order = await storage.getOrderById(merchantId, orderId);
-      if (!order) return res.status(404).json({ message: "Order not found" });
+        if (cancelledOrders.length === 0) {
+          return res.json({
+            cleaned: 0,
+            message: "No cancelled BOOKED orders found",
+          });
+        }
 
-      if (!order.shopifyOrderId) {
-        return res.status(400).json({ message: "Order has no Shopify ID - not linked to Shopify" });
+        const userId = getSessionUserId(req) || "system";
+        const actorName = await getSessionUserName(req);
+        let cleaned = 0;
+        const errors: string[] = [];
+
+        const store = await storage.getShopifyStore(merchantId);
+        let shopifyToken: string | null = null;
+        if (store?.isConnected && store?.accessToken && store?.shopDomain) {
+          try {
+            shopifyToken = decryptToken(store.accessToken);
+          } catch {
+            shopifyToken = store.accessToken;
+          }
+        }
+
+        for (const order of cancelledOrders) {
+          try {
+            if (
+              order.shopifyFulfillmentId &&
+              shopifyToken &&
+              store?.shopDomain
+            ) {
+              try {
+                await cancelShopifyFulfillment(
+                  store.shopDomain,
+                  shopifyToken,
+                  order.shopifyFulfillmentId,
+                );
+              } catch (e: any) {
+                console.warn(
+                  `[BulkCleanup] Fulfillment cancel failed for ${order.orderNumber}: ${e.message}`,
+                );
+              }
+            }
+
+            await storage.updateOrderWorkflow(merchantId, order.id, {
+              courierName: null,
+              courierTracking: null,
+              courierSlipUrl: null,
+              bookingStatus: null,
+              bookingError: null,
+              bookedAt: null,
+              shipmentStatus: "Unfulfilled",
+              courierRawStatus: null,
+              shopifyFulfillmentId: null,
+            });
+
+            const result = await transitionOrder({
+              merchantId,
+              orderId: order.id,
+              toStatus: "READY_TO_SHIP",
+              action: "bulk_cleanup",
+              actorUserId: userId,
+              actorName,
+              actorType: "user",
+              reason:
+                "Bulk cleanup: courier-cancelled order reverted to Ready to Ship",
+            });
+
+            if (result.success) {
+              cleaned++;
+            } else {
+              errors.push(
+                `${order.orderNumber}: transition failed - ${result.error}`,
+              );
+            }
+          } catch (e: any) {
+            errors.push(`${order.orderNumber}: ${e.message}`);
+          }
+        }
+
+        console.log(
+          `[BulkCleanup] Cleaned ${cleaned}/${cancelledOrders.length} cancelled BOOKED orders`,
+        );
+        res.json({
+          cleaned,
+          total: cancelledOrders.length,
+          errors: errors.length > 0 ? errors : undefined,
+        });
+      } catch (error) {
+        console.error("Error in bulk cleanup:", error);
+        res.status(500).json({ message: "Failed to run bulk cleanup" });
       }
+    },
+  );
 
-      if (order.cancelledAt) {
-        return res.status(400).json({ message: "Order is already cancelled" });
+  app.post(
+    "/api/orders/:id/cancel-shopify",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+        const orderId = req.params.id;
+        const reason = req.body?.reason || "other";
+
+        const order = await storage.getOrderById(merchantId, orderId);
+        if (!order) return res.status(404).json({ message: "Order not found" });
+
+        if (!order.shopifyOrderId) {
+          return res
+            .status(400)
+            .json({
+              message: "Order has no Shopify ID - not linked to Shopify",
+            });
+        }
+
+        if (order.cancelledAt) {
+          return res
+            .status(400)
+            .json({ message: "Order is already cancelled" });
+        }
+
+        const store = await storage.getShopifyStore(merchantId);
+        if (
+          !store ||
+          !store.isConnected ||
+          !store.accessToken ||
+          !store.shopDomain
+        ) {
+          return res
+            .status(400)
+            .json({ message: "Shopify store is not connected" });
+        }
+
+        let shopifyCancelled = false;
+        let shopifyError: string | undefined;
+
+        const cancelResult = await cancelShopifyOrder(
+          store.shopDomain,
+          store.accessToken,
+          order.shopifyOrderId,
+          reason,
+        );
+
+        if (cancelResult.success) {
+          shopifyCancelled = true;
+        } else {
+          shopifyError = cancelResult.error;
+          console.warn(
+            `[Cancel] Shopify cancellation failed for order ${orderId}, proceeding with local cancel: ${cancelResult.error}`,
+          );
+        }
+
+        await storage.updateOrderWorkflow(merchantId, orderId, {
+          cancelledAt: new Date(),
+        });
+
+        const userId = getSessionUserId(req) || "system";
+        const actorName = await getSessionUserName(req);
+        const result = await transitionOrder({
+          merchantId,
+          orderId,
+          toStatus: "CANCELLED",
+          action: "shopify_cancel",
+          actorUserId: userId,
+          actorName,
+          actorType: "user",
+          reason: shopifyCancelled
+            ? `Shopify order cancelled via API (reason: ${reason})`
+            : `Order cancelled locally (Shopify cancel failed: ${shopifyError})`,
+        });
+
+        await storage.createOrderChangeLog({
+          orderId,
+          merchantId,
+          changeType: "SHOPIFY_CANCELLED",
+          actorUserId: userId,
+          actorName,
+          actorType: "user",
+          metadata: {
+            shopifyOrderId: order.shopifyOrderId,
+            reason,
+            shopifyCancelled,
+            shopifyError,
+          },
+        });
+
+        res.json({
+          success: true,
+          order: result.order,
+          shopifyCancelled,
+          ...(shopifyError && {
+            shopifyWarning: `Order cancelled locally but Shopify cancellation failed: ${shopifyError}`,
+          }),
+        });
+      } catch (error) {
+        console.error("Error cancelling Shopify order:", error);
+        res.status(500).json({ message: "Failed to cancel Shopify order" });
       }
-
-      const store = await storage.getShopifyStore(merchantId);
-      if (!store || !store.isConnected || !store.accessToken || !store.shopDomain) {
-        return res.status(400).json({ message: "Shopify store is not connected" });
-      }
-
-      let shopifyCancelled = false;
-      let shopifyError: string | undefined;
-
-      const cancelResult = await cancelShopifyOrder(
-        store.shopDomain,
-        store.accessToken,
-        order.shopifyOrderId,
-        reason,
-      );
-
-      if (cancelResult.success) {
-        shopifyCancelled = true;
-      } else {
-        shopifyError = cancelResult.error;
-        console.warn(`[Cancel] Shopify cancellation failed for order ${orderId}, proceeding with local cancel: ${cancelResult.error}`);
-      }
-
-      await storage.updateOrderWorkflow(merchantId, orderId, {
-        cancelledAt: new Date(),
-      });
-
-      const userId = getSessionUserId(req) || "system";
-      const actorName = await getSessionUserName(req);
-      const result = await transitionOrder({
-        merchantId,
-        orderId,
-        toStatus: "CANCELLED",
-        action: "shopify_cancel",
-        actorUserId: userId,
-        actorName,
-        actorType: "user",
-        reason: shopifyCancelled
-          ? `Shopify order cancelled via API (reason: ${reason})`
-          : `Order cancelled locally (Shopify cancel failed: ${shopifyError})`,
-      });
-
-      await storage.createOrderChangeLog({
-        orderId,
-        merchantId,
-        changeType: "SHOPIFY_CANCELLED",
-        actorUserId: userId,
-        actorName,
-        actorType: "user",
-        metadata: { shopifyOrderId: order.shopifyOrderId, reason, shopifyCancelled, shopifyError },
-      });
-
-      res.json({
-        success: true,
-        order: result.order,
-        shopifyCancelled,
-        ...(shopifyError && { shopifyWarning: `Order cancelled locally but Shopify cancellation failed: ${shopifyError}` }),
-      });
-    } catch (error) {
-      console.error("Error cancelling Shopify order:", error);
-      res.status(500).json({ message: "Failed to cancel Shopify order" });
-    }
-  });
+    },
+  );
 
   app.get("/api/orders/:id", isAuthenticated, async (req, res) => {
     try {
@@ -1022,12 +1461,15 @@ export async function registerRoutes(
       }
 
       // Get related shipments with events (all scoped by merchantId)
-      const orderShipments = await storage.getShipmentsByOrderId(merchantId, order.id);
+      const orderShipments = await storage.getShipmentsByOrderId(
+        merchantId,
+        order.id,
+      );
       const shipmentsWithEvents = await Promise.all(
         orderShipments.map(async (shipment) => ({
           ...shipment,
           events: await storage.getShipmentEvents(merchantId, shipment.id),
-        }))
+        })),
       );
 
       // Get remarks (scoped by merchantId via order ownership)
@@ -1048,243 +1490,340 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/orders/:id/remarks", isAuthenticated, async (req: any, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
+  app.post(
+    "/api/orders/:id/remarks",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
 
-      // Validate request body
-      const validated = remarkSchema.safeParse(req.body);
-      if (!validated.success) {
-        return res.status(400).json({ message: validated.error.errors[0].message });
+        // Validate request body
+        const validated = remarkSchema.safeParse(req.body);
+        if (!validated.success) {
+          return res
+            .status(400)
+            .json({ message: validated.error.errors[0].message });
+        }
+
+        // Verify order exists and belongs to merchant
+        const order = await storage.getOrderById(merchantId, req.params.id);
+        if (!order) {
+          return res.status(404).json({ message: "Order not found" });
+        }
+
+        const userId = getSessionUserId(req) || "unknown";
+
+        // Create remark with merchantId scope check
+        const remark = await storage.createRemark(merchantId, {
+          orderId: req.params.id,
+          userId,
+          content: validated.data.content,
+          remarkType: validated.data.remarkType,
+          isInternal: true,
+        });
+
+        const actorName = await getSessionUserName(req);
+        await storage.createOrderChangeLog({
+          orderId: req.params.id,
+          merchantId,
+          changeType: "REMARK_ADDED",
+          fieldName: "remarks",
+          newValue: validated.data.content,
+          actorUserId: userId,
+          actorName,
+          actorType: "user",
+          metadata: { remarkType: validated.data.remarkType },
+        });
+
+        res.json(remark);
+      } catch (error) {
+        console.error("Error creating remark:", error);
+        res.status(500).json({ message: "Failed to create remark" });
       }
-
-      // Verify order exists and belongs to merchant
-      const order = await storage.getOrderById(merchantId, req.params.id);
-      if (!order) {
-        return res.status(404).json({ message: "Order not found" });
-      }
-
-      const userId = getSessionUserId(req) || "unknown";
-
-      // Create remark with merchantId scope check
-      const remark = await storage.createRemark(merchantId, {
-        orderId: req.params.id,
-        userId,
-        content: validated.data.content,
-        remarkType: validated.data.remarkType,
-        isInternal: true,
-      });
-
-      const actorName = await getSessionUserName(req);
-      await storage.createOrderChangeLog({
-        orderId: req.params.id,
-        merchantId,
-        changeType: "REMARK_ADDED",
-        fieldName: "remarks",
-        newValue: validated.data.content,
-        actorUserId: userId,
-        actorName,
-        actorType: "user",
-        metadata: { remarkType: validated.data.remarkType },
-      });
-
-      res.json(remark);
-    } catch (error) {
-      console.error("Error creating remark:", error);
-      res.status(500).json({ message: "Failed to create remark" });
-    }
-  });
+    },
+  );
 
   // Update order remark
-  app.patch("/api/orders/:id/remark", isAuthenticated, async (req: any, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
+  app.patch(
+    "/api/orders/:id/remark",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
 
-      const { value } = req.body;
-      if (typeof value !== 'string') {
-        return res.status(400).json({ message: "Invalid remark value" });
+        const { value } = req.body;
+        if (typeof value !== "string") {
+          return res.status(400).json({ message: "Invalid remark value" });
+        }
+
+        // Verify order exists and belongs to merchant
+        const order = await storage.getOrderById(merchantId, req.params.id);
+        if (!order) {
+          return res.status(404).json({ message: "Order not found" });
+        }
+
+        const updated = await storage.updateOrder(merchantId, req.params.id, {
+          remark: value,
+        });
+        res.json(updated);
+      } catch (error) {
+        console.error("Error updating remark:", error);
+        res.status(500).json({ message: "Failed to update remark" });
       }
-
-      // Verify order exists and belongs to merchant
-      const order = await storage.getOrderById(merchantId, req.params.id);
-      if (!order) {
-        return res.status(404).json({ message: "Order not found" });
-      }
-
-      const updated = await storage.updateOrder(merchantId, req.params.id, { remark: value });
-      res.json(updated);
-    } catch (error) {
-      console.error("Error updating remark:", error);
-      res.status(500).json({ message: "Failed to update remark" });
-    }
-  });
+    },
+  );
 
   // ============================================
   // ORDER PAYMENTS
   // ============================================
-  app.get("/api/orders/:id/payments", isAuthenticated, async (req: any, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-      const order = await storage.getOrderById(merchantId, req.params.id);
-      if (!order) return res.status(404).json({ message: "Order not found" });
-      const payments = await storage.getOrderPayments(merchantId, req.params.id);
-      const totalAmount = parseFloat(order.totalAmount) || 0;
-      const prepaidAmount = parseFloat(order.prepaidAmount || "0");
-      const codRemaining = parseFloat(order.codRemaining || String(totalAmount));
-      res.json({
-        payments,
-        totalAmount,
-        prepaidAmount,
-        codRemaining,
-        codPaymentStatus: order.codPaymentStatus || "UNPAID",
-        isBooked: ["BOOKED", "FULFILLED", "DELIVERED", "RETURN"].includes(order.workflowStatus),
-      });
-    } catch (error) {
-      console.error("Error fetching payments:", error);
-      res.status(500).json({ message: "Failed to fetch payments" });
-    }
-  });
-
-  app.post("/api/orders/:id/payments", isAuthenticated, async (req: any, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-
-      const order = await storage.getOrderById(merchantId, req.params.id);
-      if (!order) return res.status(404).json({ message: "Order not found" });
-      if (["BOOKED", "FULFILLED", "DELIVERED", "RETURN", "CANCELLED"].includes(order.workflowStatus)) {
-        return res.status(403).json({ message: "Payments locked after booking" });
+  app.get(
+    "/api/orders/:id/payments",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+        const order = await storage.getOrderById(merchantId, req.params.id);
+        if (!order) return res.status(404).json({ message: "Order not found" });
+        const payments = await storage.getOrderPayments(
+          merchantId,
+          req.params.id,
+        );
+        const totalAmount = parseFloat(order.totalAmount) || 0;
+        const prepaidAmount = parseFloat(order.prepaidAmount || "0");
+        const codRemaining = parseFloat(
+          order.codRemaining || String(totalAmount),
+        );
+        res.json({
+          payments,
+          totalAmount,
+          prepaidAmount,
+          codRemaining,
+          codPaymentStatus: order.codPaymentStatus || "UNPAID",
+          isBooked: ["BOOKED", "FULFILLED", "DELIVERED", "RETURN"].includes(
+            order.workflowStatus,
+          ),
+        });
+      } catch (error) {
+        console.error("Error fetching payments:", error);
+        res.status(500).json({ message: "Failed to fetch payments" });
       }
+    },
+  );
 
-      const { amount, method, reference, notes } = req.body;
-      if (!amount || typeof amount !== "number" || amount <= 0) {
-        return res.status(400).json({ message: "Amount must be a positive number" });
+  app.post(
+    "/api/orders/:id/payments",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+
+        const order = await storage.getOrderById(merchantId, req.params.id);
+        if (!order) return res.status(404).json({ message: "Order not found" });
+        if (
+          ["BOOKED", "FULFILLED", "DELIVERED", "RETURN", "CANCELLED"].includes(
+            order.workflowStatus,
+          )
+        ) {
+          return res
+            .status(403)
+            .json({ message: "Payments locked after booking" });
+        }
+
+        const { amount, method, reference, notes } = req.body;
+        if (!amount || typeof amount !== "number" || amount <= 0) {
+          return res
+            .status(400)
+            .json({ message: "Amount must be a positive number" });
+        }
+        if (!method)
+          return res
+            .status(400)
+            .json({ message: "Payment method is required" });
+        const userId = getSessionUserId(req) || "unknown";
+        const actorName = await getSessionUserName(req);
+        const state = await addPayment(
+          merchantId,
+          req.params.id,
+          amount,
+          method,
+          userId,
+          reference,
+          notes,
+        );
+
+        await storage.createOrderChangeLog({
+          orderId: req.params.id,
+          merchantId,
+          changeType: "PAYMENT_ADDED",
+          fieldName: "prepaidAmount",
+          oldValue: order.prepaidAmount || "0",
+          newValue: String(state.prepaidAmount),
+          actorUserId: userId,
+          actorName,
+          actorType: "user",
+          metadata: { amount, method, reference, notes },
+        });
+
+        res.json(state);
+      } catch (error: any) {
+        console.error("Error adding payment:", error);
+        res
+          .status(400)
+          .json({ message: error.message || "Failed to add payment" });
       }
-      if (!method) return res.status(400).json({ message: "Payment method is required" });
-      const userId = getSessionUserId(req) || "unknown";
-      const actorName = await getSessionUserName(req);
-      const state = await addPayment(merchantId, req.params.id, amount, method, userId, reference, notes);
+    },
+  );
 
-      await storage.createOrderChangeLog({
-        orderId: req.params.id,
-        merchantId,
-        changeType: "PAYMENT_ADDED",
-        fieldName: "prepaidAmount",
-        oldValue: order.prepaidAmount || "0",
-        newValue: String(state.prepaidAmount),
-        actorUserId: userId,
-        actorName,
-        actorType: "user",
-        metadata: { amount, method, reference, notes },
-      });
-
-      res.json(state);
-    } catch (error: any) {
-      console.error("Error adding payment:", error);
-      res.status(400).json({ message: error.message || "Failed to add payment" });
-    }
-  });
-
-  app.delete("/api/orders/:orderId/payments/:paymentId", isAuthenticated, async (req: any, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-      const orderBefore = await storage.getOrderById(merchantId, req.params.orderId);
-      const state = await deletePayment(merchantId, req.params.paymentId, req.params.orderId);
-      const userId = getSessionUserId(req) || "unknown";
-      const actorName = await getSessionUserName(req);
-      await storage.createOrderChangeLog({
-        orderId: req.params.orderId,
-        merchantId,
-        changeType: "PAYMENT_DELETED",
-        fieldName: "prepaidAmount",
-        oldValue: orderBefore?.prepaidAmount || "0",
-        newValue: String(state.prepaidAmount),
-        actorUserId: userId,
-        actorName,
-        actorType: "user",
-        metadata: { paymentId: req.params.paymentId },
-      });
-      res.json(state);
-    } catch (error: any) {
-      console.error("Error deleting payment:", error);
-      res.status(400).json({ message: error.message || "Failed to delete payment" });
-    }
-  });
-
-  app.post("/api/orders/:id/payments/mark-paid", isAuthenticated, async (req: any, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-      const { method } = req.body;
-      const userId = getSessionUserId(req) || "unknown";
-      const actorName = await getSessionUserName(req);
-      const orderBefore = await storage.getOrderById(merchantId, req.params.id);
-      const state = await markFullyPaid(merchantId, req.params.id, method || "CASH", userId);
-      await storage.createOrderChangeLog({
-        orderId: req.params.id,
-        merchantId,
-        changeType: "PAYMENT_MARK_PAID",
-        fieldName: "codPaymentStatus",
-        oldValue: orderBefore?.codPaymentStatus || "UNPAID",
-        newValue: "PAID",
-        actorUserId: userId,
-        actorName,
-        actorType: "user",
-        metadata: { method: method || "CASH" },
-      });
-      res.json(state);
-    } catch (error: any) {
-      console.error("Error marking fully paid:", error);
-      res.status(400).json({ message: error.message || "Failed to mark as paid" });
-    }
-  });
-
-  app.post("/api/orders/:id/payments/reset", isAuthenticated, async (req: any, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-      const orderBefore = await storage.getOrderById(merchantId, req.params.id);
-      const state = await resetPayments(merchantId, req.params.id);
-      const userId = getSessionUserId(req) || "unknown";
-      const actorName = await getSessionUserName(req);
-      await storage.createOrderChangeLog({
-        orderId: req.params.id,
-        merchantId,
-        changeType: "PAYMENT_RESET",
-        fieldName: "prepaidAmount",
-        oldValue: orderBefore?.prepaidAmount || "0",
-        newValue: "0",
-        actorUserId: userId,
-        actorName,
-        actorType: "user",
-      });
-      res.json(state);
-    } catch (error: any) {
-      console.error("Error resetting payments:", error);
-      res.status(400).json({ message: error.message || "Failed to reset payments" });
-    }
-  });
-
-  app.post("/api/orders/bulk-mark-prepaid", isAuthenticated, async (req: any, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-      const { orderIds, method } = req.body;
-      if (!Array.isArray(orderIds) || orderIds.length === 0) {
-        return res.status(400).json({ message: "orderIds array is required" });
+  app.delete(
+    "/api/orders/:orderId/payments/:paymentId",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+        const orderBefore = await storage.getOrderById(
+          merchantId,
+          req.params.orderId,
+        );
+        const state = await deletePayment(
+          merchantId,
+          req.params.paymentId,
+          req.params.orderId,
+        );
+        const userId = getSessionUserId(req) || "unknown";
+        const actorName = await getSessionUserName(req);
+        await storage.createOrderChangeLog({
+          orderId: req.params.orderId,
+          merchantId,
+          changeType: "PAYMENT_DELETED",
+          fieldName: "prepaidAmount",
+          oldValue: orderBefore?.prepaidAmount || "0",
+          newValue: String(state.prepaidAmount),
+          actorUserId: userId,
+          actorName,
+          actorType: "user",
+          metadata: { paymentId: req.params.paymentId },
+        });
+        res.json(state);
+      } catch (error: any) {
+        console.error("Error deleting payment:", error);
+        res
+          .status(400)
+          .json({ message: error.message || "Failed to delete payment" });
       }
-      const userId = getSessionUserId(req) || "unknown";
-      const result = await bulkMarkPrepaid(merchantId, orderIds, method || "CASH", userId);
-      res.json(result);
-    } catch (error: any) {
-      console.error("Error bulk marking prepaid:", error);
-      res.status(500).json({ message: error.message || "Failed to bulk mark prepaid" });
-    }
-  });
+    },
+  );
+
+  app.post(
+    "/api/orders/:id/payments/mark-paid",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+        const { method } = req.body;
+        const userId = getSessionUserId(req) || "unknown";
+        const actorName = await getSessionUserName(req);
+        const orderBefore = await storage.getOrderById(
+          merchantId,
+          req.params.id,
+        );
+        const state = await markFullyPaid(
+          merchantId,
+          req.params.id,
+          method || "CASH",
+          userId,
+        );
+        await storage.createOrderChangeLog({
+          orderId: req.params.id,
+          merchantId,
+          changeType: "PAYMENT_MARK_PAID",
+          fieldName: "codPaymentStatus",
+          oldValue: orderBefore?.codPaymentStatus || "UNPAID",
+          newValue: "PAID",
+          actorUserId: userId,
+          actorName,
+          actorType: "user",
+          metadata: { method: method || "CASH" },
+        });
+        res.json(state);
+      } catch (error: any) {
+        console.error("Error marking fully paid:", error);
+        res
+          .status(400)
+          .json({ message: error.message || "Failed to mark as paid" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/orders/:id/payments/reset",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+        const orderBefore = await storage.getOrderById(
+          merchantId,
+          req.params.id,
+        );
+        const state = await resetPayments(merchantId, req.params.id);
+        const userId = getSessionUserId(req) || "unknown";
+        const actorName = await getSessionUserName(req);
+        await storage.createOrderChangeLog({
+          orderId: req.params.id,
+          merchantId,
+          changeType: "PAYMENT_RESET",
+          fieldName: "prepaidAmount",
+          oldValue: orderBefore?.prepaidAmount || "0",
+          newValue: "0",
+          actorUserId: userId,
+          actorName,
+          actorType: "user",
+        });
+        res.json(state);
+      } catch (error: any) {
+        console.error("Error resetting payments:", error);
+        res
+          .status(400)
+          .json({ message: error.message || "Failed to reset payments" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/orders/bulk-mark-prepaid",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+        const { orderIds, method } = req.body;
+        if (!Array.isArray(orderIds) || orderIds.length === 0) {
+          return res
+            .status(400)
+            .json({ message: "orderIds array is required" });
+        }
+        const userId = getSessionUserId(req) || "unknown";
+        const result = await bulkMarkPrepaid(
+          merchantId,
+          orderIds,
+          method || "CASH",
+          userId,
+        );
+        res.json(result);
+      } catch (error: any) {
+        console.error("Error bulk marking prepaid:", error);
+        res
+          .status(500)
+          .json({ message: error.message || "Failed to bulk mark prepaid" });
+      }
+    },
+  );
 
   // Shipments
   app.get("/api/shipments", isAuthenticated, async (req, res) => {
@@ -1292,7 +1831,17 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
 
-      const { search, status, courier, dateFrom, dateTo, page: pageStr, pageSize: pageSizeStr, workflowStatus: wfStatus, shipmentStatus: shipStatusParam } = req.query;
+      const {
+        search,
+        status,
+        courier,
+        dateFrom,
+        dateTo,
+        page: pageStr,
+        pageSize: pageSizeStr,
+        workflowStatus: wfStatus,
+        shipmentStatus: shipStatusParam,
+      } = req.query;
       const page = parseInt(pageStr as string) || 1;
       const pageSize = parseInt(pageSizeStr as string) || 20;
       const offset = (page - 1) * pageSize;
@@ -1312,7 +1861,8 @@ export async function registerRoutes(
       }
 
       if (courier && courier !== "all") {
-        const mappedCourier = mapCourierSlugToName(courier as string) || courier as string;
+        const mappedCourier =
+          mapCourierSlugToName(courier as string) || (courier as string);
         conditions.push(eq(orders.courierName, mappedCourier));
       }
 
@@ -1322,10 +1872,10 @@ export async function registerRoutes(
           or(
             ilike(orders.orderNumber, searchTerm),
             ilike(orders.customerName, searchTerm),
-            ilike(orders.customerPhone || '', searchTerm),
-            ilike(orders.courierTracking || '', searchTerm),
-            ilike(orders.city || '', searchTerm),
-          )
+            ilike(orders.customerPhone || "", searchTerm),
+            ilike(orders.courierTracking || "", searchTerm),
+            ilike(orders.city || "", searchTerm),
+          ),
         );
       }
 
@@ -1343,38 +1893,51 @@ export async function registerRoutes(
       const whereClause = and(...conditions);
 
       const [result, totalResult] = await Promise.all([
-        db.select({
-          id: orders.id,
-          orderNumber: orders.orderNumber,
-          customerName: orders.customerName,
-          customerPhone: orders.customerPhone,
-          city: orders.city,
-          courierName: orders.courierName,
-          courierTracking: orders.courierTracking,
-          totalAmount: orders.totalAmount,
-          codRemaining: orders.codRemaining,
-          codPaymentStatus: orders.codPaymentStatus,
-          workflowStatus: orders.workflowStatus,
-          remark: orders.remark,
-          orderDate: orders.orderDate,
-          dispatchedAt: orders.dispatchedAt,
-          deliveredAt: orders.deliveredAt,
-          returnedAt: orders.returnedAt,
-          shipmentStatus: orders.shipmentStatus,
-          courierRawStatus: orders.courierRawStatus,
-          lastTrackingUpdate: orders.lastTrackingUpdate,
-          prepaidAmount: orders.prepaidAmount,
-          paymentMethod: orders.paymentMethod,
-        }).from(orders).where(whereClause).orderBy(desc(orders.orderDate)).limit(pageSize).offset(offset),
+        db
+          .select({
+            id: orders.id,
+            orderNumber: orders.orderNumber,
+            customerName: orders.customerName,
+            customerPhone: orders.customerPhone,
+            city: orders.city,
+            courierName: orders.courierName,
+            courierTracking: orders.courierTracking,
+            totalAmount: orders.totalAmount,
+            codRemaining: orders.codRemaining,
+            codPaymentStatus: orders.codPaymentStatus,
+            workflowStatus: orders.workflowStatus,
+            remark: orders.remark,
+            orderDate: orders.orderDate,
+            dispatchedAt: orders.dispatchedAt,
+            deliveredAt: orders.deliveredAt,
+            returnedAt: orders.returnedAt,
+            shipmentStatus: orders.shipmentStatus,
+            courierRawStatus: orders.courierRawStatus,
+            lastTrackingUpdate: orders.lastTrackingUpdate,
+            prepaidAmount: orders.prepaidAmount,
+            paymentMethod: orders.paymentMethod,
+          })
+          .from(orders)
+          .where(whereClause)
+          .orderBy(desc(orders.orderDate))
+          .limit(pageSize)
+          .offset(offset),
         db.select({ count: count() }).from(orders).where(whereClause),
       ]);
 
-      const countsByStatus = await db.select({
-        workflowStatus: orders.workflowStatus,
-        count: count(),
-      }).from(orders).where(
-        and(eq(orders.merchantId, merchantId), inArray(orders.workflowStatus, targetStatuses))
-      ).groupBy(orders.workflowStatus);
+      const countsByStatus = await db
+        .select({
+          workflowStatus: orders.workflowStatus,
+          count: count(),
+        })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.merchantId, merchantId),
+            inArray(orders.workflowStatus, targetStatuses),
+          ),
+        )
+        .groupBy(orders.workflowStatus);
 
       const counts: Record<string, number> = {};
       for (const row of countsByStatus) {
@@ -1399,7 +1962,14 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
 
-      const { courier, status, dateFrom, dateTo, page: pageStr, pageSize: pageSizeStr } = req.query;
+      const {
+        courier,
+        status,
+        dateFrom,
+        dateTo,
+        page: pageStr,
+        pageSize: pageSizeStr,
+      } = req.query;
       const page = parseInt(pageStr as string) || 1;
       const pageSize = parseInt(pageSizeStr as string) || 20;
 
@@ -1434,7 +2004,8 @@ export async function registerRoutes(
       ];
 
       if (courier && courier !== "all") {
-        const mappedCourier = mapCourierSlugToName(courier as string) || courier as string;
+        const mappedCourier =
+          mapCourierSlugToName(courier as string) || (courier as string);
         conditions.push(eq(orders.courierName, mappedCourier));
       }
       if (dateFrom) {
@@ -1450,37 +2021,56 @@ export async function registerRoutes(
 
       const whereClause = and(...conditions);
 
-      const rows = await db.select({
-        id: orders.id,
-        orderNumber: orders.orderNumber,
-        customerName: orders.customerName,
-        customerPhone: orders.customerPhone,
-        city: orders.city,
-        courierName: orders.courierName,
-        courierTracking: orders.courierTracking,
-        totalAmount: orders.totalAmount,
-        codRemaining: orders.codRemaining,
-        codPaymentStatus: orders.codPaymentStatus,
-        workflowStatus: orders.workflowStatus,
-        paymentMethod: orders.paymentMethod,
-        prepaidAmount: orders.prepaidAmount,
-        dispatchedAt: orders.dispatchedAt,
-        deliveredAt: orders.deliveredAt,
-        orderDate: orders.orderDate,
-      }).from(orders).where(whereClause).orderBy(orders.courierName, desc(orders.orderDate));
+      const rows = await db
+        .select({
+          id: orders.id,
+          orderNumber: orders.orderNumber,
+          customerName: orders.customerName,
+          customerPhone: orders.customerPhone,
+          city: orders.city,
+          courierName: orders.courierName,
+          courierTracking: orders.courierTracking,
+          totalAmount: orders.totalAmount,
+          codRemaining: orders.codRemaining,
+          codPaymentStatus: orders.codPaymentStatus,
+          workflowStatus: orders.workflowStatus,
+          paymentMethod: orders.paymentMethod,
+          prepaidAmount: orders.prepaidAmount,
+          dispatchedAt: orders.dispatchedAt,
+          deliveredAt: orders.deliveredAt,
+          orderDate: orders.orderDate,
+        })
+        .from(orders)
+        .where(whereClause)
+        .orderBy(orders.courierName, desc(orders.orderDate));
 
-      const totalsByCourier: Record<string, { count: number; totalAmount: number; codCollected: number; codPending: number }> = {};
+      const totalsByCourier: Record<
+        string,
+        {
+          count: number;
+          totalAmount: number;
+          codCollected: number;
+          codPending: number;
+        }
+      > = {};
       for (const row of rows) {
         const cn = row.courierName || "Unknown";
         if (!totalsByCourier[cn]) {
-          totalsByCourier[cn] = { count: 0, totalAmount: 0, codCollected: 0, codPending: 0 };
+          totalsByCourier[cn] = {
+            count: 0,
+            totalAmount: 0,
+            codCollected: 0,
+            codPending: 0,
+          };
         }
         totalsByCourier[cn].count++;
         totalsByCourier[cn].totalAmount += Number(row.totalAmount || 0);
         if (row.codPaymentStatus === "PAID") {
           totalsByCourier[cn].codCollected += Number(row.totalAmount || 0);
         } else {
-          totalsByCourier[cn].codPending += Number(row.codRemaining || row.totalAmount || 0);
+          totalsByCourier[cn].codPending += Number(
+            row.codRemaining || row.totalAmount || 0,
+          );
         }
       }
 
@@ -1517,7 +2107,14 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
 
-      const { search, courier, dateFrom, dateTo, page: pageStr, pageSize: pageSizeStr } = req.query;
+      const {
+        search,
+        courier,
+        dateFrom,
+        dateTo,
+        page: pageStr,
+        pageSize: pageSizeStr,
+      } = req.query;
       const page = parseInt(pageStr as string) || 1;
       const pageSize = parseInt(pageSizeStr as string) || 100;
       const offset = (page - 1) * pageSize;
@@ -1528,8 +2125,8 @@ export async function registerRoutes(
         conditions.push(
           or(
             ilike(codReconciliation.trackingNumber, `%${search}%`),
-            ilike(codReconciliation.courierName, `%${search}%`)
-          )!
+            ilike(codReconciliation.courierName, `%${search}%`),
+          )!,
         );
       }
       if (courier && courier !== "all") {
@@ -1538,37 +2135,52 @@ export async function registerRoutes(
       if (dateFrom) {
         const fromDate = new Date(dateFrom as string);
         fromDate.setHours(0, 0, 0, 0);
-        conditions.push(sql`${codReconciliation.createdAt} >= ${fromDate.toISOString()}`);
+        conditions.push(
+          sql`${codReconciliation.createdAt} >= ${fromDate.toISOString()}`,
+        );
       }
       if (dateTo) {
         const toDate = new Date(dateTo as string);
         toDate.setHours(23, 59, 59, 999);
-        conditions.push(sql`${codReconciliation.createdAt} <= ${toDate.toISOString()}`);
+        conditions.push(
+          sql`${codReconciliation.createdAt} <= ${toDate.toISOString()}`,
+        );
       }
 
       const whereClause = and(...conditions);
 
       const [records, totalResult, allForSummary] = await Promise.all([
-        db.select().from(codReconciliation).where(whereClause)
-          .orderBy(desc(codReconciliation.createdAt)).limit(pageSize).offset(offset),
-        db.select({ count: count() }).from(codReconciliation).where(whereClause),
-        db.select({
-          totalCod: sql<string>`COALESCE(SUM(${codReconciliation.codAmount}), 0)`,
-          recordCount: count(),
-          syncedCount: sql<number>`COUNT(CASE WHEN ${codReconciliation.lastSyncedAt} IS NOT NULL THEN 1 END)`,
-          unsyncedCount: sql<number>`COUNT(CASE WHEN ${codReconciliation.lastSyncedAt} IS NULL THEN 1 END)`,
-          totalTxnFee: sql<string>`COALESCE(SUM(COALESCE(${codReconciliation.transactionFee}, 0)), 0)`,
-          totalTxnTax: sql<string>`COALESCE(SUM(COALESCE(${codReconciliation.transactionTax}, 0)), 0)`,
-          totalReversalFee: sql<string>`COALESCE(SUM(COALESCE(${codReconciliation.reversalFee}, 0)), 0)`,
-          totalReversalTax: sql<string>`COALESCE(SUM(COALESCE(${codReconciliation.reversalTax}, 0)), 0)`,
-          totalCourierFee: sql<string>`COALESCE(SUM(COALESCE(${codReconciliation.courierFee}, 0)), 0)`,
-        }).from(codReconciliation).where(whereClause),
+        db
+          .select()
+          .from(codReconciliation)
+          .where(whereClause)
+          .orderBy(desc(codReconciliation.createdAt))
+          .limit(pageSize)
+          .offset(offset),
+        db
+          .select({ count: count() })
+          .from(codReconciliation)
+          .where(whereClause),
+        db
+          .select({
+            totalCod: sql<string>`COALESCE(SUM(${codReconciliation.codAmount}), 0)`,
+            recordCount: count(),
+            syncedCount: sql<number>`COUNT(CASE WHEN ${codReconciliation.lastSyncedAt} IS NOT NULL THEN 1 END)`,
+            unsyncedCount: sql<number>`COUNT(CASE WHEN ${codReconciliation.lastSyncedAt} IS NULL THEN 1 END)`,
+            totalTxnFee: sql<string>`COALESCE(SUM(COALESCE(${codReconciliation.transactionFee}, 0)), 0)`,
+            totalTxnTax: sql<string>`COALESCE(SUM(COALESCE(${codReconciliation.transactionTax}, 0)), 0)`,
+            totalReversalFee: sql<string>`COALESCE(SUM(COALESCE(${codReconciliation.reversalFee}, 0)), 0)`,
+            totalReversalTax: sql<string>`COALESCE(SUM(COALESCE(${codReconciliation.reversalTax}, 0)), 0)`,
+            totalCourierFee: sql<string>`COALESCE(SUM(COALESCE(${codReconciliation.courierFee}, 0)), 0)`,
+          })
+          .from(codReconciliation)
+          .where(whereClause),
       ]);
 
       const s = allForSummary[0] || {};
 
       // Compute per-record deductions and net using consistent logic
-      const computeRecord = (r: typeof records[0]) => {
+      const computeRecord = (r: (typeof records)[0]) => {
         const codAmt = Number(r.codAmount) || 0;
         const txnFee = Number(r.transactionFee) || 0;
         const txnTax = Number(r.transactionTax) || 0;
@@ -1576,12 +2188,15 @@ export async function registerRoutes(
         const reversalTax = Number(r.reversalTax) || 0;
         const courierFee = Number(r.courierFee) || 0;
         // Use courierFee if set (it's the total deduction from Leopards), otherwise sum individual fees (PostEx)
-        const totalDeduction = courierFee > 0 ? courierFee : (txnFee + txnTax + reversalFee + reversalTax);
-        const netPaid = Number(r.netAmount) || (codAmt - totalDeduction);
+        const totalDeduction =
+          courierFee > 0
+            ? courierFee
+            : txnFee + txnTax + reversalFee + reversalTax;
+        const netPaid = Number(r.netAmount) || codAmt - totalDeduction;
         return { totalDeduction, netPaid, hasSyncedData: !!r.lastSyncedAt };
       };
 
-      const ledgerRecords = records.map(r => {
+      const ledgerRecords = records.map((r) => {
         const computed = computeRecord(r);
         return {
           ...r,
@@ -1593,14 +2208,18 @@ export async function registerRoutes(
 
       // Use same logic for summary: sum deductions using CASE to pick courierFee OR individual fees
       const totalDeductions = Number(
-        await db.select({
-          total: sql<string>`COALESCE(SUM(
+        (await db
+          .select({
+            total: sql<string>`COALESCE(SUM(
             CASE 
               WHEN COALESCE(${codReconciliation.courierFee}, 0) > 0 THEN COALESCE(${codReconciliation.courierFee}, 0)
               ELSE COALESCE(${codReconciliation.transactionFee}, 0) + COALESCE(${codReconciliation.transactionTax}, 0) + COALESCE(${codReconciliation.reversalFee}, 0) + COALESCE(${codReconciliation.reversalTax}, 0)
             END
           ), 0)`,
-        }).from(codReconciliation).where(whereClause).then(r => r[0]?.total) || '0'
+          })
+          .from(codReconciliation)
+          .where(whereClause)
+          .then((r) => r[0]?.total)) || "0",
       );
 
       const totalCodNum = Number(s.totalCod || 0);
@@ -1641,14 +2260,17 @@ export async function registerRoutes(
       const page = parseInt(req.query.page as string) || 1;
       const pageSize = parseInt(req.query.pageSize as string) || 50;
 
-      const conditions: any[] = [eq(codReconciliation.merchantId, merchantId), isNotNull(codReconciliation.courierPaymentRef)];
+      const conditions: any[] = [
+        eq(codReconciliation.merchantId, merchantId),
+        isNotNull(codReconciliation.courierPaymentRef),
+      ];
 
       if (search) {
         conditions.push(
           or(
             ilike(codReconciliation.courierPaymentRef, `%${search}%`),
             ilike(codReconciliation.trackingNumber, `%${search}%`),
-          )
+          ),
         );
       }
       if (status) {
@@ -1661,54 +2283,55 @@ export async function registerRoutes(
       const whereClause = and(...conditions);
 
       const [chequeGroups, totalResult] = await Promise.all([
-        db.select({
-          chequeRef: codReconciliation.courierPaymentRef,
-          paymentStatus: sql<string>`MAX(${codReconciliation.courierPaymentStatus})`,
-          paymentMethod: sql<string>`MAX(${codReconciliation.courierPaymentMethod})`,
-          courierName: sql<string>`MAX(${codReconciliation.courierName})`,
-          slipLink: sql<string>`MAX(${codReconciliation.courierSlipLink})`,
-          shipmentCount: count(),
-          totalCod: sql<string>`COALESCE(SUM(${codReconciliation.codAmount}), 0)`,
-          totalCourierFee: sql<string>`COALESCE(SUM(COALESCE(${codReconciliation.courierFee}, 0)), 0)`,
-          totalNet: sql<string>`COALESCE(SUM(COALESCE(${codReconciliation.netAmount}, 0)), 0)`,
-          totalDeductions: sql<string>`COALESCE(SUM(
+        db
+          .select({
+            chequeRef: codReconciliation.courierPaymentRef,
+            paymentStatus: sql<string>`MAX(${codReconciliation.courierPaymentStatus})`,
+            paymentMethod: sql<string>`MAX(${codReconciliation.courierPaymentMethod})`,
+            courierName: sql<string>`MAX(${codReconciliation.courierName})`,
+            slipLink: sql<string>`MAX(${codReconciliation.courierSlipLink})`,
+            shipmentCount: count(),
+            totalCod: sql<string>`COALESCE(SUM(${codReconciliation.codAmount}), 0)`,
+            totalCourierFee: sql<string>`COALESCE(SUM(COALESCE(${codReconciliation.courierFee}, 0)), 0)`,
+            totalNet: sql<string>`COALESCE(SUM(COALESCE(${codReconciliation.netAmount}, 0)), 0)`,
+            totalDeductions: sql<string>`COALESCE(SUM(
             CASE 
               WHEN COALESCE(${codReconciliation.courierFee}, 0) > 0 THEN COALESCE(${codReconciliation.courierFee}, 0)
               ELSE COALESCE(${codReconciliation.transactionFee}, 0) + COALESCE(${codReconciliation.transactionTax}, 0) + COALESCE(${codReconciliation.reversalFee}, 0) + COALESCE(${codReconciliation.reversalTax}, 0)
             END
           ), 0)`,
-          earliestDate: sql<string>`MIN(${codReconciliation.createdAt})`,
-          latestDate: sql<string>`MAX(${codReconciliation.createdAt})`,
-        })
+            earliestDate: sql<string>`MIN(${codReconciliation.createdAt})`,
+            latestDate: sql<string>`MAX(${codReconciliation.createdAt})`,
+          })
           .from(codReconciliation)
           .where(whereClause)
-          .groupBy(
-            codReconciliation.courierPaymentRef,
-          )
+          .groupBy(codReconciliation.courierPaymentRef)
           .orderBy(desc(sql`MAX(${codReconciliation.createdAt})`))
           .limit(pageSize)
           .offset((page - 1) * pageSize),
-        db.select({
-          count: sql<number>`COUNT(DISTINCT ${codReconciliation.courierPaymentRef})`,
-        })
+        db
+          .select({
+            count: sql<number>`COUNT(DISTINCT ${codReconciliation.courierPaymentRef})`,
+          })
           .from(codReconciliation)
           .where(whereClause),
       ]);
 
-      const summaryResult = await db.select({
-        totalCheques: sql<number>`COUNT(DISTINCT ${codReconciliation.courierPaymentRef})`,
-        totalCod: sql<string>`COALESCE(SUM(${codReconciliation.codAmount}), 0)`,
-        totalNet: sql<string>`COALESCE(SUM(COALESCE(${codReconciliation.netAmount}, 0)), 0)`,
-        paidCount: sql<number>`COUNT(DISTINCT CASE WHEN ${codReconciliation.courierPaymentStatus} = 'Paid' THEN ${codReconciliation.courierPaymentRef} END)`,
-        pendingCount: sql<number>`COUNT(DISTINCT CASE WHEN ${codReconciliation.courierPaymentStatus} != 'Paid' OR ${codReconciliation.courierPaymentStatus} IS NULL THEN ${codReconciliation.courierPaymentRef} END)`,
-      })
+      const summaryResult = await db
+        .select({
+          totalCheques: sql<number>`COUNT(DISTINCT ${codReconciliation.courierPaymentRef})`,
+          totalCod: sql<string>`COALESCE(SUM(${codReconciliation.codAmount}), 0)`,
+          totalNet: sql<string>`COALESCE(SUM(COALESCE(${codReconciliation.netAmount}, 0)), 0)`,
+          paidCount: sql<number>`COUNT(DISTINCT CASE WHEN ${codReconciliation.courierPaymentStatus} = 'Paid' THEN ${codReconciliation.courierPaymentRef} END)`,
+          pendingCount: sql<number>`COUNT(DISTINCT CASE WHEN ${codReconciliation.courierPaymentStatus} != 'Paid' OR ${codReconciliation.courierPaymentStatus} IS NULL THEN ${codReconciliation.courierPaymentRef} END)`,
+        })
         .from(codReconciliation)
         .where(whereClause);
 
       const s = summaryResult[0] || {};
 
       res.json({
-        cheques: chequeGroups.map(c => ({
+        cheques: chequeGroups.map((c) => ({
           chequeRef: c.chequeRef,
           paymentStatus: c.paymentStatus || "Pending",
           paymentMethod: c.paymentMethod || "N/A",
@@ -1759,220 +2382,299 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/cod-reconciliation/reconcile", isAuthenticated, async (req: any, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
+  app.post(
+    "/api/cod-reconciliation/reconcile",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
 
-      // Validate request body
-      const validated = reconcileSchema.safeParse(req.body);
-      if (!validated.success) {
-        return res.status(400).json({ message: validated.error.errors[0].message });
-      }
-
-      const { recordIds, settlementRef } = validated.data;
-      const userId = getSessionUserId(req) || "unknown";
-
-      // Verify all records belong to this merchant using direct DB lookup
-      for (const recordId of recordIds) {
-        const record = await storage.getCodRecordById(merchantId, recordId);
-        if (!record) {
-          return res.status(403).json({ message: "Access denied to one or more records" });
+        // Validate request body
+        const validated = reconcileSchema.safeParse(req.body);
+        if (!validated.success) {
+          return res
+            .status(400)
+            .json({ message: validated.error.errors[0].message });
         }
+
+        const { recordIds, settlementRef } = validated.data;
+        const userId = getSessionUserId(req) || "unknown";
+
+        // Verify all records belong to this merchant using direct DB lookup
+        for (const recordId of recordIds) {
+          const record = await storage.getCodRecordById(merchantId, recordId);
+          if (!record) {
+            return res
+              .status(403)
+              .json({ message: "Access denied to one or more records" });
+          }
+        }
+
+        // Update all records (scoped by merchantId)
+        const updated = await Promise.all(
+          recordIds.map((id: string) =>
+            storage.updateCodReconciliation(merchantId, id, {
+              status: "received",
+              courierSettlementRef: settlementRef || null,
+              reconciliatedAt: new Date(),
+              reconciliatedBy: userId,
+            }),
+          ),
+        );
+
+        res.json({ updated: updated.filter(Boolean).length });
+      } catch (error) {
+        console.error("Error reconciling COD:", error);
+        res.status(500).json({ message: "Failed to reconcile COD" });
       }
-
-      // Update all records (scoped by merchantId)
-      const updated = await Promise.all(
-        recordIds.map((id: string) =>
-          storage.updateCodReconciliation(merchantId, id, {
-            status: "received",
-            courierSettlementRef: settlementRef || null,
-            reconciliatedAt: new Date(),
-            reconciliatedBy: userId,
-          })
-        )
-      );
-
-      res.json({ updated: updated.filter(Boolean).length });
-    } catch (error) {
-      console.error("Error reconciling COD:", error);
-      res.status(500).json({ message: "Failed to reconcile COD" });
-    }
-  });
+    },
+  );
 
   // Generate COD records from delivered orders
-  app.post("/api/cod-reconciliation/generate", isAuthenticated, async (req: any, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
+  app.post(
+    "/api/cod-reconciliation/generate",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
 
-      const result = await storage.generateCodRecordsFromOrders(merchantId);
-      res.json({ 
-        message: `Generated ${result.created} COD records (${result.skipped} already existed)`,
-        ...result 
-      });
-    } catch (error) {
-      console.error("Error generating COD records:", error);
-      res.status(500).json({ message: "Failed to generate COD records" });
-    }
-  });
+        const result = await storage.generateCodRecordsFromOrders(merchantId);
+        res.json({
+          message: `Generated ${result.created} COD records (${result.skipped} already existed)`,
+          ...result,
+        });
+      } catch (error) {
+        console.error("Error generating COD records:", error);
+        res.status(500).json({ message: "Failed to generate COD records" });
+      }
+    },
+  );
 
   // Sync COD payment data from courier APIs
-  app.post("/api/cod-reconciliation/sync-payments", isAuthenticated, async (req: any, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
+  app.post(
+    "/api/cod-reconciliation/sync-payments",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
 
-      let totalUpdated = 0;
-      let totalErrors = 0;
-      const courierResults: Record<string, { updated: number; errors: number; total: number }> = {};
+        let totalUpdated = 0;
+        let totalErrors = 0;
+        const courierResults: Record<
+          string,
+          { updated: number; errors: number; total: number }
+        > = {};
 
-      // Process Leopards pending records
-      const leopardsCreds = await getCourierCredentials(merchantId, "leopards");
-      if (leopardsCreds?.apiKey) {
-        const leopardsRecords = await storage.getPendingCodRecordsByCourier(merchantId, "Leopards Courier");
-        courierResults.leopards = { updated: 0, errors: 0, total: leopardsRecords.length };
+        // Process Leopards pending records
+        const leopardsCreds = await getCourierCredentials(
+          merchantId,
+          "leopards",
+        );
+        if (leopardsCreds?.apiKey) {
+          const leopardsRecords = await storage.getPendingCodRecordsByCourier(
+            merchantId,
+            "Leopards Courier",
+          );
+          courierResults.leopards = {
+            updated: 0,
+            errors: 0,
+            total: leopardsRecords.length,
+          };
 
-        if (leopardsRecords.length > 0) {
-          const trackingNumbers = leopardsRecords
-            .map(r => r.trackingNumber)
-            .filter((tn): tn is string => !!tn);
+          if (leopardsRecords.length > 0) {
+            const trackingNumbers = leopardsRecords
+              .map((r) => r.trackingNumber)
+              .filter((tn): tn is string => !!tn);
 
-          if (trackingNumbers.length > 0) {
-            try {
-              const paymentResults = await leopardsService.getPaymentDetails(trackingNumbers, {
-                apiKey: leopardsCreds.apiKey,
-                apiPassword: leopardsCreds.apiSecret || undefined,
-              });
+            if (trackingNumbers.length > 0) {
+              try {
+                const paymentResults = await leopardsService.getPaymentDetails(
+                  trackingNumbers,
+                  {
+                    apiKey: leopardsCreds.apiKey,
+                    apiPassword: leopardsCreds.apiSecret || undefined,
+                  },
+                );
 
-              for (const payment of paymentResults) {
-                if (!payment.success) continue;
+                for (const payment of paymentResults) {
+                  if (!payment.success) continue;
 
-                const record = leopardsRecords.find(r => r.trackingNumber === payment.trackingNumber);
-                if (!record) continue;
+                  const record = leopardsRecords.find(
+                    (r) => r.trackingNumber === payment.trackingNumber,
+                  );
+                  if (!record) continue;
 
-                const isSettled = payment.paymentStatus?.toLowerCase() === 'paid' ||
-                  payment.paymentStatus?.toLowerCase() === 'settled';
+                  const isSettled =
+                    payment.paymentStatus?.toLowerCase() === "paid" ||
+                    payment.paymentStatus?.toLowerCase() === "settled";
 
-                const updateData: any = {
-                  courierPaymentStatus: payment.paymentStatus || null,
-                  courierPaymentRef: payment.invoiceChequeNo || null,
-                  courierPaymentMethod: payment.paymentMethod || null,
-                  courierSlipLink: payment.slipLink || null,
-                  lastSyncedAt: new Date(),
-                };
+                  const updateData: any = {
+                    courierPaymentStatus: payment.paymentStatus || null,
+                    courierPaymentRef: payment.invoiceChequeNo || null,
+                    courierPaymentMethod: payment.paymentMethod || null,
+                    courierSlipLink: payment.slipLink || null,
+                    lastSyncedAt: new Date(),
+                  };
 
-                if (payment.invoiceChequeDate) {
-                  const chequeDate = new Date(payment.invoiceChequeDate);
-                  if (!isNaN(chequeDate.getTime())) {
-                    updateData.courierSettlementDate = chequeDate;
+                  if (payment.invoiceChequeDate) {
+                    const chequeDate = new Date(payment.invoiceChequeDate);
+                    if (!isNaN(chequeDate.getTime())) {
+                      updateData.courierSettlementDate = chequeDate;
+                    }
+                  }
+
+                  if (isSettled && record.status === "pending") {
+                    updateData.status = "received";
+                    updateData.courierSettlementRef =
+                      payment.invoiceChequeNo ||
+                      payment.paymentMethod ||
+                      "Courier confirmed";
+                    updateData.reconciliatedAt = new Date();
+                    updateData.reconciliatedBy = "system_sync";
+                  }
+
+                  await storage.updateCodReconciliation(
+                    merchantId,
+                    record.id,
+                    updateData,
+                  );
+                  courierResults.leopards.updated++;
+                  totalUpdated++;
+                }
+              } catch (err) {
+                console.error("[COD Sync] Leopards payment fetch error:", err);
+                courierResults.leopards.errors++;
+                totalErrors++;
+              }
+            }
+          }
+        }
+
+        // Process PostEx pending records
+        const postexCreds = await getCourierCredentials(merchantId, "postex");
+        if (postexCreds?.apiKey) {
+          const postexRecords = await storage.getPendingCodRecordsByCourier(
+            merchantId,
+            "PostEx",
+          );
+          courierResults.postex = {
+            updated: 0,
+            errors: 0,
+            total: postexRecords.length,
+          };
+
+          if (postexRecords.length > 0) {
+            for (const record of postexRecords) {
+              if (!record.trackingNumber) continue;
+
+              try {
+                const financialResult =
+                  await postexService.getTrackingWithFinancials(
+                    record.trackingNumber,
+                    { apiToken: postexCreds.apiKey },
+                  );
+                await new Promise((resolve) => setTimeout(resolve, 200));
+                const paymentResult = await postexService.getPaymentStatus(
+                  record.trackingNumber,
+                  { apiToken: postexCreds.apiKey },
+                );
+
+                const updateData: any = { lastSyncedAt: new Date() };
+
+                if (financialResult.success) {
+                  updateData.transactionFee =
+                    financialResult.transactionFee?.toString() || null;
+                  updateData.transactionTax =
+                    financialResult.transactionTax?.toString() || null;
+                  updateData.reversalFee =
+                    financialResult.reversalFee?.toString() || null;
+                  updateData.reversalTax =
+                    financialResult.reversalTax?.toString() || null;
+                  updateData.upfrontPayment =
+                    financialResult.upfrontPayment?.toString() || null;
+                  updateData.reservePayment =
+                    financialResult.reservePayment?.toString() || null;
+                  updateData.balancePayment =
+                    financialResult.balancePayment?.toString() || null;
+
+                  const totalFees =
+                    (financialResult.transactionFee || 0) +
+                    (financialResult.transactionTax || 0);
+                  if (totalFees > 0) {
+                    updateData.courierFee = totalFees.toString();
+                    const codAmt = Number(record.codAmount) || 0;
+                    updateData.netAmount = (codAmt - totalFees).toString();
                   }
                 }
 
-                if (isSettled && record.status === "pending") {
-                  updateData.status = "received";
-                  updateData.courierSettlementRef = payment.invoiceChequeNo || payment.paymentMethod || "Courier confirmed";
-                  updateData.reconciliatedAt = new Date();
-                  updateData.reconciliatedBy = "system_sync";
+                if (paymentResult.success) {
+                  updateData.courierPaymentStatus = paymentResult.settled
+                    ? "Settled"
+                    : "Pending";
+
+                  if (paymentResult.cprNumber1) {
+                    updateData.courierPaymentRef = paymentResult.cprNumber1;
+                  }
+                  if (paymentResult.cprNumber2) {
+                    updateData.courierPaymentRef =
+                      (updateData.courierPaymentRef
+                        ? updateData.courierPaymentRef + ", "
+                        : "") + paymentResult.cprNumber2;
+                  }
+
+                  if (paymentResult.settlementDate) {
+                    const settleDate = new Date(paymentResult.settlementDate);
+                    if (!isNaN(settleDate.getTime())) {
+                      updateData.courierSettlementDate = settleDate;
+                    }
+                  }
+
+                  if (paymentResult.settled && record.status === "pending") {
+                    updateData.status = "received";
+                    updateData.courierSettlementRef =
+                      updateData.courierPaymentRef ||
+                      "PostEx settlement confirmed";
+                    updateData.reconciliatedAt = new Date();
+                    updateData.reconciliatedBy = "system_sync";
+                  }
                 }
 
-                await storage.updateCodReconciliation(merchantId, record.id, updateData);
-                courierResults.leopards.updated++;
+                await storage.updateCodReconciliation(
+                  merchantId,
+                  record.id,
+                  updateData,
+                );
+                courierResults.postex.updated++;
                 totalUpdated++;
+              } catch (err) {
+                console.error(
+                  `[COD Sync] PostEx error for ${record.trackingNumber}:`,
+                  err,
+                );
+                courierResults.postex.errors++;
+                totalErrors++;
               }
-            } catch (err) {
-              console.error("[COD Sync] Leopards payment fetch error:", err);
-              courierResults.leopards.errors++;
-              totalErrors++;
+
+              await new Promise((resolve) => setTimeout(resolve, 200));
             }
           }
         }
+
+        res.json({
+          message: `Synced payment data: ${totalUpdated} records updated, ${totalErrors} errors`,
+          totalUpdated,
+          totalErrors,
+          courierResults,
+        });
+      } catch (error) {
+        console.error("Error syncing COD payments:", error);
+        res.status(500).json({ message: "Failed to sync COD payment data" });
       }
-
-      // Process PostEx pending records
-      const postexCreds = await getCourierCredentials(merchantId, "postex");
-      if (postexCreds?.apiKey) {
-        const postexRecords = await storage.getPendingCodRecordsByCourier(merchantId, "PostEx");
-        courierResults.postex = { updated: 0, errors: 0, total: postexRecords.length };
-
-        if (postexRecords.length > 0) {
-          for (const record of postexRecords) {
-            if (!record.trackingNumber) continue;
-
-            try {
-              const financialResult = await postexService.getTrackingWithFinancials(record.trackingNumber, { apiToken: postexCreds.apiKey });
-              await new Promise(resolve => setTimeout(resolve, 200));
-              const paymentResult = await postexService.getPaymentStatus(record.trackingNumber, { apiToken: postexCreds.apiKey });
-
-              const updateData: any = { lastSyncedAt: new Date() };
-
-              if (financialResult.success) {
-                updateData.transactionFee = financialResult.transactionFee?.toString() || null;
-                updateData.transactionTax = financialResult.transactionTax?.toString() || null;
-                updateData.reversalFee = financialResult.reversalFee?.toString() || null;
-                updateData.reversalTax = financialResult.reversalTax?.toString() || null;
-                updateData.upfrontPayment = financialResult.upfrontPayment?.toString() || null;
-                updateData.reservePayment = financialResult.reservePayment?.toString() || null;
-                updateData.balancePayment = financialResult.balancePayment?.toString() || null;
-
-                const totalFees = (financialResult.transactionFee || 0) + (financialResult.transactionTax || 0);
-                if (totalFees > 0) {
-                  updateData.courierFee = totalFees.toString();
-                  const codAmt = Number(record.codAmount) || 0;
-                  updateData.netAmount = (codAmt - totalFees).toString();
-                }
-              }
-
-              if (paymentResult.success) {
-                updateData.courierPaymentStatus = paymentResult.settled ? "Settled" : "Pending";
-
-                if (paymentResult.cprNumber1) {
-                  updateData.courierPaymentRef = paymentResult.cprNumber1;
-                }
-                if (paymentResult.cprNumber2) {
-                  updateData.courierPaymentRef = (updateData.courierPaymentRef ? updateData.courierPaymentRef + ", " : "") + paymentResult.cprNumber2;
-                }
-
-                if (paymentResult.settlementDate) {
-                  const settleDate = new Date(paymentResult.settlementDate);
-                  if (!isNaN(settleDate.getTime())) {
-                    updateData.courierSettlementDate = settleDate;
-                  }
-                }
-
-                if (paymentResult.settled && record.status === "pending") {
-                  updateData.status = "received";
-                  updateData.courierSettlementRef = updateData.courierPaymentRef || "PostEx settlement confirmed";
-                  updateData.reconciliatedAt = new Date();
-                  updateData.reconciliatedBy = "system_sync";
-                }
-              }
-
-              await storage.updateCodReconciliation(merchantId, record.id, updateData);
-              courierResults.postex.updated++;
-              totalUpdated++;
-            } catch (err) {
-              console.error(`[COD Sync] PostEx error for ${record.trackingNumber}:`, err);
-              courierResults.postex.errors++;
-              totalErrors++;
-            }
-
-            await new Promise(resolve => setTimeout(resolve, 200));
-          }
-        }
-      }
-
-      res.json({
-        message: `Synced payment data: ${totalUpdated} records updated, ${totalErrors} errors`,
-        totalUpdated,
-        totalErrors,
-        courierResults,
-      });
-    } catch (error) {
-      console.error("Error syncing COD payments:", error);
-      res.status(500).json({ message: "Failed to sync COD payment data" });
-    }
-  });
+    },
+  );
 
   // Team Management
   app.get("/api/team", isAuthenticated, async (req, res) => {
@@ -1995,46 +2697,72 @@ export async function registerRoutes(
 
       const validated = teamInviteSchema.safeParse(req.body);
       if (!validated.success) {
-        return res.status(400).json({ message: validated.error.errors[0].message });
+        return res
+          .status(400)
+          .json({ message: validated.error.errors[0].message });
       }
 
       const { email, role } = validated.data;
       const userId = (req.session as any).userId;
 
-      const [existingUser] = await db.select().from(users).where(eq(users.email, email));
+      const [existingUser] = await db
+        .select()
+        .from(users)
+        .where(eq(users.email, email));
       if (existingUser) {
-        const existingMember = await db.select().from(teamMembers)
-          .where(and(eq(teamMembers.userId, existingUser.id), eq(teamMembers.merchantId, merchantId)));
+        const existingMember = await db
+          .select()
+          .from(teamMembers)
+          .where(
+            and(
+              eq(teamMembers.userId, existingUser.id),
+              eq(teamMembers.merchantId, merchantId),
+            ),
+          );
         if (existingMember.length > 0) {
-          return res.status(400).json({ message: "This user is already a team member" });
+          return res
+            .status(400)
+            .json({ message: "This user is already a team member" });
         }
       }
 
-      const existingInvite = await db.select().from(teamInvites)
-        .where(and(
-          eq(teamInvites.email, email),
-          eq(teamInvites.merchantId, merchantId),
-          eq(teamInvites.status, "pending")
-        ));
+      const existingInvite = await db
+        .select()
+        .from(teamInvites)
+        .where(
+          and(
+            eq(teamInvites.email, email),
+            eq(teamInvites.merchantId, merchantId),
+            eq(teamInvites.status, "pending"),
+          ),
+        );
       if (existingInvite.length > 0) {
-        return res.status(400).json({ message: "An invitation has already been sent to this email. Use resend to send again." });
+        return res
+          .status(400)
+          .json({
+            message:
+              "An invitation has already been sent to this email. Use resend to send again.",
+          });
       }
 
       const token = crypto.randomBytes(32).toString("hex");
       const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-      const [invite] = await db.insert(teamInvites).values({
-        merchantId,
-        email,
-        role: role || "agent",
-        token,
-        tokenHash,
-        status: "pending",
-        invitedBy: userId,
-        expiresAt,
-        sendCount: 0,
-      }).returning();
+      const [invite] = await db
+        .insert(teamInvites)
+        .values({
+          merchantId,
+          email,
+          role: role || "agent",
+          token,
+          tokenHash,
+          status: "pending",
+          invitedBy: userId,
+          expiresAt,
+          sendCount: 0,
+        })
+        .returning();
 
       if (existingUser) {
         await db.insert(teamMembers).values({
@@ -2046,14 +2774,20 @@ export async function registerRoutes(
         });
 
         if (!existingUser.merchantId) {
-          await db.update(users).set({ merchantId }).where(eq(users.id, existingUser.id));
+          await db
+            .update(users)
+            .set({ merchantId })
+            .where(eq(users.id, existingUser.id));
         }
 
-        await db.update(teamInvites).set({
-          status: "accepted",
-          acceptedAt: new Date(),
-          acceptedByUserId: existingUser.id,
-        }).where(eq(teamInvites.id, invite.id));
+        await db
+          .update(teamInvites)
+          .set({
+            status: "accepted",
+            acceptedAt: new Date(),
+            acceptedByUserId: existingUser.id,
+          })
+          .where(eq(teamInvites.id, invite.id));
       }
 
       const inviteUrl = `${req.protocol}://${req.get("host")}/invite/${token}`;
@@ -2061,14 +2795,24 @@ export async function registerRoutes(
       let emailSent = false;
       let emailError: string | undefined;
       if (!existingUser) {
-        const [merchant] = await db.select().from(merchants).where(eq(merchants.id, merchantId));
-        const [inviter] = await db.select().from(users).where(eq(users.id, userId));
-        const inviterName = inviter ? `${inviter.firstName || ''} ${inviter.lastName || ''}`.trim() || inviter.email || 'A team admin' : 'A team admin';
+        const [merchant] = await db
+          .select()
+          .from(merchants)
+          .where(eq(merchants.id, merchantId));
+        const [inviter] = await db
+          .select()
+          .from(users)
+          .where(eq(users.id, userId));
+        const inviterName = inviter
+          ? `${inviter.firstName || ""} ${inviter.lastName || ""}`.trim() ||
+            inviter.email ||
+            "A team admin"
+          : "A team admin";
 
         const emailResult = await sendInviteEmail({
           toEmail: email,
-          merchantName: merchant?.name || 'ShipFlow Team',
-          role: role || 'agent',
+          merchantName: merchant?.name || "ShipFlow Team",
+          role: role || "agent",
           inviteUrl,
           expiresAt,
           invitedByName: inviterName,
@@ -2077,11 +2821,14 @@ export async function registerRoutes(
         emailSent = emailResult.success;
         emailError = emailResult.error;
 
-        await db.update(teamInvites).set({
-          sendCount: 1,
-          lastSentAt: new Date(),
-          lastEmailError: emailError || null,
-        }).where(eq(teamInvites.id, invite.id));
+        await db
+          .update(teamInvites)
+          .set({
+            sendCount: 1,
+            lastSentAt: new Date(),
+            lastEmailError: emailError || null,
+          })
+          .where(eq(teamInvites.id, invite.id));
       }
 
       res.json({
@@ -2097,101 +2844,153 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/team/invite/:inviteId/resend", isAuthenticated, async (req, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
+  app.post(
+    "/api/team/invite/:inviteId/resend",
+    isAuthenticated,
+    async (req, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
 
-      const { inviteId } = req.params;
-      const [invite] = await db.select().from(teamInvites)
-        .where(and(eq(teamInvites.id, inviteId), eq(teamInvites.merchantId, merchantId)));
+        const { inviteId } = req.params;
+        const [invite] = await db
+          .select()
+          .from(teamInvites)
+          .where(
+            and(
+              eq(teamInvites.id, inviteId),
+              eq(teamInvites.merchantId, merchantId),
+            ),
+          );
 
-      if (!invite) {
-        return res.status(404).json({ message: "Invite not found" });
+        if (!invite) {
+          return res.status(404).json({ message: "Invite not found" });
+        }
+        if (invite.status !== "pending") {
+          return res
+            .status(400)
+            .json({ message: "Can only resend pending invitations" });
+        }
+
+        if (
+          invite.lastSentAt &&
+          Date.now() - invite.lastSentAt.getTime() < 60000
+        ) {
+          return res
+            .status(429)
+            .json({
+              message: "Please wait at least 1 minute before resending",
+            });
+        }
+
+        const inviteUrl = `${req.protocol}://${req.get("host")}/invite/${invite.token}`;
+        const [merchant] = await db
+          .select()
+          .from(merchants)
+          .where(eq(merchants.id, merchantId));
+
+        const userId = (req.session as any).userId;
+        const [inviter] = await db
+          .select()
+          .from(users)
+          .where(eq(users.id, userId));
+        const inviterName = inviter
+          ? `${inviter.firstName || ""} ${inviter.lastName || ""}`.trim() ||
+            inviter.email ||
+            "A team admin"
+          : "A team admin";
+
+        const emailResult = await sendInviteEmail({
+          toEmail: invite.email,
+          merchantName: merchant?.name || "ShipFlow Team",
+          role: invite.role,
+          inviteUrl,
+          expiresAt:
+            invite.expiresAt || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          invitedByName: inviterName,
+        });
+
+        await db
+          .update(teamInvites)
+          .set({
+            sendCount: (invite.sendCount || 0) + 1,
+            lastSentAt: new Date(),
+            lastEmailError: emailResult.error || null,
+          })
+          .where(eq(teamInvites.id, invite.id));
+
+        res.json({
+          success: emailResult.success,
+          emailError: emailResult.error,
+          sendCount: (invite.sendCount || 0) + 1,
+        });
+      } catch (error) {
+        console.error("Error resending invite:", error);
+        res.status(500).json({ message: "Failed to resend invitation" });
       }
-      if (invite.status !== "pending") {
-        return res.status(400).json({ message: "Can only resend pending invitations" });
+    },
+  );
+
+  app.delete(
+    "/api/team/invite/:inviteId",
+    isAuthenticated,
+    async (req, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+
+        const { inviteId } = req.params;
+        const [invite] = await db
+          .select()
+          .from(teamInvites)
+          .where(
+            and(
+              eq(teamInvites.id, inviteId),
+              eq(teamInvites.merchantId, merchantId),
+            ),
+          );
+
+        if (!invite) {
+          return res.status(404).json({ message: "Invite not found" });
+        }
+        if (invite.status !== "pending") {
+          return res
+            .status(400)
+            .json({ message: "Can only revoke pending invitations" });
+        }
+
+        await db
+          .update(teamInvites)
+          .set({ status: "revoked" })
+          .where(eq(teamInvites.id, invite.id));
+
+        res.json({ message: "Invitation revoked" });
+      } catch (error) {
+        console.error("Error revoking invite:", error);
+        res.status(500).json({ message: "Failed to revoke invitation" });
       }
-
-      if (invite.lastSentAt && Date.now() - invite.lastSentAt.getTime() < 60000) {
-        return res.status(429).json({ message: "Please wait at least 1 minute before resending" });
-      }
-
-      const inviteUrl = `${req.protocol}://${req.get("host")}/invite/${invite.token}`;
-      const [merchant] = await db.select().from(merchants).where(eq(merchants.id, merchantId));
-
-      const userId = (req.session as any).userId;
-      const [inviter] = await db.select().from(users).where(eq(users.id, userId));
-      const inviterName = inviter ? `${inviter.firstName || ''} ${inviter.lastName || ''}`.trim() || inviter.email || 'A team admin' : 'A team admin';
-
-      const emailResult = await sendInviteEmail({
-        toEmail: invite.email,
-        merchantName: merchant?.name || 'ShipFlow Team',
-        role: invite.role,
-        inviteUrl,
-        expiresAt: invite.expiresAt || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-        invitedByName: inviterName,
-      });
-
-      await db.update(teamInvites).set({
-        sendCount: (invite.sendCount || 0) + 1,
-        lastSentAt: new Date(),
-        lastEmailError: emailResult.error || null,
-      }).where(eq(teamInvites.id, invite.id));
-
-      res.json({
-        success: emailResult.success,
-        emailError: emailResult.error,
-        sendCount: (invite.sendCount || 0) + 1,
-      });
-    } catch (error) {
-      console.error("Error resending invite:", error);
-      res.status(500).json({ message: "Failed to resend invitation" });
-    }
-  });
-
-  app.delete("/api/team/invite/:inviteId", isAuthenticated, async (req, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-
-      const { inviteId } = req.params;
-      const [invite] = await db.select().from(teamInvites)
-        .where(and(eq(teamInvites.id, inviteId), eq(teamInvites.merchantId, merchantId)));
-
-      if (!invite) {
-        return res.status(404).json({ message: "Invite not found" });
-      }
-      if (invite.status !== "pending") {
-        return res.status(400).json({ message: "Can only revoke pending invitations" });
-      }
-
-      await db.update(teamInvites).set({ status: "revoked" }).where(eq(teamInvites.id, invite.id));
-
-      res.json({ message: "Invitation revoked" });
-    } catch (error) {
-      console.error("Error revoking invite:", error);
-      res.status(500).json({ message: "Failed to revoke invitation" });
-    }
-  });
+    },
+  );
 
   app.get("/api/team/invites", isAuthenticated, async (req, res) => {
     try {
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
 
-      const invites = await db.select({
-        id: teamInvites.id,
-        email: teamInvites.email,
-        role: teamInvites.role,
-        status: teamInvites.status,
-        createdAt: teamInvites.createdAt,
-        expiresAt: teamInvites.expiresAt,
-        sendCount: teamInvites.sendCount,
-        lastSentAt: teamInvites.lastSentAt,
-        lastEmailError: teamInvites.lastEmailError,
-        acceptedAt: teamInvites.acceptedAt,
-      }).from(teamInvites)
+      const invites = await db
+        .select({
+          id: teamInvites.id,
+          email: teamInvites.email,
+          role: teamInvites.role,
+          status: teamInvites.status,
+          createdAt: teamInvites.createdAt,
+          expiresAt: teamInvites.expiresAt,
+          sendCount: teamInvites.sendCount,
+          lastSentAt: teamInvites.lastSentAt,
+          lastEmailError: teamInvites.lastEmailError,
+          acceptedAt: teamInvites.acceptedAt,
+        })
+        .from(teamInvites)
         .where(eq(teamInvites.merchantId, merchantId))
         .orderBy(teamInvites.createdAt);
 
@@ -2202,56 +3001,92 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/team/invite/:inviteId/link", isAuthenticated, async (req, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
+  app.get(
+    "/api/team/invite/:inviteId/link",
+    isAuthenticated,
+    async (req, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
 
-      const { inviteId } = req.params;
-      const [invite] = await db.select().from(teamInvites)
-        .where(and(eq(teamInvites.id, inviteId), eq(teamInvites.merchantId, merchantId)));
+        const { inviteId } = req.params;
+        const [invite] = await db
+          .select()
+          .from(teamInvites)
+          .where(
+            and(
+              eq(teamInvites.id, inviteId),
+              eq(teamInvites.merchantId, merchantId),
+            ),
+          );
 
-      if (!invite) {
-        return res.status(404).json({ message: "Invite not found" });
+        if (!invite) {
+          return res.status(404).json({ message: "Invite not found" });
+        }
+        if (invite.status !== "pending") {
+          return res
+            .status(400)
+            .json({ message: "This invitation is no longer active" });
+        }
+
+        const inviteUrl = `${req.protocol}://${req.get("host")}/invite/${invite.token}`;
+        res.json({ inviteUrl });
+      } catch (error) {
+        console.error("Error getting invite link:", error);
+        res.status(500).json({ message: "Failed to get invite link" });
       }
-      if (invite.status !== "pending") {
-        return res.status(400).json({ message: "This invitation is no longer active" });
-      }
-
-      const inviteUrl = `${req.protocol}://${req.get("host")}/invite/${invite.token}`;
-      res.json({ inviteUrl });
-    } catch (error) {
-      console.error("Error getting invite link:", error);
-      res.status(500).json({ message: "Failed to get invite link" });
-    }
-  });
+    },
+  );
 
   app.get("/api/team/invite/:token", async (req, res) => {
     try {
       const { token } = req.params;
-      const [invite] = await db.select().from(teamInvites).where(eq(teamInvites.token, token));
+      const [invite] = await db
+        .select()
+        .from(teamInvites)
+        .where(eq(teamInvites.token, token));
 
       if (!invite) {
-        return res.status(404).json({ message: "This invitation link is invalid or has been revoked." });
+        return res
+          .status(404)
+          .json({
+            message: "This invitation link is invalid or has been revoked.",
+          });
       }
 
       if (invite.status === "revoked") {
-        return res.status(400).json({ message: "This invitation has been revoked by the team admin." });
+        return res
+          .status(400)
+          .json({
+            message: "This invitation has been revoked by the team admin.",
+          });
       }
 
       if (invite.status === "accepted") {
-        return res.status(400).json({ message: "This invitation has already been accepted." });
+        return res
+          .status(400)
+          .json({ message: "This invitation has already been accepted." });
       }
 
       if (invite.status !== "pending") {
-        return res.status(400).json({ message: "This invitation is no longer valid." });
+        return res
+          .status(400)
+          .json({ message: "This invitation is no longer valid." });
       }
 
       if (invite.expiresAt && new Date() > invite.expiresAt) {
-        return res.status(400).json({ message: "This invitation has expired. Please ask the team admin to send a new one." });
+        return res
+          .status(400)
+          .json({
+            message:
+              "This invitation has expired. Please ask the team admin to send a new one.",
+          });
       }
 
-      const [merchant] = await db.select().from(merchants).where(eq(merchants.id, invite.merchantId));
+      const [merchant] = await db
+        .select()
+        .from(merchants)
+        .where(eq(merchants.id, invite.merchantId));
 
       res.json({
         email: invite.email,
@@ -2266,76 +3101,120 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/team/invite/:token/accept", isAuthenticated, async (req, res) => {
-    try {
-      const { token } = req.params;
-      const userId = (req.session as any).userId;
+  app.post(
+    "/api/team/invite/:token/accept",
+    isAuthenticated,
+    async (req, res) => {
+      try {
+        const { token } = req.params;
+        const userId = (req.session as any).userId;
 
-      const [invite] = await db.select().from(teamInvites).where(eq(teamInvites.token, token));
+        const [invite] = await db
+          .select()
+          .from(teamInvites)
+          .where(eq(teamInvites.token, token));
 
-      if (!invite) {
-        return res.status(404).json({ message: "Invite not found" });
+        if (!invite) {
+          return res.status(404).json({ message: "Invite not found" });
+        }
+
+        if (invite.status === "revoked") {
+          return res
+            .status(400)
+            .json({ message: "This invitation has been revoked" });
+        }
+
+        if (invite.status === "accepted") {
+          return res
+            .status(400)
+            .json({ message: "This invitation has already been accepted" });
+        }
+
+        if (invite.status !== "pending") {
+          return res
+            .status(400)
+            .json({ message: "This invitation is no longer valid" });
+        }
+
+        if (invite.expiresAt && new Date() > invite.expiresAt) {
+          return res
+            .status(400)
+            .json({ message: "This invitation has expired" });
+        }
+
+        const [user] = await db
+          .select()
+          .from(users)
+          .where(eq(users.id, userId));
+        if (!user) {
+          return res.status(401).json({ message: "User not found" });
+        }
+
+        if (user.email !== invite.email) {
+          return res
+            .status(403)
+            .json({
+              message: "This invitation was sent to a different email address",
+            });
+        }
+
+        const existing = await db
+          .select()
+          .from(teamMembers)
+          .where(
+            and(
+              eq(teamMembers.userId, userId),
+              eq(teamMembers.merchantId, invite.merchantId),
+            ),
+          );
+
+        if (existing.length > 0) {
+          await db
+            .update(teamInvites)
+            .set({
+              status: "accepted",
+              acceptedAt: new Date(),
+              acceptedByUserId: userId,
+            })
+            .where(eq(teamInvites.id, invite.id));
+          return res.json({
+            message: "You are already a member of this team",
+            merchantId: invite.merchantId,
+          });
+        }
+
+        await db.insert(teamMembers).values({
+          userId,
+          merchantId: invite.merchantId,
+          role: invite.role,
+          isActive: true,
+          joinedAt: new Date(),
+        });
+
+        await db
+          .update(users)
+          .set({ merchantId: invite.merchantId })
+          .where(eq(users.id, userId));
+
+        await db
+          .update(teamInvites)
+          .set({
+            status: "accepted",
+            acceptedAt: new Date(),
+            acceptedByUserId: userId,
+          })
+          .where(eq(teamInvites.id, invite.id));
+
+        res.json({
+          message: "You have joined the team!",
+          merchantId: invite.merchantId,
+        });
+      } catch (error) {
+        console.error("Error accepting invite:", error);
+        res.status(500).json({ message: "Failed to accept invite" });
       }
-
-      if (invite.status === "revoked") {
-        return res.status(400).json({ message: "This invitation has been revoked" });
-      }
-
-      if (invite.status === "accepted") {
-        return res.status(400).json({ message: "This invitation has already been accepted" });
-      }
-
-      if (invite.status !== "pending") {
-        return res.status(400).json({ message: "This invitation is no longer valid" });
-      }
-
-      if (invite.expiresAt && new Date() > invite.expiresAt) {
-        return res.status(400).json({ message: "This invitation has expired" });
-      }
-
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
-      if (!user) {
-        return res.status(401).json({ message: "User not found" });
-      }
-
-      if (user.email !== invite.email) {
-        return res.status(403).json({ message: "This invitation was sent to a different email address" });
-      }
-
-      const existing = await db.select().from(teamMembers)
-        .where(and(eq(teamMembers.userId, userId), eq(teamMembers.merchantId, invite.merchantId)));
-
-      if (existing.length > 0) {
-        await db.update(teamInvites).set({
-          status: "accepted",
-          acceptedAt: new Date(),
-          acceptedByUserId: userId,
-        }).where(eq(teamInvites.id, invite.id));
-        return res.json({ message: "You are already a member of this team", merchantId: invite.merchantId });
-      }
-
-      await db.insert(teamMembers).values({
-        userId,
-        merchantId: invite.merchantId,
-        role: invite.role,
-        isActive: true,
-        joinedAt: new Date(),
-      });
-
-      await db.update(users).set({ merchantId: invite.merchantId }).where(eq(users.id, userId));
-
-      await db.update(teamInvites).set({
-        status: "accepted",
-        acceptedAt: new Date(),
-        acceptedByUserId: userId,
-      }).where(eq(teamInvites.id, invite.id));
-
-      res.json({ message: "You have joined the team!", merchantId: invite.merchantId });
-    } catch (error) {
-      console.error("Error accepting invite:", error);
-      res.status(500).json({ message: "Failed to accept invite" });
-    }
-  });
+    },
+  );
 
   app.patch("/api/team/:id/role", isAuthenticated, async (req, res) => {
     try {
@@ -2345,18 +3224,27 @@ export async function registerRoutes(
       // Validate request body
       const validated = teamRoleUpdateSchema.safeParse(req.body);
       if (!validated.success) {
-        return res.status(400).json({ message: validated.error.errors[0].message });
+        return res
+          .status(400)
+          .json({ message: validated.error.errors[0].message });
       }
 
       // Verify team member exists and belongs to this merchant
       const memberId = req.params.id as string;
-      const existingMember = await storage.getTeamMemberById(merchantId, memberId);
+      const existingMember = await storage.getTeamMemberById(
+        merchantId,
+        memberId,
+      );
       if (!existingMember) {
         return res.status(404).json({ message: "Team member not found" });
       }
 
       // Update role (scoped by merchantId)
-      const member = await storage.updateTeamMemberRole(merchantId, memberId, validated.data.role);
+      const member = await storage.updateTeamMemberRole(
+        merchantId,
+        memberId,
+        validated.data.role,
+      );
       res.json(member);
     } catch (error) {
       console.error("Error updating role:", error);
@@ -2371,7 +3259,10 @@ export async function registerRoutes(
 
       // Verify team member exists and belongs to this merchant
       const memberId = req.params.id as string;
-      const existingMember = await storage.getTeamMemberById(merchantId, memberId);
+      const existingMember = await storage.getTeamMemberById(
+        merchantId,
+        memberId,
+      );
       if (!existingMember) {
         return res.status(404).json({ message: "Team member not found" });
       }
@@ -2395,9 +3286,16 @@ export async function registerRoutes(
       const couriers = await storage.getCourierAccounts(merchantId);
 
       // Filter out demo store in production if needed, or just return real data
-      const isShopifyConnected = !!(shopifyStore?.isConnected && shopifyStore?.accessToken && shopifyStore.accessToken !== "demo-access-token");
+      const isShopifyConnected = !!(
+        shopifyStore?.isConnected &&
+        shopifyStore?.accessToken &&
+        shopifyStore.accessToken !== "demo-access-token"
+      );
 
-      const envCredentials: Record<string, { hasKey: boolean; hasSecret: boolean }> = {
+      const envCredentials: Record<
+        string,
+        { hasKey: boolean; hasSecret: boolean }
+      > = {
         leopards: {
           hasKey: !!process.env.LEOPARDS_API_KEY,
           hasSecret: !!process.env.LEOPARDS_API_PASSWORD,
@@ -2439,220 +3337,286 @@ export async function registerRoutes(
     storeDomain: z.string().min(1, "Store domain is required"),
   });
 
-  app.post("/api/integrations/shopify/connect", isAuthenticated, async (req, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-
-      const validated = shopifyConnectSchema.safeParse(req.body);
-      if (!validated.success) {
-        return res.status(400).json({ message: validated.error.errors[0].message });
-      }
-
-      const { storeDomain } = validated.data;
-      const fullDomain = storeDomain.includes('.myshopify.com') 
-        ? storeDomain 
-        : `${storeDomain}.myshopify.com`;
-
-      // Check if store already exists for this merchant
-      const existingStore = await storage.getShopifyStore(merchantId);
-      
-      if (existingStore) {
-        // Update existing store
-        await storage.updateShopifyStore(existingStore.id, {
-          shopDomain: fullDomain,
-          isConnected: true,
-          accessToken: "demo-access-token", // In production, this comes from OAuth
-        });
-      } else {
-        // Create new store connection
-        await storage.createShopifyStore({
-          merchantId,
-          shopDomain: fullDomain,
-          accessToken: "demo-access-token",
-          isConnected: true,
-        });
-      }
-
-      // Trigger sync for last 2 months
-      await shopifyService.syncOrders(merchantId, storeDomain);
-
-      res.json({ success: true, message: "Shopify store connected successfully" });
-    } catch (error) {
-      console.error("Error connecting Shopify:", error);
-      res.status(500).json({ message: "Failed to connect Shopify" });
-    }
-  });
-
-  // Manual Shopify connection with access token or legacy API key/password (bypasses OAuth)
-  app.post("/api/integrations/shopify/manual-connect", isAuthenticated, async (req, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-
-      const { storeDomain, accessToken, apiKey, apiPassword } = req.body;
-      
-      if (!storeDomain) {
-        return res.status(400).json({ message: "Store domain is required" });
-      }
-
-      // Need either access token OR legacy api key/password
-      const hasModernToken = !!accessToken;
-      const hasLegacyCredentials = apiKey && apiPassword;
-      
-      if (!hasModernToken && !hasLegacyCredentials) {
-        return res.status(400).json({ message: "Either access token or API key/password is required" });
-      }
-
-      // Validate store domain format
-      const shopDomainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com$/;
-      if (!shopDomainRegex.test(storeDomain)) {
-        return res.status(400).json({ message: "Invalid store domain format" });
-      }
-
-      // Validate credentials by making a test API call
+  app.post(
+    "/api/integrations/shopify/connect",
+    isAuthenticated,
+    async (req, res) => {
       try {
-        let testResponse;
-        
-        if (hasModernToken) {
-          // Modern access token auth
-          testResponse = await fetch(`https://${storeDomain}/admin/api/2025-01/shop.json`, {
-            headers: {
-              'X-Shopify-Access-Token': accessToken,
-              'Content-Type': 'application/json',
-            },
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+
+        const validated = shopifyConnectSchema.safeParse(req.body);
+        if (!validated.success) {
+          return res
+            .status(400)
+            .json({ message: validated.error.errors[0].message });
+        }
+
+        const { storeDomain } = validated.data;
+        const fullDomain = storeDomain.includes(".myshopify.com")
+          ? storeDomain
+          : `${storeDomain}.myshopify.com`;
+
+        // Check if store already exists for this merchant
+        const existingStore = await storage.getShopifyStore(merchantId);
+
+        if (existingStore) {
+          // Update existing store
+          await storage.updateShopifyStore(existingStore.id, {
+            shopDomain: fullDomain,
+            isConnected: true,
+            accessToken: "demo-access-token", // In production, this comes from OAuth
           });
         } else {
-          // Legacy API key/password auth (Basic Auth)
-          const credentials = Buffer.from(`${apiKey}:${apiPassword}`).toString('base64');
-          testResponse = await fetch(`https://${storeDomain}/admin/api/2025-01/shop.json`, {
-            headers: {
-              'Authorization': `Basic ${credentials}`,
-              'Content-Type': 'application/json',
-            },
+          // Create new store connection
+          await storage.createShopifyStore({
+            merchantId,
+            shopDomain: fullDomain,
+            accessToken: "demo-access-token",
+            isConnected: true,
           });
         }
 
-        if (!testResponse.ok) {
-          const errorText = await testResponse.text();
-          console.error("Shopify API error:", testResponse.status, errorText);
-          return res.status(400).json({ message: "Invalid credentials - could not connect to Shopify" });
-        }
-      } catch (err) {
-        console.error("Shopify connection error:", err);
-        return res.status(400).json({ message: "Could not verify credentials with Shopify" });
-      }
+        // Trigger sync for last 2 months
+        await shopifyService.syncOrders(merchantId, storeDomain);
 
-      const tokenToStore = hasModernToken ? accessToken : `${apiKey}:${apiPassword}`;
-      const encryptedTokenToStore = encryptToken(tokenToStore);
-
-      const existingStore = await storage.getShopifyStore(merchantId);
-      
-      if (existingStore) {
-        await storage.updateShopifyStore(existingStore.id, {
-          shopDomain: storeDomain,
-          accessToken: encryptedTokenToStore,
-          isConnected: true,
-          lastSyncAt: new Date(),
+        res.json({
+          success: true,
+          message: "Shopify store connected successfully",
         });
-      } else {
-        await storage.createShopifyStore({
-          merchantId,
-          shopDomain: storeDomain,
-          accessToken: encryptedTokenToStore,
-          scopes: 'read_orders',
-          isConnected: true,
-        });
+      } catch (error) {
+        console.error("Error connecting Shopify:", error);
+        res.status(500).json({ message: "Failed to connect Shopify" });
       }
+    },
+  );
 
-      // Trigger sync for last 2 months
-      await shopifyService.syncOrders(merchantId, storeDomain);
-
-      res.json({ success: true, message: "Shopify store connected successfully" });
-    } catch (error) {
-      console.error("Error manually connecting Shopify:", error);
-      res.status(500).json({ message: "Failed to connect Shopify store" });
-    }
-  });
-
-  app.post("/api/integrations/shopify/disconnect", isAuthenticated, async (req, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-
-      const store = await storage.getShopifyStore(merchantId);
-      if (store) {
-        await storage.updateShopifyStore(store.id, { isConnected: false });
-      }
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error disconnecting Shopify:", error);
-      res.status(500).json({ message: "Failed to disconnect Shopify" });
-    }
-  });
-
-  app.post("/api/integrations/shopify/sync", isAuthenticated, async (req, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-
-      const store = await storage.getShopifyStore(merchantId);
-      if (!store || !store.isConnected) {
-        return res.status(400).json({ message: "Shopify store is not connected" });
-      }
-
-      if (!store.accessToken || store.accessToken === "demo-access-token") {
-        const result = await syncShopifyOrders(merchantId, store.shopDomain!);
-        return res.json({ 
-          success: true, 
-          message: `Successfully synced ${result.synced} orders (demo mode)`,
-          synced: result.synced,
-          total: result.total 
-        });
-      }
-
-      const { acquireMerchantSyncLock, releaseMerchantSyncLock } = await import('./services/autoSync');
-      if (!acquireMerchantSyncLock(merchantId)) {
-        return res.status(409).json({ message: "A sync is already in progress. Please wait and try again." });
-      }
-
+  // Manual Shopify connection with access token or legacy API key/password (bypasses OAuth)
+  app.post(
+    "/api/integrations/shopify/manual-connect",
+    isAuthenticated,
+    async (req, res) => {
       try {
-        const forceFullSync = req.body?.forceFullSync === true;
-        const result = await shopifyService.syncOrders(merchantId, store.shopDomain!, forceFullSync);
-        res.json({ 
-          success: true, 
-          message: `Successfully synced ${result.synced} new orders, ${result.updated} updated`,
-          synced: result.synced,
-          updated: result.updated,
-          total: result.total
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+
+        const { storeDomain, accessToken, apiKey, apiPassword } = req.body;
+
+        if (!storeDomain) {
+          return res.status(400).json({ message: "Store domain is required" });
+        }
+
+        // Need either access token OR legacy api key/password
+        const hasModernToken = !!accessToken;
+        const hasLegacyCredentials = apiKey && apiPassword;
+
+        if (!hasModernToken && !hasLegacyCredentials) {
+          return res
+            .status(400)
+            .json({
+              message: "Either access token or API key/password is required",
+            });
+        }
+
+        // Validate store domain format
+        const shopDomainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com$/;
+        if (!shopDomainRegex.test(storeDomain)) {
+          return res
+            .status(400)
+            .json({ message: "Invalid store domain format" });
+        }
+
+        // Validate credentials by making a test API call
+        try {
+          let testResponse;
+
+          if (hasModernToken) {
+            // Modern access token auth
+            testResponse = await fetch(
+              `https://${storeDomain}/admin/api/2025-01/shop.json`,
+              {
+                headers: {
+                  "X-Shopify-Access-Token": accessToken,
+                  "Content-Type": "application/json",
+                },
+              },
+            );
+          } else {
+            // Legacy API key/password auth (Basic Auth)
+            const credentials = Buffer.from(
+              `${apiKey}:${apiPassword}`,
+            ).toString("base64");
+            testResponse = await fetch(
+              `https://${storeDomain}/admin/api/2025-01/shop.json`,
+              {
+                headers: {
+                  Authorization: `Basic ${credentials}`,
+                  "Content-Type": "application/json",
+                },
+              },
+            );
+          }
+
+          if (!testResponse.ok) {
+            const errorText = await testResponse.text();
+            console.error("Shopify API error:", testResponse.status, errorText);
+            return res
+              .status(400)
+              .json({
+                message: "Invalid credentials - could not connect to Shopify",
+              });
+          }
+        } catch (err) {
+          console.error("Shopify connection error:", err);
+          return res
+            .status(400)
+            .json({ message: "Could not verify credentials with Shopify" });
+        }
+
+        const tokenToStore = hasModernToken
+          ? accessToken
+          : `${apiKey}:${apiPassword}`;
+        const encryptedTokenToStore = encryptToken(tokenToStore);
+
+        const existingStore = await storage.getShopifyStore(merchantId);
+
+        if (existingStore) {
+          await storage.updateShopifyStore(existingStore.id, {
+            shopDomain: storeDomain,
+            accessToken: encryptedTokenToStore,
+            isConnected: true,
+            lastSyncAt: new Date(),
+          });
+        } else {
+          await storage.createShopifyStore({
+            merchantId,
+            shopDomain: storeDomain,
+            accessToken: encryptedTokenToStore,
+            scopes: "read_orders",
+            isConnected: true,
+          });
+        }
+
+        // Trigger sync for last 2 months
+        await shopifyService.syncOrders(merchantId, storeDomain);
+
+        res.json({
+          success: true,
+          message: "Shopify store connected successfully",
         });
-      } finally {
-        releaseMerchantSyncLock(merchantId);
+      } catch (error) {
+        console.error("Error manually connecting Shopify:", error);
+        res.status(500).json({ message: "Failed to connect Shopify store" });
       }
-    } catch (error: any) {
-      console.error("Error syncing Shopify:", error);
-      res.status(500).json({ message: error.message || "Failed to sync Shopify" });
-    }
-  });
+    },
+  );
 
-  app.get("/api/integrations/shopify/sync-status", isAuthenticated, async (req, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
+  app.post(
+    "/api/integrations/shopify/disconnect",
+    isAuthenticated,
+    async (req, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
 
-      const { getLastSyncResult, isSyncRunning } = await import('./services/autoSync');
-      const lastResult = getLastSyncResult(merchantId);
-      const running = isSyncRunning();
-      res.json({
-        autoSyncEnabled: true,
-        intervalSeconds: 30,
-        isRunning: running,
-        lastSync: lastResult,
-      });
-    } catch (error) {
-      res.status(500).json({ message: "Failed to get sync status" });
-    }
-  });
+        const store = await storage.getShopifyStore(merchantId);
+        if (store) {
+          await storage.updateShopifyStore(store.id, { isConnected: false });
+        }
+        res.json({ success: true });
+      } catch (error) {
+        console.error("Error disconnecting Shopify:", error);
+        res.status(500).json({ message: "Failed to disconnect Shopify" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/integrations/shopify/sync",
+    isAuthenticated,
+    async (req, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+
+        const store = await storage.getShopifyStore(merchantId);
+        if (!store || !store.isConnected) {
+          return res
+            .status(400)
+            .json({ message: "Shopify store is not connected" });
+        }
+
+        if (!store.accessToken || store.accessToken === "demo-access-token") {
+          const result = await syncShopifyOrders(merchantId, store.shopDomain!);
+          return res.json({
+            success: true,
+            message: `Successfully synced ${result.synced} orders (demo mode)`,
+            synced: result.synced,
+            total: result.total,
+          });
+        }
+
+        const { acquireMerchantSyncLock, releaseMerchantSyncLock } =
+          await import("./services/autoSync");
+        if (!acquireMerchantSyncLock(merchantId)) {
+          return res
+            .status(409)
+            .json({
+              message:
+                "A sync is already in progress. Please wait and try again.",
+            });
+        }
+
+        try {
+          const forceFullSync = req.body?.forceFullSync === true;
+          const result = await shopifyService.syncOrders(
+            merchantId,
+            store.shopDomain!,
+            forceFullSync,
+          );
+          res.json({
+            success: true,
+            message: `Successfully synced ${result.synced} new orders, ${result.updated} updated`,
+            synced: result.synced,
+            updated: result.updated,
+            total: result.total,
+          });
+        } finally {
+          releaseMerchantSyncLock(merchantId);
+        }
+      } catch (error: any) {
+        console.error("Error syncing Shopify:", error);
+        res
+          .status(500)
+          .json({ message: error.message || "Failed to sync Shopify" });
+      }
+    },
+  );
+
+  app.get(
+    "/api/integrations/shopify/sync-status",
+    isAuthenticated,
+    async (req, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+
+        const { getLastSyncResult, isSyncRunning } = await import(
+          "./services/autoSync"
+        );
+        const lastResult = getLastSyncResult(merchantId);
+        const running = isSyncRunning();
+        res.json({
+          autoSyncEnabled: true,
+          intervalSeconds: 30,
+          isRunning: running,
+          lastSync: lastResult,
+        });
+      } catch (error) {
+        res.status(500).json({ message: "Failed to get sync status" });
+      }
+    },
+  );
 
   // ============================================
   // SHOPIFY IMPORT JOB ENDPOINTS
@@ -2664,19 +3628,34 @@ export async function registerRoutes(
 
       const store = await storage.getShopifyStore(merchantId);
       if (!store || !store.isConnected || !store.accessToken) {
-        return res.status(400).json({ message: "Shopify store is not connected. Please connect your store first." });
+        return res
+          .status(400)
+          .json({
+            message:
+              "Shopify store is not connected. Please connect your store first.",
+          });
       }
 
-      const { getActiveImportJob, validateShopifyConnection, startImportJob } = await import('./services/importJobRunner');
+      const { getActiveImportJob, validateShopifyConnection, startImportJob } =
+        await import("./services/importJobRunner");
 
       const existingJob = await getActiveImportJob(merchantId);
       if (existingJob) {
-        return res.json({ jobId: existingJob.id, message: "Import already in progress", alreadyRunning: true });
+        return res.json({
+          jobId: existingJob.id,
+          message: "Import already in progress",
+          alreadyRunning: true,
+        });
       }
 
-      const validation = await validateShopifyConnection(store.shopDomain!, store.accessToken);
+      const validation = await validateShopifyConnection(
+        store.shopDomain!,
+        store.accessToken,
+      );
       if (!validation.valid) {
-        return res.status(400).json({ message: validation.error || "Shopify connection failed" });
+        return res
+          .status(400)
+          .json({ message: validation.error || "Shopify connection failed" });
       }
 
       const job = await startImportJob({
@@ -2689,7 +3668,9 @@ export async function registerRoutes(
       res.json({ jobId: job.id, message: "Import started" });
     } catch (error: any) {
       console.error("Error starting import:", error);
-      res.status(500).json({ message: error.message || "Failed to start import" });
+      res
+        .status(500)
+        .json({ message: error.message || "Failed to start import" });
     }
   });
 
@@ -2700,12 +3681,16 @@ export async function registerRoutes(
 
       const jobId = req.query.jobId as string;
 
-      const { getImportJob, getLatestImportJob } = await import('./services/importJobRunner');
+      const { getImportJob, getLatestImportJob } = await import(
+        "./services/importJobRunner"
+      );
       let job;
       if (jobId) {
         job = await getImportJob(jobId);
         if (job && job.merchantId !== merchantId) {
-          return res.status(403).json({ message: "Not authorized to view this job" });
+          return res
+            .status(403)
+            .json({ message: "Not authorized to view this job" });
         }
       } else {
         job = await getLatestImportJob(merchantId);
@@ -2749,7 +3734,9 @@ export async function registerRoutes(
         return res.status(400).json({ message: "jobId is required" });
       }
 
-      const { getImportJob, cancelImportJob } = await import('./services/importJobRunner');
+      const { getImportJob, cancelImportJob } = await import(
+        "./services/importJobRunner"
+      );
       const job = await getImportJob(jobId);
       if (!job || job.merchantId !== merchantId) {
         return res.status(404).json({ message: "Import job not found" });
@@ -2775,15 +3762,19 @@ export async function registerRoutes(
 
       const store = await storage.getShopifyStore(merchantId);
       if (!store || !store.accessToken) {
-        return res.status(400).json({ message: "Shopify store is not connected" });
+        return res
+          .status(400)
+          .json({ message: "Shopify store is not connected" });
       }
 
-      const { getImportJob, resumeImportJob } = await import('./services/importJobRunner');
+      const { getImportJob, resumeImportJob } = await import(
+        "./services/importJobRunner"
+      );
       const job = await getImportJob(jobId);
       if (!job || job.merchantId !== merchantId) {
         return res.status(404).json({ message: "Import job not found" });
       }
-      if (job.status !== 'FAILED') {
+      if (job.status !== "FAILED") {
         return res.status(400).json({ message: "Can only resume failed jobs" });
       }
 
@@ -2802,62 +3793,96 @@ export async function registerRoutes(
   // Fix city data for existing orders using GraphQL
   // This is needed because Shopify Basic plan restricts PII in REST API
   // but GraphQL returns some fields like city
-  app.post("/api/integrations/shopify/fix-city-data", isAuthenticated, async (req, res) => {
-    try {
-      const { merchantId } = req.body.user;
-      
-      const store = await storage.getShopifyStore(merchantId);
-      if (!store || !store.isConnected || !store.accessToken || !store.shopDomain) {
-        return res.status(400).json({ message: "Shopify store not connected" });
-      }
+  app.post(
+    "/api/integrations/shopify/fix-city-data",
+    isAuthenticated,
+    async (req, res) => {
+      try {
+        const { merchantId } = req.body.user;
 
-      // Get orders with missing city data
-      const ordersWithMissingCity = await storage.getOrdersWithMissingCity(merchantId, 500);
-      
-      if (ordersWithMissingCity.length === 0) {
-        return res.json({ 
-          success: true, 
-          message: "No orders need city data update",
-          updated: 0 
+        const store = await storage.getShopifyStore(merchantId);
+        if (
+          !store ||
+          !store.isConnected ||
+          !store.accessToken ||
+          !store.shopDomain
+        ) {
+          return res
+            .status(400)
+            .json({ message: "Shopify store not connected" });
+        }
+
+        // Get orders with missing city data
+        const ordersWithMissingCity = await storage.getOrdersWithMissingCity(
+          merchantId,
+          500,
+        );
+
+        if (ordersWithMissingCity.length === 0) {
+          return res.json({
+            success: true,
+            message: "No orders need city data update",
+            updated: 0,
+          });
+        }
+
+        console.log(
+          `[Fix City Data] Found ${ordersWithMissingCity.length} orders with missing city, triggering full re-sync...`,
+        );
+
+        const result = await shopifyService.syncOrders(
+          merchantId,
+          store.shopDomain,
+          true,
+        );
+
+        res.json({
+          success: true,
+          message: `Full re-sync complete: ${result.synced} new, ${result.updated} updated orders with complete data`,
+          updated: result.updated,
+          processed: result.total,
         });
+      } catch (error: any) {
+        console.error("Error fixing city data:", error);
+        res
+          .status(500)
+          .json({ message: error.message || "Failed to fix city data" });
       }
+    },
+  );
 
-      console.log(`[Fix City Data] Found ${ordersWithMissingCity.length} orders with missing city, triggering full re-sync...`);
-
-      const result = await shopifyService.syncOrders(merchantId, store.shopDomain, true);
-
-      res.json({ 
-        success: true, 
-        message: `Full re-sync complete: ${result.synced} new, ${result.updated} updated orders with complete data`,
-        updated: result.updated,
-        processed: result.total
-      });
-    } catch (error: any) {
-      console.error("Error fixing city data:", error);
-      res.status(500).json({ message: error.message || "Failed to fix city data" });
-    }
-  });
-
-  app.get("/api/shopify/debug/oauth-config", isAuthenticated, async (req, res) => {
-    try {
-      const shop = typeof req.query.shop === 'string' ? req.query.shop : undefined;
-      const config = shopifyService.getOAuthConfig(shop);
-      res.json(config);
-    } catch (error) {
-      res.status(500).json({ message: "Failed to get OAuth config" });
-    }
-  });
+  app.get(
+    "/api/shopify/debug/oauth-config",
+    isAuthenticated,
+    async (req, res) => {
+      try {
+        const shop =
+          typeof req.query.shop === "string" ? req.query.shop : undefined;
+        const config = shopifyService.getOAuthConfig(shop);
+        res.json(config);
+      } catch (error) {
+        res.status(500).json({ message: "Failed to get OAuth config" });
+      }
+    },
+  );
 
   app.get("/api/shopify/auth-url", isAuthenticated, async (req, res) => {
     try {
       if (shopifyService.hasHostMismatch()) {
-        return res.status(500).json({ message: "OAuth configuration error: SHOPIFY_APP_URL and SHOPIFY_APP_REDIRECT_URL hosts do not match. Contact admin." });
+        return res
+          .status(500)
+          .json({
+            message:
+              "OAuth configuration error: SHOPIFY_APP_URL and SHOPIFY_APP_REDIRECT_URL hosts do not match. Contact admin.",
+          });
       }
       const { shop } = req.query;
-      if (!shop || typeof shop !== 'string') {
+      if (!shop || typeof shop !== "string") {
         return res.status(400).json({ message: "Shop parameter is required" });
       }
-      const shopDomain = shop.includes('.myshopify.com') ? shop : `${shop}.myshopify.com`;
+      const shopDomain = shop.includes(".myshopify.com")
+        ? shop
+        : `${shop}.myshopify.com`;
       const shopDomainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com$/;
       if (!shopDomainRegex.test(shopDomain)) {
         return res.status(400).json({ message: "Invalid shop domain format" });
@@ -2867,14 +3892,18 @@ export async function registerRoutes(
       if (!merchantId) return;
       const merchant = await storage.getMerchant(merchantId);
       let merchantCreds: { clientId: string } | undefined;
-      const usingMerchantCreds = !!(merchant?.shopifyAppClientId && merchant?.shopifyAppClientSecret);
+      const usingMerchantCreds = !!(
+        merchant?.shopifyAppClientId && merchant?.shopifyAppClientSecret
+      );
       if (usingMerchantCreds) {
         merchantCreds = { clientId: merchant.shopifyAppClientId! };
-        console.log(`[Shopify OAuth] Using merchant-specific clientId for merchant ${merchantId}`);
+        console.log(
+          `[Shopify OAuth] Using merchant-specific clientId for merchant ${merchantId}`,
+        );
       }
 
-      const state = crypto.randomBytes(16).toString('hex');
-      const credSource = usingMerchantCreds ? 'merchant' : 'env';
+      const state = crypto.randomBytes(16).toString("hex");
+      const credSource = usingMerchantCreds ? "merchant" : "env";
       oauthStateStore.set(state, {
         merchantId,
         shopDomain,
@@ -2882,16 +3911,24 @@ export async function registerRoutes(
         createdAt: Date.now(),
       });
       await storeOAuthStateInDb(state, { merchantId, shopDomain, credSource });
-      console.log(`[Shopify OAuth] Generated state ${state.substring(0, 8)}... for merchant ${merchantId}, stored in memory + DB`);
+      console.log(
+        `[Shopify OAuth] Generated state ${state.substring(0, 8)}... for merchant ${merchantId}, stored in memory + DB`,
+      );
       (req.session as any).shopifyState = state;
       (req.session as any).shopDomain = shopDomain;
-      (req.session as any).shopifyCredSource = usingMerchantCreds ? 'merchant' : 'env';
+      (req.session as any).shopifyCredSource = usingMerchantCreds
+        ? "merchant"
+        : "env";
       (req.session as any).shopifyMerchantId = merchantId;
-      const installUrl = shopifyService.getInstallUrl(shopDomain, state, merchantCreds);
+      const installUrl = shopifyService.getInstallUrl(
+        shopDomain,
+        state,
+        merchantCreds,
+      );
 
       const canonicalHost = shopifyService.getCanonicalHost();
       req.session.save((err: any) => {
-        if (err) console.warn('[Shopify OAuth] Session save error:', err);
+        if (err) console.warn("[Shopify OAuth] Session save error:", err);
         res.json({ authUrl: installUrl, state, canonicalHost });
       });
     } catch (error) {
@@ -2903,19 +3940,21 @@ export async function registerRoutes(
   app.get("/api/shopify/install", async (req, res) => {
     try {
       const { shop } = req.query;
-      if (!shop || typeof shop !== 'string') {
+      if (!shop || typeof shop !== "string") {
         return res.status(400).json({ message: "Shop parameter is required" });
       }
 
-      const shopDomain = shop.includes('.myshopify.com') ? shop : `${shop}.myshopify.com`;
-      
+      const shopDomain = shop.includes(".myshopify.com")
+        ? shop
+        : `${shop}.myshopify.com`;
+
       // Validate shop domain format (must be valid Shopify store domain)
       const shopDomainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com$/;
       if (!shopDomainRegex.test(shopDomain)) {
         return res.status(400).json({ message: "Invalid shop domain format" });
       }
 
-      const state = crypto.randomBytes(16).toString('hex');
+      const state = crypto.randomBytes(16).toString("hex");
 
       (req.session as any).shopifyState = state;
       (req.session as any).shopDomain = shopDomain;
@@ -2931,59 +3970,81 @@ export async function registerRoutes(
   app.get("/api/shopify/callback", async (req: any, res) => {
     try {
       const canonicalHost = shopifyService.getCanonicalHost();
-      const incomingHost = req.hostname || req.headers.host?.split(':')[0];
+      const incomingHost = req.hostname || req.headers.host?.split(":")[0];
       if (canonicalHost && incomingHost && incomingHost !== canonicalHost) {
         const canonicalUrl = `https://${canonicalHost}${req.originalUrl}`;
-        console.log(`[Shopify OAuth] Redirecting callback from ${incomingHost} to canonical host ${canonicalHost}`);
+        console.log(
+          `[Shopify OAuth] Redirecting callback from ${incomingHost} to canonical host ${canonicalHost}`,
+        );
         return res.redirect(302, canonicalUrl);
       }
 
       const { code, shop, state, hmac } = req.query;
 
       if (!code || !shop || !state) {
-        return res.redirect('/integrations?shopify=error&message=Missing+required+parameters');
+        return res.redirect(
+          "/integrations?shopify=error&message=Missing+required+parameters",
+        );
       }
 
       let storedOAuth = oauthStateStore.get(state as string);
-      
+
       if (!storedOAuth) {
         const dbState = await getOAuthStateFromDb(state as string);
         if (dbState) {
           storedOAuth = { ...dbState, createdAt: Date.now() };
-          console.log(`[Shopify OAuth Callback] State recovered from DB for ${(state as string).substring(0, 8)}...`);
+          console.log(
+            `[Shopify OAuth Callback] State recovered from DB for ${(state as string).substring(0, 8)}...`,
+          );
         }
       }
-      
+
       const savedState = req.session?.shopifyState;
       const sessionMatch = state === savedState;
-      
-      console.log(`[Shopify OAuth Callback] State check: received=${(state as string).substring(0, 8)}..., sessionMatch=${sessionMatch}, memoryHit=${oauthStateStore.has(state as string)}, dbHit=${!!storedOAuth}`);
-      
+
+      console.log(
+        `[Shopify OAuth Callback] State check: received=${(state as string).substring(0, 8)}..., sessionMatch=${sessionMatch}, memoryHit=${oauthStateStore.has(state as string)}, dbHit=${!!storedOAuth}`,
+      );
+
       if (!storedOAuth && !sessionMatch) {
-        console.warn("[Shopify OAuth Callback] State mismatch - no matching state found", { received: state, sessionId: req.sessionID });
-        return res.redirect('/integrations?shopify=error&message=Invalid+state+parameter');
+        console.warn(
+          "[Shopify OAuth Callback] State mismatch - no matching state found",
+          { received: state, sessionId: req.sessionID },
+        );
+        return res.redirect(
+          "/integrations?shopify=error&message=Invalid+state+parameter",
+        );
       }
 
       oauthStateStore.delete(state as string);
       try {
-        const { pool } = await import('./db');
-        pool.query(`DELETE FROM oauth_states WHERE state=$1`, [state]).catch(() => {});
+        const { pool } = await import("./db");
+        pool
+          .query(`DELETE FROM oauth_states WHERE state=$1`, [state])
+          .catch(() => {});
       } catch {}
       delete req.session.shopifyState;
 
-      const expectedShop = storedOAuth?.shopDomain || (req.session as any)?.shopDomain;
+      const expectedShop =
+        storedOAuth?.shopDomain || (req.session as any)?.shopDomain;
       if (expectedShop && expectedShop !== shop) {
-        console.warn(`[Shopify OAuth Callback] Shop domain mismatch: expected=${expectedShop}, received=${shop}`);
-        return res.redirect('/integrations?shopify=error&message=Shop+domain+mismatch');
+        console.warn(
+          `[Shopify OAuth Callback] Shop domain mismatch: expected=${expectedShop}, received=${shop}`,
+        );
+        return res.redirect(
+          "/integrations?shopify=error&message=Shop+domain+mismatch",
+        );
       }
 
       const shopDomainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com$/;
       if (!shopDomainRegex.test(shop as string)) {
-        return res.redirect('/integrations?shopify=error&message=Invalid+shop+domain');
+        return res.redirect(
+          "/integrations?shopify=error&message=Invalid+shop+domain",
+        );
       }
 
       let merchantId: string | undefined;
-      let credSource = 'env';
+      let credSource = "env";
 
       if (storedOAuth) {
         merchantId = storedOAuth.merchantId;
@@ -2991,27 +4052,37 @@ export async function registerRoutes(
       } else {
         const userId = getSessionUserId(req);
         if (!userId) {
-          return res.redirect('/integrations?shopify=error&message=Not+authenticated');
+          return res.redirect(
+            "/integrations?shopify=error&message=Not+authenticated",
+          );
         }
-        merchantId = (req.session as any).shopifyMerchantId || await storage.getUserMerchantId(userId);
-        credSource = (req.session as any).shopifyCredSource || 'env';
+        merchantId =
+          (req.session as any).shopifyMerchantId ||
+          (await storage.getUserMerchantId(userId));
+        credSource = (req.session as any).shopifyCredSource || "env";
       }
 
       if (!merchantId) {
-        return res.redirect('/integrations?shopify=error&message=No+merchant+account');
+        return res.redirect(
+          "/integrations?shopify=error&message=No+merchant+account",
+        );
       }
 
       let merchantCreds: { clientId: string; clientSecret: string } | undefined;
-      if (credSource === 'merchant') {
+      if (credSource === "merchant") {
         const merchant = await storage.getMerchant(merchantId);
         if (merchant?.shopifyAppClientId && merchant?.shopifyAppClientSecret) {
           merchantCreds = {
             clientId: merchant.shopifyAppClientId,
             clientSecret: decryptToken(merchant.shopifyAppClientSecret),
           };
-          console.log(`[Shopify OAuth Callback] Using merchant-specific credentials for merchant ${merchantId}`);
+          console.log(
+            `[Shopify OAuth Callback] Using merchant-specific credentials for merchant ${merchantId}`,
+          );
         } else {
-          console.warn(`[Shopify OAuth Callback] Session says merchant creds but none found, falling back to env`);
+          console.warn(
+            `[Shopify OAuth Callback] Session says merchant creds but none found, falling back to env`,
+          );
         }
       }
       delete (req.session as any).shopifyCredSource;
@@ -3020,23 +4091,34 @@ export async function registerRoutes(
       if (hmac) {
         const queryParams: Record<string, string> = {};
         for (const [key, value] of Object.entries(req.query)) {
-          if (typeof value === 'string') {
+          if (typeof value === "string") {
             queryParams[key] = value;
           }
         }
-        const isValid = shopifyService.validateHmac(queryParams, merchantCreds ? { clientSecret: merchantCreds.clientSecret } : undefined);
+        const isValid = shopifyService.validateHmac(
+          queryParams,
+          merchantCreds
+            ? { clientSecret: merchantCreds.clientSecret }
+            : undefined,
+        );
         if (!isValid) {
           console.warn("HMAC validation failed");
-          return res.redirect('/onboarding?shopify=error&message=Invalid+signature');
+          return res.redirect(
+            "/onboarding?shopify=error&message=Invalid+signature",
+          );
         }
       }
 
-      const { accessToken, scope } = await shopifyService.exchangeCodeForToken(shop as string, code as string, merchantCreds);
+      const { accessToken, scope } = await shopifyService.exchangeCodeForToken(
+        shop as string,
+        code as string,
+        merchantCreds,
+      );
 
       const encryptedToken = encryptToken(accessToken);
 
       const existingStore = await storage.getShopifyStore(merchantId);
-      
+
       if (existingStore) {
         await storage.updateShopifyStore(existingStore.id, {
           shopDomain: shop as string,
@@ -3056,11 +4138,14 @@ export async function registerRoutes(
       }
 
       const merchantBeforeUpdate = await storage.getMerchant(merchantId);
-      const isOnboardingComplete = merchantBeforeUpdate?.onboardingStep === 'COMPLETED';
+      const isOnboardingComplete =
+        merchantBeforeUpdate?.onboardingStep === "COMPLETED";
 
       if (!isOnboardingComplete) {
         try {
-          await storage.updateMerchant(merchantId, { onboardingStep: 'SHOPIFY_CONNECTED' } as any);
+          await storage.updateMerchant(merchantId, {
+            onboardingStep: "SHOPIFY_CONNECTED",
+          } as any);
         } catch (e) {
           console.error("Error advancing onboarding to SHOPIFY_CONNECTED:", e);
         }
@@ -3072,24 +4157,38 @@ export async function registerRoutes(
         console.error("Error registering Shopify webhooks:", webhookErr);
       }
 
-      shopifyService.syncOrders(merchantId, shop as string)
+      shopifyService
+        .syncOrders(merchantId, shop as string)
         .then(() => {
           if (!isOnboardingComplete) {
-            storage.updateMerchant(merchantId!, { onboardingStep: 'ORDERS_SYNCED' } as any)
-              .catch(e => console.error("Error advancing onboarding to ORDERS_SYNCED:", e));
+            storage
+              .updateMerchant(merchantId!, {
+                onboardingStep: "ORDERS_SYNCED",
+              } as any)
+              .catch((e) =>
+                console.error(
+                  "Error advancing onboarding to ORDERS_SYNCED:",
+                  e,
+                ),
+              );
           }
         })
-        .catch(err => console.error("Background sync error:", err));
+        .catch((err) => console.error("Background sync error:", err));
 
       delete req.session.shopifyState;
       delete req.session.shopDomain;
 
-      const redirectPath = isOnboardingComplete ? '/integrations' : '/onboarding';
+      const redirectPath = isOnboardingComplete
+        ? "/integrations"
+        : "/onboarding";
       res.redirect(`${redirectPath}?shopify=connected`);
     } catch (error) {
       console.error("Error in Shopify callback:", error);
-      const errorRedirect = '/integrations';
-      res.redirect(`${errorRedirect}?shopify=error&message=` + encodeURIComponent(String(error)));
+      const errorRedirect = "/integrations";
+      res.redirect(
+        `${errorRedirect}?shopify=error&message=` +
+          encodeURIComponent(String(error)),
+      );
     }
   });
 
@@ -3097,9 +4196,9 @@ export async function registerRoutes(
   app.post("/webhooks/shopify/orders-create", async (req: any, res) => {
     res.status(200).json({ received: true });
     try {
-      const hmac = req.headers['x-shopify-hmac-sha256'] as string;
-      const shopDomain = req.headers['x-shopify-shop-domain'] as string;
-      const webhookId = req.headers['x-shopify-webhook-id'] as string;
+      const hmac = req.headers["x-shopify-hmac-sha256"] as string;
+      const shopDomain = req.headers["x-shopify-shop-domain"] as string;
+      const webhookId = req.headers["x-shopify-webhook-id"] as string;
       const rawBody = req.rawBody as Buffer;
 
       if (!rawBody || !hmac) {
@@ -3112,8 +4211,11 @@ export async function registerRoutes(
         return;
       }
 
-      webhookHandler.processOrderWebhook('orders/create', shopDomain, rawBody, webhookId)
-        .catch(err => console.error("[Webhook] Background processing error:", err));
+      webhookHandler
+        .processOrderWebhook("orders/create", shopDomain, rawBody, webhookId)
+        .catch((err) =>
+          console.error("[Webhook] Background processing error:", err),
+        );
     } catch (error) {
       console.error("[Webhook] orders/create error:", error);
     }
@@ -3122,9 +4224,9 @@ export async function registerRoutes(
   app.post("/webhooks/shopify/orders-updated", async (req: any, res) => {
     res.status(200).json({ received: true });
     try {
-      const hmac = req.headers['x-shopify-hmac-sha256'] as string;
-      const shopDomain = req.headers['x-shopify-shop-domain'] as string;
-      const webhookId = req.headers['x-shopify-webhook-id'] as string;
+      const hmac = req.headers["x-shopify-hmac-sha256"] as string;
+      const shopDomain = req.headers["x-shopify-shop-domain"] as string;
+      const webhookId = req.headers["x-shopify-webhook-id"] as string;
       const rawBody = req.rawBody as Buffer;
 
       if (!rawBody || !hmac) {
@@ -3137,8 +4239,11 @@ export async function registerRoutes(
         return;
       }
 
-      webhookHandler.processOrderWebhook('orders/updated', shopDomain, rawBody, webhookId)
-        .catch(err => console.error("[Webhook] Background processing error:", err));
+      webhookHandler
+        .processOrderWebhook("orders/updated", shopDomain, rawBody, webhookId)
+        .catch((err) =>
+          console.error("[Webhook] Background processing error:", err),
+        );
     } catch (error) {
       console.error("[Webhook] orders/updated error:", error);
     }
@@ -3147,9 +4252,9 @@ export async function registerRoutes(
   app.post("/webhooks/shopify/fulfillments-create", async (req: any, res) => {
     res.status(200).json({ received: true });
     try {
-      const hmac = req.headers['x-shopify-hmac-sha256'] as string;
-      const shopDomain = req.headers['x-shopify-shop-domain'] as string;
-      const webhookId = req.headers['x-shopify-webhook-id'] as string;
+      const hmac = req.headers["x-shopify-hmac-sha256"] as string;
+      const shopDomain = req.headers["x-shopify-shop-domain"] as string;
+      const webhookId = req.headers["x-shopify-webhook-id"] as string;
       const rawBody = req.rawBody as Buffer;
 
       if (!rawBody || !hmac) {
@@ -3158,12 +4263,22 @@ export async function registerRoutes(
       }
 
       if (!webhookHandler.verifyHmac(rawBody, hmac)) {
-        console.warn("[Webhook] HMAC verification failed for fulfillments/create");
+        console.warn(
+          "[Webhook] HMAC verification failed for fulfillments/create",
+        );
         return;
       }
 
-      webhookHandler.processFulfillmentWebhook('fulfillments/create', shopDomain, rawBody, webhookId)
-        .catch(err => console.error("[Webhook] Background processing error:", err));
+      webhookHandler
+        .processFulfillmentWebhook(
+          "fulfillments/create",
+          shopDomain,
+          rawBody,
+          webhookId,
+        )
+        .catch((err) =>
+          console.error("[Webhook] Background processing error:", err),
+        );
     } catch (error) {
       console.error("[Webhook] fulfillments/create error:", error);
     }
@@ -3173,21 +4288,27 @@ export async function registerRoutes(
     try {
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
-      
+
       const store = await storage.getShopifyStore(merchantId);
       if (!store || !store.isConnected || !store.shopDomain) {
         return res.status(400).json({ message: "Shopify store not connected" });
       }
-      
-      const result = await shopifyService.syncOrders(merchantId, store.shopDomain, false);
-      res.json({ 
+
+      const result = await shopifyService.syncOrders(
+        merchantId,
+        store.shopDomain,
+        false,
+      );
+      res.json({
         success: true,
         ...result,
         lastSyncAt: new Date().toISOString(),
       });
     } catch (error: any) {
       console.error("Error reconciling orders:", error);
-      res.status(500).json({ message: error.message || "Reconciliation failed" });
+      res
+        .status(500)
+        .json({ message: error.message || "Reconciliation failed" });
     }
   });
 
@@ -3203,29 +4324,38 @@ export async function registerRoutes(
       res.json(health);
     } catch (error: any) {
       console.error("Error checking webhook health:", error);
-      res.status(500).json({ message: error.message || "Failed to check webhook health" });
+      res
+        .status(500)
+        .json({ message: error.message || "Failed to check webhook health" });
     }
   });
 
-  app.post("/api/shopify/webhooks/register", isAuthenticated, async (req, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
+  app.post(
+    "/api/shopify/webhooks/register",
+    isAuthenticated,
+    async (req, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
 
-      const result = await registerShopifyWebhooks(merchantId);
-      res.json({
-        success: result.failed.length === 0,
-        registered: result.registered,
-        failed: result.failed,
-        message: result.failed.length === 0
-          ? `All ${result.registered.length} webhooks registered successfully`
-          : `${result.registered.length} registered, ${result.failed.length} failed`,
-      });
-    } catch (error: any) {
-      console.error("Error registering webhooks:", error);
-      res.status(500).json({ message: error.message || "Failed to register webhooks" });
-    }
-  });
+        const result = await registerShopifyWebhooks(merchantId);
+        res.json({
+          success: result.failed.length === 0,
+          registered: result.registered,
+          failed: result.failed,
+          message:
+            result.failed.length === 0
+              ? `All ${result.registered.length} webhooks registered successfully`
+              : `${result.registered.length} registered, ${result.failed.length} failed`,
+        });
+      } catch (error: any) {
+        console.error("Error registering webhooks:", error);
+        res
+          .status(500)
+          .json({ message: error.message || "Failed to register webhooks" });
+      }
+    },
+  );
 
   // ============================================
   // DATA HEALTH & SYNC LOG ENDPOINTS
@@ -3275,19 +4405,33 @@ export async function registerRoutes(
 
       const validated = courierAccountSchema.safeParse(req.body);
       if (!validated.success) {
-        return res.status(400).json({ message: validated.error.errors[0].message });
+        return res
+          .status(400)
+          .json({ message: validated.error.errors[0].message });
       }
 
-      const { courierName, apiKey, apiSecret, accountNumber, useEnvCredentials, settings: incomingSettings } = validated.data;
+      const {
+        courierName,
+        apiKey,
+        apiSecret,
+        accountNumber,
+        useEnvCredentials,
+        settings: incomingSettings,
+      } = validated.data;
 
-      const existing = (await storage.getCourierAccounts(merchantId)).find(c => c.courierName === courierName);
+      const existing = (await storage.getCourierAccounts(merchantId)).find(
+        (c) => c.courierName === courierName,
+      );
 
-      const settings: Record<string, any> = { useEnvCredentials: !!useEnvCredentials, ...incomingSettings };
+      const settings: Record<string, any> = {
+        useEnvCredentials: !!useEnvCredentials,
+        ...incomingSettings,
+      };
 
       if (existing) {
         const account = await storage.updateCourierAccount(existing.id, {
-          apiKey: useEnvCredentials ? null : (apiKey || existing.apiKey),
-          apiSecret: useEnvCredentials ? null : (apiSecret || existing.apiSecret),
+          apiKey: useEnvCredentials ? null : apiKey || existing.apiKey,
+          apiSecret: useEnvCredentials ? null : apiSecret || existing.apiSecret,
           accountNumber: accountNumber || existing.accountNumber,
           settings,
           isActive: true,
@@ -3297,8 +4441,8 @@ export async function registerRoutes(
         const account = await storage.createCourierAccount({
           merchantId,
           courierName,
-          apiKey: useEnvCredentials ? null : (apiKey || null),
-          apiSecret: useEnvCredentials ? null : (apiSecret || null),
+          apiKey: useEnvCredentials ? null : apiKey || null,
+          apiSecret: useEnvCredentials ? null : apiSecret || null,
           accountNumber: accountNumber || null,
           settings,
           isActive: true,
@@ -3311,86 +4455,143 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/integrations/couriers/test", isAuthenticated, async (req, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
+  app.post(
+    "/api/integrations/couriers/test",
+    isAuthenticated,
+    async (req, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
 
-      const { courierName } = req.body;
-      if (!courierName) return res.status(400).json({ message: "courierName required" });
+        const { courierName } = req.body;
+        if (!courierName)
+          return res.status(400).json({ message: "courierName required" });
 
-      const creds = await getCourierCredentials(merchantId, courierName);
-      if (!creds) {
-        return res.json({ success: false, message: "No credentials configured" });
-      }
-
-      if (courierName === 'leopards') {
-        try {
-          const resp = await fetch('https://merchantapi.leopardscourier.com/api/getAllCities/format/json/', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ api_key: creds.apiKey, api_password: creds.apiSecret }),
+        const creds = await getCourierCredentials(merchantId, courierName);
+        if (!creds) {
+          return res.json({
+            success: false,
+            message: "No credentials configured",
           });
-          const data = await resp.json();
-          if (data.status === 1) {
-            return res.json({ success: true, message: `Connected! ${data.city_list?.length || 0} cities available.` });
-          }
-          return res.json({ success: false, message: data.error || 'Authentication failed' });
-        } catch (err: any) {
-          return res.json({ success: false, message: err.message });
         }
-      }
 
-      if (courierName === 'postex') {
-        try {
-          const resp = await fetch('https://api.postex.pk/services/integration/api/order/v2/get-operational-city', {
-            headers: { 'Content-Type': 'application/json', 'token': creds.apiKey! },
+        if (courierName === "leopards") {
+          try {
+            const resp = await fetch(
+              "https://merchantapi.leopardscourier.com/api/getAllCities/format/json/",
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  api_key: creds.apiKey,
+                  api_password: creds.apiSecret,
+                }),
+              },
+            );
+            const data = await resp.json();
+            if (data.status === 1) {
+              return res.json({
+                success: true,
+                message: `Connected! ${data.city_list?.length || 0} cities available.`,
+              });
+            }
+            return res.json({
+              success: false,
+              message: data.error || "Authentication failed",
+            });
+          } catch (err: any) {
+            return res.json({ success: false, message: err.message });
+          }
+        }
+
+        if (courierName === "postex") {
+          try {
+            const resp = await fetch(
+              "https://api.postex.pk/services/integration/api/order/v2/get-operational-city",
+              {
+                headers: {
+                  "Content-Type": "application/json",
+                  token: creds.apiKey!,
+                },
+              },
+            );
+            const data = await resp.json();
+            if (data.statusCode === "200") {
+              return res.json({
+                success: true,
+                message: `Connected! ${data.dist?.length || 0} operational cities.`,
+              });
+            }
+            return res.json({
+              success: false,
+              message: data.statusMessage || "Authentication failed",
+            });
+          } catch (err: any) {
+            return res.json({ success: false, message: err.message });
+          }
+        }
+
+        return res.json({
+          success: false,
+          message: `Test not available for ${courierName}`,
+        });
+      } catch (error) {
+        console.error("Error testing courier:", error);
+        res.status(500).json({ message: "Failed to test courier connection" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/integrations/postex/addresses",
+    isAuthenticated,
+    async (req, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+
+        const creds = await getCourierCredentials(merchantId, "postex");
+        if (!creds || !creds.apiKey) {
+          return res
+            .status(400)
+            .json({
+              message:
+                "PostEx credentials not configured. Save your API Token first.",
+            });
+        }
+
+        const resp = await fetch(
+          "https://api.postex.pk/services/integration/api/order/v1/get-merchant-address",
+          {
+            headers: {
+              "Content-Type": "application/json",
+              token: creds.apiKey,
+            },
+          },
+        );
+        const data = await resp.json();
+        console.log(
+          "[PostEx] Merchant addresses response:",
+          JSON.stringify(data).substring(0, 500),
+        );
+
+        if (data.statusCode === "200" && data.dist) {
+          return res.json({ success: true, addresses: data.dist });
+        }
+        return res.json({
+          success: false,
+          message: data.statusMessage || "Failed to fetch addresses",
+        });
+      } catch (error: any) {
+        console.error("Error fetching PostEx addresses:", error);
+        res
+          .status(500)
+          .json({
+            message: error.message || "Failed to fetch PostEx addresses",
           });
-          const data = await resp.json();
-          if (data.statusCode === '200') {
-            return res.json({ success: true, message: `Connected! ${data.dist?.length || 0} operational cities.` });
-          }
-          return res.json({ success: false, message: data.statusMessage || 'Authentication failed' });
-        } catch (err: any) {
-          return res.json({ success: false, message: err.message });
-        }
       }
-
-      return res.json({ success: false, message: `Test not available for ${courierName}` });
-    } catch (error) {
-      console.error("Error testing courier:", error);
-      res.status(500).json({ message: "Failed to test courier connection" });
-    }
-  });
-
-  app.post("/api/integrations/postex/addresses", isAuthenticated, async (req, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-
-      const creds = await getCourierCredentials(merchantId, "postex");
-      if (!creds || !creds.apiKey) {
-        return res.status(400).json({ message: "PostEx credentials not configured. Save your API Token first." });
-      }
-
-      const resp = await fetch("https://api.postex.pk/services/integration/api/order/v1/get-merchant-address", {
-        headers: {
-          "Content-Type": "application/json",
-          "token": creds.apiKey,
-        },
-      });
-      const data = await resp.json();
-      console.log("[PostEx] Merchant addresses response:", JSON.stringify(data).substring(0, 500));
-
-      if (data.statusCode === "200" && data.dist) {
-        return res.json({ success: true, addresses: data.dist });
-      }
-      return res.json({ success: false, message: data.statusMessage || "Failed to fetch addresses" });
-    } catch (error: any) {
-      console.error("Error fetching PostEx addresses:", error);
-      res.status(500).json({ message: error.message || "Failed to fetch PostEx addresses" });
-    }
-  });
+    },
+  );
 
   // Settings
   app.get("/api/settings", isAuthenticated, async (req, res) => {
@@ -3399,7 +4600,7 @@ export async function registerRoutes(
       if (!merchantId) return;
 
       const merchant = await storage.getMerchant(merchantId);
-      
+
       if (!merchant) {
         return res.status(404).json({ message: "Merchant not found" });
       }
@@ -3431,7 +4632,9 @@ export async function registerRoutes(
       // Validate request body
       const validated = settingsUpdateSchema.safeParse(req.body);
       if (!validated.success) {
-        return res.status(400).json({ message: validated.error.errors[0].message });
+        return res
+          .status(400)
+          .json({ message: validated.error.errors[0].message });
       }
 
       const { name, email, phone, address, city } = validated.data;
@@ -3456,7 +4659,9 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
 
-      const { syncMerchantCourierStatuses } = await import('./services/courierSyncScheduler');
+      const { syncMerchantCourierStatuses } = await import(
+        "./services/courierSyncScheduler"
+      );
       const result = await syncMerchantCourierStatuses(merchantId);
 
       res.json({
@@ -3477,21 +4682,25 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
 
-      const { getLastCourierSyncResult, isCourierSyncRunning } = await import('./services/courierSyncScheduler');
+      const { getLastCourierSyncResult, isCourierSyncRunning } = await import(
+        "./services/courierSyncScheduler"
+      );
       const lastResult = getLastCourierSyncResult(merchantId);
 
       res.json({
         autoSyncEnabled: true,
         intervalSeconds: 300,
         isRunning: isCourierSyncRunning(),
-        lastResult: lastResult ? {
-          timestamp: lastResult.timestamp,
-          updated: lastResult.updated,
-          failed: lastResult.failed,
-          skipped: lastResult.skipped,
-          total: lastResult.total,
-          error: lastResult.error,
-        } : null,
+        lastResult: lastResult
+          ? {
+              timestamp: lastResult.timestamp,
+              updated: lastResult.updated,
+              failed: lastResult.failed,
+              skipped: lastResult.skipped,
+              total: lastResult.total,
+              error: lastResult.error,
+            }
+          : null,
       });
     } catch (error) {
       res.status(500).json({ message: "Failed to get courier sync status" });
@@ -3499,74 +4708,117 @@ export async function registerRoutes(
   });
 
   // Track single shipment
-  app.get("/api/couriers/track/:courier/:trackingNumber", isAuthenticated, async (req, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
+  app.get(
+    "/api/couriers/track/:courier/:trackingNumber",
+    isAuthenticated,
+    async (req, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
 
-      const courier = req.params.courier as string;
-      const trackingNumber = req.params.trackingNumber as string;
-      const { trackShipment } = await import('./services/couriers');
-      
-      const creds = await getCourierCredentials(merchantId, courier);
-      const credObj = creds ? { apiKey: creds.apiKey || undefined, apiSecret: creds.apiSecret || undefined } : undefined;
-      const result = await trackShipment(courier, trackingNumber, credObj, undefined, undefined, merchantId);
-      
-      if (!result) {
-        return res.status(400).json({ message: "Unknown courier" });
+        const courier = req.params.courier as string;
+        const trackingNumber = req.params.trackingNumber as string;
+        const { trackShipment } = await import("./services/couriers");
+
+        const creds = await getCourierCredentials(merchantId, courier);
+        const credObj = creds
+          ? {
+              apiKey: creds.apiKey || undefined,
+              apiSecret: creds.apiSecret || undefined,
+            }
+          : undefined;
+        const result = await trackShipment(
+          courier,
+          trackingNumber,
+          credObj,
+          undefined,
+          undefined,
+          merchantId,
+        );
+
+        if (!result) {
+          return res.status(400).json({ message: "Unknown courier" });
+        }
+
+        res.json(result);
+      } catch (error) {
+        console.error("Error tracking shipment:", error);
+        res.status(500).json({ message: "Failed to track shipment" });
       }
-      
-      res.json(result);
-    } catch (error) {
-      console.error("Error tracking shipment:", error);
-      res.status(500).json({ message: "Failed to track shipment" });
-    }
-  });
+    },
+  );
 
-  app.get("/api/orders/:orderId/tracking-history", isAuthenticated, async (req, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
+  app.get(
+    "/api/orders/:orderId/tracking-history",
+    isAuthenticated,
+    async (req, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
 
-      const order = await storage.getOrderById(merchantId, req.params.orderId);
-      if (!order) {
-        return res.status(404).json({ message: "Order not found" });
-      }
+        const order = await storage.getOrderById(
+          merchantId,
+          req.params.orderId,
+        );
+        if (!order) {
+          return res.status(404).json({ message: "Order not found" });
+        }
 
-      if (!order.courierName || !order.courierTracking) {
-        return res.json({ success: false, events: [], message: "No courier booking found for this order" });
-      }
+        if (!order.courierName || !order.courierTracking) {
+          return res.json({
+            success: false,
+            events: [],
+            message: "No courier booking found for this order",
+          });
+        }
 
-      const { trackShipment } = await import('./services/couriers');
-      const creds = await getCourierCredentials(merchantId, order.courierName);
-      const credObj = creds ? { apiKey: creds.apiKey || undefined, apiSecret: creds.apiSecret || undefined } : undefined;
-      const result = await trackShipment(order.courierName, order.courierTracking, credObj, order.shipmentStatus, order.workflowStatus, merchantId);
+        const { trackShipment } = await import("./services/couriers");
+        const creds = await getCourierCredentials(
+          merchantId,
+          order.courierName,
+        );
+        const credObj = creds
+          ? {
+              apiKey: creds.apiKey || undefined,
+              apiSecret: creds.apiSecret || undefined,
+            }
+          : undefined;
+        const result = await trackShipment(
+          order.courierName,
+          order.courierTracking,
+          credObj,
+          order.shipmentStatus,
+          order.workflowStatus,
+          merchantId,
+        );
 
-      if (!result || !result.success) {
-        return res.json({
-          success: false,
-          events: [],
-          message: result?.statusDescription || "Could not fetch tracking data",
+        if (!result || !result.success) {
+          return res.json({
+            success: false,
+            events: [],
+            message:
+              result?.statusDescription || "Could not fetch tracking data",
+            courierName: order.courierName,
+            trackingNumber: order.courierTracking,
+          });
+        }
+
+        res.json({
+          success: true,
           courierName: order.courierName,
           trackingNumber: order.courierTracking,
+          currentStatus: result.normalizedStatus,
+          rawStatus: result.rawCourierStatus,
+          statusDescription: result.statusDescription,
+          lastUpdate: result.lastUpdate,
+          events: result.events,
         });
+      } catch (error) {
+        console.error("Error fetching tracking history:", error);
+        res.status(500).json({ message: "Failed to fetch tracking history" });
       }
-
-      res.json({
-        success: true,
-        courierName: order.courierName,
-        trackingNumber: order.courierTracking,
-        currentStatus: result.normalizedStatus,
-        rawStatus: result.rawCourierStatus,
-        statusDescription: result.statusDescription,
-        lastUpdate: result.lastUpdate,
-        events: result.events,
-      });
-    } catch (error) {
-      console.error("Error fetching tracking history:", error);
-      res.status(500).json({ message: "Failed to fetch tracking history" });
-    }
-  });
+    },
+  );
 
   // ============================================
   // COURIER CITIES ENDPOINT
@@ -3584,26 +4836,35 @@ export async function registerRoutes(
 
       const creds = await getCourierCredentials(merchantId, courier);
       if (!creds) {
-        return res.status(400).json({ message: `No ${courier} credentials configured` });
+        return res
+          .status(400)
+          .json({ message: `No ${courier} credentials configured` });
       }
 
       if (courier === "leopards") {
-        const { loadLeopardsCities } = await import("./services/couriers/booking");
-        const cities = await loadLeopardsCities(creds.apiKey!, creds.apiSecret!);
+        const { loadLeopardsCities } = await import(
+          "./services/couriers/booking"
+        );
+        const cities = await loadLeopardsCities(
+          creds.apiKey!,
+          creds.apiSecret!,
+        );
         res.json({
           courier,
-          cities: cities.map(c => ({
+          cities: cities.map((c) => ({
             id: c.id,
             name: c.name,
             shipmentTypes: c.shipmentTypes,
           })),
         });
       } else {
-        const { loadPostExCities } = await import("./services/couriers/booking");
+        const { loadPostExCities } = await import(
+          "./services/couriers/booking"
+        );
         const cities = await loadPostExCities(creds.apiKey!);
         res.json({
           courier,
-          cities: cities.map(c => ({
+          cities: cities.map((c) => ({
             name: c.name,
             isDeliveryCity: c.isDeliveryCity,
           })),
@@ -3629,113 +4890,190 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Order IDs required" });
       }
       if (!courier || !["leopards", "postex"].includes(courier)) {
-        return res.status(400).json({ message: "Valid courier required (leopards or postex)" });
+        return res
+          .status(400)
+          .json({ message: "Valid courier required (leopards or postex)" });
       }
 
-      const { validateOrderForBooking, normalizePhone, matchCityForCourier, loadLeopardsCities, loadPostExCities } = await import("./services/couriers/booking");
+      const {
+        validateOrderForBooking,
+        normalizePhone,
+        matchCityForCourier,
+        loadLeopardsCities,
+        loadPostExCities,
+      } = await import("./services/couriers/booking");
 
       const creds = await getCourierCredentials(merchantId, courier);
       let courierCities: Array<{ id?: number; name: string }> = [];
       if (creds) {
         if (courier === "leopards") {
-          const leopCities = await loadLeopardsCities(creds.apiKey!, creds.apiSecret!);
-          courierCities = leopCities.map(c => ({ id: c.id, name: c.name }));
+          const leopCities = await loadLeopardsCities(
+            creds.apiKey!,
+            creds.apiSecret!,
+          );
+          courierCities = leopCities.map((c) => ({ id: c.id, name: c.name }));
         } else {
           const postCities = await loadPostExCities(creds.apiKey!);
-          courierCities = postCities.filter(c => c.isDeliveryCity).map(c => ({ name: c.name }));
+          courierCities = postCities
+            .filter((c) => c.isDeliveryCity)
+            .map((c) => ({ name: c.name }));
         }
       }
 
       const fetchedOrders = await storage.getOrdersByIds(merchantId, orderIds);
-      const existingJobs = await storage.getBookingJobsByOrderIds(merchantId, orderIds);
+      const existingJobs = await storage.getBookingJobsByOrderIds(
+        merchantId,
+        orderIds,
+      );
       const bookedOrderIds = new Set(
-        existingJobs.filter(j => j.status === "success" && j.trackingNumber).map(j => j.orderId)
+        existingJobs
+          .filter((j) => j.status === "success" && j.trackingNumber)
+          .map((j) => j.orderId),
       );
 
       const buildProductDescription = (order: any): string => {
         const items = order.lineItems as any[];
         if (items && items.length > 0) {
-          return items.map((i: any) => {
-            const name = (i.name || i.title || "Item").trim();
-            const variant = i.variant_title ? ` - ${i.variant_title}` : "";
-            const qty = i.quantity > 1 ? ` x ${i.quantity}` : "";
-            return `${name}${variant}${qty}`;
-          }).join(" | ");
+          return items
+            .map((i: any) => {
+              const name = (i.name || i.title || "Item").trim();
+              const variant = i.variant_title ? ` - ${i.variant_title}` : "";
+              const qty = i.quantity > 1 ? ` x ${i.quantity}` : "";
+              return `${name}${variant}${qty}`;
+            })
+            .join(" | ");
         }
         return order.itemSummary || "Order items";
       };
 
       type PreviewOrder = {
-        orderId: string; orderNumber: string; customerName: string; city: string;
-        address: string; phone: string; weight: number; pieces: number;
-        productDescription: string; codAmount: number; amount: string;
-        cityMatched: boolean; matchedCityName: string; matchedCityId?: number;
+        orderId: string;
+        orderNumber: string;
+        customerName: string;
+        city: string;
+        address: string;
+        phone: string;
+        weight: number;
+        pieces: number;
+        productDescription: string;
+        codAmount: number;
+        amount: string;
+        cityMatched: boolean;
+        matchedCityName: string;
+        matchedCityId?: number;
         missingFields?: string[];
       };
 
       const valid: PreviewOrder[] = [];
       const invalid: PreviewOrder[] = [];
-      const alreadyBooked: Array<{ orderId: string; orderNumber: string; trackingNumber: string }> = [];
+      const alreadyBooked: Array<{
+        orderId: string;
+        orderNumber: string;
+        trackingNumber: string;
+      }> = [];
 
       for (const order of fetchedOrders) {
         if (order.workflowStatus !== "READY_TO_SHIP") {
-          const cityMatch = matchCityForCourier(order.city || "", courierCities, courier);
+          const cityMatch = matchCityForCourier(
+            order.city || "",
+            courierCities,
+            courier,
+          );
           invalid.push({
-            orderId: order.id, orderNumber: order.orderNumber,
-            customerName: order.customerName || "", city: order.city || "",
-            address: order.shippingAddress || "", phone: normalizePhone(order.customerPhone),
-            weight: 200, pieces: order.totalQuantity || 1,
+            orderId: order.id,
+            orderNumber: order.orderNumber,
+            customerName: order.customerName || "",
+            city: order.city || "",
+            address: order.shippingAddress || "",
+            phone: normalizePhone(order.customerPhone),
+            weight: 200,
+            pieces: order.totalQuantity || 1,
             productDescription: buildProductDescription(order),
             codAmount: parseFloat(order.totalAmount) || 0,
             amount: order.totalAmount,
-            cityMatched: cityMatch.matched, matchedCityName: cityMatch.matchedCity, matchedCityId: cityMatch.matchedCityId,
+            cityMatched: cityMatch.matched,
+            matchedCityName: cityMatch.matchedCity,
+            matchedCityId: cityMatch.matchedCityId,
             missingFields: ["Not in Ready to Ship status"],
           });
           continue;
         }
 
-        if (order.courierTracking || (bookedOrderIds.has(order.id) && order.workflowStatus === 'BOOKED')) {
-          const existingJob = existingJobs.find(j => j.orderId === order.id && j.status === "success");
+        if (
+          order.courierTracking ||
+          (bookedOrderIds.has(order.id) && order.workflowStatus === "BOOKED")
+        ) {
+          const existingJob = existingJobs.find(
+            (j) => j.orderId === order.id && j.status === "success",
+          );
           alreadyBooked.push({
             orderId: order.id,
             orderNumber: order.orderNumber,
-            trackingNumber: existingJob?.trackingNumber || order.courierTracking || "Unknown",
+            trackingNumber:
+              existingJob?.trackingNumber || order.courierTracking || "Unknown",
           });
           continue;
         }
 
-        const pieces = order.totalQuantity || ((order.lineItems as any[])?.length) || 1;
+        const pieces =
+          order.totalQuantity || (order.lineItems as any[])?.length || 1;
         const productDescription = buildProductDescription(order);
         const codAmount = parseFloat(order.totalAmount) || 0;
         const phone = normalizePhone(order.customerPhone);
-        const cityMatch = matchCityForCourier(order.city || "", courierCities, courier);
+        const cityMatch = matchCityForCourier(
+          order.city || "",
+          courierCities,
+          courier,
+        );
 
         const missing = validateOrderForBooking(order);
         if (missing.length > 0) {
           invalid.push({
-            orderId: order.id, orderNumber: order.orderNumber,
-            customerName: order.customerName || "", city: order.city || "",
-            address: order.shippingAddress || "", phone,
-            weight: 200, pieces, productDescription, codAmount,
+            orderId: order.id,
+            orderNumber: order.orderNumber,
+            customerName: order.customerName || "",
+            city: order.city || "",
+            address: order.shippingAddress || "",
+            phone,
+            weight: 200,
+            pieces,
+            productDescription,
+            codAmount,
             amount: order.totalAmount,
-            cityMatched: cityMatch.matched, matchedCityName: cityMatch.matchedCity, matchedCityId: cityMatch.matchedCityId,
+            cityMatched: cityMatch.matched,
+            matchedCityName: cityMatch.matchedCity,
+            matchedCityId: cityMatch.matchedCityId,
             missingFields: missing,
           });
         } else {
           valid.push({
-            orderId: order.id, orderNumber: order.orderNumber,
-            customerName: order.customerName, city: order.city || "",
-            address: order.shippingAddress || "", phone,
-            weight: 200, pieces, productDescription, codAmount,
+            orderId: order.id,
+            orderNumber: order.orderNumber,
+            customerName: order.customerName,
+            city: order.city || "",
+            address: order.shippingAddress || "",
+            phone,
+            weight: 200,
+            pieces,
+            productDescription,
+            codAmount,
             amount: order.totalAmount,
-            cityMatched: cityMatch.matched, matchedCityName: cityMatch.matchedCity, matchedCityId: cityMatch.matchedCityId,
+            cityMatched: cityMatch.matched,
+            matchedCityName: cityMatch.matchedCity,
+            matchedCityId: cityMatch.matchedCityId,
           });
         }
       }
 
       res.json({
-        valid, invalid, alreadyBooked, courier,
-        courierCities: courierCities.map(c => ({ id: (c as any).id, name: c.name })),
+        valid,
+        invalid,
+        alreadyBooked,
+        courier,
+        courierCities: courierCities.map((c) => ({
+          id: (c as any).id,
+          name: c.name,
+        })),
       });
     } catch (error) {
       console.error("Error previewing booking:", error);
@@ -3756,11 +5094,19 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Valid courier required" });
       }
 
-      const overridesMap = new Map<string, {
-        weight?: number; mode?: string; customerName?: string;
-        phone?: string; address?: string; city?: string;
-        codAmount?: number; description?: string;
-      }>();
+      const overridesMap = new Map<
+        string,
+        {
+          weight?: number;
+          mode?: string;
+          customerName?: string;
+          phone?: string;
+          address?: string;
+          city?: string;
+          codAmount?: number;
+          description?: string;
+        }
+      >();
       if (orderOverrides && typeof orderOverrides === "object") {
         for (const [oid, ov] of Object.entries(orderOverrides)) {
           overridesMap.set(oid, ov as any);
@@ -3769,7 +5115,11 @@ export async function registerRoutes(
 
       const creds = await getCourierCredentials(merchantId, courier);
       if (!creds) {
-        return res.status(400).json({ message: `No ${courier} credentials configured. Go to Settings to add them.` });
+        return res
+          .status(400)
+          .json({
+            message: `No ${courier} credentials configured. Go to Settings to add them.`,
+          });
       }
 
       const merchant = await storage.getMerchant(merchantId);
@@ -3777,40 +5127,80 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Merchant not found" });
       }
 
-      const courierAccount = (await storage.getCourierAccounts(merchantId)).find(c => c.courierName === courier);
-      const courierSettings = courierAccount?.settings as Record<string, any> | null;
+      const courierAccount = (
+        await storage.getCourierAccounts(merchantId)
+      ).find((c) => c.courierName === courier);
+      const courierSettings = courierAccount?.settings as Record<
+        string,
+        any
+      > | null;
 
-      let pickupAddressCode = courierSettings?.pickupAddressCode ? String(courierSettings.pickupAddressCode).trim() : "";
-      let storeAddressCode = courierSettings?.storeAddressCode ? String(courierSettings.storeAddressCode).trim() : "";
+      let pickupAddressCode = courierSettings?.pickupAddressCode
+        ? String(courierSettings.pickupAddressCode).trim()
+        : "";
+      let storeAddressCode = courierSettings?.storeAddressCode
+        ? String(courierSettings.storeAddressCode).trim()
+        : "";
 
       if (courier === "postex" && (!pickupAddressCode || !storeAddressCode)) {
         try {
-          console.log("[PostEx] Address codes missing/empty, auto-fetching from PostEx API...");
-          const addrResp = await fetch("https://api.postex.pk/services/integration/api/order/v1/get-merchant-address", {
-            headers: { "Content-Type": "application/json", "token": creds.apiKey! },
-          });
-          const addrData = await addrResp.json() as any;
-          if (addrData.statusCode === "200" && Array.isArray(addrData.dist) && addrData.dist.length > 0) {
+          console.log(
+            "[PostEx] Address codes missing/empty, auto-fetching from PostEx API...",
+          );
+          const addrResp = await fetch(
+            "https://api.postex.pk/services/integration/api/order/v1/get-merchant-address",
+            {
+              headers: {
+                "Content-Type": "application/json",
+                token: creds.apiKey!,
+              },
+            },
+          );
+          const addrData = (await addrResp.json()) as any;
+          if (
+            addrData.statusCode === "200" &&
+            Array.isArray(addrData.dist) &&
+            addrData.dist.length > 0
+          ) {
             for (const addr of addrData.dist) {
               const code = String(addr.addressCode).trim();
               if (addr.addressType === "Default Address" && !storeAddressCode) {
                 storeAddressCode = code;
               }
-              if ((addr.addressType === "Pickup/Return Address" || addr.addressType === "Pickup Address") && !pickupAddressCode) {
+              if (
+                (addr.addressType === "Pickup/Return Address" ||
+                  addr.addressType === "Pickup Address") &&
+                !pickupAddressCode
+              ) {
                 pickupAddressCode = code;
               }
             }
-            if (!pickupAddressCode) pickupAddressCode = String(addrData.dist[0].addressCode).trim();
-            if (!storeAddressCode) storeAddressCode = String(addrData.dist[0].addressCode).trim();
-            console.log(`[PostEx] Auto-resolved address codes: pickup="${pickupAddressCode}", store="${storeAddressCode}"`);
+            if (!pickupAddressCode)
+              pickupAddressCode = String(addrData.dist[0].addressCode).trim();
+            if (!storeAddressCode)
+              storeAddressCode = String(addrData.dist[0].addressCode).trim();
+            console.log(
+              `[PostEx] Auto-resolved address codes: pickup="${pickupAddressCode}", store="${storeAddressCode}"`,
+            );
 
             if (courierAccount) {
-              const updatedSettings = { ...courierSettings, pickupAddressCode, storeAddressCode };
-              await storage.updateCourierAccount(courierAccount.id, { settings: updatedSettings });
-              console.log("[PostEx] Persisted auto-fetched address codes to DB");
+              const updatedSettings = {
+                ...courierSettings,
+                pickupAddressCode,
+                storeAddressCode,
+              };
+              await storage.updateCourierAccount(courierAccount.id, {
+                settings: updatedSettings,
+              });
+              console.log(
+                "[PostEx] Persisted auto-fetched address codes to DB",
+              );
             }
           } else {
-            console.warn("[PostEx] Could not auto-fetch addresses:", addrData.statusMessage || "No addresses returned");
+            console.warn(
+              "[PostEx] Could not auto-fetch addresses:",
+              addrData.statusMessage || "No addresses returned",
+            );
           }
         } catch (e) {
           console.error("[PostEx] Failed to auto-fetch address codes:", e);
@@ -3819,11 +5209,14 @@ export async function registerRoutes(
 
       if (courier === "postex" && !pickupAddressCode) {
         return res.status(400).json({
-          message: "Please sync pickup addresses from PostEx and select a valid pickup address code. Go to Integrations > PostEx and click 'Sync Addresses from PostEx'.",
+          message:
+            "Please sync pickup addresses from PostEx and select a valid pickup address code. Go to Integrations > PostEx and click 'Sync Addresses from PostEx'.",
         });
       }
 
-      console.log(`[PostEx] Final address codes for booking: pickupAddressCode="${pickupAddressCode}" (type=${typeof pickupAddressCode})`);
+      console.log(
+        `[PostEx] Final address codes for booking: pickupAddressCode="${pickupAddressCode}" (type=${typeof pickupAddressCode})`,
+      );
 
       const shipperInfo = {
         name: merchant.name || "ShipFlow Merchant",
@@ -3835,20 +5228,36 @@ export async function registerRoutes(
         storeAddressCode,
       };
 
-      const { validateOrderForBooking, orderToPacket, bookLeopardsBatch, bookPostExBulk, loadLeopardsCities, findLeopardsCity } = await import("./services/couriers/booking");
-      const { generateBatchLoadsheetPdf } = await import("./services/pdfGenerator");
+      const {
+        validateOrderForBooking,
+        orderToPacket,
+        bookLeopardsBatch,
+        bookPostExBulk,
+        loadLeopardsCities,
+        findLeopardsCity,
+      } = await import("./services/couriers/booking");
+      const { generateBatchLoadsheetPdf } = await import(
+        "./services/pdfGenerator"
+      );
 
       if (courier === "leopards") {
-        const leopCities = await loadLeopardsCities(creds.apiKey!, creds.apiSecret!);
+        const leopCities = await loadLeopardsCities(
+          creds.apiKey!,
+          creds.apiSecret!,
+        );
         const originMatch = findLeopardsCity(shipperInfo.city, leopCities);
         if (!originMatch && !shipperInfo.shipperId) {
           return res.status(400).json({
             message: `Shipper city "${shipperInfo.city}" does not match any Leopards city and no Shipper ID is configured. Please go to Integrations > Leopards and set a valid Shipper City or Shipper ID.`,
           });
         } else if (!originMatch && shipperInfo.shipperId) {
-          console.warn(`[Leopards] Shipper city "${shipperInfo.city}" does not match any Leopards city, but Shipper ID ${shipperInfo.shipperId} is set — Leopards will use registered origin.`);
+          console.warn(
+            `[Leopards] Shipper city "${shipperInfo.city}" does not match any Leopards city, but Shipper ID ${shipperInfo.shipperId} is set — Leopards will use registered origin.`,
+          );
         } else if (originMatch) {
-          console.log(`[Leopards] Shipper city "${shipperInfo.city}" matched to Leopards city: ${originMatch.name} (ID: ${originMatch.id})`);
+          console.log(
+            `[Leopards] Shipper city "${shipperInfo.city}" matched to Leopards city: ${originMatch.name} (ID: ${originMatch.id})`,
+          );
         }
       }
 
@@ -3878,8 +5287,16 @@ export async function registerRoutes(
 
       const toBook: typeof fetchedOrders = [];
       for (const order of fetchedOrders) {
-        const existingJob = await storage.getBookingJob(merchantId, order.id, courier);
-        if (existingJob && existingJob.status === "success" && existingJob.trackingNumber) {
+        const existingJob = await storage.getBookingJob(
+          merchantId,
+          order.id,
+          courier,
+        );
+        if (
+          existingJob &&
+          existingJob.status === "success" &&
+          existingJob.trackingNumber
+        ) {
           results.push({
             orderId: order.id,
             orderNumber: order.orderNumber,
@@ -3903,11 +5320,13 @@ export async function registerRoutes(
         const ovr = overridesMap.get(order.id);
         const orderForValidation = { ...order };
         if (ovr) {
-          if (ovr.customerName) orderForValidation.customerName = ovr.customerName;
+          if (ovr.customerName)
+            orderForValidation.customerName = ovr.customerName;
           if (ovr.phone) orderForValidation.customerPhone = ovr.phone;
           if (ovr.address) orderForValidation.shippingAddress = ovr.address;
           if (ovr.city) orderForValidation.city = ovr.city;
-          if (ovr.codAmount !== undefined) orderForValidation.totalAmount = String(ovr.codAmount);
+          if (ovr.codAmount !== undefined)
+            orderForValidation.totalAmount = String(ovr.codAmount);
         }
         const missing = validateOrderForBooking(orderForValidation);
         if (missing.length > 0) {
@@ -3925,8 +5344,8 @@ export async function registerRoutes(
 
       if (toBook.length === 0) {
         return res.json({
-          successCount: results.filter(r => r.success).length,
-          failedCount: results.filter(r => !r.success).length,
+          successCount: results.filter((r) => r.success).length,
+          failedCount: results.filter((r) => !r.success).length,
           results,
         });
       }
@@ -3942,7 +5361,7 @@ export async function registerRoutes(
         jobMap.set(order.id, job.id);
       }
 
-      const packets = toBook.map(order => {
+      const packets = toBook.map((order) => {
         const pkt = orderToPacket(order);
         const ovr = overridesMap.get(order.id);
         if (ovr) {
@@ -3969,12 +5388,20 @@ export async function registerRoutes(
       }>;
 
       if (courier === "leopards") {
-        bookingResults = await bookLeopardsBatch(packets, {
-          apiKey: creds.apiKey!,
-          apiPassword: creds.apiSecret!,
-        }, shipperInfo);
+        bookingResults = await bookLeopardsBatch(
+          packets,
+          {
+            apiKey: creds.apiKey!,
+            apiPassword: creds.apiSecret!,
+          },
+          shipperInfo,
+        );
       } else {
-        bookingResults = await bookPostExBulk(packets, creds.apiKey!, shipperInfo);
+        bookingResults = await bookPostExBulk(
+          packets,
+          creds.apiKey!,
+          shipperInfo,
+        );
       }
 
       for (const br of bookingResults) {
@@ -4012,14 +5439,22 @@ export async function registerRoutes(
           });
 
           try {
-            const orderForFulfill = fetchedOrders.find(o => o.id === br.orderId);
-            if (orderForFulfill?.shopifyOrderId && !orderForFulfill.shopifyFulfillmentId) {
+            const orderForFulfill = fetchedOrders.find(
+              (o) => o.id === br.orderId,
+            );
+            if (
+              orderForFulfill?.shopifyOrderId &&
+              !orderForFulfill.shopifyFulfillmentId
+            ) {
               const shopifyStore = await storage.getShopifyStore(merchantId);
               if (shopifyStore?.accessToken && shopifyStore?.shopDomain) {
-                const { decryptToken } = await import('./services/encryption');
-                const { createShopifyFulfillment } = await import('./services/shopify');
+                const { decryptToken } = await import("./services/encryption");
+                const { createShopifyFulfillment } = await import(
+                  "./services/shopify"
+                );
                 const decryptedToken = decryptToken(shopifyStore.accessToken);
-                const courierDisplayName = courier === "leopards" ? "Leopards Courier" : "PostEx";
+                const courierDisplayName =
+                  courier === "leopards" ? "Leopards Courier" : "PostEx";
                 const fulfillResult = await createShopifyFulfillment(
                   shopifyStore.shopDomain,
                   decryptedToken,
@@ -4032,14 +5467,21 @@ export async function registerRoutes(
                     shopifyFulfillmentId: fulfillResult.fulfillmentId,
                     fulfillmentStatus: "fulfilled",
                   });
-                  console.log(`[Booking] Shopify fulfillment created for ${orderForFulfill.orderNumber}: ${fulfillResult.fulfillmentId}`);
+                  console.log(
+                    `[Booking] Shopify fulfillment created for ${orderForFulfill.orderNumber}: ${fulfillResult.fulfillmentId}`,
+                  );
                 } else {
-                  console.warn(`[Booking] Shopify fulfillment failed for ${orderForFulfill.orderNumber}: ${fulfillResult.error}`);
+                  console.warn(
+                    `[Booking] Shopify fulfillment failed for ${orderForFulfill.orderNumber}: ${fulfillResult.error}`,
+                  );
                 }
               }
             }
           } catch (fulfillErr: any) {
-            console.warn(`[Booking] Shopify fulfillment error for order ${br.orderId}:`, fulfillErr.message);
+            console.warn(
+              `[Booking] Shopify fulfillment error for order ${br.orderId}:`,
+              fulfillErr.message,
+            );
           }
         } else {
           await storage.updateOrder(merchantId, br.orderId, {
@@ -4058,10 +5500,15 @@ export async function registerRoutes(
         });
       }
 
-      const successCount = results.filter(r => r.success).length;
-      const failedCount = results.filter(r => !r.success).length;
+      const successCount = results.filter((r) => r.success).length;
+      const failedCount = results.filter((r) => !r.success).length;
 
-      const batchStatus = failedCount === 0 ? "SUCCESS" : (successCount === 0 ? "FAILED" : "PARTIAL_SUCCESS");
+      const batchStatus =
+        failedCount === 0
+          ? "SUCCESS"
+          : successCount === 0
+            ? "FAILED"
+            : "PARTIAL_SUCCESS";
       await storage.updateShipmentBatch(batch.id, {
         successCount,
         failedCount,
@@ -4077,20 +5524,32 @@ export async function registerRoutes(
           bookingError: r.error || null,
           trackingNumber: r.trackingNumber || null,
           slipUrl: r.slipUrl || null,
-          consigneeName: fetchedOrders.find(o => o.id === r.orderId)?.customerName || null,
-          consigneePhone: fetchedOrders.find(o => o.id === r.orderId)?.customerPhone || null,
-          consigneeCity: fetchedOrders.find(o => o.id === r.orderId)?.city || null,
-          codAmount: (fetchedOrders.find(o => o.id === r.orderId)?.codRemaining ?? fetchedOrders.find(o => o.id === r.orderId)?.totalAmount) || null,
+          consigneeName:
+            fetchedOrders.find((o) => o.id === r.orderId)?.customerName || null,
+          consigneePhone:
+            fetchedOrders.find((o) => o.id === r.orderId)?.customerPhone ||
+            null,
+          consigneeCity:
+            fetchedOrders.find((o) => o.id === r.orderId)?.city || null,
+          codAmount:
+            (fetchedOrders.find((o) => o.id === r.orderId)?.codRemaining ??
+              fetchedOrders.find((o) => o.id === r.orderId)?.totalAmount) ||
+            null,
         });
       }
 
       try {
-        for (const r of results.filter(r => r.success && r.trackingNumber)) {
-          const order = fetchedOrders.find(o => o.id === r.orderId);
+        for (const r of results.filter((r) => r.success && r.trackingNumber)) {
+          const order = fetchedOrders.find((o) => o.id === r.orderId);
           if (!order) continue;
 
-          const shipmentsList = await storage.getShipmentsByOrderId(merchantId, order.id);
-          const shipment = shipmentsList.find(s => s.trackingNumber === r.trackingNumber);
+          const shipmentsList = await storage.getShipmentsByOrderId(
+            merchantId,
+            order.id,
+          );
+          const shipment = shipmentsList.find(
+            (s) => s.trackingNumber === r.trackingNumber,
+          );
 
           await storage.createShipmentPrintRecord({
             merchantId,
@@ -4114,8 +5573,8 @@ export async function registerRoutes(
           totalCount: results.length,
           successCount,
           failedCount,
-          items: results.map(r => {
-            const order = fetchedOrders.find(o => o.id === r.orderId);
+          items: results.map((r) => {
+            const order = fetchedOrders.find((o) => o.id === r.orderId);
             return {
               orderNumber: r.orderNumber,
               trackingNumber: r.trackingNumber || "",
@@ -4136,7 +5595,9 @@ export async function registerRoutes(
         console.error("[Booking] PDF generation error (non-blocking):", pdfErr);
       }
 
-      console.log(`[Booking] ${courier}: ${successCount} success, ${failedCount} failed out of ${results.length}, batch=${batch.id}`);
+      console.log(
+        `[Booking] ${courier}: ${successCount} success, ${failedCount} failed out of ${results.length}, batch=${batch.id}`,
+      );
 
       res.json({ successCount, failedCount, results, batchId: batch.id });
     } catch (error) {
@@ -4158,7 +5619,11 @@ export async function registerRoutes(
       const pageSize = parseInt(req.query.pageSize as string) || 20;
       const courier = req.query.courier as string;
 
-      const result = await storage.getShipmentBatches(merchantId, { page, pageSize, courier });
+      const result = await storage.getShipmentBatches(merchantId, {
+        page,
+        pageSize,
+        courier,
+      });
       res.json(result);
     } catch (error) {
       console.error("Error fetching batches:", error);
@@ -4171,36 +5636,45 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
 
-      const batch = await storage.getShipmentBatchById(merchantId, req.params.id);
+      const batch = await storage.getShipmentBatchById(
+        merchantId,
+        req.params.id,
+      );
       if (!batch) {
         return res.status(404).json({ message: "Batch not found" });
       }
 
       const items = await storage.getShipmentBatchItems(batch.id);
-      
+
       const bookedOrderIds = items
-        .filter(item => item.orderId && item.bookingStatus === "BOOKED")
-        .map(item => item.orderId);
-      
+        .filter((item) => item.orderId && item.bookingStatus === "BOOKED")
+        .map((item) => item.orderId);
+
       let printRecordMap: Record<string, string> = {};
       if (bookedOrderIds.length > 0) {
-        const printRecords = await db.select({ id: shipmentPrintRecords.id, orderId: shipmentPrintRecords.orderId })
+        const printRecords = await db
+          .select({
+            id: shipmentPrintRecords.id,
+            orderId: shipmentPrintRecords.orderId,
+          })
           .from(shipmentPrintRecords)
-          .where(and(
-            eq(shipmentPrintRecords.merchantId, merchantId),
-            inArray(shipmentPrintRecords.orderId, bookedOrderIds),
-            eq(shipmentPrintRecords.isLatest, true),
-          ));
+          .where(
+            and(
+              eq(shipmentPrintRecords.merchantId, merchantId),
+              inArray(shipmentPrintRecords.orderId, bookedOrderIds),
+              eq(shipmentPrintRecords.isLatest, true),
+            ),
+          );
         for (const pr of printRecords) {
           if (pr.orderId) printRecordMap[pr.orderId] = pr.id;
         }
       }
-      
-      const itemsWithPrint = items.map(item => ({
+
+      const itemsWithPrint = items.map((item) => ({
         ...item,
         printRecordId: (item.orderId && printRecordMap[item.orderId]) || null,
       }));
-      
+
       res.json({ batch, items: itemsWithPrint });
     } catch (error) {
       console.error("Error fetching batch details:", error);
@@ -4213,7 +5687,10 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
 
-      const batch = await storage.getShipmentBatchById(merchantId, req.params.id);
+      const batch = await storage.getShipmentBatchById(
+        merchantId,
+        req.params.id,
+      );
       if (!batch || !batch.pdfBatchPath) {
         return res.status(404).json({ message: "Batch PDF not found" });
       }
@@ -4225,7 +5702,10 @@ export async function registerRoutes(
       }
 
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `inline; filename="batch_${batch.id.substring(0, 8)}.pdf"`);
+      res.setHeader(
+        "Content-Disposition",
+        `inline; filename="batch_${batch.id.substring(0, 8)}.pdf"`,
+      );
       const fs = await import("fs");
       fs.createReadStream(pdfPath).pipe(res);
     } catch (error) {
@@ -4239,7 +5719,10 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
 
-      const printRecord = await storage.getShipmentPrintRecordById(merchantId, req.params.id);
+      const printRecord = await storage.getShipmentPrintRecordById(
+        merchantId,
+        req.params.id,
+      );
       if (!printRecord || !printRecord.pdfPath) {
         return res.status(404).json({ message: "Print record not found" });
       }
@@ -4251,7 +5734,10 @@ export async function registerRoutes(
       }
 
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `inline; filename="awb_${printRecord.trackingNumber}.pdf"`);
+      res.setHeader(
+        "Content-Disposition",
+        `inline; filename="awb_${printRecord.trackingNumber}.pdf"`,
+      );
       const fs = await import("fs");
       fs.createReadStream(pdfPath).pipe(res);
     } catch (error) {
@@ -4270,7 +5756,10 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Order not found" });
       }
 
-      const shipmentsList = await storage.getShipmentsByOrderId(merchantId, order.id);
+      const shipmentsList = await storage.getShipmentsByOrderId(
+        merchantId,
+        order.id,
+      );
       const printRecords: any[] = [];
       for (const s of shipmentsList) {
         const record = await storage.getShipmentPrintRecord(merchantId, s.id);
@@ -4280,7 +5769,12 @@ export async function registerRoutes(
       }
 
       res.json({
-        order: { id: order.id, orderNumber: order.orderNumber, courierName: order.courierName, courierTracking: order.courierTracking },
+        order: {
+          id: order.id,
+          orderNumber: order.orderNumber,
+          courierName: order.courierName,
+          courierTracking: order.courierTracking,
+        },
         shipments: shipmentsList,
         printRecords,
       });
@@ -4297,15 +5791,21 @@ export async function registerRoutes(
 
       const trackingNumber = String(req.query.trackingNumber || "").trim();
       if (!trackingNumber) {
-        return res.status(400).json({ message: "Missing trackingNumber query parameter" });
+        return res
+          .status(400)
+          .json({ message: "Missing trackingNumber query parameter" });
       }
 
       const creds = await getCourierCredentials(merchantId, "postex");
       if (!creds?.apiKey) {
-        return res.status(400).json({ message: "PostEx credentials not configured" });
+        return res
+          .status(400)
+          .json({ message: "PostEx credentials not configured" });
       }
 
-      console.log(`[PostEx Invoice Route] Single invoice request: merchantId=${merchantId}, tracking=${trackingNumber}`);
+      console.log(
+        `[PostEx Invoice Route] Single invoice request: merchantId=${merchantId}, tracking=${trackingNumber}`,
+      );
 
       const { fetchPostExSlip } = await import("./services/courierSlips");
       const result = await fetchPostExSlip(trackingNumber, creds.apiKey);
@@ -4318,7 +5818,10 @@ export async function registerRoutes(
       }
 
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="postex-invoice-${trackingNumber}.pdf"`);
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="postex-invoice-${trackingNumber}.pdf"`,
+      );
       res.send(result.pdfBuffer);
     } catch (error) {
       console.error("[PostEx Invoice Route] Error:", error);
@@ -4326,383 +5829,524 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/couriers/postex/invoices", isAuthenticated, async (req, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
+  app.post(
+    "/api/couriers/postex/invoices",
+    isAuthenticated,
+    async (req, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
 
-      const rawTrackingNumbers: string[] = req.body?.trackingNumbers;
-      if (!Array.isArray(rawTrackingNumbers) || rawTrackingNumbers.length === 0) {
-        return res.status(400).json({ message: "Missing or empty trackingNumbers array in request body" });
-      }
-
-      const trackingNumbers = rawTrackingNumbers.map(t => String(t).trim()).filter(Boolean);
-      if (trackingNumbers.length === 0) {
-        return res.status(400).json({ message: "No valid tracking numbers provided" });
-      }
-
-      const creds = await getCourierCredentials(merchantId, "postex");
-      if (!creds?.apiKey) {
-        return res.status(400).json({ message: "PostEx credentials not configured" });
-      }
-
-      console.log(`[PostEx Invoice Route] Bulk invoice request: merchantId=${merchantId}, count=${trackingNumbers.length}`);
-
-      const { fetchPostExSlipBulk } = await import("./services/courierSlips");
-      const result = await fetchPostExSlipBulk(trackingNumbers, creds.apiKey);
-
-      if (!result.success || !result.pdfBuffer) {
-        return res.status(502).json({
-          message: result.error || "Failed to fetch PostEx invoices",
-          failedTrackingNumbers: result.failedTrackingNumbers || trackingNumbers,
-          chunkErrors: (result as any).chunkErrors,
-        });
-      }
-
-      if (result.failedTrackingNumbers && result.failedTrackingNumbers.length > 0) {
-        res.setHeader("X-Partial-Failure", "true");
-        res.setHeader("X-Failed-Tracking-Numbers", result.failedTrackingNumbers.join(","));
-      }
-
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="postex-invoices-bulk.pdf"`);
-      res.send(result.pdfBuffer);
-    } catch (error) {
-      console.error("[PostEx Invoice Route] Bulk error:", error);
-      res.status(500).json({ message: "Failed to fetch PostEx invoices" });
-    }
-  });
-
-  app.get("/api/print/native-slip/:orderId.pdf", isAuthenticated, async (req, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-
-      const order = await storage.getOrderById(merchantId, req.params.orderId);
-      if (!order || !order.courierTracking) {
-        return res.status(404).json({ message: "Order not found or not booked" });
-      }
-
-      const { fetchLeopardsSlip, fetchPostExSlip } = await import("./services/courierSlips");
-      const courierNorm = normalizeCourierName(order.courierName || "");
-
-      let result;
-      if (courierNorm === "leopards") {
-        const creds = await getCourierCredentials(merchantId, "leopards");
-        if (creds?.apiKey && creds?.apiSecret && order.courierTracking) {
-          result = await fetchLeopardsSlip(order.courierSlipUrl || "", {
-            apiKey: creds.apiKey,
-            apiPassword: creds.apiSecret,
-            trackingNumber: order.courierTracking,
-          });
-        } else if (order.courierSlipUrl) {
-          result = await fetchLeopardsSlip(order.courierSlipUrl);
-        } else {
-          return res.status(404).json({ message: "No Leopards slip URL or credentials available for this order" });
+        const rawTrackingNumbers: string[] = req.body?.trackingNumbers;
+        if (
+          !Array.isArray(rawTrackingNumbers) ||
+          rawTrackingNumbers.length === 0
+        ) {
+          return res
+            .status(400)
+            .json({
+              message: "Missing or empty trackingNumbers array in request body",
+            });
         }
-      } else if (courierNorm === "postex") {
+
+        const trackingNumbers = rawTrackingNumbers
+          .map((t) => String(t).trim())
+          .filter(Boolean);
+        if (trackingNumbers.length === 0) {
+          return res
+            .status(400)
+            .json({ message: "No valid tracking numbers provided" });
+        }
+
         const creds = await getCourierCredentials(merchantId, "postex");
         if (!creds?.apiKey) {
-          return res.status(400).json({ message: "PostEx credentials not configured" });
+          return res
+            .status(400)
+            .json({ message: "PostEx credentials not configured" });
         }
-        result = await fetchPostExSlip(order.courierTracking, creds.apiKey);
-      } else {
-        return res.status(400).json({ message: `Native slips not supported for courier: ${order.courierName}` });
-      }
 
-      if (!result.success || !result.pdfBuffer) {
-        return res.status(502).json({ message: result.error || "Failed to fetch courier airway bill" });
-      }
+        console.log(
+          `[PostEx Invoice Route] Bulk invoice request: merchantId=${merchantId}, count=${trackingNumbers.length}`,
+        );
 
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `inline; filename="awb_${order.orderNumber}_${order.courierTracking}.pdf"`);
-      res.send(result.pdfBuffer);
-    } catch (error) {
-      console.error("Error fetching native slip:", error);
-      res.status(500).json({ message: "Failed to fetch courier airway bill" });
-    }
-  });
+        const { fetchPostExSlipBulk } = await import("./services/courierSlips");
+        const result = await fetchPostExSlipBulk(trackingNumbers, creds.apiKey);
 
-  app.get("/api/print/batch-awb/:batchId.pdf", isAuthenticated, async (req, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-
-      const batch = await storage.getShipmentBatchById(merchantId, req.params.batchId);
-      if (!batch) {
-        return res.status(404).json({ message: "Batch not found" });
-      }
-
-      const items = await storage.getShipmentBatchItems(batch.id);
-      const bookedItems = items.filter(item => item.bookingStatus === "BOOKED" && item.trackingNumber);
-
-      if (bookedItems.length === 0) {
-        return res.status(404).json({ message: "No booked items in this batch" });
-      }
-
-      const { fetchLeopardsSlip, fetchPostExSlipBulk, combinePdfs } = await import("./services/courierSlips");
-      const courierNorm = normalizeCourierName(batch.courierName || "");
-
-      if (courierNorm === "postex") {
-        const creds = await getCourierCredentials(merchantId, "postex");
-        const postexToken = creds?.apiKey || null;
-        if (!postexToken) {
-          return res.status(400).json({ message: "PostEx credentials not configured" });
-        }
-        const trackingNums = bookedItems.map(item => item.trackingNumber!);
-        const result = await fetchPostExSlipBulk(trackingNums, postexToken);
         if (!result.success || !result.pdfBuffer) {
-          return res.status(502).json({ message: result.error || "Failed to fetch PostEx airway bills" });
+          return res.status(502).json({
+            message: result.error || "Failed to fetch PostEx invoices",
+            failedTrackingNumbers:
+              result.failedTrackingNumbers || trackingNumbers,
+            chunkErrors: (result as any).chunkErrors,
+          });
         }
+
+        if (
+          result.failedTrackingNumbers &&
+          result.failedTrackingNumbers.length > 0
+        ) {
+          res.setHeader("X-Partial-Failure", "true");
+          res.setHeader(
+            "X-Failed-Tracking-Numbers",
+            result.failedTrackingNumbers.join(","),
+          );
+        }
+
         res.setHeader("Content-Type", "application/pdf");
-        res.setHeader("Content-Disposition", `inline; filename="batch_awb_${batch.id.substring(0, 8)}.pdf"`);
-        return res.send(result.pdfBuffer);
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename="postex-invoices-bulk.pdf"`,
+        );
+        res.send(result.pdfBuffer);
+      } catch (error) {
+        console.error("[PostEx Invoice Route] Bulk error:", error);
+        res.status(500).json({ message: "Failed to fetch PostEx invoices" });
       }
+    },
+  );
 
-      const pdfBuffers: Buffer[] = [];
-      const errors: string[] = [];
+  app.get(
+    "/api/print/native-slip/:orderId.pdf",
+    isAuthenticated,
+    async (req, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
 
-      const leopardsCreds = courierNorm === "leopards" ? await getCourierCredentials(merchantId, "leopards") : null;
+        const order = await storage.getOrderById(
+          merchantId,
+          req.params.orderId,
+        );
+        if (!order || !order.courierTracking) {
+          return res
+            .status(404)
+            .json({ message: "Order not found or not booked" });
+        }
 
-      for (const item of bookedItems) {
+        const { fetchLeopardsSlip, fetchPostExSlip } = await import(
+          "./services/courierSlips"
+        );
+        const courierNorm = normalizeCourierName(order.courierName || "");
+
         let result;
         if (courierNorm === "leopards") {
-          const trackingNum = item.trackingNumber;
-          const slipUrl = item.slipUrl;
-          if (leopardsCreds?.apiKey && leopardsCreds?.apiSecret && trackingNum) {
-            result = await fetchLeopardsSlip(slipUrl || "", {
-              apiKey: leopardsCreds.apiKey,
-              apiPassword: leopardsCreds.apiSecret,
-              trackingNumber: trackingNum,
+          const creds = await getCourierCredentials(merchantId, "leopards");
+          if (creds?.apiKey && creds?.apiSecret && order.courierTracking) {
+            result = await fetchLeopardsSlip(order.courierSlipUrl || "", {
+              apiKey: creds.apiKey,
+              apiPassword: creds.apiSecret,
+              trackingNumber: order.courierTracking,
             });
-          } else if (slipUrl) {
-            result = await fetchLeopardsSlip(slipUrl);
+          } else if (order.courierSlipUrl) {
+            result = await fetchLeopardsSlip(order.courierSlipUrl);
           } else {
-            const order = await storage.getOrderById(merchantId, item.orderId);
-            if (order?.courierSlipUrl) {
-              result = await fetchLeopardsSlip(order.courierSlipUrl);
-            } else {
-              errors.push(`${item.orderNumber}: No slip URL or credentials`);
-              continue;
-            }
+            return res
+              .status(404)
+              .json({
+                message:
+                  "No Leopards slip URL or credentials available for this order",
+              });
           }
+        } else if (courierNorm === "postex") {
+          const creds = await getCourierCredentials(merchantId, "postex");
+          if (!creds?.apiKey) {
+            return res
+              .status(400)
+              .json({ message: "PostEx credentials not configured" });
+          }
+          result = await fetchPostExSlip(order.courierTracking, creds.apiKey);
         } else {
-          errors.push(`${item.orderNumber}: Unsupported courier`);
-          continue;
+          return res
+            .status(400)
+            .json({
+              message: `Native slips not supported for courier: ${order.courierName}`,
+            });
         }
 
-        if (result?.success && result.pdfBuffer) {
-          pdfBuffers.push(result.pdfBuffer);
-        } else {
-          errors.push(`${item.orderNumber}: ${result?.error || "Failed"}`);
+        if (!result.success || !result.pdfBuffer) {
+          return res
+            .status(502)
+            .json({
+              message: result.error || "Failed to fetch courier airway bill",
+            });
         }
+
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader(
+          "Content-Disposition",
+          `inline; filename="awb_${order.orderNumber}_${order.courierTracking}.pdf"`,
+        );
+        res.send(result.pdfBuffer);
+      } catch (error) {
+        console.error("Error fetching native slip:", error);
+        res
+          .status(500)
+          .json({ message: "Failed to fetch courier airway bill" });
       }
+    },
+  );
 
-      if (pdfBuffers.length === 0) {
-        return res.status(502).json({
-          message: "Could not fetch any courier airway bills",
-          errors,
+  app.get(
+    "/api/print/batch-awb/:batchId.pdf",
+    isAuthenticated,
+    async (req, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+
+        const batch = await storage.getShipmentBatchById(
+          merchantId,
+          req.params.batchId,
+        );
+        if (!batch) {
+          return res.status(404).json({ message: "Batch not found" });
+        }
+
+        const items = await storage.getShipmentBatchItems(batch.id);
+        const bookedItems = items.filter(
+          (item) => item.bookingStatus === "BOOKED" && item.trackingNumber,
+        );
+
+        if (bookedItems.length === 0) {
+          return res
+            .status(404)
+            .json({ message: "No booked items in this batch" });
+        }
+
+        const { fetchLeopardsSlip, fetchPostExSlipBulk, combinePdfs } =
+          await import("./services/courierSlips");
+        const courierNorm = normalizeCourierName(batch.courierName || "");
+
+        if (courierNorm === "postex") {
+          const creds = await getCourierCredentials(merchantId, "postex");
+          const postexToken = creds?.apiKey || null;
+          if (!postexToken) {
+            return res
+              .status(400)
+              .json({ message: "PostEx credentials not configured" });
+          }
+          const trackingNums = bookedItems.map((item) => item.trackingNumber!);
+          const result = await fetchPostExSlipBulk(trackingNums, postexToken);
+          if (!result.success || !result.pdfBuffer) {
+            return res
+              .status(502)
+              .json({
+                message: result.error || "Failed to fetch PostEx airway bills",
+              });
+          }
+          res.setHeader("Content-Type", "application/pdf");
+          res.setHeader(
+            "Content-Disposition",
+            `inline; filename="batch_awb_${batch.id.substring(0, 8)}.pdf"`,
+          );
+          return res.send(result.pdfBuffer);
+        }
+
+        const pdfBuffers: Buffer[] = [];
+        const errors: string[] = [];
+
+        const leopardsCreds =
+          courierNorm === "leopards"
+            ? await getCourierCredentials(merchantId, "leopards")
+            : null;
+        console.log(
+          `[BatchAWB] Leopards creds: ${leopardsCreds ? "available" : "not available"}`,
+        );
+
+        for (const item of bookedItems) {
+          let result;
+          if (courierNorm === "leopards") {
+            const trackingNum = item.trackingNumber;
+            const slipUrl = item.slipUrl;
+            if (
+              leopardsCreds?.apiKey &&
+              leopardsCreds?.apiSecret &&
+              trackingNum
+            ) {
+              result = await fetchLeopardsSlip(slipUrl || "", {
+                apiKey: leopardsCreds.apiKey,
+                apiPassword: leopardsCreds.apiSecret,
+                trackingNumber: trackingNum,
+              });
+            } else if (slipUrl) {
+              result = await fetchLeopardsSlip(slipUrl);
+            } else {
+              const order = await storage.getOrderById(
+                merchantId,
+                item.orderId,
+              );
+              if (order?.courierSlipUrl) {
+                result = await fetchLeopardsSlip(order.courierSlipUrl);
+              } else {
+                errors.push(`${item.orderNumber}: No slip URL or credentials`);
+                continue;
+              }
+            }
+          } else {
+            errors.push(`${item.orderNumber}: Unsupported courier`);
+            continue;
+          }
+
+          if (result?.success && result.pdfBuffer) {
+            pdfBuffers.push(result.pdfBuffer);
+          } else {
+            errors.push(`${item.orderNumber}: ${result?.error || "Failed"}`);
+          }
+        }
+
+        if (pdfBuffers.length === 0) {
+          return res.status(502).json({
+            message: "Could not fetch any courier airway bills",
+            errors,
+          });
+        }
+
+        if (errors.length > 0) {
+          console.warn(`[BatchAWB] ${errors.length} items failed:`, errors);
+        }
+
+        const combinedPdf = await combinePdfs(pdfBuffers);
+
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader(
+          "Content-Disposition",
+          `inline; filename="batch_awb_${batch.id.substring(0, 8)}.pdf"`,
+        );
+        res.send(combinedPdf);
+      } catch (error) {
+        console.error("Error fetching batch AWB:", error);
+        res.status(500).json({ message: "Failed to fetch batch airway bills" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/print/regenerate/:orderId",
+    isAuthenticated,
+    async (req, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+
+        const order = await storage.getOrderById(
+          merchantId,
+          req.params.orderId,
+        );
+        if (!order || !order.courierTracking) {
+          return res
+            .status(400)
+            .json({ message: "Order not found or not booked" });
+        }
+
+        const merchant = await storage.getMerchant(merchantId);
+        if (!merchant)
+          return res.status(400).json({ message: "Merchant not found" });
+
+        const userId = getSessionUserId(req) || "system";
+
+        const shipmentsList = await storage.getShipmentsByOrderId(
+          merchantId,
+          order.id,
+        );
+        const shipment = shipmentsList.find(
+          (s) => s.trackingNumber === order.courierTracking,
+        );
+
+        const printRecord = await storage.createShipmentPrintRecord({
+          merchantId,
+          shipmentId: shipment?.id || null,
+          orderId: order.id,
+          courierName: order.courierName || "unknown",
+          trackingNumber: order.courierTracking,
+          generatedByUserId: userId,
+          pdfPath: null,
+          source: "COURIER_NATIVE",
+          isLatest: true,
         });
+
+        res.json({ success: true, printRecordId: printRecord.id });
+      } catch (error) {
+        console.error("Error regenerating PDF:", error);
+        res.status(500).json({ message: "Failed to regenerate PDF" });
       }
-
-      if (errors.length > 0) {
-        console.warn(`[BatchAWB] ${errors.length} items failed:`, errors);
-      }
-
-      const combinedPdf = await combinePdfs(pdfBuffers);
-
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `inline; filename="batch_awb_${batch.id.substring(0, 8)}.pdf"`);
-      res.send(combinedPdf);
-    } catch (error) {
-      console.error("Error fetching batch AWB:", error);
-      res.status(500).json({ message: "Failed to fetch batch airway bills" });
-    }
-  });
-
-  app.post("/api/print/regenerate/:orderId", isAuthenticated, async (req, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-
-      const order = await storage.getOrderById(merchantId, req.params.orderId);
-      if (!order || !order.courierTracking) {
-        return res.status(400).json({ message: "Order not found or not booked" });
-      }
-
-      const merchant = await storage.getMerchant(merchantId);
-      if (!merchant) return res.status(400).json({ message: "Merchant not found" });
-
-      const userId = getSessionUserId(req) || "system";
-
-      const shipmentsList = await storage.getShipmentsByOrderId(merchantId, order.id);
-      const shipment = shipmentsList.find(s => s.trackingNumber === order.courierTracking);
-
-      const printRecord = await storage.createShipmentPrintRecord({
-        merchantId,
-        shipmentId: shipment?.id || null,
-        orderId: order.id,
-        courierName: order.courierName || "unknown",
-        trackingNumber: order.courierTracking,
-        generatedByUserId: userId,
-        pdfPath: null,
-        source: "COURIER_NATIVE",
-        isLatest: true,
-      });
-
-      res.json({ success: true, printRecordId: printRecord.id });
-    } catch (error) {
-      console.error("Error regenerating PDF:", error);
-      res.status(500).json({ message: "Failed to regenerate PDF" });
-    }
-  });
+    },
+  );
 
   // ============================================
   // LOADSHEET GENERATION (from Booked tab)
   // ============================================
-  app.post("/api/orders/generate-loadsheet", isAuthenticated, async (req, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
+  app.post(
+    "/api/orders/generate-loadsheet",
+    isAuthenticated,
+    async (req, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
 
-      const { orderIds } = req.body;
-      if (!Array.isArray(orderIds) || orderIds.length === 0) {
-        return res.status(400).json({ message: "No order IDs provided" });
-      }
+        const { orderIds } = req.body;
+        if (!Array.isArray(orderIds) || orderIds.length === 0) {
+          return res.status(400).json({ message: "No order IDs provided" });
+        }
 
-      const merchant = await storage.getMerchant(merchantId);
-      if (!merchant) return res.status(400).json({ message: "Merchant not found" });
+        const merchant = await storage.getMerchant(merchantId);
+        if (!merchant)
+          return res.status(400).json({ message: "Merchant not found" });
 
-      const userId = getSessionUserId(req) || "system";
-      const fetchedOrders = await storage.getOrdersByIds(merchantId, orderIds);
+        const userId = getSessionUserId(req) || "system";
+        const fetchedOrders = await storage.getOrdersByIds(
+          merchantId,
+          orderIds,
+        );
 
-      if (fetchedOrders.length === 0) {
-        return res.status(400).json({ message: "No orders found" });
-      }
+        if (fetchedOrders.length === 0) {
+          return res.status(400).json({ message: "No orders found" });
+        }
 
-      const bookedOrders = fetchedOrders.filter(o =>
-        o.courierTracking && (o.workflowStatus === "BOOKED" || o.workflowStatus === "FULFILLED" || o.workflowStatus === "DELIVERED" || o.workflowStatus === "RETURN")
-      );
+        const bookedOrders = fetchedOrders.filter(
+          (o) =>
+            o.courierTracking &&
+            (o.workflowStatus === "BOOKED" ||
+              o.workflowStatus === "FULFILLED" ||
+              o.workflowStatus === "DELIVERED" ||
+              o.workflowStatus === "RETURN"),
+        );
 
-      if (bookedOrders.length === 0) {
-        return res.status(400).json({ message: "No booked orders with tracking numbers found in selection" });
-      }
+        if (bookedOrders.length === 0) {
+          return res
+            .status(400)
+            .json({
+              message:
+                "No booked orders with tracking numbers found in selection",
+            });
+        }
 
-      const batchId = crypto.randomUUID();
-      const courierNames = [...new Set(bookedOrders.map(o => o.courierName || "Unknown"))];
-      const courierLabel = courierNames.length === 1 ? courierNames[0] : "Mixed";
+        const batchId = crypto.randomUUID();
+        const courierNames = [
+          ...new Set(bookedOrders.map((o) => o.courierName || "Unknown")),
+        ];
+        const courierLabel =
+          courierNames.length === 1 ? courierNames[0] : "Mixed";
 
-      const batch = await storage.createShipmentBatch({
-        merchantId,
-        createdByUserId: userId,
-        courierName: courierLabel,
-        batchType: "LOADSHEET",
-        status: "COMPLETED",
-        totalSelectedCount: bookedOrders.length,
-        successCount: bookedOrders.length,
-        failedCount: 0,
-        notes: `Loadsheet generated for ${bookedOrders.length} order(s)`,
-      });
-
-      const loadsheetItems: Array<{
-        orderNumber: string;
-        trackingNumber: string;
-        consigneeName: string;
-        consigneeCity: string;
-        consigneePhone: string;
-        codAmount: number;
-        status: string;
-      }> = [];
-
-      for (const order of bookedOrders) {
-        const itemData = {
-          orderNumber: order.orderNumber || "N/A",
-          trackingNumber: order.courierTracking || "N/A",
-          consigneeName: order.customerName || "N/A",
-          consigneeCity: order.city || "N/A",
-          consigneePhone: order.customerPhone || "N/A",
-          codAmount: Number(order.totalAmount || 0),
-          status: "BOOKED",
-        };
-        loadsheetItems.push(itemData);
-
-        await storage.createShipmentBatchItem({
-          batchId: batch.id,
-          orderId: order.id,
-          orderNumber: order.orderNumber,
-          bookingStatus: "SUCCESS",
-          trackingNumber: order.courierTracking,
-          consigneeName: order.customerName,
-          consigneePhone: order.customerPhone,
-          consigneeCity: order.city,
-          codAmount: order.totalAmount,
+        const batch = await storage.createShipmentBatch({
+          merchantId,
+          createdByUserId: userId,
+          courierName: courierLabel,
+          batchType: "LOADSHEET",
+          status: "COMPLETED",
+          totalSelectedCount: bookedOrders.length,
+          successCount: bookedOrders.length,
+          failedCount: 0,
+          notes: `Loadsheet generated for ${bookedOrders.length} order(s)`,
         });
 
-        const existingShipments = await storage.getShipmentsByOrderId(merchantId, order.id);
-        const matchingShipment = existingShipments.find(s => s.trackingNumber === order.courierTracking);
+        const loadsheetItems: Array<{
+          orderNumber: string;
+          trackingNumber: string;
+          consigneeName: string;
+          consigneeCity: string;
+          consigneePhone: string;
+          codAmount: number;
+          status: string;
+        }> = [];
 
-        const loadsheetRecord = {
-          batchId: batch.id,
-          generatedAt: new Date().toISOString(),
-          generatedBy: userId,
-          orderNumber: order.orderNumber,
-          trackingNumber: order.courierTracking,
-          courierName: order.courierName,
-          customerName: order.customerName,
-          city: order.city,
-          codAmount: Number(order.totalAmount || 0),
-        };
+        for (const order of bookedOrders) {
+          const itemData = {
+            orderNumber: order.orderNumber || "N/A",
+            trackingNumber: order.courierTracking || "N/A",
+            consigneeName: order.customerName || "N/A",
+            consigneeCity: order.city || "N/A",
+            consigneePhone: order.customerPhone || "N/A",
+            codAmount: Number(order.totalAmount || 0),
+            status: "BOOKED",
+          };
+          loadsheetItems.push(itemData);
 
-        if (matchingShipment) {
-          await storage.updateShipment(merchantId, matchingShipment.id, {
-            loadsheetBatchId: batch.id,
-            loadsheetGeneratedAt: new Date(),
-            loadsheetData: loadsheetRecord,
-          } as any);
-        } else {
-          await storage.createShipment({
+          await storage.createShipmentBatchItem({
+            batchId: batch.id,
             orderId: order.id,
-            merchantId,
-            courierName: order.courierName || "Unknown",
+            orderNumber: order.orderNumber,
+            bookingStatus: "SUCCESS",
             trackingNumber: order.courierTracking,
-            status: order.shipmentStatus || "booked",
+            consigneeName: order.customerName,
+            consigneePhone: order.customerPhone,
+            consigneeCity: order.city,
             codAmount: order.totalAmount,
-            loadsheetBatchId: batch.id,
-            loadsheetGeneratedAt: new Date(),
-            loadsheetData: loadsheetRecord,
-          } as any);
+          });
+
+          const existingShipments = await storage.getShipmentsByOrderId(
+            merchantId,
+            order.id,
+          );
+          const matchingShipment = existingShipments.find(
+            (s) => s.trackingNumber === order.courierTracking,
+          );
+
+          const loadsheetRecord = {
+            batchId: batch.id,
+            generatedAt: new Date().toISOString(),
+            generatedBy: userId,
+            orderNumber: order.orderNumber,
+            trackingNumber: order.courierTracking,
+            courierName: order.courierName,
+            customerName: order.customerName,
+            city: order.city,
+            codAmount: Number(order.totalAmount || 0),
+          };
+
+          if (matchingShipment) {
+            await storage.updateShipment(merchantId, matchingShipment.id, {
+              loadsheetBatchId: batch.id,
+              loadsheetGeneratedAt: new Date(),
+              loadsheetData: loadsheetRecord,
+            } as any);
+          } else {
+            await storage.createShipment({
+              orderId: order.id,
+              merchantId,
+              courierName: order.courierName || "Unknown",
+              trackingNumber: order.courierTracking,
+              status: order.shipmentStatus || "booked",
+              codAmount: order.totalAmount,
+              loadsheetBatchId: batch.id,
+              loadsheetGeneratedAt: new Date(),
+              loadsheetData: loadsheetRecord,
+            } as any);
+          }
         }
+
+        const { generateBatchLoadsheetPdf } = await import(
+          "./services/pdfGenerator"
+        );
+        const pdfPath = await generateBatchLoadsheetPdf({
+          batchId: batch.id,
+          courierName: courierLabel,
+          createdBy: userId,
+          createdAt: new Date().toISOString(),
+          merchantName:
+            merchant.businessName || merchant.displayName || "Merchant",
+          totalCount: bookedOrders.length,
+          successCount: bookedOrders.length,
+          failedCount: 0,
+          items: loadsheetItems,
+        });
+
+        await storage.updateShipmentBatch(batch.id, {
+          pdfBatchPath: pdfPath,
+        });
+
+        res.json({
+          success: true,
+          batchId: batch.id,
+          pdfUrl: `/api/print/batch/${batch.id}.pdf`,
+          totalOrders: bookedOrders.length,
+          courierName: courierLabel,
+        });
+      } catch (error) {
+        console.error("Error generating loadsheet:", error);
+        res.status(500).json({ message: "Failed to generate loadsheet" });
       }
-
-      const { generateBatchLoadsheetPdf } = await import("./services/pdfGenerator");
-      const pdfPath = await generateBatchLoadsheetPdf({
-        batchId: batch.id,
-        courierName: courierLabel,
-        createdBy: userId,
-        createdAt: new Date().toISOString(),
-        merchantName: merchant.businessName || merchant.displayName || "Merchant",
-        totalCount: bookedOrders.length,
-        successCount: bookedOrders.length,
-        failedCount: 0,
-        items: loadsheetItems,
-      });
-
-      await storage.updateShipmentBatch(batch.id, {
-        pdfBatchPath: pdfPath,
-      });
-
-      res.json({
-        success: true,
-        batchId: batch.id,
-        pdfUrl: `/api/print/batch/${batch.id}.pdf`,
-        totalOrders: bookedOrders.length,
-        courierName: courierLabel,
-      });
-    } catch (error) {
-      console.error("Error generating loadsheet:", error);
-      res.status(500).json({ message: "Failed to generate loadsheet" });
-    }
-  });
+    },
+  );
 
   // ============================================
   // ONBOARDING ROUTES
@@ -4720,288 +6364,412 @@ export async function registerRoutes(
   // COURIER STATUS MAPPINGS
   // ============================================
 
-  app.get("/api/courier-status-mappings", isAuthenticated, async (req: any, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
+  app.get(
+    "/api/courier-status-mappings",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
 
-      const courierName = req.query.courier as string | undefined;
-      const mappings = await storage.getCourierStatusMappings(merchantId, courierName);
+        const courierName = req.query.courier as string | undefined;
+        const mappings = await storage.getCourierStatusMappings(
+          merchantId,
+          courierName,
+        );
 
-      if (mappings.length === 0) {
-        const seeded = await storage.seedDefaultMappings(merchantId);
-        const freshMappings = await storage.getCourierStatusMappings(merchantId, courierName);
-        return res.json({ mappings: freshMappings, seeded: true, ...seeded });
-      }
-
-      res.json({ mappings });
-    } catch (error) {
-      console.error("Error fetching courier status mappings:", error);
-      res.status(500).json({ message: "Failed to fetch courier status mappings" });
-    }
-  });
-
-  app.post("/api/courier-status-mappings", isAuthenticated, async (req: any, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-
-      const schema = z.object({
-        courierName: z.string().min(1),
-        courierStatus: z.string().min(1),
-        normalizedStatus: z.string().min(1),
-        workflowStage: z.string().optional(),
-      });
-
-      const parsed = schema.parse(req.body);
-      const courierStatusKey = parsed.courierStatus.toLowerCase().trim();
-      const mapping = await storage.upsertCourierStatusMapping({
-        merchantId,
-        courierName: parsed.courierName,
-        courierStatus: courierStatusKey,
-        normalizedStatus: parsed.normalizedStatus,
-        workflowStage: parsed.workflowStage || null,
-        isCustom: true,
-      });
-
-      const unmapped = await storage.getUnmappedStatuses(merchantId, false);
-      for (const u of unmapped) {
-        if (u.courierName === parsed.courierName && u.rawStatus === courierStatusKey) {
-          await storage.resolveUnmappedStatus(merchantId, u.id);
+        if (mappings.length === 0) {
+          const seeded = await storage.seedDefaultMappings(merchantId);
+          const freshMappings = await storage.getCourierStatusMappings(
+            merchantId,
+            courierName,
+          );
+          return res.json({ mappings: freshMappings, seeded: true, ...seeded });
         }
+
+        res.json({ mappings });
+      } catch (error) {
+        console.error("Error fetching courier status mappings:", error);
+        res
+          .status(500)
+          .json({ message: "Failed to fetch courier status mappings" });
       }
+    },
+  );
 
-      res.json({ mapping });
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid mapping data", errors: error.errors });
+  app.post(
+    "/api/courier-status-mappings",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+
+        const schema = z.object({
+          courierName: z.string().min(1),
+          courierStatus: z.string().min(1),
+          normalizedStatus: z.string().min(1),
+          workflowStage: z.string().optional(),
+        });
+
+        const parsed = schema.parse(req.body);
+        const courierStatusKey = parsed.courierStatus.toLowerCase().trim();
+        const mapping = await storage.upsertCourierStatusMapping({
+          merchantId,
+          courierName: parsed.courierName,
+          courierStatus: courierStatusKey,
+          normalizedStatus: parsed.normalizedStatus,
+          workflowStage: parsed.workflowStage || null,
+          isCustom: true,
+        });
+
+        const unmapped = await storage.getUnmappedStatuses(merchantId, false);
+        for (const u of unmapped) {
+          if (
+            u.courierName === parsed.courierName &&
+            u.rawStatus === courierStatusKey
+          ) {
+            await storage.resolveUnmappedStatus(merchantId, u.id);
+          }
+        }
+
+        res.json({ mapping });
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          return res
+            .status(400)
+            .json({ message: "Invalid mapping data", errors: error.errors });
+        }
+        console.error("Error creating courier status mapping:", error);
+        res
+          .status(500)
+          .json({ message: "Failed to create courier status mapping" });
       }
-      console.error("Error creating courier status mapping:", error);
-      res.status(500).json({ message: "Failed to create courier status mapping" });
-    }
-  });
+    },
+  );
 
-  app.put("/api/courier-status-mappings/:id", isAuthenticated, async (req: any, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
+  app.put(
+    "/api/courier-status-mappings/:id",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
 
-      const schema = z.object({
-        normalizedStatus: z.string().optional(),
-        workflowStage: z.string().optional(),
-      });
+        const schema = z.object({
+          normalizedStatus: z.string().optional(),
+          workflowStage: z.string().optional(),
+        });
 
-      const parsed = schema.parse(req.body);
-      const existing = await storage.getCourierStatusMappings(merchantId);
-      const target = existing.find(m => m.id === req.params.id);
-      if (!target) return res.status(404).json({ message: "Mapping not found" });
+        const parsed = schema.parse(req.body);
+        const existing = await storage.getCourierStatusMappings(merchantId);
+        const target = existing.find((m) => m.id === req.params.id);
+        if (!target)
+          return res.status(404).json({ message: "Mapping not found" });
 
-      const mapping = await storage.upsertCourierStatusMapping({
-        merchantId,
-        courierName: target.courierName,
-        courierStatus: target.courierStatus,
-        normalizedStatus: parsed.normalizedStatus || target.normalizedStatus,
-        workflowStage: parsed.workflowStage !== undefined ? (parsed.workflowStage || null) : target.workflowStage,
-        isCustom: true,
-      });
+        const mapping = await storage.upsertCourierStatusMapping({
+          merchantId,
+          courierName: target.courierName,
+          courierStatus: target.courierStatus,
+          normalizedStatus: parsed.normalizedStatus || target.normalizedStatus,
+          workflowStage:
+            parsed.workflowStage !== undefined
+              ? parsed.workflowStage || null
+              : target.workflowStage,
+          isCustom: true,
+        });
 
-      res.json({ mapping });
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid mapping data", errors: error.errors });
+        res.json({ mapping });
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          return res
+            .status(400)
+            .json({ message: "Invalid mapping data", errors: error.errors });
+        }
+        console.error("Error updating courier status mapping:", error);
+        res
+          .status(500)
+          .json({ message: "Failed to update courier status mapping" });
       }
-      console.error("Error updating courier status mapping:", error);
-      res.status(500).json({ message: "Failed to update courier status mapping" });
-    }
-  });
+    },
+  );
 
-  app.delete("/api/courier-status-mappings/:id", isAuthenticated, async (req: any, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
+  app.delete(
+    "/api/courier-status-mappings/:id",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
 
-      await storage.deleteCourierStatusMapping(merchantId, req.params.id);
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting courier status mapping:", error);
-      res.status(500).json({ message: "Failed to delete courier status mapping" });
-    }
-  });
-
-  app.post("/api/courier-status-mappings/seed", isAuthenticated, async (req: any, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-
-      const result = await storage.seedDefaultMappings(merchantId);
-      res.json(result);
-    } catch (error) {
-      console.error("Error seeding default mappings:", error);
-      res.status(500).json({ message: "Failed to seed default mappings" });
-    }
-  });
-
-  app.post("/api/courier-status-mappings/reset", isAuthenticated, async (req: any, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-
-      const courierName = req.body.courierName as string | undefined;
-      await storage.resetCourierStatusMappings(merchantId, courierName);
-      const result = await storage.seedDefaultMappings(merchantId);
-      res.json({ ...result, reset: true });
-    } catch (error) {
-      console.error("Error resetting courier status mappings:", error);
-      res.status(500).json({ message: "Failed to reset courier status mappings" });
-    }
-  });
-
-  app.post("/api/courier-status-mappings/resync", isAuthenticated, async (req: any, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-
-      const { clearMappingsCache } = await import('./services/couriers/index');
-      clearMappingsCache(merchantId);
-
-      const { syncMerchantCourierStatuses } = await import('./services/courierSyncScheduler');
-      const result = await syncMerchantCourierStatuses(merchantId);
-
-      res.json({
-        success: true,
-        updated: result.updated,
-        failed: result.failed,
-        skipped: result.skipped,
-        total: result.total,
-      });
-    } catch (error) {
-      console.error("Error during save & resync:", error);
-      res.status(500).json({ message: "Failed to resync courier statuses" });
-    }
-  });
-
-  app.get("/api/unmapped-courier-statuses", isAuthenticated, async (req: any, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-      const resolved = req.query.resolved === 'true' ? true : req.query.resolved === 'false' ? false : undefined;
-      const statuses = await storage.getUnmappedStatuses(merchantId, resolved);
-      res.json(statuses);
-    } catch (error) {
-      console.error("Error fetching unmapped statuses:", error);
-      res.status(500).json({ message: "Failed to fetch unmapped statuses" });
-    }
-  });
-
-  app.get("/api/unmapped-courier-statuses/count", isAuthenticated, async (req: any, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-      const count = await storage.getUnmappedStatusCount(merchantId);
-      res.json({ count });
-    } catch (error) {
-      console.error("Error fetching unmapped status count:", error);
-      res.status(500).json({ message: "Failed to fetch unmapped status count" });
-    }
-  });
-
-  app.post("/api/unmapped-courier-statuses/:id/resolve", isAuthenticated, async (req: any, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-      await storage.resolveUnmappedStatus(merchantId, req.params.id);
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error resolving unmapped status:", error);
-      res.status(500).json({ message: "Failed to resolve unmapped status" });
-    }
-  });
-
-  app.delete("/api/unmapped-courier-statuses/:id", isAuthenticated, async (req: any, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-      await storage.dismissUnmappedStatus(merchantId, req.params.id);
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error dismissing unmapped status:", error);
-      res.status(500).json({ message: "Failed to dismiss unmapped status" });
-    }
-  });
-
-  app.post("/api/onboarding/advance-step", isAuthenticated, async (req, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-
-      const merchant = await storage.getMerchant(merchantId);
-      if (!merchant) return res.status(404).json({ message: "Merchant not found" });
-
-      const currentIndex = ONBOARDING_ORDER.indexOf(merchant.onboardingStep || "ACCOUNT_CREATED");
-      if (currentIndex >= ONBOARDING_ORDER.length - 1) {
-        return res.json({ onboardingStep: "COMPLETED", message: "Already completed" });
+        await storage.deleteCourierStatusMapping(merchantId, req.params.id);
+        res.json({ success: true });
+      } catch (error) {
+        console.error("Error deleting courier status mapping:", error);
+        res
+          .status(500)
+          .json({ message: "Failed to delete courier status mapping" });
       }
+    },
+  );
 
-      const nextStep = ONBOARDING_ORDER[currentIndex + 1];
-      await db.update(merchants).set({ onboardingStep: nextStep }).where(eq(merchants.id, merchantId));
+  app.post(
+    "/api/courier-status-mappings/seed",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
 
-      res.json({ onboardingStep: nextStep });
-    } catch (error) {
-      console.error("Error advancing onboarding:", error);
-      res.status(500).json({ message: "Failed to advance onboarding step" });
-    }
-  });
-
-  app.post("/api/merchants/shopify-credentials", isAuthenticated, async (req, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-
-      const { clientId, clientSecret } = req.body;
-      if (!clientId || typeof clientId !== 'string') {
-        return res.status(400).json({ message: "clientId is required" });
+        const result = await storage.seedDefaultMappings(merchantId);
+        res.json(result);
+      } catch (error) {
+        console.error("Error seeding default mappings:", error);
+        res.status(500).json({ message: "Failed to seed default mappings" });
       }
+    },
+  );
 
-      const updateData: any = {
-        shopifyAppClientId: clientId.trim(),
-        updatedAt: new Date(),
-      };
+  app.post(
+    "/api/courier-status-mappings/reset",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
 
-      if (clientSecret && typeof clientSecret === 'string' && clientSecret.trim()) {
-        updateData.shopifyAppClientSecret = encryptToken(clientSecret.trim());
-      } else {
+        const courierName = req.body.courierName as string | undefined;
+        await storage.resetCourierStatusMappings(merchantId, courierName);
+        const result = await storage.seedDefaultMappings(merchantId);
+        res.json({ ...result, reset: true });
+      } catch (error) {
+        console.error("Error resetting courier status mappings:", error);
+        res
+          .status(500)
+          .json({ message: "Failed to reset courier status mappings" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/courier-status-mappings/resync",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+
+        const { clearMappingsCache } = await import(
+          "./services/couriers/index"
+        );
+        clearMappingsCache(merchantId);
+
+        const { syncMerchantCourierStatuses } = await import(
+          "./services/courierSyncScheduler"
+        );
+        const result = await syncMerchantCourierStatuses(merchantId);
+
+        res.json({
+          success: true,
+          updated: result.updated,
+          failed: result.failed,
+          skipped: result.skipped,
+          total: result.total,
+        });
+      } catch (error) {
+        console.error("Error during save & resync:", error);
+        res.status(500).json({ message: "Failed to resync courier statuses" });
+      }
+    },
+  );
+
+  app.get(
+    "/api/unmapped-courier-statuses",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+        const resolved =
+          req.query.resolved === "true"
+            ? true
+            : req.query.resolved === "false"
+              ? false
+              : undefined;
+        const statuses = await storage.getUnmappedStatuses(
+          merchantId,
+          resolved,
+        );
+        res.json(statuses);
+      } catch (error) {
+        console.error("Error fetching unmapped statuses:", error);
+        res.status(500).json({ message: "Failed to fetch unmapped statuses" });
+      }
+    },
+  );
+
+  app.get(
+    "/api/unmapped-courier-statuses/count",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+        const count = await storage.getUnmappedStatusCount(merchantId);
+        res.json({ count });
+      } catch (error) {
+        console.error("Error fetching unmapped status count:", error);
+        res
+          .status(500)
+          .json({ message: "Failed to fetch unmapped status count" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/unmapped-courier-statuses/:id/resolve",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+        await storage.resolveUnmappedStatus(merchantId, req.params.id);
+        res.json({ success: true });
+      } catch (error) {
+        console.error("Error resolving unmapped status:", error);
+        res.status(500).json({ message: "Failed to resolve unmapped status" });
+      }
+    },
+  );
+
+  app.delete(
+    "/api/unmapped-courier-statuses/:id",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+        await storage.dismissUnmappedStatus(merchantId, req.params.id);
+        res.json({ success: true });
+      } catch (error) {
+        console.error("Error dismissing unmapped status:", error);
+        res.status(500).json({ message: "Failed to dismiss unmapped status" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/onboarding/advance-step",
+    isAuthenticated,
+    async (req, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+
         const merchant = await storage.getMerchant(merchantId);
-        if (!merchant?.shopifyAppClientSecret) {
-          return res.status(400).json({ message: "clientSecret is required for first-time setup" });
+        if (!merchant)
+          return res.status(404).json({ message: "Merchant not found" });
+
+        const currentIndex = ONBOARDING_ORDER.indexOf(
+          merchant.onboardingStep || "ACCOUNT_CREATED",
+        );
+        if (currentIndex >= ONBOARDING_ORDER.length - 1) {
+          return res.json({
+            onboardingStep: "COMPLETED",
+            message: "Already completed",
+          });
         }
+
+        const nextStep = ONBOARDING_ORDER[currentIndex + 1];
+        await db
+          .update(merchants)
+          .set({ onboardingStep: nextStep })
+          .where(eq(merchants.id, merchantId));
+
+        res.json({ onboardingStep: nextStep });
+      } catch (error) {
+        console.error("Error advancing onboarding:", error);
+        res.status(500).json({ message: "Failed to advance onboarding step" });
       }
+    },
+  );
 
-      await db.update(merchants).set(updateData).where(eq(merchants.id, merchantId));
+  app.post(
+    "/api/merchants/shopify-credentials",
+    isAuthenticated,
+    async (req, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
 
-      console.log(`[Shopify] Merchant ${merchantId} saved their own Shopify app credentials (clientId=${clientId.trim().substring(0, 8)}...)`);
-      res.json({ message: "Shopify app credentials saved", clientIdSet: true, clientSecretSet: true });
-    } catch (error: any) {
-      console.error("Error saving Shopify credentials:", error);
-      res.status(500).json({ message: "Failed to save Shopify credentials" });
-    }
-  });
+        const { clientId, clientSecret } = req.body;
+        if (!clientId || typeof clientId !== "string") {
+          return res.status(400).json({ message: "clientId is required" });
+        }
 
-  app.get("/api/merchants/shopify-credentials", isAuthenticated, async (req, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
+        const updateData: any = {
+          shopifyAppClientId: clientId.trim(),
+          updatedAt: new Date(),
+        };
 
-      const merchant = await storage.getMerchant(merchantId);
-      if (!merchant) return res.status(404).json({ message: "Merchant not found" });
+        if (
+          clientSecret &&
+          typeof clientSecret === "string" &&
+          clientSecret.trim()
+        ) {
+          updateData.shopifyAppClientSecret = encryptToken(clientSecret.trim());
+        } else {
+          const merchant = await storage.getMerchant(merchantId);
+          if (!merchant?.shopifyAppClientSecret) {
+            return res
+              .status(400)
+              .json({
+                message: "clientSecret is required for first-time setup",
+              });
+          }
+        }
 
-      res.json({
-        clientId: merchant.shopifyAppClientId || '',
-        clientSecretSet: !!merchant.shopifyAppClientSecret,
-      });
-    } catch (error) {
-      res.status(500).json({ message: "Failed to get Shopify credentials" });
-    }
-  });
+        await db
+          .update(merchants)
+          .set(updateData)
+          .where(eq(merchants.id, merchantId));
+
+        console.log(
+          `[Shopify] Merchant ${merchantId} saved their own Shopify app credentials (clientId=${clientId.trim().substring(0, 8)}...)`,
+        );
+        res.json({
+          message: "Shopify app credentials saved",
+          clientIdSet: true,
+          clientSecretSet: true,
+        });
+      } catch (error: any) {
+        console.error("Error saving Shopify credentials:", error);
+        res.status(500).json({ message: "Failed to save Shopify credentials" });
+      }
+    },
+  );
+
+  app.get(
+    "/api/merchants/shopify-credentials",
+    isAuthenticated,
+    async (req, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+
+        const merchant = await storage.getMerchant(merchantId);
+        if (!merchant)
+          return res.status(404).json({ message: "Merchant not found" });
+
+        res.json({
+          clientId: merchant.shopifyAppClientId || "",
+          clientSecretSet: !!merchant.shopifyAppClientSecret,
+        });
+      } catch (error) {
+        res.status(500).json({ message: "Failed to get Shopify credentials" });
+      }
+    },
+  );
 
   // ============================================
   // ADMIN ROUTES (SUPER_ADMIN only)
@@ -5023,7 +6791,7 @@ export async function registerRoutes(
   app.get("/api/admin/diagnostics", isAuthenticated, async (req, res) => {
     try {
       const user = req.user as any;
-      if (!user || user.role !== 'SUPER_ADMIN') {
+      if (!user || user.role !== "SUPER_ADMIN") {
         return res.status(403).json({ message: "Forbidden" });
       }
 
@@ -5032,26 +6800,50 @@ export async function registerRoutes(
         return res.status(400).json({ message: "No merchant associated" });
       }
 
-      const [totalOrders] = (await db.execute(sql`SELECT COUNT(*)::int AS count FROM orders WHERE merchant_id = ${merchantId}`)).rows;
-      const [uniqueShopify] = (await db.execute(sql`SELECT COUNT(DISTINCT shopify_order_id)::int AS count FROM orders WHERE merchant_id = ${merchantId} AND shopify_order_id IS NOT NULL`)).rows;
+      const [totalOrders] = (
+        await db.execute(
+          sql`SELECT COUNT(*)::int AS count FROM orders WHERE merchant_id = ${merchantId}`,
+        )
+      ).rows;
+      const [uniqueShopify] = (
+        await db.execute(
+          sql`SELECT COUNT(DISTINCT shopify_order_id)::int AS count FROM orders WHERE merchant_id = ${merchantId} AND shopify_order_id IS NOT NULL`,
+        )
+      ).rows;
       const totalCount = (totalOrders as any).count || 0;
       const uniqueCount = (uniqueShopify as any).count || 0;
       const duplicatesCount = totalCount - uniqueCount;
 
-      const shopifyStoreResult = (await db.execute(sql`SELECT shop_domain, is_connected, last_sync_at, webhook_status FROM shopify_stores WHERE merchant_id = ${merchantId} LIMIT 1`)).rows;
-      const shopifyStore = shopifyStoreResult.length > 0 ? shopifyStoreResult[0] as any : null;
+      const shopifyStoreResult = (
+        await db.execute(
+          sql`SELECT shop_domain, is_connected, last_sync_at, webhook_status FROM shopify_stores WHERE merchant_id = ${merchantId} LIMIT 1`,
+        )
+      ).rows;
+      const shopifyStore =
+        shopifyStoreResult.length > 0 ? (shopifyStoreResult[0] as any) : null;
 
-      const [shipmentsResult] = (await db.execute(sql`SELECT COUNT(*)::int AS count FROM shipments WHERE merchant_id = ${merchantId}`)).rows;
+      const [shipmentsResult] = (
+        await db.execute(
+          sql`SELECT COUNT(*)::int AS count FROM shipments WHERE merchant_id = ${merchantId}`,
+        )
+      ).rows;
       const shipmentsCount = (shipmentsResult as any).count || 0;
 
       let webhookEventsCount = 0;
       try {
-        const [webhookResult] = (await db.execute(sql`SELECT COUNT(*)::int AS count FROM shopify_webhook_events WHERE merchant_id = ${merchantId}`)).rows;
+        const [webhookResult] = (
+          await db.execute(
+            sql`SELECT COUNT(*)::int AS count FROM shopify_webhook_events WHERE merchant_id = ${merchantId}`,
+          )
+        ).rows;
         webhookEventsCount = (webhookResult as any).count || 0;
-      } catch {
-      }
+      } catch {}
 
-      const workflowRows = (await db.execute(sql`SELECT workflow_status, COUNT(*)::int AS count FROM orders WHERE merchant_id = ${merchantId} GROUP BY workflow_status`)).rows;
+      const workflowRows = (
+        await db.execute(
+          sql`SELECT workflow_status, COUNT(*)::int AS count FROM orders WHERE merchant_id = ${merchantId} GROUP BY workflow_status`,
+        )
+      ).rows;
       const workflowCounts: Record<string, number> = {};
       for (const row of workflowRows) {
         const r = row as any;
@@ -5062,12 +6854,14 @@ export async function registerRoutes(
         totalOrders: totalCount,
         uniqueShopifyOrders: uniqueCount,
         duplicates: duplicatesCount,
-        shopifyStore: shopifyStore ? {
-          shopDomain: shopifyStore.shop_domain,
-          isConnected: shopifyStore.is_connected,
-          lastSyncAt: shopifyStore.last_sync_at,
-          webhookStatus: shopifyStore.webhook_status,
-        } : null,
+        shopifyStore: shopifyStore
+          ? {
+              shopDomain: shopifyStore.shop_domain,
+              isConnected: shopifyStore.is_connected,
+              lastSyncAt: shopifyStore.last_sync_at,
+              webhookStatus: shopifyStore.webhook_status,
+            }
+          : null,
         totalShipments: shipmentsCount,
         webhookEvents: webhookEventsCount,
         workflowCounts,
@@ -5086,9 +6880,15 @@ export async function registerRoutes(
       const search = req.query.search as string | undefined;
       let merchantList;
       if (search) {
-        merchantList = await db.select().from(merchants).where(
-          or(ilike(merchants.name, `%${search}%`), ilike(merchants.email, `%${search}%`))
-        );
+        merchantList = await db
+          .select()
+          .from(merchants)
+          .where(
+            or(
+              ilike(merchants.name, `%${search}%`),
+              ilike(merchants.email, `%${search}%`),
+            ),
+          );
       } else {
         merchantList = await db.select().from(merchants);
       }
@@ -5105,18 +6905,25 @@ export async function registerRoutes(
       const adminId = await requireSuperAdmin(req, res);
       if (!adminId) return;
 
-      const [merchant] = await db.select().from(merchants).where(eq(merchants.id, req.params.id));
-      if (!merchant) return res.status(404).json({ message: "Merchant not found" });
+      const [merchant] = await db
+        .select()
+        .from(merchants)
+        .where(eq(merchants.id, req.params.id));
+      if (!merchant)
+        return res.status(404).json({ message: "Merchant not found" });
 
-      const merchantUsers = await db.select({
-        id: users.id,
-        email: users.email,
-        firstName: users.firstName,
-        lastName: users.lastName,
-        role: users.role,
-        isActive: users.isActive,
-        lastLoginAt: users.lastLoginAt,
-      }).from(users).where(eq(users.merchantId, merchant.id));
+      const merchantUsers = await db
+        .select({
+          id: users.id,
+          email: users.email,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          role: users.role,
+          isActive: users.isActive,
+          lastLoginAt: users.lastLoginAt,
+        })
+        .from(users)
+        .where(eq(users.merchantId, merchant.id));
 
       res.json({ ...merchant, users: merchantUsers });
     } catch (error) {
@@ -5125,79 +6932,109 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/admin/merchants/:id/suspend", isAuthenticated, async (req, res) => {
-    try {
-      const adminId = await requireSuperAdmin(req, res);
-      if (!adminId) return;
+  app.post(
+    "/api/admin/merchants/:id/suspend",
+    isAuthenticated,
+    async (req, res) => {
+      try {
+        const adminId = await requireSuperAdmin(req, res);
+        if (!adminId) return;
 
-      await db.update(merchants).set({ status: "SUSPENDED" }).where(eq(merchants.id, req.params.id));
-      await db.insert(adminActionLogs).values({
-        adminUserId: adminId,
-        actionType: "SUSPEND_MERCHANT",
-        targetMerchantId: req.params.id,
-        details: "Merchant suspended by admin",
-      });
+        await db
+          .update(merchants)
+          .set({ status: "SUSPENDED" })
+          .where(eq(merchants.id, req.params.id));
+        await db.insert(adminActionLogs).values({
+          adminUserId: adminId,
+          actionType: "SUSPEND_MERCHANT",
+          targetMerchantId: req.params.id,
+          details: "Merchant suspended by admin",
+        });
 
-      res.json({ message: "Merchant suspended" });
-    } catch (error) {
-      console.error("Error suspending merchant:", error);
-      res.status(500).json({ message: "Failed to suspend merchant" });
-    }
-  });
-
-  app.post("/api/admin/merchants/:id/unsuspend", isAuthenticated, async (req, res) => {
-    try {
-      const adminId = await requireSuperAdmin(req, res);
-      if (!adminId) return;
-
-      await db.update(merchants).set({ status: "ACTIVE" }).where(eq(merchants.id, req.params.id));
-      await db.insert(adminActionLogs).values({
-        adminUserId: adminId,
-        actionType: "UNSUSPEND_MERCHANT",
-        targetMerchantId: req.params.id,
-        details: "Merchant unsuspended by admin",
-      });
-
-      res.json({ message: "Merchant unsuspended" });
-    } catch (error) {
-      res.status(500).json({ message: "Failed to unsuspend merchant" });
-    }
-  });
-
-  app.post("/api/admin/merchants/:id/advance-onboarding", isAuthenticated, async (req, res) => {
-    try {
-      const adminId = await requireSuperAdmin(req, res);
-      if (!adminId) return;
-
-      const [merchant] = await db.select().from(merchants).where(eq(merchants.id, req.params.id));
-      if (!merchant) return res.status(404).json({ message: "Merchant not found" });
-
-      const currentIndex = ONBOARDING_ORDER.indexOf(merchant.onboardingStep || "ACCOUNT_CREATED");
-      if (currentIndex >= ONBOARDING_ORDER.length - 1) {
-        return res.json({ onboardingStep: "COMPLETED" });
+        res.json({ message: "Merchant suspended" });
+      } catch (error) {
+        console.error("Error suspending merchant:", error);
+        res.status(500).json({ message: "Failed to suspend merchant" });
       }
+    },
+  );
 
-      const nextStep = ONBOARDING_ORDER[currentIndex + 1];
-      await db.update(merchants).set({ onboardingStep: nextStep }).where(eq(merchants.id, req.params.id));
-      await db.insert(adminActionLogs).values({
-        adminUserId: adminId,
-        actionType: "ADVANCE_ONBOARDING",
-        targetMerchantId: req.params.id,
-        details: `Advanced onboarding from ${merchant.onboardingStep} to ${nextStep}`,
-      });
+  app.post(
+    "/api/admin/merchants/:id/unsuspend",
+    isAuthenticated,
+    async (req, res) => {
+      try {
+        const adminId = await requireSuperAdmin(req, res);
+        if (!adminId) return;
 
-      res.json({ onboardingStep: nextStep });
-    } catch (error) {
-      res.status(500).json({ message: "Failed to advance onboarding" });
-    }
-  });
+        await db
+          .update(merchants)
+          .set({ status: "ACTIVE" })
+          .where(eq(merchants.id, req.params.id));
+        await db.insert(adminActionLogs).values({
+          adminUserId: adminId,
+          actionType: "UNSUSPEND_MERCHANT",
+          targetMerchantId: req.params.id,
+          details: "Merchant unsuspended by admin",
+        });
+
+        res.json({ message: "Merchant unsuspended" });
+      } catch (error) {
+        res.status(500).json({ message: "Failed to unsuspend merchant" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/admin/merchants/:id/advance-onboarding",
+    isAuthenticated,
+    async (req, res) => {
+      try {
+        const adminId = await requireSuperAdmin(req, res);
+        if (!adminId) return;
+
+        const [merchant] = await db
+          .select()
+          .from(merchants)
+          .where(eq(merchants.id, req.params.id));
+        if (!merchant)
+          return res.status(404).json({ message: "Merchant not found" });
+
+        const currentIndex = ONBOARDING_ORDER.indexOf(
+          merchant.onboardingStep || "ACCOUNT_CREATED",
+        );
+        if (currentIndex >= ONBOARDING_ORDER.length - 1) {
+          return res.json({ onboardingStep: "COMPLETED" });
+        }
+
+        const nextStep = ONBOARDING_ORDER[currentIndex + 1];
+        await db
+          .update(merchants)
+          .set({ onboardingStep: nextStep })
+          .where(eq(merchants.id, req.params.id));
+        await db.insert(adminActionLogs).values({
+          adminUserId: adminId,
+          actionType: "ADVANCE_ONBOARDING",
+          targetMerchantId: req.params.id,
+          details: `Advanced onboarding from ${merchant.onboardingStep} to ${nextStep}`,
+        });
+
+        res.json({ onboardingStep: nextStep });
+      } catch (error) {
+        res.status(500).json({ message: "Failed to advance onboarding" });
+      }
+    },
+  );
 
   app.post("/api/admin/users/:id/block", isAuthenticated, async (req, res) => {
     try {
       const adminId = await requireSuperAdmin(req, res);
       if (!adminId) return;
 
-      await db.update(users).set({ isActive: false }).where(eq(users.id, req.params.id));
+      await db
+        .update(users)
+        .set({ isActive: false })
+        .where(eq(users.id, req.params.id));
       await db.insert(adminActionLogs).values({
         adminUserId: adminId,
         actionType: "BLOCK_USER",
@@ -5211,109 +7048,148 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/admin/users/:id/unblock", isAuthenticated, async (req, res) => {
-    try {
-      const adminId = await requireSuperAdmin(req, res);
-      if (!adminId) return;
+  app.post(
+    "/api/admin/users/:id/unblock",
+    isAuthenticated,
+    async (req, res) => {
+      try {
+        const adminId = await requireSuperAdmin(req, res);
+        if (!adminId) return;
 
-      await db.update(users).set({ isActive: true }).where(eq(users.id, req.params.id));
-      await db.insert(adminActionLogs).values({
-        adminUserId: adminId,
-        actionType: "UNBLOCK_USER",
-        targetUserId: req.params.id,
-        details: "User unblocked by admin",
-      });
+        await db
+          .update(users)
+          .set({ isActive: true })
+          .where(eq(users.id, req.params.id));
+        await db.insert(adminActionLogs).values({
+          adminUserId: adminId,
+          actionType: "UNBLOCK_USER",
+          targetUserId: req.params.id,
+          details: "User unblocked by admin",
+        });
 
-      res.json({ message: "User unblocked" });
-    } catch (error) {
-      res.status(500).json({ message: "Failed to unblock user" });
-    }
-  });
+        res.json({ message: "User unblocked" });
+      } catch (error) {
+        res.status(500).json({ message: "Failed to unblock user" });
+      }
+    },
+  );
 
-  app.post("/api/admin/users/:id/reset-password", isAuthenticated, async (req, res) => {
-    try {
-      const adminId = await requireSuperAdmin(req, res);
-      if (!adminId) return;
+  app.post(
+    "/api/admin/users/:id/reset-password",
+    isAuthenticated,
+    async (req, res) => {
+      try {
+        const adminId = await requireSuperAdmin(req, res);
+        if (!adminId) return;
 
-      const bcrypt = await import("bcrypt");
-      const tempPassword = crypto.randomBytes(8).toString("hex");
-      const passwordHash = await bcrypt.default.hash(tempPassword, 12);
+        const bcrypt = await import("bcrypt");
+        const tempPassword = crypto.randomBytes(8).toString("hex");
+        const passwordHash = await bcrypt.default.hash(tempPassword, 12);
 
-      await db.update(users).set({ passwordHash }).where(eq(users.id, req.params.id));
-      await db.insert(adminActionLogs).values({
-        adminUserId: adminId,
-        actionType: "RESET_PASSWORD",
-        targetUserId: req.params.id,
-        details: "Password reset by admin",
-      });
+        await db
+          .update(users)
+          .set({ passwordHash })
+          .where(eq(users.id, req.params.id));
+        await db.insert(adminActionLogs).values({
+          adminUserId: adminId,
+          actionType: "RESET_PASSWORD",
+          targetUserId: req.params.id,
+          details: "Password reset by admin",
+        });
 
-      res.json({ message: "Password reset", tempPassword });
-    } catch (error) {
-      res.status(500).json({ message: "Failed to reset password" });
-    }
-  });
+        res.json({ message: "Password reset", tempPassword });
+      } catch (error) {
+        res.status(500).json({ message: "Failed to reset password" });
+      }
+    },
+  );
 
   // ============================================
   // BULK CANCELLATION JOB ENDPOINTS
   // ============================================
 
-  app.post("/api/cancellation-jobs/preview", isAuthenticated, async (req: any, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
+  app.post(
+    "/api/cancellation-jobs/preview",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
 
-      const { identifiers, inputType } = req.body;
-      if (!identifiers || !Array.isArray(identifiers) || identifiers.length === 0) {
-        return res.status(400).json({ message: "identifiers array is required" });
-      }
-      if (!["ORDER_IDS", "SHOPIFY_NAMES", "TRACKING_NUMBERS"].includes(inputType)) {
-        return res.status(400).json({ message: "inputType must be ORDER_IDS, SHOPIFY_NAMES, or TRACKING_NUMBERS" });
-      }
-
-      const { orders: allOrders } = await storage.getOrders(merchantId, { pageSize: 10000 });
-      const matched: any[] = [];
-      const notFound: string[] = [];
-
-      for (const identifier of identifiers) {
-        const trimmed = String(identifier).trim();
-        if (!trimmed) continue;
-
-        let found: any = null;
-        if (inputType === "ORDER_IDS") {
-          found = allOrders.find((o: any) => o.id === trimmed);
-        } else if (inputType === "SHOPIFY_NAMES") {
-          found = allOrders.find((o: any) =>
-            o.orderNumber === trimmed
-          );
-        } else if (inputType === "TRACKING_NUMBERS") {
-          found = allOrders.find((o: any) => o.courierTracking === trimmed);
+        const { identifiers, inputType } = req.body;
+        if (
+          !identifiers ||
+          !Array.isArray(identifiers) ||
+          identifiers.length === 0
+        ) {
+          return res
+            .status(400)
+            .json({ message: "identifiers array is required" });
+        }
+        if (
+          !["ORDER_IDS", "SHOPIFY_NAMES", "TRACKING_NUMBERS"].includes(
+            inputType,
+          )
+        ) {
+          return res
+            .status(400)
+            .json({
+              message:
+                "inputType must be ORDER_IDS, SHOPIFY_NAMES, or TRACKING_NUMBERS",
+            });
         }
 
-        if (found) {
-          matched.push({
-            id: found.id,
-            orderNumber: found.orderNumber,
-            courierName: found.courierName,
-            courierTracking: found.courierTracking,
-            workflowStatus: found.workflowStatus,
-            shopifyOrderId: found.shopifyOrderId,
-            totalAmount: found.totalAmount,
-            customerName: found.customerName,
-            cancelledAt: found.cancelledAt,
-            canCancelCourier: found.workflowStatus === "BOOKED" && !!found.courierTracking,
-            canCancelShopify: !!found.shopifyOrderId && !found.cancelledAt,
-          });
-        } else {
-          notFound.push(trimmed);
-        }
-      }
+        const { orders: allOrders } = await storage.getOrders(merchantId, {
+          pageSize: 10000,
+        });
+        const matched: any[] = [];
+        const notFound: string[] = [];
 
-      res.json({ matched, notFound, totalMatched: matched.length, totalNotFound: notFound.length });
-    } catch (error) {
-      console.error("Error previewing cancellation:", error);
-      res.status(500).json({ message: "Failed to preview cancellation" });
-    }
-  });
+        for (const identifier of identifiers) {
+          const trimmed = String(identifier).trim();
+          if (!trimmed) continue;
+
+          let found: any = null;
+          if (inputType === "ORDER_IDS") {
+            found = allOrders.find((o: any) => o.id === trimmed);
+          } else if (inputType === "SHOPIFY_NAMES") {
+            found = allOrders.find((o: any) => o.orderNumber === trimmed);
+          } else if (inputType === "TRACKING_NUMBERS") {
+            found = allOrders.find((o: any) => o.courierTracking === trimmed);
+          }
+
+          if (found) {
+            matched.push({
+              id: found.id,
+              orderNumber: found.orderNumber,
+              courierName: found.courierName,
+              courierTracking: found.courierTracking,
+              workflowStatus: found.workflowStatus,
+              shopifyOrderId: found.shopifyOrderId,
+              totalAmount: found.totalAmount,
+              customerName: found.customerName,
+              cancelledAt: found.cancelledAt,
+              canCancelCourier:
+                found.workflowStatus === "BOOKED" && !!found.courierTracking,
+              canCancelShopify: !!found.shopifyOrderId && !found.cancelledAt,
+            });
+          } else {
+            notFound.push(trimmed);
+          }
+        }
+
+        res.json({
+          matched,
+          notFound,
+          totalMatched: matched.length,
+          totalNotFound: notFound.length,
+        });
+      } catch (error) {
+        console.error("Error previewing cancellation:", error);
+        res.status(500).json({ message: "Failed to preview cancellation" });
+      }
+    },
+  );
 
   app.post("/api/cancellation-jobs", isAuthenticated, async (req: any, res) => {
     try {
@@ -5325,7 +7201,11 @@ export async function registerRoutes(
         return res.status(400).json({ message: "orderIds array is required" });
       }
       if (!["COURIER_CANCEL", "SHOPIFY_CANCEL", "BOTH"].includes(jobType)) {
-        return res.status(400).json({ message: "jobType must be COURIER_CANCEL, SHOPIFY_CANCEL, or BOTH" });
+        return res
+          .status(400)
+          .json({
+            message: "jobType must be COURIER_CANCEL, SHOPIFY_CANCEL, or BOTH",
+          });
       }
 
       const userId = getSessionUserId(req) || "system";
@@ -5347,10 +7227,18 @@ export async function registerRoutes(
 
       for (const order of matchedOrders) {
         const actions: string[] = [];
-        if ((jobType === "COURIER_CANCEL" || jobType === "BOTH") && order.courierTracking && order.workflowStatus === "BOOKED") {
+        if (
+          (jobType === "COURIER_CANCEL" || jobType === "BOTH") &&
+          order.courierTracking &&
+          order.workflowStatus === "BOOKED"
+        ) {
           actions.push("COURIER_CANCEL");
         }
-        if ((jobType === "SHOPIFY_CANCEL" || jobType === "BOTH") && order.shopifyOrderId && !order.cancelledAt) {
+        if (
+          (jobType === "SHOPIFY_CANCEL" || jobType === "BOTH") &&
+          order.shopifyOrderId &&
+          !order.cancelledAt
+        ) {
           actions.push("SHOPIFY_CANCEL");
         }
 
@@ -5381,8 +7269,8 @@ export async function registerRoutes(
         }
       }
 
-      runCancellationJob(job.id, merchantId).catch(err =>
-        console.error(`[CancelJob] Background job error for ${job.id}:`, err)
+      runCancellationJob(job.id, merchantId).catch((err) =>
+        console.error(`[CancelJob] Background job error for ${job.id}:`, err),
       );
 
       res.json({ jobId: job.id, message: "Cancellation job started" });
@@ -5400,7 +7288,10 @@ export async function registerRoutes(
       const page = parseInt(String(req.query.page)) || 1;
       const pageSize = parseInt(String(req.query.pageSize)) || 20;
 
-      const result = await storage.getCancellationJobs(merchantId, { page, pageSize });
+      const result = await storage.getCancellationJobs(merchantId, {
+        page,
+        pageSize,
+      });
       res.json(result);
     } catch (error) {
       console.error("Error fetching cancellation jobs:", error);
@@ -5408,32 +7299,39 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/cancellation-jobs/:id", isAuthenticated, async (req: any, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
+  app.get(
+    "/api/cancellation-jobs/:id",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
 
-      const job = await storage.getCancellationJob(merchantId, req.params.id);
-      if (!job) return res.status(404).json({ message: "Job not found" });
+        const job = await storage.getCancellationJob(merchantId, req.params.id);
+        if (!job) return res.status(404).json({ message: "Job not found" });
 
-      const items = await storage.getCancellationJobItems(job.id);
-      res.json({ ...job, items });
-    } catch (error) {
-      console.error("Error fetching cancellation job:", error);
-      res.status(500).json({ message: "Failed to fetch cancellation job" });
-    }
-  });
+        const items = await storage.getCancellationJobItems(job.id);
+        res.json({ ...job, items });
+      } catch (error) {
+        console.error("Error fetching cancellation job:", error);
+        res.status(500).json({ message: "Failed to fetch cancellation job" });
+      }
+    },
+  );
 
   async function runCancellationJob(jobId: string, merchantId: string) {
     console.log(`[CancelJob] Starting job ${jobId}`);
 
-    await storage.updateCancellationJob(jobId, { status: "RUNNING", startedAt: new Date() });
+    await storage.updateCancellationJob(jobId, {
+      status: "RUNNING",
+      startedAt: new Date(),
+    });
 
     const items = await storage.getCancellationJobItems(jobId);
-    const pendingItems = items.filter(i => i.status === "PENDING");
+    const pendingItems = items.filter((i) => i.status === "PENDING");
     let successCount = 0;
     let failedCount = 0;
-    let skippedCount = items.filter(i => i.status === "SKIPPED").length;
+    let skippedCount = items.filter((i) => i.status === "SKIPPED").length;
 
     const store = await storage.getShopifyStore(merchantId);
 
@@ -5443,23 +7341,34 @@ export async function registerRoutes(
       try {
         if (item.action === "COURIER_CANCEL") {
           if (!item.trackingNumber) {
-            await storage.updateCancellationJobItem(item.id, { status: "SKIPPED", errorMessage: "No tracking number" });
+            await storage.updateCancellationJobItem(item.id, {
+              status: "SKIPPED",
+              errorMessage: "No tracking number",
+            });
             skippedCount++;
             continue;
           }
 
-          const order = item.orderId ? await storage.getOrderById(merchantId, item.orderId) : null;
+          const order = item.orderId
+            ? await storage.getOrderById(merchantId, item.orderId)
+            : null;
           const courierName = order?.courierName || "";
 
           if (!courierName) {
-            await storage.updateCancellationJobItem(item.id, { status: "SKIPPED", errorMessage: "No courier name on order" });
+            await storage.updateCancellationJobItem(item.id, {
+              status: "SKIPPED",
+              errorMessage: "No courier name on order",
+            });
             skippedCount++;
             continue;
           }
 
           const creds = await getCourierCredentials(merchantId, courierName);
           if (!creds) {
-            await storage.updateCancellationJobItem(item.id, { status: "FAILED", errorMessage: "Courier credentials not configured" });
+            await storage.updateCancellationJobItem(item.id, {
+              status: "FAILED",
+              errorMessage: "Courier credentials not configured",
+            });
             failedCount++;
             continue;
           }
@@ -5467,13 +7376,18 @@ export async function registerRoutes(
           const result = await cancelCourierBooking(
             courierName,
             item.trackingNumber,
-            { apiKey: creds.apiKey || undefined, apiSecret: creds.apiSecret || undefined },
+            {
+              apiKey: creds.apiKey || undefined,
+              apiSecret: creds.apiSecret || undefined,
+            },
           );
 
           if (result.success) {
             await storage.updateCancellationJobItem(item.id, {
               status: "SUCCESS",
-              courierResponse: result.rawResponse || { message: result.message },
+              courierResponse: result.rawResponse || {
+                message: result.message,
+              },
             });
 
             if (order && order.workflowStatus === "BOOKED") {
@@ -5508,10 +7422,16 @@ export async function registerRoutes(
             failedCount++;
           }
         } else if (item.action === "SHOPIFY_CANCEL") {
-          if (!item.shopifyOrderId || !store?.shopDomain || !store?.accessToken) {
+          if (
+            !item.shopifyOrderId ||
+            !store?.shopDomain ||
+            !store?.accessToken
+          ) {
             await storage.updateCancellationJobItem(item.id, {
               status: "SKIPPED",
-              errorMessage: !item.shopifyOrderId ? "No Shopify order ID" : "Shopify store not connected",
+              errorMessage: !item.shopifyOrderId
+                ? "No Shopify order ID"
+                : "Shopify store not connected",
             });
             skippedCount++;
             continue;
@@ -5525,10 +7445,14 @@ export async function registerRoutes(
           );
 
           if (result.success) {
-            await storage.updateCancellationJobItem(item.id, { status: "SUCCESS" });
+            await storage.updateCancellationJobItem(item.id, {
+              status: "SUCCESS",
+            });
 
             if (item.orderId) {
-              await storage.updateOrderWorkflow(merchantId, item.orderId, { cancelledAt: new Date() });
+              await storage.updateOrderWorkflow(merchantId, item.orderId, {
+                cancelledAt: new Date(),
+              });
               await transitionOrder({
                 merchantId,
                 orderId: item.orderId,
@@ -5549,10 +7473,14 @@ export async function registerRoutes(
           }
         }
 
-        await storage.updateCancellationJob(jobId, { successCount, failedCount, skippedCount });
+        await storage.updateCancellationJob(jobId, {
+          successCount,
+          failedCount,
+          skippedCount,
+        });
 
         if (i < pendingItems.length - 1) {
-          await new Promise(r => setTimeout(r, 500));
+          await new Promise((r) => setTimeout(r, 500));
         }
       } catch (err: any) {
         console.error(`[CancelJob] Item ${item.id} error:`, err);
@@ -5564,7 +7492,8 @@ export async function registerRoutes(
       }
     }
 
-    const finalStatus = failedCount === 0 ? "COMPLETED" : (successCount > 0 ? "PARTIAL" : "FAILED");
+    const finalStatus =
+      failedCount === 0 ? "COMPLETED" : successCount > 0 ? "PARTIAL" : "FAILED";
     await storage.updateCancellationJob(jobId, {
       status: finalStatus,
       successCount,
@@ -5573,7 +7502,9 @@ export async function registerRoutes(
       finishedAt: new Date(),
     });
 
-    console.log(`[CancelJob] Job ${jobId} finished: ${finalStatus} (success=${successCount}, failed=${failedCount}, skipped=${skippedCount})`);
+    console.log(
+      `[CancelJob] Job ${jobId} finished: ${finalStatus} (success=${successCount}, failed=${failedCount}, skipped=${skippedCount})`,
+    );
   }
 
   return httpServer;
