@@ -6165,6 +6165,71 @@ export async function registerRoutes(
   );
 
   app.get(
+    "/api/print/label-preview",
+    isAuthenticated,
+    async (_req, res) => {
+      const sampleLabels = [
+        {
+          trackingNumber: "PW7513510750",
+          orderNumber: "24630",
+          customerName: "Haissam Malik",
+          customerPhone: "03001234567",
+          customerAddress: "House 12, Street 5, DHA Phase 6, Lahore",
+          customerCity: "Lahore",
+          customerProvince: "Punjab",
+          postalCode: "54000",
+          codAmount: "4500",
+          totalQuantity: 2,
+          weight: "0.5",
+          pieces: 1,
+          paymentMethod: "COD",
+          courierName: "Leopards",
+          remark: "Handle with care - fragile items",
+          products: [
+            { name: "Premium Cotton T-Shirt (Black, L)", qty: 1, price: "2500", sku: "TSH-BLK-L" },
+            { name: "Slim Fit Jeans (Blue, 32)", qty: 1, price: "2000", sku: "JNS-BLU-32" },
+          ],
+          brandName: "ShipFlow Demo Store",
+          brandPhone: "03009876543",
+          brandAddress: "Office 301, Business Plaza, Gulberg III",
+          brandCity: "Lahore",
+          orderDate: "2/14/2026",
+          bookedAt: "2/14/2026",
+          itemSummary: "Premium Cotton T-Shirt x1 | Slim Fit Jeans x1",
+        },
+        {
+          trackingNumber: "PW7527293568",
+          orderNumber: "24255",
+          customerName: "Syed Mohsin Ali",
+          customerPhone: "03211234567",
+          customerAddress: "Flat B-3, Askari Tower, Rawalpindi",
+          customerCity: "Rawalpindi",
+          customerProvince: "Punjab",
+          postalCode: "46000",
+          codAmount: "0",
+          totalQuantity: 1,
+          weight: "0.3",
+          pieces: 1,
+          paymentMethod: "Prepaid",
+          courierName: "Leopards",
+          remark: "",
+          products: [
+            { name: "Wireless Earbuds Pro", qty: 1, price: "3200", sku: "WEB-PRO-1" },
+          ],
+          brandName: "ShipFlow Demo Store",
+          brandPhone: "03009876543",
+          brandAddress: "Office 301, Business Plaza, Gulberg III",
+          brandCity: "Lahore",
+          orderDate: "2/13/2026",
+          bookedAt: "2/13/2026",
+          itemSummary: "Wireless Earbuds Pro x1",
+        },
+      ];
+      res.json({ labels: sampleLabels });
+    },
+  );
+
+  app.get(
     "/api/print/label-data/batch/:batchId",
     isAuthenticated,
     async (req, res) => {

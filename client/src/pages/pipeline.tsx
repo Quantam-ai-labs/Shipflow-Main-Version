@@ -724,9 +724,11 @@ export default function Pipeline() {
     toast({ title: "Tracking numbers copied" });
   }, [bookingResultsModal, toast]);
 
-  const openPrintLabels = useCallback(async (batchId?: string, orderIds?: string[], perPage: number = 2) => {
+  const openPrintLabels = useCallback(async (batchId?: string, orderIds?: string[], perPage: number = 2, preview?: boolean) => {
     let url: string;
-    if (batchId) {
+    if (preview) {
+      url = `/api/print/label-preview`;
+    } else if (batchId) {
       url = `/api/print/label-data/batch/${batchId}`;
     } else if (orderIds && orderIds.length > 0) {
       url = `/api/print/label-data/orders?ids=${orderIds.join(",")}`;
