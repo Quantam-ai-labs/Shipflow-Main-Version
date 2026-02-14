@@ -89,7 +89,7 @@ function CityAutocomplete({ value, onChange, cities, hasWarning, testId }: {
     <div ref={containerRef} className="relative">
       <Input
         ref={inputRef}
-        className={`h-9 text-sm px-2 min-w-[130px] ${hasWarning ? "border-orange-400 dark:border-orange-600" : ""}`}
+        className={`h-8 text-xs px-1.5 min-w-[130px] border-0 shadow-none focus-visible:ring-1 bg-transparent ${hasWarning ? "ring-1 ring-orange-400 dark:ring-orange-600" : ""}`}
         value={query}
         onChange={(e) => {
           setQuery(e.target.value);
@@ -105,7 +105,7 @@ function CityAutocomplete({ value, onChange, cities, hasWarning, testId }: {
           {filtered.map((c) => (
             <div
               key={c.name}
-              className={`px-2 py-1.5 text-sm cursor-pointer hover-elevate ${c.name === value ? "bg-primary/10 font-medium" : ""}`}
+              className={`px-2 py-1 text-xs cursor-pointer hover-elevate ${c.name === value ? "bg-primary/10 font-medium" : ""}`}
               onMouseDown={(e) => {
                 e.preventDefault();
                 onChange(c.name);
@@ -1420,33 +1420,34 @@ export default function Pipeline() {
             return (
               <div className="space-y-3">
                 {allOrders.length > 0 && (
-                  <div className="overflow-x-auto max-h-[60vh] overflow-y-auto border rounded-md">
-                    <table className="w-full text-sm">
-                      <thead className="bg-muted/50 sticky top-0 z-10">
-                        <tr className="border-b">
-                          <th className="px-2 py-2.5 text-left w-10">
+                  <div className="overflow-x-auto max-h-[60vh] overflow-y-auto border border-border">
+                    <table className="w-full text-sm border-collapse">
+                      <thead className="bg-emerald-700 dark:bg-emerald-800 sticky top-0 z-10">
+                        <tr>
+                          <th className="px-2 py-2 text-left w-10 border border-emerald-600 dark:border-emerald-700 text-white">
                             <Checkbox
                               checked={allChecked}
                               onCheckedChange={(checked) => {
                                 if (checked) setPreviewChecked(new Set(allValidIds));
                                 else setPreviewChecked(new Set());
                               }}
+                              className="border-white/60 data-[state=checked]:bg-white data-[state=checked]:text-emerald-700"
                               data-testid="checkbox-preview-all"
                             />
                           </th>
-                          <th className="px-2 py-2.5 text-left font-medium w-8">#</th>
-                          <th className="px-2 py-2.5 text-left font-medium w-20">Order</th>
-                          <th className="px-2 py-2.5 text-left font-medium min-w-[140px]">Name</th>
-                          <th className="px-2 py-2.5 text-left font-medium min-w-[120px]">Phone</th>
-                          <th className="px-2 py-2.5 text-left font-medium min-w-[280px]">Address</th>
-                          <th className="px-2 py-2.5 text-left font-medium min-w-[100px]">City</th>
-                          <th className="px-2 py-2.5 text-left font-medium min-w-[140px]">Courier City</th>
-                          <th className="px-2 py-2.5 text-left font-medium w-20">COD</th>
-                          <th className="px-2 py-2.5 text-left font-medium w-20">Gram</th>
-                          <th className="px-2 py-2.5 text-left font-medium w-16">Pcs</th>
-                          <th className="px-2 py-2.5 text-left font-medium min-w-[110px]">Type</th>
-                          <th className="px-2 py-2.5 text-center font-medium w-10" title="City Match Status">
-                            <CheckCircle2 className="w-4 h-4 mx-auto text-muted-foreground" />
+                          <th className="px-2 py-2 text-left font-semibold w-8 border border-emerald-600 dark:border-emerald-700 text-white text-xs">#</th>
+                          <th className="px-2 py-2 text-left font-semibold w-20 border border-emerald-600 dark:border-emerald-700 text-white text-xs">Order</th>
+                          <th className="px-2 py-2 text-left font-semibold min-w-[140px] border border-emerald-600 dark:border-emerald-700 text-white text-xs">Name</th>
+                          <th className="px-2 py-2 text-left font-semibold min-w-[120px] border border-emerald-600 dark:border-emerald-700 text-white text-xs">Phone</th>
+                          <th className="px-2 py-2 text-left font-semibold min-w-[280px] border border-emerald-600 dark:border-emerald-700 text-white text-xs">Address</th>
+                          <th className="px-2 py-2 text-left font-semibold min-w-[100px] border border-emerald-600 dark:border-emerald-700 text-white text-xs">City</th>
+                          <th className="px-2 py-2 text-left font-semibold min-w-[140px] border border-emerald-600 dark:border-emerald-700 text-white text-xs">Courier City</th>
+                          <th className="px-2 py-2 text-left font-semibold w-20 border border-emerald-600 dark:border-emerald-700 text-white text-xs">COD</th>
+                          <th className="px-2 py-2 text-left font-semibold w-20 border border-emerald-600 dark:border-emerald-700 text-white text-xs">Gram</th>
+                          <th className="px-2 py-2 text-left font-semibold w-16 border border-emerald-600 dark:border-emerald-700 text-white text-xs">Pcs</th>
+                          <th className="px-2 py-2 text-left font-semibold min-w-[110px] border border-emerald-600 dark:border-emerald-700 text-white text-xs">Type</th>
+                          <th className="px-2 py-2 text-center font-semibold w-10 border border-emerald-600 dark:border-emerald-700" title="City Match Status">
+                            <CheckCircle2 className="w-4 h-4 mx-auto text-white/80" />
                           </th>
                         </tr>
                       </thead>
@@ -1461,10 +1462,10 @@ export default function Pipeline() {
                           return (
                             <tr
                               key={order.orderId}
-                              className={`border-b last:border-b-0 ${hasError ? "bg-red-50/50 dark:bg-red-950/20" : ""} ${!isChecked && isValid ? "opacity-40" : ""}`}
+                              className={`${hasError ? "bg-red-50/50 dark:bg-red-950/20" : ""} ${!isChecked && isValid ? "opacity-40" : ""}`}
                               data-testid={`preview-row-${order.orderId}`}
                             >
-                              <td className="px-2 py-1.5">
+                              <td className="px-2 py-1 border border-border">
                                 {isValid ? (
                                   <Checkbox
                                     checked={isChecked}
@@ -1480,8 +1481,8 @@ export default function Pipeline() {
                                   <AlertCircle className="w-4 h-4 text-red-500" />
                                 )}
                               </td>
-                              <td className="px-2 py-1.5 text-muted-foreground">{idx + 1}</td>
-                              <td className="px-2 py-1.5 font-medium whitespace-nowrap" data-testid={`text-order-${order.orderId}`}>
+                              <td className="px-2 py-1 border border-border text-muted-foreground text-xs">{idx + 1}</td>
+                              <td className="px-2 py-1 border border-border font-medium whitespace-nowrap text-xs" data-testid={`text-order-${order.orderId}`}>
                                 {orderNum}
                                 {hasError && (
                                   <span className="block text-red-500 text-[10px] font-normal" title={order.missingFields.join(", ")}>
@@ -1489,36 +1490,36 @@ export default function Pipeline() {
                                   </span>
                                 )}
                               </td>
-                              <td className="px-2 py-1.5">
+                              <td className="px-1 py-0.5 border border-border">
                                 <Input
-                                  className="h-9 text-sm px-2 min-w-[130px]"
+                                  className="h-8 text-xs px-1.5 min-w-[130px] border-0 shadow-none focus-visible:ring-1 bg-transparent"
                                   value={ovr?.customerName ?? order.customerName ?? ""}
                                   onChange={(e) => updateField(order.orderId, "customerName", e.target.value)}
                                   data-testid={`input-name-${order.orderId}`}
                                 />
                               </td>
-                              <td className="px-2 py-1.5">
+                              <td className="px-1 py-0.5 border border-border">
                                 <Input
-                                  className="h-9 text-sm px-2 font-mono min-w-[110px]"
+                                  className="h-8 text-xs px-1.5 font-mono min-w-[110px] border-0 shadow-none focus-visible:ring-1 bg-transparent"
                                   value={ovr?.phone ?? order.phone ?? ""}
                                   onChange={(e) => updateField(order.orderId, "phone", e.target.value)}
                                   data-testid={`input-phone-${order.orderId}`}
                                 />
                               </td>
-                              <td className="px-2 py-1.5">
+                              <td className="px-1 py-0.5 border border-border">
                                 <Input
-                                  className="h-9 text-sm px-2 min-w-[260px]"
+                                  className="h-8 text-xs px-1.5 min-w-[260px] border-0 shadow-none focus-visible:ring-1 bg-transparent"
                                   value={ovr?.address ?? order.address ?? ""}
                                   onChange={(e) => updateField(order.orderId, "address", e.target.value)}
                                   data-testid={`input-address-${order.orderId}`}
                                 />
                               </td>
-                              <td className="px-2 py-1.5">
-                                <span className={`text-sm whitespace-nowrap ${!order.cityMatched ? "text-orange-500 font-medium" : "text-muted-foreground"}`} data-testid={`text-entered-city-${order.orderId}`}>
+                              <td className="px-2 py-1 border border-border">
+                                <span className={`text-xs whitespace-nowrap ${!order.cityMatched ? "text-orange-500 font-medium" : "text-muted-foreground"}`} data-testid={`text-entered-city-${order.orderId}`}>
                                   {order.city || "-"}
                                 </span>
                               </td>
-                              <td className="px-2 py-1.5">
+                              <td className="px-1 py-0.5 border border-border">
                                 {courierCities.length > 0 ? (
                                   <CityAutocomplete
                                     value={ovr?.city ?? order.city ?? ""}
@@ -1529,49 +1530,49 @@ export default function Pipeline() {
                                   />
                                 ) : (
                                   <Input
-                                    className="h-9 text-sm px-2 min-w-[120px]"
+                                    className="h-8 text-xs px-1.5 min-w-[120px] border-0 shadow-none focus-visible:ring-1 bg-transparent"
                                     value={ovr?.city ?? order.city ?? ""}
                                     onChange={(e) => updateField(order.orderId, "city", e.target.value)}
                                     data-testid={`input-city-${order.orderId}`}
                                   />
                                 )}
                               </td>
-                              <td className="px-2 py-1.5">
+                              <td className="px-1 py-0.5 border border-border">
                                 <Input
                                   type="number"
                                   min={0}
-                                  className="h-9 w-[80px] text-sm px-2 text-center"
+                                  className="h-8 w-[70px] text-xs px-1.5 text-center border-0 shadow-none focus-visible:ring-1 bg-transparent"
                                   value={ovr?.codAmount ?? order.codAmount ?? 0}
                                   onChange={(e) => updateField(order.orderId, "codAmount", parseFloat(e.target.value) || 0)}
                                   data-testid={`input-cod-${order.orderId}`}
                                 />
                               </td>
-                              <td className="px-2 py-1.5">
+                              <td className="px-1 py-0.5 border border-border">
                                 <Input
                                   type="number"
                                   min={1}
-                                  className="h-9 w-[80px] text-sm px-2 text-center"
+                                  className="h-8 w-[70px] text-xs px-1.5 text-center border-0 shadow-none focus-visible:ring-1 bg-transparent"
                                   value={ovr?.weight ?? 200}
                                   onChange={(e) => updateField(order.orderId, "weight", parseInt(e.target.value) || 200)}
                                   data-testid={`input-weight-${order.orderId}`}
                                 />
                               </td>
-                              <td className="px-2 py-1.5">
+                              <td className="px-1 py-0.5 border border-border">
                                 <Input
                                   type="number"
                                   min={1}
-                                  className="h-9 w-[60px] text-sm px-2 text-center"
+                                  className="h-8 w-[50px] text-xs px-1.5 text-center border-0 shadow-none focus-visible:ring-1 bg-transparent"
                                   value={ovr?.pieces ?? 1}
                                   onChange={(e) => updateField(order.orderId, "pieces", parseInt(e.target.value) || 1)}
                                   data-testid={`input-pieces-${order.orderId}`}
                                 />
                               </td>
-                              <td className="px-2 py-1.5">
+                              <td className="px-1 py-0.5 border border-border">
                                 <Select
                                   value={ovr?.mode ?? modeOptions[0]}
                                   onValueChange={(val) => updateField(order.orderId, "mode", val)}
                                 >
-                                  <SelectTrigger className="h-9 min-w-[100px] text-sm px-2" data-testid={`select-mode-${order.orderId}`}>
+                                  <SelectTrigger className="h-8 min-w-[90px] text-xs px-1.5 border-0 shadow-none focus-visible:ring-1 bg-transparent" data-testid={`select-mode-${order.orderId}`}>
                                     <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent>
@@ -1581,11 +1582,11 @@ export default function Pipeline() {
                                   </SelectContent>
                                 </Select>
                               </td>
-                              <td className="px-2 py-1.5 text-center" data-testid={`city-status-${order.orderId}`}>
+                              <td className="px-2 py-1 border border-border text-center" data-testid={`city-status-${order.orderId}`}>
                                 {cityMatched ? (
-                                  <CheckCircle2 className="w-5 h-5 text-green-500 mx-auto" />
+                                  <CheckCircle2 className="w-4 h-4 text-green-500 mx-auto" />
                                 ) : (
-                                  <XCircle className="w-5 h-5 text-red-500 mx-auto" />
+                                  <XCircle className="w-4 h-4 text-red-500 mx-auto" />
                                 )}
                               </td>
                             </tr>
@@ -1611,7 +1612,7 @@ export default function Pipeline() {
                     </div>
                   </div>
                 )}
-                <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground border-t pt-2 flex-wrap">
+                <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground pt-2 flex-wrap">
                   <span>{checkedCount} of {bookingConfirmModal.preview.valid.length} orders selected for booking</span>
                   <div className="flex items-center gap-3 flex-wrap">
                     {bookingConfirmModal.preview.invalid.length > 0 && (
