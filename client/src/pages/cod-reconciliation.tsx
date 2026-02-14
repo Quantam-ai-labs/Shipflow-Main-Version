@@ -124,8 +124,11 @@ export default function CodReconciliationPage() {
     ...(dateParams.dateTo && { dateTo: dateParams.dateTo }),
   });
 
+  const queryString = queryParams.toString();
+  const apiUrl = `/api/cod-reconciliation?${queryString}`;
+
   const { data, isLoading } = useQuery<CodReconciliationResponse>({
-    queryKey: ["/api/cod-reconciliation", queryParams.toString()],
+    queryKey: [apiUrl],
     refetchInterval: 30000,
   });
 
@@ -138,7 +141,7 @@ export default function CodReconciliationPage() {
       return apiRequest("POST", "/api/cod-reconciliation/reconcile", data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/cod-reconciliation"] });
+      queryClient.invalidateQueries({ predicate: (query) => (query.queryKey[0] as string)?.startsWith("/api/cod-reconciliation") });
       setSelectedRecords([]);
       setIsReconcileDialogOpen(false);
       setSettlementRef("");
@@ -162,7 +165,7 @@ export default function CodReconciliationPage() {
     },
     onSuccess: async (response: any) => {
       const data = await response.json();
-      queryClient.invalidateQueries({ queryKey: ["/api/cod-reconciliation"] });
+      queryClient.invalidateQueries({ predicate: (query) => (query.queryKey[0] as string)?.startsWith("/api/cod-reconciliation") });
       toast({
         title: "Records generated",
         description: data.message,
@@ -183,7 +186,7 @@ export default function CodReconciliationPage() {
     },
     onSuccess: async (response: any) => {
       const data = await response.json();
-      queryClient.invalidateQueries({ queryKey: ["/api/cod-reconciliation"] });
+      queryClient.invalidateQueries({ predicate: (query) => (query.queryKey[0] as string)?.startsWith("/api/cod-reconciliation") });
       toast({
         title: "Payment sync complete",
         description: data.message,
