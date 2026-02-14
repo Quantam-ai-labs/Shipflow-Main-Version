@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useMemo, useEffect, useCallback } from "react";
 import { DateRange } from "react-day-picker";
 import { dateRangeToParams } from "@/components/date-range-picker";
-import { format, parse } from "date-fns";
+import { format, parse, startOfMonth } from "date-fns";
 
 const STORAGE_KEY = "shipflow-date-range";
 
@@ -39,10 +39,9 @@ export function DateRangeProvider({ children }: { children: React.ReactNode }) {
   const [dateRange, setDateRangeState] = useState<DateRange | undefined>(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
-      return stored ? deserializeRange(stored) : undefined;
-    } catch {
-      return undefined;
-    }
+      if (stored) return deserializeRange(stored);
+    } catch {}
+    return { from: startOfMonth(new Date()), to: new Date() };
   });
 
   const setDateRange = useCallback((range: DateRange | undefined) => {
