@@ -338,7 +338,11 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
 
-      const stats = await storage.getDashboardStats(merchantId);
+      const { dateFrom, dateTo } = req.query;
+      const stats = await storage.getDashboardStats(merchantId, {
+        dateFrom: dateFrom as string,
+        dateTo: dateTo as string,
+      });
       res.json(stats);
     } catch (error) {
       console.error("Error fetching dashboard stats:", error);

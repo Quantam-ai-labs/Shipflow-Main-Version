@@ -118,7 +118,7 @@ export interface IStorage {
   updateOrderWorkflow(merchantId: string, orderId: string, data: Partial<InsertOrder>): Promise<Order | undefined>;
 
   // Analytics
-  getDashboardStats(merchantId: string): Promise<any>;
+  getDashboardStats(merchantId: string, options?: { dateFrom?: string; dateTo?: string }): Promise<any>;
   getAnalytics(merchantId: string, dateRange: string): Promise<any>;
 
   // Shipment Batches
@@ -924,8 +924,19 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Analytics
-  async getDashboardStats(merchantId: string): Promise<any> {
-    const allOrders = await db.select().from(orders).where(eq(orders.merchantId, merchantId));
+  async getDashboardStats(merchantId: string, options?: { dateFrom?: string; dateTo?: string }): Promise<any> {
+    let conditions = [eq(orders.merchantId, merchantId)];
+    if (options?.dateFrom) {
+      const fromDate = new Date(options.dateFrom);
+      fromDate.setHours(0, 0, 0, 0);
+      conditions.push(sql`${orders.orderDate} >= ${fromDate.toISOString()}`);
+    }
+    if (options?.dateTo) {
+      const toDate = new Date(options.dateTo);
+      toDate.setHours(23, 59, 59, 999);
+      conditions.push(sql`${orders.orderDate} <= ${toDate.toISOString()}`);
+    }
+    const allOrders = await db.select().from(orders).where(and(...conditions));
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
