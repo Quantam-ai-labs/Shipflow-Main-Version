@@ -227,7 +227,7 @@ export default function Integrations() {
 
   const reconcileMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("POST", "/api/integrations/shopify/reconcile", {});
+      return apiRequest("POST", "/api/shopify/reconcile", {});
     },
     onSuccess: async (res) => {
       const result = await res.json();
