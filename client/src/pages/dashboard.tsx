@@ -21,6 +21,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import type { Order, Shipment } from "@shared/schema";
 import { Link, useLocation } from "wouter";
+import { useDateRange } from "@/contexts/date-range-context";
 
 interface DashboardStats {
   totalOrders: number;
@@ -394,8 +395,16 @@ function OrderSearchSection() {
 }
 
 export default function Dashboard() {
+  const { dateParams } = useDateRange();
+
+  const statsQueryParams = new URLSearchParams();
+  if (dateParams.dateFrom) statsQueryParams.set("dateFrom", dateParams.dateFrom);
+  if (dateParams.dateTo) statsQueryParams.set("dateTo", dateParams.dateTo);
+  const statsQueryString = statsQueryParams.toString();
+  const statsUrl = `/api/dashboard/stats${statsQueryString ? `?${statsQueryString}` : ""}`;
+
   const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery<DashboardStats>({
-    queryKey: ["/api/dashboard/stats"],
+    queryKey: [statsUrl],
     refetchInterval: 30000,
   });
 

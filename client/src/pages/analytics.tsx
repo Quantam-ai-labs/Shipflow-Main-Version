@@ -10,9 +10,7 @@ import {
   MapPin,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
-import { DateRange } from "react-day-picker";
-import { DateRangePicker, dateRangeToParams } from "@/components/date-range-picker";
+import { useDateRange } from "@/contexts/date-range-context";
 import {
   BarChart,
   Bar,
@@ -61,8 +59,7 @@ interface AnalyticsData {
 const COLORS = ["hsl(220, 70%, 50%)", "hsl(160, 60%, 45%)", "hsl(35, 90%, 50%)", "hsl(280, 60%, 55%)", "hsl(350, 70%, 55%)"];
 
 export default function Analytics() {
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
-  const dateParams = dateRangeToParams(dateRange);
+  const { dateRange, dateParams } = useDateRange();
 
   const { data, isLoading } = useQuery<AnalyticsData>({
     queryKey: ["/api/analytics", { dateFrom: dateParams.dateFrom, dateTo: dateParams.dateTo }],
@@ -89,10 +86,6 @@ export default function Analytics() {
           <h1 className="text-2xl font-bold">Analytics</h1>
           <p className="text-muted-foreground">Track performance and insights across your operations.</p>
         </div>
-        <DateRangePicker
-          dateRange={dateRange}
-          onDateRangeChange={setDateRange}
-        />
       </div>
 
       {/* Overview Stats */}

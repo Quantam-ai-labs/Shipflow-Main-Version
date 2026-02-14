@@ -46,8 +46,7 @@ import type { CodReconciliation } from "@shared/schema";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { Label } from "@/components/ui/label";
-import { DateRange } from "react-day-picker";
-import { DateRangePicker, dateRangeToParams } from "@/components/date-range-picker";
+import { useDateRange } from "@/contexts/date-range-context";
 
 const statusOptions = [
   { value: "all", label: "All Statuses" },
@@ -87,14 +86,13 @@ export default function CodReconciliationPage() {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+  const { dateParams } = useDateRange();
   const [page, setPage] = useState(1);
   const pageSize = 100;
   const [selectedRecords, setSelectedRecords] = useState<string[]>([]);
   const [isReconcileDialogOpen, setIsReconcileDialogOpen] = useState(false);
   const [settlementRef, setSettlementRef] = useState("");
 
-  const dateParams = dateRangeToParams(dateRange);
   const queryParams = new URLSearchParams({
     page: page.toString(),
     pageSize: pageSize.toString(),
@@ -331,10 +329,6 @@ export default function CodReconciliationPage() {
                 data-testid="input-search-cod"
               />
             </div>
-            <DateRangePicker
-              dateRange={dateRange}
-              onDateRangeChange={(range) => { setDateRange(range); setPage(1); }}
-            />
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-[160px]" data-testid="select-cod-status">
                 <Filter className="w-4 h-4 mr-2" />

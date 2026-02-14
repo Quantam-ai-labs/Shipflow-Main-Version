@@ -6,6 +6,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { DateRangeProvider, useDateRange } from "@/contexts/date-range-context";
+import { DateRangePicker } from "@/components/date-range-picker";
 import { AppSidebar } from "@/components/app-sidebar";
 import { useAuth } from "@/hooks/use-auth";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -69,6 +71,17 @@ function AppRoutes() {
   );
 }
 
+function HeaderDateRangePicker() {
+  const { dateRange, setDateRange } = useDateRange();
+  return (
+    <DateRangePicker
+      dateRange={dateRange}
+      onDateRangeChange={setDateRange}
+      data-testid="button-global-date-range"
+    />
+  );
+}
+
 function AuthenticatedLayout() {
   const { user } = useAuth();
   const onboardingIncomplete = user?.merchant?.onboardingStep !== "COMPLETED";
@@ -79,21 +92,26 @@ function AuthenticatedLayout() {
   };
 
   return (
-    <SidebarProvider style={style as React.CSSProperties}>
-      <div className="flex h-screen w-full">
-        <AppSidebar />
-        <div className="flex flex-col flex-1 overflow-hidden">
-          <header className="flex items-center justify-between gap-4 p-3 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            <SidebarTrigger data-testid="button-sidebar-toggle" />
-            <ThemeToggle />
-          </header>
-          {onboardingIncomplete && <OnboardingBanner />}
-          <main className="flex-1 overflow-auto p-4 md:p-6">
-            <AppRoutes />
-          </main>
+    <DateRangeProvider>
+      <SidebarProvider style={style as React.CSSProperties}>
+        <div className="flex h-screen w-full">
+          <AppSidebar />
+          <div className="flex flex-col flex-1 overflow-hidden">
+            <header className="flex items-center justify-between gap-4 p-3 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+              <SidebarTrigger data-testid="button-sidebar-toggle" />
+              <div className="flex items-center gap-2">
+                <HeaderDateRangePicker />
+                <ThemeToggle />
+              </div>
+            </header>
+            {onboardingIncomplete && <OnboardingBanner />}
+            <main className="flex-1 overflow-auto p-4 md:p-6">
+              <AppRoutes />
+            </main>
+          </div>
         </div>
-      </div>
-    </SidebarProvider>
+      </SidebarProvider>
+    </DateRangeProvider>
   );
 }
 

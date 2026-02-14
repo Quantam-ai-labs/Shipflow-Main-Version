@@ -62,8 +62,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { Order } from "@shared/schema";
 import { Link, useParams } from "wouter";
 import { format, formatDistanceToNow, isPast } from "date-fns";
-import { DateRange } from "react-day-picker";
-import { DateRangePicker, dateRangeToParams } from "@/components/date-range-picker";
+import { useDateRange } from "@/contexts/date-range-context";
 import { useRef } from "react";
 
 function CityAutocomplete({ value, onChange, cities, hasWarning, testId }: {
@@ -238,9 +237,7 @@ export default function Pipeline() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [pendingReasonFilter, setPendingReasonFilter] = useState("all");
   const [shipmentSubFilter, setShipmentSubFilter] = useState("all");
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
-
-  const dateParams = dateRangeToParams(dateRange);
+  const { dateRange, dateParams } = useDateRange();
 
   const [cancelModal, setCancelModal] = useState<{ open: boolean; orderIds: string[]; fromTab?: string }>({ open: false, orderIds: [] });
   const [cancelReason, setCancelReason] = useState("");
@@ -283,7 +280,6 @@ export default function Pipeline() {
     setSearch("");
     setPendingReasonFilter("all");
     setShipmentSubFilter("all");
-    setDateRange(undefined);
   }, [activeTab]);
 
   const { data, isLoading, isFetching } = useQuery<{ orders: Order[]; total: number }>({
@@ -762,16 +758,6 @@ export default function Pipeline() {
               </SelectContent>
             </Select>
           )}
-
-          <DateRangePicker
-            dateRange={dateRange}
-            onDateRangeChange={(range) => {
-              setDateRange(range);
-              setPage(1);
-            }}
-            className="w-[250px]"
-            data-testid="date-range-picker-pipeline"
-          />
 
           {isFetching && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
         </div>
