@@ -50,6 +50,7 @@ import {
   RotateCcw,
   Receipt,
   FileCheck,
+  PhoneCall,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery } from "@tanstack/react-query";
@@ -102,6 +103,14 @@ const codSubItems = [
     title: "Manage Cheques",
     url: "/manage-cheques",
     icon: FileCheck,
+  },
+];
+
+const testingNavItems = [
+  {
+    title: "Voice Call Test",
+    url: "/voice-call-test",
+    icon: PhoneCall,
   },
 ];
 
@@ -291,6 +300,26 @@ export function AppSidebar() {
                   </CollapsibleContent>
                 </SidebarMenuItem>
               </Collapsible>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel>Feature Testing</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {testingNavItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={location === item.url}
+                  >
+                    <Link href={item.url} data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                      <item.icon className="w-4 h-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

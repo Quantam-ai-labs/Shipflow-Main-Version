@@ -24,6 +24,7 @@ import Analytics from "@/pages/analytics";
 import CodReconciliation from "@/pages/cod-reconciliation";
 import PaymentLedger from "@/pages/payment-ledger";
 import ManageCheques from "@/pages/manage-cheques";
+import VoiceCallTest from "@/pages/voice-call-test";
 import Team from "@/pages/team";
 import Integrations from "@/pages/integrations";
 import Settings from "@/pages/settings";
@@ -65,6 +66,7 @@ function AppRoutes() {
       <Route path="/cod-reconciliation" component={CodReconciliation} />
       <Route path="/payment-ledger" component={PaymentLedger} />
       <Route path="/manage-cheques" component={ManageCheques} />
+      <Route path="/voice-call-test" component={VoiceCallTest} />
       <Route path="/team" component={Team} />
       <Route path="/integrations" component={Integrations} />
       <Route path="/settings" component={Settings} />
