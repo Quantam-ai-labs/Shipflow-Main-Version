@@ -1,5 +1,43 @@
 import type { Order } from "@shared/schema";
 
+async function retryableFetch(
+  url: string,
+  options: RequestInit,
+  maxRetries = 2,
+  baseDelay = 1000
+): Promise<Response> {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000);
+      const resp = await fetch(url, { ...options, signal: controller.signal });
+      clearTimeout(timeout);
+      if ((resp.status >= 500 || resp.status === 429) && attempt < maxRetries) {
+        console.warn(`[Booking] Server error ${resp.status} on attempt ${attempt + 1}, retrying...`);
+        await new Promise((r) => setTimeout(r, baseDelay * Math.pow(2, attempt)));
+        continue;
+      }
+      return resp;
+    } catch (err: any) {
+      lastError = err;
+      const isRetryable = err.name === "AbortError" ||
+        err.code === "ECONNRESET" ||
+        err.code === "ETIMEDOUT" ||
+        err.code === "ENOTFOUND" ||
+        err.message?.includes("fetch failed") ||
+        err.message?.includes("network");
+      if (isRetryable && attempt < maxRetries) {
+        console.warn(`[Booking] Network error on attempt ${attempt + 1}: ${err.message}, retrying...`);
+        await new Promise((r) => setTimeout(r, baseDelay * Math.pow(2, attempt)));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError || new Error("All retry attempts failed");
+}
+
 export interface BookingPacket {
   orderId: string;
   orderNumber: string;
@@ -268,7 +306,7 @@ export async function bookLeopardsPacket(
     console.log(`[Leopards] Booking order ${packet.orderNumber}...`);
     console.log(`[Leopards] Request body:`, JSON.stringify(requestBody, null, 2));
 
-    const resp = await fetch("https://merchantapi.leopardscourier.com/api/bookPacket/format/json/", {
+    const resp = await retryableFetch("https://merchantapi.leopardscourier.com/api/bookPacket/format/json/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(requestBody),
@@ -317,13 +355,29 @@ export async function bookLeopardsBatch(
   shipperInfo: { name: string; phone: string; address: string; city: string; shipperId?: string }
 ): Promise<BookingResult[]> {
   const results: BookingResult[] = [];
-  const cities = await loadLeopardsCities(credentials.apiKey, credentials.apiPassword);
+
+  let cities: LeopardsCityEntry[] = [];
+  try {
+    cities = await loadLeopardsCities(credentials.apiKey, credentials.apiPassword);
+  } catch (err: any) {
+    console.error("[Leopards] Failed to load cities for batch, continuing without city validation:", err.message);
+  }
 
   console.log(`[Leopards] Booking ${packets.length} packets sequentially...`);
 
   for (let i = 0; i < packets.length; i++) {
-    const result = await bookLeopardsPacket(packets[i], credentials, shipperInfo, cities);
-    results.push(result);
+    try {
+      const result = await bookLeopardsPacket(packets[i], credentials, shipperInfo, cities);
+      results.push(result);
+    } catch (err: any) {
+      console.error(`[Leopards] Unexpected error booking ${packets[i].orderNumber}:`, err.message);
+      results.push({
+        orderId: packets[i].orderId,
+        orderNumber: packets[i].orderNumber,
+        success: false,
+        error: `Unexpected error: ${err.message}`,
+      });
+    }
     if (i < packets.length - 1) {
       await new Promise((r) => setTimeout(r, 300));
     }
@@ -378,7 +432,7 @@ export async function bookPostExOrder(
     console.log(`[PostEx] Full request payload keys: ${Object.keys(requestBody).join(', ')}`);
     console.log(`[PostEx] Full request:`, JSON.stringify(requestBody, null, 2));
 
-    const resp = await fetch("https://api.postex.pk/services/integration/api/order/v3/create-order", {
+    const resp = await retryableFetch("https://api.postex.pk/services/integration/api/order/v3/create-order", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -427,9 +481,21 @@ export async function bookPostExBulk(
 ): Promise<BookingResult[]> {
   const results: BookingResult[] = [];
 
+  console.log(`[PostEx] Booking ${packets.length} packets sequentially...`);
+
   for (let i = 0; i < packets.length; i++) {
-    const result = await bookPostExOrder(packets[i], token, shipperInfo);
-    results.push(result);
+    try {
+      const result = await bookPostExOrder(packets[i], token, shipperInfo);
+      results.push(result);
+    } catch (err: any) {
+      console.error(`[PostEx] Unexpected error booking ${packets[i].orderNumber}:`, err.message);
+      results.push({
+        orderId: packets[i].orderId,
+        orderNumber: packets[i].orderNumber,
+        success: false,
+        error: `Unexpected error: ${err.message}`,
+      });
+    }
     if (i < packets.length - 1) {
       await new Promise((r) => setTimeout(r, 300));
     }

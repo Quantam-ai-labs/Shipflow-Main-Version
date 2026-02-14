@@ -724,6 +724,143 @@ export default function Pipeline() {
     toast({ title: "Tracking numbers copied" });
   }, [bookingResultsModal, toast]);
 
+  const openPrintLabels = useCallback(async (batchId?: string, orderIds?: string[], perPage: number = 2) => {
+    let url: string;
+    if (batchId) {
+      url = `/api/print/label-data/batch/${batchId}`;
+    } else if (orderIds && orderIds.length > 0) {
+      url = `/api/print/label-data/orders?ids=${orderIds.join(",")}`;
+    } else {
+      return;
+    }
+    try {
+      const resp = await fetch(url, { credentials: "include" });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ message: "Failed" }));
+        toast({ title: "Label Error", description: err.message, variant: "destructive" });
+        return;
+      }
+      const data = await resp.json();
+      if (!data.labels || data.labels.length === 0) {
+        toast({ title: "No Labels", description: "No booked orders with tracking numbers found", variant: "destructive" });
+        return;
+      }
+      const pw = window.open("", "_blank", "width=800,height=600");
+      if (!pw) {
+        toast({ title: "Popup Blocked", description: "Please allow popups for this site", variant: "destructive" });
+        return;
+      }
+
+      const safeJsonB64 = btoa(unescape(encodeURIComponent(JSON.stringify(data.labels))));
+
+      pw.document.write(`<!DOCTYPE html><html><head><title>AWB Labels</title><style>
+@page{size:A4;margin:8mm}*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,Helvetica,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.label-page{page-break-after:always;display:flex;flex-direction:column;gap:4px;height:277mm}
+.label-page:last-child{page-break-after:auto}.label-slot{flex:1;overflow:hidden}
+@media print{.no-print{display:none!important}}
+</style></head><body>
+<div class="no-print" style="padding:12px;background:#f5f5f5;border-bottom:1px solid #ddd;display:flex;align-items:center;gap:12px;">
+<button onclick="window.print()" style="padding:8px 20px;background:#000;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:14px;">Print Labels</button>
+<span id="label-info" style="color:#666;font-size:13px;">${data.labels.length} label(s) | ${perPage} per page</span>
+<select id="perPageSelect" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;">
+<option value="1"${perPage===1?' selected':''}>1 per page</option>
+<option value="2"${perPage===2?' selected':''}>2 per page</option>
+<option value="3"${perPage===3?' selected':''}>3 per page</option>
+<option value="4"${perPage===4?' selected':''}>4 per page</option>
+</select>
+<button onclick="window.close()" style="margin-left:auto;padding:6px 14px;background:#fff;border:1px solid #ccc;border-radius:4px;cursor:pointer;font-size:13px;">Close</button>
+</div>
+<div id="label-root"><div style="text-align:center;padding:40px;color:#666">Generating labels...</div></div>
+<script id="label-data" type="application/json">${safeJsonB64}</script>
+</body></html>`);
+      pw.document.close();
+
+      const s = pw.document.createElement("script");
+      s.type = "module";
+      s.textContent = `
+const labels=JSON.parse(decodeURIComponent(escape(atob(document.getElementById("label-data").textContent))));
+let perPage=${perPage};
+const compact=()=>perPage>=3;
+function esc(s){if(!s)return"";const d=document.createElement("div");d.textContent=String(s);return d.innerHTML}
+function fmtCOD(a){const n=typeof a==="string"?parseFloat(a):a;return isNaN(n)?"0":n.toLocaleString("en-PK",{minimumFractionDigits:0,maximumFractionDigits:0})}
+function rl(l){
+  const c=compact(),fs=c?"6.5px":"8px",hs=c?"7.5px":"9px",cs=c?"12px":"16px",sp=c?"2px 3px":"3px 5px";
+  const isCOD=!l.paymentMethod||l.paymentMethod.toUpperCase()==="COD"||l.paymentMethod.toUpperCase()==="CASH ON DELIVERY";
+  const ph=l.products&&l.products.length>0?l.products.map(p=>'<div style="font-size:'+(c?"5.5px":"6.5px")+';line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(p.qty)+'x '+esc(p.name)+(p.sku?' ('+esc(p.sku)+')':'')+'</div>').join(''):'<div style="font-size:'+(c?"5.5px":"6.5px")+';color:#666">'+esc(l.itemSummary||'\\u2014')+'</div>';
+  return '<div style="border:2px solid #000;font-family:Arial,Helvetica,sans-serif;color:#000;background:#fff;width:100%;box-sizing:border-box;height:100%;">'
+  +'<table style="width:100%;border-collapse:collapse;table-layout:fixed;"><colgroup><col style="width:40%"><col style="width:30%"><col style="width:30%"></colgroup><tbody><tr>'
+  +'<td style="border-right:1px solid #000;border-bottom:1px solid #000;padding:'+sp+';vertical-align:top;font-size:'+fs+';line-height:1.3;">'
+  +'<div style="font-size:'+hs+';font-weight:700;margin-bottom:'+(c?"1px":"2px")+';text-transform:uppercase;letter-spacing:0.3px;">Ship To</div>'
+  +'<div style="font-weight:700;font-size:'+(c?"8px":"10px")+';margin-bottom:2px;">'+esc(l.customerName)+'</div>'
+  +'<div style="margin-bottom:1px;">'+esc(l.customerPhone)+'</div>'
+  +'<div style="font-size:'+(c?"6px":"7px")+';line-height:1.25;max-height:'+(c?"28px":"36px")+';overflow:hidden;margin-bottom:2px;">'+esc(l.customerAddress)+'</div>'
+  +'<div style="font-weight:700;font-size:'+(c?"8px":"10px")+';">'+esc(l.customerCity)+(l.customerProvince?', '+esc(l.customerProvince):'')+(l.postalCode?' '+esc(l.postalCode):'')+'</div></td>'
+  +'<td style="border-right:1px solid #000;border-bottom:1px solid #000;padding:'+sp+';vertical-align:top;font-size:'+fs+';line-height:1.3;">'
+  +'<div style="font-size:'+hs+';font-weight:700;margin-bottom:'+(c?"1px":"2px")+';text-transform:uppercase;letter-spacing:0.3px;">Ship From</div>'
+  +'<div style="font-weight:600;font-size:'+(c?"7px":"9px")+';margin-bottom:1px;">'+esc(l.brandName)+'</div>'
+  +(l.brandPhone?'<div style="margin-bottom:1px;">'+esc(l.brandPhone)+'</div>':'')
+  +(l.brandAddress?'<div style="font-size:'+(c?"5.5px":"6.5px")+';line-height:1.2;max-height:'+(c?"20px":"24px")+';overflow:hidden;">'+esc(l.brandAddress)+'</div>':'')
+  +(l.brandCity?'<div style="font-weight:600;margin-top:1px;">'+esc(l.brandCity)+'</div>':'')+'</td>'
+  +'<td style="border-bottom:1px solid #000;padding:'+sp+';vertical-align:top;font-size:'+fs+';line-height:1.3;">'
+  +'<div style="font-size:'+hs+';font-weight:700;margin-bottom:'+(c?"1px":"2px")+';text-transform:uppercase;letter-spacing:0.3px;">Parcel Info</div>'
+  +'<div style="display:flex;justify-content:space-between;gap:4px;margin-bottom:2px;">'
+  +'<div><span style="font-size:'+(c?"5.5px":"6.5px")+';color:#666;">Pcs</span><div style="font-weight:700;">'+(l.pieces||1)+'</div></div>'
+  +'<div><span style="font-size:'+(c?"5.5px":"6.5px")+';color:#666;">Wt</span><div style="font-weight:700;">'+esc(l.weight||"0.5")+' kg</div></div>'
+  +'<div><span style="font-size:'+(c?"5.5px":"6.5px")+';color:#666;">Qty</span><div style="font-weight:700;">'+(l.totalQuantity||1)+'</div></div></div>'
+  +'<div style="background:'+(isCOD?"#000":"#16a34a")+';color:#fff;text-align:center;padding:'+(c?"2px":"3px")+';font-weight:700;font-size:'+cs+';letter-spacing:0.5px;">'
+  +(isCOD?'COD: Rs '+fmtCOD(l.codAmount):'PREPAID')+'</div></td></tr></tbody></table>'
+  +'<div style="border-bottom:1px solid #000;padding:'+(c?"3px 5px":"4px 8px")+';display:flex;align-items:center;justify-content:space-between;gap:8px;">'
+  +'<div style="flex:1;text-align:center;"><canvas class="bc" data-v="'+esc(l.trackingNumber)+'" data-h="'+(c?28:40)+'"></canvas>'
+  +'<div style="font-size:'+(c?"7px":"9px")+';font-weight:700;letter-spacing:1px;margin-top:1px;">'+esc(l.trackingNumber)+'</div></div>'
+  +'<canvas class="qr" data-v="'+esc(l.trackingNumber)+'" data-s="'+(c?45:60)+'"></canvas></div>'
+  +'<div style="border-bottom:1px solid #000;padding:'+(c?"2px 5px":"3px 8px")+';"><div style="display:flex;justify-content:space-between;align-items:center;">'
+  +'<div><span style="font-size:'+(c?"5.5px":"6.5px")+';color:#666;">ORDER </span><span style="font-weight:700;font-size:'+(c?"8px":"10px")+';">#'+esc(l.orderNumber)+'</span></div>'
+  +'<div><span style="font-size:'+(c?"5.5px":"6.5px")+';color:#666;">DATE </span><span style="font-weight:600;font-size:'+(c?"7px":"8px")+';">'+esc(l.orderDate||l.bookedAt)+'</span></div>'
+  +'<div><span style="font-size:'+(c?"5.5px":"6.5px")+';color:#666;">COURIER </span><span style="font-weight:600;font-size:'+(c?"7px":"8px")+';">'+esc(l.courierName)+'</span></div></div></div>'
+  +'<table style="width:100%;border-collapse:collapse;table-layout:fixed;"><colgroup><col style="width:35%"><col style="width:65%"></colgroup><tbody><tr>'
+  +'<td style="border-right:1px solid #000;padding:'+sp+';vertical-align:top;font-size:'+fs+';line-height:1.3;">'
+  +'<div style="font-size:'+hs+';font-weight:700;margin-bottom:'+(c?"1px":"2px")+';text-transform:uppercase;letter-spacing:0.3px;">Remarks</div>'
+  +'<div style="max-height:'+(c?"22px":"30px")+';overflow:hidden;font-size:'+(c?"6px":"7px")+';line-height:1.25;">'+esc(l.remark||'\\u2014')+'</div></td>'
+  +'<td style="padding:'+sp+';vertical-align:top;font-size:'+fs+';line-height:1.3;">'
+  +'<div style="font-size:'+hs+';font-weight:700;margin-bottom:'+(c?"1px":"2px")+';text-transform:uppercase;letter-spacing:0.3px;">Products</div>'
+  +'<div style="max-height:'+(c?"22px":"30px")+';overflow:hidden;">'+ph+'</div></td></tr></tbody></table></div>';
+}
+async function render(){
+  const root=document.getElementById("label-root");
+  const pages=[];
+  for(let i=0;i<labels.length;i+=perPage){
+    const pl=labels.slice(i,i+perPage);
+    let h='<div class="label-page">';
+    for(const l of pl)h+='<div class="label-slot">'+rl(l)+'</div>';
+    h+='</div>';pages.push(h);
+  }
+  root.innerHTML=pages.join('');
+  try{
+    const JsBarcode=(await import("https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/+esm")).default;
+    document.querySelectorAll("canvas.bc").forEach(el=>{
+      const v=el.getAttribute("data-v"),h=parseInt(el.getAttribute("data-h")||"40");
+      if(v)try{JsBarcode(el,v,{format:"CODE128",width:1.5,height:h,displayValue:false,margin:0})}catch(e){console.warn("Barcode failed for:",v,e)}
+    });
+  }catch(e){console.error("Barcode load error:",e)}
+  try{
+    const QRCode=(await import("https://cdn.jsdelivr.net/npm/qrcode@1.5.4/+esm")).default;
+    for(const el of document.querySelectorAll("canvas.qr")){
+      const v=el.getAttribute("data-v"),sz=parseInt(el.getAttribute("data-s")||"60");
+      if(v){try{await QRCode.toCanvas(el,v,{width:sz,margin:0,errorCorrectionLevel:"M"});el.style.width=sz+"px";el.style.height=sz+"px"}catch(e){console.warn("QR failed for:",v,e)}}
+    }
+  }catch(e){console.error("QR load error:",e)}
+}
+render();
+document.getElementById("perPageSelect").addEventListener("change",e=>{perPage=parseInt(e.target.value);document.getElementById("label-info").textContent=labels.length+" label(s) | "+perPage+" per page";render()});
+`;
+      pw.document.body.appendChild(s);
+    } catch (err: any) {
+      console.error("Print labels error:", err);
+      toast({ title: "Error", description: "Failed to generate labels", variant: "destructive" });
+    }
+  }, [toast]);
+
   const expiredHolds = useMemo(() => {
     if (activeTab !== "HOLD") return 0;
     return orders.filter(o => o.holdUntil && isPast(new Date(o.holdUntil))).length;
@@ -836,6 +973,14 @@ export default function Pipeline() {
             <>
               <Button
                 size="sm"
+                onClick={() => openPrintLabels(undefined, Array.from(selectedIds))}
+                data-testid="bulk-print-labels"
+              >
+                <Printer className="w-3.5 h-3.5 mr-1.5" />Print Labels
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
                 onClick={() => loadsheetMutation.mutate(Array.from(selectedIds))}
                 disabled={loadsheetMutation.isPending}
                 data-testid="bulk-generate-loadsheet"
@@ -865,6 +1010,16 @@ export default function Pipeline() {
                 Cleanup Cancelled
               </Button>
             </>
+          )}
+
+          {activeTab === "FULFILLED" && selectedIds.size > 0 && (
+            <Button
+              size="sm"
+              onClick={() => openPrintLabels(undefined, Array.from(selectedIds))}
+              data-testid="bulk-print-labels-fulfilled"
+            >
+              <Printer className="w-3.5 h-3.5 mr-1.5" />Print Labels
+            </Button>
           )}
 
           {activeTab === "READY_TO_SHIP" && (
@@ -1678,28 +1833,33 @@ export default function Pipeline() {
                     </div>
                     <div className="flex items-center gap-1 flex-wrap">
                       {bookingResultsModal.results.batchId && (
-                        <Button size="sm" variant="outline" onClick={async () => {
-                          try {
-                            const resp = await fetch(`/api/print/batch-awb/${bookingResultsModal.results.batchId}.pdf`);
-                            if (!resp.ok) {
-                              const err = await resp.json().catch(() => ({ message: "Failed to fetch airway bills" }));
-                              toast({ title: "Invoice Error", description: err.message, variant: "destructive" });
-                              return;
+                        <>
+                          <Button size="sm" variant="default" onClick={() => openPrintLabels(bookingResultsModal.results.batchId)} data-testid="button-print-labels">
+                            <Printer className="w-3.5 h-3.5 mr-1" />Print Labels
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={async () => {
+                            try {
+                              const resp = await fetch(`/api/print/batch-awb/${bookingResultsModal.results.batchId}.pdf`);
+                              if (!resp.ok) {
+                                const err = await resp.json().catch(() => ({ message: "Failed to fetch airway bills" }));
+                                toast({ title: "Invoice Error", description: err.message, variant: "destructive" });
+                                return;
+                              }
+                              const blob = await resp.blob();
+                              if (blob.size === 0 || blob.type.includes("json")) {
+                                toast({ title: "Invoice Error", description: "Invoices not available for this batch", variant: "destructive" });
+                                return;
+                              }
+                              const url = URL.createObjectURL(blob);
+                              window.open(url, "_blank");
+                              setTimeout(() => URL.revokeObjectURL(url), 60000);
+                            } catch {
+                              toast({ title: "Error", description: "Could not fetch airway bills", variant: "destructive" });
                             }
-                            const blob = await resp.blob();
-                            if (blob.size === 0 || blob.type.includes("json")) {
-                              toast({ title: "Invoice Error", description: "Invoices not available for this batch", variant: "destructive" });
-                              return;
-                            }
-                            const url = URL.createObjectURL(blob);
-                            window.open(url, "_blank");
-                            setTimeout(() => URL.revokeObjectURL(url), 60000);
-                          } catch {
-                            toast({ title: "Error", description: "Could not fetch airway bills", variant: "destructive" });
-                          }
-                        }} data-testid="button-download-awb">
-                          <Printer className="w-3.5 h-3.5 mr-1" />Download Courier AWBs
-                        </Button>
+                          }} data-testid="button-download-awb">
+                            <Download className="w-3.5 h-3.5 mr-1" />Courier AWBs
+                          </Button>
+                        </>
                       )}
                       <Button size="sm" variant="ghost" onClick={copyTrackingNumbers} data-testid="button-copy-tracking">
                         <Copy className="w-3.5 h-3.5 mr-1" />Copy Tracking

@@ -6164,6 +6164,152 @@ export async function registerRoutes(
     },
   );
 
+  app.get(
+    "/api/print/label-data/batch/:batchId",
+    isAuthenticated,
+    async (req, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+
+        const batch = await storage.getShipmentBatchById(
+          merchantId,
+          req.params.batchId,
+        );
+        if (!batch) {
+          return res.status(404).json({ message: "Batch not found" });
+        }
+
+        const items = await storage.getShipmentBatchItems(batch.id);
+        const bookedItems = items.filter(
+          (item) => item.bookingStatus === "BOOKED" && item.trackingNumber,
+        );
+
+        if (bookedItems.length === 0) {
+          return res.status(404).json({ message: "No booked items in this batch" });
+        }
+
+        const merchant = await storage.getMerchant(merchantId);
+
+        const labels = await Promise.all(
+          bookedItems.map(async (item) => {
+            const order = await storage.getOrderById(merchantId, item.orderId);
+            if (!order) return null;
+
+            const lineItems = (order.lineItems as any[]) || [];
+            const products = lineItems.map((li: any) => ({
+              name: li.title || li.name || "Item",
+              qty: li.quantity || 1,
+              price: li.price || "0",
+              sku: li.sku || "",
+            }));
+
+            return {
+              trackingNumber: item.trackingNumber || "",
+              orderNumber: order.orderNumber || "",
+              customerName: order.customerName || item.consigneeName || "",
+              customerPhone: order.customerPhone || item.consigneePhone || "",
+              customerAddress: order.shippingAddress || "",
+              customerCity: order.city || item.consigneeCity || "",
+              customerProvince: order.province || "",
+              postalCode: order.postalCode || "",
+              codAmount: item.codAmount || order.totalAmount || "0",
+              totalQuantity: order.totalQuantity || 1,
+              weight: "0.5",
+              pieces: 1,
+              paymentMethod: order.paymentMethod || "COD",
+              courierName: batch.courierName || order.courierName || "",
+              remark: order.remark || order.notes || "",
+              products,
+              brandName: merchant?.name || "",
+              brandPhone: merchant?.phone || "",
+              brandAddress: merchant?.address || "",
+              brandCity: merchant?.city || "",
+              orderDate: order.orderDate ? new Date(order.orderDate).toLocaleDateString("en-PK") : "",
+              bookedAt: order.bookedAt ? new Date(order.bookedAt).toLocaleDateString("en-PK") : "",
+              itemSummary: order.itemSummary || "",
+            };
+          }),
+        );
+
+        res.json({
+          labels: labels.filter(Boolean),
+          batchId: batch.id,
+          courierName: batch.courierName,
+        });
+      } catch (error) {
+        console.error("Error fetching label data:", error);
+        res.status(500).json({ message: "Failed to fetch label data" });
+      }
+    },
+  );
+
+  app.get(
+    "/api/print/label-data/orders",
+    isAuthenticated,
+    async (req, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+
+        const orderIds = (req.query.ids as string || "").split(",").filter(Boolean);
+        if (orderIds.length === 0) {
+          return res.status(400).json({ message: "No order IDs provided" });
+        }
+
+        const merchant = await storage.getMerchant(merchantId);
+
+        const labels = await Promise.all(
+          orderIds.map(async (orderId) => {
+            const order = await storage.getOrderById(merchantId, orderId);
+            if (!order || !order.courierTracking) return null;
+
+            const lineItems = (order.lineItems as any[]) || [];
+            const products = lineItems.map((li: any) => ({
+              name: li.title || li.name || "Item",
+              qty: li.quantity || 1,
+              price: li.price || "0",
+              sku: li.sku || "",
+            }));
+
+            return {
+              trackingNumber: order.courierTracking || "",
+              orderNumber: order.orderNumber || "",
+              customerName: order.customerName || "",
+              customerPhone: order.customerPhone || "",
+              customerAddress: order.shippingAddress || "",
+              customerCity: order.city || "",
+              customerProvince: order.province || "",
+              postalCode: order.postalCode || "",
+              codAmount: order.totalAmount || "0",
+              totalQuantity: order.totalQuantity || 1,
+              weight: "0.5",
+              pieces: 1,
+              paymentMethod: order.paymentMethod || "COD",
+              courierName: order.courierName || "",
+              remark: order.remark || order.notes || "",
+              products,
+              brandName: merchant?.name || "",
+              brandPhone: merchant?.phone || "",
+              brandAddress: merchant?.address || "",
+              brandCity: merchant?.city || "",
+              orderDate: order.orderDate ? new Date(order.orderDate).toLocaleDateString("en-PK") : "",
+              bookedAt: order.bookedAt ? new Date(order.bookedAt).toLocaleDateString("en-PK") : "",
+              itemSummary: order.itemSummary || "",
+            };
+          }),
+        );
+
+        res.json({
+          labels: labels.filter(Boolean),
+        });
+      } catch (error) {
+        console.error("Error fetching label data:", error);
+        res.status(500).json({ message: "Failed to fetch label data" });
+      }
+    },
+  );
+
   app.post(
     "/api/print/regenerate/:orderId",
     isAuthenticated,
