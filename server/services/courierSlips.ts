@@ -10,19 +10,79 @@ export interface CourierSlipResult {
   failedTrackingNumbers?: string[];
 }
 
-export async function fetchLeopardsSlip(slipUrl: string): Promise<CourierSlipResult> {
+const LEOPARDS_SLIP_URL = "https://merchantapi.leopardscourier.com/api/getSlipDataPDF/format/json/";
+
+export async function fetchLeopardsSlip(
+  slipUrl: string,
+  credentials?: { apiKey: string; apiPassword: string; trackingNumber: string }
+): Promise<CourierSlipResult> {
   try {
-    if (!slipUrl) {
-      return { success: false, error: "No slip URL available" };
-    }
-    const resp = await fetch(slipUrl, { signal: AbortSignal.timeout(15000) });
-    if (!resp.ok) {
-      return { success: false, error: `Leopards slip fetch failed: HTTP ${resp.status}` };
+    let resp: Response;
+
+    if (credentials?.apiKey && credentials?.apiPassword && credentials?.trackingNumber) {
+      console.log(`[Leopards Slip] Fetching slip via API for tracking: ${credentials.trackingNumber}`);
+      resp = await fetch(LEOPARDS_SLIP_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          api_key: credentials.apiKey,
+          api_password: credentials.apiPassword,
+          track_numbers: credentials.trackingNumber,
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
+
+      if (!resp.ok) {
+        console.log(`[Leopards Slip] API returned ${resp.status}, trying stored URL fallback`);
+        if (slipUrl) {
+          resp = await fetch(slipUrl, { signal: AbortSignal.timeout(15000) });
+          if (!resp.ok) {
+            return { success: false, error: `Leopards slip fetch failed: HTTP ${resp.status}` };
+          }
+        } else {
+          return { success: false, error: `Leopards slip API returned HTTP ${resp.status}` };
+        }
+      }
+    } else if (slipUrl) {
+      resp = await fetch(slipUrl, { signal: AbortSignal.timeout(15000) });
+      if (!resp.ok) {
+        return { success: false, error: `Leopards slip fetch failed: HTTP ${resp.status}` };
+      }
+    } else {
+      return { success: false, error: "No slip URL or credentials available" };
     }
     const contentType = resp.headers.get("content-type") || "";
     const buffer = Buffer.from(await resp.arrayBuffer());
 
-    if (contentType.includes("pdf") || buffer.slice(0, 5).toString() === "%PDF-") {
+    if (contentType.includes("json")) {
+      try {
+        const jsonData = JSON.parse(buffer.toString("utf-8"));
+        console.log(`[Leopards Slip] JSON response status: ${jsonData.status}, keys: ${Object.keys(jsonData).join(",")}`);
+        if (jsonData.status === 1 && jsonData.slip_data) {
+          const pdfBuf = Buffer.from(jsonData.slip_data, "base64");
+          if (pdfBuf.length > 0) {
+            return { success: true, pdfBuffer: pdfBuf };
+          }
+        }
+        if (jsonData.status === 1 && jsonData.slipUrl) {
+          const slipResp = await fetch(jsonData.slipUrl, { signal: AbortSignal.timeout(15000) });
+          if (slipResp.ok) {
+            const slipBuf = Buffer.from(await slipResp.arrayBuffer());
+            if (slipBuf.length > 0) {
+              return { success: true, pdfBuffer: slipBuf };
+            }
+          }
+        }
+        if (jsonData.status === 0 || jsonData.error) {
+          const errMsg = typeof jsonData.error === "string" ? jsonData.error : (jsonData.message || "Leopards slip unavailable");
+          return { success: false, error: `Leopards: ${errMsg}` };
+        }
+      } catch (parseErr) {
+        console.log(`[Leopards Slip] JSON parse failed, treating as raw data`);
+      }
+    }
+
+    if (contentType.includes("pdf") || (buffer.length >= 5 && buffer.slice(0, 5).toString() === "%PDF-")) {
       return { success: true, pdfBuffer: buffer };
     }
 

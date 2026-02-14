@@ -4280,10 +4280,18 @@ export async function registerRoutes(
 
       let result;
       if (courierNorm === "leopards") {
-        if (!order.courierSlipUrl) {
-          return res.status(404).json({ message: "No Leopards slip URL available for this order" });
+        const creds = await getCourierCredentials(merchantId, "leopards");
+        if (creds?.apiKey && creds?.apiSecret && order.courierTracking) {
+          result = await fetchLeopardsSlip(order.courierSlipUrl || "", {
+            apiKey: creds.apiKey,
+            apiPassword: creds.apiSecret,
+            trackingNumber: order.courierTracking,
+          });
+        } else if (order.courierSlipUrl) {
+          result = await fetchLeopardsSlip(order.courierSlipUrl);
+        } else {
+          return res.status(404).json({ message: "No Leopards slip URL or credentials available for this order" });
         }
-        result = await fetchLeopardsSlip(order.courierSlipUrl);
       } else if (courierNorm === "postex") {
         const creds = await getCourierCredentials(merchantId, "postex");
         if (!creds?.apiKey) {
@@ -4346,20 +4354,29 @@ export async function registerRoutes(
       const pdfBuffers: Buffer[] = [];
       const errors: string[] = [];
 
+      const leopardsCreds = courierNorm === "leopards" ? await getCourierCredentials(merchantId, "leopards") : null;
+
       for (const item of bookedItems) {
         let result;
         if (courierNorm === "leopards") {
+          const trackingNum = item.trackingNumber;
           const slipUrl = item.slipUrl;
-          if (!slipUrl) {
+          if (leopardsCreds?.apiKey && leopardsCreds?.apiSecret && trackingNum) {
+            result = await fetchLeopardsSlip(slipUrl || "", {
+              apiKey: leopardsCreds.apiKey,
+              apiPassword: leopardsCreds.apiSecret,
+              trackingNumber: trackingNum,
+            });
+          } else if (slipUrl) {
+            result = await fetchLeopardsSlip(slipUrl);
+          } else {
             const order = await storage.getOrderById(merchantId, item.orderId);
             if (order?.courierSlipUrl) {
               result = await fetchLeopardsSlip(order.courierSlipUrl);
             } else {
-              errors.push(`${item.orderNumber}: No slip URL`);
+              errors.push(`${item.orderNumber}: No slip URL or credentials`);
               continue;
             }
-          } else {
-            result = await fetchLeopardsSlip(slipUrl);
           }
         } else {
           errors.push(`${item.orderNumber}: Unsupported courier`);
