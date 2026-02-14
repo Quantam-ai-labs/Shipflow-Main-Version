@@ -476,12 +476,27 @@ export class DatabaseStorage implements IStorage {
     return result.map(r => r.status).filter((s): s is string => s !== null);
   }
 
-  async getWorkflowCounts(merchantId: string): Promise<Record<string, number>> {
+  async getWorkflowCounts(merchantId: string, options?: { dateFrom?: string; dateTo?: string }): Promise<Record<string, number>> {
+    let conditions = [eq(orders.merchantId, merchantId)];
+    if (options?.dateFrom) {
+      const fromDate = new Date(options.dateFrom);
+      if (!isNaN(fromDate.getTime())) {
+        fromDate.setHours(0, 0, 0, 0);
+        conditions.push(sql`${orders.orderDate} >= ${fromDate.toISOString()}`);
+      }
+    }
+    if (options?.dateTo) {
+      const toDate = new Date(options.dateTo);
+      if (!isNaN(toDate.getTime())) {
+        toDate.setHours(23, 59, 59, 999);
+        conditions.push(sql`${orders.orderDate} <= ${toDate.toISOString()}`);
+      }
+    }
     const result = await db.select({
       status: orders.workflowStatus,
       count: count()
     }).from(orders)
-      .where(eq(orders.merchantId, merchantId))
+      .where(and(...conditions))
       .groupBy(orders.workflowStatus);
     
     const counts: Record<string, number> = { NEW: 0, PENDING: 0, HOLD: 0, READY_TO_SHIP: 0, BOOKED: 0, FULFILLED: 0, DELIVERED: 0, RETURN: 0, CANCELLED: 0 };
@@ -928,13 +943,17 @@ export class DatabaseStorage implements IStorage {
     let conditions = [eq(orders.merchantId, merchantId)];
     if (options?.dateFrom) {
       const fromDate = new Date(options.dateFrom);
-      fromDate.setHours(0, 0, 0, 0);
-      conditions.push(sql`${orders.orderDate} >= ${fromDate.toISOString()}`);
+      if (!isNaN(fromDate.getTime())) {
+        fromDate.setHours(0, 0, 0, 0);
+        conditions.push(sql`${orders.orderDate} >= ${fromDate.toISOString()}`);
+      }
     }
     if (options?.dateTo) {
       const toDate = new Date(options.dateTo);
-      toDate.setHours(23, 59, 59, 999);
-      conditions.push(sql`${orders.orderDate} <= ${toDate.toISOString()}`);
+      if (!isNaN(toDate.getTime())) {
+        toDate.setHours(23, 59, 59, 999);
+        conditions.push(sql`${orders.orderDate} <= ${toDate.toISOString()}`);
+      }
     }
     const allOrders = await db.select().from(orders).where(and(...conditions));
 

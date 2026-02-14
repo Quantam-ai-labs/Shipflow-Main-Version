@@ -1,4 +1,5 @@
 import { useLocation, Link } from "wouter";
+import { useDateRange } from "@/contexts/date-range-context";
 import {
   Sidebar,
   SidebarContent,
@@ -128,8 +129,15 @@ export function AppSidebar() {
     return user?.email || "User";
   };
 
+  const { dateParams } = useDateRange();
+  const countsUrl = `/api/orders/workflow-counts${dateParams.dateFrom || dateParams.dateTo ? `?${new URLSearchParams(Object.entries(dateParams).filter(([_, v]) => v)).toString()}` : ''}`;
   const { data: counts } = useQuery<Record<string, number>>({
-    queryKey: ["/api/orders/workflow-counts"],
+    queryKey: ["/api/orders/workflow-counts", dateParams],
+    queryFn: async () => {
+      const res = await fetch(countsUrl, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch counts");
+      return res.json();
+    },
     refetchInterval: 30000,
   });
 

@@ -428,7 +428,8 @@ export async function registerRoutes(
     try {
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
-      const counts = await storage.getWorkflowCounts(merchantId);
+      const { dateFrom, dateTo } = req.query as { dateFrom?: string; dateTo?: string };
+      const counts = await storage.getWorkflowCounts(merchantId, { dateFrom, dateTo });
       res.json(counts);
     } catch (error) {
       console.error("Error fetching workflow counts:", error);
