@@ -36,7 +36,7 @@ import {
   cancelShopifyOrder,
   cancelShopifyFulfillment,
 } from "./services/shopify";
-import { cancelCourierBooking } from "./services/couriers";
+import { cancelCourierBooking, trackShipment } from "./services/couriers";
 import {
   transitionOrder,
   bulkTransitionOrders,
@@ -1117,13 +1117,37 @@ export async function registerRoutes(
               courierCancelResult,
             );
             if (!courierCancelResult.success) {
-              const cleanMsg =
-                typeof courierCancelResult.message === "string"
-                  ? courierCancelResult.message
-                  : JSON.stringify(courierCancelResult.message);
-              return res.status(400).json({
-                message: `Courier cancellation failed: ${cleanMsg}`,
-              });
+              let alreadyCancelled = false;
+              try {
+                const liveTracking = await trackShipment(
+                  oldCourierName,
+                  oldCourierTracking,
+                  { apiKey: creds.apiKey || undefined, apiSecret: creds.apiSecret || undefined },
+                  order.shipmentStatus,
+                  order.workflowStatus,
+                  merchantId,
+                );
+                if (liveTracking) {
+                  const liveStatus = (liveTracking.normalizedStatus || '').toUpperCase();
+                  const liveRaw = (liveTracking.rawCourierStatus || '').toLowerCase();
+                  if (liveStatus === 'CANCELLED' || liveRaw.includes('cancel')) {
+                    alreadyCancelled = true;
+                    console.log(`[Cancel] Shipment ${oldCourierTracking} already cancelled on courier — proceeding with local cleanup`);
+                  }
+                }
+              } catch (trackErr: any) {
+                console.warn(`[Cancel] Live tracking check failed for ${oldCourierTracking}:`, trackErr?.message);
+              }
+
+              if (!alreadyCancelled) {
+                const cleanMsg =
+                  typeof courierCancelResult.message === "string"
+                    ? courierCancelResult.message
+                    : JSON.stringify(courierCancelResult.message);
+                return res.status(400).json({
+                  message: `Courier cancellation failed: ${cleanMsg}`,
+                });
+              }
             }
           }
         }
@@ -1229,6 +1253,7 @@ export async function registerRoutes(
         if (!merchantId) return;
 
         const cancelledOrders: any[] = [];
+        const allBookedOrders: any[] = [];
         let page = 1;
         const pageSize = 200;
         while (true) {
@@ -1238,6 +1263,7 @@ export async function registerRoutes(
             pageSize,
           });
           for (const o of batch) {
+            allBookedOrders.push(o);
             const raw = (o.courierRawStatus || "").toLowerCase();
             const ship = (o.shipmentStatus || "").toUpperCase();
             if (raw.includes("cancel") || ship === "CANCELLED") {
@@ -1246,6 +1272,38 @@ export async function registerRoutes(
           }
           if (batch.length < pageSize) break;
           page++;
+        }
+
+        const uncheckedOrders = allBookedOrders.filter(
+          (o) => !cancelledOrders.some((c) => c.id === o.id) && o.courierTracking && o.courierName
+        );
+
+        if (uncheckedOrders.length > 0) {
+          console.log(`[BulkCleanup] Checking ${uncheckedOrders.length} BOOKED orders with live courier tracking...`);
+          for (const o of uncheckedOrders) {
+            try {
+              const creds = await getCourierCredentials(merchantId, o.courierName);
+              if (!creds) continue;
+              const liveTracking = await trackShipment(
+                o.courierName,
+                o.courierTracking,
+                { apiKey: creds.apiKey || undefined, apiSecret: creds.apiSecret || undefined },
+                o.shipmentStatus,
+                o.workflowStatus,
+                merchantId,
+              );
+              if (liveTracking) {
+                const liveStatus = (liveTracking.normalizedStatus || '').toUpperCase();
+                const liveRaw = (liveTracking.rawCourierStatus || '').toLowerCase();
+                if (liveStatus === 'CANCELLED' || liveRaw.includes('cancel')) {
+                  console.log(`[BulkCleanup] Live check: ${o.orderNumber} (${o.courierTracking}) is cancelled on courier`);
+                  cancelledOrders.push(o);
+                }
+              }
+            } catch (err: any) {
+              console.warn(`[BulkCleanup] Live tracking check failed for ${o.orderNumber}: ${err?.message}`);
+            }
+          }
         }
 
         if (cancelledOrders.length === 0) {
