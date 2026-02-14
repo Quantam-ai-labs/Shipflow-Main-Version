@@ -5576,56 +5576,5 @@ export async function registerRoutes(
     console.log(`[CancelJob] Job ${jobId} finished: ${finalStatus} (success=${successCount}, failed=${failedCount}, skipped=${skippedCount})`);
   }
 
-  // Voice Call Test - Branded SMS Pakistan
-  app.post("/api/voice-call/test", isAuthenticated, async (req: any, res) => {
-    try {
-      const { phoneNumber, messageText } = req.body;
-      if (!phoneNumber || !messageText) {
-        return res.status(400).json({ error: "Phone number and message text are required" });
-      }
-
-      const apiKey = process.env.BRANDED_SMS_API_KEY;
-      if (!apiKey) {
-        return res.status(500).json({ error: "Branded SMS API key not configured" });
-      }
-
-      const params = new URLSearchParams({
-        email: "lalaimport.pk@gmail.com",
-        key: apiKey,
-        to: phoneNumber.replace(/[^0-9]/g, ""),
-        type: "tts",
-        text: messageText,
-        order_id: "test",
-        order_number: "test",
-        amount: "0",
-        voice_id: "735",
-      });
-
-      const apiUrl = `https://app.brandedsmspakistan.com/api/send-voice?${params.toString()}`;
-      console.log(`[VoiceCall] Sending call to ${phoneNumber}...`);
-
-      const response = await fetch(apiUrl);
-      const responseText = await response.text();
-
-      let responseData;
-      try {
-        responseData = JSON.parse(responseText);
-      } catch {
-        responseData = { raw: responseText };
-      }
-
-      console.log(`[VoiceCall] Response status=${response.status}:`, responseData);
-
-      res.json({
-        success: response.ok,
-        status: response.status,
-        data: responseData,
-      });
-    } catch (err: any) {
-      console.error("[VoiceCall] Error:", err);
-      res.status(500).json({ error: err.message || "Failed to make voice call" });
-    }
-  });
-
   return httpServer;
 }
