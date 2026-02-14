@@ -279,6 +279,99 @@ export class LeopardsService {
     
     return results;
   }
+
+  async getPaymentDetails(cnNumbers: string[], credentials?: { apiKey?: string; apiPassword?: string }): Promise<LeopardsPaymentResult[]> {
+    const creds = this.getCredentials(credentials);
+    const results: LeopardsPaymentResult[] = [];
+
+    if (!creds.apiKey || !creds.apiPassword) {
+      return cnNumbers.map(cn => ({
+        success: false,
+        trackingNumber: cn,
+        error: 'Leopards API credentials not configured',
+      }));
+    }
+
+    const batchSize = 50;
+    for (let i = 0; i < cnNumbers.length; i += batchSize) {
+      const batch = cnNumbers.slice(i, i + batchSize);
+
+      try {
+        const params = new URLSearchParams({
+          api_key: creds.apiKey,
+          api_password: creds.apiPassword,
+          cn_numbers: batch.join(','),
+        });
+
+        const response = await fetch(`${this.baseUrl}/getPaymentDetails/format/json/?${params.toString()}`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+        });
+
+        if (!response.ok) {
+          throw new Error(`Leopards Payment API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (data.status === 1 && data.payment_list) {
+          for (const payment of data.payment_list) {
+            results.push({
+              success: true,
+              trackingNumber: String(payment.booked_packet_cn),
+              billingMethod: payment.billing_method || null,
+              paymentStatus: payment.status || null,
+              invoiceChequeNo: payment.invoice_cheque_no || null,
+              invoiceChequeDate: payment.invoice_cheque_date || null,
+              paymentMethod: payment.payment_method || null,
+              message: payment.message || null,
+              slipLink: payment.slip_link || null,
+            });
+          }
+        } else {
+          for (const cn of batch) {
+            if (!results.find(r => r.trackingNumber === cn)) {
+              results.push({
+                success: false,
+                trackingNumber: cn,
+                error: data.error || 'No payment data found',
+              });
+            }
+          }
+        }
+      } catch (error) {
+        console.error('[Leopards] Payment details error:', error);
+        for (const cn of batch) {
+          if (!results.find(r => r.trackingNumber === cn)) {
+            results.push({
+              success: false,
+              trackingNumber: cn,
+              error: error instanceof Error ? error.message : 'Unknown error',
+            });
+          }
+        }
+      }
+
+      if (i + batchSize < cnNumbers.length) {
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+    }
+
+    return results;
+  }
+}
+
+export interface LeopardsPaymentResult {
+  success: boolean;
+  trackingNumber: string;
+  billingMethod?: string | null;
+  paymentStatus?: string | null;
+  invoiceChequeNo?: string | null;
+  invoiceChequeDate?: string | null;
+  paymentMethod?: string | null;
+  message?: string | null;
+  slipLink?: string | null;
+  error?: string;
 }
 
 export const leopardsService = new LeopardsService();

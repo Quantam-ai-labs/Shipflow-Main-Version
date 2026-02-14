@@ -29,6 +29,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   DollarSign,
   Search,
   Filter,
@@ -39,6 +44,9 @@ import {
   ChevronLeft,
   ChevronRight,
   RefreshCw,
+  CloudDownload,
+  ExternalLink,
+  Receipt,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -68,6 +76,19 @@ function getStatusBadge(status: string) {
   return <Badge className={config.color}>{displayStatus}</Badge>;
 }
 
+function getCourierPaymentBadge(courierPaymentStatus: string | null) {
+  if (!courierPaymentStatus) return <span className="text-muted-foreground text-xs">--</span>;
+
+  const lower = courierPaymentStatus.toLowerCase();
+  if (lower === "settled" || lower === "paid") {
+    return <Badge className="bg-green-500/10 text-green-600 border-green-500/20">{courierPaymentStatus}</Badge>;
+  }
+  if (lower === "pending" || lower === "unpaid") {
+    return <Badge className="bg-amber-500/10 text-amber-600 border-amber-500/20">{courierPaymentStatus}</Badge>;
+  }
+  return <Badge variant="secondary">{courierPaymentStatus}</Badge>;
+}
+
 interface CodReconciliationResponse {
   records: CodReconciliation[];
   total: number;
@@ -92,6 +113,7 @@ export default function CodReconciliationPage() {
   const [selectedRecords, setSelectedRecords] = useState<string[]>([]);
   const [isReconcileDialogOpen, setIsReconcileDialogOpen] = useState(false);
   const [settlementRef, setSettlementRef] = useState("");
+  const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
   const queryParams = new URLSearchParams({
     page: page.toString(),
@@ -104,7 +126,7 @@ export default function CodReconciliationPage() {
 
   const { data, isLoading } = useQuery<CodReconciliationResponse>({
     queryKey: ["/api/cod-reconciliation", queryParams.toString()],
-    refetchInterval: 30000, // Auto-refresh every 30 seconds
+    refetchInterval: 30000,
   });
 
   const records = data?.records ?? [];
@@ -155,6 +177,27 @@ export default function CodReconciliationPage() {
     },
   });
 
+  const syncPaymentsMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/cod-reconciliation/sync-payments", {});
+    },
+    onSuccess: async (response: any) => {
+      const data = await response.json();
+      queryClient.invalidateQueries({ queryKey: ["/api/cod-reconciliation"] });
+      toast({
+        title: "Payment sync complete",
+        description: data.message,
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to sync payment data from couriers.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
       setSelectedRecords(records.filter((r) => r.status === "pending").map((r) => r.id));
@@ -189,7 +232,11 @@ export default function CodReconciliationPage() {
       return;
     }
 
-    const headers = ["Tracking #", "Courier", "COD Amount", "Courier Fee", "Net Amount", "Status", "Settlement Ref", "Date"];
+    const headers = [
+      "Tracking #", "Courier", "COD Amount", "Courier Fee", "Net Amount",
+      "Status", "Courier Payment", "Payment Ref", "Settlement Date",
+      "Txn Fee", "Txn Tax", "Upfront", "Reserve", "Balance",
+    ];
     const csvContent = [
       headers.join(","),
       ...records.map((record) =>
@@ -200,8 +247,14 @@ export default function CodReconciliationPage() {
           record.courierFee || "",
           record.netAmount || "",
           record.status || "",
-          record.courierSettlementRef || "",
-          record.createdAt ? format(new Date(record.createdAt), "yyyy-MM-dd") : "",
+          record.courierPaymentStatus || "",
+          record.courierPaymentRef || "",
+          record.courierSettlementDate ? format(new Date(record.courierSettlementDate), "yyyy-MM-dd") : "",
+          record.transactionFee || "",
+          record.transactionTax || "",
+          record.upfrontPayment || "",
+          record.reservePayment || "",
+          record.balancePayment || "",
         ].join(",")
       ),
     ].join("\n");
@@ -222,13 +275,17 @@ export default function CodReconciliationPage() {
     });
   };
 
+  const formatPKR = (value: string | number | null | undefined) => {
+    if (!value || value === "0") return "--";
+    return `PKR ${Number(value).toLocaleString()}`;
+  };
+
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">COD Reconciliation</h1>
-          <p className="text-muted-foreground">Track and reconcile Cash on Delivery payments.</p>
+          <h1 className="text-2xl font-bold" data-testid="text-cod-title">COD Reconciliation</h1>
+          <p className="text-muted-foreground">Track and reconcile Cash on Delivery payments from couriers.</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {selectedRecords.length > 0 && (
@@ -237,10 +294,20 @@ export default function CodReconciliationPage() {
               Reconcile ({selectedRecords.length})
             </Button>
           )}
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={() => generateMutation.mutate()} 
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => syncPaymentsMutation.mutate()}
+            disabled={syncPaymentsMutation.isPending}
+            data-testid="button-sync-payments"
+          >
+            <CloudDownload className={`w-4 h-4 mr-2 ${syncPaymentsMutation.isPending ? 'animate-pulse' : ''}`} />
+            {syncPaymentsMutation.isPending ? 'Syncing...' : 'Sync Payments'}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => generateMutation.mutate()}
             disabled={generateMutation.isPending}
             data-testid="button-generate-cod"
           >
@@ -254,7 +321,6 @@ export default function CodReconciliationPage() {
         </div>
       </div>
 
-      {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="bg-gradient-to-br from-amber-500/5 to-amber-500/10 border-amber-500/20">
           <CardContent className="p-6">
@@ -265,7 +331,7 @@ export default function CodReconciliationPage() {
                   <Skeleton className="h-8 w-28 mt-1" />
                 ) : (
                   <>
-                    <p className="text-2xl font-bold">PKR {summary?.totalPending ?? "0"}</p>
+                    <p className="text-2xl font-bold" data-testid="text-pending-amount">PKR {summary?.totalPending ?? "0"}</p>
                     <p className="text-xs text-muted-foreground mt-1">{summary?.pendingCount ?? 0} orders</p>
                   </>
                 )}
@@ -285,7 +351,7 @@ export default function CodReconciliationPage() {
                   <Skeleton className="h-8 w-28 mt-1" />
                 ) : (
                   <>
-                    <p className="text-2xl font-bold">PKR {summary?.totalReceived ?? "0"}</p>
+                    <p className="text-2xl font-bold" data-testid="text-received-amount">PKR {summary?.totalReceived ?? "0"}</p>
                     <p className="text-xs text-muted-foreground mt-1">{summary?.receivedCount ?? 0} orders</p>
                   </>
                 )}
@@ -304,7 +370,7 @@ export default function CodReconciliationPage() {
                 {isLoading ? (
                   <Skeleton className="h-8 w-28 mt-1" />
                 ) : (
-                  <p className="text-2xl font-bold">PKR {summary?.totalDisputed ?? "0"}</p>
+                  <p className="text-2xl font-bold" data-testid="text-disputed-amount">PKR {summary?.totalDisputed ?? "0"}</p>
                 )}
               </div>
               <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
@@ -315,7 +381,6 @@ export default function CodReconciliationPage() {
         </Card>
       </div>
 
-      {/* Filters */}
       <Card>
         <CardContent className="p-4">
           <div className="flex flex-col lg:flex-row gap-4">
@@ -346,7 +411,6 @@ export default function CodReconciliationPage() {
         </CardContent>
       </Card>
 
-      {/* Records Table */}
       <Card>
         <CardHeader className="pb-4">
           <CardTitle className="text-lg font-semibold flex items-center gap-2">
@@ -392,45 +456,136 @@ export default function CodReconciliationPage() {
                       <TableHead className="text-right">Courier Fee</TableHead>
                       <TableHead className="text-right">Net Amount</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead>Settlement Ref</TableHead>
-                      <TableHead>Date</TableHead>
+                      <TableHead>Courier Payment</TableHead>
+                      <TableHead>Payment Ref</TableHead>
+                      <TableHead>Last Synced</TableHead>
+                      <TableHead className="w-[50px]"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {records.map((record) => (
-                      <TableRow key={record.id} data-testid={`cod-row-${record.id}`}>
-                        <TableCell>
-                          <Checkbox
-                            checked={selectedRecords.includes(record.id)}
-                            onCheckedChange={(checked) => handleSelectRecord(record.id, !!checked)}
-                            disabled={record.status !== "pending"}
-                            data-testid={`checkbox-${record.id}`}
-                          />
-                        </TableCell>
-                        <TableCell className="font-mono text-sm">
-                          {record.trackingNumber || "-"}
-                        </TableCell>
-                        <TableCell className="capitalize">{record.courierName}</TableCell>
-                        <TableCell className="text-right font-medium">
-                          PKR {Number(record.codAmount).toLocaleString()}
-                        </TableCell>
-                        <TableCell className="text-right text-muted-foreground">
-                          PKR {Number(record.courierFee || 0).toLocaleString()}
-                        </TableCell>
-                        <TableCell className="text-right font-medium">
-                          PKR {Number(record.netAmount || 0).toLocaleString()}
-                        </TableCell>
-                        <TableCell>{getStatusBadge(record.status || "pending")}</TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {record.courierSettlementRef || "-"}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground text-sm">
-                          {record.createdAt
-                            ? format(new Date(record.createdAt), "MMM dd, yyyy")
-                            : "-"}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {records.map((record) => {
+                      const isExpanded = expandedRow === record.id;
+                      const hasFinancials = record.transactionFee || record.transactionTax ||
+                        record.upfrontPayment || record.reservePayment || record.balancePayment;
+
+                      return (
+                        <>
+                          <TableRow
+                            key={record.id}
+                            data-testid={`cod-row-${record.id}`}
+                            className={isExpanded ? "border-b-0" : ""}
+                          >
+                            <TableCell>
+                              <Checkbox
+                                checked={selectedRecords.includes(record.id)}
+                                onCheckedChange={(checked) => handleSelectRecord(record.id, !!checked)}
+                                disabled={record.status !== "pending"}
+                                data-testid={`checkbox-${record.id}`}
+                              />
+                            </TableCell>
+                            <TableCell className="font-mono text-sm">
+                              {record.trackingNumber || "-"}
+                            </TableCell>
+                            <TableCell className="capitalize">{record.courierName}</TableCell>
+                            <TableCell className="text-right font-medium">
+                              PKR {Number(record.codAmount).toLocaleString()}
+                            </TableCell>
+                            <TableCell className="text-right text-muted-foreground">
+                              {formatPKR(record.courierFee)}
+                            </TableCell>
+                            <TableCell className="text-right font-medium">
+                              {formatPKR(record.netAmount)}
+                            </TableCell>
+                            <TableCell>{getStatusBadge(record.status || "pending")}</TableCell>
+                            <TableCell>
+                              {getCourierPaymentBadge(record.courierPaymentStatus)}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground text-sm">
+                              <div className="flex items-center gap-1">
+                                <span>{record.courierPaymentRef || record.courierSettlementRef || "-"}</span>
+                                {record.courierSlipLink && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <a
+                                        href={record.courierSlipLink}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-muted-foreground hover-elevate"
+                                        data-testid={`link-slip-${record.id}`}
+                                      >
+                                        <ExternalLink className="w-3.5 h-3.5" />
+                                      </a>
+                                    </TooltipTrigger>
+                                    <TooltipContent>View payment slip</TooltipContent>
+                                  </Tooltip>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-muted-foreground text-xs">
+                              {record.lastSyncedAt
+                                ? format(new Date(record.lastSyncedAt), "MMM dd, HH:mm")
+                                : "-"}
+                            </TableCell>
+                            <TableCell>
+                              {hasFinancials && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => setExpandedRow(isExpanded ? null : record.id)}
+                                  data-testid={`button-expand-${record.id}`}
+                                >
+                                  <Receipt className="w-4 h-4" />
+                                </Button>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                          {isExpanded && hasFinancials && (
+                            <TableRow key={`${record.id}-details`} className="bg-muted/30">
+                              <TableCell colSpan={11}>
+                                <div className="py-2 px-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4 text-sm">
+                                  <div>
+                                    <span className="text-muted-foreground block text-xs">Txn Fee</span>
+                                    <span className="font-medium">{formatPKR(record.transactionFee)}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground block text-xs">Txn Tax</span>
+                                    <span className="font-medium">{formatPKR(record.transactionTax)}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground block text-xs">Reversal Fee</span>
+                                    <span className="font-medium">{formatPKR(record.reversalFee)}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground block text-xs">Reversal Tax</span>
+                                    <span className="font-medium">{formatPKR(record.reversalTax)}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground block text-xs">Upfront Payment</span>
+                                    <span className="font-medium">{formatPKR(record.upfrontPayment)}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground block text-xs">Reserve Payment</span>
+                                    <span className="font-medium">{formatPKR(record.reservePayment)}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground block text-xs">Balance Payment</span>
+                                    <span className="font-medium">{formatPKR(record.balancePayment)}</span>
+                                  </div>
+                                  {record.courierSettlementDate && (
+                                    <div>
+                                      <span className="text-muted-foreground block text-xs">Settlement Date</span>
+                                      <span className="font-medium">
+                                        {format(new Date(record.courierSettlementDate), "MMM dd, yyyy")}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>
@@ -477,7 +632,6 @@ export default function CodReconciliationPage() {
         </CardContent>
       </Card>
 
-      {/* Reconcile Dialog */}
       <Dialog open={isReconcileDialogOpen} onOpenChange={setIsReconcileDialogOpen}>
         <DialogContent>
           <DialogHeader>

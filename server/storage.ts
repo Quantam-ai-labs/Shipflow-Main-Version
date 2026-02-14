@@ -94,6 +94,7 @@ export interface IStorage {
   createCodReconciliation(record: InsertCodReconciliation): Promise<CodReconciliation>;
   updateCodReconciliation(merchantId: string, id: string, data: Partial<InsertCodReconciliation>): Promise<CodReconciliation | undefined>;
   generateCodRecordsFromOrders(merchantId: string): Promise<{ created: number; skipped: number }>;
+  getPendingCodRecordsByCourier(merchantId: string, courierName: string): Promise<CodReconciliation[]>;
 
   // Sync Logs
   createSyncLog(log: InsertSyncLog): Promise<SyncLog>;
@@ -936,6 +937,15 @@ export class DatabaseStorage implements IStorage {
     }
     
     return { created, skipped };
+  }
+
+  async getPendingCodRecordsByCourier(merchantId: string, courierName: string): Promise<CodReconciliation[]> {
+    return db.select().from(codReconciliation)
+      .where(and(
+        eq(codReconciliation.merchantId, merchantId),
+        eq(codReconciliation.courierName, courierName),
+        eq(codReconciliation.status, "pending")
+      ));
   }
 
   // Analytics

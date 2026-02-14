@@ -160,6 +160,147 @@ export class PostExService {
     
     return results;
   }
+
+  async getPaymentStatus(trackingNumber: string, credentials?: { apiToken?: string }): Promise<PostExPaymentResult> {
+    const token = this.getToken(credentials);
+
+    if (!token) {
+      return { success: false, trackingNumber, error: 'PostEx API token not configured' };
+    }
+
+    try {
+      const response = await fetch(`${this.baseUrl}/v1/payment-status/${trackingNumber}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'token': token,
+        },
+      });
+
+      if (response.status === 404) {
+        return { success: false, trackingNumber, error: 'Order not found' };
+      }
+
+      if (!response.ok) {
+        throw new Error(`PostEx Payment API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.statusCode === '200' && data.dist) {
+        return {
+          success: true,
+          trackingNumber: data.dist.trackingNumber || trackingNumber,
+          settled: data.dist.settle === true,
+          settlementDate: data.dist.settlementDate || null,
+          upfrontPaymentDate: data.dist.upfrontPaymentDate || null,
+          cprNumber1: data.dist.cprNumber_1 || null,
+          reservePaymentDate: data.dist.reservePaymentDate || null,
+          cprNumber2: data.dist.cprNumber_2 || null,
+          orderRefNumber: data.dist.orderRefNumber || null,
+        };
+      }
+
+      return { success: false, trackingNumber, error: data.statusMessage || 'Payment status not found' };
+    } catch (error) {
+      console.error('[PostEx] Payment status error:', error);
+      return {
+        success: false,
+        trackingNumber,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  async getPaymentStatusBatch(trackingNumbers: string[], credentials?: { apiToken?: string }): Promise<PostExPaymentResult[]> {
+    const results: PostExPaymentResult[] = [];
+
+    for (const tn of trackingNumbers) {
+      const result = await this.getPaymentStatus(tn, credentials);
+      results.push(result);
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+
+    return results;
+  }
+
+  async getTrackingWithFinancials(trackingNumber: string, credentials?: { apiToken?: string }): Promise<PostExFinancialResult> {
+    const token = this.getToken(credentials);
+
+    if (!token) {
+      return { success: false, trackingNumber, error: 'PostEx API token not configured' };
+    }
+
+    try {
+      const response = await fetch(`${this.baseUrl}/v1/track-order/${trackingNumber}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'token': token,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`PostEx API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.statusCode === '200' && data.dist) {
+        const d = data.dist;
+        return {
+          success: true,
+          trackingNumber: d.trackingNumber || trackingNumber,
+          invoicePayment: d.invoicePayment || 0,
+          transactionFee: d.transactionFee || 0,
+          transactionTax: d.transactionTax || 0,
+          reversalFee: d.reversalFee || 0,
+          reversalTax: d.reversalTax || 0,
+          upfrontPayment: d.upfrontPayment || 0,
+          reservePayment: d.reservePayment || 0,
+          balancePayment: d.balancePayment || 0,
+          transactionStatus: d.transactionStatus || '',
+        };
+      }
+
+      return { success: false, trackingNumber, error: data.statusMessage || 'Not found' };
+    } catch (error) {
+      console.error('[PostEx] Financial tracking error:', error);
+      return {
+        success: false,
+        trackingNumber,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+}
+
+export interface PostExPaymentResult {
+  success: boolean;
+  trackingNumber: string;
+  settled?: boolean;
+  settlementDate?: string | null;
+  upfrontPaymentDate?: string | null;
+  cprNumber1?: string | null;
+  reservePaymentDate?: string | null;
+  cprNumber2?: string | null;
+  orderRefNumber?: string | null;
+  error?: string;
+}
+
+export interface PostExFinancialResult {
+  success: boolean;
+  trackingNumber: string;
+  invoicePayment?: number;
+  transactionFee?: number;
+  transactionTax?: number;
+  reversalFee?: number;
+  reversalTax?: number;
+  upfrontPayment?: number;
+  reservePayment?: number;
+  balancePayment?: number;
+  transactionStatus?: string;
+  error?: string;
 }
 
 export const postexService = new PostExService();
