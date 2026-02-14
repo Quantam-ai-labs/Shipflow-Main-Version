@@ -48,6 +48,7 @@ import {
   Send,
   PackageCheck,
   RotateCcw,
+  Receipt,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery } from "@tanstack/react-query";
@@ -87,6 +88,11 @@ const bottomNavItems = [
     title: "COD Reconciliation",
     url: "/cod-reconciliation",
     icon: DollarSign,
+  },
+  {
+    title: "Payment Ledger",
+    url: "/payment-ledger",
+    icon: Receipt,
   },
 ];
 

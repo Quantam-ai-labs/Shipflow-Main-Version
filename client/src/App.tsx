@@ -22,6 +22,7 @@ import OrderDetails from "@/pages/order-details";
 import Shipments from "@/pages/shipments";
 import Analytics from "@/pages/analytics";
 import CodReconciliation from "@/pages/cod-reconciliation";
+import PaymentLedger from "@/pages/payment-ledger";
 import Team from "@/pages/team";
 import Integrations from "@/pages/integrations";
 import Settings from "@/pages/settings";
@@ -61,6 +62,7 @@ function AppRoutes() {
       <Route path="/shipments" component={Shipments} />
       <Route path="/analytics" component={Analytics} />
       <Route path="/cod-reconciliation" component={CodReconciliation} />
+      <Route path="/payment-ledger" component={PaymentLedger} />
       <Route path="/team" component={Team} />
       <Route path="/integrations" component={Integrations} />
       <Route path="/settings" component={Settings} />

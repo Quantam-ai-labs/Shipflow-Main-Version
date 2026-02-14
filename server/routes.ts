@@ -3,7 +3,7 @@ import express from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { shipmentPrintRecords, users, merchants, adminActionLogs, teamMembers, teamInvites, orders } from "@shared/schema";
+import { shipmentPrintRecords, users, merchants, adminActionLogs, teamMembers, teamInvites, orders, codReconciliation } from "@shared/schema";
 import { and, eq, inArray, ilike, or, sql, desc, count, isNotNull } from "drizzle-orm";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { z } from "zod";
@@ -1511,6 +1511,125 @@ export async function registerRoutes(
   });
 
   // COD Reconciliation
+  // Payment Ledger - per-shipment financial breakdown
+  app.get("/api/payment-ledger", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const { search, courier, dateFrom, dateTo, page: pageStr, pageSize: pageSizeStr } = req.query;
+      const page = parseInt(pageStr as string) || 1;
+      const pageSize = parseInt(pageSizeStr as string) || 100;
+      const offset = (page - 1) * pageSize;
+
+      let conditions = [eq(codReconciliation.merchantId, merchantId)];
+
+      if (search) {
+        conditions.push(
+          or(
+            ilike(codReconciliation.trackingNumber, `%${search}%`),
+            ilike(codReconciliation.courierName, `%${search}%`)
+          )!
+        );
+      }
+      if (courier && courier !== "all") {
+        conditions.push(eq(codReconciliation.courierName, courier as string));
+      }
+      if (dateFrom) {
+        const fromDate = new Date(dateFrom as string);
+        fromDate.setHours(0, 0, 0, 0);
+        conditions.push(sql`${codReconciliation.createdAt} >= ${fromDate.toISOString()}`);
+      }
+      if (dateTo) {
+        const toDate = new Date(dateTo as string);
+        toDate.setHours(23, 59, 59, 999);
+        conditions.push(sql`${codReconciliation.createdAt} <= ${toDate.toISOString()}`);
+      }
+
+      const whereClause = and(...conditions);
+
+      const [records, totalResult, allForSummary] = await Promise.all([
+        db.select().from(codReconciliation).where(whereClause)
+          .orderBy(desc(codReconciliation.createdAt)).limit(pageSize).offset(offset),
+        db.select({ count: count() }).from(codReconciliation).where(whereClause),
+        db.select({
+          totalCod: sql<string>`COALESCE(SUM(${codReconciliation.codAmount}), 0)`,
+          recordCount: count(),
+          syncedCount: sql<number>`COUNT(CASE WHEN ${codReconciliation.lastSyncedAt} IS NOT NULL THEN 1 END)`,
+          unsyncedCount: sql<number>`COUNT(CASE WHEN ${codReconciliation.lastSyncedAt} IS NULL THEN 1 END)`,
+          totalTxnFee: sql<string>`COALESCE(SUM(COALESCE(${codReconciliation.transactionFee}, 0)), 0)`,
+          totalTxnTax: sql<string>`COALESCE(SUM(COALESCE(${codReconciliation.transactionTax}, 0)), 0)`,
+          totalReversalFee: sql<string>`COALESCE(SUM(COALESCE(${codReconciliation.reversalFee}, 0)), 0)`,
+          totalReversalTax: sql<string>`COALESCE(SUM(COALESCE(${codReconciliation.reversalTax}, 0)), 0)`,
+          totalCourierFee: sql<string>`COALESCE(SUM(COALESCE(${codReconciliation.courierFee}, 0)), 0)`,
+        }).from(codReconciliation).where(whereClause),
+      ]);
+
+      const s = allForSummary[0] || {};
+
+      // Compute per-record deductions and net using consistent logic
+      const computeRecord = (r: typeof records[0]) => {
+        const codAmt = Number(r.codAmount) || 0;
+        const txnFee = Number(r.transactionFee) || 0;
+        const txnTax = Number(r.transactionTax) || 0;
+        const reversalFee = Number(r.reversalFee) || 0;
+        const reversalTax = Number(r.reversalTax) || 0;
+        const courierFee = Number(r.courierFee) || 0;
+        // Use courierFee if set (it's the total deduction from Leopards), otherwise sum individual fees (PostEx)
+        const totalDeduction = courierFee > 0 ? courierFee : (txnFee + txnTax + reversalFee + reversalTax);
+        const netPaid = Number(r.netAmount) || (codAmt - totalDeduction);
+        return { totalDeduction, netPaid, hasSyncedData: !!r.lastSyncedAt };
+      };
+
+      const ledgerRecords = records.map(r => {
+        const computed = computeRecord(r);
+        return {
+          ...r,
+          totalDeduction: computed.totalDeduction.toFixed(2),
+          calculatedNetPaid: computed.netPaid.toFixed(2),
+          hasSyncedData: computed.hasSyncedData,
+        };
+      });
+
+      // Use same logic for summary: sum deductions using CASE to pick courierFee OR individual fees
+      const totalDeductions = Number(
+        await db.select({
+          total: sql<string>`COALESCE(SUM(
+            CASE 
+              WHEN COALESCE(${codReconciliation.courierFee}, 0) > 0 THEN COALESCE(${codReconciliation.courierFee}, 0)
+              ELSE COALESCE(${codReconciliation.transactionFee}, 0) + COALESCE(${codReconciliation.transactionTax}, 0) + COALESCE(${codReconciliation.reversalFee}, 0) + COALESCE(${codReconciliation.reversalTax}, 0)
+            END
+          ), 0)`,
+        }).from(codReconciliation).where(whereClause).then(r => r[0]?.total) || '0'
+      );
+
+      const totalCodNum = Number(s.totalCod || 0);
+      // Net paid = totalCod - totalDeductions (for consistent calculation)
+      const totalNetPaid = totalCodNum - totalDeductions;
+
+      res.json({
+        records: ledgerRecords,
+        total: totalResult[0]?.count || 0,
+        page,
+        pageSize,
+        summary: {
+          totalCod: totalCodNum.toLocaleString(),
+          totalDeductions: totalDeductions.toLocaleString(),
+          totalNetPaid: totalNetPaid.toLocaleString(),
+          totalTxnFee: Number(s.totalTxnFee || 0).toLocaleString(),
+          totalTxnTax: Number(s.totalTxnTax || 0).toLocaleString(),
+          totalReversalFee: Number(s.totalReversalFee || 0).toLocaleString(),
+          recordCount: s.recordCount || 0,
+          syncedCount: s.syncedCount || 0,
+          unsyncedCount: s.unsyncedCount || 0,
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching payment ledger:", error);
+      res.status(500).json({ message: "Failed to fetch payment ledger" });
+    }
+  });
+
   app.get("/api/cod-reconciliation", isAuthenticated, async (req, res) => {
     try {
       const merchantId = await requireMerchant(req, res);
