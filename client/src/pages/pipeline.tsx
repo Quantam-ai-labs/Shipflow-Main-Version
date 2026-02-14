@@ -89,7 +89,7 @@ function CityAutocomplete({ value, onChange, cities, hasWarning, testId }: {
     <div ref={containerRef} className="relative">
       <Input
         ref={inputRef}
-        className={`h-8 text-xs px-1.5 min-w-[130px] border-0 shadow-none focus-visible:ring-1 bg-transparent ${hasWarning ? "ring-1 ring-orange-400 dark:ring-orange-600" : ""}`}
+        className={`h-8 text-xs px-1.5 min-w-[100px] border-0 shadow-none focus-visible:ring-1 bg-transparent ${hasWarning ? "ring-1 ring-orange-400 dark:ring-orange-600" : ""}`}
         value={query}
         onChange={(e) => {
           setQuery(e.target.value);
@@ -1438,10 +1438,10 @@ export default function Pipeline() {
                           <th className="px-2 py-2 text-left font-semibold w-8 border border-emerald-600 dark:border-emerald-700 text-white text-xs">#</th>
                           <th className="px-2 py-2 text-left font-semibold w-20 border border-emerald-600 dark:border-emerald-700 text-white text-xs">Order</th>
                           <th className="px-2 py-2 text-left font-semibold min-w-[140px] border border-emerald-600 dark:border-emerald-700 text-white text-xs">Name</th>
-                          <th className="px-2 py-2 text-left font-semibold min-w-[120px] border border-emerald-600 dark:border-emerald-700 text-white text-xs">Phone</th>
-                          <th className="px-2 py-2 text-left font-semibold min-w-[280px] border border-emerald-600 dark:border-emerald-700 text-white text-xs">Address</th>
-                          <th className="px-2 py-2 text-left font-semibold min-w-[100px] border border-emerald-600 dark:border-emerald-700 text-white text-xs">City</th>
-                          <th className="px-2 py-2 text-left font-semibold min-w-[140px] border border-emerald-600 dark:border-emerald-700 text-white text-xs">Courier City</th>
+                          <th className="px-2 py-2 text-left font-semibold min-w-[100px] border border-emerald-600 dark:border-emerald-700 text-white text-xs">Phone</th>
+                          <th className="px-2 py-2 text-left font-semibold min-w-[350px] border border-emerald-600 dark:border-emerald-700 text-white text-xs">Address</th>
+                          <th className="px-2 py-2 text-left font-semibold min-w-[90px] border border-emerald-600 dark:border-emerald-700 text-white text-xs">City</th>
+                          <th className="px-2 py-2 text-left font-semibold min-w-[110px] border border-emerald-600 dark:border-emerald-700 text-white text-xs">Courier City</th>
                           <th className="px-2 py-2 text-left font-semibold w-20 border border-emerald-600 dark:border-emerald-700 text-white text-xs">COD</th>
                           <th className="px-2 py-2 text-left font-semibold w-20 border border-emerald-600 dark:border-emerald-700 text-white text-xs">Gram</th>
                           <th className="px-2 py-2 text-left font-semibold w-16 border border-emerald-600 dark:border-emerald-700 text-white text-xs">Pcs</th>
@@ -1500,7 +1500,7 @@ export default function Pipeline() {
                               </td>
                               <td className="px-1 py-0.5 border border-border">
                                 <Input
-                                  className="h-8 text-xs px-1.5 font-mono min-w-[110px] border-0 shadow-none focus-visible:ring-1 bg-transparent"
+                                  className="h-8 text-xs px-1.5 font-mono min-w-[90px] border-0 shadow-none focus-visible:ring-1 bg-transparent"
                                   value={ovr?.phone ?? order.phone ?? ""}
                                   onChange={(e) => updateField(order.orderId, "phone", e.target.value)}
                                   data-testid={`input-phone-${order.orderId}`}
@@ -1508,7 +1508,7 @@ export default function Pipeline() {
                               </td>
                               <td className="px-1 py-0.5 border border-border">
                                 <Input
-                                  className="h-8 text-xs px-1.5 min-w-[260px] border-0 shadow-none focus-visible:ring-1 bg-transparent"
+                                  className="h-8 text-xs px-1.5 min-w-[330px] border-0 shadow-none focus-visible:ring-1 bg-transparent"
                                   value={ovr?.address ?? order.address ?? ""}
                                   onChange={(e) => updateField(order.orderId, "address", e.target.value)}
                                   data-testid={`input-address-${order.orderId}`}
@@ -1530,7 +1530,7 @@ export default function Pipeline() {
                                   />
                                 ) : (
                                   <Input
-                                    className="h-8 text-xs px-1.5 min-w-[120px] border-0 shadow-none focus-visible:ring-1 bg-transparent"
+                                    className="h-8 text-xs px-1.5 min-w-[100px] border-0 shadow-none focus-visible:ring-1 bg-transparent"
                                     value={ovr?.city ?? order.city ?? ""}
                                     onChange={(e) => updateField(order.orderId, "city", e.target.value)}
                                     data-testid={`input-city-${order.orderId}`}
