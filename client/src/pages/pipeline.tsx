@@ -836,6 +836,17 @@ export default function Pipeline() {
             <>
               <Button
                 size="sm"
+                variant="outline"
+                onClick={() => {
+                  const ids = Array.from(selectedIds).join(",");
+                  window.open(`/print-labels?ids=${ids}`, "_blank");
+                }}
+                data-testid="bulk-print-labels"
+              >
+                <Printer className="w-3.5 h-3.5 mr-1.5" />Print Labels
+              </Button>
+              <Button
+                size="sm"
                 onClick={() => loadsheetMutation.mutate(Array.from(selectedIds))}
                 disabled={loadsheetMutation.isPending}
                 data-testid="bulk-generate-loadsheet"
@@ -1701,6 +1712,15 @@ export default function Pipeline() {
                           <Printer className="w-3.5 h-3.5 mr-1" />Download Courier AWBs
                         </Button>
                       )}
+                      <Button size="sm" variant="outline" onClick={() => {
+                          const successIds = bookingResultsModal.results.results
+                            .filter((r: any) => r.success)
+                            .map((r: any) => r.orderId)
+                            .join(",");
+                          if (successIds) window.open(`/print-labels?ids=${successIds}`, "_blank");
+                        }} data-testid="button-print-labels">
+                          <Printer className="w-3.5 h-3.5 mr-1" />Print Labels
+                        </Button>
                       <Button size="sm" variant="ghost" onClick={copyTrackingNumbers} data-testid="button-copy-tracking">
                         <Copy className="w-3.5 h-3.5 mr-1" />Copy Tracking
                       </Button>

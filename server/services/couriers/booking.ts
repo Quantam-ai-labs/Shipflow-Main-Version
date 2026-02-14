@@ -1,5 +1,34 @@
 import type { Order } from "@shared/schema";
 
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries = 2
+): Promise<Response> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000);
+      const resp = await fetch(url, { ...options, signal: controller.signal });
+      clearTimeout(timeout);
+      return resp;
+    } catch (err: any) {
+      const isTransient =
+        err.name === "AbortError" ||
+        err.code === "ECONNRESET" ||
+        err.code === "ECONNREFUSED" ||
+        err.code === "ETIMEDOUT" ||
+        err.message?.includes("fetch failed") ||
+        err.message?.includes("network");
+      if (!isTransient || attempt === maxRetries) throw err;
+      const delay = 1000 * (attempt + 1);
+      console.warn(`[Booking] Retry ${attempt + 1}/${maxRetries} after ${delay}ms: ${err.message}`);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+  throw new Error("Unreachable");
+}
+
 export interface BookingPacket {
   orderId: string;
   orderNumber: string;
@@ -117,7 +146,7 @@ export async function loadLeopardsCities(apiKey: string, apiPassword: string): P
   }
 
   try {
-    const resp = await fetch("https://merchantapi.leopardscourier.com/api/getAllCities/format/json/", {
+    const resp = await fetchWithRetry("https://merchantapi.leopardscourier.com/api/getAllCities/format/json/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ api_key: apiKey, api_password: apiPassword }),
@@ -268,7 +297,7 @@ export async function bookLeopardsPacket(
     console.log(`[Leopards] Booking order ${packet.orderNumber}...`);
     console.log(`[Leopards] Request body:`, JSON.stringify(requestBody, null, 2));
 
-    const resp = await fetch("https://merchantapi.leopardscourier.com/api/bookPacket/format/json/", {
+    const resp = await fetchWithRetry("https://merchantapi.leopardscourier.com/api/bookPacket/format/json/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(requestBody),
@@ -378,7 +407,7 @@ export async function bookPostExOrder(
     console.log(`[PostEx] Full request payload keys: ${Object.keys(requestBody).join(', ')}`);
     console.log(`[PostEx] Full request:`, JSON.stringify(requestBody, null, 2));
 
-    const resp = await fetch("https://api.postex.pk/services/integration/api/order/v3/create-order", {
+    const resp = await fetchWithRetry("https://api.postex.pk/services/integration/api/order/v3/create-order", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

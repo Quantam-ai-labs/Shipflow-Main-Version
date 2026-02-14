@@ -5828,6 +5828,85 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/labels/data", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const { orderIds } = req.body;
+      if (!Array.isArray(orderIds) || orderIds.length === 0) {
+        return res.status(400).json({ message: "orderIds array required" });
+      }
+
+      const merchant = await storage.getMerchant(merchantId);
+      if (!merchant) {
+        return res.status(404).json({ message: "Merchant not found" });
+      }
+
+      const courierAcctList = await storage.getCourierAccounts(merchantId);
+      const leopardsCreds = courierAcctList.find((c) => c.courierName === "leopards");
+      const postexCreds = courierAcctList.find((c) => c.courierName === "postex");
+      const leopardsSettings = (leopardsCreds?.settings || {}) as any;
+      const postexSettings = (postexCreds?.settings || {}) as any;
+
+      const labels: any[] = [];
+      for (const orderId of orderIds.slice(0, 100)) {
+        const order = await storage.getOrderById(merchantId, orderId);
+        if (!order) continue;
+
+        const lineItems = Array.isArray(order.lineItems) ? order.lineItems : [];
+        const products = lineItems.map((item: any) => ({
+          name: item.name || item.title || "Item",
+          qty: item.quantity || 1,
+          sku: item.sku || "",
+          variant: item.variant_title || "",
+        }));
+
+        const codAmount = Number(order.codRemaining ?? order.totalAmount) || 0;
+        const isCOD = order.paymentMethod?.toLowerCase()?.includes("cod") ||
+                      order.paymentStatus?.toLowerCase() === "pending" ||
+                      codAmount > 0;
+
+        labels.push({
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          trackingNumber: order.courierTracking || "",
+          courierName: order.courierName || "",
+          customerName: order.customerName || "",
+          customerPhone: order.customerPhone || "",
+          customerEmail: order.customerEmail || "",
+          shippingAddress: order.shippingAddress || "",
+          city: order.city || "",
+          province: order.province || "",
+          postalCode: order.postalCode || "",
+          country: order.country || "Pakistan",
+          totalAmount: Number(order.totalAmount) || 0,
+          codAmount,
+          isCOD,
+          totalQuantity: order.totalQuantity || 1,
+          itemSummary: order.itemSummary || "",
+          remark: order.remark || order.notes || "",
+          products,
+          orderDate: order.orderDate,
+          bookedAt: order.bookedAt,
+          slipUrl: order.courierSlipUrl || "",
+          shipper: {
+            name: merchant.name || "",
+            phone: merchant.phone || "",
+            address: leopardsSettings?.shipperAddress || postexSettings?.shipperAddress || merchant.address || "",
+            city: leopardsSettings?.shipperCity || postexSettings?.shipperCity || merchant.city || "",
+            logoUrl: merchant.logoUrl || "",
+          },
+        });
+      }
+
+      res.json({ labels });
+    } catch (error) {
+      console.error("Error fetching label data:", error);
+      res.status(500).json({ message: "Failed to fetch label data" });
+    }
+  });
+
   app.get("/api/couriers/postex/invoice", isAuthenticated, async (req, res) => {
     try {
       const merchantId = await requireMerchant(req, res);

@@ -30,6 +30,7 @@ import Settings from "@/pages/settings";
 import Onboarding from "@/pages/onboarding";
 import AdminPanel from "@/pages/admin";
 import InviteAccept from "@/pages/invite-accept";
+import PrintLabels from "@/pages/print-labels";
 import NotFound from "@/pages/not-found";
 
 function OnboardingBanner() {
@@ -176,6 +177,10 @@ function MainApp() {
 
   if (!isAuthenticated) {
     return <AuthPage />;
+  }
+
+  if (location.startsWith("/print-labels")) {
+    return <PrintLabels />;
   }
 
   if (user?.merchant?.onboardingStep !== "COMPLETED" && location !== "/onboarding" && location !== "/admin") {
