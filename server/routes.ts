@@ -1630,6 +1630,114 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/manage-cheques", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const search = (req.query.search as string) || "";
+      const status = (req.query.status as string) || "";
+      const courier = (req.query.courier as string) || "";
+      const page = parseInt(req.query.page as string) || 1;
+      const pageSize = parseInt(req.query.pageSize as string) || 50;
+
+      const conditions: any[] = [eq(codReconciliation.merchantId, merchantId), isNotNull(codReconciliation.courierPaymentRef)];
+
+      if (search) {
+        conditions.push(
+          or(
+            ilike(codReconciliation.courierPaymentRef, `%${search}%`),
+            ilike(codReconciliation.trackingNumber, `%${search}%`),
+          )
+        );
+      }
+      if (status) {
+        conditions.push(eq(codReconciliation.courierPaymentStatus, status));
+      }
+      if (courier) {
+        conditions.push(ilike(codReconciliation.courierName, `%${courier}%`));
+      }
+
+      const whereClause = and(...conditions);
+
+      const [chequeGroups, totalResult] = await Promise.all([
+        db.select({
+          chequeRef: codReconciliation.courierPaymentRef,
+          paymentStatus: sql<string>`MAX(${codReconciliation.courierPaymentStatus})`,
+          paymentMethod: sql<string>`MAX(${codReconciliation.courierPaymentMethod})`,
+          courierName: sql<string>`MAX(${codReconciliation.courierName})`,
+          slipLink: sql<string>`MAX(${codReconciliation.courierSlipLink})`,
+          shipmentCount: count(),
+          totalCod: sql<string>`COALESCE(SUM(${codReconciliation.codAmount}), 0)`,
+          totalCourierFee: sql<string>`COALESCE(SUM(COALESCE(${codReconciliation.courierFee}, 0)), 0)`,
+          totalNet: sql<string>`COALESCE(SUM(COALESCE(${codReconciliation.netAmount}, 0)), 0)`,
+          totalDeductions: sql<string>`COALESCE(SUM(
+            CASE 
+              WHEN COALESCE(${codReconciliation.courierFee}, 0) > 0 THEN COALESCE(${codReconciliation.courierFee}, 0)
+              ELSE COALESCE(${codReconciliation.transactionFee}, 0) + COALESCE(${codReconciliation.transactionTax}, 0) + COALESCE(${codReconciliation.reversalFee}, 0) + COALESCE(${codReconciliation.reversalTax}, 0)
+            END
+          ), 0)`,
+          earliestDate: sql<string>`MIN(${codReconciliation.createdAt})`,
+          latestDate: sql<string>`MAX(${codReconciliation.createdAt})`,
+        })
+          .from(codReconciliation)
+          .where(whereClause)
+          .groupBy(
+            codReconciliation.courierPaymentRef,
+          )
+          .orderBy(desc(sql`MAX(${codReconciliation.createdAt})`))
+          .limit(pageSize)
+          .offset((page - 1) * pageSize),
+        db.select({
+          count: sql<number>`COUNT(DISTINCT ${codReconciliation.courierPaymentRef})`,
+        })
+          .from(codReconciliation)
+          .where(whereClause),
+      ]);
+
+      const summaryResult = await db.select({
+        totalCheques: sql<number>`COUNT(DISTINCT ${codReconciliation.courierPaymentRef})`,
+        totalCod: sql<string>`COALESCE(SUM(${codReconciliation.codAmount}), 0)`,
+        totalNet: sql<string>`COALESCE(SUM(COALESCE(${codReconciliation.netAmount}, 0)), 0)`,
+        paidCount: sql<number>`COUNT(DISTINCT CASE WHEN ${codReconciliation.courierPaymentStatus} = 'Paid' THEN ${codReconciliation.courierPaymentRef} END)`,
+        pendingCount: sql<number>`COUNT(DISTINCT CASE WHEN ${codReconciliation.courierPaymentStatus} != 'Paid' OR ${codReconciliation.courierPaymentStatus} IS NULL THEN ${codReconciliation.courierPaymentRef} END)`,
+      })
+        .from(codReconciliation)
+        .where(whereClause);
+
+      const s = summaryResult[0] || {};
+
+      res.json({
+        cheques: chequeGroups.map(c => ({
+          chequeRef: c.chequeRef,
+          paymentStatus: c.paymentStatus || "Pending",
+          paymentMethod: c.paymentMethod || "N/A",
+          courierName: c.courierName,
+          slipLink: c.slipLink,
+          shipmentCount: c.shipmentCount,
+          totalCod: Number(c.totalCod || 0).toFixed(2),
+          totalDeductions: Number(c.totalDeductions || 0).toFixed(2),
+          totalNet: Number(c.totalNet || 0).toFixed(2),
+          earliestDate: c.earliestDate,
+          latestDate: c.latestDate,
+        })),
+        total: totalResult[0]?.count || 0,
+        page,
+        pageSize,
+        summary: {
+          totalCheques: s.totalCheques || 0,
+          totalCod: Number(s.totalCod || 0).toFixed(2),
+          totalNet: Number(s.totalNet || 0).toFixed(2),
+          paidCount: s.paidCount || 0,
+          pendingCount: s.pendingCount || 0,
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching manage cheques:", error);
+      res.status(500).json({ message: "Failed to fetch cheques data" });
+    }
+  });
+
   app.get("/api/cod-reconciliation", isAuthenticated, async (req, res) => {
     try {
       const merchantId = await requireMerchant(req, res);

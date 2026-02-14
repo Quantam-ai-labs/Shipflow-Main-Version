@@ -49,6 +49,7 @@ import {
   PackageCheck,
   RotateCcw,
   Receipt,
+  FileCheck,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery } from "@tanstack/react-query";
@@ -84,6 +85,9 @@ const bottomNavItems = [
     url: "/analytics",
     icon: BarChart3,
   },
+];
+
+const codSubItems = [
   {
     title: "COD Reconciliation",
     url: "/cod-reconciliation",
@@ -93,6 +97,11 @@ const bottomNavItems = [
     title: "Payment Ledger",
     url: "/payment-ledger",
     icon: Receipt,
+  },
+  {
+    title: "Manage Cheques",
+    url: "/manage-cheques",
+    icon: FileCheck,
   },
 ];
 
@@ -153,6 +162,7 @@ export function AppSidebar() {
   });
 
   const isOrdersRouteActive = location.startsWith("/orders");
+  const isCodRouteActive = location === "/cod-reconciliation" || location === "/payment-ledger" || location === "/manage-cheques";
   const totalOrderCount = counts
     ? Object.values(counts).reduce((sum, c) => sum + (c || 0), 0)
     : 0;
@@ -253,6 +263,34 @@ export function AppSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+              <Collapsible defaultOpen={isCodRouteActive} asChild className="group/cod-collapsible">
+                <SidebarMenuItem>
+                  <CollapsibleTrigger asChild>
+                    <SidebarMenuButton data-testid="nav-cod-toggle" tooltip="COD & Payments">
+                      <DollarSign className="w-4 h-4" />
+                      <span className="flex-1">COD & Payments</span>
+                      <ChevronRight className="w-4 h-4 ml-auto transition-transform duration-200 group-data-[state=open]/cod-collapsible:rotate-90" />
+                    </SidebarMenuButton>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <SidebarMenuSub>
+                      {codSubItems.map((item) => (
+                        <SidebarMenuSubItem key={item.title}>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={location === item.url}
+                          >
+                            <Link href={item.url} data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                              <item.icon className="w-3.5 h-3.5" />
+                              <span>{item.title}</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </SidebarMenuItem>
+              </Collapsible>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
