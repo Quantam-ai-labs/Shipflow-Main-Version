@@ -944,7 +944,10 @@ export class DatabaseStorage implements IStorage {
       .where(and(
         eq(codReconciliation.merchantId, merchantId),
         eq(codReconciliation.courierName, courierName),
-        eq(codReconciliation.status, "pending")
+        or(
+          isNull(codReconciliation.courierPaymentRef),
+          eq(codReconciliation.courierPaymentRef, ''),
+        )
       ));
   }
 
