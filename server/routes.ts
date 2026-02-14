@@ -61,6 +61,7 @@ import {
   writeBackAddress,
   writeBackCancel,
   writeBackTags,
+  writeBackFulfillment,
 } from "./services/shopifyWriteBack";
 import { leopardsService } from "./services/couriers/leopards";
 import { postexService } from "./services/couriers/postex";
@@ -5045,9 +5046,9 @@ export async function registerRoutes(
             address: order.shippingAddress || "",
             phone: normalizePhone(order.customerPhone),
             weight: 200,
-            pieces: order.totalQuantity || 1,
+            pieces: 1,
             productDescription: buildProductDescription(order),
-            codAmount: parseFloat(order.totalAmount) || 0,
+            codAmount: parseFloat(order.codRemaining ?? order.totalAmount) || 0,
             amount: order.totalAmount,
             cityMatched: cityMatch.matched,
             matchedCityName: cityMatch.matchedCity,
@@ -5073,10 +5074,9 @@ export async function registerRoutes(
           continue;
         }
 
-        const pieces =
-          order.totalQuantity || (order.lineItems as any[])?.length || 1;
+        const pieces = 1;
         const productDescription = buildProductDescription(order);
-        const codAmount = parseFloat(order.totalAmount) || 0;
+        const codAmount = parseFloat(order.codRemaining ?? order.totalAmount) || 0;
         const phone = normalizePhone(order.customerPhone);
         const cityMatch = matchCityForCourier(
           order.city || "",
@@ -5163,6 +5163,7 @@ export async function registerRoutes(
           city?: string;
           codAmount?: number;
           description?: string;
+          pieces?: number;
         }
       >();
       if (orderOverrides && typeof orderOverrides === "object") {
@@ -5431,6 +5432,7 @@ export async function registerRoutes(
           if (ovr.city) pkt.city = ovr.city;
           if (ovr.codAmount !== undefined) pkt.codAmount = ovr.codAmount;
           if (ovr.description) pkt.itemSummary = ovr.description;
+          if (ovr.pieces !== undefined && ovr.pieces > 0) pkt.pieces = ovr.pieces;
         }
         return pkt;
       });
@@ -5496,50 +5498,34 @@ export async function registerRoutes(
             reason: `Booked with ${courier === "leopards" ? "Leopards" : "PostEx"} - ${br.trackingNumber}`,
           });
 
-          try {
-            const orderForFulfill = fetchedOrders.find(
-              (o) => o.id === br.orderId,
-            );
-            if (
-              orderForFulfill?.shopifyOrderId &&
-              !orderForFulfill.shopifyFulfillmentId
-            ) {
-              const shopifyStore = await storage.getShopifyStore(merchantId);
-              if (shopifyStore?.accessToken && shopifyStore?.shopDomain) {
-                const { decryptToken } = await import("./services/encryption");
-                const { createShopifyFulfillment } = await import(
-                  "./services/shopify"
+          const orderForFulfill = fetchedOrders.find(
+            (o) => o.id === br.orderId,
+          );
+          if (orderForFulfill?.shopifyOrderId) {
+            const courierDisplayName =
+              courier === "leopards" ? "Leopards Courier" : "PostEx";
+            writeBackFulfillment(
+              merchantId,
+              br.orderId,
+              orderForFulfill.shopifyOrderId,
+              br.trackingNumber!,
+              courierDisplayName,
+            ).then((fulfillResult) => {
+              if (fulfillResult.success) {
+                console.log(
+                  `[Booking] Shopify fulfillment write-back succeeded for ${orderForFulfill.orderNumber}: ${fulfillResult.fulfillmentId || 'already fulfilled'}`,
                 );
-                const decryptedToken = decryptToken(shopifyStore.accessToken);
-                const courierDisplayName =
-                  courier === "leopards" ? "Leopards Courier" : "PostEx";
-                const fulfillResult = await createShopifyFulfillment(
-                  shopifyStore.shopDomain,
-                  decryptedToken,
-                  orderForFulfill.shopifyOrderId,
-                  br.trackingNumber!,
-                  courierDisplayName,
+              } else {
+                console.error(
+                  `[Booking] Shopify fulfillment write-back FAILED for ${orderForFulfill.orderNumber}: ${fulfillResult.error}`,
                 );
-                if (fulfillResult.success && fulfillResult.fulfillmentId) {
-                  await storage.updateOrder(merchantId, br.orderId, {
-                    shopifyFulfillmentId: fulfillResult.fulfillmentId,
-                    fulfillmentStatus: "fulfilled",
-                  });
-                  console.log(
-                    `[Booking] Shopify fulfillment created for ${orderForFulfill.orderNumber}: ${fulfillResult.fulfillmentId}`,
-                  );
-                } else {
-                  console.warn(
-                    `[Booking] Shopify fulfillment failed for ${orderForFulfill.orderNumber}: ${fulfillResult.error}`,
-                  );
-                }
               }
-            }
-          } catch (fulfillErr: any) {
-            console.warn(
-              `[Booking] Shopify fulfillment error for order ${br.orderId}:`,
-              fulfillErr.message,
-            );
+            }).catch((err: any) => {
+              console.error(
+                `[Booking] Shopify fulfillment write-back error for ${orderForFulfill.orderNumber}:`,
+                err.message,
+              );
+            });
           }
         } else {
           await storage.updateOrder(merchantId, br.orderId, {

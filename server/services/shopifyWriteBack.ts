@@ -1,6 +1,6 @@
 import { storage } from '../storage';
 import { decryptToken } from './encryption';
-import { cancelShopifyOrder } from './shopify';
+import { cancelShopifyOrder, createShopifyFulfillment } from './shopify';
 
 const API_VERSION = '2025-01';
 
@@ -245,4 +245,92 @@ export async function writeBackTags(
       return { success: false, error: error.message || 'Unknown error' };
     }
   });
+}
+
+export async function writeBackFulfillment(
+  merchantId: string,
+  orderId: string,
+  shopifyOrderId: string,
+  trackingNumber: string,
+  courierDisplayName: string,
+): Promise<{ success: boolean; fulfillmentId?: string; error?: string }> {
+  return enqueueWriteBack(`fulfill:${shopifyOrderId}`, async () => {
+    const creds = await getShopifyCredentials(merchantId);
+    if (!creds) {
+      console.warn(`[ShopifyWriteBack] Fulfillment skipped for order ${orderId}: Shopify not connected`);
+      return { success: false, error: 'Shopify not connected' };
+    }
+
+    const order = await storage.getOrderById(merchantId, orderId);
+    if (order?.shopifyFulfillmentId) {
+      console.log(`[ShopifyWriteBack] Fulfillment already exists for order ${orderId}: ${order.shopifyFulfillmentId}`);
+      return { success: true, fulfillmentId: order.shopifyFulfillmentId };
+    }
+
+    markWriteBack(shopifyOrderId);
+
+    const MAX_RETRIES = 2;
+    let lastError = '';
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      if (attempt > 0) {
+        const delay = attempt * 2000;
+        console.log(`[ShopifyWriteBack] Fulfillment retry ${attempt}/${MAX_RETRIES} for order ${orderId} after ${delay}ms`);
+        await new Promise(r => setTimeout(r, delay));
+      }
+
+      try {
+        const result = await createShopifyFulfillment(
+          creds.shopDomain,
+          creds.accessToken,
+          shopifyOrderId,
+          trackingNumber,
+          courierDisplayName,
+        );
+
+        if (result.success) {
+          if (result.fulfillmentId) {
+            await storage.updateOrder(merchantId, orderId, {
+              shopifyFulfillmentId: result.fulfillmentId,
+              fulfillmentStatus: 'fulfilled',
+            });
+            console.log(`[ShopifyWriteBack] Fulfillment created for order ${orderId}: ${result.fulfillmentId}`);
+          } else {
+            await storage.updateOrder(merchantId, orderId, {
+              fulfillmentStatus: 'fulfilled',
+            });
+            console.log(`[ShopifyWriteBack] Order ${orderId} already fulfilled on Shopify`);
+          }
+          return { success: true, fulfillmentId: result.fulfillmentId };
+        }
+
+        lastError = result.error || 'Unknown fulfillment error';
+
+        if (result.error?.includes('429') || result.error?.includes('rate')) {
+          console.warn(`[ShopifyWriteBack] Rate limited on fulfillment for order ${orderId}, will retry`);
+          continue;
+        }
+
+        if (result.error?.includes('5') && result.error?.includes('00')) {
+          console.warn(`[ShopifyWriteBack] Server error on fulfillment for order ${orderId}, will retry`);
+          continue;
+        }
+
+        console.error(`[ShopifyWriteBack] Fulfillment failed for order ${orderId}: ${result.error}`);
+        return { success: false, error: result.error };
+      } catch (err: any) {
+        lastError = err.message || 'Unknown error';
+        console.error(`[ShopifyWriteBack] Fulfillment exception for order ${orderId} attempt ${attempt}:`, err.message);
+        if (attempt < MAX_RETRIES) continue;
+      }
+    }
+
+    console.error(`[ShopifyWriteBack] Fulfillment exhausted retries for order ${orderId}: ${lastError}`);
+    try {
+      await storage.updateOrder(merchantId, orderId, {
+        bookingError: `Shopify fulfillment failed: ${lastError}`,
+      });
+    } catch {}
+    return { success: false, error: lastError };
+  }) as Promise<{ success: boolean; fulfillmentId?: string; error?: string }>;
 }

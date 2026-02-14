@@ -89,7 +89,7 @@ function CityAutocomplete({ value, onChange, cities, hasWarning, testId }: {
     <div ref={containerRef} className="relative">
       <Input
         ref={inputRef}
-        className={`h-6 text-xs px-1 min-w-[110px] ${hasWarning ? "border-orange-400 dark:border-orange-600" : ""}`}
+        className={`h-9 text-sm px-2 min-w-[130px] ${hasWarning ? "border-orange-400 dark:border-orange-600" : ""}`}
         value={query}
         onChange={(e) => {
           setQuery(e.target.value);
@@ -101,11 +101,11 @@ function CityAutocomplete({ value, onChange, cities, hasWarning, testId }: {
         data-testid={testId}
       />
       {open && filtered.length > 0 && (
-        <div className="absolute z-50 top-full left-0 w-[200px] max-h-[180px] overflow-y-auto bg-popover border rounded-md shadow-lg mt-0.5">
+        <div className="absolute z-50 top-full left-0 w-[220px] max-h-[200px] overflow-y-auto bg-popover border rounded-md shadow-lg mt-0.5">
           {filtered.map((c) => (
             <div
               key={c.name}
-              className={`px-2 py-1 text-xs cursor-pointer hover-elevate ${c.name === value ? "bg-primary/10 font-medium" : ""}`}
+              className={`px-2 py-1.5 text-sm cursor-pointer hover-elevate ${c.name === value ? "bg-primary/10 font-medium" : ""}`}
               onMouseDown={(e) => {
                 e.preventDefault();
                 onChange(c.name);
@@ -262,6 +262,7 @@ export default function Pipeline() {
   const [previewOverrides, setPreviewOverrides] = useState<Record<string, {
     weight: number; mode: string; customerName: string; phone: string;
     address: string; city: string; codAmount: number; description: string;
+    pieces: number;
   }>>({});
   const [courierCities, setCourierCities] = useState<Array<{ id?: number; name: string }>>([]);
 
@@ -650,6 +651,7 @@ export default function Pipeline() {
       const overrides: Record<string, {
         weight: number; mode: string; customerName: string; phone: string;
         address: string; city: string; codAmount: number; description: string;
+        pieces: number;
       }> = {};
       const allOrders = [...preview.valid, ...preview.invalid];
       for (const v of allOrders) {
@@ -663,6 +665,7 @@ export default function Pipeline() {
           city: cityToUse || "",
           codAmount: v.codAmount || 0,
           description: v.productDescription || "",
+          pieces: v.pieces || 1,
         };
       }
       setPreviewOverrides(overrides);
@@ -1379,7 +1382,7 @@ export default function Pipeline() {
       </Dialog>
       {/* Booking Confirmation Modal */}
       <Dialog open={bookingConfirmModal.open} onOpenChange={open => { if (!open) setBookingConfirmModal({ open: false, preview: null }); }}>
-        <DialogContent className="max-w-[95vw] w-[1400px]">
+        <DialogContent className="max-w-[97vw] w-[1500px]">
           <DialogHeader>
             <DialogTitle>Confirm Booking via {selectedCourier === "leopards" ? "Leopards" : "PostEx"}</DialogTitle>
             <DialogDescription>Review and edit order details before booking. All fields except Order ID are editable.</DialogDescription>
@@ -1401,14 +1404,27 @@ export default function Pipeline() {
                 [orderId]: { ...prev[orderId], [field]: value },
               }));
             };
+            const isCityMatchedForOrder = (order: any) => {
+              const ovr = previewOverrides[order.orderId];
+              const selectedCity = ovr?.city ?? order.city ?? "";
+              if (!selectedCity) return false;
+              if (courierCities.length === 0) return true;
+              return courierCities.some(c => c.name.toLowerCase() === selectedCity.toLowerCase());
+            };
+            const checkedOrdersWithCityError = allOrders.filter(order => {
+              if (order._type !== "valid") return false;
+              if (!previewChecked.has(order.orderId)) return false;
+              return !isCityMatchedForOrder(order);
+            });
+            const hasCityErrors = checkedOrdersWithCityError.length > 0;
             return (
               <div className="space-y-3">
                 {allOrders.length > 0 && (
-                  <div className="overflow-x-auto max-h-[55vh] overflow-y-auto border rounded-md">
-                    <table className="w-full text-xs">
+                  <div className="overflow-x-auto max-h-[60vh] overflow-y-auto border rounded-md">
+                    <table className="w-full text-sm">
                       <thead className="bg-muted/50 sticky top-0 z-10">
                         <tr className="border-b">
-                          <th className="px-1 py-2 text-left w-8">
+                          <th className="px-2 py-2.5 text-left w-10">
                             <Checkbox
                               checked={allChecked}
                               onCheckedChange={(checked) => {
@@ -1418,19 +1434,20 @@ export default function Pipeline() {
                               data-testid="checkbox-preview-all"
                             />
                           </th>
-                          <th className="px-1 py-2 text-left font-medium w-6">#</th>
-                          <th className="px-1 py-2 text-left font-medium">Order</th>
-                          <th className="px-1 py-2 text-left font-medium min-w-[100px]">Name</th>
-                          <th className="px-1 py-2 text-left font-medium min-w-[100px]">Phone</th>
-                          <th className="px-1 py-2 text-left font-medium min-w-[250px]">Address</th>
-                          <th className="px-1 py-2 text-left font-medium min-w-[80px]">Entered City</th>
-                          <th className="px-1 py-2 text-left font-medium min-w-[120px]">Courier City</th>
-                          <th className="px-1 py-2 text-left font-medium min-w-[70px]">COD</th>
-                          <th className="px-1 py-2 text-left font-medium w-16">Gram</th>
-                          <th className="px-1 py-2 text-left font-medium min-w-[100px]">Description</th>
-                          <th className="px-1 py-2 text-left font-medium w-8">Pcs</th>
-                          <th className="px-1 py-2 text-left font-medium min-w-[100px]">Type</th>
-                          <th className="px-1 py-2 text-left font-medium w-8"></th>
+                          <th className="px-2 py-2.5 text-left font-medium w-8">#</th>
+                          <th className="px-2 py-2.5 text-left font-medium w-20">Order</th>
+                          <th className="px-2 py-2.5 text-left font-medium min-w-[140px]">Name</th>
+                          <th className="px-2 py-2.5 text-left font-medium min-w-[120px]">Phone</th>
+                          <th className="px-2 py-2.5 text-left font-medium min-w-[280px]">Address</th>
+                          <th className="px-2 py-2.5 text-left font-medium min-w-[100px]">City</th>
+                          <th className="px-2 py-2.5 text-left font-medium min-w-[140px]">Courier City</th>
+                          <th className="px-2 py-2.5 text-left font-medium w-20">COD</th>
+                          <th className="px-2 py-2.5 text-left font-medium w-20">Gram</th>
+                          <th className="px-2 py-2.5 text-left font-medium w-16">Pcs</th>
+                          <th className="px-2 py-2.5 text-left font-medium min-w-[110px]">Type</th>
+                          <th className="px-2 py-2.5 text-center font-medium w-10" title="City Match Status">
+                            <CheckCircle2 className="w-4 h-4 mx-auto text-muted-foreground" />
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1439,14 +1456,15 @@ export default function Pipeline() {
                           const isChecked = previewChecked.has(order.orderId);
                           const ovr = previewOverrides[order.orderId];
                           const hasError = !isValid && order.missingFields?.length > 0;
-                          const cityNotMatched = !order.cityMatched;
+                          const cityMatched = isCityMatchedForOrder(order);
+                          const orderNum = String(order.orderNumber || "").replace(/^#/, "");
                           return (
                             <tr
                               key={order.orderId}
-                              className={`border-b last:border-b-0 ${hasError ? "bg-red-50/50 dark:bg-red-950/20" : ""} ${!isChecked && isValid ? "opacity-50" : ""}`}
+                              className={`border-b last:border-b-0 ${hasError ? "bg-red-50/50 dark:bg-red-950/20" : ""} ${!isChecked && isValid ? "opacity-40" : ""}`}
                               data-testid={`preview-row-${order.orderId}`}
                             >
-                              <td className="px-1 py-1">
+                              <td className="px-2 py-1.5">
                                 {isValid ? (
                                   <Checkbox
                                     checked={isChecked}
@@ -1459,93 +1477,101 @@ export default function Pipeline() {
                                     data-testid={`checkbox-preview-${order.orderId}`}
                                   />
                                 ) : (
-                                  <AlertCircle className="w-3.5 h-3.5 text-red-500" />
+                                  <AlertCircle className="w-4 h-4 text-red-500" />
                                 )}
                               </td>
-                              <td className="px-1 py-1 text-muted-foreground">{idx + 1}</td>
-                              <td className="px-1 py-1 font-medium whitespace-nowrap">{order.orderNumber}</td>
-                              <td className="px-1 py-1">
+                              <td className="px-2 py-1.5 text-muted-foreground">{idx + 1}</td>
+                              <td className="px-2 py-1.5 font-medium whitespace-nowrap" data-testid={`text-order-${order.orderId}`}>
+                                {orderNum}
+                                {hasError && (
+                                  <span className="block text-red-500 text-[10px] font-normal" title={order.missingFields.join(", ")}>
+                                    {order.missingFields.join(", ")}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-2 py-1.5">
                                 <Input
-                                  className="h-6 text-xs px-1 min-w-[90px]"
+                                  className="h-9 text-sm px-2 min-w-[130px]"
                                   value={ovr?.customerName ?? order.customerName ?? ""}
                                   onChange={(e) => updateField(order.orderId, "customerName", e.target.value)}
                                   data-testid={`input-name-${order.orderId}`}
                                 />
                               </td>
-                              <td className="px-1 py-1">
+                              <td className="px-2 py-1.5">
                                 <Input
-                                  className="h-6 text-xs px-1 font-mono min-w-[95px]"
+                                  className="h-9 text-sm px-2 font-mono min-w-[110px]"
                                   value={ovr?.phone ?? order.phone ?? ""}
                                   onChange={(e) => updateField(order.orderId, "phone", e.target.value)}
                                   data-testid={`input-phone-${order.orderId}`}
                                 />
                               </td>
-                              <td className="px-1 py-1">
+                              <td className="px-2 py-1.5">
                                 <Input
-                                  className="h-6 text-xs px-1 min-w-[240px]"
+                                  className="h-9 text-sm px-2 min-w-[260px]"
                                   value={ovr?.address ?? order.address ?? ""}
                                   onChange={(e) => updateField(order.orderId, "address", e.target.value)}
                                   data-testid={`input-address-${order.orderId}`}
                                 />
                               </td>
-                              <td className="px-1 py-1">
-                                <span className={`text-xs whitespace-nowrap ${!order.cityMatched ? "text-orange-500 font-medium" : "text-muted-foreground"}`} data-testid={`text-entered-city-${order.orderId}`}>
+                              <td className="px-2 py-1.5">
+                                <span className={`text-sm whitespace-nowrap ${!order.cityMatched ? "text-orange-500 font-medium" : "text-muted-foreground"}`} data-testid={`text-entered-city-${order.orderId}`}>
                                   {order.city || "-"}
                                 </span>
                               </td>
-                              <td className="px-1 py-1">
+                              <td className="px-2 py-1.5">
                                 {courierCities.length > 0 ? (
                                   <CityAutocomplete
                                     value={ovr?.city ?? order.city ?? ""}
                                     onChange={(val) => updateField(order.orderId, "city", val)}
                                     cities={courierCities}
-                                    hasWarning={cityNotMatched && !(ovr?.city && courierCities.some(c => c.name === ovr.city))}
+                                    hasWarning={!cityMatched}
                                     testId={`input-city-${order.orderId}`}
                                   />
                                 ) : (
                                   <Input
-                                    className="h-6 text-xs px-1 min-w-[90px]"
+                                    className="h-9 text-sm px-2 min-w-[120px]"
                                     value={ovr?.city ?? order.city ?? ""}
                                     onChange={(e) => updateField(order.orderId, "city", e.target.value)}
                                     data-testid={`input-city-${order.orderId}`}
                                   />
                                 )}
                               </td>
-                              <td className="px-1 py-1">
+                              <td className="px-2 py-1.5">
                                 <Input
                                   type="number"
                                   min={0}
-                                  className="h-6 w-[65px] text-xs px-1 text-center"
+                                  className="h-9 w-[80px] text-sm px-2 text-center"
                                   value={ovr?.codAmount ?? order.codAmount ?? 0}
                                   onChange={(e) => updateField(order.orderId, "codAmount", parseFloat(e.target.value) || 0)}
                                   data-testid={`input-cod-${order.orderId}`}
                                 />
                               </td>
-                              <td className="px-1 py-1">
+                              <td className="px-2 py-1.5">
                                 <Input
                                   type="number"
                                   min={1}
-                                  className="h-6 w-16 text-xs px-1 text-center"
+                                  className="h-9 w-[80px] text-sm px-2 text-center"
                                   value={ovr?.weight ?? 200}
                                   onChange={(e) => updateField(order.orderId, "weight", parseInt(e.target.value) || 200)}
                                   data-testid={`input-weight-${order.orderId}`}
                                 />
                               </td>
-                              <td className="px-1 py-1">
+                              <td className="px-2 py-1.5">
                                 <Input
-                                  className="h-6 text-xs px-1 min-w-[90px]"
-                                  value={ovr?.description ?? order.productDescription ?? ""}
-                                  onChange={(e) => updateField(order.orderId, "description", e.target.value)}
-                                  data-testid={`input-desc-${order.orderId}`}
+                                  type="number"
+                                  min={1}
+                                  className="h-9 w-[60px] text-sm px-2 text-center"
+                                  value={ovr?.pieces ?? 1}
+                                  onChange={(e) => updateField(order.orderId, "pieces", parseInt(e.target.value) || 1)}
+                                  data-testid={`input-pieces-${order.orderId}`}
                                 />
                               </td>
-                              <td className="px-1 py-1 text-center">{order.pieces || 1}</td>
-                              <td className="px-1 py-1">
+                              <td className="px-2 py-1.5">
                                 <Select
                                   value={ovr?.mode ?? modeOptions[0]}
                                   onValueChange={(val) => updateField(order.orderId, "mode", val)}
                                 >
-                                  <SelectTrigger className="h-6 min-w-[90px] text-xs px-1" data-testid={`select-mode-${order.orderId}`}>
+                                  <SelectTrigger className="h-9 min-w-[100px] text-sm px-2" data-testid={`select-mode-${order.orderId}`}>
                                     <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent>
@@ -1555,11 +1581,11 @@ export default function Pipeline() {
                                   </SelectContent>
                                 </Select>
                               </td>
-                              <td className="px-1 py-1">
-                                {hasError && (
-                                  <span className="text-red-500 text-[10px] whitespace-nowrap" title={order.missingFields.join(", ")}>
-                                    {order.missingFields.join(", ")}
-                                  </span>
+                              <td className="px-2 py-1.5 text-center" data-testid={`city-status-${order.orderId}`}>
+                                {cityMatched ? (
+                                  <CheckCircle2 className="w-5 h-5 text-green-500 mx-auto" />
+                                ) : (
+                                  <XCircle className="w-5 h-5 text-red-500 mx-auto" />
                                 )}
                               </td>
                             </tr>
@@ -1585,11 +1611,18 @@ export default function Pipeline() {
                     </div>
                   </div>
                 )}
-                <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground border-t pt-2">
+                <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground border-t pt-2 flex-wrap">
                   <span>{checkedCount} of {bookingConfirmModal.preview.valid.length} orders selected for booking</span>
-                  {bookingConfirmModal.preview.invalid.length > 0 && (
-                    <span className="text-red-500">{bookingConfirmModal.preview.invalid.length} with errors (shown in table)</span>
-                  )}
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {bookingConfirmModal.preview.invalid.length > 0 && (
+                      <span className="text-red-500">{bookingConfirmModal.preview.invalid.length} with errors</span>
+                    )}
+                    {hasCityErrors && (
+                      <span className="text-red-500 font-medium">
+                        {checkedOrdersWithCityError.length} selected order{checkedOrdersWithCityError.length > 1 ? "s" : ""} with unmatched city - fix or deselect to proceed
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             );
@@ -1598,7 +1631,22 @@ export default function Pipeline() {
             <Button variant="ghost" onClick={() => setBookingConfirmModal({ open: false, preview: null })} data-testid="button-cancel-booking">Back</Button>
             <Button
               onClick={submitBooking}
-              disabled={checkedCount === 0}
+              disabled={checkedCount === 0 || (() => {
+                if (!bookingConfirmModal.preview) return false;
+                const allOrders = [
+                  ...bookingConfirmModal.preview.valid.map((v: any) => ({ ...v, _type: "valid" })),
+                  ...bookingConfirmModal.preview.invalid.map((v: any) => ({ ...v, _type: "invalid" })),
+                ];
+                return allOrders.some(order => {
+                  if (order._type !== "valid") return false;
+                  if (!previewChecked.has(order.orderId)) return false;
+                  const ovr = previewOverrides[order.orderId];
+                  const selectedCity = ovr?.city ?? order.city ?? "";
+                  if (!selectedCity) return true;
+                  if (courierCities.length === 0) return false;
+                  return !courierCities.some((c: any) => c.name.toLowerCase() === selectedCity.toLowerCase());
+                });
+              })()}
               data-testid="button-confirm-booking"
             >
               <Send className="w-3.5 h-3.5 mr-1.5" />
