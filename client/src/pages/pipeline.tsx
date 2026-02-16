@@ -355,10 +355,13 @@ export default function Pipeline() {
       setSelectedIds(new Set());
       const actionLabel: Record<string, string> = { confirm: "confirmed", cancel: "cancelled", pending: "set to pending", hold: "put on hold", "release-hold": "released" };
       const label = actionLabel[variables.action] || "updated";
+      const skipped = data?.skipped || 0;
+      const updated = data?.updated || variables.orderIds.length;
+      const skippedMsg = skipped > 0 ? ` (${skipped} skipped — already in target stage or transition not allowed)` : "";
       const canUndo = ["confirm", "release-hold"].includes(variables.action);
       if (canUndo) {
         const { dismiss } = toast({
-          title: `${variables.orderIds.length} order${variables.orderIds.length > 1 ? "s" : ""} ${label}`,
+          title: `${updated} order${updated !== 1 ? "s" : ""} ${label}${skippedMsg}`,
           description: "Click Undo to revert.",
           action: (
             <Button
@@ -385,7 +388,7 @@ export default function Pipeline() {
           duration: 10000,
         });
       } else {
-        toast({ title: `${variables.orderIds.length} order${variables.orderIds.length > 1 ? "s" : ""} ${label}` });
+        toast({ title: `${updated} order${updated !== 1 ? "s" : ""} ${label}${skippedMsg}` });
       }
     },
   });
@@ -566,7 +569,7 @@ export default function Pipeline() {
     if (action === "cancel") {
       setCancelModal({ open: true, orderIds: [orderId], fromTab: activeTab });
       setCancelAlsoShopify(false);
-    } else if (action === "pending") {
+    } else if (action === "pending" || action === "move-to-pending") {
       setPendingModal({ open: true, orderIds: [orderId] });
     } else if (action === "hold") {
       setHoldModal({ open: true, orderIds: [orderId] });
@@ -780,19 +783,29 @@ export default function Pipeline() {
               <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />Confirm
             </Button>
           )}
-          {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "HOLD") && (
+          {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "HOLD" || activeTab === "READY_TO_SHIP") && (
             <Button size="sm" variant="destructive" onClick={() => handleBulkAction("cancel")} disabled={isPending} data-testid="bulk-cancel">
               <XCircle className="w-3.5 h-3.5 mr-1.5" />Cancel
             </Button>
           )}
-          {(activeTab === "NEW" || activeTab === "PENDING") && (
+          {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "READY_TO_SHIP") && (
             <Button size="sm" variant="secondary" onClick={() => handleBulkAction("hold")} disabled={isPending} data-testid="bulk-hold">
               <Pause className="w-3.5 h-3.5 mr-1.5" />Hold
+            </Button>
+          )}
+          {(activeTab === "READY_TO_SHIP") && (
+            <Button size="sm" variant="secondary" onClick={() => handleBulkAction("pending")} disabled={isPending} data-testid="bulk-pending">
+              <Clock className="w-3.5 h-3.5 mr-1.5" />Pending
             </Button>
           )}
           {activeTab === "HOLD" && (
             <Button size="sm" onClick={() => handleBulkAction("release-hold")} disabled={isPending} data-testid="bulk-release">
               <Truck className="w-3.5 h-3.5 mr-1.5" />Release
+            </Button>
+          )}
+          {activeTab === "HOLD" && (
+            <Button size="sm" variant="secondary" onClick={() => handleBulkAction("pending")} disabled={isPending} data-testid="bulk-pending-hold">
+              <Clock className="w-3.5 h-3.5 mr-1.5" />Pending
             </Button>
           )}
 
@@ -1219,7 +1232,22 @@ export default function Pipeline() {
                         </Button>
                       )}
                       {activeTab === "READY_TO_SHIP" && (
-                        <Badge variant="secondary" className="text-xs">Ready</Badge>
+                        <>
+                          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-amber-600"
+                            onClick={() => handleSingleAction(order.id, "pending")}
+                            disabled={isPending}
+                            title="Move to Pending"
+                            data-testid={`button-pending-rts-${order.id}`}>
+                            <Clock className="w-3.5 h-3.5 mr-1" />Pending
+                          </Button>
+                          <Button size="icon" variant="ghost" className="text-purple-600"
+                            onClick={() => handleSingleAction(order.id, "hold")}
+                            disabled={isPending}
+                            title="Hold"
+                            data-testid={`button-hold-rts-${order.id}`}>
+                            <Pause className="w-4 h-4" />
+                          </Button>
+                        </>
                       )}
                       {activeTab === "BOOKED" && (
                         <Button size="sm" variant="ghost" className="text-xs text-red-600"
@@ -1246,7 +1274,7 @@ export default function Pipeline() {
                           <Undo2 className="w-4 h-4" />
                         </Button>
                       )}
-                      {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "HOLD") && (
+                      {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "HOLD" || activeTab === "READY_TO_SHIP") && (
                         <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-red-600"
                           onClick={() => handleSingleAction(order.id, "cancel")}
                           disabled={isPending}

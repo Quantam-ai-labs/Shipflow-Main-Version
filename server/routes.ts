@@ -1181,18 +1181,6 @@ export async function registerRoutes(
           }
         }
 
-        await storage.updateOrderWorkflow(merchantId, orderId, {
-          courierName: null,
-          courierTracking: null,
-          courierSlipUrl: null,
-          bookingStatus: null,
-          bookingError: null,
-          bookedAt: null,
-          shipmentStatus: "Unfulfilled",
-          courierRawStatus: null,
-          shopifyFulfillmentId: null,
-        });
-
         const userId = getSessionUserId(req) || "system";
         const actorName = await getSessionUserName(req);
         const result = await transitionOrder({
@@ -1211,6 +1199,18 @@ export async function registerRoutes(
         if (!result.success) {
           return res.status(400).json({ message: result.error });
         }
+
+        await storage.updateOrderWorkflow(merchantId, orderId, {
+          courierName: null,
+          courierTracking: null,
+          courierSlipUrl: null,
+          bookingStatus: null,
+          bookingError: null,
+          bookedAt: null,
+          shipmentStatus: "Unfulfilled",
+          courierRawStatus: null,
+          shopifyFulfillmentId: null,
+        });
 
         await storage.createOrderChangeLog({
           orderId,
