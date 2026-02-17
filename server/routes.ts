@@ -1909,7 +1909,7 @@ export async function registerRoutes(
       const pageSize = parseInt(pageSizeStr as string) || 20;
       const offset = (page - 1) * pageSize;
 
-      const targetStatuses = ["FULFILLED", "DELIVERED", "RETURN"];
+      const targetStatuses = ["BOOKED", "FULFILLED", "DELIVERED", "RETURN"];
       let conditions: any[] = [
         eq(orders.merchantId, merchantId),
         inArray(orders.workflowStatus, targetStatuses),
