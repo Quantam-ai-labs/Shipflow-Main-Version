@@ -53,7 +53,6 @@ import { useToast } from "@/hooks/use-toast";
 
 const workflowStatusOptions = [
   { value: "all", label: "All Stages" },
-  { value: "BOOKED", label: "Booked" },
   { value: "FULFILLED", label: "Fulfilled" },
   { value: "DELIVERED", label: "Delivered" },
   { value: "RETURN", label: "Return" },
@@ -92,7 +91,6 @@ const bookingStatusOptions = [
 ];
 
 const WORKFLOW_STATUS_CONFIG: Record<string, { color: string; icon: React.ElementType; label: string }> = {
-  'BOOKED': { color: "bg-purple-500/10 text-purple-600 border-purple-500/20", icon: Package, label: "Booked" },
   'FULFILLED': { color: "bg-blue-500/10 text-blue-600 border-blue-500/20", icon: Truck, label: "Fulfilled" },
   'DELIVERED': { color: "bg-green-500/10 text-green-600 border-green-500/20", icon: CheckCircle2, label: "Delivered" },
   'RETURN': { color: "bg-red-500/10 text-red-600 border-red-500/20", icon: RotateCcw, label: "Return" },
@@ -321,12 +319,11 @@ export default function Shipments() {
   const shipmentOrders = data?.orders ?? [];
   const totalPages = Math.ceil((data?.total ?? 0) / pageSize);
   const counts = data?.counts ?? {};
-  const bookedCount = counts["BOOKED"] ?? 0;
   const fulfilledCount = counts["FULFILLED"] ?? 0;
   const deliveredCount = counts["DELIVERED"] ?? 0;
   const returnCount = counts["RETURN"] ?? 0;
-  const totalCount = bookedCount + fulfilledCount + deliveredCount + returnCount;
-  const pendingCount = bookedCount + fulfilledCount;
+  const totalCount = fulfilledCount + deliveredCount + returnCount;
+  const pendingCount = fulfilledCount;
 
   const bkDateParams = dateRangeToParams(bkDateRange);
   const bkQueryParams = new URLSearchParams({
@@ -461,7 +458,7 @@ export default function Shipments() {
                 </div>
                 <div>
                   <p className="text-2xl font-bold" data-testid="stat-pending">{pendingCount}</p>
-                  <p className="text-xs text-muted-foreground">Pending</p>
+                  <p className="text-xs text-muted-foreground">In Transit</p>
                 </div>
               </CardContent>
             </Card>

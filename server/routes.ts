@@ -1909,7 +1909,7 @@ export async function registerRoutes(
       const pageSize = parseInt(pageSizeStr as string) || 20;
       const offset = (page - 1) * pageSize;
 
-      const targetStatuses = ["BOOKED", "FULFILLED", "DELIVERED", "RETURN"];
+      const targetStatuses = ["FULFILLED", "DELIVERED", "RETURN"];
       let conditions: any[] = [
         eq(orders.merchantId, merchantId),
         inArray(orders.workflowStatus, targetStatuses),
@@ -1988,18 +1988,28 @@ export async function registerRoutes(
         db.select({ count: count() }).from(orders).where(whereClause),
       ]);
 
+      const countConditions: any[] = [
+        eq(orders.merchantId, merchantId),
+        inArray(orders.workflowStatus, targetStatuses),
+      ];
+      if (dateFrom) {
+        const fromDate = new Date(dateFrom as string);
+        fromDate.setHours(0, 0, 0, 0);
+        countConditions.push(sql`${orders.orderDate} >= ${fromDate.toISOString()}`);
+      }
+      if (dateTo) {
+        const toDate = new Date(dateTo as string);
+        toDate.setHours(23, 59, 59, 999);
+        countConditions.push(sql`${orders.orderDate} <= ${toDate.toISOString()}`);
+      }
+
       const countsByStatus = await db
         .select({
           workflowStatus: orders.workflowStatus,
           count: count(),
         })
         .from(orders)
-        .where(
-          and(
-            eq(orders.merchantId, merchantId),
-            inArray(orders.workflowStatus, targetStatuses),
-          ),
-        )
+        .where(and(...countConditions))
         .groupBy(orders.workflowStatus);
 
       const counts: Record<string, number> = {};
