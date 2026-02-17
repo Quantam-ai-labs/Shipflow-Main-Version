@@ -512,12 +512,14 @@ export class ShopifyService {
 
         try {
           const { transitionOrder, applyRoboTags } = await import('./workflowTransition');
+          const terminalStates = ['DELIVERED', 'RETURN', 'CANCELLED'];
+          
           if (initialWorkflowStatus === 'CANCELLED') {
             await transitionOrder({
               merchantId,
               orderId: existingOrderId,
               toStatus: 'CANCELLED',
-              action: 'shopify_sync_cancel',
+              action: 'shopify_sync',
               actorType: 'system',
               reason: 'Cancelled in Shopify',
               extraData: {
@@ -525,10 +527,29 @@ export class ShopifyService {
                 cancelReason: 'Cancelled in Shopify',
               },
             });
-          } else if (initialWorkflowStatus !== 'FULFILLED') {
+          } else if (initialWorkflowStatus === 'FULFILLED') {
+            const existingOrder = await storage.getOrderById(merchantId, existingOrderId);
+            if (existingOrder && !terminalStates.includes(existingOrder.workflowStatus) && existingOrder.workflowStatus !== 'FULFILLED') {
+              await transitionOrder({
+                merchantId,
+                orderId: existingOrderId,
+                toStatus: 'FULFILLED',
+                action: 'shopify_sync',
+                actorType: 'system',
+                reason: `Fulfilled in Shopify (was ${existingOrder.workflowStatus} in ShipFlow)`,
+                extraData: {
+                  dispatchedAt: now,
+                },
+              });
+            }
+          }
+          
+          if (initialWorkflowStatus !== 'CANCELLED') {
             await applyRoboTags(merchantId, existingOrderId, transformedOrder.tags);
           }
-        } catch (e) {}
+        } catch (e) {
+          console.error(`[Shopify] Error processing workflow for order ${existingOrderId}:`, e);
+        }
         updatedCount++;
       } else {
         const createData: any = {

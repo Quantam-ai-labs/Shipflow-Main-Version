@@ -32,7 +32,7 @@ const SYSTEM_ALLOWED_TRANSITIONS: Record<WorkflowStatus, WorkflowStatus[]> = {
 };
 
 function isTransitionAllowed(from: string, to: string, actorType: string, action: string): { allowed: boolean; reason?: string } {
-  if (action === "revert" || action === "admin_override" || action === "data_repair" || action === "courier_status_sync") {
+  if (action === "revert" || action === "admin_override" || action === "data_repair" || action === "courier_status_sync" || action === "shopify_sync") {
     return { allowed: true };
   }
 
