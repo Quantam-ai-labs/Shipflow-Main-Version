@@ -527,19 +527,17 @@ export class ShopifyService {
                 cancelReason: 'Cancelled in Shopify',
               },
             });
-          } else if (initialWorkflowStatus === 'FULFILLED') {
+          } else if (initialWorkflowStatus === 'BOOKED') {
             const existingOrder = await storage.getOrderById(merchantId, existingOrderId);
-            if (existingOrder && !terminalStates.includes(existingOrder.workflowStatus) && existingOrder.workflowStatus !== 'FULFILLED') {
+            const preBookedStates = ['NEW', 'PENDING', 'HOLD', 'READY_TO_SHIP'];
+            if (existingOrder && preBookedStates.includes(existingOrder.workflowStatus)) {
               await transitionOrder({
                 merchantId,
                 orderId: existingOrderId,
-                toStatus: 'FULFILLED',
+                toStatus: 'BOOKED',
                 action: 'shopify_sync',
                 actorType: 'system',
-                reason: `Fulfilled in Shopify (was ${existingOrder.workflowStatus} in ShipFlow)`,
-                extraData: {
-                  dispatchedAt: now,
-                },
+                reason: `Fulfilled in Shopify - moved to BOOKED (was ${existingOrder.workflowStatus} in ShipFlow)`,
               });
             }
           }
@@ -566,9 +564,9 @@ export class ShopifyService {
           createData.cancelledAt = shopifyOrder.cancelled_at ? new Date(shopifyOrder.cancelled_at) : now;
           createData.cancelReason = 'Cancelled in Shopify';
         }
-        if (initialWorkflowStatus === 'FULFILLED') {
+        if (initialWorkflowStatus === 'BOOKED') {
           if (!createData.shipmentStatus || createData.shipmentStatus === 'Unfulfilled' || createData.shipmentStatus === 'pending') {
-            createData.shipmentStatus = 'IN_TRANSIT';
+            createData.shipmentStatus = 'BOOKED';
           }
         }
         const created = await storage.createOrder(createData);
@@ -598,7 +596,7 @@ export class ShopifyService {
       return 'CANCELLED';
     }
     if (shopifyOrder.fulfillment_status === 'fulfilled') {
-      return 'FULFILLED';
+      return 'BOOKED';
     }
     return 'NEW';
   }
