@@ -235,7 +235,7 @@ export default function Integrations() {
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       toast({
         title: "Reconciliation Complete",
-        description: result.message || `${result.created} new, ${result.updated} updated`,
+        description: result.message || `${result.synced} new, ${result.updated} updated`,
       });
     },
     onError: () => {

@@ -4360,11 +4360,12 @@ export async function registerRoutes(
       const result = await shopifyService.syncOrders(
         merchantId,
         store.shopDomain,
-        false,
+        true,
       );
       res.json({
         success: true,
         ...result,
+        message: `Full scan complete: ${result.synced} new, ${result.updated} updated`,
         lastSyncAt: new Date().toISOString(),
       });
     } catch (error: any) {
