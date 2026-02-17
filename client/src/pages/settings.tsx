@@ -232,6 +232,20 @@ function CourierStatusMappingSection() {
     },
   });
 
+  const saveAllMappingsMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/courier-status-mappings/save-all");
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/courier-status-mappings"] });
+      toast({ title: "Mappings saved", description: `All ${data.count || 0} mappings have been saved.` });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to save mappings.", variant: "destructive" });
+    },
+  });
+
   const resyncMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/courier-status-mappings/resync");
@@ -315,12 +329,22 @@ function CourierStatusMappingSection() {
             <Button
               variant="default"
               size="sm"
+              onClick={() => saveAllMappingsMutation.mutate()}
+              disabled={saveAllMappingsMutation.isPending}
+              data-testid="button-save-mappings"
+            >
+              <Save className="w-4 h-4 mr-1" />
+              {saveAllMappingsMutation.isPending ? "Saving..." : "Save All"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => resyncMutation.mutate()}
               disabled={resyncMutation.isPending}
-              data-testid="button-save-resync"
+              data-testid="button-resync-stages"
             >
               <RefreshCw className={`w-4 h-4 mr-1 ${resyncMutation.isPending ? "animate-spin" : ""}`} />
-              {resyncMutation.isPending ? "Syncing..." : "Save & ReSync"}
+              {resyncMutation.isPending ? "Syncing..." : "ReSync"}
             </Button>
             <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
               <DialogTrigger asChild>

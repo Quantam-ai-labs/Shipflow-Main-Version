@@ -6680,6 +6680,32 @@ export async function registerRoutes(
   );
 
   app.post(
+    "/api/courier-status-mappings/save-all",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+
+        const { clearMappingsCache } = await import(
+          "./services/couriers/index"
+        );
+        clearMappingsCache(merchantId);
+
+        const allMappings = await storage.getCourierStatusMappings(merchantId);
+        res.json({
+          success: true,
+          count: allMappings.length,
+          message: `All ${allMappings.length} mappings saved successfully`,
+        });
+      } catch (error) {
+        console.error("Error saving all mappings:", error);
+        res.status(500).json({ message: "Failed to save mappings" });
+      }
+    },
+  );
+
+  app.post(
     "/api/courier-status-mappings/resync",
     isAuthenticated,
     async (req: any, res) => {
