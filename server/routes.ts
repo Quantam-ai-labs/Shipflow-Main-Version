@@ -24,6 +24,8 @@ import {
   desc,
   count,
   isNotNull,
+  gte,
+  lte,
 } from "drizzle-orm";
 import {
   setupAuth,
@@ -1945,12 +1947,12 @@ export async function registerRoutes(
       if (dateFrom) {
         const fromDate = new Date(dateFrom as string);
         fromDate.setHours(0, 0, 0, 0);
-        conditions.push(sql`${orders.orderDate} >= ${fromDate.toISOString()}`);
+        conditions.push(gte(orders.orderDate, fromDate));
       }
       if (dateTo) {
         const toDate = new Date(dateTo as string);
         toDate.setHours(23, 59, 59, 999);
-        conditions.push(sql`${orders.orderDate} <= ${toDate.toISOString()}`);
+        conditions.push(lte(orders.orderDate, toDate));
       }
 
       const whereClause = and(...conditions);
@@ -1995,12 +1997,12 @@ export async function registerRoutes(
       if (dateFrom) {
         const fromDate = new Date(dateFrom as string);
         fromDate.setHours(0, 0, 0, 0);
-        countConditions.push(sql`${orders.orderDate} >= ${fromDate.toISOString()}`);
+        countConditions.push(gte(orders.orderDate, fromDate));
       }
       if (dateTo) {
         const toDate = new Date(dateTo as string);
         toDate.setHours(23, 59, 59, 999);
-        countConditions.push(sql`${orders.orderDate} <= ${toDate.toISOString()}`);
+        countConditions.push(lte(orders.orderDate, toDate));
       }
 
       const countsByStatus = await db
