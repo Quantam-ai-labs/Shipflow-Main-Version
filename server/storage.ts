@@ -30,6 +30,7 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, ilike, sql, count, inArray, isNull, isNotNull, gte } from "drizzle-orm";
+import { normalizePakistaniPhone } from "./utils/phone";
 
 export interface IStorage {
   // Merchants
@@ -508,6 +509,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateOrderWorkflow(merchantId: string, orderId: string, data: Partial<Order>): Promise<Order | undefined> {
+    if ((data as any).customerPhone) {
+      data = { ...data, customerPhone: normalizePakistaniPhone((data as any).customerPhone) } as Partial<Order>;
+    }
     const [updated] = await db.update(orders)
       .set({ ...data, updatedAt: new Date() })
       .where(and(eq(orders.id, orderId), eq(orders.merchantId, merchantId)))
@@ -697,6 +701,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createOrder(order: InsertOrder): Promise<Order> {
+    if (order.customerPhone) {
+      order = { ...order, customerPhone: normalizePakistaniPhone(order.customerPhone) };
+    }
     if (order.shopifyOrderId && order.merchantId) {
       const [result] = await db.insert(orders)
         .values(order)
@@ -713,6 +720,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateOrder(merchantId: string, id: string, data: Partial<InsertOrder>): Promise<Order | undefined> {
+    if (data.customerPhone) {
+      data = { ...data, customerPhone: normalizePakistaniPhone(data.customerPhone) };
+    }
     const [updated] = await db.update(orders).set({ ...data, updatedAt: new Date() })
       .where(and(eq(orders.id, id), eq(orders.merchantId, merchantId)))
       .returning();

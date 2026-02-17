@@ -3,6 +3,7 @@ import express from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
+import { normalizePakistaniPhone } from "./utils/phone";
 import {
   shipmentPrintRecords,
   users,
@@ -298,7 +299,7 @@ async function syncShopifyOrders(
       orderNumber: generateOrderNumber(),
       customerName: customer,
       customerEmail: `${customer.toLowerCase().replace(" ", ".")}@example.com`,
-      customerPhone: `+92${Math.floor(Math.random() * 900000000) + 100000000}`,
+      customerPhone: `03${Math.floor(Math.random() * 900000000) + 100000000}`.slice(0, 11),
       shippingAddress: `House ${Math.floor(Math.random() * 500) + 1}, Street ${Math.floor(Math.random() * 50) + 1}`,
       city,
       country: "Pakistan",
@@ -679,7 +680,7 @@ export async function registerRoutes(
             pendingReason: null,
             pendingReasonType: null,
           };
-          if (customerPhone) extraData.customerPhone = customerPhone;
+          if (customerPhone) extraData.customerPhone = normalizePakistaniPhone(customerPhone) || customerPhone;
           if (shippingAddress) extraData.shippingAddress = shippingAddress;
           if (city) extraData.city = city;
           break;
@@ -985,6 +986,9 @@ export async function registerRoutes(
               val = val.filter(
                 (item: any) => item && typeof item === "object" && item.name,
               );
+            }
+            if (field === "customerPhone" && typeof val === "string") {
+              val = normalizePakistaniPhone(val) || val;
             }
             updateData[field] = val;
             fieldsToCheck.push({ key: field, newVal: val });

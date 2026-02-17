@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { decryptToken } from './encryption';
+import { normalizePakistaniPhone } from '../utils/phone';
 
 interface ShopifyConfig {
   clientId: string;
@@ -687,6 +688,7 @@ export class ShopifyService {
     } else if (isMeaningful(notePhone)) {
       customerPhone = notePhone.trim();
     }
+    customerPhone = normalizePakistaniPhone(customerPhone);
 
     const customerEmail = customer?.email?.trim() || shopifyOrder.email?.trim() || (shopifyOrder as any).contact_email?.trim() || null;
 
