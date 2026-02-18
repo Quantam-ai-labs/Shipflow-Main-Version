@@ -883,3 +883,99 @@ export const insertProductSchema = createInsertSchema(products).omit({
 });
 export type InsertProduct = z.infer<typeof insertProductSchema>;
 export type Product = typeof products.$inferSelect;
+
+// ============================================
+// EXPENSES (Accounting - expense tracking)
+// ============================================
+export const expenses = pgTable("expenses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description"),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  category: varchar("category", { length: 100 }).notNull(),
+  date: timestamp("date").notNull(),
+  paymentMethod: varchar("payment_method", { length: 50 }),
+  reference: varchar("reference", { length: 255 }),
+  isRecurring: boolean("is_recurring").default(false),
+  recurringFrequency: varchar("recurring_frequency", { length: 20 }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_expenses_merchant").on(table.merchantId),
+  index("idx_expenses_date").on(table.merchantId, table.date),
+  index("idx_expenses_category").on(table.merchantId, table.category),
+]);
+
+export const insertExpenseSchema = createInsertSchema(expenses).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertExpense = z.infer<typeof insertExpenseSchema>;
+export type Expense = typeof expenses.$inferSelect;
+
+// ============================================
+// STOCK LEDGER (Accounting - stock movements)
+// ============================================
+export const stockLedger = pgTable("stock_ledger", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  type: varchar("type", { length: 20 }).notNull(),
+  productName: varchar("product_name", { length: 500 }).notNull(),
+  sku: varchar("sku", { length: 100 }),
+  quantity: integer("quantity").notNull(),
+  unitPrice: decimal("unit_price", { precision: 12, scale: 2 }).notNull(),
+  totalValue: decimal("total_value", { precision: 12, scale: 2 }).notNull(),
+  supplier: varchar("supplier", { length: 255 }),
+  reference: varchar("reference", { length: 255 }),
+  date: timestamp("date").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_stock_ledger_merchant").on(table.merchantId),
+  index("idx_stock_ledger_type").on(table.merchantId, table.type),
+  index("idx_stock_ledger_date").on(table.merchantId, table.date),
+]);
+
+export const insertStockLedgerSchema = createInsertSchema(stockLedger).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertStockLedger = z.infer<typeof insertStockLedgerSchema>;
+export type StockLedgerEntry = typeof stockLedger.$inferSelect;
+
+// ============================================
+// COURIER DUES (Accounting - courier payables/receivables)
+// ============================================
+export const courierDues = pgTable("courier_dues", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  courierName: varchar("courier_name", { length: 100 }).notNull(),
+  type: varchar("type", { length: 20 }).notNull(),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  description: varchar("description", { length: 500 }),
+  reference: varchar("reference", { length: 255 }),
+  dueDate: timestamp("due_date"),
+  status: varchar("status", { length: 20 }).notNull().default("pending"),
+  paidDate: timestamp("paid_date"),
+  date: timestamp("date").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_courier_dues_merchant").on(table.merchantId),
+  index("idx_courier_dues_courier").on(table.merchantId, table.courierName),
+  index("idx_courier_dues_status").on(table.merchantId, table.status),
+])
+
+export const insertCourierDueSchema = createInsertSchema(courierDues).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertCourierDue = z.infer<typeof insertCourierDueSchema>;
+export type CourierDue = typeof courierDues.$inferSelect;

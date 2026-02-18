@@ -52,6 +52,10 @@ import {
   Receipt,
   FileCheck,
   ShoppingBag,
+  Calculator,
+  Wallet,
+  ArrowDownLeft,
+  ArrowUpRight,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery } from "@tanstack/react-query";
@@ -120,6 +124,29 @@ const codSubItems = [
   },
 ];
 
+const accountingSubItems = [
+  {
+    title: "Financial Dashboard",
+    url: "/financial-dashboard",
+    icon: Wallet,
+  },
+  {
+    title: "Expenses",
+    url: "/expense-tracker",
+    icon: Receipt,
+  },
+  {
+    title: "Stock Ledger",
+    url: "/stock-ledger",
+    icon: Package,
+  },
+  {
+    title: "Courier Dues",
+    url: "/courier-dues",
+    icon: Truck,
+  },
+];
+
 const settingsNavItems = [
   {
     title: "Team",
@@ -178,6 +205,7 @@ export function AppSidebar() {
 
   const isOrdersRouteActive = location.startsWith("/orders");
   const isInventoryRouteActive = location === "/products" || location === "/product-analytics";
+  const isAccountingRouteActive = location === "/financial-dashboard" || location === "/expense-tracker" || location === "/stock-ledger" || location === "/courier-dues";
   const isCodRouteActive = location === "/cod-reconciliation" || location === "/payment-ledger" || location === "/manage-cheques";
   const totalOrderCount = counts
     ? Object.values(counts).reduce((sum, c) => sum + (c || 0), 0)
@@ -319,6 +347,34 @@ export function AppSidebar() {
                   <CollapsibleContent>
                     <SidebarMenuSub>
                       {codSubItems.map((item) => (
+                        <SidebarMenuSubItem key={item.title}>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={location === item.url}
+                          >
+                            <Link href={item.url} data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                              <item.icon className="w-3.5 h-3.5" />
+                              <span>{item.title}</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </SidebarMenuItem>
+              </Collapsible>
+              <Collapsible defaultOpen={isAccountingRouteActive} asChild className="group/accounting-collapsible">
+                <SidebarMenuItem>
+                  <CollapsibleTrigger asChild>
+                    <SidebarMenuButton data-testid="nav-accounting-toggle" tooltip="Accounting">
+                      <Calculator className="w-4 h-4" />
+                      <span className="flex-1">Accounting</span>
+                      <ChevronRight className="w-4 h-4 ml-auto transition-transform duration-200 group-data-[state=open]/accounting-collapsible:rotate-90" />
+                    </SidebarMenuButton>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <SidebarMenuSub>
+                      {accountingSubItems.map((item) => (
                         <SidebarMenuSubItem key={item.title}>
                           <SidebarMenuSubButton
                             asChild

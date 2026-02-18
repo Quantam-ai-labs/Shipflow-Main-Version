@@ -33,6 +33,10 @@ import InviteAccept from "@/pages/invite-accept";
 import PrintLabels from "@/pages/print-labels";
 import Products from "@/pages/products";
 import ProductAnalytics from "@/pages/product-analytics";
+import ExpenseTracker from "@/pages/expense-tracker";
+import StockLedger from "@/pages/stock-ledger";
+import CourierDues from "@/pages/courier-dues";
+import FinancialDashboard from "@/pages/financial-dashboard";
 import NotFound from "@/pages/not-found";
 
 function OnboardingBanner() {
@@ -72,6 +76,10 @@ function AppRoutes() {
       <Route path="/integrations" component={Integrations} />
       <Route path="/products" component={Products} />
       <Route path="/product-analytics" component={ProductAnalytics} />
+      <Route path="/expense-tracker" component={ExpenseTracker} />
+      <Route path="/courier-dues" component={CourierDues} />
+      <Route path="/financial-dashboard" component={FinancialDashboard} />
+      <Route path="/stock-ledger" component={StockLedger} />
       <Route path="/settings" component={Settings} />
       <Route path="/onboarding" component={Onboarding} />
       <Route path="/admin" component={AdminPanel} />

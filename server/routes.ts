@@ -13,6 +13,9 @@ import {
   teamInvites,
   orders,
   codReconciliation,
+  expenses,
+  stockLedger,
+  courierDues,
 } from "@shared/schema";
 import {
   and,
@@ -8197,6 +8200,488 @@ export async function registerRoutes(
       res.json({ success: true, updated });
     } catch (error: any) {
       console.error("[Backfill] Error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // ACCOUNTING - EXPENSES
+  // ============================================
+
+  app.get("/api/expenses", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { category, startDate, endDate } = req.query;
+      let query = db.select().from(expenses).where(eq(expenses.merchantId, merchantId));
+      const conditions: any[] = [eq(expenses.merchantId, merchantId)];
+      if (category && category !== "all") conditions.push(eq(expenses.category, category as string));
+      if (startDate) conditions.push(gte(expenses.date, new Date(startDate as string)));
+      if (endDate) conditions.push(lte(expenses.date, new Date(endDate as string)));
+      const results = await db.select().from(expenses).where(and(...conditions)).orderBy(desc(expenses.date));
+      res.json(results);
+    } catch (error: any) {
+      console.error("[Expenses] Error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/expenses", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const schema = z.object({
+        title: z.string().min(1),
+        description: z.string().optional(),
+        amount: z.string().or(z.number()),
+        category: z.string().min(1),
+        date: z.string(),
+        paymentMethod: z.string().optional(),
+        reference: z.string().optional(),
+        isRecurring: z.boolean().optional(),
+        recurringFrequency: z.string().optional(),
+        notes: z.string().optional(),
+      });
+      const parsed = schema.parse(req.body);
+      const [result] = await db.insert(expenses).values({
+        merchantId,
+        title: parsed.title,
+        description: parsed.description || null,
+        amount: String(parsed.amount),
+        category: parsed.category,
+        date: new Date(parsed.date),
+        paymentMethod: parsed.paymentMethod || null,
+        reference: parsed.reference || null,
+        isRecurring: parsed.isRecurring || false,
+        recurringFrequency: parsed.recurringFrequency || null,
+        notes: parsed.notes || null,
+      }).returning();
+      res.json(result);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: "Invalid data", details: error.errors });
+      console.error("[Expenses] Create error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.put("/api/expenses/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { id } = req.params;
+      const schema = z.object({
+        title: z.string().min(1).optional(),
+        description: z.string().optional(),
+        amount: z.string().or(z.number()).optional(),
+        category: z.string().min(1).optional(),
+        date: z.string().optional(),
+        paymentMethod: z.string().optional(),
+        reference: z.string().optional(),
+        isRecurring: z.boolean().optional(),
+        recurringFrequency: z.string().optional(),
+        notes: z.string().optional(),
+      });
+      const parsed = schema.parse(req.body);
+      const updateData: any = {};
+      if (parsed.title !== undefined) updateData.title = parsed.title;
+      if (parsed.description !== undefined) updateData.description = parsed.description;
+      if (parsed.amount !== undefined) updateData.amount = String(parsed.amount);
+      if (parsed.category !== undefined) updateData.category = parsed.category;
+      if (parsed.date !== undefined) updateData.date = new Date(parsed.date);
+      if (parsed.paymentMethod !== undefined) updateData.paymentMethod = parsed.paymentMethod;
+      if (parsed.reference !== undefined) updateData.reference = parsed.reference;
+      if (parsed.isRecurring !== undefined) updateData.isRecurring = parsed.isRecurring;
+      if (parsed.recurringFrequency !== undefined) updateData.recurringFrequency = parsed.recurringFrequency;
+      if (parsed.notes !== undefined) updateData.notes = parsed.notes;
+      updateData.updatedAt = new Date();
+      const [result] = await db.update(expenses).set(updateData).where(and(eq(expenses.id, id), eq(expenses.merchantId, merchantId))).returning();
+      if (!result) return res.status(404).json({ error: "Expense not found" });
+      res.json(result);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: "Invalid data", details: error.errors });
+      console.error("[Expenses] Update error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/expenses/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { id } = req.params;
+      const [result] = await db.delete(expenses).where(and(eq(expenses.id, id), eq(expenses.merchantId, merchantId))).returning();
+      if (!result) return res.status(404).json({ error: "Expense not found" });
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("[Expenses] Delete error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/expenses/summary", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { startDate, endDate } = req.query;
+      const conditions: any[] = [eq(expenses.merchantId, merchantId)];
+      if (startDate) conditions.push(gte(expenses.date, new Date(startDate as string)));
+      if (endDate) conditions.push(lte(expenses.date, new Date(endDate as string)));
+      const results = await db.select({
+        category: expenses.category,
+        total: sql<string>`SUM(${expenses.amount}::numeric)`,
+        count: sql<number>`COUNT(*)::int`,
+      }).from(expenses).where(and(...conditions)).groupBy(expenses.category);
+      const totalResult = await db.select({
+        total: sql<string>`COALESCE(SUM(${expenses.amount}::numeric), 0)`,
+      }).from(expenses).where(and(...conditions));
+      res.json({ byCategory: results, total: totalResult[0]?.total || "0" });
+    } catch (error: any) {
+      console.error("[Expenses] Summary error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // ACCOUNTING - STOCK LEDGER
+  // ============================================
+
+  app.get("/api/stock-ledger", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { type, startDate, endDate } = req.query;
+      const conditions: any[] = [eq(stockLedger.merchantId, merchantId)];
+      if (type && type !== "all") conditions.push(eq(stockLedger.type, type as string));
+      if (startDate) conditions.push(gte(stockLedger.date, new Date(startDate as string)));
+      if (endDate) conditions.push(lte(stockLedger.date, new Date(endDate as string)));
+      const results = await db.select().from(stockLedger).where(and(...conditions)).orderBy(desc(stockLedger.date));
+      res.json(results);
+    } catch (error: any) {
+      console.error("[StockLedger] Error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/stock-ledger", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const schema = z.object({
+        type: z.enum(["incoming", "outgoing", "return"]),
+        productName: z.string().min(1),
+        sku: z.string().optional(),
+        quantity: z.number().int().positive(),
+        unitPrice: z.string().or(z.number()),
+        totalValue: z.string().or(z.number()),
+        supplier: z.string().optional(),
+        reference: z.string().optional(),
+        date: z.string(),
+        notes: z.string().optional(),
+      });
+      const parsed = schema.parse(req.body);
+      const [result] = await db.insert(stockLedger).values({
+        merchantId,
+        type: parsed.type,
+        productName: parsed.productName,
+        sku: parsed.sku || null,
+        quantity: parsed.quantity,
+        unitPrice: String(parsed.unitPrice),
+        totalValue: String(parsed.totalValue),
+        supplier: parsed.supplier || null,
+        reference: parsed.reference || null,
+        date: new Date(parsed.date),
+        notes: parsed.notes || null,
+      }).returning();
+      res.json(result);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: "Invalid data", details: error.errors });
+      console.error("[StockLedger] Create error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.put("/api/stock-ledger/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { id } = req.params;
+      const schema = z.object({
+        type: z.enum(["incoming", "outgoing", "return"]).optional(),
+        productName: z.string().min(1).optional(),
+        sku: z.string().optional(),
+        quantity: z.number().int().positive().optional(),
+        unitPrice: z.string().or(z.number()).optional(),
+        totalValue: z.string().or(z.number()).optional(),
+        supplier: z.string().optional(),
+        reference: z.string().optional(),
+        date: z.string().optional(),
+        notes: z.string().optional(),
+      });
+      const parsed = schema.parse(req.body);
+      const updateData: any = {};
+      if (parsed.type !== undefined) updateData.type = parsed.type;
+      if (parsed.productName !== undefined) updateData.productName = parsed.productName;
+      if (parsed.sku !== undefined) updateData.sku = parsed.sku;
+      if (parsed.quantity !== undefined) updateData.quantity = parsed.quantity;
+      if (parsed.unitPrice !== undefined) updateData.unitPrice = String(parsed.unitPrice);
+      if (parsed.totalValue !== undefined) updateData.totalValue = String(parsed.totalValue);
+      if (parsed.supplier !== undefined) updateData.supplier = parsed.supplier;
+      if (parsed.reference !== undefined) updateData.reference = parsed.reference;
+      if (parsed.date !== undefined) updateData.date = new Date(parsed.date);
+      if (parsed.notes !== undefined) updateData.notes = parsed.notes;
+      updateData.updatedAt = new Date();
+      const [result] = await db.update(stockLedger).set(updateData).where(and(eq(stockLedger.id, id), eq(stockLedger.merchantId, merchantId))).returning();
+      if (!result) return res.status(404).json({ error: "Entry not found" });
+      res.json(result);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: "Invalid data", details: error.errors });
+      console.error("[StockLedger] Update error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/stock-ledger/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { id } = req.params;
+      const [result] = await db.delete(stockLedger).where(and(eq(stockLedger.id, id), eq(stockLedger.merchantId, merchantId))).returning();
+      if (!result) return res.status(404).json({ error: "Entry not found" });
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("[StockLedger] Delete error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/stock-ledger/summary", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { startDate, endDate } = req.query;
+      const conditions: any[] = [eq(stockLedger.merchantId, merchantId)];
+      if (startDate) conditions.push(gte(stockLedger.date, new Date(startDate as string)));
+      if (endDate) conditions.push(lte(stockLedger.date, new Date(endDate as string)));
+      const results = await db.select({
+        type: stockLedger.type,
+        totalQty: sql<number>`COALESCE(SUM(${stockLedger.quantity}), 0)::int`,
+        totalValue: sql<string>`COALESCE(SUM(${stockLedger.totalValue}::numeric), 0)`,
+        count: sql<number>`COUNT(*)::int`,
+      }).from(stockLedger).where(and(...conditions)).groupBy(stockLedger.type);
+      res.json(results);
+    } catch (error: any) {
+      console.error("[StockLedger] Summary error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // ACCOUNTING - COURIER DUES
+  // ============================================
+
+  app.get("/api/courier-dues", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { courierName, status, startDate, endDate } = req.query;
+      const conditions: any[] = [eq(courierDues.merchantId, merchantId)];
+      if (courierName && courierName !== "all") conditions.push(eq(courierDues.courierName, courierName as string));
+      if (status && status !== "all") conditions.push(eq(courierDues.status, status as string));
+      if (startDate) conditions.push(gte(courierDues.date, new Date(startDate as string)));
+      if (endDate) conditions.push(lte(courierDues.date, new Date(endDate as string)));
+      const results = await db.select().from(courierDues).where(and(...conditions)).orderBy(desc(courierDues.date));
+      res.json(results);
+    } catch (error: any) {
+      console.error("[CourierDues] Error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/courier-dues", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const schema = z.object({
+        courierName: z.string().min(1),
+        type: z.enum(["payable", "receivable"]),
+        amount: z.string().or(z.number()),
+        description: z.string().optional(),
+        reference: z.string().optional(),
+        dueDate: z.string().optional(),
+        status: z.string().optional(),
+        date: z.string(),
+        notes: z.string().optional(),
+      });
+      const parsed = schema.parse(req.body);
+      const [result] = await db.insert(courierDues).values({
+        merchantId,
+        courierName: parsed.courierName,
+        type: parsed.type,
+        amount: String(parsed.amount),
+        description: parsed.description || null,
+        reference: parsed.reference || null,
+        dueDate: parsed.dueDate ? new Date(parsed.dueDate) : null,
+        status: parsed.status || "pending",
+        date: new Date(parsed.date),
+        notes: parsed.notes || null,
+      }).returning();
+      res.json(result);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: "Invalid data", details: error.errors });
+      console.error("[CourierDues] Create error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.put("/api/courier-dues/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { id } = req.params;
+      const schema = z.object({
+        courierName: z.string().min(1).optional(),
+        type: z.enum(["payable", "receivable"]).optional(),
+        amount: z.string().or(z.number()).optional(),
+        description: z.string().optional(),
+        reference: z.string().optional(),
+        dueDate: z.string().nullable().optional(),
+        status: z.string().optional(),
+        paidDate: z.string().nullable().optional(),
+        date: z.string().optional(),
+        notes: z.string().optional(),
+      });
+      const parsed = schema.parse(req.body);
+      const updateData: any = {};
+      if (parsed.courierName !== undefined) updateData.courierName = parsed.courierName;
+      if (parsed.type !== undefined) updateData.type = parsed.type;
+      if (parsed.amount !== undefined) updateData.amount = String(parsed.amount);
+      if (parsed.description !== undefined) updateData.description = parsed.description;
+      if (parsed.reference !== undefined) updateData.reference = parsed.reference;
+      if (parsed.dueDate !== undefined) updateData.dueDate = parsed.dueDate ? new Date(parsed.dueDate) : null;
+      if (parsed.status !== undefined) updateData.status = parsed.status;
+      if (parsed.paidDate !== undefined) updateData.paidDate = parsed.paidDate ? new Date(parsed.paidDate) : null;
+      if (parsed.date !== undefined) updateData.date = new Date(parsed.date);
+      if (parsed.notes !== undefined) updateData.notes = parsed.notes;
+      updateData.updatedAt = new Date();
+      const [result] = await db.update(courierDues).set(updateData).where(and(eq(courierDues.id, id), eq(courierDues.merchantId, merchantId))).returning();
+      if (!result) return res.status(404).json({ error: "Due not found" });
+      res.json(result);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: "Invalid data", details: error.errors });
+      console.error("[CourierDues] Update error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/courier-dues/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { id } = req.params;
+      const [result] = await db.delete(courierDues).where(and(eq(courierDues.id, id), eq(courierDues.merchantId, merchantId))).returning();
+      if (!result) return res.status(404).json({ error: "Due not found" });
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("[CourierDues] Delete error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/courier-dues/summary", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { startDate, endDate } = req.query;
+      const conditions: any[] = [eq(courierDues.merchantId, merchantId)];
+      if (startDate) conditions.push(gte(courierDues.date, new Date(startDate as string)));
+      if (endDate) conditions.push(lte(courierDues.date, new Date(endDate as string)));
+      const results = await db.select({
+        courierName: courierDues.courierName,
+        type: courierDues.type,
+        status: courierDues.status,
+        total: sql<string>`COALESCE(SUM(${courierDues.amount}::numeric), 0)`,
+        count: sql<number>`COUNT(*)::int`,
+      }).from(courierDues).where(and(...conditions)).groupBy(courierDues.courierName, courierDues.type, courierDues.status);
+      res.json(results);
+    } catch (error: any) {
+      console.error("[CourierDues] Summary error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // ACCOUNTING - FINANCIAL DASHBOARD
+  // ============================================
+
+  app.get("/api/financial-overview", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { startDate, endDate } = req.query;
+
+      const expenseConditions: any[] = [eq(expenses.merchantId, merchantId)];
+      const stockConditions: any[] = [eq(stockLedger.merchantId, merchantId)];
+      const dueConditions: any[] = [eq(courierDues.merchantId, merchantId)];
+      if (startDate) {
+        const sd = new Date(startDate as string);
+        expenseConditions.push(gte(expenses.date, sd));
+        stockConditions.push(gte(stockLedger.date, sd));
+        dueConditions.push(gte(courierDues.date, sd));
+      }
+      if (endDate) {
+        const ed = new Date(endDate as string);
+        expenseConditions.push(lte(expenses.date, ed));
+        stockConditions.push(lte(stockLedger.date, ed));
+        dueConditions.push(lte(courierDues.date, ed));
+      }
+
+      const [expenseTotal] = await db.select({
+        total: sql<string>`COALESCE(SUM(${expenses.amount}::numeric), 0)`,
+        count: sql<number>`COUNT(*)::int`,
+      }).from(expenses).where(and(...expenseConditions));
+
+      const expensesByCategory = await db.select({
+        category: expenses.category,
+        total: sql<string>`COALESCE(SUM(${expenses.amount}::numeric), 0)`,
+      }).from(expenses).where(and(...expenseConditions)).groupBy(expenses.category).orderBy(desc(sql`SUM(${expenses.amount}::numeric)`));
+
+      const stockSummary = await db.select({
+        type: stockLedger.type,
+        totalQty: sql<number>`COALESCE(SUM(${stockLedger.quantity}), 0)::int`,
+        totalValue: sql<string>`COALESCE(SUM(${stockLedger.totalValue}::numeric), 0)`,
+      }).from(stockLedger).where(and(...stockConditions)).groupBy(stockLedger.type);
+
+      const courierSummary = await db.select({
+        courierName: courierDues.courierName,
+        type: courierDues.type,
+        status: courierDues.status,
+        total: sql<string>`COALESCE(SUM(${courierDues.amount}::numeric), 0)`,
+      }).from(courierDues).where(and(...dueConditions)).groupBy(courierDues.courierName, courierDues.type, courierDues.status);
+
+      const monthlyExpenses = await db.select({
+        month: sql<string>`TO_CHAR(${expenses.date}, 'YYYY-MM')`,
+        total: sql<string>`COALESCE(SUM(${expenses.amount}::numeric), 0)`,
+      }).from(expenses).where(and(...expenseConditions)).groupBy(sql`TO_CHAR(${expenses.date}, 'YYYY-MM')`).orderBy(sql`TO_CHAR(${expenses.date}, 'YYYY-MM')`);
+
+      const recentExpenses = await db.select().from(expenses).where(and(...expenseConditions)).orderBy(desc(expenses.date)).limit(5);
+
+      // Revenue from delivered orders
+      const orderConditions: any[] = [eq(orders.merchantId, merchantId), eq(orders.workflowStatus, "DELIVERED")];
+      if (startDate) orderConditions.push(gte(orders.orderDate, new Date(startDate as string)));
+      if (endDate) orderConditions.push(lte(orders.orderDate, new Date(endDate as string)));
+      const [orderRevenue] = await db.select({
+        total: sql<string>`COALESCE(SUM(${orders.totalPrice}::numeric), 0)`,
+        count: sql<number>`COUNT(*)::int`,
+      }).from(orders).where(and(...orderConditions));
+
+      res.json({
+        expenses: { total: expenseTotal.total, count: expenseTotal.count, byCategory: expensesByCategory, monthly: monthlyExpenses, recent: recentExpenses },
+        stock: stockSummary,
+        courierDues: courierSummary,
+        revenue: { total: orderRevenue.total, deliveredOrders: orderRevenue.count },
+      });
+    } catch (error: any) {
+      console.error("[FinancialOverview] Error:", error);
       res.status(500).json({ error: error.message });
     }
   });

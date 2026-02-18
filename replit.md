@@ -57,6 +57,12 @@ Preferred communication style: Simple, everyday language.
 - **Webhook Resilience**: All webhook endpoints respond 200 immediately before processing, preventing Shopify from removing webhooks due to timeouts. Webhook health check API and re-register UI button in Integrations page.
 - **Product & Inventory Management**: Shopify product sync via `products` table. Stores product title, variants (with SKU, price, inventory per variant), images, tags, vendor, type, and total inventory. Synced via `POST /api/products/sync` endpoint using paginated Shopify Admin API calls. Products page (`/products`) shows searchable/filterable product catalog with inventory levels, variant details, and product images. Order line items display product thumbnails captured during order sync.
 - **Order Detail Layout**: Shopify-style layout with Order Summary (line items with product thumbnails, pricing breakdown) in the main content area and Customer Details (name, phone, email, shipping address) in the right sidebar.
+- **Accounting & Finance Module**: Comprehensive accounting section with 4 pages under collapsible "Accounting" sidebar group:
+  - **Financial Dashboard** (`/financial-dashboard`): Overview with revenue (from delivered orders), total expenses, net profit/loss, outstanding courier dues, monthly expense charts (recharts), expense category breakdown (pie chart), stock overview, and courier dues summary.
+  - **Expense Tracker** (`/expense-tracker`): Full CRUD for business expenses with categories (Rent, Salaries, Utilities, Marketing, Packaging, Shipping, Courier Fees, Returns & Refunds, Office Supplies, Software & Tools, Taxes, Miscellaneous), payment methods, recurring expense support, date filtering, and running totals.
+  - **Stock Ledger** (`/stock-ledger`): Track incoming, outgoing, and returning stock with product names, SKUs, quantities, unit prices, total values, and suppliers. Summary cards show net stock position.
+  - **Courier Dues** (`/courier-dues`): Track payables/receivables per courier (Leopards, PostEx, TCS) with status tracking (pending/partial/paid/overdue), quick "Mark as Paid" action, and settlement history.
+  - Database tables: `expenses`, `stock_ledger`, `courier_dues` - all scoped by `merchantId` with proper indexes.
 
 ## External Dependencies
 
