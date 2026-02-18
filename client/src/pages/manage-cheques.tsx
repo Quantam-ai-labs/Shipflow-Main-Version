@@ -30,12 +30,15 @@ import {
   Banknote,
   Hash,
   Package,
+  Calendar,
+  ArrowDownRight,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 
 interface ChequeRecord {
-  chequeRef: string;
+  settlementKey: string;
+  chequeRef: string | null;
   paymentStatus: string;
   paymentMethod: string;
   courierName: string | null;
@@ -44,6 +47,7 @@ interface ChequeRecord {
   totalCod: string;
   totalDeductions: string;
   totalNet: string;
+  settlementDate: string | null;
   earliestDate: string | null;
   latestDate: string | null;
 }
@@ -54,10 +58,11 @@ interface ChequesResponse {
   page: number;
   pageSize: number;
   summary: {
-    totalCheques: number;
+    totalSettlements: number;
     totalCod: string;
     totalNet: string;
-    paidCount: number;
+    totalDeductions: string;
+    settledCount: number;
     pendingCount: number;
   };
 }
@@ -104,25 +109,36 @@ export default function ManageCheques() {
     }
   };
 
+  const isSettled = (status: string) => {
+    const s = status.toLowerCase();
+    return s === "paid" || s === "settled";
+  };
+
+  const getDisplayRef = (cheque: ChequeRecord) => {
+    if (cheque.chequeRef) return cheque.chequeRef;
+    if (cheque.settlementDate) return `Settlement ${formatDate(cheque.settlementDate)}`;
+    return cheque.settlementKey;
+  };
+
   return (
     <div className="flex flex-col h-full overflow-auto" data-testid="manage-cheques-page">
       <div className="p-4 md:p-6 space-y-4">
         <div className="flex flex-col gap-2">
-          <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">Manage Cheques</h1>
+          <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">Manage Settlements</h1>
           <p className="text-sm text-muted-foreground">
-            Track and manage courier payment cheques grouped by reference number
+            Track courier payment settlements - cheques (Leopards) and digital transfers (PostEx)
           </p>
         </div>
 
         {summary && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Total Cheques</CardTitle>
+                <CardTitle className="text-sm font-medium text-muted-foreground">Settlements</CardTitle>
                 <Hash className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold" data-testid="text-total-cheques">{summary.totalCheques}</div>
+                <div className="text-2xl font-bold" data-testid="text-total-settlements">{summary.totalSettlements}</div>
               </CardContent>
             </Card>
             <Card>
@@ -136,11 +152,20 @@ export default function ManageCheques() {
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Paid</CardTitle>
+                <CardTitle className="text-sm font-medium text-muted-foreground">Net Received</CardTitle>
+                <ArrowDownRight className="h-4 w-4 text-green-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-green-600 dark:text-green-400" data-testid="text-total-net">{formatCurrency(summary.totalNet)}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Settled</CardTitle>
                 <CheckCircle2 className="h-4 w-4 text-green-500" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-green-600 dark:text-green-400" data-testid="text-paid-count">{summary.paidCount}</div>
+                <div className="text-2xl font-bold text-green-600 dark:text-green-400" data-testid="text-settled-count">{summary.settledCount}</div>
               </CardContent>
             </Card>
             <Card>
@@ -158,7 +183,7 @@ export default function ManageCheques() {
         <Card>
           <CardHeader className="pb-3">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-              <CardTitle className="text-lg">Cheque Records</CardTitle>
+              <CardTitle className="text-lg">Settlement Records</CardTitle>
               <div className="flex flex-wrap items-center gap-2">
                 <div className="relative w-full md:w-64">
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -176,7 +201,7 @@ export default function ManageCheques() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="Paid">Paid</SelectItem>
+                    <SelectItem value="Paid">Paid / Settled</SelectItem>
                     <SelectItem value="Pending">Pending</SelectItem>
                   </SelectContent>
                 </Select>
@@ -204,33 +229,41 @@ export default function ManageCheques() {
             ) : cheques.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
                 <FileText className="h-12 w-12 mb-3 opacity-50" />
-                <p className="text-lg font-medium">No cheques found</p>
-                <p className="text-sm">Cheque data will appear once courier payments are synced</p>
+                <p className="text-lg font-medium">No settlements found</p>
+                <p className="text-sm">Settlement data will appear once courier payments are synced</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Cheque Ref</TableHead>
+                      <TableHead>Reference</TableHead>
                       <TableHead>Courier</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Method</TableHead>
                       <TableHead className="text-right">Shipments</TableHead>
                       <TableHead className="text-right">Total COD</TableHead>
                       <TableHead className="text-right">Deductions</TableHead>
-                      <TableHead className="text-right">Net Amount</TableHead>
-                      <TableHead>Date Range</TableHead>
+                      <TableHead className="text-right">Settlement Amount</TableHead>
+                      <TableHead>Settlement Date</TableHead>
                       <TableHead>Slip</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {cheques.map((cheque) => (
-                      <TableRow key={cheque.chequeRef} data-testid={`row-cheque-${cheque.chequeRef}`}>
+                      <TableRow key={cheque.settlementKey} data-testid={`row-settlement-${cheque.settlementKey}`}>
                         <TableCell>
-                          <span className="font-mono text-sm font-medium" data-testid={`text-ref-${cheque.chequeRef}`}>
-                            {cheque.chequeRef}
-                          </span>
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-mono text-sm font-medium" data-testid={`text-ref-${cheque.settlementKey}`}>
+                              {getDisplayRef(cheque)}
+                            </span>
+                            {cheque.chequeRef && cheque.settlementDate && (
+                              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                <Calendar className="w-3 h-3" />
+                                {formatDate(cheque.settlementDate)}
+                              </span>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline" className="text-xs">
@@ -239,11 +272,11 @@ export default function ManageCheques() {
                         </TableCell>
                         <TableCell>
                           <Badge
-                            variant={cheque.paymentStatus === "Paid" ? "default" : "secondary"}
-                            className={cheque.paymentStatus === "Paid" ? "bg-green-600 text-white" : ""}
-                            data-testid={`badge-status-${cheque.chequeRef}`}
+                            variant={isSettled(cheque.paymentStatus) ? "default" : "secondary"}
+                            className={isSettled(cheque.paymentStatus) ? "bg-green-600 text-white" : ""}
+                            data-testid={`badge-status-${cheque.settlementKey}`}
                           >
-                            {cheque.paymentStatus === "Paid" ? (
+                            {isSettled(cheque.paymentStatus) ? (
                               <CheckCircle2 className="w-3 h-3 mr-1" />
                             ) : (
                               <Clock className="w-3 h-3 mr-1" />
@@ -252,28 +285,30 @@ export default function ManageCheques() {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <span className="text-sm text-muted-foreground">{cheque.paymentMethod}</span>
+                          <span className="text-sm text-muted-foreground">
+                            {cheque.paymentMethod !== "N/A" ? cheque.paymentMethod : (cheque.courierName === "PostEx" ? "Digital" : "-")}
+                          </span>
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1">
                             <Package className="w-3.5 h-3.5 text-muted-foreground" />
-                            <span className="font-medium" data-testid={`text-shipments-${cheque.chequeRef}`}>
+                            <span className="font-medium" data-testid={`text-shipments-${cheque.settlementKey}`}>
                               {cheque.shipmentCount}
                             </span>
                           </div>
                         </TableCell>
-                        <TableCell className="text-right font-medium" data-testid={`text-cod-${cheque.chequeRef}`}>
+                        <TableCell className="text-right text-muted-foreground" data-testid={`text-cod-${cheque.settlementKey}`}>
                           {formatCurrency(cheque.totalCod)}
                         </TableCell>
-                        <TableCell className="text-right text-muted-foreground" data-testid={`text-deductions-${cheque.chequeRef}`}>
+                        <TableCell className="text-right text-muted-foreground" data-testid={`text-deductions-${cheque.settlementKey}`}>
                           {formatCurrency(cheque.totalDeductions)}
                         </TableCell>
-                        <TableCell className="text-right font-medium text-green-600 dark:text-green-400" data-testid={`text-net-${cheque.chequeRef}`}>
+                        <TableCell className="text-right font-medium text-green-600 dark:text-green-400" data-testid={`text-net-${cheque.settlementKey}`}>
                           {formatCurrency(cheque.totalNet)}
                         </TableCell>
                         <TableCell>
-                          <span className="text-xs text-muted-foreground">
-                            {formatDate(cheque.earliestDate)} - {formatDate(cheque.latestDate)}
+                          <span className="text-sm text-muted-foreground">
+                            {formatDate(cheque.settlementDate)}
                           </span>
                         </TableCell>
                         <TableCell>
@@ -282,7 +317,7 @@ export default function ManageCheques() {
                               size="icon"
                               variant="ghost"
                               onClick={() => window.open(cheque.slipLink!, "_blank")}
-                              data-testid={`button-slip-${cheque.chequeRef}`}
+                              data-testid={`button-slip-${cheque.settlementKey}`}
                             >
                               <ExternalLink className="w-4 h-4" />
                             </Button>
@@ -300,7 +335,7 @@ export default function ManageCheques() {
             {totalPages > 1 && (
               <div className="flex items-center justify-between px-4 py-3 border-t">
                 <p className="text-sm text-muted-foreground">
-                  Showing {((page - 1) * pageSize) + 1}-{Math.min(page * pageSize, total)} of {total} cheques
+                  Showing {((page - 1) * pageSize) + 1}-{Math.min(page * pageSize, total)} of {total} settlements
                 </p>
                 <div className="flex items-center gap-1">
                   <Button

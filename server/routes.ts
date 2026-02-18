@@ -24,6 +24,7 @@ import {
   desc,
   count,
   isNotNull,
+  isNull,
   gte,
   lte,
 } from "drizzle-orm";
@@ -2335,9 +2336,20 @@ export async function registerRoutes(
       const page = parseInt(req.query.page as string) || 1;
       const pageSize = parseInt(req.query.pageSize as string) || 50;
 
+      const settlementKey = sql<string>`COALESCE(
+        ${codReconciliation.courierPaymentRef},
+        CASE WHEN ${codReconciliation.courierSettlementDate} IS NOT NULL
+          THEN 'SETTLE-' || ${codReconciliation.courierName} || '-' || TO_CHAR(${codReconciliation.courierSettlementDate}, 'YYYY-MM-DD')
+          ELSE NULL
+        END
+      )`;
+
       const conditions: any[] = [
         eq(codReconciliation.merchantId, merchantId),
-        isNotNull(codReconciliation.courierPaymentRef),
+        or(
+          isNotNull(codReconciliation.courierPaymentRef),
+          isNotNull(codReconciliation.courierSettlementDate),
+        ),
       ];
 
       if (search) {
@@ -2349,7 +2361,24 @@ export async function registerRoutes(
         );
       }
       if (status) {
-        conditions.push(eq(codReconciliation.courierPaymentStatus, status));
+        const statusLower = status.toLowerCase();
+        if (statusLower === "paid" || statusLower === "settled") {
+          conditions.push(
+            or(
+              eq(codReconciliation.courierPaymentStatus, "Paid"),
+              eq(codReconciliation.courierPaymentStatus, "Settled"),
+            ),
+          );
+        } else if (statusLower === "pending") {
+          conditions.push(
+            or(
+              eq(codReconciliation.courierPaymentStatus, "Pending"),
+              isNull(codReconciliation.courierPaymentStatus),
+            ),
+          );
+        } else {
+          conditions.push(eq(codReconciliation.courierPaymentStatus, status));
+        }
       }
       if (courier) {
         conditions.push(ilike(codReconciliation.courierName, `%${courier}%`));
@@ -2360,33 +2389,34 @@ export async function registerRoutes(
       const [chequeGroups, totalResult] = await Promise.all([
         db
           .select({
-            chequeRef: codReconciliation.courierPaymentRef,
+            settlementKey: settlementKey,
+            chequeRef: sql<string>`MAX(${codReconciliation.courierPaymentRef})`,
             paymentStatus: sql<string>`MAX(${codReconciliation.courierPaymentStatus})`,
             paymentMethod: sql<string>`MAX(${codReconciliation.courierPaymentMethod})`,
             courierName: sql<string>`MAX(${codReconciliation.courierName})`,
             slipLink: sql<string>`MAX(${codReconciliation.courierSlipLink})`,
             shipmentCount: count(),
             totalCod: sql<string>`COALESCE(SUM(${codReconciliation.codAmount}), 0)`,
-            totalCourierFee: sql<string>`COALESCE(SUM(COALESCE(${codReconciliation.courierFee}, 0)), 0)`,
-            totalNet: sql<string>`COALESCE(SUM(COALESCE(${codReconciliation.netAmount}, 0)), 0)`,
             totalDeductions: sql<string>`COALESCE(SUM(
-            CASE 
-              WHEN COALESCE(${codReconciliation.courierFee}, 0) > 0 THEN COALESCE(${codReconciliation.courierFee}, 0)
-              ELSE COALESCE(${codReconciliation.transactionFee}, 0) + COALESCE(${codReconciliation.transactionTax}, 0) + COALESCE(${codReconciliation.reversalFee}, 0) + COALESCE(${codReconciliation.reversalTax}, 0)
-            END
-          ), 0)`,
+              CASE 
+                WHEN COALESCE(${codReconciliation.courierFee}, 0) > 0 THEN COALESCE(${codReconciliation.courierFee}, 0)
+                ELSE COALESCE(${codReconciliation.transactionFee}, 0) + COALESCE(${codReconciliation.transactionTax}, 0) + COALESCE(${codReconciliation.reversalFee}, 0) + COALESCE(${codReconciliation.reversalTax}, 0)
+              END
+            ), 0)`,
+            totalNet: sql<string>`COALESCE(SUM(COALESCE(${codReconciliation.netAmount}, 0)), 0)`,
+            settlementDate: sql<string>`MAX(${codReconciliation.courierSettlementDate})`,
             earliestDate: sql<string>`MIN(${codReconciliation.createdAt})`,
             latestDate: sql<string>`MAX(${codReconciliation.createdAt})`,
           })
           .from(codReconciliation)
           .where(whereClause)
-          .groupBy(codReconciliation.courierPaymentRef)
-          .orderBy(desc(sql`MAX(${codReconciliation.createdAt})`))
+          .groupBy(settlementKey)
+          .orderBy(desc(sql`MAX(COALESCE(${codReconciliation.courierSettlementDate}, ${codReconciliation.createdAt}))`))
           .limit(pageSize)
           .offset((page - 1) * pageSize),
         db
           .select({
-            count: sql<number>`COUNT(DISTINCT ${codReconciliation.courierPaymentRef})`,
+            count: sql<number>`COUNT(DISTINCT ${settlementKey})`,
           })
           .from(codReconciliation)
           .where(whereClause),
@@ -2394,11 +2424,17 @@ export async function registerRoutes(
 
       const summaryResult = await db
         .select({
-          totalCheques: sql<number>`COUNT(DISTINCT ${codReconciliation.courierPaymentRef})`,
+          totalSettlements: sql<number>`COUNT(DISTINCT ${settlementKey})`,
           totalCod: sql<string>`COALESCE(SUM(${codReconciliation.codAmount}), 0)`,
           totalNet: sql<string>`COALESCE(SUM(COALESCE(${codReconciliation.netAmount}, 0)), 0)`,
-          paidCount: sql<number>`COUNT(DISTINCT CASE WHEN ${codReconciliation.courierPaymentStatus} = 'Paid' THEN ${codReconciliation.courierPaymentRef} END)`,
-          pendingCount: sql<number>`COUNT(DISTINCT CASE WHEN ${codReconciliation.courierPaymentStatus} != 'Paid' OR ${codReconciliation.courierPaymentStatus} IS NULL THEN ${codReconciliation.courierPaymentRef} END)`,
+          totalDeductions: sql<string>`COALESCE(SUM(
+            CASE 
+              WHEN COALESCE(${codReconciliation.courierFee}, 0) > 0 THEN COALESCE(${codReconciliation.courierFee}, 0)
+              ELSE COALESCE(${codReconciliation.transactionFee}, 0) + COALESCE(${codReconciliation.transactionTax}, 0) + COALESCE(${codReconciliation.reversalFee}, 0) + COALESCE(${codReconciliation.reversalTax}, 0)
+            END
+          ), 0)`,
+          settledCount: sql<number>`COUNT(DISTINCT CASE WHEN ${codReconciliation.courierPaymentStatus} IN ('Paid', 'Settled') THEN ${settlementKey} END)`,
+          pendingCount: sql<number>`COUNT(DISTINCT CASE WHEN ${codReconciliation.courierPaymentStatus} NOT IN ('Paid', 'Settled') OR ${codReconciliation.courierPaymentStatus} IS NULL THEN ${settlementKey} END)`,
         })
         .from(codReconciliation)
         .where(whereClause);
@@ -2407,7 +2443,8 @@ export async function registerRoutes(
 
       res.json({
         cheques: chequeGroups.map((c) => ({
-          chequeRef: c.chequeRef,
+          settlementKey: c.settlementKey,
+          chequeRef: c.chequeRef || null,
           paymentStatus: c.paymentStatus || "Pending",
           paymentMethod: c.paymentMethod || "N/A",
           courierName: c.courierName,
@@ -2416,6 +2453,7 @@ export async function registerRoutes(
           totalCod: Number(c.totalCod || 0).toFixed(2),
           totalDeductions: Number(c.totalDeductions || 0).toFixed(2),
           totalNet: Number(c.totalNet || 0).toFixed(2),
+          settlementDate: c.settlementDate,
           earliestDate: c.earliestDate,
           latestDate: c.latestDate,
         })),
@@ -2423,10 +2461,11 @@ export async function registerRoutes(
         page,
         pageSize,
         summary: {
-          totalCheques: s.totalCheques || 0,
+          totalSettlements: s.totalSettlements || 0,
           totalCod: Number(s.totalCod || 0).toFixed(2),
           totalNet: Number(s.totalNet || 0).toFixed(2),
-          paidCount: s.paidCount || 0,
+          totalDeductions: Number(s.totalDeductions || 0).toFixed(2),
+          settledCount: s.settledCount || 0,
           pendingCount: s.pendingCount || 0,
         },
       });
