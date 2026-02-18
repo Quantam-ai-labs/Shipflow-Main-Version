@@ -2594,6 +2594,18 @@ export async function registerRoutes(
                     lastSyncedAt: new Date(),
                   };
 
+                  const codAmt = Number(record.codAmount) || 0;
+                  if (codAmt > 0 && !record.transactionFee) {
+                    const existingFee = Number(record.courierFee) || 0;
+                    const leopardsFee = existingFee > 0 ? existingFee : Math.round(codAmt * 0.025 * 100) / 100;
+                    updateData.transactionFee = leopardsFee.toString();
+                    updateData.transactionTax = "0";
+                    if (!record.courierFee) {
+                      updateData.courierFee = leopardsFee.toString();
+                      updateData.netAmount = (codAmt - leopardsFee).toString();
+                    }
+                  }
+
                   if (payment.invoiceChequeDate) {
                     const chequeDate = new Date(payment.invoiceChequeDate);
                     if (!isNaN(chequeDate.getTime())) {
