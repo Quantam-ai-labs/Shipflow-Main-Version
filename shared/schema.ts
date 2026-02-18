@@ -212,6 +212,8 @@ export const orders = pgTable("orders", {
   bookingStatus: varchar("booking_status", { length: 50 }),
   bookingError: text("booking_error"),
   bookedAt: timestamp("booked_at"),
+  fulfilledAt: timestamp("fulfilled_at"),
+  fulfilledBy: varchar("fulfilled_by", { length: 255 }),
   dispatchedAt: timestamp("dispatched_at"),
   deliveredAt: timestamp("delivered_at"),
   returnedAt: timestamp("returned_at"),

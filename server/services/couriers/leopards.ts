@@ -280,6 +280,85 @@ export class LeopardsService {
     return results;
   }
 
+  async getShipperCheques(credentials?: { apiKey?: string; apiPassword?: string }): Promise<LeopardsChequeResult> {
+    const creds = this.getCredentials(credentials);
+
+    if (!creds.apiKey || !creds.apiPassword) {
+      return { success: false, cheques: [], error: 'Leopards API credentials not configured' };
+    }
+
+    const endpointsToTry = [
+      `${this.baseUrl}/getShipperCheques/format/json/`,
+      `${this.baseUrl}/getPaymentCheques/format/json/`,
+      `${this.baseUrl}/getChequeList/format/json/`,
+    ];
+
+    const formBody = new URLSearchParams({
+      api_key: creds.apiKey,
+      api_password: creds.apiPassword,
+    });
+    const jsonBody = JSON.stringify({
+      api_key: creds.apiKey,
+      api_password: creds.apiPassword,
+    });
+
+    const errors: string[] = [];
+
+    for (const endpoint of endpointsToTry) {
+      for (const contentType of ['application/x-www-form-urlencoded', 'application/json'] as const) {
+        try {
+          console.log(`[Leopards] Trying cheques endpoint: ${endpoint} (${contentType})`);
+          const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': contentType },
+            body: contentType === 'application/json' ? jsonBody : formBody.toString(),
+          });
+
+          if (!response.ok) {
+            console.log(`[Leopards] Endpoint ${endpoint} returned ${response.status}`);
+            errors.push(`${endpoint} (${contentType}): HTTP ${response.status}`);
+            continue;
+          }
+
+          const data = await response.json();
+          console.log(`[Leopards] Cheques response from ${endpoint} (${contentType}):`, JSON.stringify(data).substring(0, 500));
+
+          if (data.status === 1 || data.status === '1') {
+            const chequeList = data.cheque_list || data.cheques || data.data || data.payment_list || [];
+            if (Array.isArray(chequeList) && chequeList.length > 0) {
+              const cheques: LeopardsCheque[] = chequeList.map((c: any) => ({
+                sysId: String(c.SysID || c.sys_id || c.id || ''),
+                cityName: c['City Name'] || c.city_name || c.city || '',
+                dateCreated: c['Date Created'] || c.date_created || c.created_date || '',
+                chequeNo: c['Cheque No'] || c.cheque_no || c.invoice_cheque_no || '',
+                shipperName: c['Shipper Name'] || c.shipper_name || '',
+                payeeName: c['Payee Name'] || c.payee_name || '',
+                chequeAmount: parseFloat(c['Cheque Amount'] || c.cheque_amount || c.amount || '0'),
+                paymentMethod: c['Payment Method'] || c.payment_method || 'IBFT',
+              }));
+              console.log(`[Leopards] Successfully fetched ${cheques.length} cheques via ${endpoint} (${contentType})`);
+              return { success: true, cheques, endpoint: `${endpoint} (${contentType})` };
+            }
+          }
+
+          if (data.error || data.message) {
+            errors.push(`${endpoint} (${contentType}): ${data.error || data.message}`);
+          }
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : 'Unknown';
+          console.error(`[Leopards] Error trying ${endpoint} (${contentType}):`, msg);
+          errors.push(`${endpoint} (${contentType}): ${msg}`);
+        }
+      }
+    }
+
+    return {
+      success: false,
+      cheques: [],
+      error: `Could not find a working cheques endpoint. Tried: ${errors.join('; ')}`,
+    };
+  }
+
   async getPaymentDetails(cnNumbers: string[], credentials?: { apiKey?: string; apiPassword?: string }): Promise<LeopardsPaymentResult[]> {
     const creds = this.getCredentials(credentials);
     const results: LeopardsPaymentResult[] = [];
@@ -372,6 +451,24 @@ export interface LeopardsPaymentResult {
   message?: string | null;
   slipLink?: string | null;
   error?: string;
+}
+
+export interface LeopardsCheque {
+  sysId: string;
+  cityName: string;
+  dateCreated: string;
+  chequeNo: string;
+  shipperName: string;
+  payeeName: string;
+  chequeAmount: number;
+  paymentMethod: string;
+}
+
+export interface LeopardsChequeResult {
+  success: boolean;
+  cheques: LeopardsCheque[];
+  error?: string;
+  endpoint?: string;
 }
 
 export const leopardsService = new LeopardsService();

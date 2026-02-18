@@ -520,8 +520,13 @@ export default function Pipeline() {
       if (data.pdfUrl) {
         window.open(data.pdfUrl, "_blank");
       }
-      toast({ title: "Loadsheet generated", description: `Loadsheet created for ${data.totalOrders} order(s)` });
+      const transMsg = data.transitioned > 0
+        ? ` ${data.transitioned} order(s) moved to Fulfilled.`
+        : "";
+      toast({ title: "Loadsheet generated", description: `Loadsheet created for ${data.totalOrders} order(s).${transMsg}` });
       setSelectedIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders/workflow-counts"] });
     },
     onError: (err: any) => {
       toast({ title: "Loadsheet failed", description: err.message || "Failed to generate loadsheet", variant: "destructive" });

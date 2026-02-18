@@ -2475,6 +2475,46 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/manage-cheques/sync-leopards-cheques", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const creds = await getCourierCredentials(merchantId, "leopards");
+      if (!creds || !creds.apiKey || !creds.apiSecret) {
+        return res.status(400).json({
+          success: false,
+          message: "Leopards API credentials not configured. Please set up your Leopards credentials in Settings.",
+        });
+      }
+
+      console.log(`[Manage Cheques] Fetching all Leopards cheques for merchant ${merchantId}`);
+      const result = await leopardsService.getShipperCheques({
+        apiKey: creds.apiKey,
+        apiPassword: creds.apiSecret,
+      });
+
+      if (!result.success) {
+        return res.json({
+          success: false,
+          message: result.error || "Failed to fetch cheques from Leopards API",
+          cheques: [],
+          apiEndpointsTried: ["getShipperCheques", "getPaymentCheques", "getChequeList"],
+        });
+      }
+
+      res.json({
+        success: true,
+        cheques: result.cheques,
+        count: result.cheques.length,
+        endpoint: result.endpoint,
+      });
+    } catch (error) {
+      console.error("Error syncing Leopards cheques:", error);
+      res.status(500).json({ success: false, message: "Failed to sync Leopards cheques" });
+    }
+  });
+
   app.get("/api/cod-reconciliation", isAuthenticated, async (req, res) => {
     try {
       const merchantId = await requireMerchant(req, res);
@@ -6525,12 +6565,42 @@ export async function registerRoutes(
           pdfBatchPath: pdfPath,
         });
 
+        const bookedOnlyOrders = bookedOrders.filter(o => o.workflowStatus === "BOOKED");
+        let transitioned = 0;
+        let transitionSkipped = 0;
+
+        if (bookedOnlyOrders.length > 0) {
+          const bookedIds = bookedOnlyOrders.map(o => o.id);
+          const now = new Date();
+          const result = await bulkTransitionOrders({
+            merchantId,
+            orderIds: bookedIds,
+            toStatus: "FULFILLED",
+            action: "loadsheet_generation",
+            actorUserId: userId,
+            actorName: "Loadsheet Generator",
+            actorType: "system",
+            reason: `Loadsheet generated (batch: ${batch.id})`,
+            extraData: {
+              loadsheetBatchId: batch.id,
+              loadsheetGeneratedAt: now,
+              fulfilledAt: now,
+              fulfilledBy: userId,
+            } as any,
+          });
+          transitioned = result.updated;
+          transitionSkipped = result.skipped;
+          console.log(`[Loadsheet] Transitioned ${transitioned} orders BOOKED→FULFILLED, skipped ${transitionSkipped}`);
+        }
+
         res.json({
           success: true,
           batchId: batch.id,
           pdfUrl: `/api/print/batch/${batch.id}.pdf`,
           totalOrders: bookedOrders.length,
           courierName: courierLabel,
+          transitioned,
+          transitionSkipped,
         });
       } catch (error) {
         console.error("Error generating loadsheet:", error);
