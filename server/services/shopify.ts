@@ -450,6 +450,25 @@ export class ShopifyService {
     const courierConfirmedIds = await storage.getOrdersWithCourierStatus(merchantId, allShopifyIds);
     const managedWorkflowIds = await storage.getOrdersInManagedWorkflow(merchantId, allShopifyIds);
     
+    // Build product image map for enriching line items
+    const allProductIds = new Set<string>();
+    for (const shopifyOrder of shopifyOrders) {
+      for (const item of (shopifyOrder as any).line_items || []) {
+        if (item.product_id) allProductIds.add(String(item.product_id));
+      }
+    }
+    const productImageMap = new Map<string, string>();
+    if (allProductIds.size > 0) {
+      try {
+        const matchedProducts = await storage.getProductsByShopifyIds(merchantId, Array.from(allProductIds));
+        for (const p of matchedProducts) {
+          if (p.imageUrl) productImageMap.set(p.shopifyProductId, p.imageUrl);
+        }
+      } catch (e) {
+        // Products table may not be populated yet, continue without images
+      }
+    }
+
     let newCount = 0;
     let updatedCount = 0;
     const now = new Date();
@@ -464,6 +483,17 @@ export class ShopifyService {
 
       const shopifyOrderId = String(shopifyOrder.id);
       const transformedOrder = this.transformOrderForStorage(shopifyOrder);
+      
+      // Enrich line items with product images from products table
+      if (transformedOrder.lineItems && Array.isArray(transformedOrder.lineItems) && productImageMap.size > 0) {
+        transformedOrder.lineItems = (transformedOrder.lineItems as any[]).map((item: any) => {
+          if (!item.image && item.productId && productImageMap.has(item.productId)) {
+            return { ...item, image: productImageMap.get(item.productId) };
+          }
+          return item;
+        });
+      }
+
       const existingOrderId = existingOrdersMap.get(shopifyOrderId);
       const hasCourierStatus = courierConfirmedIds.has(shopifyOrderId);
       const isInManagedWorkflow = managedWorkflowIds.has(shopifyOrderId);

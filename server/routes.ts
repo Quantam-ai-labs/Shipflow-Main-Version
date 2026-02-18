@@ -7867,9 +7867,75 @@ export async function registerRoutes(
         synced++;
       }
 
+      // Auto-backfill order line item images after product sync
+      try {
+        await backfillOrderLineItemImages(merchantId);
+      } catch (backfillErr) {
+        console.error("[Products Sync] Backfill warning:", backfillErr);
+      }
+
       res.json({ success: true, synced, total: shopifyProducts.length });
     } catch (error: any) {
       console.error("[Products Sync] Error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Backfill order line item images from products table
+  async function backfillOrderLineItemImages(merchantId: string) {
+    const { products: allProducts } = await storage.getProducts(merchantId, { pageSize: 10000 });
+    if (allProducts.length === 0) return 0;
+
+    const productImageMap = new Map<string, string>();
+    for (const p of allProducts) {
+      if (p.imageUrl) {
+        productImageMap.set(p.shopifyProductId, p.imageUrl);
+      }
+    }
+    if (productImageMap.size === 0) return 0;
+
+    // Get all orders for this merchant (paginate through them)
+    let updated = 0;
+    let page = 1;
+    const pageSize = 100;
+    while (true) {
+      const { orders: batch, total } = await storage.getOrders(merchantId, { page, pageSize });
+      if (batch.length === 0) break;
+
+      for (const order of batch) {
+        const lineItems = order.lineItems as Array<{ name: string; quantity: number; price: string | number; sku?: string; image?: string | null; productId?: string | null; variantId?: string | null; variantTitle?: string | null }> | null;
+        if (!lineItems || lineItems.length === 0) continue;
+
+        let changed = false;
+        const enrichedItems = lineItems.map(item => {
+          if (!item.image && item.productId && productImageMap.has(item.productId)) {
+            changed = true;
+            return { ...item, image: productImageMap.get(item.productId) };
+          }
+          return item;
+        });
+
+        if (changed) {
+          await storage.updateOrder(merchantId, order.id, { lineItems: enrichedItems } as any);
+          updated++;
+        }
+      }
+
+      if (page * pageSize >= total) break;
+      page++;
+    }
+    console.log(`[Backfill] Updated ${updated} orders with product images for merchant ${merchantId}`);
+    return updated;
+  }
+
+  app.post("/api/products/backfill-images", async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const updated = await backfillOrderLineItemImages(merchantId);
+      res.json({ success: true, updated });
+    } catch (error: any) {
+      console.error("[Backfill] Error:", error);
       res.status(500).json({ error: error.message });
     }
   });
