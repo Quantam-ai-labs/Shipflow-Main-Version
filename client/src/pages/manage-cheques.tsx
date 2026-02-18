@@ -33,11 +33,9 @@ import {
   Calendar,
   ArrowDownRight,
 } from "lucide-react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { RefreshCw, Download } from "lucide-react";
+import { Download } from "lucide-react";
 
 interface ChequeRecord {
   settlementKey: string;
@@ -53,26 +51,6 @@ interface ChequeRecord {
   settlementDate: string | null;
   earliestDate: string | null;
   latestDate: string | null;
-}
-
-interface LeopardsCheque {
-  sysId: string;
-  cityName: string;
-  dateCreated: string;
-  chequeNo: string;
-  shipperName: string;
-  payeeName: string;
-  chequeAmount: number;
-  paymentMethod: string;
-}
-
-interface LeopardsSyncResponse {
-  success: boolean;
-  cheques: LeopardsCheque[];
-  count: number;
-  message?: string;
-  endpoint?: string;
-  apiEndpointsTried?: string[];
 }
 
 interface ChequesResponse {
@@ -91,39 +69,11 @@ interface ChequesResponse {
 }
 
 export default function ManageCheques() {
-  const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [courierFilter, setCourierFilter] = useState("all");
   const [page, setPage] = useState(1);
   const pageSize = 50;
-  const [leopardsCheques, setLeopardsCheques] = useState<LeopardsCheque[]>([]);
-  const [showLeopardsCheques, setShowLeopardsCheques] = useState(false);
-
-  const syncLeopardsMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/manage-cheques/sync-leopards-cheques");
-      return res.json() as Promise<LeopardsSyncResponse>;
-    },
-    onSuccess: (data) => {
-      if (data.success && data.cheques.length > 0) {
-        setLeopardsCheques(data.cheques);
-        setShowLeopardsCheques(true);
-        toast({ title: "Leopards cheques fetched", description: `Found ${data.count} cheque(s) from Leopards API` });
-      } else {
-        toast({
-          title: "No cheques found from API",
-          description: data.message || "The Leopards API did not return any cheque data. The cheques endpoint may not be available with your current API credentials.",
-          variant: "destructive",
-        });
-      }
-    },
-    onError: (err: any) => {
-      toast({ title: "Sync failed", description: err.message || "Failed to fetch cheques from Leopards", variant: "destructive" });
-    },
-  });
-
-  const leopardsTotalAmount = leopardsCheques.reduce((sum, c) => sum + c.chequeAmount, 0);
 
   const buildQueryString = () => {
     const params = new URLSearchParams();
@@ -181,15 +131,6 @@ export default function ManageCheques() {
               Track courier payment settlements - cheques (Leopards) and digital transfers (PostEx)
             </p>
           </div>
-          <Button
-            variant="outline"
-            onClick={() => syncLeopardsMutation.mutate()}
-            disabled={syncLeopardsMutation.isPending}
-            data-testid="button-sync-leopards"
-          >
-            <RefreshCw className={`w-4 h-4 mr-2 ${syncLeopardsMutation.isPending ? "animate-spin" : ""}`} />
-            {syncLeopardsMutation.isPending ? "Fetching..." : "Fetch Leopards Cheques"}
-          </Button>
         </div>
 
         {summary && (
@@ -242,66 +183,6 @@ export default function ManageCheques() {
           </div>
         )}
 
-        {showLeopardsCheques && leopardsCheques.length > 0 && (
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                <div>
-                  <CardTitle className="text-lg">Leopards Cheques (from API)</CardTitle>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {leopardsCheques.length} cheque(s) totalling {formatCurrency(leopardsTotalAmount)}
-                  </p>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowLeopardsCheques(false)}
-                  data-testid="button-hide-leopards-cheques"
-                >
-                  Hide
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto max-h-96 overflow-y-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Cheque No</TableHead>
-                      <TableHead>City</TableHead>
-                      <TableHead>Payee</TableHead>
-                      <TableHead>Method</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
-                      <TableHead>Date</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {leopardsCheques.map((ch) => (
-                      <TableRow key={ch.sysId} data-testid={`row-leopards-cheque-${ch.sysId}`}>
-                        <TableCell>
-                          <span className="font-mono text-sm font-medium" data-testid={`text-cheque-no-${ch.sysId}`}>
-                            {ch.chequeNo}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{ch.cityName}</TableCell>
-                        <TableCell className="text-sm">{ch.payeeName}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="text-xs">{ch.paymentMethod}</Badge>
-                        </TableCell>
-                        <TableCell className="text-right font-medium text-green-600 dark:text-green-400" data-testid={`text-cheque-amount-${ch.sysId}`}>
-                          {formatCurrency(ch.chequeAmount)}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {formatDate(ch.dateCreated)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        )}
 
         <Card>
           <CardHeader className="pb-3">

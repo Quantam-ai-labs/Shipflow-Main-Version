@@ -2475,45 +2475,6 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/manage-cheques/sync-leopards-cheques", isAuthenticated, async (req: any, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-
-      const creds = await getCourierCredentials(merchantId, "leopards");
-      if (!creds || !creds.apiKey || !creds.apiSecret) {
-        return res.status(400).json({
-          success: false,
-          message: "Leopards API credentials not configured. Please set up your Leopards credentials in Settings.",
-        });
-      }
-
-      console.log(`[Manage Cheques] Fetching all Leopards cheques for merchant ${merchantId}`);
-      const result = await leopardsService.getShipperCheques({
-        apiKey: creds.apiKey,
-        apiPassword: creds.apiSecret,
-      });
-
-      if (!result.success) {
-        return res.json({
-          success: false,
-          message: result.error || "Failed to fetch cheques from Leopards API",
-          cheques: [],
-          apiEndpointsTried: ["getShipperCheques", "getPaymentCheques", "getChequeList"],
-        });
-      }
-
-      res.json({
-        success: true,
-        cheques: result.cheques,
-        count: result.cheques.length,
-        endpoint: result.endpoint,
-      });
-    } catch (error) {
-      console.error("Error syncing Leopards cheques:", error);
-      res.status(500).json({ success: false, message: "Failed to sync Leopards cheques" });
-    }
-  });
 
   app.get("/api/cod-reconciliation", isAuthenticated, async (req, res) => {
     try {
