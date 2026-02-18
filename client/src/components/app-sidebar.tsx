@@ -83,7 +83,7 @@ const bottomNavItems = [
     icon: Truck,
   },
   {
-    title: "Products",
+    title: "Inventory",
     url: "/products",
     icon: ShoppingBag,
   },
