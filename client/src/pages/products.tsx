@@ -39,7 +39,9 @@ import {
   Image as ImageIcon,
   Tag,
   AlertCircle,
+  TrendingUp,
 } from "lucide-react";
+import { Link } from "wouter";
 import type { Product } from "@shared/schema";
 
 interface ProductVariant {
@@ -144,14 +146,22 @@ export default function ProductsPage() {
             {data ? `${data.total} products` : "Loading..."} synced from Shopify
           </p>
         </div>
-        <Button
-          onClick={() => syncMutation.mutate()}
-          disabled={syncMutation.isPending}
-          data-testid="button-sync-products"
-        >
-          <RefreshCw className={`w-4 h-4 mr-2 ${syncMutation.isPending ? "animate-spin" : ""}`} />
-          {syncMutation.isPending ? "Syncing..." : "Sync from Shopify"}
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Link href="/product-analytics">
+            <Button variant="outline" data-testid="button-product-analytics">
+              <TrendingUp className="w-4 h-4 mr-2" />
+              Analytics
+            </Button>
+          </Link>
+          <Button
+            onClick={() => syncMutation.mutate()}
+            disabled={syncMutation.isPending}
+            data-testid="button-sync-products"
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${syncMutation.isPending ? "animate-spin" : ""}`} />
+            {syncMutation.isPending ? "Syncing..." : "Sync from Shopify"}
+          </Button>
+        </div>
       </div>
 
       <div className="flex items-center gap-3 flex-wrap">

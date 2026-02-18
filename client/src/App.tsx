@@ -32,6 +32,7 @@ import AdminPanel from "@/pages/admin";
 import InviteAccept from "@/pages/invite-accept";
 import PrintLabels from "@/pages/print-labels";
 import Products from "@/pages/products";
+import ProductAnalytics from "@/pages/product-analytics";
 import NotFound from "@/pages/not-found";
 
 function OnboardingBanner() {
@@ -70,6 +71,7 @@ function AppRoutes() {
       <Route path="/team" component={Team} />
       <Route path="/integrations" component={Integrations} />
       <Route path="/products" component={Products} />
+      <Route path="/product-analytics" component={ProductAnalytics} />
       <Route path="/settings" component={Settings} />
       <Route path="/onboarding" component={Onboarding} />
       <Route path="/admin" component={AdminPanel} />

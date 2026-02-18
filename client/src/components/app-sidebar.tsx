@@ -36,6 +36,7 @@ import {
   CheckCircle,
   XCircle,
   BarChart3,
+  TrendingUp,
   DollarSign,
   Users,
   Settings,
@@ -85,6 +86,11 @@ const bottomNavItems = [
     title: "Products",
     url: "/products",
     icon: ShoppingBag,
+  },
+  {
+    title: "Product Analytics",
+    url: "/product-analytics",
+    icon: TrendingUp,
   },
   {
     title: "Analytics",

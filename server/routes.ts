@@ -7834,6 +7834,140 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/product-analytics", async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const { dateFrom, dateTo } = req.query;
+
+      let dateFilterSql = sql``;
+      if (dateFrom) {
+        const fromDate = new Date(dateFrom as string);
+        fromDate.setHours(0, 0, 0, 0);
+        dateFilterSql = sql`${dateFilterSql} AND o.order_date >= ${fromDate.toISOString()}`;
+      }
+      if (dateTo) {
+        const toDate = new Date(dateTo as string);
+        toDate.setHours(23, 59, 59, 999);
+        dateFilterSql = sql`${dateFilterSql} AND o.order_date <= ${toDate.toISOString()}`;
+      }
+
+      const [productResults, trendResults, perProductDailyResults] = await Promise.all([
+        db.execute(sql`
+          SELECT 
+            item->>'name' as product_name,
+            p.total_inventory as current_stock,
+            p.image_url as image_url,
+            p.shopify_product_id as shopify_product_id,
+            SUM((item->>'quantity')::int) as total_ordered,
+            SUM(CASE WHEN o.workflow_status IN ('BOOKED','FULFILLED','DELIVERED','RETURN') THEN (item->>'quantity')::int ELSE 0 END) as committed,
+            SUM(CASE WHEN o.workflow_status IN ('FULFILLED','DELIVERED','RETURN') THEN (item->>'quantity')::int ELSE 0 END) as dispatched,
+            SUM(CASE WHEN o.workflow_status = 'DELIVERED' THEN (item->>'quantity')::int ELSE 0 END) as delivered,
+            SUM(CASE WHEN o.workflow_status = 'RETURN' THEN (item->>'quantity')::int ELSE 0 END) as returned,
+            SUM(CASE WHEN o.workflow_status = 'CANCELLED' THEN (item->>'quantity')::int ELSE 0 END) as cancelled,
+            COUNT(DISTINCT o.id) as order_count
+          FROM orders o
+          CROSS JOIN LATERAL jsonb_array_elements(o.line_items) as item
+          LEFT JOIN products p ON LOWER(TRIM(p.title)) = LOWER(TRIM(item->>'name')) AND p.merchant_id = o.merchant_id
+          WHERE o.merchant_id = ${merchantId}
+            AND o.line_items IS NOT NULL
+            ${dateFilterSql}
+          GROUP BY item->>'name', p.total_inventory, p.image_url, p.shopify_product_id
+          ORDER BY total_ordered DESC
+        `),
+        db.execute(sql`
+          SELECT 
+            TO_CHAR(o.order_date, 'YYYY-MM-DD') as date,
+            SUM((item->>'quantity')::int) as total_ordered,
+            SUM(CASE WHEN o.workflow_status IN ('BOOKED','FULFILLED','DELIVERED','RETURN') THEN (item->>'quantity')::int ELSE 0 END) as committed,
+            SUM(CASE WHEN o.workflow_status IN ('FULFILLED','DELIVERED','RETURN') THEN (item->>'quantity')::int ELSE 0 END) as dispatched,
+            SUM(CASE WHEN o.workflow_status = 'DELIVERED' THEN (item->>'quantity')::int ELSE 0 END) as delivered,
+            SUM(CASE WHEN o.workflow_status = 'RETURN' THEN (item->>'quantity')::int ELSE 0 END) as returned
+          FROM orders o
+          CROSS JOIN LATERAL jsonb_array_elements(o.line_items) as item
+          WHERE o.merchant_id = ${merchantId}
+            AND o.line_items IS NOT NULL
+            AND o.order_date IS NOT NULL
+            ${dateFilterSql}
+          GROUP BY TO_CHAR(o.order_date, 'YYYY-MM-DD')
+          ORDER BY date ASC
+        `),
+        db.execute(sql`
+          SELECT 
+            item->>'name' as product_name,
+            TO_CHAR(o.order_date, 'YYYY-MM-DD') as date,
+            SUM((item->>'quantity')::int) as total_ordered,
+            SUM(CASE WHEN o.workflow_status IN ('FULFILLED','DELIVERED','RETURN') THEN (item->>'quantity')::int ELSE 0 END) as dispatched
+          FROM orders o
+          CROSS JOIN LATERAL jsonb_array_elements(o.line_items) as item
+          WHERE o.merchant_id = ${merchantId}
+            AND o.line_items IS NOT NULL
+            AND o.order_date IS NOT NULL
+            ${dateFilterSql}
+          GROUP BY item->>'name', TO_CHAR(o.order_date, 'YYYY-MM-DD')
+          ORDER BY date ASC
+        `),
+      ]);
+
+      const productData = (productResults as any).rows || productResults;
+      const trendData = (trendResults as any).rows || trendResults;
+      const perProductDailyData = (perProductDailyResults as any).rows || perProductDailyResults;
+
+      const products = (productData as any[]).map((r: any) => ({
+        productName: r.product_name,
+        currentStock: r.current_stock ? parseInt(r.current_stock) : null,
+        imageUrl: r.image_url,
+        shopifyProductId: r.shopify_product_id,
+        totalOrdered: parseInt(r.total_ordered),
+        committed: parseInt(r.committed),
+        dispatched: parseInt(r.dispatched),
+        delivered: parseInt(r.delivered),
+        returned: parseInt(r.returned),
+        cancelled: parseInt(r.cancelled),
+        orderCount: parseInt(r.order_count),
+      }));
+
+      const dailyTrend = (trendData as any[]).map((r: any) => ({
+        date: r.date,
+        totalOrdered: parseInt(r.total_ordered),
+        committed: parseInt(r.committed),
+        dispatched: parseInt(r.dispatched),
+        delivered: parseInt(r.delivered),
+        returned: parseInt(r.returned),
+      }));
+
+      const perProductDaily: Record<string, Array<{ date: string; totalOrdered: number; dispatched: number }>> = {};
+      (perProductDailyData as any[]).forEach((r: any) => {
+        const name = r.product_name;
+        if (!perProductDaily[name]) perProductDaily[name] = [];
+        perProductDaily[name].push({
+          date: r.date,
+          totalOrdered: parseInt(r.total_ordered),
+          dispatched: parseInt(r.dispatched),
+        });
+      });
+
+      const totals = products.reduce(
+        (acc, p) => ({
+          totalOrdered: acc.totalOrdered + p.totalOrdered,
+          committed: acc.committed + p.committed,
+          dispatched: acc.dispatched + p.dispatched,
+          delivered: acc.delivered + p.delivered,
+          returned: acc.returned + p.returned,
+          cancelled: acc.cancelled + p.cancelled,
+          totalStock: acc.totalStock + (p.currentStock || 0),
+        }),
+        { totalOrdered: 0, committed: 0, dispatched: 0, delivered: 0, returned: 0, cancelled: 0, totalStock: 0 }
+      );
+
+      res.json({ products, dailyTrend, perProductDaily, totals });
+    } catch (error: any) {
+      console.error("[ProductAnalytics] Error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.get("/api/products/:id", async (req: any, res) => {
     try {
       const merchantId = await requireMerchant(req, res);
