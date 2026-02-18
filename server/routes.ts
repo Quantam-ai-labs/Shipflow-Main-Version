@@ -1544,27 +1544,59 @@ export async function registerRoutes(
       // Get change log
       const changeLog = await storage.getOrderChangeLog(merchantId, order.id);
 
-      // Enrich line items with product images from products table
+      // Enrich line items with product images using raw Shopify data + products table
       let enrichedOrder = { ...order };
       const lineItems = order.lineItems as Array<{ name: string; quantity: number; price: string | number; sku?: string; image?: string | null; productId?: string | null; variantId?: string | null; variantTitle?: string | null }> | null;
       if (lineItems && lineItems.length > 0) {
-        const productIds = lineItems
-          .map(item => item.productId)
-          .filter((id): id is string => !!id);
-        if (productIds.length > 0) {
-          const matchedProducts = await storage.getProductsByShopifyIds(merchantId, productIds);
-          const productImageMap = new Map<string, string>();
-          for (const p of matchedProducts) {
-            if (p.imageUrl) {
-              productImageMap.set(p.shopifyProductId, p.imageUrl);
-            }
+        const rawData = order.rawShopifyData as any;
+        const rawLineItems = rawData?.line_items as Array<any> | undefined;
+
+        // Build a lookup from raw Shopify line items by title for safe matching
+        const rawByTitle = new Map<string, any>();
+        if (rawLineItems) {
+          for (const raw of rawLineItems) {
+            if (raw.title) rawByTitle.set(raw.title.toLowerCase().trim(), raw);
           }
-          const enrichedLineItems = lineItems.map(item => {
-            if (!item.image && item.productId && productImageMap.has(item.productId)) {
-              return { ...item, image: productImageMap.get(item.productId) };
-            }
-            return item;
-          });
+        }
+
+        // Collect all possible product IDs
+        const productIdSet = new Set<string>();
+        lineItems.forEach(item => {
+          if (item.productId) productIdSet.add(item.productId);
+        });
+        if (rawLineItems) {
+          for (const raw of rawLineItems) {
+            if (raw.product_id) productIdSet.add(String(raw.product_id));
+          }
+        }
+
+        const productImageMap = new Map<string, string>();
+        if (productIdSet.size > 0) {
+          const matchedProducts = await storage.getProductsByShopifyIds(merchantId, Array.from(productIdSet));
+          for (const p of matchedProducts) {
+            if (p.imageUrl) productImageMap.set(p.shopifyProductId, p.imageUrl);
+          }
+        }
+
+        let anyChanged = false;
+        const enrichedLineItems = lineItems.map(item => {
+          if (item.image && item.productId) return item;
+          // Match raw item by title (safe, not index-based)
+          const rawItem = rawByTitle.get((item.name || '').toLowerCase().trim());
+          const pid = item.productId || (rawItem?.product_id ? String(rawItem.product_id) : null);
+
+          const updates: any = { ...item };
+          if (!updates.productId && pid) { updates.productId = pid; anyChanged = true; }
+          if (!updates.variantId && rawItem?.variant_id) { updates.variantId = String(rawItem.variant_id); anyChanged = true; }
+
+          if (!updates.image) {
+            if (rawItem?.image?.src) { updates.image = rawItem.image.src; anyChanged = true; }
+            else if (pid && productImageMap.has(pid)) { updates.image = productImageMap.get(pid)!; anyChanged = true; }
+          }
+          return updates;
+        });
+
+        if (anyChanged) {
           enrichedOrder = { ...enrichedOrder, lineItems: enrichedLineItems };
         }
       }
@@ -7881,20 +7913,21 @@ export async function registerRoutes(
     }
   });
 
-  // Backfill order line item images from products table
+  // Backfill order line item images from products table + raw_shopify_data
   async function backfillOrderLineItemImages(merchantId: string) {
     const { products: allProducts } = await storage.getProducts(merchantId, { pageSize: 10000 });
-    if (allProducts.length === 0) return 0;
 
+    // Build shopifyProductId → imageUrl map
     const productImageMap = new Map<string, string>();
+    // Also build product title → imageUrl map for name-based fallback
+    const productTitleMap = new Map<string, string>();
     for (const p of allProducts) {
       if (p.imageUrl) {
         productImageMap.set(p.shopifyProductId, p.imageUrl);
+        productTitleMap.set(p.title.toLowerCase().trim(), p.imageUrl);
       }
     }
-    if (productImageMap.size === 0) return 0;
 
-    // Get all orders for this merchant (paginate through them)
     let updated = 0;
     let page = 1;
     const pageSize = 100;
@@ -7906,13 +7939,61 @@ export async function registerRoutes(
         const lineItems = order.lineItems as Array<{ name: string; quantity: number; price: string | number; sku?: string; image?: string | null; productId?: string | null; variantId?: string | null; variantTitle?: string | null }> | null;
         if (!lineItems || lineItems.length === 0) continue;
 
+        // Extract product data from raw_shopify_data using title-based matching
+        const rawData = order.rawShopifyData as any;
+        const rawLineItems = rawData?.line_items as Array<{ product_id?: number; variant_id?: number; variant_title?: string | null; title?: string; image?: { src?: string } }> | undefined;
+
+        // Build title-based lookup from raw data (safe, not index-based)
+        const rawByTitle = new Map<string, typeof rawLineItems extends Array<infer T> ? T : never>();
+        if (rawLineItems) {
+          for (const raw of rawLineItems) {
+            if (raw.title) rawByTitle.set(raw.title.toLowerCase().trim(), raw as any);
+          }
+        }
+
         let changed = false;
         const enrichedItems = lineItems.map(item => {
-          if (!item.image && item.productId && productImageMap.has(item.productId)) {
+          const updates: any = { ...item };
+          // Match raw item by title, not by index
+          const rawItem = rawByTitle.get((item.name || '').toLowerCase().trim());
+
+          // Fill in productId from raw data if missing
+          if (!updates.productId && rawItem?.product_id) {
+            updates.productId = String(rawItem.product_id);
             changed = true;
-            return { ...item, image: productImageMap.get(item.productId) };
           }
-          return item;
+          if (!updates.variantId && rawItem?.variant_id) {
+            updates.variantId = String(rawItem.variant_id);
+            changed = true;
+          }
+          if (!updates.variantTitle && rawItem?.variant_title) {
+            updates.variantTitle = rawItem.variant_title;
+            changed = true;
+          }
+
+          // Now try to fill in image
+          if (!updates.image) {
+            // Try 1: Use raw Shopify line item image
+            if (rawItem?.image?.src) {
+              updates.image = rawItem.image.src;
+              changed = true;
+            }
+            // Try 2: Match by productId from products table
+            else if (updates.productId && productImageMap.has(updates.productId)) {
+              updates.image = productImageMap.get(updates.productId);
+              changed = true;
+            }
+            // Try 3: Match by product title
+            else {
+              const titleKey = (updates.name || '').toLowerCase().trim();
+              if (titleKey && productTitleMap.has(titleKey)) {
+                updates.image = productTitleMap.get(titleKey);
+                changed = true;
+              }
+            }
+          }
+
+          return updates;
         });
 
         if (changed) {
