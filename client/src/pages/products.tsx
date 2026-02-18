@@ -40,9 +40,103 @@ import {
   Tag,
   AlertCircle,
   TrendingUp,
+  ShoppingCart,
+  Loader2,
 } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import type { Product } from "@shared/schema";
+
+const WORKFLOW_STATUS_COLORS: Record<string, string> = {
+  'NEW': "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+  'PENDING': "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300",
+  'HOLD': "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300",
+  'READY_TO_SHIP': "bg-cyan-100 text-cyan-700 dark:bg-cyan-900 dark:text-cyan-300",
+  'BOOKED': "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
+  'FULFILLED': "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300",
+  'DELIVERED': "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
+  'RETURN': "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
+  'CANCELLED': "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
+};
+
+interface Purchase {
+  orderId: string;
+  orderNumber: string;
+  customerName: string;
+  customerPhone: string | null;
+  workflowStatus: string;
+  orderDate: string;
+  quantity: number;
+  unitPrice: string | null;
+}
+
+function PurchaseSummary({ productId }: { productId: string }) {
+  const [, navigate] = useLocation();
+  const { data, isLoading } = useQuery<{ purchases: Purchase[]; totalPurchases: number }>({
+    queryKey: [`/api/products/${productId}/purchases`],
+    enabled: !!productId,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-6 text-sm text-muted-foreground gap-2" data-testid="loading-purchases">
+        <Loader2 className="w-4 h-4 animate-spin" />
+        Loading purchase history...
+      </div>
+    );
+  }
+
+  const purchases = data?.purchases || [];
+
+  if (purchases.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground py-3" data-testid="text-no-purchases">No purchase records found for this product.</p>
+    );
+  }
+
+  return (
+    <div className="border rounded-md overflow-hidden" data-testid="table-purchase-summary">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Customer</TableHead>
+            <TableHead>Order ID</TableHead>
+            <TableHead>Qty</TableHead>
+            <TableHead>Status</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {purchases.map((p) => {
+            const colorClass = WORKFLOW_STATUS_COLORS[p.workflowStatus] || "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300";
+            return (
+              <TableRow
+                key={`${p.orderId}-${p.quantity}`}
+                className="cursor-pointer"
+                onClick={() => navigate(`/orders/${p.orderId}`)}
+                data-testid={`row-purchase-${p.orderId}`}
+              >
+                <TableCell className="font-medium text-sm">
+                  <div>
+                    {p.customerName}
+                    {p.customerPhone && (
+                      <span className="block text-xs text-muted-foreground">{p.customerPhone}</span>
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell className="text-sm">#{p.orderNumber}</TableCell>
+                <TableCell className="text-sm">{p.quantity}</TableCell>
+                <TableCell>
+                  <Badge className={`${colorClass} text-xs font-medium`} data-testid={`badge-purchase-status-${p.orderId}`}>
+                    {p.workflowStatus.replace(/_/g, ' ')}
+                  </Badge>
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
 
 interface ProductVariant {
   id: string;
@@ -411,6 +505,16 @@ export default function ProductsPage() {
                   </div>
                 </>
               )}
+
+              <Separator />
+
+              <div>
+                <h4 className="font-medium mb-2 flex items-center gap-2">
+                  <ShoppingCart className="w-4 h-4" />
+                  Purchase Summary
+                </h4>
+                <PurchaseSummary productId={selectedProduct.id} />
+              </div>
 
               {selectedProduct.shopifySyncedAt && (
                 <p className="text-xs text-muted-foreground text-right">

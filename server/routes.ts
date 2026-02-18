@@ -7980,6 +7980,52 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/products/:id/purchases", async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const product = await storage.getProductById(merchantId, req.params.id);
+      if (!product) return res.status(404).json({ error: "Product not found" });
+
+      const results = await db.execute(sql`
+        SELECT 
+          o.id,
+          o.order_number,
+          o.customer_name,
+          o.customer_phone,
+          o.workflow_status,
+          o.order_date,
+          (item->>'quantity')::int as quantity,
+          item->>'price' as unit_price
+        FROM orders o
+        CROSS JOIN LATERAL jsonb_array_elements(o.line_items) as item
+        WHERE o.merchant_id = ${merchantId}
+          AND o.line_items IS NOT NULL
+          AND LOWER(TRIM(item->>'name')) = LOWER(TRIM(${product.title}))
+        ORDER BY o.order_date DESC
+        LIMIT 100
+      `);
+
+      const rows = (results as any).rows || results;
+      const purchases = (rows as any[]).map((r: any) => ({
+        orderId: r.id,
+        orderNumber: r.order_number,
+        customerName: r.customer_name,
+        customerPhone: r.customer_phone,
+        workflowStatus: r.workflow_status,
+        orderDate: r.order_date,
+        quantity: parseInt(r.quantity) || 0,
+        unitPrice: r.unit_price,
+      }));
+
+      res.json({ purchases, totalPurchases: purchases.length });
+    } catch (error: any) {
+      console.error("Error fetching product purchases:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.post("/api/products/sync", async (req: any, res) => {
     try {
       const merchantId = await requireMerchant(req, res);
