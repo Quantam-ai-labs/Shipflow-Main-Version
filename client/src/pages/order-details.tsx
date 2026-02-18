@@ -892,7 +892,7 @@ export default function OrderDetails() {
   }
 
   const shipment = order.shipments?.[0];
-  const lineItems = order.lineItems as Array<{ name: string; quantity: number; price: string }> | null;
+  const lineItems = order.lineItems as Array<{ name: string; quantity: number; price: string; sku?: string; image?: string | null; variantTitle?: string | null; productId?: string | null }> | null;
 
   return (
     <div className="space-y-6">
@@ -920,201 +920,6 @@ export default function OrderDetails() {
       <div className="grid lg:grid-cols-3 gap-4">
         {/* Main Content */}
         <div className="lg:col-span-2 space-y-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-              <CardTitle className="text-lg flex items-center gap-2 flex-wrap">
-                <User className="w-5 h-5" />
-                Customer Details
-                {isLocked && (
-                  <Badge variant="outline" className="text-xs gap-1" data-testid="badge-locked-customer">
-                    <Lock className="w-3 h-3" />
-                    Locked - Booked
-                  </Badge>
-                )}
-              </CardTitle>
-              {!isLocked && !isEditingCustomer && (
-                <Button variant="ghost" size="icon" onClick={startEditingCustomer} data-testid="button-edit-customer">
-                  <Edit3 className="w-4 h-4" />
-                </Button>
-              )}
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {isEditingCustomer ? (
-                <>
-                  <div className="grid sm:grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-xs text-muted-foreground">Name</label>
-                      <Input value={editCustomerName} onChange={(e) => setEditCustomerName(e.target.value)} data-testid="input-edit-customer-name" />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs text-muted-foreground">Phone</label>
-                      <Input value={editCustomerPhone} onChange={(e) => setEditCustomerPhone(e.target.value)} data-testid="input-edit-customer-phone" />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs text-muted-foreground">Email</label>
-                      <Input value={editCustomerEmail} onChange={(e) => setEditCustomerEmail(e.target.value)} data-testid="input-edit-customer-email" />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs text-muted-foreground">City</label>
-                      <Input value={editCity} onChange={(e) => setEditCity(e.target.value)} data-testid="input-edit-city" />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs text-muted-foreground">Province</label>
-                      <Input value={editProvince} onChange={(e) => setEditProvince(e.target.value)} data-testid="input-edit-province" />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs text-muted-foreground">Postal Code</label>
-                      <Input value={editPostalCode} onChange={(e) => setEditPostalCode(e.target.value)} data-testid="input-edit-postal-code" />
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">Shipping Address</label>
-                    <Textarea value={editShippingAddress} onChange={(e) => setEditShippingAddress(e.target.value)} className="min-h-[60px]" data-testid="input-edit-shipping-address" />
-                  </div>
-                  <div className="flex items-center gap-2 justify-end flex-wrap">
-                    <Button variant="outline" size="sm" onClick={() => setIsEditingCustomer(false)} disabled={updateOrderMutation.isPending} data-testid="button-cancel-customer-edit">
-                      Cancel
-                    </Button>
-                    <Button size="sm" onClick={handleSaveCustomer} disabled={updateOrderMutation.isPending} data-testid="button-save-customer">
-                      {updateOrderMutation.isPending ? "Saving..." : "Save"}
-                    </Button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="grid sm:grid-cols-2 gap-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-                        <User className="w-5 h-5 text-muted-foreground" />
-                      </div>
-                      <div>
-                        <p className="font-medium" data-testid="text-customer-name">{order.customerName}</p>
-                        <p className="text-sm text-muted-foreground">Customer</p>
-                      </div>
-                    </div>
-                    {order.customerPhone && (
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-                          <Phone className="w-5 h-5 text-muted-foreground" />
-                        </div>
-                        <div>
-                          <p className="font-medium" data-testid="text-customer-phone">{order.customerPhone}</p>
-                          <p className="text-sm text-muted-foreground">Phone</p>
-                        </div>
-                      </div>
-                    )}
-                    {order.customerEmail && (
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-                          <Mail className="w-5 h-5 text-muted-foreground" />
-                        </div>
-                        <div>
-                          <p className="font-medium truncate max-w-[200px]" data-testid="text-customer-email">{order.customerEmail}</p>
-                          <p className="text-sm text-muted-foreground">Email</p>
-                        </div>
-                      </div>
-                    )}
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-                        <MapPin className="w-5 h-5 text-muted-foreground" />
-                      </div>
-                      <div>
-                        <p className="font-medium" data-testid="text-customer-location">{order.city}, {order.province}</p>
-                        <p className="text-sm text-muted-foreground">Location</p>
-                      </div>
-                    </div>
-                  </div>
-                  {order.shippingAddress && (
-                    <div className="pt-4 border-t">
-                      <p className="text-sm text-muted-foreground mb-1">Shipping Address</p>
-                      <p className="text-sm" data-testid="text-shipping-address">{order.shippingAddress}</p>
-                    </div>
-                  )}
-                </>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Courier Tracking Journey */}
-          <CourierTrackingJourney orderId={id!} order={order} />
-
-          {/* Remarks */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <MessageSquare className="w-5 h-5" />
-                Remarks
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex gap-2">
-                <Textarea
-                  placeholder="Add a remark about this order..."
-                  value={newRemark}
-                  onChange={(e) => setNewRemark(e.target.value)}
-                  className="min-h-[80px]"
-                  data-testid="input-remark"
-                />
-              </div>
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <Select value={remarkType} onValueChange={setRemarkType}>
-                  <SelectTrigger className="w-[160px]" data-testid="select-remark-type">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="general">General</SelectItem>
-                    <SelectItem value="follow_up">Follow Up</SelectItem>
-                    <SelectItem value="issue">Issue</SelectItem>
-                    <SelectItem value="resolved">Resolved</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Button
-                  onClick={handleAddRemark}
-                  disabled={!newRemark.trim() || addRemarkMutation.isPending}
-                  data-testid="button-add-remark"
-                >
-                  <Send className="w-4 h-4 mr-2" />
-                  {addRemarkMutation.isPending ? "Adding..." : "Add Remark"}
-                </Button>
-              </div>
-              <Separator />
-              <div className="space-y-4">
-                {order.remarks && order.remarks.length > 0 ? (
-                  order.remarks.map((remark) => (
-                    <div key={remark.id} className="flex gap-3">
-                      <Avatar className="h-8 w-8">
-                        <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                          U
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Badge variant="outline" className="text-xs capitalize">
-                            {remark.remarkType?.replace(/_/g, " ")}
-                          </Badge>
-                          <span className="text-xs text-muted-foreground">
-                            {remark.createdAt ? format(new Date(remark.createdAt), "MMM dd, h:mm a") : ""}
-                          </span>
-                        </div>
-                        <p className="text-sm">{remark.content}</p>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    No remarks yet. Add one above.
-                  </p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Combined Activity History */}
-          <ActivityTimeline auditLog={auditLog} changeLog={order?.changeLog} />
-        </div>
-
-        {/* Sidebar */}
-        <div className="space-y-4">
           <Card>
             <CardHeader className="pb-3 flex flex-row items-center justify-between gap-2 space-y-0">
               <CardTitle className="text-lg flex items-center gap-2 flex-wrap">
@@ -1230,14 +1035,30 @@ export default function OrderDetails() {
               ) : (
                 <>
                   {lineItems && lineItems.length > 0 ? (
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       {lineItems.map((item, index) => (
-                        <div key={index} className="flex items-start justify-between gap-2 text-sm" data-testid={`line-item-${index}`}>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium leading-tight">{item.name}</p>
-                            <p className="text-muted-foreground text-xs">Qty: {item.quantity}</p>
+                        <div key={index} className="flex items-center gap-3 py-1" data-testid={`line-item-${index}`}>
+                          <div className="w-12 h-12 rounded-md border bg-muted flex items-center justify-center overflow-hidden shrink-0">
+                            {item.image ? (
+                              <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <Package className="w-5 h-5 text-muted-foreground" />
+                            )}
                           </div>
-                          <p className="font-medium shrink-0">PKR {Number(item.price).toLocaleString()}</p>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm leading-tight">{item.name}</p>
+                            {item.variantTitle && (
+                              <p className="text-xs text-muted-foreground">{item.variantTitle}</p>
+                            )}
+                            {item.sku && (
+                              <p className="text-xs text-muted-foreground">SKU: {item.sku}</p>
+                            )}
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="text-sm font-medium">PKR {Number(item.price).toLocaleString()}</p>
+                            <p className="text-xs text-muted-foreground">x {item.quantity}</p>
+                          </div>
+                          <p className="text-sm font-semibold shrink-0 w-24 text-right">PKR {(Number(item.price) * item.quantity).toLocaleString()}</p>
                         </div>
                       ))}
                     </div>
@@ -1284,6 +1105,184 @@ export default function OrderDetails() {
                     >
                       {order.paymentStatus?.replace(/\b\w/g, (l) => l.toUpperCase())}
                     </Badge>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Courier Tracking Journey */}
+          <CourierTrackingJourney orderId={id!} order={order} />
+
+          {/* Remarks */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <MessageSquare className="w-5 h-5" />
+                Remarks
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-2">
+                <Textarea
+                  placeholder="Add a remark about this order..."
+                  value={newRemark}
+                  onChange={(e) => setNewRemark(e.target.value)}
+                  className="min-h-[80px]"
+                  data-testid="input-remark"
+                />
+              </div>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <Select value={remarkType} onValueChange={setRemarkType}>
+                  <SelectTrigger className="w-[160px]" data-testid="select-remark-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="general">General</SelectItem>
+                    <SelectItem value="follow_up">Follow Up</SelectItem>
+                    <SelectItem value="issue">Issue</SelectItem>
+                    <SelectItem value="resolved">Resolved</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button
+                  onClick={handleAddRemark}
+                  disabled={!newRemark.trim() || addRemarkMutation.isPending}
+                  data-testid="button-add-remark"
+                >
+                  <Send className="w-4 h-4 mr-2" />
+                  {addRemarkMutation.isPending ? "Adding..." : "Add Remark"}
+                </Button>
+              </div>
+              <Separator />
+              <div className="space-y-4">
+                {order.remarks && order.remarks.length > 0 ? (
+                  order.remarks.map((remark) => (
+                    <div key={remark.id} className="flex gap-3">
+                      <Avatar className="h-8 w-8">
+                        <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                          U
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Badge variant="outline" className="text-xs capitalize">
+                            {remark.remarkType?.replace(/_/g, " ")}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {remark.createdAt ? format(new Date(remark.createdAt), "MMM dd, h:mm a") : ""}
+                          </span>
+                        </div>
+                        <p className="text-sm">{remark.content}</p>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No remarks yet. Add one above.
+                  </p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Combined Activity History */}
+          <ActivityTimeline auditLog={auditLog} changeLog={order?.changeLog} />
+        </div>
+
+        {/* Sidebar */}
+        <div className="space-y-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+              <CardTitle className="text-lg flex items-center gap-2 flex-wrap">
+                <User className="w-5 h-5" />
+                Customer
+                {isLocked && (
+                  <Badge variant="outline" className="text-xs gap-1" data-testid="badge-locked-customer">
+                    <Lock className="w-3 h-3" />
+                    Locked
+                  </Badge>
+                )}
+              </CardTitle>
+              {!isLocked && !isEditingCustomer && (
+                <Button variant="ghost" size="icon" onClick={startEditingCustomer} data-testid="button-edit-customer">
+                  <Edit3 className="w-4 h-4" />
+                </Button>
+              )}
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {isEditingCustomer ? (
+                <>
+                  <div className="space-y-2">
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Name</label>
+                      <Input value={editCustomerName} onChange={(e) => setEditCustomerName(e.target.value)} data-testid="input-edit-customer-name" />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Phone</label>
+                      <Input value={editCustomerPhone} onChange={(e) => setEditCustomerPhone(e.target.value)} data-testid="input-edit-customer-phone" />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Email</label>
+                      <Input value={editCustomerEmail} onChange={(e) => setEditCustomerEmail(e.target.value)} data-testid="input-edit-customer-email" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">City</label>
+                        <Input value={editCity} onChange={(e) => setEditCity(e.target.value)} data-testid="input-edit-city" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">Province</label>
+                        <Input value={editProvince} onChange={(e) => setEditProvince(e.target.value)} data-testid="input-edit-province" />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Postal Code</label>
+                      <Input value={editPostalCode} onChange={(e) => setEditPostalCode(e.target.value)} data-testid="input-edit-postal-code" />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Shipping Address</label>
+                      <Textarea value={editShippingAddress} onChange={(e) => setEditShippingAddress(e.target.value)} className="min-h-[60px]" data-testid="input-edit-shipping-address" />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 justify-end flex-wrap">
+                    <Button variant="outline" size="sm" onClick={() => setIsEditingCustomer(false)} disabled={updateOrderMutation.isPending} data-testid="button-cancel-customer-edit">
+                      Cancel
+                    </Button>
+                    <Button size="sm" onClick={handleSaveCustomer} disabled={updateOrderMutation.isPending} data-testid="button-save-customer">
+                      {updateOrderMutation.isPending ? "Saving..." : "Save"}
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="space-y-2.5">
+                    <div className="flex items-center gap-2.5">
+                      <User className="w-4 h-4 text-muted-foreground shrink-0" />
+                      <span className="text-sm font-medium" data-testid="text-customer-name">{order.customerName}</span>
+                    </div>
+                    {order.customerPhone && (
+                      <div className="flex items-center gap-2.5">
+                        <Phone className="w-4 h-4 text-muted-foreground shrink-0" />
+                        <span className="text-sm" data-testid="text-customer-phone">{order.customerPhone}</span>
+                      </div>
+                    )}
+                    {order.customerEmail && (
+                      <div className="flex items-center gap-2.5">
+                        <Mail className="w-4 h-4 text-muted-foreground shrink-0" />
+                        <span className="text-sm truncate" data-testid="text-customer-email">{order.customerEmail}</span>
+                      </div>
+                    )}
+                  </div>
+                  <Separator />
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Shipping Address</p>
+                    <div className="text-sm space-y-0.5">
+                      <p data-testid="text-customer-name-address">{order.customerName}</p>
+                      {order.shippingAddress && <p className="text-muted-foreground" data-testid="text-shipping-address">{order.shippingAddress}</p>}
+                      <p className="text-muted-foreground" data-testid="text-customer-location">{order.city}{order.province ? `, ${order.province}` : ""}</p>
+                      {order.postalCode && <p className="text-muted-foreground">{order.postalCode}</p>}
+                      {order.customerPhone && <p className="text-muted-foreground">{order.customerPhone}</p>}
+                    </div>
                   </div>
                 </>
               )}

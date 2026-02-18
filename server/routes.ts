@@ -7755,5 +7755,99 @@ export async function registerRoutes(
     );
   }
 
+  // ============================================
+  // PRODUCTS / INVENTORY
+  // ============================================
+
+  app.get("/api/products", async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { search, status, page, pageSize } = req.query;
+      const result = await storage.getProducts(merchantId, {
+        search: search as string,
+        status: status as string,
+        page: page ? parseInt(page as string) : undefined,
+        pageSize: pageSize ? parseInt(pageSize as string) : undefined,
+      });
+      res.json(result);
+    } catch (error: any) {
+      console.error("[Products] Error fetching products:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/products/:id", async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const product = await storage.getProductById(merchantId, req.params.id);
+      if (!product) return res.status(404).json({ error: "Product not found" });
+      res.json(product);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/products/sync", async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const store = await storage.getShopifyStore(merchantId);
+      if (!store || !store.accessToken || !store.shopDomain || !store.isConnected) {
+        return res.status(400).json({ error: "Shopify store not connected" });
+      }
+
+      const accessToken = decryptToken(store.accessToken);
+      const shopifyProducts = await shopifyService.fetchAllProducts(store.shopDomain, accessToken);
+
+      let synced = 0;
+      for (const sp of shopifyProducts) {
+        const totalInventory = (sp.variants || []).reduce((sum: number, v: any) => sum + (v.inventory_quantity || 0), 0);
+        const variantsData = (sp.variants || []).map((v: any) => ({
+          id: String(v.id),
+          title: v.title,
+          sku: v.sku,
+          price: v.price,
+          compareAtPrice: v.compare_at_price,
+          inventoryQuantity: v.inventory_quantity || 0,
+          inventoryItemId: v.inventory_item_id ? String(v.inventory_item_id) : null,
+          weight: v.weight,
+          weightUnit: v.weight_unit,
+          option1: v.option1,
+          option2: v.option2,
+          option3: v.option3,
+        }));
+        const imagesData = (sp.images || []).map((img: any) => ({
+          id: String(img.id),
+          src: img.src,
+          alt: img.alt,
+          position: img.position,
+          width: img.width,
+          height: img.height,
+        }));
+
+        await storage.upsertProduct(merchantId, String(sp.id), {
+          title: sp.title,
+          handle: sp.handle,
+          vendor: sp.vendor,
+          productType: sp.product_type,
+          status: sp.status,
+          imageUrl: sp.image?.src || (sp.images?.length > 0 ? sp.images[0].src : null),
+          images: imagesData,
+          tags: sp.tags || "",
+          totalInventory,
+          variants: variantsData,
+        });
+        synced++;
+      }
+
+      res.json({ success: true, synced, total: shopifyProducts.length });
+    } catch (error: any) {
+      console.error("[Products Sync] Error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   return httpServer;
 }

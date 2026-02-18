@@ -850,3 +850,36 @@ export const insertUnmappedCourierStatusSchema = createInsertSchema(unmappedCour
 });
 export type InsertUnmappedCourierStatus = z.infer<typeof insertUnmappedCourierStatusSchema>;
 export type UnmappedCourierStatus = typeof unmappedCourierStatuses.$inferSelect;
+
+// ============================================
+// PRODUCTS (Shopify product sync & inventory)
+// ============================================
+export const products = pgTable("products", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id", { length: 255 }).notNull(),
+  shopifyProductId: varchar("shopify_product_id", { length: 255 }).notNull(),
+  title: varchar("title", { length: 500 }).notNull(),
+  handle: varchar("handle", { length: 500 }),
+  vendor: varchar("vendor", { length: 255 }),
+  productType: varchar("product_type", { length: 255 }),
+  status: varchar("status", { length: 50 }).default("active"),
+  imageUrl: text("image_url"),
+  images: jsonb("images"),
+  tags: text("tags"),
+  totalInventory: integer("total_inventory").default(0),
+  variants: jsonb("variants"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  shopifySyncedAt: timestamp("shopify_synced_at"),
+}, (table) => [
+  index("idx_products_merchant").on(table.merchantId),
+  uniqueIndex("idx_products_shopify_unique").on(table.merchantId, table.shopifyProductId),
+]);
+
+export const insertProductSchema = createInsertSchema(products).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertProduct = z.infer<typeof insertProductSchema>;
+export type Product = typeof products.$inferSelect;

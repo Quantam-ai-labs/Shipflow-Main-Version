@@ -815,11 +815,15 @@ export class ShopifyService {
       fulfillmentStatus,
       orderStatus,
       shipmentStatus,
-      lineItems: shopifyOrder.line_items.map(item => ({
+      lineItems: shopifyOrder.line_items.map((item: any) => ({
         name: item.title,
         quantity: item.quantity,
         price: parseFloat(item.price),
         sku: item.sku,
+        variantTitle: item.variant_title || null,
+        productId: item.product_id ? String(item.product_id) : null,
+        variantId: item.variant_id ? String(item.variant_id) : null,
+        image: item.image?.src || null,
       })),
       tags: shopifyOrder.tags ? shopifyOrder.tags.split(',').map(t => t.trim()) : [],
       notes: shopifyOrder.note,
@@ -829,6 +833,65 @@ export class ShopifyService {
       browserIp,
       rawShopifyData: shopifyOrder as unknown as Record<string, any>,
     };
+  }
+
+  async fetchAllProducts(shop: string, accessToken: string): Promise<any[]> {
+    const allProducts: any[] = [];
+    const headers = this.getAuthHeaders(accessToken);
+
+    let url: string | null = `https://${shop}/admin/api/2025-01/products.json?limit=250&fields=id,title,handle,vendor,product_type,status,image,images,tags,variants`;
+    let pageCount = 0;
+    let retryCount = 0;
+    const maxRetries = 3;
+
+    console.log(`[Shopify Products] Starting paginated product fetch from ${shop}...`);
+
+    while (url) {
+      pageCount++;
+      console.log(`[Shopify Products] Fetching page ${pageCount}... (${allProducts.length} products so far)`);
+
+      try {
+        const response = await fetch(url, { headers });
+
+        if (response.status === 429) {
+          const retryAfter = response.headers.get('Retry-After');
+          const delay = retryAfter ? parseInt(retryAfter) * 1000 : 2000;
+          console.log(`[Shopify Products] Rate limited, waiting ${delay}ms...`);
+          await this.sleep(delay);
+          retryCount++;
+          if (retryCount > maxRetries) throw new Error('Max retries exceeded due to rate limiting');
+          continue;
+        }
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Failed to fetch products: ${response.status} ${errorText}`);
+        }
+
+        const data = await response.json();
+        if (data.products && Array.isArray(data.products)) {
+          allProducts.push(...data.products);
+        }
+
+        const linkHeader = response.headers.get('Link');
+        url = null;
+        if (linkHeader) {
+          const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
+          if (nextMatch) {
+            url = nextMatch[1];
+          }
+        }
+
+        retryCount = 0;
+        await this.sleep(300);
+      } catch (error: any) {
+        console.error(`[Shopify Products] Error on page ${pageCount}:`, error.message);
+        throw error;
+      }
+    }
+
+    console.log(`[Shopify Products] Fetched ${allProducts.length} products total.`);
+    return allProducts;
   }
 }
 

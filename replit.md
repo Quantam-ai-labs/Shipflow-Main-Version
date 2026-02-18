@@ -55,6 +55,8 @@ Preferred communication style: Simple, everyday language.
   - Loop prevention via in-memory cooldown map (10s) to skip webhook echoes from our own writes
   - Bulk write-backs are serialized with 500ms delay for Shopify API rate limit compliance
 - **Webhook Resilience**: All webhook endpoints respond 200 immediately before processing, preventing Shopify from removing webhooks due to timeouts. Webhook health check API and re-register UI button in Integrations page.
+- **Product & Inventory Management**: Shopify product sync via `products` table. Stores product title, variants (with SKU, price, inventory per variant), images, tags, vendor, type, and total inventory. Synced via `POST /api/products/sync` endpoint using paginated Shopify Admin API calls. Products page (`/products`) shows searchable/filterable product catalog with inventory levels, variant details, and product images. Order line items display product thumbnails captured during order sync.
+- **Order Detail Layout**: Shopify-style layout with Order Summary (line items with product thumbnails, pricing breakdown) in the main content area and Customer Details (name, phone, email, shipping address) in the right sidebar.
 
 ## External Dependencies
 

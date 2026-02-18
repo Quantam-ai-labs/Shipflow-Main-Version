@@ -50,6 +50,7 @@ import {
   RotateCcw,
   Receipt,
   FileCheck,
+  ShoppingBag,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery } from "@tanstack/react-query";
@@ -79,6 +80,11 @@ const bottomNavItems = [
     title: "Shipments",
     url: "/shipments",
     icon: Truck,
+  },
+  {
+    title: "Products",
+    url: "/products",
+    icon: ShoppingBag,
   },
   {
     title: "Analytics",

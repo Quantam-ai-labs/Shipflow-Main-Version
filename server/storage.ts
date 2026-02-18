@@ -26,6 +26,8 @@ import {
   type CourierStatusMapping, type InsertCourierStatusMapping,
   unmappedCourierStatuses,
   type UnmappedCourierStatus,
+  products,
+  type Product, type InsertProduct,
   users,
 } from "@shared/schema";
 import { db } from "./db";
@@ -177,6 +179,12 @@ export interface IStorage {
   getUnmappedStatusCount(merchantId: string): Promise<number>;
   resolveUnmappedStatus(merchantId: string, id: string): Promise<void>;
   dismissUnmappedStatus(merchantId: string, id: string): Promise<void>;
+
+  // Products
+  getProducts(merchantId: string, options?: { search?: string; status?: string; page?: number; pageSize?: number }): Promise<{ products: Product[]; total: number }>;
+  getProductById(merchantId: string, id: string): Promise<Product | undefined>;
+  upsertProduct(merchantId: string, shopifyProductId: string, data: Partial<InsertProduct>): Promise<Product>;
+  deleteProductsByMerchant(merchantId: string): Promise<void>;
 
   // Seed
   seedDemoData(): Promise<void>;
@@ -1632,6 +1640,57 @@ export class DatabaseStorage implements IStorage {
   async dismissUnmappedStatus(merchantId: string, id: string): Promise<void> {
     await db.delete(unmappedCourierStatuses)
       .where(and(eq(unmappedCourierStatuses.id, id), eq(unmappedCourierStatuses.merchantId, merchantId)));
+  }
+
+  async getProducts(merchantId: string, options?: { search?: string; status?: string; page?: number; pageSize?: number }): Promise<{ products: Product[]; total: number }> {
+    const page = options?.page || 1;
+    const pageSize = options?.pageSize || 50;
+    const offset = (page - 1) * pageSize;
+    const conditions: any[] = [eq(products.merchantId, merchantId)];
+
+    if (options?.search) {
+      conditions.push(
+        or(
+          ilike(products.title, `%${options.search}%`),
+          ilike(products.vendor, `%${options.search}%`),
+          ilike(products.productType, `%${options.search}%`),
+          ilike(products.tags, `%${options.search}%`)
+        )
+      );
+    }
+
+    if (options?.status) {
+      conditions.push(eq(products.status, options.status));
+    }
+
+    const whereClause = conditions.length > 1 ? and(...conditions) : conditions[0];
+
+    const [totalResult, productRows] = await Promise.all([
+      db.select({ count: count() }).from(products).where(whereClause),
+      db.select().from(products).where(whereClause).orderBy(desc(products.updatedAt)).limit(pageSize).offset(offset),
+    ]);
+
+    return { products: productRows, total: totalResult[0]?.count || 0 };
+  }
+
+  async getProductById(merchantId: string, id: string): Promise<Product | undefined> {
+    const result = await db.select().from(products).where(and(eq(products.id, id), eq(products.merchantId, merchantId)));
+    return result[0];
+  }
+
+  async upsertProduct(merchantId: string, shopifyProductId: string, data: Partial<InsertProduct>): Promise<Product> {
+    const existing = await db.select().from(products).where(and(eq(products.merchantId, merchantId), eq(products.shopifyProductId, shopifyProductId)));
+    if (existing.length > 0) {
+      const updated = await db.update(products).set({ ...data, updatedAt: new Date(), shopifySyncedAt: new Date() }).where(and(eq(products.merchantId, merchantId), eq(products.shopifyProductId, shopifyProductId))).returning();
+      return updated[0];
+    } else {
+      const inserted = await db.insert(products).values({ ...data, merchantId, shopifyProductId, shopifySyncedAt: new Date() } as any).returning();
+      return inserted[0];
+    }
+  }
+
+  async deleteProductsByMerchant(merchantId: string): Promise<void> {
+    await db.delete(products).where(eq(products.merchantId, merchantId));
   }
 
   async seedDemoData(): Promise<void> {
