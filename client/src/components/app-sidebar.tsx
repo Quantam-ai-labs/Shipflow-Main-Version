@@ -83,7 +83,15 @@ const bottomNavItems = [
     icon: Truck,
   },
   {
-    title: "Inventory",
+    title: "Analytics",
+    url: "/analytics",
+    icon: BarChart3,
+  },
+];
+
+const inventorySubItems = [
+  {
+    title: "Products",
     url: "/products",
     icon: ShoppingBag,
   },
@@ -91,11 +99,6 @@ const bottomNavItems = [
     title: "Product Analytics",
     url: "/product-analytics",
     icon: TrendingUp,
-  },
-  {
-    title: "Analytics",
-    url: "/analytics",
-    icon: BarChart3,
   },
 ];
 
@@ -174,6 +177,7 @@ export function AppSidebar() {
   });
 
   const isOrdersRouteActive = location.startsWith("/orders");
+  const isInventoryRouteActive = location === "/products" || location === "/product-analytics";
   const isCodRouteActive = location === "/cod-reconciliation" || location === "/payment-ledger" || location === "/manage-cheques";
   const totalOrderCount = counts
     ? Object.values(counts).reduce((sum, c) => sum + (c || 0), 0)
@@ -275,6 +279,34 @@ export function AppSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+              <Collapsible defaultOpen={isInventoryRouteActive} asChild className="group/inventory-collapsible">
+                <SidebarMenuItem>
+                  <CollapsibleTrigger asChild>
+                    <SidebarMenuButton data-testid="nav-inventory-toggle" tooltip="Inventory">
+                      <ShoppingBag className="w-4 h-4" />
+                      <span className="flex-1">Inventory</span>
+                      <ChevronRight className="w-4 h-4 ml-auto transition-transform duration-200 group-data-[state=open]/inventory-collapsible:rotate-90" />
+                    </SidebarMenuButton>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <SidebarMenuSub>
+                      {inventorySubItems.map((item) => (
+                        <SidebarMenuSubItem key={item.title}>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={location === item.url}
+                          >
+                            <Link href={item.url} data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                              <item.icon className="w-3.5 h-3.5" />
+                              <span>{item.title}</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </SidebarMenuItem>
+              </Collapsible>
               <Collapsible defaultOpen={isCodRouteActive} asChild className="group/cod-collapsible">
                 <SidebarMenuItem>
                   <CollapsibleTrigger asChild>
