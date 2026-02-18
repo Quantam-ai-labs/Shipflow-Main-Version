@@ -330,11 +330,11 @@ function ActivityTimeline({ auditLog, changeLog }: { auditLog: any[] | undefined
                         {entry.oldValue && (
                           <>
                             <span className="text-xs text-muted-foreground">from</span>
-                            <span className="text-xs line-through text-muted-foreground/70 max-w-[120px] truncate">{entry.oldValue}</span>
+                            <span className="text-xs line-through text-muted-foreground/70 break-words">{entry.oldValue}</span>
                           </>
                         )}
                         <span className="text-xs text-muted-foreground">to</span>
-                        <span className="text-xs font-medium max-w-[120px] truncate">{entry.newValue}</span>
+                        <span className="text-xs font-medium break-words">{entry.newValue}</span>
                       </div>
                     )}
                     {entry._type === "change" && (entry.changeType === "PAYMENT_ADDED" || entry.changeType === "PAYMENT_DELETED" || entry.changeType === "PAYMENT_REMOVED") && entry.metadata && (
@@ -343,10 +343,10 @@ function ActivityTimeline({ auditLog, changeLog }: { auditLog: any[] | undefined
                       </p>
                     )}
                     {entry._type === "change" && entry.changeType === "REMARK_ADDED" && entry.newValue && (
-                      <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-[300px]">"{entry.newValue}"</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 break-words">"{entry.newValue}"</p>
                     )}
                     {entry.reason && entry._type === "status" && (
-                      <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-[300px]">{entry.reason}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 break-words">{entry.reason}</p>
                     )}
                     <p className="text-xs text-muted-foreground/60 mt-0.5">{timeStr}</p>
                   </div>
