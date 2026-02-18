@@ -1544,8 +1544,33 @@ export async function registerRoutes(
       // Get change log
       const changeLog = await storage.getOrderChangeLog(merchantId, order.id);
 
+      // Enrich line items with product images from products table
+      let enrichedOrder = { ...order };
+      const lineItems = order.lineItems as Array<{ name: string; quantity: number; price: string | number; sku?: string; image?: string | null; productId?: string | null; variantId?: string | null; variantTitle?: string | null }> | null;
+      if (lineItems && lineItems.length > 0) {
+        const productIds = lineItems
+          .map(item => item.productId)
+          .filter((id): id is string => !!id);
+        if (productIds.length > 0) {
+          const matchedProducts = await storage.getProductsByShopifyIds(merchantId, productIds);
+          const productImageMap = new Map<string, string>();
+          for (const p of matchedProducts) {
+            if (p.imageUrl) {
+              productImageMap.set(p.shopifyProductId, p.imageUrl);
+            }
+          }
+          const enrichedLineItems = lineItems.map(item => {
+            if (!item.image && item.productId && productImageMap.has(item.productId)) {
+              return { ...item, image: productImageMap.get(item.productId) };
+            }
+            return item;
+          });
+          enrichedOrder = { ...enrichedOrder, lineItems: enrichedLineItems };
+        }
+      }
+
       res.json({
-        ...order,
+        ...enrichedOrder,
         shipments: shipmentsWithEvents,
         remarks: orderRemarks,
         changeLog,

@@ -183,6 +183,7 @@ export interface IStorage {
   // Products
   getProducts(merchantId: string, options?: { search?: string; status?: string; page?: number; pageSize?: number }): Promise<{ products: Product[]; total: number }>;
   getProductById(merchantId: string, id: string): Promise<Product | undefined>;
+  getProductsByShopifyIds(merchantId: string, shopifyProductIds: string[]): Promise<Product[]>;
   upsertProduct(merchantId: string, shopifyProductId: string, data: Partial<InsertProduct>): Promise<Product>;
   deleteProductsByMerchant(merchantId: string): Promise<void>;
 
@@ -1676,6 +1677,13 @@ export class DatabaseStorage implements IStorage {
   async getProductById(merchantId: string, id: string): Promise<Product | undefined> {
     const result = await db.select().from(products).where(and(eq(products.id, id), eq(products.merchantId, merchantId)));
     return result[0];
+  }
+
+  async getProductsByShopifyIds(merchantId: string, shopifyProductIds: string[]): Promise<Product[]> {
+    if (shopifyProductIds.length === 0) return [];
+    return await db.select().from(products).where(
+      and(eq(products.merchantId, merchantId), inArray(products.shopifyProductId, shopifyProductIds))
+    );
   }
 
   async upsertProduct(merchantId: string, shopifyProductId: string, data: Partial<InsertProduct>): Promise<Product> {
