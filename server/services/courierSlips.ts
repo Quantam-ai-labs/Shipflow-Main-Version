@@ -1,4 +1,5 @@
 import { PDFDocument } from "pdf-lib";
+import { generateAirwayBillPdfBuffer, type AirwayBillData } from "./pdfGenerator";
 
 const POSTEX_INVOICE_URL = "https://api.postex.pk/services/integration/api/order/v1/get-invoice";
 const POSTEX_MAX_PER_REQUEST = 10;
@@ -10,18 +11,24 @@ export interface CourierSlipResult {
   failedTrackingNumbers?: string[];
 }
 
+export interface LeopardsOrderContext {
+  itemsSummary?: string;
+  quantity?: number;
+}
+
+const LEOPARDS_TRACK_URL = "https://merchantapi.leopardscourier.com/api/trackBookedPacket/format/json/";
 const LEOPARDS_SLIP_URL = "https://merchantapi.leopardscourier.com/api/getSlipDataPDF/format/json/";
 
 export async function fetchLeopardsSlip(
   slipUrl: string,
-  credentials?: { apiKey: string; apiPassword: string; trackingNumber: string }
+  credentials?: { apiKey: string; apiPassword: string; trackingNumber: string },
+  orderContext?: LeopardsOrderContext
 ): Promise<CourierSlipResult> {
   try {
-    let resp: Response;
-
     if (credentials?.apiKey && credentials?.apiPassword && credentials?.trackingNumber) {
-      console.log(`[Leopards Slip] Fetching slip via API for tracking: ${credentials.trackingNumber}`);
-      resp = await fetch(LEOPARDS_SLIP_URL, {
+      console.log(`[Leopards Slip] Fetching tracking via API for: ${credentials.trackingNumber}`);
+
+      const trackResp = await fetch(LEOPARDS_TRACK_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -32,88 +39,163 @@ export async function fetchLeopardsSlip(
         signal: AbortSignal.timeout(15000),
       });
 
-      if (!resp.ok) {
-        console.log(`[Leopards Slip] API returned ${resp.status}, trying stored URL fallback`);
-        if (slipUrl) {
-          resp = await fetch(slipUrl, { signal: AbortSignal.timeout(15000) });
-          if (!resp.ok) {
-            return { success: false, error: `Leopards slip fetch failed: HTTP ${resp.status}` };
-          }
-        } else {
-          return { success: false, error: `Leopards slip API returned HTTP ${resp.status}` };
+      const trackBody = await trackResp.text();
+      let trackJson: any = null;
+      try {
+        trackJson = JSON.parse(trackBody);
+        console.log(`[Leopards Track] Full JSON response:`, JSON.stringify(trackJson, null, 2));
+      } catch {
+        console.log(`[Leopards Track] Raw response (not JSON):`, trackBody);
+      }
+
+      if (!trackResp.ok) {
+        console.log(`[Leopards Track] API returned HTTP ${trackResp.status}`);
+      }
+
+      if (trackJson?.status === 1 && trackJson.packet_list?.length > 0) {
+        const bills: AirwayBillData[] = trackJson.packet_list.map((pkt: any) => {
+          const weight = parseFloat(pkt.booked_packet_weight) || 0;
+
+          return {
+            trackingNumber: pkt.track_number || credentials.trackingNumber,
+            orderNumber: (pkt.booked_packet_order_id || "").replace(/^#/, ""),
+            courierName: "Leopards",
+            bookedAt: pkt.booking_date || new Date().toLocaleDateString("en-GB"),
+            merchantName: pkt.shipment_name_eng || "",
+            merchantAddress: pkt.shipment_address || "",
+            consigneeName: pkt.consignment_name_eng || "",
+            consigneePhone: pkt.consignment_phone || "",
+            consigneeCity: pkt.destination_city_name || "",
+            consigneeAddress: pkt.consignment_address || "",
+            codAmount: parseFloat(pkt.booked_packet_collect_amount) || 0,
+            weight: weight,
+            pieces: pkt.booked_packet_no_piece || 1,
+            itemsSummary: orderContext?.itemsSummary || "",
+            shipmentType: "Overnight",
+            remarks: pkt.special_instructions || "",
+            quantity: orderContext?.quantity || pkt.booked_packet_no_piece || 1,
+          } as AirwayBillData;
+        });
+
+        console.log(`[Leopards Slip] Generating PDF for ${bills.length} packet(s) from tracking API`);
+        const pdfBuffer = await generateAirwayBillPdfBuffer(bills);
+        return { success: true, pdfBuffer };
+      }
+
+      if (trackJson?.status === 0 || trackJson?.error) {
+        const errMsg = typeof trackJson.error === "string" ? trackJson.error : (trackJson.message || "Tracking data unavailable");
+        console.log(`[Leopards Slip] Track API error: ${errMsg}, falling back to slip PDF API`);
+      }
+
+      console.log(`[Leopards Slip] Track API did not return packets, trying slip PDF API fallback`);
+      const slipApiResp = await fetch(LEOPARDS_SLIP_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          api_key: credentials.apiKey,
+          api_password: credentials.apiPassword,
+          track_numbers: credentials.trackingNumber,
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
+
+      if (slipApiResp.ok) {
+        const contentType = slipApiResp.headers.get("content-type") || "";
+        const buffer = Buffer.from(await slipApiResp.arrayBuffer());
+        const parsed = await processLeopardsResponse(contentType, buffer);
+        if (parsed) return parsed;
+      }
+
+      if (slipUrl) {
+        console.log(`[Leopards Slip] Slip PDF API failed, trying stored URL fallback`);
+        const fallbackResp = await fetch(slipUrl, { signal: AbortSignal.timeout(15000) });
+        if (fallbackResp.ok) {
+          const contentType = fallbackResp.headers.get("content-type") || "";
+          const buffer = Buffer.from(await fallbackResp.arrayBuffer());
+          const parsed = await processLeopardsResponse(contentType, buffer);
+          if (parsed) return parsed;
         }
       }
+
+      return { success: false, error: "Leopards slip fetch failed from tracking API, slip PDF API, and URL" };
     } else if (slipUrl) {
-      resp = await fetch(slipUrl, { signal: AbortSignal.timeout(15000) });
+      console.log(`[Leopards Slip] No credentials, fetching from slip URL`);
+      const resp = await fetch(slipUrl, { signal: AbortSignal.timeout(15000) });
       if (!resp.ok) {
         return { success: false, error: `Leopards slip fetch failed: HTTP ${resp.status}` };
       }
+      const contentType = resp.headers.get("content-type") || "";
+      const buffer = Buffer.from(await resp.arrayBuffer());
+      const parsed = await processLeopardsResponse(contentType, buffer);
+      if (parsed) return parsed;
+      return { success: true, pdfBuffer: buffer };
     } else {
       return { success: false, error: "No slip URL or credentials available" };
     }
-    const contentType = resp.headers.get("content-type") || "";
-    const buffer = Buffer.from(await resp.arrayBuffer());
-
-    if (contentType.includes("json")) {
-      try {
-        const jsonData = JSON.parse(buffer.toString("utf-8"));
-        console.log(`[Leopards Slip] JSON response status: ${jsonData.status}, keys: ${Object.keys(jsonData).join(",")}`);
-        if (jsonData.status === 1 && jsonData.slip_data) {
-          const pdfBuf = Buffer.from(jsonData.slip_data, "base64");
-          if (pdfBuf.length > 0) {
-            return { success: true, pdfBuffer: pdfBuf };
-          }
-        }
-        if (jsonData.status === 1 && jsonData.slipUrl) {
-          const slipResp = await fetch(jsonData.slipUrl, { signal: AbortSignal.timeout(15000) });
-          if (slipResp.ok) {
-            const slipBuf = Buffer.from(await slipResp.arrayBuffer());
-            if (slipBuf.length > 0) {
-              return { success: true, pdfBuffer: slipBuf };
-            }
-          }
-        }
-        if (jsonData.status === 0 || jsonData.error) {
-          const errMsg = typeof jsonData.error === "string" ? jsonData.error : (jsonData.message || "Leopards slip unavailable");
-          return { success: false, error: `Leopards: ${errMsg}` };
-        }
-      } catch (parseErr) {
-        console.log(`[Leopards Slip] JSON parse failed, treating as raw data`);
-      }
-    }
-
-    if (contentType.includes("pdf") || (buffer.length >= 5 && buffer.slice(0, 5).toString() === "%PDF-")) {
-      return { success: true, pdfBuffer: buffer };
-    }
-
-    if (contentType.includes("image")) {
-      const pdfDoc = await PDFDocument.create();
-      let img;
-      if (contentType.includes("png")) {
-        img = await pdfDoc.embedPng(buffer);
-      } else {
-        img = await pdfDoc.embedJpg(buffer);
-      }
-      const aspectRatio = img.width / img.height;
-      const pageWidth = 595;
-      const pageHeight = pageWidth / aspectRatio;
-      const page = pdfDoc.addPage([pageWidth, Math.max(pageHeight, 842)]);
-      const drawWidth = pageWidth - 40;
-      const drawHeight = drawWidth / aspectRatio;
-      page.drawImage(img, {
-        x: 20,
-        y: page.getHeight() - drawHeight - 20,
-        width: drawWidth,
-        height: drawHeight,
-      });
-      const pdfBytes = await pdfDoc.save();
-      return { success: true, pdfBuffer: Buffer.from(pdfBytes) };
-    }
-
-    return { success: true, pdfBuffer: buffer };
   } catch (err: any) {
     return { success: false, error: `Failed to fetch Leopards slip: ${err.message}` };
   }
+}
+
+async function processLeopardsResponse(contentType: string, buffer: Buffer): Promise<CourierSlipResult | null> {
+  if (contentType.includes("json")) {
+    try {
+      const jsonData = JSON.parse(buffer.toString("utf-8"));
+      console.log(`[Leopards Slip] JSON response status: ${jsonData.status}, keys: ${Object.keys(jsonData).join(",")}`);
+      if (jsonData.status === 1 && jsonData.slip_data) {
+        const pdfBuf = Buffer.from(jsonData.slip_data, "base64");
+        if (pdfBuf.length > 0) {
+          return { success: true, pdfBuffer: pdfBuf };
+        }
+      }
+      if (jsonData.status === 1 && jsonData.slipUrl) {
+        const slipResp = await fetch(jsonData.slipUrl, { signal: AbortSignal.timeout(15000) });
+        if (slipResp.ok) {
+          const slipBuf = Buffer.from(await slipResp.arrayBuffer());
+          if (slipBuf.length > 0) {
+            return { success: true, pdfBuffer: slipBuf };
+          }
+        }
+        return null;
+      }
+      if (jsonData.status === 0 || jsonData.error) {
+        const errMsg = typeof jsonData.error === "string" ? jsonData.error : (jsonData.message || "Leopards slip unavailable");
+        return { success: false, error: `Leopards: ${errMsg}` };
+      }
+    } catch (parseErr) {
+      console.log(`[Leopards Slip] JSON parse failed, treating as raw data`);
+    }
+  }
+
+  if (contentType.includes("pdf") || (buffer.length >= 5 && buffer.slice(0, 5).toString() === "%PDF-")) {
+    return { success: true, pdfBuffer: buffer };
+  }
+
+  if (contentType.includes("image")) {
+    const pdfDoc = await PDFDocument.create();
+    let img;
+    if (contentType.includes("png")) {
+      img = await pdfDoc.embedPng(buffer);
+    } else {
+      img = await pdfDoc.embedJpg(buffer);
+    }
+    const aspectRatio = img.width / img.height;
+    const pageWidth = 595;
+    const pageHeight = pageWidth / aspectRatio;
+    const page = pdfDoc.addPage([pageWidth, Math.max(pageHeight, 842)]);
+    const drawWidth = pageWidth - 40;
+    const drawHeight = drawWidth / aspectRatio;
+    page.drawImage(img, {
+      x: 20,
+      y: page.getHeight() - drawHeight - 20,
+      width: drawWidth,
+      height: drawHeight,
+    });
+    const pdfBytes = await pdfDoc.save();
+    return { success: true, pdfBuffer: Buffer.from(pdfBytes) };
+  }
+
+  return null;
 }
 
 function parsePostExError(buffer: Buffer, httpStatus: number): string {
