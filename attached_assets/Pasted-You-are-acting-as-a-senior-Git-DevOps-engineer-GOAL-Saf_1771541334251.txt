@@ -1,0 +1,63 @@
+You are acting as a senior Git + DevOps engineer.
+
+GOAL:
+Safely merge two Replit projects into a single GitHub repository while preserving BOTH histories and ALL code changes.
+
+PROJECTS:
+A = "Asset Manager Pro"
+B = "Asset Manager Pro - Arjad Testing Version"
+
+RULES (NON-NEGOTIABLE):
+- DO NOT delete or overwrite any code
+- DO NOT squash commits
+- DO NOT rewrite Git history
+- DO NOT lose functionality from either project
+- Resolve conflicts by preserving logic from BOTH sides
+- Ask for confirmation only if a conflict cannot be resolved logically
+
+TARGET STRUCTURE:
+- GitHub repo name: "Asset Manager Pro"
+- Branch strategy:
+  - `main` → final merged version (based on Project B)
+  - `asset-manager-pro-A` → full backup of Project A
+- Both branches must be pushed to GitHub
+- Project name in Replit should be renamed to "Asset Manager Pro"
+
+TASKS (EXECUTE IN ORDER):
+
+1. Initialize Git in BOTH Replit projects if not already initialized.
+
+2. In Project A:
+   - Commit all files with message:
+     "Backup A: Asset Manager Pro (original)"
+   - Rename branch to `asset-manager-pro-A`
+   - Push this branch to the GitHub repository.
+
+3. In Project B:
+   - Commit all files with message:
+     "Backup B: Asset Manager Pro - Arjad Testing Version"
+   - Set branch to `main`
+   - Push to GitHub as the main branch.
+
+4. In Project B:
+   - Fetch branch `asset-manager-pro-A`
+   - Merge it into `main`
+   - If conflicts occur:
+     - Manually inspect each conflict
+     - Combine features and logic from BOTH versions
+     - Do not discard either side unless code is truly duplicated
+   - Commit merge with message:
+     "Merged Asset Manager Pro (A) into main, preserved all changes"
+
+5. Verify:
+   - `main` contains features from BOTH A and B
+   - `asset-manager-pro-A` remains untouched as backup
+   - Repository builds/runs without errors
+
+6. Output:
+   - Summary of actions taken
+   - List of files that had conflicts and how they were resolved
+   - Confirmation that no data was lost
+
+FINAL CHECK:
+If ANY step risks losing data, STOP and explain before proceeding.
