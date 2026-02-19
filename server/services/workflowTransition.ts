@@ -131,7 +131,7 @@ export async function transitionOrder(params: TransitionParams): Promise<Transit
   });
 
   if (order.shopifyOrderId && action !== 'courier_status_sync') {
-    if (toStatus === "CANCELLED") {
+    if (toStatus === "CANCELLED" && action !== 'robo_cancel') {
       writeBackCancel(merchantId, order.shopifyOrderId, reason || "Cancelled in ShipFlow")
         .then(r => { if (!r.success) console.warn(`[ShopifyWriteBack] Cancel failed for ${orderId}: ${r.error}`); })
         .catch(e => console.error(`[ShopifyWriteBack] Cancel error:`, e));
@@ -239,7 +239,7 @@ export async function bulkTransitionOrders(params: {
       for (let i = 0; i < shopifyOrders.length; i++) {
         const o = shopifyOrders[i];
         try {
-          if (toStatus === "CANCELLED") {
+          if (toStatus === "CANCELLED" && action !== 'robo_cancel') {
             const r = await writeBackCancel(merchantId, o.shopifyOrderId!, reason || "Cancelled in ShipFlow");
             if (!r.success) console.warn(`[ShopifyWriteBack] Bulk cancel failed for ${o.id}: ${r.error}`);
           }
