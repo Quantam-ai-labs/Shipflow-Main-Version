@@ -1,0 +1,417 @@
+You are an expert product engineer building “AIK Financial OS (Accounting Tab) V2” inside our existing ShipFlow/AIK app on Replit.
+
+IMPORTANT CONTEXT:
+- The app already exists and already has an Accounting section/tab. Do NOT rebuild the whole app.
+- Upgrade/extend the Accounting module to an “advanced but simple” system similar to Vyapar/QuickBooks, focusing on:
+  1) store/stock finance (purchases, sales, COGS, landed cost)
+  2) inhouse finance (cash/bank, money in/out, expenses, payables/receivables)
+  3) courier-related finance (COD receivables, courier payables, shipment charges, reconciliation)
+- UI must remain super simple: iPhone-like, “business gossip mode”, quick actions, minimal words.
+- Backend must enforce correctness: atomic DB transactions + audit logs + immutable ledger events.
+
+========================
+STACK (match current app)
+========================
+- Next.js (App Router) + TypeScript
+- TailwindCSS (keep current design system)
+- PostgreSQL (Replit Postgres)
+- Prisma ORM
+- Existing auth in app (single-tenant ok for V1/V2), keep it consistent.
+
+========================
+CRITICAL UX RULE (NON-NEGOTIABLE)
+========================
+At every place where the user selects an account or a party, ALWAYS show current balances and an “after action” preview.
+
+Mandatory for:
+- Account dropdowns (Bank/Cash) -> show balance + after
+- Party selector -> show party balance (They owe us / We owe them / Settled) + after
+- Unpaid items list -> show party balance + item amount
+- Confirmation screen -> show before/after balances
+- Courier selector -> show courier balance (we owe courier / courier owes us) + after
+
+NO EXCEPTIONS.
+
+========================
+ADVANCED ACCOUNTING OPTION (NEW)
+========================
+Add a toggle in Accounting Settings:
+- Simple Mode (default): NO accounting jargon visible (no journal entries page visible).
+- Advanced Mode: show additional pages for accountants:
+  - Ledger View (double-entry)
+  - Trial Balance
+  - Chart of Accounts
+  - Reconciliation tools
+But even in Simple Mode, the backend must still record proper ledger events.
+
+========================
+INSPIRATION: VYAPAR-LIKE FEATURES (apply to our scope)
+========================
+Mirror the useful “SMB accounting + inventory” capabilities:
+- Clean day-to-day money tracking, receivables/payables, stock + purchase/sale, reports.
+- Bank reconciliation with smart matching concept (suggested matches). :contentReference[oaicite:1]{index=1}
+- Strong reporting: P&L, Balance Sheet, cash flow, stock reports (Vyapar promotes 37+ reports). :contentReference[oaicite:2]{index=2}
+- Inventory docs concept: stock register, purchase order, delivery challan templates (we don’t need Indian GST, but we need documents). :contentReference[oaicite:3]{index=3}
+- Courier-business oriented features: POD uploads, packaging material inventory concepts are optional later, but we WILL do courier finance + COD recon. :contentReference[oaicite:4]{index=4}
+
+========================
+SCOPE (V2 within Accounting Tab)
+========================
+Include:
+A) Dashboard + drilldowns
+B) Parties (customers/suppliers/vendors/couriers are all “Parties” with types/tags)
+C) Cash Accounts (bank/cash)
+D) Expense Types + Expenses (history + needs payment + pay flow)
+E) Products/Stock (avg cost moving)
+F) Purchases (Stock receipts) + landed cost
+G) Sales (manual sell)
+H) Money screen (Money In / Money Out)
+I) Courier Finance (NEW):
+   - COD receivable from courier
+   - courier charges payable
+   - settlement reconciliation per courier statement
+J) Reports pages (simple + advanced)
+K) Audit log + event backbone
+
+Exclude (still):
+- Ads integrations
+- POS scanning
+- Forecasting AI
+- Multi-entity consolidation
+- Complex taxation/GST workflows
+
+========================
+UI STRUCTURE (Accounting Tab with Collapsible Pages)
+========================
+In the app’s existing “Accounting” tab, create a left sub-navigation with collapsible groups so UI never feels cluttered.
+
+Accounting Home (top)
+1) Overview (Dashboard)
+2) Money (2 buttons)
+3) Parties
+4) Stock & Sales (collapsible)
+   - Products
+   - Add Stock (Receipts)
+   - Sell
+5) Expenses (collapsible)
+   - Expense History
+   - Needs Payment
+6) Courier Money (collapsible)  [NEW]
+   - COD Receivable
+   - Courier Payable
+   - Settlements / Reconciliation
+7) Reports (collapsible)
+   - Profit & Loss
+   - Balance Snapshot
+   - Cash Flow
+   - Stock Report
+   - Party Balances
+8) Advanced (only visible when Advanced Mode ON)
+   - Ledger
+   - Trial Balance
+   - Chart of Accounts
+   - Bank Reconciliation
+9) Settings
+   - Preferences (Simple/Advanced mode, defaults)
+   - Opening Balances setup
+   - Export/Backup
+
+All pages should be collapsible groups (accordion style) to avoid clutter.
+
+========================
+CORE DEFINITIONS (UI WORDING)
+========================
+Party balance display:
+- balance > 0 => “They owe us”
+- balance < 0 => “We owe them”
+- balance = 0 => “Settled”
+Auto-flips on overpay/overreceive.
+
+Working Capital (as defined):
+Working Capital = Cash Now + Money Coming − Money Owed
+- Cash Now = sum of cash accounts balances
+- Money Coming = sum of positive party balances
+- Money Owed = sum(abs(negative party balances))
+
+Courier Balance display (per courier party):
+- courier_balance > 0 => “Courier owes us” (COD pending)
+- courier_balance < 0 => “We owe courier” (charges pending)
+- =0 => Settled
+
+========================
+EVENT BACKBONE (IMPORTANT)
+========================
+Even in Simple Mode, every action must produce immutable events:
+- CashMovement events
+- PartyBalanceDelta events
+- StockMovement events
+- LedgerEntry events (in background, for Advanced Mode pages)
+
+Every action must be atomic: balances, stock, and ledger must update in one DB transaction.
+
+========================
+FEATURES & FLOWS
+========================
+
+-----------------------------------
+1) MONEY SCREEN (Simple, 2 buttons)
+-----------------------------------
+Two big buttons:
+🟢 Money In
+🔴 Money Out
+Both open modals. No complex pages.
+
+MONEY IN modal:
+Fields:
+- Party (search select) -> show party balance below
+- Amount
+- Receive into account (dropdown with balances)
+- Date
+- Note
+Preview before confirm:
+- Party balance before -> after
+- Account balance before -> after
+Behavior:
+- Increase cash account
+- party_balance_new = party_balance_old - amount
+If crosses zero, show warning:
+“This creates a credit/refund situation. Continue?”
+
+MONEY OUT modal:
+Step 1 intent chooser:
+A) Pay Existing (Needs Payment)
+B) New Expense (Paid Now)
+C) Pay Party (Advance)
+D) Transfer Between Accounts
+E) Courier Settlement (NEW)
+
+A) Pay Existing:
+List unpaid expenses with party balances.
+Pay modal:
+- Pay from account (with balances)
+- Amount (V2 allow partial payments ON)
+Preview required:
+- Account before/after
+- Party before/after (party_balance_new = old + amount)
+
+B) New Expense (Paid Now):
+Fields:
+- Expense Type
+- Party (balance shown)
+- Amount
+- Pay from account (balances)
+- Date
+- Note
+Preview required
+Behavior:
+- create expense PAID
+- decrease cash account
+- update party balance (old + amount)
+
+C) Pay Party (Advance):
+Fields:
+- Party balance shown
+- Amount
+- Pay from account (balances)
+- Date/Note
+Preview required
+Behavior:
+- decrease cash
+- update party balance (old + amount)
+If flips positive show warning: “You now have credit with this party.”
+
+D) Transfer:
+Fields:
+- From account (balance)
+- To account (balance)
+- Amount
+Preview required
+Behavior:
+- decrease from, increase to
+
+E) Courier Settlement (NEW):
+Goal: record a settlement between us and a courier (like Leopards/PostEx).
+Fields:
+- Courier (party tagged type=courier) -> show courier balance
+- Settlement Type:
+   1) Courier paid us COD (money received)
+   2) We paid courier charges (money sent)
+   3) Net settlement (one entry, system splits)
+- Amount
+- Into/From account (balances)
+- Statement reference (optional)
+- Date/Note
+Preview required:
+- Courier balance before/after
+- Account balance before/after
+
+-----------------------------------
+2) EXPENSES MODULE (two sections)
+-----------------------------------
+Single page with:
+1) Expense History (all)
+2) Needs Payment (pinned)
+Each unpaid expense has PAY button.
+PAY flow:
+- choose pay-from account (balances shown)
+- allow partial payments (V2 ON):
+   - expense has remaining_due
+   - allow multiple payments until settled
+Preview required.
+Store payment history.
+
+-----------------------------------
+3) PRODUCTS / STOCK MODULE (V2 improvements)
+-----------------------------------
+Product fields:
+- name, sku
+- stock_qty
+- avg_unit_cost (moving average)
+
+Add Stock (Receipt) flow:
+- Supplier party (balance shown)
+- Product, qty, unit cost, date
+- Paid now? yes/no
+- Extra costs rows (repeatable):
+  - expense type
+  - vendor party (balance shown)
+  - amount
+  - paid now? yes/no + account
+  - add to product cost? (default from expense type)
+Preview:
+- stock before/after
+- supplier balance before/after
+- accounts before/after (if paid)
+- computed landed cost and resulting receipt unit cost
+Behavior (atomic):
+- update stock_qty
+- compute moving average cost
+- record expenses for extra costs
+- update party balances accordingly
+- create ledger events behind the scenes
+
+Sell flow:
+Fields:
+- customer party balance shown
+- product (show stock + avg cost)
+- qty, unit price, date
+- paid now? yes/no + account
+Preview:
+- stock before/after
+- party before/after
+- account before/after if paid
+- show COGS + gross profit (simple wording: “Cost” and “Margin”)
+Behavior:
+- reduce stock
+- create sale record (revenue_total, cogs_total)
+- update party balance and cash accordingly
+
+-----------------------------------
+4) COURIER FINANCE MODULE (NEW)
+-----------------------------------
+Create a dedicated courier finance section in Accounting to track:
+- COD expected from courier vs received
+- courier charges owed vs paid
+- settlement history
+- reconciliation screen (like bank reconciliation but for courier statements)
+
+Key data sources:
+- From ShipFlow booking/shipments (already exists): tracking#, delivered/returned status, COD amount, courier charged amount (if known)
+- From manual entries: courier statement uploads or CSV (optional later)
+
+Pages:
+A) COD Receivable:
+- List delivered shipments not yet received COD for selected courier
+- Show totals and party balance (Courier owes us)
+- Button: “Mark COD Received” -> opens Money In modal prefilled with courier + amount (or partial)
+- Preview required
+
+B) Courier Payable:
+- List courier invoices/charges not yet paid (or computed charges per shipment if you store rate)
+- Button: “Pay Courier” -> Money Out > Courier Settlement
+- Preview required
+
+C) Settlements / Reconciliation:
+- Upload courier statement file (CSV/PDF later; for V2 allow CSV)
+- Smart matching suggestions (by tracking number + amount) similar to bank reconciliation “smart suggestions”. :contentReference[oaicite:5]{index=5}
+- User can accept matches in bulk.
+- Any unmatched lines become “adjustments” requiring confirmation.
+
+-----------------------------------
+5) REPORTS (Simple + Advanced)
+-----------------------------------
+Simple reports (no accounting words):
+- “Cash Now” (accounts list)
+- “Money Coming” (positive party balances)
+- “Money Owed” (negative party balances)
+- “Working Capital” breakdown
+- “Profit This Month” (Revenue - COGS - Expenses - Courier Charges)
+- “Stock Value” (qty * avg cost)
+- “Courier Health” (COD pending, returns, charges)
+
+Advanced reports (only if Advanced Mode ON):
+- Profit & Loss
+- Balance Sheet Snapshot
+- Trial Balance
+- Cash Flow Statement
+Vyapar promotes many reports including Balance Sheet, P&L, cash flow; we need these core ones. :contentReference[oaicite:6]{index=6}
+
+Each metric clickable drilldown to tables.
+
+-----------------------------------
+6) DATA MODEL (Prisma) — extend existing
+-----------------------------------
+Use/extend existing tables, add what’s missing. Ensure we do NOT break existing ShipFlow tables.
+
+Keep:
+- User
+- CashAccount
+- Party
+- ExpenseType
+- Expense (upgrade to support partial payments)
+- Product
+- StockReceipt
+- Sale
+- CashMovement
+- AuditLog
+
+Add/Upgrade:
+- PartyBalance (party_id unique, balance)
+- ExpensePayment (id, expense_id, amount, cash_account_id, date, note)
+- PartyTag/PartyType optional (or tags json)
+- CourierShipmentFinance (shipment_id, courier_party_id, cod_amount, courier_charge, cod_received_amount, charges_paid_amount, status)
+- LedgerAccount, LedgerEntry, LedgerLine (for Advanced Mode)
+- ReconciliationSession + ReconciliationLine (for bank/courier reconciliation suggestions)
+
+Atomic transactions:
+- Every action must write:
+  - cash movement
+  - party balance delta
+  - stock movement if relevant
+  - ledger entries (behind the scenes)
+  - audit log before/after snapshots
+
+-----------------------------------
+7) SEED DATA
+-----------------------------------
+Seed:
+- Cash accounts: Bank A, Bank B, Cash
+- Expense types: Freight, Customs, Transport, Salary, Food, Utilities
+- Parties: few suppliers, customers, and couriers (Leopards, PostEx as Party type=courier)
+- Products: few sample items
+- Optional: sample shipments to test courier finance.
+
+-----------------------------------
+8) DELIVERABLE
+-----------------------------------
+A running Replit app where the Accounting tab is upgraded with:
+- collapsible multi-page accounting navigation
+- Money In / Money Out modals with mandatory before/after previews
+- expenses with partial payments
+- stock receipts with landed cost
+- sell flow with COGS and margin
+- courier finance pages (COD receivable, courier payable, settlements/reconciliation)
+- advanced accounting mode toggle that reveals ledgers/trial balance but keeps Simple Mode clean
+- strict audit + atomic correctness
+
+Proceed to implement: update Prisma schema, migrate, seed, then build Accounting UI pages and modal flows end-to-end.
