@@ -255,6 +255,85 @@ export async function fetchPostExSlip(trackingNumber: string, token: string): Pr
   }
 }
 
+export interface PostExOrderData {
+  trackingNumber: string;
+  orderNumber: string;
+  merchantName: string;
+  merchantAddress?: string;
+  consigneeName: string;
+  consigneePhone: string;
+  consigneeCity: string;
+  consigneeAddress: string;
+  codAmount: number;
+  weight?: number;
+  pieces?: number;
+  itemsSummary?: string;
+  remarks?: string;
+  bookedAt?: string;
+}
+
+export async function generatePostExCustomSlip(orderData: PostExOrderData): Promise<CourierSlipResult> {
+  try {
+    const bill: AirwayBillData = {
+      trackingNumber: orderData.trackingNumber,
+      orderNumber: (orderData.orderNumber || "").replace(/^#/, ""),
+      courierName: "PostEx",
+      bookedAt: orderData.bookedAt || new Date().toLocaleDateString("en-GB"),
+      merchantName: orderData.merchantName || "",
+      merchantAddress: orderData.merchantAddress || "",
+      consigneeName: orderData.consigneeName || "",
+      consigneePhone: orderData.consigneePhone || "",
+      consigneeCity: orderData.consigneeCity || "",
+      consigneeAddress: orderData.consigneeAddress || "",
+      codAmount: orderData.codAmount || 0,
+      weight: orderData.weight || 200,
+      pieces: orderData.pieces || 1,
+      itemsSummary: orderData.itemsSummary || "",
+      shipmentType: "Overnight",
+      remarks: orderData.remarks || "",
+      quantity: orderData.pieces || 1,
+    };
+
+    console.log(`[PostEx Slip] Generating custom PDF for tracking: ${orderData.trackingNumber}`);
+    const pdfBuffer = await generateAirwayBillPdfBuffer([bill]);
+    return { success: true, pdfBuffer };
+  } catch (err: any) {
+    console.error(`[PostEx Slip] Custom PDF generation failed:`, err.message);
+    return { success: false, error: `Failed to generate PostEx slip: ${err.message}` };
+  }
+}
+
+export async function generatePostExCustomSlipBulk(orders: PostExOrderData[]): Promise<CourierSlipResult> {
+  try {
+    const bills: AirwayBillData[] = orders.map(orderData => ({
+      trackingNumber: orderData.trackingNumber,
+      orderNumber: (orderData.orderNumber || "").replace(/^#/, ""),
+      courierName: "PostEx",
+      bookedAt: orderData.bookedAt || new Date().toLocaleDateString("en-GB"),
+      merchantName: orderData.merchantName || "",
+      merchantAddress: orderData.merchantAddress || "",
+      consigneeName: orderData.consigneeName || "",
+      consigneePhone: orderData.consigneePhone || "",
+      consigneeCity: orderData.consigneeCity || "",
+      consigneeAddress: orderData.consigneeAddress || "",
+      codAmount: orderData.codAmount || 0,
+      weight: orderData.weight || 200,
+      pieces: orderData.pieces || 1,
+      itemsSummary: orderData.itemsSummary || "",
+      shipmentType: "Overnight",
+      remarks: orderData.remarks || "",
+      quantity: orderData.pieces || 1,
+    }));
+
+    console.log(`[PostEx Slip] Generating custom bulk PDF for ${bills.length} order(s)`);
+    const pdfBuffer = await generateAirwayBillPdfBuffer(bills);
+    return { success: true, pdfBuffer };
+  } catch (err: any) {
+    console.error(`[PostEx Slip] Bulk custom PDF generation failed:`, err.message);
+    return { success: false, error: `Failed to generate PostEx slips: ${err.message}` };
+  }
+}
+
 export async function fetchPostExSlipBulk(
   trackingNumbers: string[],
   token: string

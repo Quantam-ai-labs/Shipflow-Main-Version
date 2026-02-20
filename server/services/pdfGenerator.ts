@@ -16,10 +16,21 @@ const LEOPARDS_LOGO_PATH = path.join(
   "attached_assets",
   "imgi_1_LCS-Main-Logo-300x128_1771073319000.png",
 );
+const POSTEX_LOGO_PATH = path.join(
+  process.cwd(),
+  "attached_assets",
+  "postex_logo.png",
+);
 let leopardsLogoBytes: Buffer | null = null;
 try {
   if (fs.existsSync(LEOPARDS_LOGO_PATH)) {
     leopardsLogoBytes = fs.readFileSync(LEOPARDS_LOGO_PATH);
+  }
+} catch {}
+let postexLogoBytes: Buffer | null = null;
+try {
+  if (fs.existsSync(POSTEX_LOGO_PATH)) {
+    postexLogoBytes = fs.readFileSync(POSTEX_LOGO_PATH);
   }
 } catch {}
 
@@ -536,9 +547,14 @@ async function drawSingleAirwayBill(
   // --- Column 3: Parcel Information ---
   let c3y = row1TopY - 5;
 
-  if (leopardsLogoBytes && data.courierName.toLowerCase().includes("leopard")) {
+  const courierLower = data.courierName.toLowerCase();
+  const logoBytes = courierLower.includes("leopard") ? leopardsLogoBytes
+    : courierLower.includes("postex") ? postexLogoBytes
+    : null;
+
+  if (logoBytes) {
     try {
-      const logoImg = await pdfDoc.embedPng(leopardsLogoBytes);
+      const logoImg = await pdfDoc.embedPng(logoBytes);
       const logoAspect = logoImg.width / logoImg.height;
       const logoW = Math.min(col3W - 20, 70);
       const logoH = logoW / logoAspect;
