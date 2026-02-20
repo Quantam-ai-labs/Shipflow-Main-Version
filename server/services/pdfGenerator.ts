@@ -259,13 +259,13 @@ async function drawSingleAirwayBill(
   // Vertical Lines
   page.drawLine({
     start: { x: col2X, y: topY },
-    end: { x: col2X, y: topY - headerH - row1H },
+    end: { x: col2X, y: topY - headerH - row1H - 35 },
     thickness: 1,
     color: BLACK,
   });
   page.drawLine({
     start: { x: col3X, y: topY },
-    end: { x: col3X, y: topY - headerH - row1H },
+    end: { x: col3X, y: topY - headerH - row1H - 35 },
     thickness: 1,
     color: BLACK,
   });
@@ -279,7 +279,7 @@ async function drawSingleAirwayBill(
     color: BLACK,
   });
 
-  const remarksTopY = row1TopY - row1H;
+  const remarksTopY = row1TopY - row1H - 35;
   page.drawLine({
     start: { x: x, y: remarksTopY },
     end: { x: x + w, y: remarksTopY },
@@ -406,14 +406,22 @@ async function drawSingleAirwayBill(
     thickness: 0.5,
     color: BLACK,
   });
-  drawTextSafe(page, boldFont, "Order:", col1X + pad, c1y, labelSize, BLACK);
   drawTextSafe(
     page,
-    font,
+    boldFont,
+    "Order:",
+    col1X + pad,
+    c1y - 10,
+    labelSize + 7,
+    BLACK,
+  );
+  drawTextSafe(
+    page,
+    boldFont,
     data.orderNumber,
-    col1X + pad + 30,
-    c1y,
-    valueSize,
+    col1X + pad + 70,
+    c1y - 10,
+    valueSize + 7,
     BLACK,
   );
 
@@ -431,7 +439,7 @@ async function drawSingleAirwayBill(
       const img = await pdfDoc.embedPng(orderBarcode);
       page.drawImage(img, {
         x: col1X + pad,
-        y: orderBarcodeY,
+        y: orderBarcodeY - 20,
         width: 90,
         height: 20,
       });
@@ -603,7 +611,7 @@ async function drawSingleAirwayBill(
   const trackBarcode = await generateBarcodePng(
     data.trackingNumber,
     "code128",
-    14,
+    16,
     2,
   );
   if (trackBarcode) {
@@ -612,7 +620,7 @@ async function drawSingleAirwayBill(
       const bcWidth = col3W - 20;
       page.drawImage(img, {
         x: col3X + 10,
-        y: trackBarcodeY,
+        y: trackBarcodeY - 5,
         width: bcWidth,
         height: 30,
       });
@@ -627,13 +635,13 @@ async function drawSingleAirwayBill(
     font,
     tnText,
     col3X + (col3W - tnWidth) / 2,
-    trackBarcodeY - 10,
+    trackBarcodeY - 15,
     9,
     BLACK,
   );
 
   // Service Info Grid
-  const serviceY = trackBarcodeY - 15;
+  const serviceY = trackBarcodeY - 25;
   page.drawLine({
     start: { x: col3X, y: serviceY },
     end: { x: x + w, y: serviceY },
@@ -649,7 +657,7 @@ async function drawSingleAirwayBill(
   drawTextSafe(page, font, "yes", col3X + col3W - 25, infoY, 8, BLACK);
 
   // Date/Weight Grid
-  const dateY = infoY - 4;
+  const dateY = infoY - 8;
   page.drawLine({
     start: { x: col3X, y: dateY },
     end: { x: x + w, y: dateY },
@@ -666,7 +674,7 @@ async function drawSingleAirwayBill(
   drawTextSafe(page, font, wText, col3X + col3W - 55, infoY, 8, BLACK);
 
   // Pieces/Qty Grid
-  const piecesY = infoY - 4;
+  const piecesY = infoY - 8;
   page.drawLine({
     start: { x: col3X, y: piecesY },
     end: { x: x + w, y: piecesY },
@@ -719,7 +727,10 @@ async function drawSingleAirwayBill(
     8,
     BLACK,
   );
-  const prodText = `[ ${data.itemsSummary} ]`;
+  const prodText = (data.itemsSummary || "")
+    .replace(/^\[\s*/, "") // remove starting [
+    .replace(/\s*\]$/, ""); // remove ending ]
+
   drawTextSafe(page, font, prodText, x + pad + 40, productsTopY - 13, 8, BLACK);
 }
 
