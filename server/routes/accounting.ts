@@ -19,20 +19,26 @@ import {
   orders,
   shipments,
   codReconciliation,
+  teamMembers,
 } from "../../shared/schema";
 import type {
   Party, CashAccount, AccountingProduct,
 } from "../../shared/schema";
 
 function isAuthenticated(req: any, res: Response, next: Function) {
-  if (!req.isAuthenticated || !req.isAuthenticated()) {
+  if (!req.session?.userId) {
     return res.status(401).json({ message: "Unauthorized" });
   }
   next();
 }
 
-function getMerchantId(req: any): string {
-  return req.user?.merchantId;
+async function getMerchantId(req: any): Promise<string> {
+  const userId = req.session?.userId;
+  if (!userId) throw new Error("No user session");
+  const [membership] = await db.select().from(teamMembers)
+    .where(and(eq(teamMembers.userId, userId), eq(teamMembers.isActive, true)));
+  if (!membership?.merchantId) throw new Error("No merchant access");
+  return membership.merchantId;
 }
 
 async function getOrCreatePartyBalance(merchantId: string, partyId: string): Promise<string> {
@@ -84,7 +90,7 @@ export function registerAccountingRoutes(app: Express) {
   // ========== ACCOUNTING SETTINGS ==========
   app.get("/api/accounting/settings", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       let [settings] = await db.select().from(accountingSettings)
         .where(eq(accountingSettings.merchantId, merchantId));
       if (!settings) {
@@ -96,7 +102,7 @@ export function registerAccountingRoutes(app: Express) {
 
   app.put("/api/accounting/settings", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const { advancedMode, defaultCashAccountId, defaultCurrency } = req.body;
       const [settings] = await db.update(accountingSettings)
         .set({ advancedMode, defaultCashAccountId, defaultCurrency, updatedAt: new Date() })
@@ -113,7 +119,7 @@ export function registerAccountingRoutes(app: Express) {
   // ========== PARTIES ==========
   app.get("/api/accounting/parties", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const { type } = req.query;
       const conditions: any[] = [eq(parties.merchantId, merchantId)];
       if (type && type !== "all") conditions.push(eq(parties.type, type as string));
@@ -130,7 +136,7 @@ export function registerAccountingRoutes(app: Express) {
 
   app.post("/api/accounting/parties", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const [party] = await db.insert(parties).values({ ...req.body, merchantId }).returning();
       await db.insert(partyBalances).values({ merchantId, partyId: party.id, balance: req.body.openingBalance || "0" });
       if (req.body.openingBalance && parseFloat(req.body.openingBalance) !== 0) {
@@ -143,7 +149,7 @@ export function registerAccountingRoutes(app: Express) {
 
   app.put("/api/accounting/parties/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const { name, type, phone, email, address, tags, notes, isActive } = req.body;
       const [party] = await db.update(parties).set({ name, type, phone, email, address, tags, notes, isActive, updatedAt: new Date() })
         .where(and(eq(parties.id, req.params.id), eq(parties.merchantId, merchantId))).returning();
@@ -153,7 +159,7 @@ export function registerAccountingRoutes(app: Express) {
 
   app.delete("/api/accounting/parties/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       await db.delete(parties).where(and(eq(parties.id, req.params.id), eq(parties.merchantId, merchantId)));
       res.json({ success: true });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
@@ -161,7 +167,7 @@ export function registerAccountingRoutes(app: Express) {
 
   app.get("/api/accounting/parties/:id/balance", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const balance = await getOrCreatePartyBalance(merchantId, req.params.id);
       res.json({ balance });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
@@ -170,7 +176,7 @@ export function registerAccountingRoutes(app: Express) {
   // ========== CASH ACCOUNTS ==========
   app.get("/api/accounting/cash-accounts", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const results = await db.select().from(cashAccounts)
         .where(eq(cashAccounts.merchantId, merchantId))
         .orderBy(desc(cashAccounts.createdAt));
@@ -180,7 +186,7 @@ export function registerAccountingRoutes(app: Express) {
 
   app.post("/api/accounting/cash-accounts", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const [account] = await db.insert(cashAccounts).values({
         ...req.body, merchantId, balance: req.body.openingBalance || "0",
       }).returning();
@@ -194,7 +200,7 @@ export function registerAccountingRoutes(app: Express) {
 
   app.put("/api/accounting/cash-accounts/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const { name, type, bankName, accountNumber, isActive } = req.body;
       const [account] = await db.update(cashAccounts)
         .set({ name, type, bankName, accountNumber, isActive, updatedAt: new Date() })
@@ -206,7 +212,7 @@ export function registerAccountingRoutes(app: Express) {
   // ========== EXPENSE TYPES ==========
   app.get("/api/accounting/expense-types", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const results = await db.select().from(expenseTypes)
         .where(eq(expenseTypes.merchantId, merchantId));
       res.json(results);
@@ -215,7 +221,7 @@ export function registerAccountingRoutes(app: Express) {
 
   app.post("/api/accounting/expense-types", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const [result] = await db.insert(expenseTypes).values({ ...req.body, merchantId }).returning();
       res.json(result);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
@@ -224,7 +230,7 @@ export function registerAccountingRoutes(app: Express) {
   // ========== MONEY IN ==========
   app.post("/api/accounting/money-in", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const { partyId, amount, cashAccountId, date, note } = req.body;
       const amt = parseFloat(amount);
       if (!amt || amt <= 0) return res.status(400).json({ message: "Invalid amount" });
@@ -258,7 +264,7 @@ export function registerAccountingRoutes(app: Express) {
   // ========== MONEY OUT: PAY EXPENSE ==========
   app.post("/api/accounting/money-out/pay-expense", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const { expenseId, amount, cashAccountId, date, note } = req.body;
       const amt = parseFloat(amount);
 
@@ -312,7 +318,7 @@ export function registerAccountingRoutes(app: Express) {
   // ========== MONEY OUT: NEW EXPENSE (PAID NOW) ==========
   app.post("/api/accounting/money-out/new-expense", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const { title, category, amount, partyId, cashAccountId, date, note } = req.body;
       const amt = parseFloat(amount);
 
@@ -357,7 +363,7 @@ export function registerAccountingRoutes(app: Express) {
   // ========== MONEY OUT: PAY PARTY (ADVANCE) ==========
   app.post("/api/accounting/money-out/pay-party", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const { partyId, amount, cashAccountId, date, note } = req.body;
       const amt = parseFloat(amount);
 
@@ -386,7 +392,7 @@ export function registerAccountingRoutes(app: Express) {
   // ========== MONEY OUT: TRANSFER ==========
   app.post("/api/accounting/money-out/transfer", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const { fromAccountId, toAccountId, amount, date, note } = req.body;
       const amt = parseFloat(amount);
 
@@ -420,7 +426,7 @@ export function registerAccountingRoutes(app: Express) {
   // ========== MONEY OUT: COURIER SETTLEMENT ==========
   app.post("/api/accounting/money-out/courier-settlement", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const { courierPartyId, type, amount, cashAccountId, statementRef, date, notes } = req.body;
       const amt = parseFloat(amount);
 
@@ -468,7 +474,7 @@ export function registerAccountingRoutes(app: Express) {
   // ========== EXPENSES: UNPAID LIST ==========
   app.get("/api/accounting/expenses/unpaid", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const results = await db.select({
         expense: expenses,
         partyBalance: partyBalances.balance,
@@ -490,7 +496,7 @@ export function registerAccountingRoutes(app: Express) {
   // ========== EXPENSE PAYMENTS HISTORY ==========
   app.get("/api/accounting/expenses/:id/payments", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const results = await db.select().from(expensePayments)
         .where(and(eq(expensePayments.expenseId, req.params.id), eq(expensePayments.merchantId, merchantId)))
         .orderBy(desc(expensePayments.date));
@@ -501,7 +507,7 @@ export function registerAccountingRoutes(app: Express) {
   // ========== CREATE UNPAID EXPENSE ==========
   app.post("/api/accounting/expenses/create-unpaid", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const { title, category, amount, partyId, date, note } = req.body;
       const amt = parseFloat(amount);
 
@@ -528,7 +534,7 @@ export function registerAccountingRoutes(app: Express) {
   // ========== ACCOUNTING PRODUCTS ==========
   app.get("/api/accounting/products", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const results = await db.select().from(accountingProducts)
         .where(eq(accountingProducts.merchantId, merchantId))
         .orderBy(desc(accountingProducts.createdAt));
@@ -538,7 +544,7 @@ export function registerAccountingRoutes(app: Express) {
 
   app.post("/api/accounting/products", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const [product] = await db.insert(accountingProducts).values({ ...req.body, merchantId }).returning();
       res.json(product);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
@@ -546,7 +552,7 @@ export function registerAccountingRoutes(app: Express) {
 
   app.put("/api/accounting/products/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const { name, sku, sellingPrice, isActive } = req.body;
       const [product] = await db.update(accountingProducts)
         .set({ name, sku, sellingPrice, isActive, updatedAt: new Date() })
@@ -558,7 +564,7 @@ export function registerAccountingRoutes(app: Express) {
   // ========== ADD STOCK (RECEIPT) ==========
   app.post("/api/accounting/stock-receipts", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const { productId, supplierId, quantity, unitCost, extraCosts, paidNow, cashAccountId, date, notes } = req.body;
       const qty = parseInt(quantity);
       const cost = parseFloat(unitCost);
@@ -640,7 +646,7 @@ export function registerAccountingRoutes(app: Express) {
   // ========== SELL ==========
   app.post("/api/accounting/sales", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const { productId, customerId, quantity, unitPrice, paidNow, cashAccountId, date, notes } = req.body;
       const qty = parseInt(quantity);
       const price = parseFloat(unitPrice);
@@ -702,7 +708,7 @@ export function registerAccountingRoutes(app: Express) {
   // ========== COURIER FINANCE: COD RECEIVABLE ==========
   app.get("/api/accounting/courier-finance/cod-receivable", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const { courier } = req.query;
 
       const conditions: any[] = [
@@ -737,7 +743,7 @@ export function registerAccountingRoutes(app: Express) {
   // ========== COURIER FINANCE: COURIER PAYABLE ==========
   app.get("/api/accounting/courier-finance/courier-payable", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const { courier } = req.query;
       const conditions: any[] = [eq(codReconciliation.merchantId, merchantId)];
       if (courier) conditions.push(eq(codReconciliation.courierName, courier as string));
@@ -752,7 +758,7 @@ export function registerAccountingRoutes(app: Express) {
   // ========== COURIER SETTLEMENTS LIST ==========
   app.get("/api/accounting/courier-settlements", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const results = await db.select({
         settlement: courierSettlements,
         partyName: parties.name,
@@ -767,7 +773,7 @@ export function registerAccountingRoutes(app: Express) {
   // ========== CASH MOVEMENTS HISTORY ==========
   app.get("/api/accounting/cash-movements", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const { accountId, startDate, endDate, limit } = req.query;
       const conditions: any[] = [eq(cashMovements.merchantId, merchantId)];
       if (accountId) conditions.push(eq(cashMovements.cashAccountId, accountId as string));
@@ -801,7 +807,7 @@ export function registerAccountingRoutes(app: Express) {
   // ========== REPORTS: OVERVIEW DASHBOARD ==========
   app.get("/api/accounting/reports/overview", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const { startDate, endDate } = req.query;
 
       const accts = await db.select().from(cashAccounts).where(eq(cashAccounts.merchantId, merchantId));
@@ -877,7 +883,7 @@ export function registerAccountingRoutes(app: Express) {
   // ========== REPORTS: P&L ==========
   app.get("/api/accounting/reports/pnl", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const { startDate, endDate } = req.query;
 
       const dateFilter = (table: any) => {
@@ -912,7 +918,7 @@ export function registerAccountingRoutes(app: Express) {
   // ========== REPORTS: BALANCE SNAPSHOT ==========
   app.get("/api/accounting/reports/balance-sheet", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
 
       const accts = await db.select().from(cashAccounts).where(eq(cashAccounts.merchantId, merchantId));
       const cashTotal = accts.reduce((s, a) => s + parseFloat(a.balance), 0);
@@ -958,7 +964,7 @@ export function registerAccountingRoutes(app: Express) {
   // ========== REPORTS: CASH FLOW ==========
   app.get("/api/accounting/reports/cash-flow", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const { startDate, endDate } = req.query;
       const conditions: any[] = [eq(cashMovements.merchantId, merchantId)];
       if (startDate) conditions.push(gte(cashMovements.date, new Date(startDate as string)));
@@ -992,7 +998,7 @@ export function registerAccountingRoutes(app: Express) {
   // ========== REPORTS: STOCK REPORT ==========
   app.get("/api/accounting/reports/stock", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const products = await db.select().from(accountingProducts)
         .where(eq(accountingProducts.merchantId, merchantId))
         .orderBy(accountingProducts.name);
@@ -1005,7 +1011,7 @@ export function registerAccountingRoutes(app: Express) {
   // ========== REPORTS: PARTY BALANCES ==========
   app.get("/api/accounting/reports/party-balances", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const results = await db.select({
         party: parties,
         balance: partyBalances.balance,
@@ -1023,7 +1029,7 @@ export function registerAccountingRoutes(app: Express) {
   // ========== ADVANCED: LEDGER ENTRIES ==========
   app.get("/api/accounting/ledger", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const { startDate, endDate, account } = req.query;
       const conditions: any[] = [eq(ledgerEntries.merchantId, merchantId)];
       if (startDate) conditions.push(gte(ledgerEntries.date, new Date(startDate as string)));
@@ -1040,7 +1046,7 @@ export function registerAccountingRoutes(app: Express) {
   // ========== ADVANCED: TRIAL BALANCE ==========
   app.get("/api/accounting/trial-balance", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const debits = await db.select({
         account: ledgerEntries.debitAccount,
         total: sql<string>`COALESCE(SUM(${ledgerEntries.amount}::numeric), 0)`,
@@ -1078,7 +1084,7 @@ export function registerAccountingRoutes(app: Express) {
   // ========== AUDIT LOG ==========
   app.get("/api/accounting/audit-log", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const { limit: lim } = req.query;
       const results = await db.select().from(accountingAuditLog)
         .where(eq(accountingAuditLog.merchantId, merchantId))
@@ -1091,7 +1097,7 @@ export function registerAccountingRoutes(app: Express) {
   // ========== STOCK RECEIPTS HISTORY ==========
   app.get("/api/accounting/stock-receipts", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const results = await db.select({
         receipt: stockReceipts,
         productName: accountingProducts.name,
@@ -1108,7 +1114,7 @@ export function registerAccountingRoutes(app: Express) {
   // ========== SALES HISTORY ==========
   app.get("/api/accounting/sales", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const results = await db.select({
         sale: sales,
         productName: accountingProducts.name,
@@ -1125,7 +1131,7 @@ export function registerAccountingRoutes(app: Express) {
   // ========== BALANCE PREVIEW (used before any action) ==========
   app.post("/api/accounting/preview-balances", isAuthenticated, async (req: any, res) => {
     try {
-      const merchantId = getMerchantId(req);
+      const merchantId = await getMerchantId(req);
       const { partyId, cashAccountId, amount, operation } = req.body;
       const amt = parseFloat(amount) || 0;
       const result: any = {};
