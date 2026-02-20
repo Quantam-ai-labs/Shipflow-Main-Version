@@ -548,9 +548,11 @@ async function drawSingleAirwayBill(
   let c3y = row1TopY - 5;
 
   const courierLower = data.courierName.toLowerCase();
-  const logoBytes = courierLower.includes("leopard") ? leopardsLogoBytes
-    : courierLower.includes("postex") ? postexLogoBytes
-    : null;
+  const logoBytes = courierLower.includes("leopard")
+    ? leopardsLogoBytes
+    : courierLower.includes("postex")
+      ? postexLogoBytes
+      : null;
 
   if (logoBytes) {
     try {
