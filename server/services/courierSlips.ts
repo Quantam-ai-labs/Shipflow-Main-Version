@@ -17,7 +17,6 @@ export interface LeopardsOrderContext {
 }
 
 const LEOPARDS_TRACK_URL = "https://merchantapi.leopardscourier.com/api/trackBookedPacket/format/json/";
-const LEOPARDS_SLIP_URL = "https://merchantapi.leopardscourier.com/api/getSlipDataPDF/format/json/";
 
 export async function fetchLeopardsSlip(
   slipUrl: string,
@@ -84,30 +83,11 @@ export async function fetchLeopardsSlip(
 
       if (trackJson?.status === 0 || trackJson?.error) {
         const errMsg = typeof trackJson.error === "string" ? trackJson.error : (trackJson.message || "Tracking data unavailable");
-        console.log(`[Leopards Slip] Track API error: ${errMsg}, falling back to slip PDF API`);
-      }
-
-      console.log(`[Leopards Slip] Track API did not return packets, trying slip PDF API fallback`);
-      const slipApiResp = await fetch(LEOPARDS_SLIP_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          api_key: credentials.apiKey,
-          api_password: credentials.apiPassword,
-          track_numbers: credentials.trackingNumber,
-        }),
-        signal: AbortSignal.timeout(15000),
-      });
-
-      if (slipApiResp.ok) {
-        const contentType = slipApiResp.headers.get("content-type") || "";
-        const buffer = Buffer.from(await slipApiResp.arrayBuffer());
-        const parsed = await processLeopardsResponse(contentType, buffer);
-        if (parsed) return parsed;
+        console.log(`[Leopards Slip] Track API error: ${errMsg}, falling back to slip URL`);
       }
 
       if (slipUrl) {
-        console.log(`[Leopards Slip] Slip PDF API failed, trying stored URL fallback`);
+        console.log(`[Leopards Slip] Track API did not return packets, trying stored URL fallback`);
         const fallbackResp = await fetch(slipUrl, { signal: AbortSignal.timeout(15000) });
         if (fallbackResp.ok) {
           const contentType = fallbackResp.headers.get("content-type") || "";
@@ -117,7 +97,7 @@ export async function fetchLeopardsSlip(
         }
       }
 
-      return { success: false, error: "Leopards slip fetch failed from tracking API, slip PDF API, and URL" };
+      return { success: false, error: "Leopards slip fetch failed from both tracking API and URL" };
     } else if (slipUrl) {
       console.log(`[Leopards Slip] No credentials, fetching from slip URL`);
       const resp = await fetch(slipUrl, { signal: AbortSignal.timeout(15000) });
