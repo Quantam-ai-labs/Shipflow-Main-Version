@@ -235,7 +235,7 @@ async function drawSingleAirwayBill(
   const row1H = 120;
   const remarksH = 20;
   const productsH = 40;
-  const totalH = headerH + row1H + remarksH + productsH;
+  const totalH = headerH + row1H + 25 + remarksH + productsH;
   const bottomY = topY - totalH;
 
   const col1W = w * 0.34;
