@@ -103,13 +103,13 @@ export function registerAccountingRoutes(app: Express) {
   app.put("/api/accounting/settings", isAuthenticated, async (req: any, res) => {
     try {
       const merchantId = await getMerchantId(req);
-      const { advancedMode, defaultCashAccountId, defaultCurrency } = req.body;
+      const { advancedMode, defaultCashAccountId, defaultCurrency, financialYearStart } = req.body;
       const [settings] = await db.update(accountingSettings)
-        .set({ advancedMode, defaultCashAccountId, defaultCurrency, updatedAt: new Date() })
+        .set({ advancedMode, defaultCashAccountId, defaultCurrency, financialYearStart, updatedAt: new Date() })
         .where(eq(accountingSettings.merchantId, merchantId)).returning();
       if (!settings) {
         const [created] = await db.insert(accountingSettings)
-          .values({ merchantId, advancedMode, defaultCashAccountId, defaultCurrency }).returning();
+          .values({ merchantId, advancedMode, defaultCashAccountId, defaultCurrency, financialYearStart }).returning();
         return res.json(created);
       }
       res.json(settings);
