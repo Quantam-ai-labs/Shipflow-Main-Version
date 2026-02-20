@@ -1510,10 +1510,7 @@ export default function OrderDetails() {
                     data-testid="button-print-airway-bill"
                     onClick={async () => {
                       try {
-                        const isPostEx = (order.courierName || "").toLowerCase().includes("postex");
-                        const fetchUrl = isPostEx
-                          ? `/api/couriers/postex/invoice?trackingNumber=${encodeURIComponent(order.courierTracking!)}`
-                          : `/api/print/native-slip/${(order as any).id}.pdf`;
+                        const fetchUrl = `/api/print/native-slip/${(order as any).id}.pdf`;
                         const resp = await fetch(fetchUrl);
                         if (!resp.ok) {
                           const err = await resp.json().catch(() => ({ message: "Failed to fetch airway bill" }));
@@ -1542,10 +1539,7 @@ export default function OrderDetails() {
                     data-testid="button-download-pdf"
                     onClick={async () => {
                       try {
-                        const isPostEx = (order.courierName || "").toLowerCase().includes("postex");
-                        const fetchUrl = isPostEx
-                          ? `/api/couriers/postex/invoice?trackingNumber=${encodeURIComponent(order.courierTracking!)}`
-                          : `/api/print/native-slip/${(order as any).id}.pdf`;
+                        const fetchUrl = `/api/print/native-slip/${(order as any).id}.pdf`;
                         const resp = await fetch(fetchUrl);
                         if (!resp.ok) {
                           const err = await resp.json().catch(() => ({ message: "Failed to fetch airway bill" }));
@@ -1560,7 +1554,7 @@ export default function OrderDetails() {
                         const url = URL.createObjectURL(blob);
                         const a = document.createElement("a");
                         a.href = url;
-                        a.download = `postex-invoice-${order.courierTracking}.pdf`;
+                        a.download = `awb-${order.courierTracking}.pdf`;
                         a.click();
                         URL.revokeObjectURL(url);
                       } catch {
