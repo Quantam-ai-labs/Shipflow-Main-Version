@@ -6058,20 +6058,36 @@ export async function registerRoutes(
       const allOrders = await storage.getOrders(merchantId, { searchTracking: trackingNumber });
       const order = allOrders.orders.find(o => o.courierTracking === trackingNumber);
       const merchant = await storage.getMerchant(merchantId);
+      const postexAccounts = await storage.getCourierAccounts(merchantId);
+      const postexAccount = postexAccounts.find((a: any) => a.courierName === "postex");
+      const postexSettings = (postexAccount?.settings as Record<string, any>) || {};
+      const shipperAddr = postexSettings?.shipperAddress || merchant?.address || "";
+      const bookedDate = order?.bookedAt
+        ? new Date(order.bookedAt).toLocaleDateString("en-GB")
+        : new Date().toLocaleDateString("en-GB");
+
+      let shipmentWeight = 0;
+      if (order) {
+        const orderShipments = await storage.getShipmentsByOrderId(merchantId, order.id);
+        const shipment = orderShipments.find(s => s.trackingNumber === trackingNumber);
+        shipmentWeight = Number(shipment?.weight) || 0;
+      }
 
       const result = await generatePostExCustomSlip({
         trackingNumber,
         orderNumber: order?.orderNumber || "",
         merchantName: merchant?.name || "",
-        merchantAddress: merchant?.address || "",
+        merchantAddress: shipperAddr,
         consigneeName: order?.customerName || "",
         consigneePhone: order?.customerPhone || "",
         consigneeCity: order?.shippingCity || "",
         consigneeAddress: order?.shippingAddress || "",
         codAmount: Number(order?.codAmount) || 0,
+        weight: shipmentWeight,
         pieces: Number(order?.totalItems) || 1,
         itemsSummary: order?.itemSummary || "",
         remarks: order?.remarks || "",
+        bookedAt: bookedDate,
       });
 
       if (!result.success || !result.pdfBuffer) {
@@ -6128,23 +6144,38 @@ export async function registerRoutes(
 
         const { generatePostExCustomSlipBulk } = await import("./services/courierSlips");
         const merchant = await storage.getMerchant(merchantId);
+        const postexAccounts = await storage.getCourierAccounts(merchantId);
+        const postexAccount = postexAccounts.find((a: any) => a.courierName === "postex");
+        const postexSettings = (postexAccount?.settings as Record<string, any>) || {};
+        const shipperAddr = postexSettings?.shipperAddress || merchant?.address || "";
         const orderDataList = await Promise.all(
           trackingNumbers.map(async (tn) => {
             const allOrders = await storage.getOrders(merchantId, { searchTracking: tn });
             const order = allOrders.orders.find(o => o.courierTracking === tn);
+            const bookedDate = order?.bookedAt
+              ? new Date(order.bookedAt).toLocaleDateString("en-GB")
+              : new Date().toLocaleDateString("en-GB");
+            let shipmentWeight = 0;
+            if (order) {
+              const orderShipments = await storage.getShipmentsByOrderId(merchantId, order.id);
+              const shipment = orderShipments.find(s => s.trackingNumber === tn);
+              shipmentWeight = Number(shipment?.weight) || 0;
+            }
             return {
               trackingNumber: tn,
               orderNumber: order?.orderNumber || "",
               merchantName: merchant?.name || "",
-              merchantAddress: merchant?.address || "",
+              merchantAddress: shipperAddr,
               consigneeName: order?.customerName || "",
               consigneePhone: order?.customerPhone || "",
               consigneeCity: order?.shippingCity || "",
               consigneeAddress: order?.shippingAddress || "",
               codAmount: Number(order?.codAmount) || 0,
+              weight: shipmentWeight,
               pieces: Number(order?.totalItems) || 1,
               itemsSummary: order?.itemSummary || "",
               remarks: order?.remarks || "",
+              bookedAt: bookedDate,
             };
           })
         );
@@ -6213,19 +6244,30 @@ export async function registerRoutes(
           }
         } else if (courierNorm === "postex") {
           const merchant = await storage.getMerchant(merchantId);
+          const postexAccounts = await storage.getCourierAccounts(merchantId);
+          const postexAccount = postexAccounts.find((a: any) => a.courierName === "postex");
+          const postexSettings = (postexAccount?.settings as Record<string, any>) || {};
+          const shipperAddr = postexSettings?.shipperAddress || merchant?.address || "";
+          const bookedDate = order.bookedAt
+            ? new Date(order.bookedAt).toLocaleDateString("en-GB")
+            : new Date().toLocaleDateString("en-GB");
+          const orderShipments = await storage.getShipmentsByOrderId(merchantId, order.id);
+          const shipment = orderShipments.find(s => s.trackingNumber === order.courierTracking);
           result = await generatePostExCustomSlip({
             trackingNumber: order.courierTracking,
             orderNumber: order.orderNumber || "",
             merchantName: merchant?.name || "",
-            merchantAddress: merchant?.address || "",
+            merchantAddress: shipperAddr,
             consigneeName: order.customerName || "",
             consigneePhone: order.customerPhone || "",
             consigneeCity: order.shippingCity || "",
             consigneeAddress: order.shippingAddress || "",
             codAmount: Number(order.codAmount) || 0,
+            weight: Number(shipment?.weight) || 0,
             pieces: Number(order.totalItems) || 1,
             itemsSummary: order.itemSummary || "",
             remarks: order.remarks || "",
+            bookedAt: bookedDate,
           });
         } else {
           return res
@@ -6291,22 +6333,37 @@ export async function registerRoutes(
 
         if (courierNorm === "postex") {
           const merchant = await storage.getMerchant(merchantId);
+          const postexAccounts = await storage.getCourierAccounts(merchantId);
+          const postexAccount = postexAccounts.find((a: any) => a.courierName === "postex");
+          const postexSettings = (postexAccount?.settings as Record<string, any>) || {};
+          const shipperAddr = postexSettings?.shipperAddress || merchant?.address || "";
           const orderDataList = await Promise.all(
             bookedItems.map(async (item) => {
               const order = await storage.getOrderById(merchantId, item.orderId);
+              const bookedDate = order?.bookedAt
+                ? new Date(order.bookedAt).toLocaleDateString("en-GB")
+                : new Date().toLocaleDateString("en-GB");
+              let shipmentWeight = 0;
+              if (order) {
+                const orderShipments = await storage.getShipmentsByOrderId(merchantId, order.id);
+                const shipment = orderShipments.find(s => s.trackingNumber === item.trackingNumber);
+                shipmentWeight = Number(shipment?.weight) || 0;
+              }
               return {
                 trackingNumber: item.trackingNumber!,
                 orderNumber: item.orderNumber || order?.orderNumber || "",
                 merchantName: merchant?.name || "",
-                merchantAddress: merchant?.address || "",
+                merchantAddress: shipperAddr,
                 consigneeName: item.consigneeName || order?.customerName || "",
                 consigneePhone: item.consigneePhone || order?.customerPhone || "",
                 consigneeCity: item.consigneeCity || order?.shippingCity || "",
                 consigneeAddress: order?.shippingAddress || "",
                 codAmount: Number(item.codAmount) || Number(order?.codAmount) || 0,
+                weight: shipmentWeight,
                 pieces: Number(order?.totalItems) || 1,
                 itemsSummary: order?.itemSummary || "",
                 remarks: order?.remarks || "",
+                bookedAt: bookedDate,
               };
             })
           );
