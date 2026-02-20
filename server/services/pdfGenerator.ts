@@ -417,18 +417,14 @@ async function drawSingleAirwayBill(
     thickness: 0.5,
     color: BLACK,
   });
-  const orderLabelSize = 14;
-  const orderLabel = "Order:";
-  const orderValue = data.orderNumber;
-  drawTextSafe(page, boldFont, orderLabel, col1X + pad, c1y, orderLabelSize, BLACK);
-  const orderLabelWidth = boldFont.widthOfTextAtSize(orderLabel, orderLabelSize);
+  drawTextSafe(page, boldFont, "Order:", col1X + pad, c1y, labelSize, BLACK);
   drawTextSafe(
     page,
-    boldFont,
-    orderValue,
-    col1X + pad + orderLabelWidth + 5,
+    font,
+    data.orderNumber,
+    col1X + pad + 30,
     c1y,
-    orderLabelSize,
+    valueSize,
     BLACK,
   );
 
@@ -612,10 +608,10 @@ async function drawSingleAirwayBill(
   }
 
   // Tracking Barcode (Big)
-  const trackBarcodeY = trackQrY - 40;
+  const trackBarcodeY = trackQrY - 35;
   page.drawLine({
-    start: { x: col3X, y: trackQrY - 10 },
-    end: { x: x + w, y: trackQrY - 10 },
+    start: { x: col3X, y: trackQrY - 5 },
+    end: { x: x + w, y: trackQrY - 5 },
     thickness: 0.5,
     color: BLACK,
   });
@@ -685,7 +681,7 @@ async function drawSingleAirwayBill(
   drawTextSafe(page, boldFont, "Weight:", col3X + col3W - 85, infoY, 8, BLACK);
   drawTextSafe(page, font, wText, col3X + col3W - 55, infoY, 8, BLACK);
 
-  // Pieces/Qty Grid (same row style as Service and Date)
+  // Pieces/Qty Grid
   const piecesY = infoY - 4;
   page.drawLine({
     start: { x: col3X, y: piecesY },
@@ -696,10 +692,26 @@ async function drawSingleAirwayBill(
 
   infoY = piecesY - 11;
   drawTextSafe(page, boldFont, "Pieces:", col3X + pad, infoY, 8, BLACK);
-  drawTextSafe(page, font, String(data.pieces), col3X + pad + 35, infoY, 8, BLACK);
+  drawTextSafe(
+    page,
+    font,
+    String(data.pieces),
+    col3X + pad + 35,
+    infoY,
+    8,
+    BLACK,
+  );
 
-  drawTextSafe(page, boldFont, "Qty:", col3X + col3W - 55, infoY, 8, BLACK);
-  drawTextSafe(page, font, String(data.quantity), col3X + col3W - 25, infoY, 8, BLACK);
+  drawTextSafe(page, boldFont, "Qty:", col3X + col3W - 35, infoY, 8, BLACK);
+  drawTextSafe(
+    page,
+    font,
+    String(data.quantity),
+    col3X + col3W - 15,
+    infoY,
+    8,
+    BLACK,
+  );
 
   // --- Remarks Row ---
   drawTextSafe(page, boldFont, "Remarks:", x + pad, remarksTopY - 13, 8, BLACK);
