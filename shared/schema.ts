@@ -1320,6 +1320,7 @@ export const accountingSettings = pgTable("accounting_settings", {
   advancedMode: boolean("advanced_mode").default(false),
   defaultCashAccountId: varchar("default_cash_account_id"),
   defaultCurrency: varchar("default_currency", { length: 10 }).default("PKR"),
+  financialYearStart: integer("financial_year_start").default(7),
   openingBalancesSet: boolean("opening_balances_set").default(false),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
