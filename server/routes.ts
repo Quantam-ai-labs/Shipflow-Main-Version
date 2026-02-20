@@ -6050,33 +6050,40 @@ export async function registerRoutes(
           .json({ message: "Missing trackingNumber query parameter" });
       }
 
-      const creds = await getCourierCredentials(merchantId, "postex");
-      if (!creds?.apiKey) {
-        return res
-          .status(400)
-          .json({ message: "PostEx credentials not configured" });
-      }
-
       console.log(
         `[PostEx Invoice Route] Single invoice request: merchantId=${merchantId}, tracking=${trackingNumber}`,
       );
 
-      const { fetchPostExSlip } = await import("./services/courierSlips");
-      const result = await fetchPostExSlip(trackingNumber, creds.apiKey);
-
-      if (!result.success || !result.pdfBuffer) {
-        return res.status(502).json({
-          message: result.error || "Failed to fetch PostEx invoice",
-          trackingNumber,
-        });
+      const { generatePostExCustomSlip } = await import("./services/courierSlips");
+      const order = await storage.getOrderByTracking(merchantId, trackingNumber);
+      if (!order) {
+        return res.status(404).json({ message: "Order not found for this tracking number" });
       }
+      const merchant = await storage.getMerchantById(merchantId);
+      const lineItems = Array.isArray(order.lineItems) ? order.lineItems : [];
+      const itemsSummary = order.itemSummary || lineItems.map((li: any) => `${li.title || li.name || "Item"} x${li.quantity || 1}`).join(", ");
+      const pdfBuffer = await generatePostExCustomSlip([{
+        trackingNumber,
+        orderNumber: order.orderNumber,
+        customerName: order.customerName,
+        customerPhone: order.customerPhone || "",
+        city: order.city || "",
+        shippingAddress: order.shippingAddress || "",
+        codAmount: parseFloat(String(order.totalAmount)) || 0,
+        merchantName: merchant?.name || "",
+        merchantAddress: merchant?.address || "",
+        itemsSummary,
+        totalQuantity: order.totalQuantity || 1,
+        remarks: order.notes || "",
+        bookedAt: order.createdAt ? new Date(order.createdAt).toLocaleDateString("en-GB") : new Date().toLocaleDateString("en-GB"),
+      }]);
 
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader(
         "Content-Disposition",
         `attachment; filename="postex-invoice-${trackingNumber}.pdf"`,
       );
-      res.send(result.pdfBuffer);
+      res.send(pdfBuffer);
     } catch (error) {
       console.error("[PostEx Invoice Route] Error:", error);
       res.status(500).json({ message: "Failed to fetch PostEx invoice" });
@@ -6112,46 +6119,62 @@ export async function registerRoutes(
             .json({ message: "No valid tracking numbers provided" });
         }
 
-        const creds = await getCourierCredentials(merchantId, "postex");
-        if (!creds?.apiKey) {
-          return res
-            .status(400)
-            .json({ message: "PostEx credentials not configured" });
-        }
-
         console.log(
           `[PostEx Invoice Route] Bulk invoice request: merchantId=${merchantId}, count=${trackingNumbers.length}`,
         );
 
-        const { fetchPostExSlipBulk } = await import("./services/courierSlips");
-        const result = await fetchPostExSlipBulk(trackingNumbers, creds.apiKey);
+        const { generatePostExCustomSlip } = await import("./services/courierSlips");
+        const merchant = await storage.getMerchantById(merchantId);
+        const postExContexts: Array<import("./services/courierSlips").PostExOrderContext> = [];
+        const failedTrackingNumbers: string[] = [];
 
-        if (!result.success || !result.pdfBuffer) {
-          return res.status(502).json({
-            message: result.error || "Failed to fetch PostEx invoices",
-            failedTrackingNumbers:
-              result.failedTrackingNumbers || trackingNumbers,
-            chunkErrors: (result as any).chunkErrors,
+        for (const tn of trackingNumbers) {
+          const order = await storage.getOrderByTracking(merchantId, tn);
+          if (!order) {
+            failedTrackingNumbers.push(tn);
+            continue;
+          }
+          const lineItems = Array.isArray(order.lineItems) ? order.lineItems : [];
+          const itemsSummary = order.itemSummary || lineItems.map((li: any) => `${li.title || li.name || "Item"} x${li.quantity || 1}`).join(", ");
+          postExContexts.push({
+            trackingNumber: tn,
+            orderNumber: order.orderNumber,
+            customerName: order.customerName,
+            customerPhone: order.customerPhone || "",
+            city: order.city || "",
+            shippingAddress: order.shippingAddress || "",
+            codAmount: parseFloat(String(order.totalAmount)) || 0,
+            merchantName: merchant?.name || "",
+            merchantAddress: merchant?.address || "",
+            itemsSummary,
+            totalQuantity: order.totalQuantity || 1,
+            remarks: order.notes || "",
+            bookedAt: order.createdAt ? new Date(order.createdAt).toLocaleDateString("en-GB") : new Date().toLocaleDateString("en-GB"),
           });
         }
 
-        if (
-          result.failedTrackingNumbers &&
-          result.failedTrackingNumbers.length > 0
-        ) {
+        if (postExContexts.length === 0) {
+          return res.status(404).json({
+            message: "No orders found for the provided tracking numbers",
+            failedTrackingNumbers,
+          });
+        }
+
+        if (failedTrackingNumbers.length > 0) {
           res.setHeader("X-Partial-Failure", "true");
           res.setHeader(
             "X-Failed-Tracking-Numbers",
-            result.failedTrackingNumbers.join(","),
+            failedTrackingNumbers.join(","),
           );
         }
 
+        const pdfBuffer = await generatePostExCustomSlip(postExContexts);
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader(
           "Content-Disposition",
           `attachment; filename="postex-invoices-bulk.pdf"`,
         );
-        res.send(result.pdfBuffer);
+        res.send(pdfBuffer);
       } catch (error) {
         console.error("[PostEx Invoice Route] Bulk error:", error);
         res.status(500).json({ message: "Failed to fetch PostEx invoices" });
@@ -6202,13 +6225,26 @@ export async function registerRoutes(
               });
           }
         } else if (courierNorm === "postex") {
-          const creds = await getCourierCredentials(merchantId, "postex");
-          if (!creds?.apiKey) {
-            return res
-              .status(400)
-              .json({ message: "PostEx credentials not configured" });
-          }
-          result = await fetchPostExSlip(order.courierTracking, creds.apiKey);
+          const { generatePostExCustomSlip } = await import("./services/courierSlips");
+          const merchant = await storage.getMerchantById(merchantId);
+          const lineItems = Array.isArray(order.lineItems) ? order.lineItems : [];
+          const itemsSummary = order.itemSummary || lineItems.map((li: any) => `${li.title || li.name || "Item"} x${li.quantity || 1}`).join(", ");
+          const pdfBuffer = await generatePostExCustomSlip([{
+            trackingNumber: order.courierTracking!,
+            orderNumber: order.orderNumber,
+            customerName: order.customerName,
+            customerPhone: order.customerPhone || "",
+            city: order.city || "",
+            shippingAddress: order.shippingAddress || "",
+            codAmount: parseFloat(String(order.totalAmount)) || 0,
+            merchantName: merchant?.name || "",
+            merchantAddress: merchant?.address || "",
+            itemsSummary,
+            totalQuantity: order.totalQuantity || 1,
+            remarks: order.notes || "",
+            bookedAt: order.createdAt ? new Date(order.createdAt).toLocaleDateString("en-GB") : new Date().toLocaleDateString("en-GB"),
+          }]);
+          result = { success: true, pdfBuffer };
         } else {
           return res
             .status(400)
@@ -6272,28 +6308,40 @@ export async function registerRoutes(
         const courierNorm = normalizeCourierName(batch.courierName || "");
 
         if (courierNorm === "postex") {
-          const creds = await getCourierCredentials(merchantId, "postex");
-          const postexToken = creds?.apiKey || null;
-          if (!postexToken) {
-            return res
-              .status(400)
-              .json({ message: "PostEx credentials not configured" });
+          const { generatePostExCustomSlip } = await import("./services/courierSlips");
+          const merchant = await storage.getMerchantById(merchantId);
+          const postExContexts: Array<import("./services/courierSlips").PostExOrderContext> = [];
+          for (const item of bookedItems) {
+            const order = await storage.getOrderById(merchantId, item.orderId);
+            if (!order) continue;
+            const lineItems = Array.isArray(order.lineItems) ? order.lineItems : [];
+            const itemsSummary = order.itemSummary || lineItems.map((li: any) => `${li.title || li.name || "Item"} x${li.quantity || 1}`).join(", ");
+            postExContexts.push({
+              trackingNumber: item.trackingNumber || order.courierTracking || "",
+              orderNumber: item.orderNumber || order.orderNumber,
+              customerName: item.consigneeName || order.customerName,
+              customerPhone: item.consigneePhone || order.customerPhone || "",
+              city: item.consigneeCity || order.city || "",
+              shippingAddress: order.shippingAddress || "",
+              codAmount: parseFloat(String(item.codAmount || order.totalAmount)) || 0,
+              merchantName: merchant?.name || "",
+              merchantAddress: merchant?.address || "",
+              itemsSummary,
+              totalQuantity: order.totalQuantity || 1,
+              remarks: order.notes || "",
+              bookedAt: order.createdAt ? new Date(order.createdAt).toLocaleDateString("en-GB") : new Date().toLocaleDateString("en-GB"),
+            });
           }
-          const trackingNums = bookedItems.map((item) => item.trackingNumber!);
-          const result = await fetchPostExSlipBulk(trackingNums, postexToken);
-          if (!result.success || !result.pdfBuffer) {
-            return res
-              .status(502)
-              .json({
-                message: result.error || "Failed to fetch PostEx airway bills",
-              });
+          if (postExContexts.length === 0) {
+            return res.status(404).json({ message: "No valid PostEx orders found in batch" });
           }
+          const pdfBuffer = await generatePostExCustomSlip(postExContexts);
           res.setHeader("Content-Type", "application/pdf");
           res.setHeader(
             "Content-Disposition",
             `inline; filename="batch_awb_${batch.id.substring(0, 8)}.pdf"`,
           );
-          return res.send(result.pdfBuffer);
+          return res.send(pdfBuffer);
         }
 
         const pdfBuffers: Buffer[] = [];

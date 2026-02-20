@@ -4,6 +4,48 @@ import { generateAirwayBillPdfBuffer, type AirwayBillData } from "./pdfGenerator
 const POSTEX_INVOICE_URL = "https://api.postex.pk/services/integration/api/order/v1/get-invoice";
 const POSTEX_MAX_PER_REQUEST = 10;
 
+export interface PostExOrderContext {
+  trackingNumber: string;
+  orderNumber: string;
+  customerName: string;
+  customerPhone: string;
+  city: string;
+  shippingAddress: string;
+  codAmount: number;
+  merchantName: string;
+  merchantAddress?: string;
+  itemsSummary?: string;
+  totalQuantity?: number;
+  weight?: number;
+  pieces?: number;
+  remarks?: string;
+  bookedAt?: string;
+}
+
+export function generatePostExCustomSlip(orders: PostExOrderContext[]): Promise<Buffer> {
+  const bills: AirwayBillData[] = orders.map((o) => ({
+    trackingNumber: o.trackingNumber || "",
+    orderNumber: (o.orderNumber || "").replace(/^#/, ""),
+    courierName: "PostEx",
+    bookedAt: o.bookedAt || new Date().toLocaleDateString("en-GB"),
+    merchantName: o.merchantName || "",
+    merchantAddress: o.merchantAddress || "",
+    consigneeName: o.customerName || "",
+    consigneePhone: o.customerPhone || "",
+    consigneeCity: o.city || "",
+    consigneeAddress: o.shippingAddress || "",
+    codAmount: o.codAmount || 0,
+    weight: o.weight || 500,
+    pieces: o.pieces || 1,
+    itemsSummary: o.itemsSummary || "",
+    shipmentType: "Overnight",
+    remarks: o.remarks || "",
+    quantity: o.totalQuantity || 1,
+  }));
+
+  return generateAirwayBillPdfBuffer(bills);
+}
+
 export interface CourierSlipResult {
   success: boolean;
   pdfBuffer?: Buffer;

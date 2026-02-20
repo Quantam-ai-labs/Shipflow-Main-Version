@@ -66,6 +66,7 @@ export interface IStorage {
   getUniqueStatuses(merchantId: string): Promise<string[]>;
   getOrderById(merchantId: string, id: string): Promise<Order | undefined>;
   getOrderByShopifyId(merchantId: string, shopifyOrderId: string): Promise<Order | undefined>;
+  getOrderByTracking(merchantId: string, trackingNumber: string): Promise<Order | undefined>;
   getExistingShopifyOrderIds(merchantId: string, shopifyOrderIds: string[]): Promise<Set<string>>;
   getExistingOrdersByShopifyIds(merchantId: string, shopifyOrderIds: string[]): Promise<Map<string, string>>;
   getOrdersWithCourierStatus(merchantId: string, shopifyOrderIds: string[]): Promise<Set<string>>;
@@ -556,6 +557,12 @@ export class DatabaseStorage implements IStorage {
   async getOrderByShopifyId(merchantId: string, shopifyOrderId: string): Promise<Order | undefined> {
     const [order] = await db.select().from(orders)
       .where(and(eq(orders.shopifyOrderId, shopifyOrderId), eq(orders.merchantId, merchantId)));
+    return order;
+  }
+
+  async getOrderByTracking(merchantId: string, trackingNumber: string): Promise<Order | undefined> {
+    const [order] = await db.select().from(orders)
+      .where(and(eq(orders.courierTracking, trackingNumber), eq(orders.merchantId, merchantId)));
     return order;
   }
 
