@@ -6059,7 +6059,7 @@ export async function registerRoutes(
       if (!order) {
         return res.status(404).json({ message: "Order not found for this tracking number" });
       }
-      const merchant = await storage.getMerchantById(merchantId);
+      const merchant = await storage.getMerchant(merchantId);
       const lineItems = Array.isArray(order.lineItems) ? order.lineItems : [];
       const itemsSummary = order.itemSummary || lineItems.map((li: any) => `${li.title || li.name || "Item"} x${li.quantity || 1}`).join(", ");
       const pdfBuffer = await generatePostExCustomSlip([{
@@ -6124,7 +6124,7 @@ export async function registerRoutes(
         );
 
         const { generatePostExCustomSlip } = await import("./services/courierSlips");
-        const merchant = await storage.getMerchantById(merchantId);
+        const merchant = await storage.getMerchant(merchantId);
         const postExContexts: Array<import("./services/courierSlips").PostExOrderContext> = [];
         const failedTrackingNumbers: string[] = [];
 
@@ -6226,7 +6226,7 @@ export async function registerRoutes(
           }
         } else if (courierNorm === "postex") {
           const { generatePostExCustomSlip } = await import("./services/courierSlips");
-          const merchant = await storage.getMerchantById(merchantId);
+          const merchant = await storage.getMerchant(merchantId);
           const lineItems = Array.isArray(order.lineItems) ? order.lineItems : [];
           const itemsSummary = order.itemSummary || lineItems.map((li: any) => `${li.title || li.name || "Item"} x${li.quantity || 1}`).join(", ");
           const pdfBuffer = await generatePostExCustomSlip([{
@@ -6309,7 +6309,7 @@ export async function registerRoutes(
 
         if (courierNorm === "postex") {
           const { generatePostExCustomSlip } = await import("./services/courierSlips");
-          const merchant = await storage.getMerchantById(merchantId);
+          const merchant = await storage.getMerchant(merchantId);
           const postExContexts: Array<import("./services/courierSlips").PostExOrderContext> = [];
           for (const item of bookedItems) {
             const order = await storage.getOrderById(merchantId, item.orderId);
