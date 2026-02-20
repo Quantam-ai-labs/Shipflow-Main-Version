@@ -56,6 +56,14 @@ import {
   Wallet,
   ArrowDownLeft,
   ArrowUpRight,
+  Banknote,
+  UserCircle,
+  ShoppingCart,
+  PieChart,
+  BookOpen,
+  Landmark,
+  Scale,
+  Cog,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery } from "@tanstack/react-query";
@@ -124,27 +132,45 @@ const codSubItems = [
   },
 ];
 
-const accountingSubItems = [
-  {
-    title: "Financial Dashboard",
-    url: "/financial-dashboard",
-    icon: Wallet,
-  },
-  {
-    title: "Expenses",
-    url: "/expense-tracker",
-    icon: Receipt,
-  },
-  {
-    title: "Stock Ledger",
-    url: "/stock-ledger",
-    icon: Package,
-  },
-  {
-    title: "Courier Dues",
-    url: "/courier-dues",
-    icon: Truck,
-  },
+const accountingOverviewItems = [
+  { title: "Overview", url: "/accounting", icon: Wallet },
+  { title: "Money", url: "/accounting/money", icon: Banknote },
+  { title: "Parties", url: "/accounting/parties", icon: UserCircle },
+];
+
+const accountingStockItems = [
+  { title: "Products", url: "/accounting/products", icon: ShoppingBag },
+  { title: "Add Stock", url: "/accounting/stock-receipts", icon: ArrowDownLeft },
+  { title: "Sell", url: "/accounting/sales", icon: ShoppingCart },
+];
+
+const accountingExpenseItems = [
+  { title: "Expense History", url: "/accounting/expenses", icon: Receipt },
+  { title: "Needs Payment", url: "/accounting/expenses-unpaid", icon: Clock },
+];
+
+const accountingCourierItems = [
+  { title: "COD Receivable", url: "/accounting/cod-receivable", icon: ArrowDownLeft },
+  { title: "Courier Payable", url: "/accounting/courier-payable", icon: ArrowUpRight },
+  { title: "Settlements", url: "/accounting/settlements", icon: Scale },
+];
+
+const accountingReportItems = [
+  { title: "Profit & Loss", url: "/accounting/reports/pnl", icon: TrendingUp },
+  { title: "Balance Snapshot", url: "/accounting/reports/balance-sheet", icon: PieChart },
+  { title: "Cash Flow", url: "/accounting/reports/cash-flow", icon: BarChart3 },
+  { title: "Stock Report", url: "/accounting/reports/stock", icon: Package },
+  { title: "Party Balances", url: "/accounting/reports/party-balances", icon: Users },
+];
+
+const accountingAdvancedItems = [
+  { title: "Ledger", url: "/accounting/ledger", icon: BookOpen },
+  { title: "Trial Balance", url: "/accounting/trial-balance", icon: Scale },
+  { title: "Cash Accounts", url: "/accounting/cash-accounts", icon: Landmark },
+];
+
+const accountingSettingsItems = [
+  { title: "Preferences", url: "/accounting/settings", icon: Cog },
 ];
 
 const settingsNavItems = [
@@ -205,8 +231,14 @@ export function AppSidebar() {
 
   const isOrdersRouteActive = location.startsWith("/orders");
   const isInventoryRouteActive = location === "/products" || location === "/product-analytics";
-  const isAccountingRouteActive = location === "/financial-dashboard" || location === "/expense-tracker" || location === "/stock-ledger" || location === "/courier-dues";
+  const isAccountingRouteActive = location.startsWith("/accounting") || location === "/financial-dashboard" || location === "/expense-tracker" || location === "/stock-ledger" || location === "/courier-dues";
   const isCodRouteActive = location === "/cod-reconciliation" || location === "/payment-ledger" || location === "/manage-cheques";
+
+  const { data: acctSettings } = useQuery<{ advancedMode: boolean }>({
+    queryKey: ["/api/accounting/settings"],
+    enabled: !!user,
+  });
+  const advancedMode = acctSettings?.advancedMode ?? false;
   const totalOrderCount = counts
     ? Object.values(counts).reduce((sum, c) => sum + (c || 0), 0)
     : 0;
@@ -374,13 +406,89 @@ export function AppSidebar() {
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <SidebarMenuSub>
-                      {accountingSubItems.map((item) => (
+                      {accountingOverviewItems.map((item) => (
                         <SidebarMenuSubItem key={item.title}>
-                          <SidebarMenuSubButton
-                            asChild
-                            isActive={location === item.url}
-                          >
-                            <Link href={item.url} data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                          <SidebarMenuSubButton asChild isActive={location === item.url}>
+                            <Link href={item.url} data-testid={`nav-acct-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                              <item.icon className="w-3.5 h-3.5" />
+                              <span>{item.title}</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                      <SidebarMenuSubItem>
+                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground px-2 pt-2 pb-0.5 block">Stock & Sales</span>
+                      </SidebarMenuSubItem>
+                      {accountingStockItems.map((item) => (
+                        <SidebarMenuSubItem key={item.title}>
+                          <SidebarMenuSubButton asChild isActive={location === item.url}>
+                            <Link href={item.url} data-testid={`nav-acct-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                              <item.icon className="w-3.5 h-3.5" />
+                              <span>{item.title}</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                      <SidebarMenuSubItem>
+                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground px-2 pt-2 pb-0.5 block">Expenses</span>
+                      </SidebarMenuSubItem>
+                      {accountingExpenseItems.map((item) => (
+                        <SidebarMenuSubItem key={item.title}>
+                          <SidebarMenuSubButton asChild isActive={location === item.url}>
+                            <Link href={item.url} data-testid={`nav-acct-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                              <item.icon className="w-3.5 h-3.5" />
+                              <span>{item.title}</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                      <SidebarMenuSubItem>
+                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground px-2 pt-2 pb-0.5 block">Courier Money</span>
+                      </SidebarMenuSubItem>
+                      {accountingCourierItems.map((item) => (
+                        <SidebarMenuSubItem key={item.title}>
+                          <SidebarMenuSubButton asChild isActive={location === item.url}>
+                            <Link href={item.url} data-testid={`nav-acct-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                              <item.icon className="w-3.5 h-3.5" />
+                              <span>{item.title}</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                      <SidebarMenuSubItem>
+                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground px-2 pt-2 pb-0.5 block">Reports</span>
+                      </SidebarMenuSubItem>
+                      {accountingReportItems.map((item) => (
+                        <SidebarMenuSubItem key={item.title}>
+                          <SidebarMenuSubButton asChild isActive={location === item.url}>
+                            <Link href={item.url} data-testid={`nav-acct-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                              <item.icon className="w-3.5 h-3.5" />
+                              <span>{item.title}</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                      {advancedMode && (
+                        <>
+                          <SidebarMenuSubItem>
+                            <span className="text-[10px] uppercase tracking-wider text-muted-foreground px-2 pt-2 pb-0.5 block">Advanced</span>
+                          </SidebarMenuSubItem>
+                          {accountingAdvancedItems.map((item) => (
+                            <SidebarMenuSubItem key={item.title}>
+                              <SidebarMenuSubButton asChild isActive={location === item.url}>
+                                <Link href={item.url} data-testid={`nav-acct-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                                  <item.icon className="w-3.5 h-3.5" />
+                                  <span>{item.title}</span>
+                                </Link>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          ))}
+                        </>
+                      )}
+                      {accountingSettingsItems.map((item) => (
+                        <SidebarMenuSubItem key={item.title}>
+                          <SidebarMenuSubButton asChild isActive={location === item.url}>
+                            <Link href={item.url} data-testid={`nav-acct-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
                               <item.icon className="w-3.5 h-3.5" />
                               <span>{item.title}</span>
                             </Link>

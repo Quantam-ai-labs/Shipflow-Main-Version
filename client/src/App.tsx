@@ -37,6 +37,26 @@ import ExpenseTracker from "@/pages/expense-tracker";
 import StockLedger from "@/pages/stock-ledger";
 import CourierDues from "@/pages/courier-dues";
 import FinancialDashboard from "@/pages/financial-dashboard";
+import AccountingOverview from "@/pages/accounting/overview";
+import MoneyPage from "@/pages/accounting/money";
+import AccountingParties from "@/pages/accounting/parties";
+import AccountingProducts from "@/pages/accounting/products";
+import AccountingStockReceipts from "@/pages/accounting/stock-receipts";
+import AccountingSales from "@/pages/accounting/sales";
+import AccountingExpenses from "@/pages/accounting/expenses";
+import AccountingExpensesUnpaid from "@/pages/accounting/expenses-unpaid";
+import AccountingCodReceivable from "@/pages/accounting/cod-receivable";
+import AccountingCourierPayable from "@/pages/accounting/courier-payable";
+import AccountingSettlements from "@/pages/accounting/settlements";
+import AccountingPnl from "@/pages/accounting/reports/pnl";
+import AccountingBalanceSheet from "@/pages/accounting/reports/balance-sheet";
+import AccountingCashFlow from "@/pages/accounting/reports/cash-flow";
+import AccountingStockReport from "@/pages/accounting/reports/stock";
+import AccountingPartyBalances from "@/pages/accounting/reports/party-balances";
+import AccountingLedger from "@/pages/accounting/ledger";
+import AccountingTrialBalance from "@/pages/accounting/trial-balance";
+import AccountingCashAccounts from "@/pages/accounting/cash-accounts";
+import AccountingSettings from "@/pages/accounting/settings";
 import NotFound from "@/pages/not-found";
 
 function OnboardingBanner() {
@@ -80,6 +100,26 @@ function AppRoutes() {
       <Route path="/courier-dues" component={CourierDues} />
       <Route path="/financial-dashboard" component={FinancialDashboard} />
       <Route path="/stock-ledger" component={StockLedger} />
+      <Route path="/accounting" component={AccountingOverview} />
+      <Route path="/accounting/money" component={MoneyPage} />
+      <Route path="/accounting/parties" component={AccountingParties} />
+      <Route path="/accounting/products" component={AccountingProducts} />
+      <Route path="/accounting/stock-receipts" component={AccountingStockReceipts} />
+      <Route path="/accounting/sales" component={AccountingSales} />
+      <Route path="/accounting/expenses" component={AccountingExpenses} />
+      <Route path="/accounting/expenses-unpaid" component={AccountingExpensesUnpaid} />
+      <Route path="/accounting/cod-receivable" component={AccountingCodReceivable} />
+      <Route path="/accounting/courier-payable" component={AccountingCourierPayable} />
+      <Route path="/accounting/settlements" component={AccountingSettlements} />
+      <Route path="/accounting/reports/pnl" component={AccountingPnl} />
+      <Route path="/accounting/reports/balance-sheet" component={AccountingBalanceSheet} />
+      <Route path="/accounting/reports/cash-flow" component={AccountingCashFlow} />
+      <Route path="/accounting/reports/stock" component={AccountingStockReport} />
+      <Route path="/accounting/reports/party-balances" component={AccountingPartyBalances} />
+      <Route path="/accounting/ledger" component={AccountingLedger} />
+      <Route path="/accounting/trial-balance" component={AccountingTrialBalance} />
+      <Route path="/accounting/cash-accounts" component={AccountingCashAccounts} />
+      <Route path="/accounting/settings" component={AccountingSettings} />
       <Route path="/settings" component={Settings} />
       <Route path="/onboarding" component={Onboarding} />
       <Route path="/admin" component={AdminPanel} />

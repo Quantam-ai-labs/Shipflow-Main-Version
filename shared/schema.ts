@@ -893,9 +893,14 @@ export const expenses = pgTable("expenses", {
   title: varchar("title", { length: 255 }).notNull(),
   description: text("description"),
   amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  paidAmount: decimal("paid_amount", { precision: 12, scale: 2 }).default("0"),
+  remainingDue: decimal("remaining_due", { precision: 12, scale: 2 }),
+  paymentStatus: varchar("payment_status", { length: 20 }).default("unpaid"),
+  partyId: varchar("party_id"),
   category: varchar("category", { length: 100 }).notNull(),
   date: timestamp("date").notNull(),
   paymentMethod: varchar("payment_method", { length: 50 }),
+  cashAccountId: varchar("cash_account_id"),
   reference: varchar("reference", { length: 255 }),
   isRecurring: boolean("is_recurring").default(false),
   recurringFrequency: varchar("recurring_frequency", { length: 20 }),
@@ -906,6 +911,7 @@ export const expenses = pgTable("expenses", {
   index("idx_expenses_merchant").on(table.merchantId),
   index("idx_expenses_date").on(table.merchantId, table.date),
   index("idx_expenses_category").on(table.merchantId, table.category),
+  index("idx_expenses_payment_status").on(table.merchantId, table.paymentStatus),
 ]);
 
 export const insertExpenseSchema = createInsertSchema(expenses).omit({
@@ -979,3 +985,350 @@ export const insertCourierDueSchema = createInsertSchema(courierDues).omit({
 });
 export type InsertCourierDue = z.infer<typeof insertCourierDueSchema>;
 export type CourierDue = typeof courierDues.$inferSelect;
+
+// ============================================
+// ACCOUNTING: PARTIES (Customers, Suppliers, Couriers)
+// ============================================
+export const parties = pgTable("parties", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  type: varchar("type", { length: 30 }).notNull().default("customer"),
+  phone: varchar("phone", { length: 50 }),
+  email: varchar("email", { length: 255 }),
+  address: text("address"),
+  tags: text("tags").array(),
+  notes: text("notes"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_parties_merchant").on(table.merchantId),
+  index("idx_parties_type").on(table.merchantId, table.type),
+]);
+
+export const insertPartySchema = createInsertSchema(parties).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertParty = z.infer<typeof insertPartySchema>;
+export type Party = typeof parties.$inferSelect;
+
+// ============================================
+// ACCOUNTING: PARTY BALANCES (Running balance per party)
+// ============================================
+export const partyBalances = pgTable("party_balances", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  partyId: varchar("party_id").notNull().references(() => parties.id, { onDelete: "cascade" }),
+  balance: decimal("balance", { precision: 14, scale: 2 }).notNull().default("0"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("idx_party_balances_unique").on(table.merchantId, table.partyId),
+]);
+
+export const insertPartyBalanceSchema = createInsertSchema(partyBalances).omit({
+  id: true,
+  updatedAt: true,
+});
+export type InsertPartyBalance = z.infer<typeof insertPartyBalanceSchema>;
+export type PartyBalance = typeof partyBalances.$inferSelect;
+
+// ============================================
+// ACCOUNTING: CASH ACCOUNTS (Bank / Cash wallets)
+// ============================================
+export const cashAccounts = pgTable("cash_accounts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  type: varchar("type", { length: 30 }).notNull().default("cash"),
+  bankName: varchar("bank_name", { length: 255 }),
+  accountNumber: varchar("account_number", { length: 100 }),
+  balance: decimal("balance", { precision: 14, scale: 2 }).notNull().default("0"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_cash_accounts_merchant").on(table.merchantId),
+]);
+
+export const insertCashAccountSchema = createInsertSchema(cashAccounts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertCashAccount = z.infer<typeof insertCashAccountSchema>;
+export type CashAccount = typeof cashAccounts.$inferSelect;
+
+// ============================================
+// ACCOUNTING: CASH MOVEMENTS (Money in/out records)
+// ============================================
+export const cashMovements = pgTable("cash_movements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  cashAccountId: varchar("cash_account_id").notNull().references(() => cashAccounts.id),
+  type: varchar("type", { length: 10 }).notNull(),
+  amount: decimal("amount", { precision: 14, scale: 2 }).notNull(),
+  balanceAfter: decimal("balance_after", { precision: 14, scale: 2 }),
+  partyId: varchar("party_id").references(() => parties.id),
+  relatedExpenseId: varchar("related_expense_id"),
+  relatedSaleId: varchar("related_sale_id"),
+  relatedReceiptId: varchar("related_receipt_id"),
+  relatedSettlementId: varchar("related_settlement_id"),
+  description: text("description"),
+  reference: varchar("reference", { length: 255 }),
+  date: timestamp("date").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_cash_movements_merchant").on(table.merchantId),
+  index("idx_cash_movements_account").on(table.cashAccountId),
+  index("idx_cash_movements_date").on(table.merchantId, table.date),
+]);
+
+export const insertCashMovementSchema = createInsertSchema(cashMovements).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertCashMovement = z.infer<typeof insertCashMovementSchema>;
+export type CashMovement = typeof cashMovements.$inferSelect;
+
+// ============================================
+// ACCOUNTING: EXPENSE TYPES (Categories for expenses)
+// ============================================
+export const expenseTypes = pgTable("expense_types", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  addToProductCost: boolean("add_to_product_cost").default(false),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_expense_types_merchant").on(table.merchantId),
+]);
+
+export const insertExpenseTypeSchema = createInsertSchema(expenseTypes).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertExpenseType = z.infer<typeof insertExpenseTypeSchema>;
+export type ExpenseType = typeof expenseTypes.$inferSelect;
+
+// ============================================
+// ACCOUNTING: EXPENSE PAYMENTS (Partial payment tracking)
+// ============================================
+export const expensePayments = pgTable("expense_payments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  expenseId: varchar("expense_id").notNull().references(() => expenses.id, { onDelete: "cascade" }),
+  cashAccountId: varchar("cash_account_id").notNull().references(() => cashAccounts.id),
+  partyId: varchar("party_id").references(() => parties.id),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  date: timestamp("date").notNull(),
+  note: text("note"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_expense_payments_expense").on(table.expenseId),
+  index("idx_expense_payments_merchant").on(table.merchantId),
+]);
+
+export const insertExpensePaymentSchema = createInsertSchema(expensePayments).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertExpensePayment = z.infer<typeof insertExpensePaymentSchema>;
+export type ExpensePayment = typeof expensePayments.$inferSelect;
+
+// ============================================
+// ACCOUNTING: ACCOUNTING PRODUCTS (Internal stock with avg cost)
+// ============================================
+export const accountingProducts = pgTable("accounting_products", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 500 }).notNull(),
+  sku: varchar("sku", { length: 100 }),
+  stockQty: integer("stock_qty").notNull().default(0),
+  avgUnitCost: decimal("avg_unit_cost", { precision: 12, scale: 2 }).notNull().default("0"),
+  sellingPrice: decimal("selling_price", { precision: 12, scale: 2 }),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_acct_products_merchant").on(table.merchantId),
+]);
+
+export const insertAccountingProductSchema = createInsertSchema(accountingProducts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertAccountingProduct = z.infer<typeof insertAccountingProductSchema>;
+export type AccountingProduct = typeof accountingProducts.$inferSelect;
+
+// ============================================
+// ACCOUNTING: STOCK RECEIPTS (Purchases / stock in)
+// ============================================
+export const stockReceipts = pgTable("stock_receipts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  productId: varchar("product_id").notNull().references(() => accountingProducts.id),
+  supplierId: varchar("supplier_id").references(() => parties.id),
+  quantity: integer("quantity").notNull(),
+  unitCost: decimal("unit_cost", { precision: 12, scale: 2 }).notNull(),
+  totalCost: decimal("total_cost", { precision: 14, scale: 2 }).notNull(),
+  landedCost: decimal("landed_cost", { precision: 14, scale: 2 }),
+  landedUnitCost: decimal("landed_unit_cost", { precision: 12, scale: 2 }),
+  extraCosts: jsonb("extra_costs"),
+  paidNow: boolean("paid_now").default(false),
+  cashAccountId: varchar("cash_account_id").references(() => cashAccounts.id),
+  date: timestamp("date").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_stock_receipts_merchant").on(table.merchantId),
+  index("idx_stock_receipts_product").on(table.productId),
+  index("idx_stock_receipts_date").on(table.merchantId, table.date),
+]);
+
+export const insertStockReceiptSchema = createInsertSchema(stockReceipts).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertStockReceipt = z.infer<typeof insertStockReceiptSchema>;
+export type StockReceipt = typeof stockReceipts.$inferSelect;
+
+// ============================================
+// ACCOUNTING: SALES (Manual sell records)
+// ============================================
+export const sales = pgTable("sales", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  productId: varchar("product_id").notNull().references(() => accountingProducts.id),
+  customerId: varchar("customer_id").references(() => parties.id),
+  quantity: integer("quantity").notNull(),
+  unitPrice: decimal("unit_price", { precision: 12, scale: 2 }).notNull(),
+  totalRevenue: decimal("total_revenue", { precision: 14, scale: 2 }).notNull(),
+  cogsTotal: decimal("cogs_total", { precision: 14, scale: 2 }),
+  grossProfit: decimal("gross_profit", { precision: 14, scale: 2 }),
+  paidNow: boolean("paid_now").default(false),
+  cashAccountId: varchar("cash_account_id").references(() => cashAccounts.id),
+  date: timestamp("date").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_sales_merchant").on(table.merchantId),
+  index("idx_sales_product").on(table.productId),
+  index("idx_sales_date").on(table.merchantId, table.date),
+]);
+
+export const insertSaleSchema = createInsertSchema(sales).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertSale = z.infer<typeof insertSaleSchema>;
+export type Sale = typeof sales.$inferSelect;
+
+// ============================================
+// ACCOUNTING: COURIER SETTLEMENTS (COD / charge settlements)
+// ============================================
+export const courierSettlements = pgTable("courier_settlements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  courierPartyId: varchar("courier_party_id").notNull().references(() => parties.id),
+  type: varchar("type", { length: 30 }).notNull(),
+  amount: decimal("amount", { precision: 14, scale: 2 }).notNull(),
+  cashAccountId: varchar("cash_account_id").notNull().references(() => cashAccounts.id),
+  statementRef: varchar("statement_ref", { length: 255 }),
+  date: timestamp("date").notNull(),
+  notes: text("notes"),
+  matchedItems: jsonb("matched_items"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_courier_settlements_merchant").on(table.merchantId),
+  index("idx_courier_settlements_courier").on(table.courierPartyId),
+  index("idx_courier_settlements_date").on(table.merchantId, table.date),
+]);
+
+export const insertCourierSettlementSchema = createInsertSchema(courierSettlements).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertCourierSettlement = z.infer<typeof insertCourierSettlementSchema>;
+export type CourierSettlement = typeof courierSettlements.$inferSelect;
+
+// ============================================
+// ACCOUNTING: LEDGER ENTRIES (Double-entry backbone)
+// ============================================
+export const ledgerEntries = pgTable("ledger_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  date: timestamp("date").notNull(),
+  description: text("description"),
+  debitAccount: varchar("debit_account", { length: 100 }).notNull(),
+  creditAccount: varchar("credit_account", { length: 100 }).notNull(),
+  amount: decimal("amount", { precision: 14, scale: 2 }).notNull(),
+  referenceType: varchar("reference_type", { length: 30 }),
+  referenceId: varchar("reference_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_ledger_entries_merchant").on(table.merchantId),
+  index("idx_ledger_entries_date").on(table.merchantId, table.date),
+  index("idx_ledger_entries_ref").on(table.referenceType, table.referenceId),
+]);
+
+export const insertLedgerEntrySchema = createInsertSchema(ledgerEntries).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertLedgerEntry = z.infer<typeof insertLedgerEntrySchema>;
+export type LedgerEntry = typeof ledgerEntries.$inferSelect;
+
+// ============================================
+// ACCOUNTING: AUDIT LOG (Immutable event log)
+// ============================================
+export const accountingAuditLog = pgTable("accounting_audit_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  eventType: varchar("event_type", { length: 50 }).notNull(),
+  entityType: varchar("entity_type", { length: 30 }),
+  entityId: varchar("entity_id"),
+  description: text("description"),
+  balancesBefore: jsonb("balances_before"),
+  balancesAfter: jsonb("balances_after"),
+  metadata: jsonb("metadata"),
+  actorUserId: varchar("actor_user_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_acct_audit_merchant").on(table.merchantId),
+  index("idx_acct_audit_type").on(table.merchantId, table.eventType),
+  index("idx_acct_audit_date").on(table.merchantId, table.createdAt),
+]);
+
+export const insertAccountingAuditLogSchema = createInsertSchema(accountingAuditLog).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertAccountingAuditLog = z.infer<typeof insertAccountingAuditLogSchema>;
+export type AccountingAuditLogEntry = typeof accountingAuditLog.$inferSelect;
+
+// ============================================
+// ACCOUNTING: SETTINGS (per-merchant preferences)
+// ============================================
+export const accountingSettings = pgTable("accounting_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  advancedMode: boolean("advanced_mode").default(false),
+  defaultCashAccountId: varchar("default_cash_account_id"),
+  defaultCurrency: varchar("default_currency", { length: 10 }).default("PKR"),
+  openingBalancesSet: boolean("opening_balances_set").default(false),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("idx_acct_settings_merchant").on(table.merchantId),
+]);
+
+export const insertAccountingSettingsSchema = createInsertSchema(accountingSettings).omit({
+  id: true,
+  updatedAt: true,
+});
+export type InsertAccountingSettings = z.infer<typeof insertAccountingSettingsSchema>;
+export type AccountingSettings = typeof accountingSettings.$inferSelect;

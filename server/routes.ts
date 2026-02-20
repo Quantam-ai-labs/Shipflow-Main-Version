@@ -4,6 +4,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
 import { normalizePakistaniPhone } from "./utils/phone";
+import { registerAccountingRoutes } from "./routes/accounting";
 import {
   shipmentPrintRecords,
   users,
@@ -426,6 +427,7 @@ export async function registerRoutes(
   // Setup authentication
   await setupAuth(app);
   registerAuthRoutes(app);
+  registerAccountingRoutes(app);
 
   // Seed demo data on startup
   await storage.seedDemoData();

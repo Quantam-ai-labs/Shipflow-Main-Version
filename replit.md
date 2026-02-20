@@ -57,12 +57,24 @@ Preferred communication style: Simple, everyday language.
 - **Webhook Resilience**: All webhook endpoints respond 200 immediately before processing, preventing Shopify from removing webhooks due to timeouts. Webhook health check API and re-register UI button in Integrations page.
 - **Product & Inventory Management**: Shopify product sync via `products` table. Stores product title, variants (with SKU, price, inventory per variant), images, tags, vendor, type, and total inventory. Synced via `POST /api/products/sync` endpoint using paginated Shopify Admin API calls. Products page (`/products`) shows searchable/filterable product catalog with inventory levels, variant details, and product images. Order line items display product thumbnails captured during order sync.
 - **Order Detail Layout**: Shopify-style layout with Order Summary (line items with product thumbnails, pricing breakdown) in the main content area and Customer Details (name, phone, email, shipping address) in the right sidebar.
-- **Accounting & Finance Module**: Comprehensive accounting section with 4 pages under collapsible "Accounting" sidebar group:
-  - **Financial Dashboard** (`/financial-dashboard`): Overview with revenue (from delivered orders), total expenses, net profit/loss, outstanding courier dues, monthly expense charts (recharts), expense category breakdown (pie chart), stock overview, and courier dues summary.
-  - **Expense Tracker** (`/expense-tracker`): Full CRUD for business expenses with categories (Rent, Salaries, Utilities, Marketing, Packaging, Shipping, Courier Fees, Returns & Refunds, Office Supplies, Software & Tools, Taxes, Miscellaneous), payment methods, recurring expense support, date filtering, and running totals.
-  - **Stock Ledger** (`/stock-ledger`): Track incoming, outgoing, and returning stock with product names, SKUs, quantities, unit prices, total values, and suppliers. Summary cards show net stock position.
-  - **Courier Dues** (`/courier-dues`): Track payables/receivables per courier (Leopards, PostEx, TCS) with status tracking (pending/partial/paid/overdue), quick "Mark as Paid" action, and settlement history.
-  - Database tables: `expenses`, `stock_ledger`, `courier_dues` - all scoped by `merchantId` with proper indexes.
+- **Accounting & Finance Module**: Comprehensive Vyapar/QuickBooks-like accounting system with double-entry ledger backbone, 19 dedicated pages under collapsible "Accounting" sidebar group with sub-sections:
+  - **Overview** (`/accounting`): Dashboard with Cash in Hand, Money Coming, Money Owed, Profit, Stock Value, Working Capital summary cards + Recent Activity feed.
+  - **Money In/Out** (`/accounting/money`): Two-button (Money In/Money Out) cash flow management with 5 Money Out intents (Pay Existing Expense, New Expense, Pay Party, Transfer, Courier Settlement). Transaction history table.
+  - **Parties** (`/accounting/parties`): Customer/Supplier/Courier party management with balance tracking, search, and type filters.
+  - **Products** (`/accounting/products`): Inventory management with moving average cost, quantity tracking.
+  - **Add Stock** (`/accounting/stock-receipts`): Stock receipt recording with landed cost (unit cost + extra costs), supplier linking, cash account deduction.
+  - **Sell** (`/accounting/sales`): Sales recording with automatic COGS calculation based on weighted average cost, margin display.
+  - **Expense History** (`/accounting/expenses`): All expenses with partial payment status tracking (paid/partial/unpaid).
+  - **Needs Payment** (`/accounting/expenses-unpaid`): Unpaid expenses with inline Pay button, create unpaid expense flow.
+  - **COD Receivable** (`/accounting/cod-receivable`): Delivered shipments pending COD collection from couriers.
+  - **Courier Payable** (`/accounting/courier-payable`): Amounts owed to couriers for shipping services.
+  - **Settlements** (`/accounting/settlements`): Courier settlement recording and reconciliation.
+  - **Reports**: Profit & Loss, Balance Snapshot, Cash Flow (with recharts), Stock Report, Party Balances.
+  - **Advanced** (visible in Advanced Mode): Ledger view, Trial Balance, Cash Accounts management.
+  - **Settings** (`/accounting/settings`): Simple/Advanced mode toggle, financial year start, currency preferences.
+  - Backend: 40+ API endpoints in `server/routes/accounting.ts` with atomic transactions, immutable ledger entries, and audit logging.
+  - Database tables: `parties`, `partyBalances`, `cashAccounts`, `cashMovements`, `expenseTypes`, `expensePayments`, `accountingProducts`, `stockReceipts`, `sales`, `courierSettlements`, `ledgerEntries`, `accountingAuditLog`, `accountingSettings` - all scoped by `merchantId`.
+  - Legacy pages still accessible: Financial Dashboard (`/financial-dashboard`), Expense Tracker (`/expense-tracker`), Stock Ledger (`/stock-ledger`), Courier Dues (`/courier-dues`).
 
 ## External Dependencies
 
