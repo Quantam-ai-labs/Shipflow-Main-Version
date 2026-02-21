@@ -232,9 +232,6 @@ async function drawSingleAirwayBill(
   const headerH = 20;
   const row1H = 120;
   const remarksH = 20;
-  const productsH = 40;
-  const totalH = headerH + row1H + 25 + remarksH + productsH;
-  const bottomY = topY - totalH;
 
   const col1W = w * 0.34;
   const col2W = w * 0.33;
@@ -243,16 +240,6 @@ async function drawSingleAirwayBill(
   const col1X = x;
   const col2X = x + col1W;
   const col3X = x + col1W + col2W;
-
-  // Draw Main Box Border
-  page.drawRectangle({
-    x: x,
-    y: bottomY,
-    width: w,
-    height: totalH,
-    borderColor: BLACK,
-    borderWidth: 1,
-  });
 
   // Vertical Lines
   page.drawLine({
@@ -727,9 +714,7 @@ async function drawSingleAirwayBill(
   );
   let prodText = "";
   if (data.itemsSummary && data.itemsSummary.trim()) {
-    prodText = data.itemsSummary
-      .replace(/^\[\s*/, "")
-      .replace(/\s*\]$/, "");
+    prodText = data.itemsSummary.replace(/^\[\s*/, "").replace(/\s*\]$/, "");
   } else if ((data as any).items?.length) {
     prodText = (data as any).items
       .map((i: any) => i.name || i.title || i.sku)
@@ -744,10 +729,33 @@ async function drawSingleAirwayBill(
     prodText,
     font,
     8,
-    w - (pad + 40) - pad,  // available width
-    3                     // max lines (you can increase)
+    w - (pad + 40) - pad,
+    1000, // large number = effectively unlimited
   );
+  const lineHeight = 9;
+  const basePadding = 15;
 
+  const productsH = Math.max(
+    40,
+    productLines.length * lineHeight + basePadding,
+  );
+  const totalH = headerH + row1H + 25 + remarksH + productsH;
+  const bottomY = topY - totalH;
+
+  const minLines = 3;
+
+  while (productLines.length < minLines) {
+    productLines.push("");
+  }
+  // Draw Main Box Border
+  page.drawRectangle({
+    x: x,
+    y: bottomY,
+    width: w,
+    height: totalH,
+    borderColor: BLACK,
+    borderWidth: 1,
+  });
   let prodY = productsTopY - 13;
 
   for (const line of productLines) {
@@ -781,7 +789,15 @@ export async function generateAirwayBillPdfBuffer(
     const pdfDoc = await PDFDocument.create();
     const page = pdfDoc.addPage([A4_WIDTH, A4_HEIGHT]);
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-    drawTextSafe(page, font, "No orders to generate.", A4_WIDTH / 2 - 60, A4_HEIGHT / 2, 12, BLACK);
+    drawTextSafe(
+      page,
+      font,
+      "No orders to generate.",
+      A4_WIDTH / 2 - 60,
+      A4_HEIGHT / 2,
+      12,
+      BLACK,
+    );
     return Buffer.from(await pdfDoc.save());
   }
 
@@ -798,7 +814,15 @@ export async function generateAirwayBillPdfBuffer(
 
     const position = i % 3;
     const topY = A4_HEIGHT - MARGIN_TOP - position * (BILL_HEIGHT + GAP_Y);
-    await drawSingleAirwayBill(currentPage, pdfDoc, font, boldFont, bills[i], MARGIN_X, topY);
+    await drawSingleAirwayBill(
+      currentPage,
+      pdfDoc,
+      font,
+      boldFont,
+      bills[i],
+      MARGIN_X,
+      topY,
+    );
 
     if (position < 2 && i < bills.length - 1) {
       const cutLineY = topY - BILL_HEIGHT - GAP_Y / 2;
@@ -820,7 +844,15 @@ export async function generateAirwayBillPdf(
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
   const page = pdfDoc.addPage([A4_WIDTH, A4_HEIGHT]);
-  await drawSingleAirwayBill(page, pdfDoc, font, boldFont, data, MARGIN_X, A4_HEIGHT - MARGIN_TOP);
+  await drawSingleAirwayBill(
+    page,
+    pdfDoc,
+    font,
+    boldFont,
+    data,
+    MARGIN_X,
+    A4_HEIGHT - MARGIN_TOP,
+  );
 
   const pdfBytes = await pdfDoc.save();
   const filename = `awb_${data.trackingNumber}_${Date.now()}.pdf`;
@@ -841,7 +873,15 @@ export async function generateMultiAirwayBillPdf(
 
   if (bills.length === 0) {
     const page = pdfDoc.addPage([A4_WIDTH, A4_HEIGHT]);
-    drawTextSafe(page, font, "No orders to generate.", A4_WIDTH / 2 - 60, A4_HEIGHT / 2, 12, BLACK);
+    drawTextSafe(
+      page,
+      font,
+      "No orders to generate.",
+      A4_WIDTH / 2 - 60,
+      A4_HEIGHT / 2,
+      12,
+      BLACK,
+    );
     const pdfBytes = await pdfDoc.save();
     const filename = `awb_batch_empty_${Date.now()}.pdf`;
     const filepath = path.join(PDF_DIR, filename);
@@ -858,7 +898,15 @@ export async function generateMultiAirwayBillPdf(
 
     const position = i % 3;
     const topY = A4_HEIGHT - MARGIN_TOP - position * (BILL_HEIGHT + GAP_Y);
-    await drawSingleAirwayBill(currentPage, pdfDoc, font, boldFont, bills[i], MARGIN_X, topY);
+    await drawSingleAirwayBill(
+      currentPage,
+      pdfDoc,
+      font,
+      boldFont,
+      bills[i],
+      MARGIN_X,
+      topY,
+    );
 
     if (position < 2 && i < bills.length - 1) {
       const cutLineY = topY - BILL_HEIGHT - GAP_Y / 2;
