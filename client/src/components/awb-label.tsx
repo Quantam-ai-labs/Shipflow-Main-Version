@@ -243,7 +243,7 @@ export function AwbLabel({ data }: AwbLabelProps) {
       {/* Remarks Row */}
       <div style={{ borderBottom: B, padding: "3px 5px" }}>
         <span style={{ fontWeight: 700, fontSize: "8px" }}>Remarks: </span>
-        <span style={{ fontSize: "8px" }}>- {data.remark || ""}</span>
+        <span style={{ fontSize: "8px" }}>- {data.remark || "handle with care"}</span>
       </div>
 
       {/* Products Row */}

@@ -712,7 +712,7 @@ async function drawSingleAirwayBill(
   drawTextSafe(
     page,
     font,
-    `- ${data.remarks}`,
+    `- ${data.remarks || "handle with care"}`,
     x + pad + 40,
     remarksTopY - 13,
     8,
