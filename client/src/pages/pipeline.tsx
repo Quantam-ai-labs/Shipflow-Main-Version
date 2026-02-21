@@ -1765,8 +1765,8 @@ export default function Pipeline() {
                         <span className="font-medium">{r.orderNumber}</span>
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-green-700 dark:text-green-400">{r.trackingNumber}</span>
-                          {r.slipUrl && (
-                            <a href={r.slipUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                          {r.orderId && (
+                            <a href={`/api/print/native-slip/${r.orderId}.pdf`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
                               <ExternalLink className="w-3 h-3" />
                             </a>
                           )}

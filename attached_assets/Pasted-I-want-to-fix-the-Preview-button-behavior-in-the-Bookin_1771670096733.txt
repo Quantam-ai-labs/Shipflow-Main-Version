@@ -1,0 +1,97 @@
+I want to fix the Preview button behavior in the Booking Results section.
+
+IMPORTANT:
+- Do NOT change UI design, styling, layout, icons, or structure
+- Only change the functionality of the Preview button
+- Do NOT remove the button, only update its logic
+
+========================================
+CURRENT BEHAVIOR (WRONG)
+========================================
+
+- The Preview button is wrapped inside an <a> tag
+- It opens a courier API URL (awb_url)
+- It shows courier-generated PDF
+
+========================================
+EXPECTED BEHAVIOR (CORRECT)
+========================================
+
+- The Preview button must open OUR CUSTOM GENERATED PDF
+- It must NOT open any external courier URL
+- It must use the same PDF logic as "Download Courier AWBs"
+
+========================================
+REQUIRED CHANGES
+========================================
+
+1. REMOVE external link behavior
+- Remove <a href="..."> wrapper completely
+- Remove any usage of:
+    window.open(awb_url)
+    href={awb_url}
+    target="_blank"
+
+2. REPLACE with button click handler
+
+- Use:
+    onClick={() => handlePreview(order)}
+
+3. CREATE handlePreview FUNCTION
+
+- This function should:
+    - Generate PDF using existing AWB PDF function
+    - Pass selected order(s)
+    - Open PDF in new tab
+
+Example:
+
+const handlePreview = (order) => {
+    const doc = generateAWBPDF([order]);
+
+    const blob = doc.output("blob");
+    const url = URL.createObjectURL(blob);
+
+    window.open(url);
+};
+
+========================================
+PDF LOGIC (IMPORTANT)
+========================================
+
+Use the SAME function as "Download Courier AWBs"
+
+Rules:
+- If total invoices <= 3 → 1 page
+- If total invoices > 3 → max 3 invoices per page
+
+Pagination logic:
+
+if (index !== 0 && index % 3 === 0) {
+    doc.addPage();
+}
+
+Position logic:
+
+position = index % 3
+
+- 0 → top
+- 1 → middle
+- 2 → bottom
+
+========================================
+CONSISTENCY RULE
+========================================
+
+- DO NOT duplicate PDF logic
+- Reuse existing generateAWBPDF function
+- Ensure Preview and Download use SAME logic
+
+========================================
+FINAL RESULT
+========================================
+
+- Clicking Preview button opens custom PDF
+- Courier API PDF is no longer used
+- Layout remains unchanged
+- Pagination rules (3 per page) are applied
