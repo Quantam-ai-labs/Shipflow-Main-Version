@@ -264,6 +264,22 @@ async function drawSingleAirwayBill(
     color: BLACK,
   });
 
+  const remarksTopY = row1TopY - row1H - 35;
+  page.drawLine({
+    start: { x: x, y: remarksTopY },
+    end: { x: x + w, y: remarksTopY },
+    thickness: 1,
+    color: BLACK,
+  });
+
+  const productsTopY = remarksTopY - remarksH;
+  page.drawLine({
+    start: { x: x, y: productsTopY },
+    end: { x: x + w, y: productsTopY },
+    thickness: 1,
+    color: BLACK,
+  });
+
   // --- Headers ---
   const headerTextY = topY - 14;
   drawTextSafe(
@@ -734,6 +750,8 @@ async function drawSingleAirwayBill(
   const bottomY = topY - totalH;
 
   // NOW recalculate dependent Y positions
+  const remarksTopY = row1TopY - row1H - 35;
+  const productsTopY = remarksTopY - remarksH;
   // Draw Main Box Border
   page.drawRectangle({
     x: x,
