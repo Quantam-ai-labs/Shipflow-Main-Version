@@ -4378,7 +4378,7 @@ export async function registerRoutes(
         merchantCreds,
       );
 
-      const requestedScopes = (process.env.SHOPIFY_APP_SCOPES || 'read_orders,write_orders,read_fulfillments,write_fulfillments,write_webhooks').split(',').map(s => s.trim());
+      const requestedScopes = (process.env.SHOPIFY_APP_SCOPES || 'read_orders,write_orders,read_fulfillments,write_fulfillments,write_webhooks,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders').split(',').map(s => s.trim());
       const grantedScopes = scope ? scope.split(',').map((s: string) => s.trim()) : [];
       const isScopeSatisfied = (required: string, granted: string[]): boolean => {
         if (granted.includes(required)) return true;
@@ -4694,6 +4694,19 @@ export async function registerRoutes(
         results.readShop = { status: shopRes.status, ok: shopRes.ok };
       } catch (e: any) {
         results.readShop = { error: e.message };
+      }
+
+      try {
+        const foRes = await fetch(
+          `https://${store.shopDomain}/admin/api/2025-01/fulfillment_orders.json?status=open&limit=1`,
+          { headers: { "X-Shopify-Access-Token": accessToken, "Content-Type": "application/json" } }
+        );
+        results.readFulfillmentOrders = { status: foRes.status, ok: foRes.ok };
+        if (!foRes.ok) {
+          results.readFulfillmentOrders.body = await foRes.text();
+        }
+      } catch (e: any) {
+        results.readFulfillmentOrders = { error: e.message };
       }
 
       console.log("[Shopify Token Test]", JSON.stringify(results, null, 2));
@@ -6406,6 +6419,9 @@ export async function registerRoutes(
         );
         const courierNorm = normalizeCourierName(order.courierName || "");
 
+        const lineItems = Array.isArray(order.lineItems) ? order.lineItems : [];
+        const orderItemsSummary = order.itemSummary || lineItems.map((li: any) => `${li.title || li.name || "Item"} x${li.quantity || 1}`).join(", ");
+
         let result;
         if (courierNorm === "leopards") {
           const creds = await getCourierCredentials(merchantId, "leopards");
@@ -6414,9 +6430,9 @@ export async function registerRoutes(
               apiKey: creds.apiKey,
               apiPassword: creds.apiSecret,
               trackingNumber: order.courierTracking,
-            });
+            }, { itemsSummary: orderItemsSummary, quantity: order.totalQuantity || 1 });
           } else if (order.courierSlipUrl) {
-            result = await fetchLeopardsSlip(order.courierSlipUrl);
+            result = await fetchLeopardsSlip(order.courierSlipUrl, undefined, { itemsSummary: orderItemsSummary, quantity: order.totalQuantity || 1 });
           } else {
             return res
               .status(404)
@@ -6561,6 +6577,10 @@ export async function registerRoutes(
           if (courierNorm === "leopards") {
             const trackingNum = item.trackingNumber;
             const slipUrl = item.slipUrl;
+            const order = await storage.getOrderById(merchantId, item.orderId);
+            const bulkLineItems = Array.isArray(order?.lineItems) ? order.lineItems : [];
+            const bulkItemsSummary = order?.itemSummary || bulkLineItems.map((li: any) => `${li.title || li.name || "Item"} x${li.quantity || 1}`).join(", ");
+            const bulkOrderCtx = { itemsSummary: bulkItemsSummary, quantity: order?.totalQuantity || 1 };
             if (
               leopardsCreds?.apiKey &&
               leopardsCreds?.apiSecret &&
@@ -6570,16 +6590,12 @@ export async function registerRoutes(
                 apiKey: leopardsCreds.apiKey,
                 apiPassword: leopardsCreds.apiSecret,
                 trackingNumber: trackingNum,
-              });
+              }, bulkOrderCtx);
             } else if (slipUrl) {
-              result = await fetchLeopardsSlip(slipUrl);
+              result = await fetchLeopardsSlip(slipUrl, undefined, bulkOrderCtx);
             } else {
-              const order = await storage.getOrderById(
-                merchantId,
-                item.orderId,
-              );
               if (order?.courierSlipUrl) {
-                result = await fetchLeopardsSlip(order.courierSlipUrl);
+                result = await fetchLeopardsSlip(order.courierSlipUrl, undefined, bulkOrderCtx);
               } else {
                 errors.push(`${item.orderNumber}: No slip URL or credentials`);
                 continue;

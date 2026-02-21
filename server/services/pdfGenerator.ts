@@ -718,8 +718,16 @@ async function drawSingleAirwayBill(
   );
 
   // --- Products Row ---
+  drawTextSafe(
+    page,
+    boldFont,
+    "Products:",
+    x + pad,
+    productsTopY - 13,
+    8,
+    BLACK,
+  );
   let prodText = "";
-
   if (data.itemsSummary && data.itemsSummary.trim()) {
     prodText = data.itemsSummary
       .replace(/^\[\s*/, "")
@@ -729,19 +737,12 @@ async function drawSingleAirwayBill(
       .map((i: any) => i.name || i.title || i.sku)
       .filter(Boolean)
       .join(", ");
-  } else {
+  }
+  if (!prodText || !prodText.trim()) {
     prodText = "-";
   }
 
-  drawTextSafe(
-    page,
-    font,
-    truncate(prodText, 120),
-    x + pad + 40,
-    productsTopY - 13,
-    8,
-    BLACK,
-  );
+  drawTextSafe(page, font, truncate(prodText, 120), x + pad + 40, productsTopY - 13, 8, BLACK);
 }
 
 export async function generateAirwayBillPdfBuffer(
