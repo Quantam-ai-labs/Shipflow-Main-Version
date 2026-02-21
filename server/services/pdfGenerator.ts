@@ -1164,8 +1164,3 @@ export function getPdfPath(filepath: string): string | null {
   if (fs.existsSync(filepath)) return filepath;
   return null;
 }
-
-
-read whole file
-and tell me if need to change leopard courier pdf deisgn, 
-cna you help me?
