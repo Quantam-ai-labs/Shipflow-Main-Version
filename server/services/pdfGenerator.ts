@@ -160,10 +160,6 @@ function wrapText(
     if (testWidth > maxWidth && currentLine) {
       lines.push(currentLine);
       if (lines.length >= maxLines) {
-        lines[lines.length - 1] = truncate(
-          lines[lines.length - 1],
-          lines[lines.length - 1].length,
-        );
         return lines;
       }
       currentLine = word;
@@ -743,7 +739,21 @@ async function drawSingleAirwayBill(
   if (!prodText || !prodText.trim()) {
     prodText = "-";
   }
-  drawTextSafe(page, font, prodText, x + pad + 40, productsTopY - 13, 8, BLACK);
+  // Wrap products text instead of single line
+  const productLines = wrapText(
+    prodText,
+    font,
+    8,
+    w - (pad + 40) - pad,  // available width
+    3                     // max lines (you can increase)
+  );
+
+  let prodY = productsTopY - 13;
+
+  for (const line of productLines) {
+    drawTextSafe(page, font, line, x + pad + 40, prodY, 8, BLACK);
+    prodY -= 9;
+  }
 }
 
 function drawDashedCutLine(page: PDFPage, y: number) {
