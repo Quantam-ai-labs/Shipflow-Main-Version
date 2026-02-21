@@ -1,0 +1,72 @@
+I am facing two separate issues in my order booking and PDF generation system.
+
+IMPORTANT:
+Do NOT change UI design, layout, or styling. Only fix logic.
+
+========================================
+ISSUE 1: MULTIPLE ORDER BOOKING BUG
+========================================
+
+Problem:
+When I select multiple orders (e.g., 25165 and 24997) and click "Book",
+only ONE order moves to the "Booked" section.
+The other remains in "Ready to Ship".
+
+Expected Behavior:
+- ALL selected orders must be booked
+- ALL should move to "Booked" section
+- NONE should remain in "Ready to Ship"
+
+Fix Requirements:
+1. Ensure all selected order IDs are processed
+2. Loop through all selected orders properly
+3. If using async calls, use Promise.all OR proper async/await loop
+4. Ensure state updates correctly after booking
+5. Ensure backend API updates ALL orders, not just one
+6. Prevent partial success (either all succeed or show error)
+
+Example:
+Selected Orders: [25165, 24997]
+After booking:
+- Both should be in "Booked"
+- None should remain in "Ready to Ship"
+
+========================================
+ISSUE 2: PDF GENERATION (MULTIPLE INVOICES)
+========================================
+
+Problem:
+When generating PDF for multiple orders,
+each invoice is placed on a separate page.
+
+Expected Behavior:
+- MAXIMUM 3 invoices per page
+
+Rules:
+- 1 order → 1 page → 1 invoice
+- 2 orders → 1 page → 2 invoices
+- 3 orders → 1 page → 3 invoices
+- 4 orders → 2 pages (3 on first, 1 on second)
+- 5 orders → 2 pages (3 + 2)
+- 6 orders → 2 pages (3 + 3)
+
+Fix Requirements:
+1. Loop through all orders
+2. Track index of each invoice
+3. After every 3 invoices, add a page break
+4. Do NOT add page break after every invoice
+5. Ensure each invoice remains intact (no split across pages)
+
+Implementation Hint:
+- Use condition: if (index % 3 === 0 && index !== 0) → add new page
+- Position invoices using vertical offsets (y position)
+- Ensure spacing between invoices
+
+========================================
+OUTPUT REQUIREMENT
+========================================
+
+- Fix booking logic so ALL selected orders are processed
+- Fix PDF generation to group 3 invoices per page
+- Keep code clean and reusable
+- Do not change design/layout

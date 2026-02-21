@@ -1224,6 +1224,14 @@ export async function registerRoutes(
           shopifyFulfillmentId: null,
         });
 
+        const existingBookingJob = await storage.getBookingJob(merchantId, orderId, oldCourierName || "");
+        if (existingBookingJob) {
+          await storage.updateBookingJob(existingBookingJob.id, {
+            status: "cancelled",
+            errorMessage: "Booking cancelled by user",
+          });
+        }
+
         await storage.createOrderChangeLog({
           orderId,
           merchantId,
@@ -5404,7 +5412,7 @@ export async function registerRoutes(
         }
 
         if (
-          order.courierTracking ||
+          (order.courierTracking && order.workflowStatus === "BOOKED") ||
           (bookedOrderIds.has(order.id) && order.workflowStatus === "BOOKED")
         ) {
           const existingJob = existingJobs.find(
@@ -5699,7 +5707,9 @@ export async function registerRoutes(
         if (
           existingJob &&
           existingJob.status === "success" &&
-          existingJob.trackingNumber
+          existingJob.trackingNumber &&
+          order.courierTracking &&
+          order.workflowStatus === "BOOKED"
         ) {
           results.push({
             orderId: order.id,
