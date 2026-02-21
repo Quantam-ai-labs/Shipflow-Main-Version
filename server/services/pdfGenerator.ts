@@ -204,10 +204,12 @@ export interface AirwayBillData {
 const A4_WIDTH = 595.28;
 const A4_HEIGHT = 841.89;
 const MARGIN_X = 18;
-const MARGIN_TOP = 16;
+const MARGIN_TOP = 20;
+const MARGIN_BOTTOM = 20;
 const BILL_WIDTH = A4_WIDTH - MARGIN_X * 2;
-const BILL_HEIGHT = 260;
-const GAP_Y = 6;
+const AVAILABLE_H = A4_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM;
+const GAP_Y = 15;
+const BILL_HEIGHT = Math.floor((AVAILABLE_H - GAP_Y * 2) / 3);
 
 const BLACK = rgb(0.05, 0.05, 0.05);
 const DARK = rgb(0.15, 0.15, 0.15);
@@ -741,8 +743,25 @@ async function drawSingleAirwayBill(
   if (!prodText || !prodText.trim()) {
     prodText = "-";
   }
-
   drawTextSafe(page, font, truncate(prodText, 120), x + pad + 40, productsTopY - 13, 8, BLACK);
+}
+
+function drawDashedCutLine(page: PDFPage, y: number) {
+  const dashLen = 6;
+  const gapLen = 4;
+  const lineColor = rgb(0.55, 0.55, 0.55);
+  let cx = MARGIN_X;
+  const endX = A4_WIDTH - MARGIN_X;
+  while (cx < endX) {
+    const segEnd = Math.min(cx + dashLen, endX);
+    page.drawLine({
+      start: { x: cx, y },
+      end: { x: segEnd, y },
+      thickness: 0.5,
+      color: lineColor,
+    });
+    cx = segEnd + gapLen;
+  }
 }
 
 export async function generateAirwayBillPdfBuffer(
@@ -752,28 +771,28 @@ export async function generateAirwayBillPdfBuffer(
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-  const billsPerPage = 3;
+  const copiesPerBill = 3;
 
-  for (let i = 0; i < bills.length; i++) {
-    const posOnPage = i % billsPerPage;
-    let page: PDFPage;
+  for (const bill of bills) {
+    const page = pdfDoc.addPage([A4_WIDTH, A4_HEIGHT]);
 
-    if (posOnPage === 0) {
-      page = pdfDoc.addPage([A4_WIDTH, A4_HEIGHT]);
-    } else {
-      page = pdfDoc.getPages()[pdfDoc.getPageCount() - 1];
+    for (let copy = 0; copy < copiesPerBill; copy++) {
+      const topY = A4_HEIGHT - MARGIN_TOP - copy * (BILL_HEIGHT + GAP_Y);
+      await drawSingleAirwayBill(
+        page,
+        pdfDoc,
+        font,
+        boldFont,
+        bill,
+        MARGIN_X,
+        topY,
+      );
+
+      if (copy < copiesPerBill - 1) {
+        const cutLineY = topY - BILL_HEIGHT - GAP_Y / 2;
+        drawDashedCutLine(page, cutLineY);
+      }
     }
-
-    const topY = A4_HEIGHT - MARGIN_TOP - posOnPage * (BILL_HEIGHT + GAP_Y);
-    await drawSingleAirwayBill(
-      page,
-      pdfDoc,
-      font,
-      boldFont,
-      bills[i],
-      MARGIN_X,
-      topY,
-    );
   }
 
   const pdfBytes = await pdfDoc.save();
@@ -790,15 +809,22 @@ export async function generateAirwayBillPdf(
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
   const page = pdfDoc.addPage([A4_WIDTH, A4_HEIGHT]);
-  await drawSingleAirwayBill(
-    page,
-    pdfDoc,
-    font,
-    boldFont,
-    data,
-    MARGIN_X,
-    A4_HEIGHT - MARGIN_TOP,
-  );
+  for (let copy = 0; copy < 3; copy++) {
+    const topY = A4_HEIGHT - MARGIN_TOP - copy * (BILL_HEIGHT + GAP_Y);
+    await drawSingleAirwayBill(
+      page,
+      pdfDoc,
+      font,
+      boldFont,
+      data,
+      MARGIN_X,
+      topY,
+    );
+    if (copy < 2) {
+      const cutLineY = topY - BILL_HEIGHT - GAP_Y / 2;
+      drawDashedCutLine(page, cutLineY);
+    }
+  }
 
   const pdfBytes = await pdfDoc.save();
   const filename = `awb_${data.trackingNumber}_${Date.now()}.pdf`;
@@ -817,28 +843,24 @@ export async function generateMultiAirwayBillPdf(
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-  const billsPerPage = 3;
-
-  for (let i = 0; i < bills.length; i++) {
-    const posOnPage = i % billsPerPage;
-    let page: PDFPage;
-
-    if (posOnPage === 0) {
-      page = pdfDoc.addPage([A4_WIDTH, A4_HEIGHT]);
-    } else {
-      page = pdfDoc.getPages()[pdfDoc.getPageCount() - 1];
+  for (const bill of bills) {
+    const page = pdfDoc.addPage([A4_WIDTH, A4_HEIGHT]);
+    for (let copy = 0; copy < 3; copy++) {
+      const topY = A4_HEIGHT - MARGIN_TOP - copy * (BILL_HEIGHT + GAP_Y);
+      await drawSingleAirwayBill(
+        page,
+        pdfDoc,
+        font,
+        boldFont,
+        bill,
+        MARGIN_X,
+        topY,
+      );
+      if (copy < 2) {
+        const cutLineY = topY - BILL_HEIGHT - GAP_Y / 2;
+        drawDashedCutLine(page, cutLineY);
+      }
     }
-
-    const topY = A4_HEIGHT - MARGIN_TOP - posOnPage * (BILL_HEIGHT + GAP_Y);
-    await drawSingleAirwayBill(
-      page,
-      pdfDoc,
-      font,
-      boldFont,
-      bills[i],
-      MARGIN_X,
-      topY,
-    );
   }
 
   const pdfBytes = await pdfDoc.save();
