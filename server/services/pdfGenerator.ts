@@ -724,8 +724,6 @@ async function drawSingleAirwayBill(
   if (!prodText || !prodText.trim()) {
     prodText = "-";
   }
-  prodText =
-    "abcdefg hijklmnop qrs tuvwxyzabcdefghijklm nopqr stuvwxy zabcdefghijklmnopqrst  uvwxyzabcde fghijklmnopqr stuv wxyzabcd efghij klmnopq rstuvwxyzabcdefghijklm nopqrstuvwxyzabcdefghijklmnopqr stuvwxyzabcdefghijklmnop qrstuvwxyzabcdefghijklmnopqrstuvwx yzabcdefghijklm nopqrstu vwxyzabcdefghij klmnopqrst uvwxyzabcdefghijklmnopqrs tuvwxyzabcdefghijklmnopqrstu vwxyzabcdefghijklmno pqrstuvwxy zabcdefghijk lmnopqrs tuvwxyzabcdefghijkl mnopqrstuvwxyzabcdefghijklmnopqrstuvw xyzabcdefghijklm nopqrs tuvwxyzabcdefghijklmnop qrstu  vwxyzabcde fghijkl mnopqrstuv  wxyzabcdefghijklmn opqrstuvwxyzabcdefghijklmnopq  rstuvwxyzabc defghij klmno pqrstu vwxyzabcdefghijkl mnopqrstu vwxyzabc defghijklmnop qrst uvwxyzabcdefgh ijklmnopqrstuvwxyzabcdefghijk lmnopqrstuv wxyzabcdef ghijkl mnopqr stuvwxyzabcdefghijklmnopq rstuvwxyzabcdefghijklmnop qrstuvwxyza bcdefghijklmnopqr stuvwxyzabcdefghijklm nopqrst  uvwxyzabcdefghijklmno pqrstuvw xyzabcdefghijklmnopqrstuv wxyzabcdefghijklmnopqrstuvwx yzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz";
   // Wrap products text instead of single line
   const productLines = wrapText(
     prodText,
