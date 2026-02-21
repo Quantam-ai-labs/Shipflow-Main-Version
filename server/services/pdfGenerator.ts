@@ -725,7 +725,7 @@ async function drawSingleAirwayBill(
     prodText = "-";
   }
   prodText =
-    "abcdefghijklmnopqrst uvwxyzabcdefghijklm nopqrstu vwxyzabc defghijklm nopqrst uvwxyzabcdefghijklmno pqrstu vwxyzabc defghijklmnopq rstuvwx yzabcdef ghijk lmnopqrstuv  wxyzabcdefghijklmnopqrstuvwxyzabcdefghijk  lmnopq rst uvwxyzabcdefghijkl mnopqrstuvwxyzabc defghijklmnop qrstuvwx yzabcdef  ghijklmno pqrstuvwxyzabcdefghijklmnopqrs tuvwxyzabcdefghijklmnop qrstu vwxyzabcdefghijkl mnopq rstuvwxyzabcdefghijk lmn opqrstuvwxyzabcdefghi jklmnop qrstuv wxyzab cdefgh ijklmnopqrstuvwxyzabcdefghij klmnopqrstu  vwxyzabcdefghijk lmnopqrstuvwxyzabcdefghijklmn opqrst uvwxyzabcdefghijklmnopq rstuvwxyzabcdefghijklmn opqrst uvwxyzabc defghijklmnopqrstuvwxyzabcdefghijklmnop qrstuv wxyzabcdefghijklmnopqr  stuvwxyzabcdefghijklmn opqrstu vwxyzab cdefghijklm nopqrstuv  wxyzabcdefghijklmnopq rstuvwxyzabcdefghijklmno pqrstuvw xyzabcdefghijk lmnopqrstuvw xyzabcdefghijklm  nopqrstu vwxyzabcdefghijk  lmnopqrstuv wxyzabcdefghijklm  nopqrstuvwxyzabc defghijkl mnopqrstuvwxyzabcdefghijklmnopq rstuvwxyzabcdefg hijklmnopqr  stuvwxyzabcdefghij klmnopq rstuvwxyz";
+    "abcdefg hijklmnop qrs tuvwxyzabcdefghijklm nopqr stuvwxy zabcdefghijklmnopqrst  uvwxyzabcde fghijklmnopqr stuv wxyzabcd efghij klmnopq rstuvwxyzabcdefghijklm nopqrstuvwxyzabcdefghijklmnopqr stuvwxyzabcdefghijklmnop qrstuvwxyzabcdefghijklmnopqrstuvwx yzabcdefghijklm nopqrstu vwxyzabcdefghij klmnopqrst uvwxyzabcdefghijklmnopqrs tuvwxyzabcdefghijklmnopqrstu vwxyzabcdefghijklmno pqrstuvwxy zabcdefghijk lmnopqrs tuvwxyzabcdefghijkl mnopqrstuvwxyzabcdefghijklmnopqrstuvw xyzabcdefghijklm nopqrs tuvwxyzabcdefghijklmnop qrstu  vwxyzabcde fghijkl mnopqrstuv  wxyzabcdefghijklmn opqrstuvwxyzabcdefghijklmnopq  rstuvwxyzabc defghij klmno pqrstu vwxyzabcdefghijkl mnopqrstu vwxyzabc defghijklmnop qrst uvwxyzabcdefgh ijklmnopqrstuvwxyzabcdefghijk lmnopqrstuv wxyzabcdef ghijkl mnopqr stuvwxyzabcdefghijklmnopq rstuvwxyzabcdefghijklmnop qrstuvwxyza bcdefghijklmnopqr stuvwxyzabcdefghijklm nopqrst  uvwxyzabcdefghijklmno pqrstuvw xyzabcdefghijklmnopqrstuv wxyzabcdefghijklmnopqrstuvwx yzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz";
   // Wrap products text instead of single line
   const productLines = wrapText(
     prodText,
@@ -737,21 +737,18 @@ async function drawSingleAirwayBill(
   const lineHeight = 9;
   const basePadding = 15;
 
+  const productsH = Math.max(
+    40,
+    productLines.length * lineHeight + basePadding,
+  );
+  const totalH = headerH + row1H + 25 + remarksH + productsH;
+  const bottomY = topY - totalH;
+
   const minLines = 3;
+
   while (productLines.length < minLines) {
     productLines.push("");
   }
-
-  // Calculate dynamic products height
-  const productsH = productLines.length * lineHeight + basePadding;
-
-  // Recalculate layout positions dynamically
-  const totalH = headerH + row1H + 35 + remarksH + productsH;
-  const bottomY = topY - totalH;
-
-  // NOW recalculate dependent Y positions
-  const remarksTopY = row1TopY - row1H - 35;
-  const productsTopY = remarksTopY - remarksH;
   // Draw Main Box Border
   page.drawRectangle({
     x: x,
