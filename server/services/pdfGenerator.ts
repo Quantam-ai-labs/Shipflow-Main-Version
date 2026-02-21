@@ -737,9 +737,11 @@ async function drawSingleAirwayBill(
   const lineHeight = 9;
   const basePadding = 15;
 
+  const basePaddingTop = 15;
+  const basePaddingBottom = 10; // Add some bottom padding
   const productsH = Math.max(
     40,
-    productLines.length * lineHeight + basePadding,
+    productLines.length * lineHeight + basePaddingTop + basePaddingBottom,
   );
   const totalH = headerH + row1H + 25 + remarksH + productsH;
   const bottomY = topY - totalH;
