@@ -1292,7 +1292,8 @@ export async function registerRoutes(
         const errors: string[] = [];
 
         for (const order of bookedOrders) {
-          const courierDisplayName = order.courierName === "leopards" ? "Leopards Courier" : order.courierName === "postex" ? "PostEx" : order.courierName || "Unknown";
+          const cn = (order.courierName || "").toLowerCase();
+          const courierDisplayName = cn.includes("leopard") ? "Leopards Courier" : cn.includes("postex") ? "PostEx" : cn.includes("tcs") ? "TCS" : order.courierName || "Unknown";
           try {
             const result = await writeBackFulfillment(
               merchantId,
@@ -1303,6 +1304,7 @@ export async function registerRoutes(
             );
             if (result.success) {
               succeeded++;
+              await storage.updateOrder(merchantId, order.id, { bookingError: null });
             } else {
               failed++;
               errors.push(`${order.orderNumber}: ${result.error}`);
@@ -1311,6 +1313,7 @@ export async function registerRoutes(
             failed++;
             errors.push(`${order.orderNumber}: ${err.message}`);
           }
+          await new Promise(r => setTimeout(r, 500));
         }
 
         console.log(`[RetryFulfillment] Retried ${bookedOrders.length} orders: ${succeeded} succeeded, ${failed} failed`);
