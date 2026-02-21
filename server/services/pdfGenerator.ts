@@ -1,3 +1,20 @@
+import { PDFDocument, StandardFonts, rgb, PDFPage, PDFFont } from "pdf-lib";
+import bwipjs from "bwip-js";
+
+export interface AirwayBillData {
+  consigneeName: string;
+  consigneePhone: string;
+  consigneeAddress: string;
+  consigneeCity: string;
+  orderNumber: string;
+  merchantName: string;
+  merchantAddress: string;
+  codAmount: string | number;
+  courierName: string;
+  trackingNumber: string;
+  itemsSummary?: string;
+}
+
 // ================== CONSTANTS ==================
 const A4_WIDTH = 595.28;
 const A4_HEIGHT = 841.89;
@@ -7,6 +24,78 @@ const BILL_HEIGHT = 260;
 const GAP_Y = 6;
 
 const BLACK = rgb(0, 0, 0);
+
+// ================== HELPERS ==================
+function truncate(str: string, maxLen: number): string {
+  if (!str) return "-";
+  return str.length > maxLen ? str.substring(0, maxLen - 1) + "…" : str;
+}
+
+function drawTextSafe(
+  page: PDFPage,
+  font: PDFFont,
+  text: string,
+  x: number,
+  y: number,
+  size: number,
+) {
+  try {
+    page.drawText(text || "-", { x, y, size, font, color: BLACK });
+  } catch {
+    page.drawText("-", { x, y, size, font, color: BLACK });
+  }
+}
+
+function wrapText(
+  text: string,
+  font: PDFFont,
+  fontSize: number,
+  maxWidth: number,
+  maxLines: number,
+): string[] {
+  const words = (text || "-").split(/\s+/);
+  const lines: string[] = [];
+  let currentLine = "";
+
+  for (const word of words) {
+    const testLine = currentLine ? `${currentLine} ${word}` : word;
+    const width = font.widthOfTextAtSize(testLine, fontSize);
+    if (width > maxWidth && currentLine) {
+      lines.push(currentLine);
+      currentLine = word;
+      if (lines.length >= maxLines) break;
+    } else {
+      currentLine = testLine;
+    }
+  }
+  if (currentLine && lines.length < maxLines) {
+    lines.push(currentLine);
+  }
+  return lines;
+}
+
+async function generateBarcodePng(
+  text: string,
+  type: "code128" | "qrcode" = "code128",
+): Promise<Buffer | null> {
+  try {
+    if (!text) return null;
+    const opts: any = {
+      bcid: type,
+      text,
+      scale: 3,
+      includetext: type === "code128",
+      textsize: 8,
+    };
+    if (type === "qrcode") {
+      opts.eclevel = "M";
+    }
+    const png = await bwipjs.toBuffer(opts);
+    return Buffer.from(png);
+  } catch {
+    return null;
+  }
+}
 
 // ================== MAIN GENERATOR ==================
 export async function generateAirwayBillPdfBuffer(
