@@ -456,6 +456,27 @@ export default function Integrations() {
     },
   });
 
+  const retryFulfillmentMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/orders/retry-fulfillment-writeback", {});
+    },
+    onSuccess: async (res: any) => {
+      const data = await res.json();
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      toast({
+        title: "Fulfillment Retry Complete",
+        description: `${data.succeeded} succeeded, ${data.failed} failed out of ${data.retried} orders.`,
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to retry fulfillment write-backs.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const saveCourierMutation = useMutation({
     mutationFn: async (payload: { courierName: string; apiKey?: string; apiSecret?: string; accountNumber?: string; useEnvCredentials: boolean; settings?: Record<string, any> }) => {
       return apiRequest("POST", "/api/integrations/couriers", payload);
@@ -802,6 +823,15 @@ export default function Integrations() {
                 >
                   <RefreshCw className="w-4 h-4 mr-2" />
                   Re-authorize Permissions
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => retryFulfillmentMutation.mutate()}
+                  disabled={retryFulfillmentMutation.isPending}
+                  data-testid="button-retry-fulfillment"
+                >
+                  <RefreshCw className={`w-4 h-4 mr-2 ${retryFulfillmentMutation.isPending ? "animate-spin" : ""}`} />
+                  Retry Fulfillments
                 </Button>
                 <Button
                   variant="ghost"

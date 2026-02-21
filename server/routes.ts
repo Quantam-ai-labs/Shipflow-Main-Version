@@ -1258,6 +1258,77 @@ export async function registerRoutes(
   );
 
   app.post(
+    "/api/orders/retry-fulfillment-writeback",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+
+        const bookedOrders: any[] = [];
+        let page = 1;
+        const pageSize = 200;
+        while (true) {
+          const { orders: batch } = await storage.getOrders(merchantId, {
+            workflowStatus: "BOOKED",
+            page,
+            pageSize,
+          });
+          for (const o of batch) {
+            if (o.courierTracking && o.shopifyOrderId && !o.shopifyFulfillmentId) {
+              bookedOrders.push(o);
+            }
+          }
+          if (batch.length < pageSize) break;
+          page++;
+        }
+
+        if (bookedOrders.length === 0) {
+          return res.json({ message: "No booked orders need fulfillment retry", retried: 0, succeeded: 0, failed: 0 });
+        }
+
+        let succeeded = 0;
+        let failed = 0;
+        const errors: string[] = [];
+
+        for (const order of bookedOrders) {
+          const courierDisplayName = order.courierName === "leopards" ? "Leopards Courier" : order.courierName === "postex" ? "PostEx" : order.courierName || "Unknown";
+          try {
+            const result = await writeBackFulfillment(
+              merchantId,
+              order.id,
+              order.shopifyOrderId,
+              order.courierTracking,
+              courierDisplayName,
+            );
+            if (result.success) {
+              succeeded++;
+            } else {
+              failed++;
+              errors.push(`${order.orderNumber}: ${result.error}`);
+            }
+          } catch (err: any) {
+            failed++;
+            errors.push(`${order.orderNumber}: ${err.message}`);
+          }
+        }
+
+        console.log(`[RetryFulfillment] Retried ${bookedOrders.length} orders: ${succeeded} succeeded, ${failed} failed`);
+        res.json({
+          message: `Retried ${bookedOrders.length} booked orders`,
+          retried: bookedOrders.length,
+          succeeded,
+          failed,
+          errors: errors.length > 0 ? errors.slice(0, 10) : undefined,
+        });
+      } catch (error: any) {
+        console.error("Error retrying fulfillment write-backs:", error);
+        res.status(500).json({ message: "Failed to retry fulfillment write-backs" });
+      }
+    },
+  );
+
+  app.post(
     "/api/orders/bulk-cleanup-cancelled",
     isAuthenticated,
     async (req: any, res) => {
