@@ -4380,9 +4380,19 @@ export async function registerRoutes(
 
       const requestedScopes = (process.env.SHOPIFY_APP_SCOPES || 'read_orders,write_orders,read_fulfillments,write_fulfillments,write_webhooks').split(',').map(s => s.trim());
       const grantedScopes = scope ? scope.split(',').map((s: string) => s.trim()) : [];
-      const missingScopes = requestedScopes.filter(s => !grantedScopes.includes(s));
+      const isScopeSatisfied = (required: string, granted: string[]): boolean => {
+        if (granted.includes(required)) return true;
+        if (required === 'read_orders' && (granted.includes('read_all_orders') || granted.includes('write_orders'))) return true;
+        if (required.startsWith('read_')) {
+          const resource = required.replace('read_', '');
+          if (granted.includes(`write_${resource}`)) return true;
+        }
+        return false;
+      };
+      const missingScopes = requestedScopes.filter(s => !isScopeSatisfied(s, grantedScopes));
       
       console.log(`[Shopify OAuth Callback] Scopes granted by Shopify: ${scope}`);
+      console.log(`[Shopify OAuth Callback] Missing scopes after aliasing: ${missingScopes.length > 0 ? missingScopes.join(', ') : 'NONE'}`);
       if (missingScopes.length > 0) {
         console.warn(`[Shopify OAuth Callback] WARNING: Missing scopes not granted by Shopify: ${missingScopes.join(', ')}`);
         console.warn(`[Shopify OAuth Callback] This may cause write-back features (tags, fulfillments, address updates) to fail with 403 errors.`);
@@ -4600,9 +4610,21 @@ export async function registerRoutes(
         return res.json({ connected: false, grantedScopes: [], missingScopes: [], requiredScopes: [] });
       }
 
-      const requiredScopes = (process.env.SHOPIFY_APP_SCOPES || 'read_orders,write_orders,read_fulfillments,write_fulfillments,write_webhooks').split(',').map(s => s.trim());
+      const requiredScopes = (process.env.SHOPIFY_APP_SCOPES || 'read_orders,write_orders,read_fulfillments,write_fulfillments,write_webhooks,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders').split(',').map(s => s.trim());
       const grantedScopes = store.scopes ? store.scopes.split(',').map(s => s.trim()) : [];
-      const missingScopes = requiredScopes.filter(s => !grantedScopes.includes(s));
+
+      const isScopeSatisfied = (required: string, granted: string[]): boolean => {
+        if (granted.includes(required)) return true;
+        if (required === 'read_orders' && (granted.includes('read_all_orders') || granted.includes('write_orders'))) return true;
+        if (required === 'read_all_orders' && granted.includes('read_all_orders')) return true;
+        if (required.startsWith('read_')) {
+          const resource = required.replace('read_', '');
+          if (granted.includes(`write_${resource}`)) return true;
+        }
+        return false;
+      };
+
+      const missingScopes = requiredScopes.filter(s => !isScopeSatisfied(s, grantedScopes));
 
       res.json({
         connected: true,
@@ -4611,10 +4633,73 @@ export async function registerRoutes(
         requiredScopes,
         missingScopes,
         hasScopeMismatch: missingScopes.length > 0,
-        writeBackEnabled: grantedScopes.includes('write_orders') && grantedScopes.includes('write_fulfillments'),
+        writeBackEnabled: isScopeSatisfied('write_orders', grantedScopes) && isScopeSatisfied('write_fulfillments', grantedScopes) && isScopeSatisfied('write_merchant_managed_fulfillment_orders', grantedScopes),
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to check scopes" });
+    }
+  });
+
+  app.get("/api/shopify/test-token", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const store = await storage.getShopifyStore(merchantId);
+      if (!store || !store.accessToken || !store.shopDomain || !store.isConnected) {
+        return res.json({ connected: false, error: "Shopify not connected" });
+      }
+
+      const accessToken = decryptToken(store.accessToken);
+      const results: Record<string, any> = {
+        shopDomain: store.shopDomain,
+        storedScopes: store.scopes,
+        tokenLength: accessToken.length,
+        tokenPrefix: accessToken.substring(0, 6) + "...",
+      };
+
+      try {
+        const readRes = await fetch(
+          `https://${store.shopDomain}/admin/api/2025-01/orders.json?limit=1&status=any`,
+          { headers: { "X-Shopify-Access-Token": accessToken, "Content-Type": "application/json" } }
+        );
+        results.readOrders = { status: readRes.status, ok: readRes.ok };
+        if (!readRes.ok) {
+          results.readOrders.body = await readRes.text();
+        }
+      } catch (e: any) {
+        results.readOrders = { error: e.message };
+      }
+
+      try {
+        const scopesRes = await fetch(
+          `https://${store.shopDomain}/admin/oauth/access_scopes.json`,
+          { headers: { "X-Shopify-Access-Token": accessToken, "Content-Type": "application/json" } }
+        );
+        if (scopesRes.ok) {
+          const scopesData = await scopesRes.json();
+          results.actualScopes = scopesData.access_scopes?.map((s: any) => s.handle) || [];
+        } else {
+          results.actualScopes = { status: scopesRes.status, body: await scopesRes.text() };
+        }
+      } catch (e: any) {
+        results.actualScopes = { error: e.message };
+      }
+
+      try {
+        const shopRes = await fetch(
+          `https://${store.shopDomain}/admin/api/2025-01/shop.json`,
+          { headers: { "X-Shopify-Access-Token": accessToken, "Content-Type": "application/json" } }
+        );
+        results.readShop = { status: shopRes.status, ok: shopRes.ok };
+      } catch (e: any) {
+        results.readShop = { error: e.message };
+      }
+
+      console.log("[Shopify Token Test]", JSON.stringify(results, null, 2));
+      res.json(results);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Token test failed" });
     }
   });
 

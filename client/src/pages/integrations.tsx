@@ -776,7 +776,7 @@ export default function Integrations() {
                     <p className="text-muted-foreground mt-1">
                       Your Shopify app is missing these scopes: <strong>{scopeData.missingScopes.join(', ')}</strong>. 
                       Features like order tag sync, fulfillment write-back, and address updates may not work. 
-                      To fix this, update the app permissions in your Shopify admin under Settings &gt; Apps &gt; API access, then reconnect your store.
+                      Click <strong>"Re-authorize Permissions"</strong> below to grant the missing permissions. This will redirect you to Shopify to approve the updated scopes.
                     </p>
                   </div>
                 </div>
@@ -832,6 +832,27 @@ export default function Integrations() {
                 >
                   <RefreshCw className={`w-4 h-4 mr-2 ${retryFulfillmentMutation.isPending ? "animate-spin" : ""}`} />
                   Retry Fulfillments
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    try {
+                      const res = await fetch("/api/shopify/test-token", { credentials: "include" });
+                      const data = await res.json();
+                      const actualScopes = Array.isArray(data.actualScopes) ? data.actualScopes.join(", ") : JSON.stringify(data.actualScopes);
+                      toast({
+                        title: "Token Test Results",
+                        description: `Read Orders: ${data.readOrders?.ok ? "OK" : data.readOrders?.status || "FAIL"} | Actual Scopes: ${actualScopes}`,
+                      });
+                      console.log("Token test results:", data);
+                    } catch (e: any) {
+                      toast({ title: "Test Failed", description: e.message, variant: "destructive" });
+                    }
+                  }}
+                  data-testid="button-test-shopify-token"
+                >
+                  <Settings className="w-4 h-4 mr-2" />
+                  Test Token
                 </Button>
                 <Button
                   variant="ghost"
