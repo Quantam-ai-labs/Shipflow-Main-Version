@@ -717,6 +717,9 @@ async function drawSingleAirwayBill(
     BLACK,
   );
 
+  console.log("ITEMS SUMMARY RAW:", data.itemsSummary);
+  console.log("FULL BILL DATA:", data);
+
   // --- Products Row ---
   drawTextSafe(
     page,
