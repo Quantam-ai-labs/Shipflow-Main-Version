@@ -6239,6 +6239,8 @@ export async function registerRoutes(
           codAmount,
           isCOD,
           totalQuantity: order.totalQuantity || 1,
+          weight: Number(order.weight) || 0,
+          pieces: 1,
           itemSummary: order.itemSummary || "",
           remark: order.remark || order.notes || "",
           products,

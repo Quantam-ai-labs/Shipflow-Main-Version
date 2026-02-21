@@ -12,7 +12,7 @@ export default function PrintLabels() {
   const [labels, setLabels] = useState<LabelData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [layout, setLayout] = useState<LayoutMode>(1);
+  const [layout, setLayout] = useState<LayoutMode>(3);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -180,22 +180,36 @@ function renderPages(labels: LabelData[], layout: LayoutMode, cols: number, rows
 
   return pages.map((pageLabels, pageIdx) => (
     <div key={pageIdx} className="print-page" data-testid={`print-page-${pageIdx}`}>
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: `repeat(${cols}, 1fr)`,
-        gridTemplateRows: layout === 4 ? "repeat(2, 1fr)" : undefined,
-        gap: layout === 1 ? 0 : 10,
-        height: "100%",
-        alignContent: layout === 1 ? "start" : "start",
-      }}>
-        {pageLabels.map((label) => (
-          <div key={label.orderId} style={{
-            ...(layout === 1 ? {} : {}),
-          }}>
-            <AwbLabel data={label} />
-          </div>
-        ))}
-      </div>
+      {layout === 3 ? (
+        <div style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "flex-start" }}>
+          {pageLabels.map((label, idx) => (
+            <div key={label.orderId}>
+              <AwbLabel data={label} />
+              {idx < pageLabels.length - 1 && (
+                <div style={{
+                  borderTop: "1.5px dashed #999",
+                  margin: "6px 0",
+                }} />
+              )}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: `repeat(${cols}, 1fr)`,
+          gridTemplateRows: layout === 4 ? "repeat(2, 1fr)" : undefined,
+          gap: layout === 1 ? 0 : 10,
+          height: "100%",
+          alignContent: "start",
+        }}>
+          {pageLabels.map((label) => (
+            <div key={label.orderId}>
+              <AwbLabel data={label} />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   ));
 }
