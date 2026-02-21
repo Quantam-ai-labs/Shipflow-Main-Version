@@ -159,6 +159,65 @@ export async function fetchLeopardsSlip(
   }
 }
 
+export interface LeopardsSlipDataResult {
+  success: boolean;
+  bills?: AirwayBillData[];
+  error?: string;
+}
+
+export async function fetchLeopardsSlipData(
+  slipUrl: string,
+  credentials?: { apiKey: string; apiPassword: string; trackingNumber: string },
+  orderContext?: LeopardsOrderContext
+): Promise<LeopardsSlipDataResult> {
+  try {
+    if (credentials?.apiKey && credentials?.apiPassword && credentials?.trackingNumber) {
+      const trackResp = await fetch(LEOPARDS_TRACK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          api_key: credentials.apiKey,
+          api_password: credentials.apiPassword,
+          track_numbers: credentials.trackingNumber,
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
+
+      const trackBody = await trackResp.text();
+      let trackJson: any = null;
+      try {
+        trackJson = JSON.parse(trackBody);
+      } catch {}
+
+      if (trackJson?.status === 1 && trackJson.packet_list?.length > 0) {
+        const bills: AirwayBillData[] = trackJson.packet_list.map((pkt: any) => ({
+          trackingNumber: pkt.track_number || credentials.trackingNumber,
+          orderNumber: (pkt.booked_packet_order_id || "").replace(/^#/, ""),
+          courierName: "Leopards",
+          bookedAt: pkt.booking_date || new Date().toLocaleDateString("en-GB"),
+          merchantName: pkt.shipment_name_eng || "",
+          merchantAddress: pkt.shipment_address || "",
+          consigneeName: pkt.consignment_name_eng || "",
+          consigneePhone: pkt.consignment_phone || "",
+          consigneeCity: pkt.destination_city_name || "",
+          consigneeAddress: pkt.consignment_address || "",
+          codAmount: parseFloat(pkt.booked_packet_collect_amount) || 0,
+          weight: parseFloat(pkt.booked_packet_weight) || 0,
+          pieces: pkt.booked_packet_no_piece || 1,
+          itemsSummary: orderContext?.itemsSummary || "",
+          shipmentType: "Overnight",
+          remarks: pkt.special_instructions || "",
+          quantity: orderContext?.quantity || pkt.booked_packet_no_piece || 1,
+        } as AirwayBillData));
+        return { success: true, bills };
+      }
+    }
+    return { success: false, error: "Could not fetch tracking data" };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
 async function processLeopardsResponse(contentType: string, buffer: Buffer): Promise<CourierSlipResult | null> {
   if (contentType.includes("json")) {
     try {

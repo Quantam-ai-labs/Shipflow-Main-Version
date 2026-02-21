@@ -6530,8 +6530,6 @@ export async function registerRoutes(
             .json({ message: "No booked items in this batch" });
         }
 
-        const { fetchLeopardsSlip, fetchPostExSlipBulk, combinePdfs } =
-          await import("./services/courierSlips");
         const courierNorm = normalizeCourierName(batch.courierName || "");
 
         if (courierNorm === "postex") {
@@ -6571,77 +6569,90 @@ export async function registerRoutes(
           return res.send(pdfBuffer);
         }
 
-        const pdfBuffers: Buffer[] = [];
         const errors: string[] = [];
 
-        const leopardsCreds =
-          courierNorm === "leopards"
-            ? await getCourierCredentials(merchantId, "leopards")
-            : null;
-        console.log(
-          `[BatchAWB] Leopards creds: ${leopardsCreds ? "available" : "not available"}`,
-        );
+        if (courierNorm === "leopards") {
+          const { fetchLeopardsSlipData, fetchLeopardsSlip, combinePdfs } = await import("./services/courierSlips");
+          const { generateAirwayBillPdfBuffer } = await import("./services/pdfGenerator");
+          const leopardsCreds = await getCourierCredentials(merchantId, "leopards");
 
-        for (const item of bookedItems) {
-          let result;
-          if (courierNorm === "leopards") {
+          const allBills: import("./services/pdfGenerator").AirwayBillData[] = [];
+          const fallbackPdfBuffers: Buffer[] = [];
+
+          for (const item of bookedItems) {
             const trackingNum = item.trackingNumber;
             const slipUrl = item.slipUrl;
             const order = await storage.getOrderById(merchantId, item.orderId);
             const bulkLineItems = Array.isArray(order?.lineItems) ? order.lineItems : [];
             const bulkItemsSummary = order?.itemSummary || bulkLineItems.map((li: any) => `${li.title || li.name || "Item"} x${li.quantity || 1}`).join(", ");
             const bulkOrderCtx = { itemsSummary: bulkItemsSummary, quantity: order?.totalQuantity || 1 };
-            if (
-              leopardsCreds?.apiKey &&
-              leopardsCreds?.apiSecret &&
-              trackingNum
-            ) {
-              result = await fetchLeopardsSlip(slipUrl || "", {
+
+            if (leopardsCreds?.apiKey && leopardsCreds?.apiSecret && trackingNum) {
+              const dataResult = await fetchLeopardsSlipData("", {
                 apiKey: leopardsCreds.apiKey,
                 apiPassword: leopardsCreds.apiSecret,
                 trackingNumber: trackingNum,
               }, bulkOrderCtx);
-            } else if (slipUrl) {
-              result = await fetchLeopardsSlip(slipUrl, undefined, bulkOrderCtx);
-            } else {
-              if (order?.courierSlipUrl) {
-                result = await fetchLeopardsSlip(order.courierSlipUrl, undefined, bulkOrderCtx);
-              } else {
-                errors.push(`${item.orderNumber}: No slip URL or credentials`);
+              if (dataResult.success && dataResult.bills) {
+                allBills.push(...dataResult.bills);
                 continue;
               }
             }
-          } else {
-            errors.push(`${item.orderNumber}: Unsupported courier`);
-            continue;
+
+            const fallbackSlipUrl = slipUrl || order?.courierSlipUrl || "";
+            if (fallbackSlipUrl || (leopardsCreds?.apiKey && trackingNum)) {
+              const result = await fetchLeopardsSlip(
+                fallbackSlipUrl,
+                leopardsCreds?.apiKey && leopardsCreds?.apiSecret && trackingNum
+                  ? { apiKey: leopardsCreds.apiKey, apiPassword: leopardsCreds.apiSecret, trackingNumber: trackingNum }
+                  : undefined,
+                bulkOrderCtx,
+              );
+              if (result?.success && result.pdfBuffer) {
+                fallbackPdfBuffers.push(result.pdfBuffer);
+              } else {
+                errors.push(`${item.orderNumber}: ${result?.error || "Failed"}`);
+              }
+            } else {
+              errors.push(`${item.orderNumber}: No slip URL or credentials`);
+            }
           }
 
-          if (result?.success && result.pdfBuffer) {
-            pdfBuffers.push(result.pdfBuffer);
-          } else {
-            errors.push(`${item.orderNumber}: ${result?.error || "Failed"}`);
+          if (allBills.length === 0 && fallbackPdfBuffers.length === 0) {
+            return res.status(502).json({
+              message: "Could not fetch any courier airway bills",
+              errors,
+            });
           }
+
+          if (errors.length > 0) {
+            console.warn(`[BatchAWB] ${errors.length} items failed:`, errors);
+          }
+
+          let finalPdf: Buffer;
+          if (allBills.length > 0 && fallbackPdfBuffers.length === 0) {
+            console.log(`[BatchAWB] Total invoices: ${allBills.length}`);
+            finalPdf = await generateAirwayBillPdfBuffer(allBills);
+          } else if (allBills.length === 0 && fallbackPdfBuffers.length > 0) {
+            finalPdf = await combinePdfs(fallbackPdfBuffers);
+          } else {
+            const billsPdf = await generateAirwayBillPdfBuffer(allBills);
+            finalPdf = await combinePdfs([billsPdf, ...fallbackPdfBuffers]);
+          }
+
+          res.setHeader("Content-Type", "application/pdf");
+          res.setHeader(
+            "Content-Disposition",
+            `inline; filename="batch_awb_${batch.id.substring(0, 8)}.pdf"`,
+          );
+          return res.send(finalPdf);
         }
 
-        if (pdfBuffers.length === 0) {
-          return res.status(502).json({
-            message: "Could not fetch any courier airway bills",
-            errors,
-          });
-        }
-
-        if (errors.length > 0) {
-          console.warn(`[BatchAWB] ${errors.length} items failed:`, errors);
-        }
-
-        const combinedPdf = await combinePdfs(pdfBuffers);
-
-        res.setHeader("Content-Type", "application/pdf");
-        res.setHeader(
-          "Content-Disposition",
-          `inline; filename="batch_awb_${batch.id.substring(0, 8)}.pdf"`,
-        );
-        res.send(combinedPdf);
+        errors.push("Unsupported courier for batch AWB");
+        return res.status(502).json({
+          message: "Could not fetch any courier airway bills",
+          errors,
+        });
       } catch (error) {
         console.error("Error fetching batch AWB:", error);
         res.status(500).json({ message: "Failed to fetch batch airway bills" });
