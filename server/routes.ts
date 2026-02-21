@@ -4304,6 +4304,17 @@ export async function registerRoutes(
         merchantCreds,
       );
 
+      const requestedScopes = (process.env.SHOPIFY_APP_SCOPES || 'read_orders,write_orders,read_fulfillments,write_fulfillments,write_webhooks').split(',').map(s => s.trim());
+      const grantedScopes = scope ? scope.split(',').map((s: string) => s.trim()) : [];
+      const missingScopes = requestedScopes.filter(s => !grantedScopes.includes(s));
+      
+      console.log(`[Shopify OAuth Callback] Scopes granted by Shopify: ${scope}`);
+      if (missingScopes.length > 0) {
+        console.warn(`[Shopify OAuth Callback] WARNING: Missing scopes not granted by Shopify: ${missingScopes.join(', ')}`);
+        console.warn(`[Shopify OAuth Callback] This may cause write-back features (tags, fulfillments, address updates) to fail with 403 errors.`);
+        console.warn(`[Shopify OAuth Callback] To fix: In Shopify Admin > Settings > Apps > ${shop} > API access, ensure all required scopes are approved.`);
+      }
+
       const encryptedToken = encryptToken(accessToken);
 
       const existingStore = await storage.getShopifyStore(merchantId);
@@ -4499,6 +4510,37 @@ export async function registerRoutes(
       res
         .status(500)
         .json({ message: error.message || "Reconciliation failed" });
+    }
+  });
+
+  // ============================================
+  // SHOPIFY SCOPE VERIFICATION
+  // ============================================
+  app.get("/api/shopify/scopes", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const store = await storage.getShopifyStore(merchantId);
+      if (!store || !store.isConnected) {
+        return res.json({ connected: false, grantedScopes: [], missingScopes: [], requiredScopes: [] });
+      }
+
+      const requiredScopes = (process.env.SHOPIFY_APP_SCOPES || 'read_orders,write_orders,read_fulfillments,write_fulfillments,write_webhooks').split(',').map(s => s.trim());
+      const grantedScopes = store.scopes ? store.scopes.split(',').map(s => s.trim()) : [];
+      const missingScopes = requiredScopes.filter(s => !grantedScopes.includes(s));
+
+      res.json({
+        connected: true,
+        shopDomain: store.shopDomain,
+        grantedScopes,
+        requiredScopes,
+        missingScopes,
+        hasScopeMismatch: missingScopes.length > 0,
+        writeBackEnabled: grantedScopes.includes('write_orders') && grantedScopes.includes('write_fulfillments'),
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to check scopes" });
     }
   });
 

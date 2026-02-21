@@ -235,6 +235,9 @@ export async function writeBackTags(
       if (!putRes.ok) {
         const errText = await putRes.text();
         console.error(`[ShopifyWriteBack] Tag update failed: ${putRes.status} ${errText}`);
+        if (putRes.status === 403) {
+          console.error(`[ShopifyWriteBack] Tag sync BLOCKED by missing Shopify scopes (write_orders). Update app permissions in Shopify Admin and reconnect store.`);
+        }
         return { success: false, error: `Shopify API error ${putRes.status}: ${errText}` };
       }
 
@@ -305,6 +308,17 @@ export async function writeBackFulfillment(
         }
 
         lastError = result.error || 'Unknown fulfillment error';
+
+        if (result.error?.includes('403') || result.error?.includes('merchant approval') || result.error?.includes('scope')) {
+          console.error(`[ShopifyWriteBack] Fulfillment BLOCKED by missing Shopify scopes for order ${orderId}: ${result.error}`);
+          console.error(`[ShopifyWriteBack] Fix: Update app permissions in Shopify Admin > Settings > Apps > API access, then reconnect store`);
+          try {
+            await storage.updateOrder(merchantId, orderId, {
+              bookingError: `Shopify fulfillment blocked: missing permissions (write_fulfillments scope). Reconnect Shopify store after updating app permissions.`,
+            });
+          } catch {}
+          return { success: false, error: result.error };
+        }
 
         if (result.error?.includes('429') || result.error?.includes('rate')) {
           console.warn(`[ShopifyWriteBack] Rate limited on fulfillment for order ${orderId}, will retry`);

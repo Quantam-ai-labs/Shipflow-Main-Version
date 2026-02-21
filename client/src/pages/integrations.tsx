@@ -30,6 +30,7 @@ import {
   Key,
   Lock,
   Loader2,
+  AlertTriangle,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -401,6 +402,18 @@ export default function Integrations() {
     refetchInterval: 60000,
   });
 
+  const { data: scopeData } = useQuery<{
+    connected: boolean;
+    grantedScopes: string[];
+    requiredScopes: string[];
+    missingScopes: string[];
+    hasScopeMismatch: boolean;
+    writeBackEnabled: boolean;
+  }>({
+    queryKey: ["/api/shopify/scopes"],
+    enabled: !!data?.shopify?.isConnected,
+  });
+
   const registerWebhooksMutation = useMutation({
     mutationFn: async () => {
       return apiRequest("POST", "/api/shopify/webhooks/register", {});
@@ -730,6 +743,21 @@ export default function Integrations() {
                       <RefreshCw className="w-3 h-3" />
                     </Button>
                   )}
+                </div>
+              )}
+              {scopeData?.hasScopeMismatch && (
+                <div className="flex items-start gap-2 text-sm p-3 rounded-md border border-yellow-500/30 bg-yellow-500/5" data-testid="scope-warning">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-yellow-600 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-yellow-700 dark:text-yellow-400">
+                      Missing Shopify permissions
+                    </p>
+                    <p className="text-muted-foreground mt-1">
+                      Your Shopify app is missing these scopes: <strong>{scopeData.missingScopes.join(', ')}</strong>. 
+                      Features like order tag sync, fulfillment write-back, and address updates may not work. 
+                      To fix this, update the app permissions in your Shopify admin under Settings &gt; Apps &gt; API access, then reconnect your store.
+                    </p>
+                  </div>
                 </div>
               )}
               <div className="flex items-center gap-2 flex-wrap">
