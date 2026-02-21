@@ -743,7 +743,7 @@ async function drawSingleAirwayBill(
   if (!prodText || !prodText.trim()) {
     prodText = "-";
   }
-  drawTextSafe(page, font, truncate(prodText, 120), x + pad + 40, productsTopY - 13, 8, BLACK);
+  drawTextSafe(page, font, prodText, x + pad + 40, productsTopY - 13, 8, BLACK);
 }
 
 function drawDashedCutLine(page: PDFPage, y: number) {
