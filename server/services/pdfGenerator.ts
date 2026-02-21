@@ -717,34 +717,32 @@ async function drawSingleAirwayBill(
     BLACK,
   );
 
-  console.log("ITEMS SUMMARY RAW:", data.itemsSummary);
-  console.log("FULL BILL DATA:", data);
-
   // --- Products Row ---
-let prodText = "";
+  let prodText = "";
 
-if (data.itemsSummary && data.itemsSummary.trim()) {
-  prodText = data.itemsSummary
-    .replace(/^\[\s*/, "")
-    .replace(/\s*\]$/, "");
-} else if ((data as any).items?.length) {
-  prodText = (data as any).items
-    .map((i: any) => i.name || i.title || i.sku)
-    .filter(Boolean)
-    .join(", ");
-} else {
-  prodText = "-";
+  if (data.itemsSummary && data.itemsSummary.trim()) {
+    prodText = data.itemsSummary
+      .replace(/^\[\s*/, "")
+      .replace(/\s*\]$/, "");
+  } else if ((data as any).items?.length) {
+    prodText = (data as any).items
+      .map((i: any) => i.name || i.title || i.sku)
+      .filter(Boolean)
+      .join(", ");
+  } else {
+    prodText = "-";
+  }
+
+  drawTextSafe(
+    page,
+    font,
+    truncate(prodText, 120),
+    x + pad + 40,
+    productsTopY - 13,
+    8,
+    BLACK,
+  );
 }
-
-drawTextSafe(
-  page,
-  font,
-  truncate(prodText, 120),
-  x + pad + 40,
-  productsTopY - 13,
-  8,
-  BLACK,
-);
 
 export async function generateAirwayBillPdfBuffer(
   bills: AirwayBillData[],
