@@ -18,6 +18,13 @@ import {
   expenses,
   stockLedger,
   courierDues,
+  shopifyStores,
+  courierAccounts,
+  shipments,
+  accountingProducts,
+  sales,
+  cashAccounts,
+  parties,
 } from "@shared/schema";
 import {
   and,
@@ -7703,6 +7710,388 @@ export async function registerRoutes(
       }
     },
   );
+
+  // ============================================
+  // SUPER ADMIN: PLATFORM DASHBOARD ANALYTICS
+  // ============================================
+
+  app.get("/api/admin/platform-stats", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+
+      const [merchantCount] = (await db.execute(sql`SELECT COUNT(*)::int AS count FROM merchants`)).rows;
+      const [activeCount] = (await db.execute(sql`SELECT COUNT(*)::int AS count FROM merchants WHERE status = 'ACTIVE'`)).rows;
+      const [suspendedCount] = (await db.execute(sql`SELECT COUNT(*)::int AS count FROM merchants WHERE status = 'SUSPENDED'`)).rows;
+      const [userCount] = (await db.execute(sql`SELECT COUNT(*)::int AS count FROM users`)).rows;
+      const [activeUserCount] = (await db.execute(sql`SELECT COUNT(*)::int AS count FROM users WHERE is_active = true`)).rows;
+      const [orderCount] = (await db.execute(sql`SELECT COUNT(*)::int AS count FROM orders`)).rows;
+      const [shipmentCount] = (await db.execute(sql`SELECT COUNT(*)::int AS count FROM shipments`)).rows;
+
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const [newMerchants30d] = (await db.execute(sql`SELECT COUNT(*)::int AS count FROM merchants WHERE created_at >= ${thirtyDaysAgo}`)).rows;
+      const [newOrders30d] = (await db.execute(sql`SELECT COUNT(*)::int AS count FROM orders WHERE created_at >= ${thirtyDaysAgo}`)).rows;
+
+      const planBreakdown = (await db.execute(sql`
+        SELECT COALESCE(subscription_plan, 'free') AS plan, COUNT(*)::int AS count
+        FROM merchants GROUP BY COALESCE(subscription_plan, 'free') ORDER BY count DESC
+      `)).rows;
+
+      const onboardingBreakdown = (await db.execute(sql`
+        SELECT onboarding_step AS step, COUNT(*)::int AS count
+        FROM merchants GROUP BY onboarding_step ORDER BY count DESC
+      `)).rows;
+
+      const topMerchants = (await db.execute(sql`
+        SELECT m.id, m.name, m.email, m.status, m.subscription_plan,
+          COUNT(o.id)::int AS order_count
+        FROM merchants m
+        LEFT JOIN orders o ON o.merchant_id = m.id
+        GROUP BY m.id, m.name, m.email, m.status, m.subscription_plan
+        ORDER BY order_count DESC LIMIT 10
+      `)).rows;
+
+      const recentSignups = (await db.execute(sql`
+        SELECT id, name, email, status, subscription_plan, onboarding_step, created_at
+        FROM merchants ORDER BY created_at DESC LIMIT 10
+      `)).rows;
+
+      res.json({
+        totalMerchants: (merchantCount as any).count,
+        activeMerchants: (activeCount as any).count,
+        suspendedMerchants: (suspendedCount as any).count,
+        totalUsers: (userCount as any).count,
+        activeUsers: (activeUserCount as any).count,
+        totalOrders: (orderCount as any).count,
+        totalShipments: (shipmentCount as any).count,
+        newMerchants30d: (newMerchants30d as any).count,
+        newOrders30d: (newOrders30d as any).count,
+        planBreakdown,
+        onboardingBreakdown,
+        topMerchants,
+        recentSignups,
+      });
+    } catch (error) {
+      console.error("Platform stats error:", error);
+      res.status(500).json({ message: "Failed to fetch platform stats" });
+    }
+  });
+
+  app.get("/api/admin/analytics/trends", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+
+      const dailySignups = (await db.execute(sql`
+        SELECT DATE(created_at) AS date, COUNT(*)::int AS count
+        FROM merchants
+        WHERE created_at >= NOW() - INTERVAL '30 days'
+        GROUP BY DATE(created_at) ORDER BY date
+      `)).rows;
+
+      const dailyOrders = (await db.execute(sql`
+        SELECT DATE(created_at) AS date, COUNT(*)::int AS count
+        FROM orders
+        WHERE created_at >= NOW() - INTERVAL '30 days'
+        GROUP BY DATE(created_at) ORDER BY date
+      `)).rows;
+
+      const workflowBreakdown = (await db.execute(sql`
+        SELECT workflow_status AS status, COUNT(*)::int AS count
+        FROM orders GROUP BY workflow_status ORDER BY count DESC
+      `)).rows;
+
+      const courierUsage = (await db.execute(sql`
+        SELECT courier_name AS courier, COUNT(*)::int AS count
+        FROM shipments WHERE courier_name IS NOT NULL
+        GROUP BY courier_name ORDER BY count DESC
+      `)).rows;
+
+      const merchantsByCity = (await db.execute(sql`
+        SELECT COALESCE(city, 'Unknown') AS city, COUNT(*)::int AS count
+        FROM merchants GROUP BY COALESCE(city, 'Unknown') ORDER BY count DESC LIMIT 10
+      `)).rows;
+
+      res.json({ dailySignups, dailyOrders, workflowBreakdown, courierUsage, merchantsByCity });
+    } catch (error) {
+      console.error("Analytics trends error:", error);
+      res.status(500).json({ message: "Failed to fetch analytics" });
+    }
+  });
+
+  // ============================================
+  // SUPER ADMIN: MERCHANT DEEP PEEK
+  // ============================================
+
+  app.get("/api/admin/merchants/:id/peek", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+
+      const mid = req.params.id;
+      const [merchant] = await db.select().from(merchants).where(eq(merchants.id, mid));
+      if (!merchant) return res.status(404).json({ message: "Merchant not found" });
+
+      const merchantUsers = await db.select({
+        id: users.id, email: users.email, firstName: users.firstName, lastName: users.lastName,
+        role: users.role, isActive: users.isActive, lastLoginAt: users.lastLoginAt, createdAt: users.createdAt,
+      }).from(users).where(eq(users.merchantId, mid));
+
+      const [orderStats] = (await db.execute(sql`
+        SELECT COUNT(*)::int AS total,
+          COUNT(CASE WHEN workflow_status = 'NEW' THEN 1 END)::int AS new_count,
+          COUNT(CASE WHEN workflow_status = 'DELIVERED' THEN 1 END)::int AS delivered,
+          COUNT(CASE WHEN workflow_status = 'CANCELLED' THEN 1 END)::int AS cancelled,
+          COUNT(CASE WHEN workflow_status = 'RETURN' THEN 1 END)::int AS returned,
+          COALESCE(SUM(CASE WHEN workflow_status = 'DELIVERED' THEN total_price::numeric ELSE 0 END), 0)::text AS revenue
+        FROM orders WHERE merchant_id = ${mid}
+      `)).rows;
+
+      const shopifyInfo = await db.select({
+        shopDomain: shopifyStores.shopDomain,
+        isConnected: shopifyStores.isConnected,
+        lastSyncAt: shopifyStores.lastSyncAt,
+      }).from(shopifyStores).where(eq(shopifyStores.merchantId, mid));
+
+      const courierInfo = await db.select({
+        courierName: courierAccounts.courierName,
+        isActive: courierAccounts.isActive,
+      }).from(courierAccounts).where(eq(courierAccounts.merchantId, mid));
+
+      const [productStats] = (await db.execute(sql`
+        SELECT COUNT(*)::int AS total,
+          COUNT(CASE WHEN active = true THEN 1 END)::int AS active_count,
+          COALESCE(SUM(stock_qty), 0)::int AS total_stock
+        FROM accounting_products WHERE merchant_id = ${mid}
+      `)).rows;
+
+      const [accountingStats] = (await db.execute(sql`
+        SELECT
+          (SELECT COUNT(*)::int FROM parties WHERE merchant_id = ${mid}) AS total_parties,
+          (SELECT COUNT(*)::int FROM cash_accounts WHERE merchant_id = ${mid}) AS total_accounts,
+          (SELECT COUNT(*)::int FROM sales WHERE merchant_id = ${mid}) AS total_sales,
+          (SELECT COUNT(*)::int FROM stock_receipts WHERE merchant_id = ${mid}) AS total_receipts
+      `)).rows;
+
+      const recentOrders = (await db.execute(sql`
+        SELECT id, shopify_order_name, customer_name, total_price, workflow_status, created_at
+        FROM orders WHERE merchant_id = ${mid} ORDER BY created_at DESC LIMIT 10
+      `)).rows;
+
+      await db.insert(adminActionLogs).values({
+        adminUserId: adminId,
+        actionType: "PEEK_MERCHANT",
+        targetMerchantId: mid,
+        details: `Peeked into merchant: ${merchant.name}`,
+      });
+
+      res.json({
+        merchant,
+        users: merchantUsers,
+        orderStats,
+        shopify: shopifyInfo[0] || null,
+        couriers: courierInfo,
+        productStats,
+        accountingStats,
+        recentOrders,
+      });
+    } catch (error) {
+      console.error("Merchant peek error:", error);
+      res.status(500).json({ message: "Failed to peek merchant" });
+    }
+  });
+
+  // ============================================
+  // SUPER ADMIN: SUBSCRIPTION MANAGEMENT
+  // ============================================
+
+  app.put("/api/admin/merchants/:id/subscription", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+
+      const { plan } = req.body;
+      const validPlans = ["free", "starter", "professional", "enterprise"];
+      if (!plan || !validPlans.includes(plan)) return res.status(400).json({ message: `Plan must be one of: ${validPlans.join(", ")}` });
+
+      const [updated] = await db.update(merchants)
+        .set({ subscriptionPlan: plan, updatedAt: new Date() })
+        .where(eq(merchants.id, req.params.id)).returning();
+      if (!updated) return res.status(404).json({ message: "Merchant not found" });
+
+      await db.insert(adminActionLogs).values({
+        adminUserId: adminId,
+        actionType: "UPDATE_SUBSCRIPTION",
+        targetMerchantId: req.params.id,
+        details: `Changed subscription to: ${plan}`,
+      });
+
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update subscription" });
+    }
+  });
+
+  // ============================================
+  // SUPER ADMIN: DELETE MERCHANT
+  // ============================================
+
+  app.delete("/api/admin/merchants/:id", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+
+      const mid = req.params.id;
+      const [merchant] = await db.select().from(merchants).where(eq(merchants.id, mid));
+      if (!merchant) return res.status(404).json({ message: "Merchant not found" });
+
+      await db.insert(adminActionLogs).values({
+        adminUserId: adminId,
+        actionType: "DELETE_MERCHANT",
+        targetMerchantId: mid,
+        details: `Deleted merchant: ${merchant.name} (${merchant.email})`,
+      });
+
+      await db.delete(merchants).where(eq(merchants.id, mid));
+      res.json({ message: `Merchant "${merchant.name}" deleted successfully.` });
+    } catch (error) {
+      console.error("Delete merchant error:", error);
+      res.status(500).json({ message: "Failed to delete merchant" });
+    }
+  });
+
+  // ============================================
+  // SUPER ADMIN: ALL USERS (cross-tenant)
+  // ============================================
+
+  app.get("/api/admin/users", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+
+      const search = req.query.search as string | undefined;
+      let query = db.select({
+        id: users.id, email: users.email, firstName: users.firstName, lastName: users.lastName,
+        role: users.role, isActive: users.isActive, merchantId: users.merchantId,
+        lastLoginAt: users.lastLoginAt, createdAt: users.createdAt,
+        merchantName: merchants.name, merchantStatus: merchants.status,
+      }).from(users).leftJoin(merchants, eq(users.merchantId, merchants.id));
+
+      const results = search
+        ? await (query as any).where(or(ilike(users.email, `%${search}%`), ilike(users.firstName, `%${search}%`), ilike(users.lastName, `%${search}%`)))
+        : await query;
+
+      res.json(results);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
+
+  // ============================================
+  // SUPER ADMIN: AUDIT LOG
+  // ============================================
+
+  app.get("/api/admin/audit-log", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+
+      const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
+      const offset = parseInt(req.query.offset as string) || 0;
+      const actionType = req.query.actionType as string | undefined;
+
+      let results;
+      if (actionType) {
+        results = await db.select({
+          id: adminActionLogs.id,
+          adminUserId: adminActionLogs.adminUserId,
+          actionType: adminActionLogs.actionType,
+          targetMerchantId: adminActionLogs.targetMerchantId,
+          targetUserId: adminActionLogs.targetUserId,
+          details: adminActionLogs.details,
+          createdAt: adminActionLogs.createdAt,
+          adminEmail: users.email,
+          adminName: users.firstName,
+          merchantName: merchants.name,
+        }).from(adminActionLogs)
+          .leftJoin(users, eq(adminActionLogs.adminUserId, users.id))
+          .leftJoin(merchants, eq(adminActionLogs.targetMerchantId, merchants.id))
+          .where(eq(adminActionLogs.actionType, actionType))
+          .orderBy(desc(adminActionLogs.createdAt))
+          .limit(limit).offset(offset);
+      } else {
+        results = await db.select({
+          id: adminActionLogs.id,
+          adminUserId: adminActionLogs.adminUserId,
+          actionType: adminActionLogs.actionType,
+          targetMerchantId: adminActionLogs.targetMerchantId,
+          targetUserId: adminActionLogs.targetUserId,
+          details: adminActionLogs.details,
+          createdAt: adminActionLogs.createdAt,
+          adminEmail: users.email,
+          adminName: users.firstName,
+          merchantName: merchants.name,
+        }).from(adminActionLogs)
+          .leftJoin(users, eq(adminActionLogs.adminUserId, users.id))
+          .leftJoin(merchants, eq(adminActionLogs.targetMerchantId, merchants.id))
+          .orderBy(desc(adminActionLogs.createdAt))
+          .limit(limit).offset(offset);
+      }
+
+      const [totalResult] = (await db.execute(sql`SELECT COUNT(*)::int AS count FROM admin_action_logs`)).rows;
+      res.json({ logs: results, total: (totalResult as any).count });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch audit log" });
+    }
+  });
+
+  // ============================================
+  // SUPER ADMIN: APPLICATION HEALTH
+  // ============================================
+
+  app.get("/api/admin/health", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+
+      const startTime = Date.now();
+      await db.execute(sql`SELECT 1`);
+      const dbLatency = Date.now() - startTime;
+
+      const [dbSize] = (await db.execute(sql`
+        SELECT pg_size_pretty(pg_database_size(current_database())) AS size
+      `)).rows;
+
+      const [tableStats] = (await db.execute(sql`
+        SELECT
+          (SELECT COUNT(*)::int FROM orders) AS orders,
+          (SELECT COUNT(*)::int FROM shipments) AS shipments,
+          (SELECT COUNT(*)::int FROM merchants) AS merchants,
+          (SELECT COUNT(*)::int FROM users) AS users,
+          (SELECT COUNT(*)::int FROM accounting_products) AS products,
+          (SELECT COUNT(*)::int FROM sales) AS sales
+      `)).rows;
+
+      const largeTables = (await db.execute(sql`
+        SELECT relname AS table_name, n_live_tup::int AS row_count
+        FROM pg_stat_user_tables
+        ORDER BY n_live_tup DESC LIMIT 15
+      `)).rows;
+
+      res.json({
+        dbLatencyMs: dbLatency,
+        dbSize: (dbSize as any).size,
+        tableStats,
+        largeTables,
+        uptime: process.uptime(),
+        memoryUsage: process.memoryUsage(),
+        nodeVersion: process.version,
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch health" });
+    }
+  });
 
   // ============================================
   // BULK CANCELLATION JOB ENDPOINTS
