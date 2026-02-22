@@ -31,6 +31,8 @@ import {
   Lock,
   Loader2,
   AlertTriangle,
+  Calendar,
+  Check,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -188,6 +190,8 @@ export default function Integrations() {
   const [shopifyAccessToken, setShopifyAccessToken] = useState("");
   const [shopifyApiKey, setShopifyApiKey] = useState("");
   const [shopifyApiPassword, setShopifyApiPassword] = useState("");
+  const [editingSyncDate, setEditingSyncDate] = useState(false);
+  const [syncFromDateInput, setSyncFromDateInput] = useState("");
   const [useLegacyAuth, setUseLegacyAuth] = useState(false);
   const [useManualAuth, setUseManualAuth] = useState(false);
   const [isOAuthRedirecting, setIsOAuthRedirecting] = useState(false);
@@ -433,6 +437,27 @@ export default function Integrations() {
         description: "Could not register webhooks. Please try again.",
         variant: "destructive",
       });
+    },
+  });
+
+  const { data: syncFromDateData } = useQuery<{ shopifySyncFromDate: string | null }>({
+    queryKey: ["/api/merchants/sync-from-date"],
+  });
+
+  const saveSyncFromDateMutation = useMutation({
+    mutationFn: async (dateStr: string) => {
+      const res = await apiRequest("PATCH", "/api/merchants/sync-from-date", {
+        syncFromDate: new Date(dateStr).toISOString(),
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/merchants/sync-from-date"] });
+      setEditingSyncDate(false);
+      toast({ title: "Sync date updated", description: "To fetch older orders, run a full re-import from the Orders page or trigger a manual sync." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
 
@@ -715,6 +740,65 @@ export default function Integrations() {
                       {new Date(data.shopify.lastSyncAt).toLocaleString()}
                     </span>
                   </div>
+                )}
+              </div>
+              <div className="flex items-center gap-2 flex-wrap text-sm p-3 rounded-md border" data-testid="sync-from-date-section">
+                <Calendar className="w-4 h-4 shrink-0 text-muted-foreground" />
+                <span className="text-muted-foreground">Sync data from:</span>
+                {editingSyncDate ? (
+                  <>
+                    <Input
+                      type="date"
+                      value={syncFromDateInput}
+                      onChange={(e) => setSyncFromDateInput(e.target.value)}
+                      min="2015-01-01"
+                      max={new Date().toISOString().split("T")[0]}
+                      className="w-auto h-8 text-sm"
+                      data-testid="input-edit-sync-from-date"
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8"
+                      onClick={() => saveSyncFromDateMutation.mutate(syncFromDateInput)}
+                      disabled={saveSyncFromDateMutation.isPending || !syncFromDateInput}
+                      data-testid="button-save-sync-date"
+                    >
+                      {saveSyncFromDateMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8"
+                      onClick={() => setEditingSyncDate(false)}
+                      data-testid="button-cancel-sync-date"
+                    >
+                      Cancel
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <span className="font-medium" data-testid="text-sync-from-date">
+                      {syncFromDateData?.shopifySyncFromDate
+                        ? new Date(syncFromDateData.shopifySyncFromDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+                        : `January 1, ${new Date().getFullYear()} (default)`}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => {
+                        const currentDate = syncFromDateData?.shopifySyncFromDate
+                          ? new Date(syncFromDateData.shopifySyncFromDate).toISOString().split("T")[0]
+                          : `${new Date().getFullYear()}-01-01`;
+                        setSyncFromDateInput(currentDate);
+                        setEditingSyncDate(true);
+                      }}
+                      data-testid="button-edit-sync-date"
+                    >
+                      Change
+                    </Button>
+                  </>
                 )}
               </div>
               {data?.shopify.isConnected && (

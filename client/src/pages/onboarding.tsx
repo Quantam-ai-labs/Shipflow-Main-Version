@@ -19,6 +19,7 @@ import {
   SkipForward,
   ExternalLink,
   KeyRound,
+  Calendar,
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -65,6 +66,11 @@ export default function Onboarding() {
   const [appClientId, setAppClientId] = useState("");
   const [appClientSecret, setAppClientSecret] = useState("");
   const [credentialsSaved, setCredentialsSaved] = useState(false);
+  const [syncFromDate, setSyncFromDate] = useState(() => {
+    const d = new Date();
+    d.setMonth(0, 1);
+    return d.toISOString().split("T")[0];
+  });
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -214,6 +220,9 @@ export default function Onboarding() {
 
   const startImportMutation = useMutation({
     mutationFn: async () => {
+      await apiRequest("PATCH", "/api/merchants/sync-from-date", {
+        syncFromDate: new Date(syncFromDate).toISOString(),
+      });
       const res = await apiRequest("POST", "/api/shopify/import/start");
       return res.json();
     },
@@ -487,14 +496,34 @@ export default function Onboarding() {
             <>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2"><Package className="w-5 h-5" />Sync Orders</CardTitle>
-                <CardDescription>Import your orders from Shopify. Orders from {new Date().getFullYear()} onwards will be imported in small batches.</CardDescription>
+                <CardDescription>Choose a start date and import your Shopify orders. Only orders from that date onward will be synced.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 {(!importJob || importJob.status === 'CANCELLED') && (
                   <div className="text-center py-8">
                     <Package className="w-16 h-16 mx-auto text-muted-foreground/50 mb-4" />
                     <h3 className="text-lg font-medium mb-2" data-testid="text-ready-import">Ready to Import Orders</h3>
-                    <p className="text-muted-foreground mb-4">Orders from January 1, {new Date().getFullYear()} will be imported in batches.</p>
+                    <p className="text-muted-foreground mb-4">Select the date from which you want to bring your Shopify data.</p>
+
+                    <div className="max-w-xs mx-auto mb-6">
+                      <Label className="text-sm font-medium flex items-center justify-center gap-1.5 mb-2">
+                        <Calendar className="w-4 h-4" />
+                        Sync orders from
+                      </Label>
+                      <Input
+                        type="date"
+                        value={syncFromDate}
+                        onChange={(e) => setSyncFromDate(e.target.value)}
+                        min="2015-01-01"
+                        max={new Date().toISOString().split("T")[0]}
+                        className="text-center"
+                        data-testid="input-sync-from-date"
+                      />
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Orders created on or after {new Date(syncFromDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })} will be imported.
+                      </p>
+                    </div>
+
                     <p className="text-xs text-muted-foreground mb-6">The import runs in the background — you can close this tab and come back anytime.</p>
                     <Button size="lg" onClick={() => startImportMutation.mutate()} disabled={startImportMutation.isPending} data-testid="button-start-import">
                       {startImportMutation.isPending ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <RefreshCw className="w-5 h-5 mr-2" />}
@@ -535,7 +564,7 @@ export default function Onboarding() {
                     </div>
 
                     <p className="text-xs text-center text-muted-foreground">
-                      Importing from Jan 1, {importJob.startDate ? new Date(importJob.startDate).getFullYear() : new Date().getFullYear()} &middot; Page {importJob.currentPage || 0}
+                      Importing from {importJob.startDate ? new Date(importJob.startDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : `Jan 1, ${new Date().getFullYear()}`} &middot; Page {importJob.currentPage || 0}
                     </p>
 
                     <div className="flex justify-center">

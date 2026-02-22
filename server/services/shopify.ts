@@ -419,7 +419,10 @@ export class ShopifyService {
     const isIncremental = !forceFullSync && store.lastSyncAt != null;
     const syncStartTime = new Date();
 
-    const MIN_ORDER_DATE = '2026-01-01T00:00:00.000Z';
+    const merchant = await storage.getMerchant(merchantId);
+    const MIN_ORDER_DATE = merchant?.shopifySyncFromDate
+      ? new Date(merchant.shopifySyncFromDate).toISOString()
+      : `${new Date().getFullYear()}-01-01T00:00:00.000Z`;
 
     let fetchParams: { status?: string; updated_at_min?: string; created_at_min?: string } = {
       status: 'any',

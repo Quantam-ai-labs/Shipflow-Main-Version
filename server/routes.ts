@@ -3938,11 +3938,17 @@ export async function registerRoutes(
           .json({ message: validation.error || "Shopify connection failed" });
       }
 
+      const merchant = await storage.getMerchant(merchantId);
+      const startDate = merchant?.shopifySyncFromDate
+        ? new Date(merchant.shopifySyncFromDate)
+        : undefined;
+
       const job = await startImportJob({
         merchantId,
         shopDomain: store.shopDomain!,
         accessToken: store.accessToken,
         batchSize: 100,
+        startDate,
       });
 
       res.json({ jobId: job.id, message: "Import started" });
@@ -7299,6 +7305,53 @@ export async function registerRoutes(
       } catch (error) {
         console.error("Error dismissing unmapped status:", error);
         res.status(500).json({ message: "Failed to dismiss unmapped status" });
+      }
+    },
+  );
+
+  app.patch(
+    "/api/merchants/sync-from-date",
+    isAuthenticated,
+    async (req, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+        const { syncFromDate } = req.body;
+        if (!syncFromDate) {
+          return res.status(400).json({ message: "syncFromDate is required" });
+        }
+        const date = new Date(syncFromDate);
+        if (isNaN(date.getTime())) {
+          return res.status(400).json({ message: "Invalid date format" });
+        }
+        const now = new Date();
+        if (date > now) {
+          return res.status(400).json({ message: "Sync-from date cannot be in the future" });
+        }
+        const earliest = new Date("2015-01-01T00:00:00.000Z");
+        if (date < earliest) {
+          return res.status(400).json({ message: "Sync-from date cannot be earlier than 2015" });
+        }
+        await storage.updateMerchant(merchantId, { shopifySyncFromDate: date } as any);
+        res.json({ success: true, shopifySyncFromDate: date.toISOString() });
+      } catch (error: any) {
+        console.error("Error saving sync-from date:", error);
+        res.status(500).json({ message: error.message || "Failed to save sync-from date" });
+      }
+    },
+  );
+
+  app.get(
+    "/api/merchants/sync-from-date",
+    isAuthenticated,
+    async (req, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+        const merchant = await storage.getMerchant(merchantId);
+        res.json({ shopifySyncFromDate: merchant?.shopifySyncFromDate || null });
+      } catch (error: any) {
+        res.status(500).json({ message: error.message || "Failed to get sync-from date" });
       }
     },
   );

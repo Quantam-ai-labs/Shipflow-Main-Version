@@ -25,6 +25,7 @@ export const merchants = pgTable("merchants", {
   onboardingStep: varchar("onboarding_step", { length: 30 }).notNull().default("ACCOUNT_CREATED"),
   shopifyAppClientId: varchar("shopify_app_client_id", { length: 255 }),
   shopifyAppClientSecret: text("shopify_app_client_secret"),
+  shopifySyncFromDate: timestamp("shopify_sync_from_date"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
