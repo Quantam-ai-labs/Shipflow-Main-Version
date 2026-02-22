@@ -29,6 +29,7 @@ import Integrations from "@/pages/integrations";
 import Settings from "@/pages/settings";
 import Onboarding from "@/pages/onboarding";
 import AdminPanel from "@/pages/admin";
+import AdminLoginPage from "@/pages/admin-login";
 import InviteAccept from "@/pages/invite-accept";
 import PrintLabels from "@/pages/print-labels";
 import Products from "@/pages/products";
@@ -222,6 +223,14 @@ function MainApp() {
     return <SuspendedScreen />;
   }
 
+  // Admin login page is always accessible
+  if (location === "/admin-login") {
+    if (isAuthenticated && user?.role === "SUPER_ADMIN") {
+      return <Redirect to="/admin" />;
+    }
+    return <AdminLoginPage />;
+  }
+
   // Invite acceptance page is accessible to both authenticated and unauthenticated users
   if (location.startsWith("/invite/")) {
     return (
@@ -233,6 +242,18 @@ function MainApp() {
 
   if (!isAuthenticated) {
     return <AuthPage />;
+  }
+
+  // Super Admin users go straight to admin panel (no merchant needed)
+  if (user?.role === "SUPER_ADMIN" && !user?.merchantId) {
+    return (
+      <Switch>
+        <Route path="/admin" component={AdminPanel} />
+        <Route>
+          <Redirect to="/admin" />
+        </Route>
+      </Switch>
+    );
   }
 
   if (location.startsWith("/print-labels")) {

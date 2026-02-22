@@ -24,13 +24,13 @@ import {
   Loader2, Building2, Users, Database, Activity, AlertTriangle, Eye,
   Trash2, TrendingUp, Package, ShoppingCart, Truck, Server,
   BarChart3, ClipboardList, Crown, ArrowLeft, HardDrive, Cpu,
-  Clock, Zap, Globe, ChevronRight,
+  Clock, Zap, Globe, ChevronRight, LogOut,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -781,15 +781,31 @@ export default function AdminPanel() {
     );
   }
 
+  const { logout } = useAuth();
+  const [, setLocation] = useLocation();
+
+  const handleAdminLogout = () => {
+    logout();
+    setLocation("/admin-login");
+  };
+
   return (
     <div className="space-y-6" data-testid="admin-panel">
-      <div className="flex items-center gap-3">
-        <div className="p-2 rounded-lg bg-primary/10">
-          <Shield className="w-6 h-6 text-primary" />
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-primary/10">
+            <Shield className="w-6 h-6 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold" data-testid="text-admin-title">Control Room</h1>
+            <p className="text-sm text-muted-foreground">Platform-wide administration and monitoring</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-2xl font-bold" data-testid="text-admin-title">Control Room</h1>
-          <p className="text-sm text-muted-foreground">Platform-wide administration and monitoring</p>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground hidden sm:inline">{user?.email}</span>
+          <Button variant="outline" size="sm" onClick={handleAdminLogout} data-testid="button-admin-logout">
+            <LogOut className="w-4 h-4 mr-1" />Sign Out
+          </Button>
         </div>
       </div>
 
