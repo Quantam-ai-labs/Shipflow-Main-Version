@@ -61,7 +61,7 @@ Preferred communication style: Simple, everyday language.
   - **Overview** (`/accounting`): Dashboard with Cash in Hand, Money Coming, Money Owed, Profit, Stock Value, Working Capital summary cards + Recent Activity feed.
   - **Money In/Out** (`/accounting/money`): Two-button (Money In/Money Out) cash flow management with 5 Money Out intents (Pay Existing Expense, New Expense, Pay Party, Transfer, Courier Settlement). Transaction history table.
   - **Parties** (`/accounting/parties`): Customer/Supplier/Courier party management with balance tracking, search, and type filters.
-  - **Products** (`/accounting/products`): Inventory management with moving average cost, quantity tracking.
+  - **Products** (`/accounting/products`): Full product catalog with enforced unique SKU (auto-generated via SKU-XXXXXX sequence if empty), normalized name/SKU uniqueness per merchant, minimal primary form (Name, SKU, Sale Price) with collapsible Advanced section (Unit, Track Inventory toggle, Purchase Cost, Costing Method, Category, Barcode). Supports CSV/Excel bulk import with server-side validation preview and atomic batch insert. Safe soft-delete (deactivate) for products with linked transactions.
   - **Add Stock** (`/accounting/stock-receipts`): Stock receipt recording with landed cost (unit cost + extra costs), supplier linking, cash account deduction.
   - **Sell** (`/accounting/sales`): Sales recording with automatic COGS calculation based on weighted average cost, margin display.
   - **Expense History** (`/accounting/expenses`): All expenses with partial payment status tracking (paid/partial/unpaid).

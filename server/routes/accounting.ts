@@ -538,7 +538,28 @@ export function registerAccountingRoutes(app: Express) {
   });
 
   // ========== ACCOUNTING PRODUCTS ==========
+
+  async function generateNextSku(merchantId: string): Promise<string> {
+    const [result] = await db.select({
+      maxSku: sql<string>`MAX(sku)`,
+    }).from(accountingProducts)
+      .where(and(eq(accountingProducts.merchantId, merchantId), sql`sku LIKE 'SKU-%'`));
+    const maxSku = result?.maxSku || "SKU-000000";
+    const num = parseInt(maxSku.replace("SKU-", ""), 10) || 0;
+    return `SKU-${String(num + 1).padStart(6, "0")}`;
+  }
+
   app.get("/api/accounting/products", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const results = await db.select().from(accountingProducts)
+        .where(and(eq(accountingProducts.merchantId, merchantId), eq(accountingProducts.active, true)))
+        .orderBy(desc(accountingProducts.createdAt));
+      res.json(results);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/accounting/products/all", isAuthenticated, async (req: any, res) => {
     try {
       const merchantId = await getMerchantId(req);
       const results = await db.select().from(accountingProducts)
@@ -551,7 +572,51 @@ export function registerAccountingRoutes(app: Express) {
   app.post("/api/accounting/products", isAuthenticated, async (req: any, res) => {
     try {
       const merchantId = await getMerchantId(req);
-      const [product] = await db.insert(accountingProducts).values({ ...req.body, merchantId }).returning();
+      const { name, sku, salePrice, unit, trackInventory, purchaseCost, category, barcode, costingMethod } = req.body;
+
+      if (!name || !name.trim()) return res.status(400).json({ message: "Name is required." });
+      const nameNorm = name.trim().toLowerCase();
+      const salePriceVal = parseFloat(salePrice);
+      if (isNaN(salePriceVal) || salePriceVal < 0) return res.status(400).json({ message: "Sale price must be >= 0." });
+
+      const existingName = await db.select({ id: accountingProducts.id }).from(accountingProducts)
+        .where(and(eq(accountingProducts.merchantId, merchantId), eq(accountingProducts.nameNormalized, nameNorm)));
+      if (existingName.length > 0) return res.status(400).json({ message: `A product with name "${name.trim()}" already exists.` });
+
+      let finalSku = sku?.trim() || "";
+      if (!finalSku) {
+        finalSku = await generateNextSku(merchantId);
+      }
+      const skuNorm = finalSku.toUpperCase();
+
+      const existingSku = await db.select({ id: accountingProducts.id }).from(accountingProducts)
+        .where(and(eq(accountingProducts.merchantId, merchantId), eq(accountingProducts.skuNormalized, skuNorm)));
+      if (existingSku.length > 0) return res.status(400).json({ message: `A product with SKU "${finalSku}" already exists.` });
+
+      if (barcode?.trim()) {
+        const existingBarcode = await db.select({ id: accountingProducts.id }).from(accountingProducts)
+          .where(and(eq(accountingProducts.merchantId, merchantId), eq(accountingProducts.barcode, barcode.trim())));
+        if (existingBarcode.length > 0) return res.status(400).json({ message: `A product with barcode "${barcode.trim()}" already exists.` });
+      }
+
+      const track = trackInventory !== false;
+      const [product] = await db.insert(accountingProducts).values({
+        merchantId,
+        name: name.trim(),
+        nameNormalized: nameNorm,
+        sku: finalSku,
+        skuNormalized: skuNorm,
+        salePrice: salePriceVal.toFixed(2),
+        sellingPrice: salePriceVal.toFixed(2),
+        unit: unit?.trim() || "pcs",
+        trackInventory: track,
+        purchaseCost: track && purchaseCost ? parseFloat(purchaseCost).toFixed(2) : null,
+        category: category?.trim() || null,
+        barcode: barcode?.trim() || null,
+        costingMethod: costingMethod || "AVERAGE",
+        active: true,
+        isActive: true,
+      }).returning();
       res.json(product);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
@@ -559,11 +624,233 @@ export function registerAccountingRoutes(app: Express) {
   app.put("/api/accounting/products/:id", isAuthenticated, async (req: any, res) => {
     try {
       const merchantId = await getMerchantId(req);
-      const { name, sku, sellingPrice, isActive } = req.body;
+      const { name, sku, salePrice, unit, trackInventory, purchaseCost, category, barcode, costingMethod } = req.body;
+
+      if (!name || !name.trim()) return res.status(400).json({ message: "Name is required." });
+      const nameNorm = name.trim().toLowerCase();
+      const salePriceVal = parseFloat(salePrice);
+      if (isNaN(salePriceVal) || salePriceVal < 0) return res.status(400).json({ message: "Sale price must be >= 0." });
+
+      const existingName = await db.select({ id: accountingProducts.id }).from(accountingProducts)
+        .where(and(
+          eq(accountingProducts.merchantId, merchantId),
+          eq(accountingProducts.nameNormalized, nameNorm),
+          sql`${accountingProducts.id} != ${req.params.id}`
+        ));
+      if (existingName.length > 0) return res.status(400).json({ message: `A product with name "${name.trim()}" already exists.` });
+
+      let finalSku = sku?.trim() || "";
+      if (!finalSku) {
+        finalSku = await generateNextSku(merchantId);
+      }
+      const skuNorm = finalSku.toUpperCase();
+
+      const existingSku = await db.select({ id: accountingProducts.id }).from(accountingProducts)
+        .where(and(
+          eq(accountingProducts.merchantId, merchantId),
+          eq(accountingProducts.skuNormalized, skuNorm),
+          sql`${accountingProducts.id} != ${req.params.id}`
+        ));
+      if (existingSku.length > 0) return res.status(400).json({ message: `A product with SKU "${finalSku}" already exists.` });
+
+      if (barcode?.trim()) {
+        const existingBarcode = await db.select({ id: accountingProducts.id }).from(accountingProducts)
+          .where(and(
+            eq(accountingProducts.merchantId, merchantId),
+            eq(accountingProducts.barcode, barcode.trim()),
+            sql`${accountingProducts.id} != ${req.params.id}`
+          ));
+        if (existingBarcode.length > 0) return res.status(400).json({ message: `A product with barcode "${barcode.trim()}" already exists.` });
+      }
+
+      const track = trackInventory !== false;
       const [product] = await db.update(accountingProducts)
-        .set({ name, sku, sellingPrice, isActive, updatedAt: new Date() })
+        .set({
+          name: name.trim(),
+          nameNormalized: nameNorm,
+          sku: finalSku,
+          skuNormalized: skuNorm,
+          salePrice: salePriceVal.toFixed(2),
+          sellingPrice: salePriceVal.toFixed(2),
+          unit: unit?.trim() || "pcs",
+          trackInventory: track,
+          purchaseCost: track && purchaseCost ? parseFloat(purchaseCost).toFixed(2) : null,
+          category: category?.trim() || null,
+          barcode: barcode?.trim() || null,
+          costingMethod: costingMethod || "AVERAGE",
+          updatedAt: new Date(),
+        })
         .where(and(eq(accountingProducts.id, req.params.id), eq(accountingProducts.merchantId, merchantId))).returning();
+      if (!product) return res.status(404).json({ message: "Product not found." });
       res.json(product);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.patch("/api/accounting/products/:id/deactivate", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const productId = req.params.id;
+
+      const hasReceipts = await db.select({ id: stockReceiptItems.id }).from(stockReceiptItems)
+        .innerJoin(stockReceipts, eq(stockReceipts.id, stockReceiptItems.stockReceiptId))
+        .where(and(eq(stockReceiptItems.productId, productId), eq(stockReceipts.merchantId, merchantId)))
+        .limit(1);
+      const hasSales = await db.select({ id: saleItems.id }).from(saleItems)
+        .innerJoin(sales, eq(sales.id, saleItems.saleId))
+        .where(and(eq(saleItems.productId, productId), eq(sales.merchantId, merchantId)))
+        .limit(1);
+
+      const [product] = await db.update(accountingProducts)
+        .set({ active: false, isActive: false, updatedAt: new Date() })
+        .where(and(eq(accountingProducts.id, productId), eq(accountingProducts.merchantId, merchantId))).returning();
+      if (!product) return res.status(404).json({ message: "Product not found." });
+      const hasTransactions = hasReceipts.length > 0 || hasSales.length > 0;
+      res.json({ ...product, softDeleted: true, message: hasTransactions ? "Product deactivated (has linked transactions)." : "Product deactivated." });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/accounting/products/bulk-import/parse", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const { rows } = req.body;
+      if (!Array.isArray(rows) || rows.length === 0) return res.status(400).json({ message: "No rows provided." });
+
+      const validRows: any[] = [];
+      const errors: { row: number; field: string; message: string }[] = [];
+      const seenNames = new Set<string>();
+      const seenSkus = new Set<string>();
+      const seenBarcodes = new Set<string>();
+
+      const allProducts = await db.select({
+        nameNormalized: accountingProducts.nameNormalized,
+        skuNormalized: accountingProducts.skuNormalized,
+        barcode: accountingProducts.barcode,
+      }).from(accountingProducts).where(eq(accountingProducts.merchantId, merchantId));
+
+      const existingNames = new Set(allProducts.map(p => p.nameNormalized).filter(Boolean));
+      const existingSkus = new Set(allProducts.map(p => p.skuNormalized).filter(Boolean));
+      const existingBarcodes = new Set(allProducts.map(p => p.barcode).filter(Boolean));
+
+      let nextSkuNum = 0;
+      const [maxResult] = await db.select({
+        maxSku: sql<string>`MAX(sku)`,
+      }).from(accountingProducts)
+        .where(and(eq(accountingProducts.merchantId, merchantId), sql`sku LIKE 'SKU-%'`));
+      nextSkuNum = parseInt((maxResult?.maxSku || "SKU-000000").replace("SKU-", ""), 10) || 0;
+
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const rowNum = i + 1;
+        const name = (row.name || "").trim();
+        const rawSku = (row.sku || "").trim();
+        const rawSalePrice = row.sale_price ?? row.salePrice ?? row.price ?? "";
+        const unit = (row.unit || "pcs").trim();
+        const trackStr = (row.track_inventory ?? row.trackInventory ?? "YES").toString().toUpperCase();
+        const track = trackStr !== "NO" && trackStr !== "FALSE" && trackStr !== "0";
+        const purchaseCost = row.purchase_cost ?? row.purchaseCost ?? "";
+        const category = (row.category || "").trim();
+        const barcode = (row.barcode || "").trim();
+
+        if (!name) { errors.push({ row: rowNum, field: "name", message: "Name is required." }); continue; }
+        const nameNorm = name.toLowerCase();
+        if (seenNames.has(nameNorm)) { errors.push({ row: rowNum, field: "name", message: `Duplicate name "${name}" in file.` }); continue; }
+        if (existingNames.has(nameNorm)) { errors.push({ row: rowNum, field: "name", message: `Product "${name}" already exists.` }); continue; }
+
+        const salePrice = parseFloat(rawSalePrice);
+        if (isNaN(salePrice) || salePrice < 0) { errors.push({ row: rowNum, field: "sale_price", message: "Sale price must be a number >= 0." }); continue; }
+
+        let sku = rawSku;
+        let autoSku = false;
+        if (!sku) {
+          nextSkuNum++;
+          sku = `SKU-${String(nextSkuNum).padStart(6, "0")}`;
+          autoSku = true;
+        }
+        const skuNorm = sku.toUpperCase();
+        if (seenSkus.has(skuNorm)) { errors.push({ row: rowNum, field: "sku", message: `Duplicate SKU "${sku}" in file.` }); continue; }
+        if (existingSkus.has(skuNorm)) { errors.push({ row: rowNum, field: "sku", message: `SKU "${sku}" already exists.` }); continue; }
+
+        if (barcode) {
+          if (seenBarcodes.has(barcode)) { errors.push({ row: rowNum, field: "barcode", message: `Duplicate barcode "${barcode}" in file.` }); continue; }
+          if (existingBarcodes.has(barcode)) { errors.push({ row: rowNum, field: "barcode", message: `Barcode "${barcode}" already exists.` }); continue; }
+          seenBarcodes.add(barcode);
+        }
+
+        if (!track && purchaseCost) {
+          errors.push({ row: rowNum, field: "purchase_cost", message: "Purchase cost not allowed when Track Inventory = NO." }); continue;
+        }
+
+        seenNames.add(nameNorm);
+        seenSkus.add(skuNorm);
+
+        validRows.push({
+          row: rowNum,
+          name: name,
+          sku,
+          autoSku,
+          salePrice: salePrice.toFixed(2),
+          unit,
+          trackInventory: track,
+          purchaseCost: track && purchaseCost ? parseFloat(purchaseCost).toFixed(2) : null,
+          category: category || null,
+          barcode: barcode || null,
+          costingMethod: "AVERAGE",
+        });
+      }
+
+      res.json({ validRows, errors, totalRows: rows.length });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/accounting/products/bulk-import/confirm", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const { products } = req.body;
+      if (!Array.isArray(products) || products.length === 0) return res.status(400).json({ message: "No products to import." });
+
+      const result = await db.transaction(async (tx) => {
+        const inserted: any[] = [];
+        for (const p of products) {
+          const nameNorm = p.name.trim().toLowerCase();
+          const skuNorm = p.sku.toUpperCase();
+
+          const nameConflict = await tx.select({ id: accountingProducts.id }).from(accountingProducts)
+            .where(and(eq(accountingProducts.merchantId, merchantId), eq(accountingProducts.nameNormalized, nameNorm)));
+          if (nameConflict.length > 0) throw new Error(`Product "${p.name}" already exists.`);
+
+          const skuConflict = await tx.select({ id: accountingProducts.id }).from(accountingProducts)
+            .where(and(eq(accountingProducts.merchantId, merchantId), eq(accountingProducts.skuNormalized, skuNorm)));
+          if (skuConflict.length > 0) throw new Error(`SKU "${p.sku}" already exists.`);
+
+          if (p.barcode) {
+            const barcodeConflict = await tx.select({ id: accountingProducts.id }).from(accountingProducts)
+              .where(and(eq(accountingProducts.merchantId, merchantId), eq(accountingProducts.barcode, p.barcode)));
+            if (barcodeConflict.length > 0) throw new Error(`Barcode "${p.barcode}" already exists.`);
+          }
+
+          const [product] = await tx.insert(accountingProducts).values({
+            merchantId,
+            name: p.name.trim(),
+            nameNormalized: nameNorm,
+            sku: p.sku,
+            skuNormalized: skuNorm,
+            salePrice: p.salePrice,
+            sellingPrice: p.salePrice,
+            unit: p.unit || "pcs",
+            trackInventory: p.trackInventory !== false,
+            purchaseCost: p.purchaseCost || null,
+            category: p.category || null,
+            barcode: p.barcode || null,
+            costingMethod: p.costingMethod || "AVERAGE",
+            active: true,
+            isActive: true,
+          }).returning();
+          inserted.push(product);
+        }
+        return inserted;
+      });
+
+      res.json({ imported: result.length, products: result });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
