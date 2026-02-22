@@ -1166,30 +1166,37 @@ export type InsertAccountingProduct = z.infer<typeof insertAccountingProductSche
 export type AccountingProduct = typeof accountingProducts.$inferSelect;
 
 // ============================================
-// ACCOUNTING: STOCK RECEIPTS (Purchases / stock in)
+// ACCOUNTING: STOCK RECEIPTS (Purchases / stock in) - Multi-item
 // ============================================
 export const stockReceipts = pgTable("stock_receipts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
-  productId: varchar("product_id").notNull().references(() => accountingProducts.id),
   supplierId: varchar("supplier_id").notNull().references(() => parties.id),
-  quantity: integer("quantity").notNull(),
-  unitCost: decimal("unit_cost", { precision: 12, scale: 2 }).notNull(),
-  totalCost: decimal("total_cost", { precision: 14, scale: 2 }).notNull(),
-  landedCost: decimal("landed_cost", { precision: 14, scale: 2 }),
-  landedUnitCost: decimal("landed_unit_cost", { precision: 12, scale: 2 }),
-  extraCosts: jsonb("extra_costs"),
-  paidNow: boolean("paid_now").default(false),
-  paymentType: varchar("payment_type", { length: 20 }).default("PAID_NOW"),
+  paymentType: varchar("payment_type", { length: 20 }).notNull().default("PAID_NOW"),
   cashAccountId: varchar("cash_account_id").references(() => cashAccounts.id),
-  inventoryValue: decimal("inventory_value", { precision: 14, scale: 2 }),
+  extraCosts: decimal("extra_costs", { precision: 14, scale: 2 }).default("0"),
+  itemsSubtotal: decimal("items_subtotal", { precision: 14, scale: 2 }).notNull(),
+  inventoryValue: decimal("inventory_value", { precision: 14, scale: 2 }).notNull(),
+  description: text("description"),
   date: timestamp("date").notNull(),
-  notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   index("idx_stock_receipts_merchant").on(table.merchantId),
-  index("idx_stock_receipts_product").on(table.productId),
   index("idx_stock_receipts_date").on(table.merchantId, table.date),
+]);
+
+export const stockReceiptItems = pgTable("stock_receipt_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  stockReceiptId: varchar("stock_receipt_id").notNull().references(() => stockReceipts.id, { onDelete: "cascade" }),
+  productId: varchar("product_id").notNull().references(() => accountingProducts.id),
+  quantity: integer("quantity").notNull(),
+  unitCost: decimal("unit_cost", { precision: 12, scale: 2 }).notNull(),
+  lineTotal: decimal("line_total", { precision: 14, scale: 2 }).notNull(),
+  allocatedExtra: decimal("allocated_extra", { precision: 14, scale: 2 }).default("0"),
+  finalUnitCost: decimal("final_unit_cost", { precision: 12, scale: 2 }).notNull(),
+}, (table) => [
+  index("idx_stock_receipt_items_receipt").on(table.stockReceiptId),
+  index("idx_stock_receipt_items_product").on(table.productId),
 ]);
 
 export const insertStockReceiptSchema = createInsertSchema(stockReceipts).omit({
@@ -1198,6 +1205,12 @@ export const insertStockReceiptSchema = createInsertSchema(stockReceipts).omit({
 });
 export type InsertStockReceipt = z.infer<typeof insertStockReceiptSchema>;
 export type StockReceipt = typeof stockReceipts.$inferSelect;
+
+export const insertStockReceiptItemSchema = createInsertSchema(stockReceiptItems).omit({
+  id: true,
+});
+export type InsertStockReceiptItem = z.infer<typeof insertStockReceiptItemSchema>;
+export type StockReceiptItem = typeof stockReceiptItems.$inferSelect;
 
 // ============================================
 // ACCOUNTING: SALES (Manual sell records)
