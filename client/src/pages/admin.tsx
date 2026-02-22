@@ -380,9 +380,9 @@ function MerchantsTab() {
               <TableBody>
                 {peekData.recentOrders?.map((o: any) => (
                   <TableRow key={o.id}>
-                    <TableCell className="font-medium">{o.shopify_order_name || o.id.slice(0, 8)}</TableCell>
+                    <TableCell className="font-medium">{o.order_number || o.id.slice(0, 8)}</TableCell>
                     <TableCell>{o.customer_name || "—"}</TableCell>
-                    <TableCell>Rs. {parseInt(o.total_price || "0").toLocaleString()}</TableCell>
+                    <TableCell>Rs. {parseInt(o.total_amount || "0").toLocaleString()}</TableCell>
                     <TableCell><Badge variant="outline" className="text-xs">{o.workflow_status}</Badge></TableCell>
                     <TableCell className="text-xs">{formatDate(o.created_at)}</TableCell>
                   </TableRow>

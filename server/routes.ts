@@ -7844,7 +7844,7 @@ export async function registerRoutes(
           COUNT(CASE WHEN workflow_status = 'DELIVERED' THEN 1 END)::int AS delivered,
           COUNT(CASE WHEN workflow_status = 'CANCELLED' THEN 1 END)::int AS cancelled,
           COUNT(CASE WHEN workflow_status = 'RETURN' THEN 1 END)::int AS returned,
-          COALESCE(SUM(CASE WHEN workflow_status = 'DELIVERED' THEN total_price::numeric ELSE 0 END), 0)::text AS revenue
+          COALESCE(SUM(CASE WHEN workflow_status = 'DELIVERED' THEN total_amount::numeric ELSE 0 END), 0)::text AS revenue
         FROM orders WHERE merchant_id = ${mid}
       `)).rows;
 
@@ -7875,7 +7875,7 @@ export async function registerRoutes(
       `)).rows;
 
       const recentOrders = (await db.execute(sql`
-        SELECT id, shopify_order_name, customer_name, total_price, workflow_status, created_at
+        SELECT id, order_number, customer_name, total_amount, workflow_status, created_at
         FROM orders WHERE merchant_id = ${mid} ORDER BY created_at DESC LIMIT 10
       `)).rows;
 
