@@ -8138,6 +8138,96 @@ export async function registerRoutes(
   });
 
   // ============================================
+  // SUPER ADMIN: CREATE MERCHANT
+  // ============================================
+
+  app.post("/api/admin/merchants/create", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+
+      const createSchema = z.object({
+        merchantName: z.string().min(1, "Business name is required"),
+        email: z.string().email("Valid email is required"),
+        password: z.string().min(6, "Password must be at least 6 characters"),
+        firstName: z.string().min(1, "First name is required"),
+        lastName: z.string().optional(),
+        phone: z.string().optional(),
+        city: z.string().optional(),
+        subscriptionPlan: z.enum(["free", "starter", "professional", "enterprise"]).optional().default("free"),
+        skipOnboarding: z.boolean().optional().default(false),
+      });
+
+      const body = createSchema.parse(req.body);
+
+      const existing = await db.select().from(users).where(eq(users.email, body.email));
+      if (existing.length > 0) {
+        return res.status(400).json({ message: "An account with this email already exists" });
+      }
+
+      const bcrypt = await import("bcrypt");
+      const passwordHash = await bcrypt.hash(body.password, 12);
+      const normalizedPhone = normalizePakistaniPhone(body.phone);
+      const slug = body.merchantName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "") + "-" + Date.now().toString(36);
+
+      const result = await db.transaction(async (tx) => {
+        const [merchant] = await tx.insert(merchants).values({
+          name: body.merchantName,
+          slug,
+          email: body.email,
+          phone: normalizedPhone,
+          city: body.city || null,
+          status: "ACTIVE",
+          subscriptionPlan: body.subscriptionPlan,
+          onboardingStep: body.skipOnboarding ? "COMPLETED" : "ACCOUNT_CREATED",
+        }).returning();
+
+        const [user] = await tx.insert(users).values({
+          email: body.email,
+          firstName: body.firstName,
+          lastName: body.lastName || null,
+          passwordHash,
+          role: "USER",
+          isActive: true,
+          merchantId: merchant.id,
+        }).returning();
+
+        await tx.insert(teamMembers).values({
+          userId: user.id,
+          merchantId: merchant.id,
+          role: "admin",
+          joinedAt: new Date(),
+        });
+
+        return { merchant, user };
+      });
+
+      await db.insert(adminActionLogs).values({
+        adminUserId: adminId,
+        actionType: "create_merchant",
+        targetMerchantId: result.merchant.id,
+        targetUserId: result.user.id,
+        details: `Merchant "${body.merchantName}" created by admin with plan: ${body.subscriptionPlan}`,
+      });
+
+      res.json({
+        message: `Merchant "${body.merchantName}" created successfully`,
+        merchant: result.merchant,
+        user: { id: result.user.id, email: result.user.email, firstName: result.user.firstName },
+      });
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors[0].message });
+      }
+      console.error("Admin create merchant error:", error);
+      res.status(500).json({ message: "Failed to create merchant" });
+    }
+  });
+
+  // ============================================
   // SUPER ADMIN: APPLICATION HEALTH
   // ============================================
 

@@ -19,12 +19,14 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Shield, Search, Ban, CheckCircle, UserX, UserCheck, Key, SkipForward,
   Loader2, Building2, Users, Database, Activity, AlertTriangle, Eye,
   Trash2, TrendingUp, Package, ShoppingCart, Truck, Server,
   BarChart3, ClipboardList, Crown, ArrowLeft, HardDrive, Cpu,
-  Clock, Zap, Globe, ChevronRight, LogOut,
+  Clock, Zap, Globe, ChevronRight, LogOut, Plus,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -184,6 +186,10 @@ function MerchantsTab() {
   const [peekId, setPeekId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
   const [subDialog, setSubDialog] = useState<{ merchant: any; plan: string } | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    merchantName: "", email: "", password: "", firstName: "", lastName: "", phone: "", city: "", subscriptionPlan: "free", skipOnboarding: false,
+  });
 
   const { data: merchantList = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/admin/merchants", search],
@@ -260,6 +266,21 @@ function MerchantsTab() {
     onSuccess: (data) => {
       toast({ title: "User updated", description: data.tempPassword ? `Temp password: ${data.tempPassword}` : undefined });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/merchants"] });
+    },
+    onError: (err: any) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+  });
+
+  const createMerchantMutation = useMutation({
+    mutationFn: async (data: typeof createForm) => {
+      const res = await apiRequest("POST", "/api/admin/merchants/create", data);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Merchant Created", description: data.message });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/merchants"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/platform-stats"] });
+      setCreateOpen(false);
+      setCreateForm({ merchantName: "", email: "", password: "", firstName: "", lastName: "", phone: "", city: "", subscriptionPlan: "free", skipOnboarding: false });
     },
     onError: (err: any) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
   });
@@ -453,9 +474,14 @@ function MerchantsTab() {
 
   return (
     <div className="space-y-4">
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input placeholder="Search merchants by name or email..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" data-testid="input-admin-search" />
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input placeholder="Search merchants by name or email..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" data-testid="input-admin-search" />
+        </div>
+        <Button onClick={() => setCreateOpen(true)} data-testid="button-create-merchant">
+          <Plus className="w-4 h-4 mr-2" />Add Merchant
+        </Button>
       </div>
 
       {isLoading ? (
@@ -522,6 +548,72 @@ function MerchantsTab() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={createOpen} onOpenChange={(open) => { if (!open) setCreateOpen(false); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Plus className="w-5 h-5" />Add New Merchant</DialogTitle>
+            <DialogDescription>Create a new merchant account with an admin user.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={(e) => { e.preventDefault(); createMerchantMutation.mutate(createForm); }} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="cm-business">Business Name *</Label>
+              <Input id="cm-business" data-testid="input-create-merchant-name" placeholder="e.g. My Store" value={createForm.merchantName} onChange={(e) => setCreateForm({ ...createForm, merchantName: e.target.value })} required />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="cm-first">First Name *</Label>
+                <Input id="cm-first" data-testid="input-create-first-name" placeholder="First name" value={createForm.firstName} onChange={(e) => setCreateForm({ ...createForm, firstName: e.target.value })} required />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="cm-last">Last Name</Label>
+                <Input id="cm-last" data-testid="input-create-last-name" placeholder="Last name" value={createForm.lastName} onChange={(e) => setCreateForm({ ...createForm, lastName: e.target.value })} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="cm-email">Email *</Label>
+              <Input id="cm-email" data-testid="input-create-email" type="email" placeholder="merchant@example.com" value={createForm.email} onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })} required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="cm-password">Password *</Label>
+              <Input id="cm-password" data-testid="input-create-password" type="password" placeholder="Min 6 characters" value={createForm.password} onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })} required minLength={6} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="cm-phone">Phone</Label>
+                <Input id="cm-phone" data-testid="input-create-phone" placeholder="03XX-XXXXXXX" value={createForm.phone} onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="cm-city">City</Label>
+                <Input id="cm-city" data-testid="input-create-city" placeholder="e.g. Karachi" value={createForm.city} onChange={(e) => setCreateForm({ ...createForm, city: e.target.value })} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Subscription Plan</Label>
+              <Select value={createForm.subscriptionPlan} onValueChange={(v) => setCreateForm({ ...createForm, subscriptionPlan: v })}>
+                <SelectTrigger data-testid="select-create-plan"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="free">Free</SelectItem>
+                  <SelectItem value="starter">Starter</SelectItem>
+                  <SelectItem value="professional">Professional</SelectItem>
+                  <SelectItem value="enterprise">Enterprise</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox id="cm-skip" data-testid="checkbox-skip-onboarding" checked={createForm.skipOnboarding} onCheckedChange={(v) => setCreateForm({ ...createForm, skipOnboarding: !!v })} />
+              <Label htmlFor="cm-skip" className="text-sm font-normal cursor-pointer">Skip onboarding wizard</Label>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
+              <Button type="submit" disabled={createMerchantMutation.isPending} data-testid="button-submit-create-merchant">
+                {createMerchantMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Create Merchant
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
