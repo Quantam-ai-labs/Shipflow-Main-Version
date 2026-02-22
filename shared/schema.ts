@@ -1172,7 +1172,7 @@ export const stockReceipts = pgTable("stock_receipts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
   productId: varchar("product_id").notNull().references(() => accountingProducts.id),
-  supplierId: varchar("supplier_id").references(() => parties.id),
+  supplierId: varchar("supplier_id").notNull().references(() => parties.id),
   quantity: integer("quantity").notNull(),
   unitCost: decimal("unit_cost", { precision: 12, scale: 2 }).notNull(),
   totalCost: decimal("total_cost", { precision: 14, scale: 2 }).notNull(),

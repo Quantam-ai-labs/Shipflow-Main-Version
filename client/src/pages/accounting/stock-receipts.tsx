@@ -7,9 +7,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -17,6 +18,9 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import {
+  RadioGroup, RadioGroupItem,
+} from "@/components/ui/radio-group";
 import { Plus } from "lucide-react";
 
 interface StockReceipt {
@@ -28,8 +32,8 @@ interface StockReceipt {
   extraCosts?: number | string;
   totalLandedCost?: number | string;
   supplierName?: string;
-  partyId?: string;
-  description?: string;
+  paymentType?: string;
+  paidNow?: boolean;
   date: string;
 }
 
@@ -55,8 +59,9 @@ interface ReceiptFormData {
   quantity: string;
   unitCost: string;
   extraCosts: string;
+  paymentType: string;
   cashAccountId: string;
-  partyId: string;
+  supplierId: string;
   description: string;
   date: string;
 }
@@ -65,7 +70,7 @@ const todayStr = () => new Date().toISOString().split("T")[0];
 
 const emptyForm: ReceiptFormData = {
   productId: "", quantity: "", unitCost: "", extraCosts: "",
-  cashAccountId: "", partyId: "", description: "", date: todayStr(),
+  paymentType: "PAID_NOW", cashAccountId: "", supplierId: "", description: "", date: todayStr(),
 };
 
 function formatPKR(amount: number | string): string {
@@ -97,16 +102,20 @@ export default function AccountingStockReceipts() {
 
   const createMutation = useMutation({
     mutationFn: async (data: ReceiptFormData) => {
-      const res = await apiRequest("POST", "/api/accounting/stock-receipts", {
+      const body: any = {
         productId: data.productId,
+        supplierId: data.supplierId,
         quantity: parseFloat(data.quantity),
         unitCost: parseFloat(data.unitCost),
         extraCosts: data.extraCosts ? parseFloat(data.extraCosts) : 0,
-        cashAccountId: data.cashAccountId,
-        partyId: data.partyId || undefined,
-        description: data.description || undefined,
+        paymentType: data.paymentType,
         date: data.date,
-      });
+        notes: data.description || undefined,
+      };
+      if (data.paymentType === "PAID_NOW") {
+        body.cashAccountId = data.cashAccountId;
+      }
+      const res = await apiRequest("POST", "/api/accounting/stock-receipts", body);
       return res.json();
     },
     onSuccess: () => {
@@ -114,6 +123,7 @@ export default function AccountingStockReceipts() {
       queryClient.invalidateQueries({ queryKey: ["/api/accounting/stock-receipts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/accounting/cash-accounts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/accounting/reports/overview"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/accounting/parties"] });
       toast({ title: "Stock receipt recorded successfully" });
       setDialogOpen(false);
       setFormData(emptyForm);
@@ -136,12 +146,21 @@ export default function AccountingStockReceipts() {
       toast({ title: "Valid unit cost is required", variant: "destructive" });
       return;
     }
-    if (!formData.cashAccountId) {
-      toast({ title: "Cash account is required", variant: "destructive" });
+    if (!formData.supplierId) {
+      toast({ title: "Supplier is required", variant: "destructive" });
+      return;
+    }
+    if (formData.paymentType === "PAID_NOW" && !formData.cashAccountId) {
+      toast({ title: "Cash/Bank account is required for Paid Now", variant: "destructive" });
       return;
     }
     createMutation.mutate(formData);
   }
+
+  const qty = parseFloat(formData.quantity) || 0;
+  const uc = parseFloat(formData.unitCost) || 0;
+  const ec = parseFloat(formData.extraCosts) || 0;
+  const previewInventoryValue = (qty * uc) + ec;
 
   return (
     <div className="space-y-6" data-testid="accounting-stock-receipts">
@@ -183,6 +202,7 @@ export default function AccountingStockReceipts() {
                   <TableHead className="text-right">Extra Costs</TableHead>
                   <TableHead className="text-right">Total Landed Cost</TableHead>
                   <TableHead>Supplier</TableHead>
+                  <TableHead>Payment</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -193,6 +213,7 @@ export default function AccountingStockReceipts() {
                   const totalLanded = receipt.totalLandedCost
                     ? (typeof receipt.totalLandedCost === "string" ? parseFloat(receipt.totalLandedCost) : receipt.totalLandedCost)
                     : (qty * unitCost + extra);
+                  const paymentLabel = receipt.paymentType === "CREDIT" ? "Credit" : "Paid";
                   return (
                     <TableRow key={receipt.id} data-testid={`row-receipt-${receipt.id}`}>
                       <TableCell data-testid={`text-receipt-date-${receipt.id}`}>
@@ -216,6 +237,11 @@ export default function AccountingStockReceipts() {
                       <TableCell data-testid={`text-receipt-supplier-${receipt.id}`}>
                         {receipt.supplierName || "-"}
                       </TableCell>
+                      <TableCell data-testid={`text-receipt-payment-${receipt.id}`}>
+                        <Badge variant={receipt.paymentType === "CREDIT" ? "outline" : "secondary"} className="text-xs">
+                          {paymentLabel}
+                        </Badge>
+                      </TableCell>
                     </TableRow>
                   );
                 })}
@@ -229,6 +255,7 @@ export default function AccountingStockReceipts() {
         <DialogContent data-testid="dialog-stock-receipt-form">
           <DialogHeader>
             <DialogTitle data-testid="text-dialog-title">Add Stock Receipt</DialogTitle>
+            <DialogDescription>Record a new inventory purchase from a supplier.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
@@ -246,29 +273,31 @@ export default function AccountingStockReceipts() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="receipt-quantity">Quantity *</Label>
-              <Input
-                id="receipt-quantity"
-                type="number"
-                step="1"
-                value={formData.quantity}
-                onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
-                placeholder="0"
-                data-testid="input-receipt-quantity"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="receipt-unitcost">Unit Cost *</Label>
-              <Input
-                id="receipt-unitcost"
-                type="number"
-                step="0.01"
-                value={formData.unitCost}
-                onChange={(e) => setFormData({ ...formData, unitCost: e.target.value })}
-                placeholder="0.00"
-                data-testid="input-receipt-unitcost"
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="receipt-quantity">Quantity *</Label>
+                <Input
+                  id="receipt-quantity"
+                  type="number"
+                  step="1"
+                  value={formData.quantity}
+                  onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+                  placeholder="0"
+                  data-testid="input-receipt-quantity"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="receipt-unitcost">Unit Cost *</Label>
+                <Input
+                  id="receipt-unitcost"
+                  type="number"
+                  step="0.01"
+                  value={formData.unitCost}
+                  onChange={(e) => setFormData({ ...formData, unitCost: e.target.value })}
+                  placeholder="0.00"
+                  data-testid="input-receipt-unitcost"
+                />
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="receipt-extracosts">Extra Costs (shipping/customs)</Label>
@@ -282,29 +311,22 @@ export default function AccountingStockReceipts() {
                 data-testid="input-receipt-extracosts"
               />
             </div>
+
+            {previewInventoryValue > 0 && (
+              <div className="bg-muted/50 rounded-md p-3 text-sm" data-testid="text-inventory-preview">
+                <span className="text-muted-foreground">Inventory Value: </span>
+                <span className="font-semibold">{formatPKR(previewInventoryValue)}</span>
+                <span className="text-muted-foreground ml-2">({qty} x {formatPKR(uc)}{ec > 0 ? ` + ${formatPKR(ec)} extra` : ""})</span>
+              </div>
+            )}
+
             <div className="space-y-2">
-              <Label>Cash Account *</Label>
-              <Select value={formData.cashAccountId} onValueChange={(v) => setFormData({ ...formData, cashAccountId: v })}>
-                <SelectTrigger data-testid="select-receipt-account">
-                  <SelectValue placeholder="Select account" />
-                </SelectTrigger>
-                <SelectContent>
-                  {cashAccounts.map((a) => (
-                    <SelectItem key={a.id} value={a.id} data-testid={`option-account-${a.id}`}>
-                      {a.name} ({formatPKR(a.balance)})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Supplier Party (optional)</Label>
-              <Select value={formData.partyId || "__none__"} onValueChange={(v) => setFormData({ ...formData, partyId: v === "__none__" ? "" : v })}>
+              <Label>Supplier Party *</Label>
+              <Select value={formData.supplierId} onValueChange={(v) => setFormData({ ...formData, supplierId: v })}>
                 <SelectTrigger data-testid="select-receipt-supplier">
                   <SelectValue placeholder="Select supplier" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__none__">None</SelectItem>
                   {suppliers.map((s) => (
                     <SelectItem key={s.id} value={s.id} data-testid={`option-supplier-${s.id}`}>
                       {s.name}
@@ -313,6 +335,50 @@ export default function AccountingStockReceipts() {
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="space-y-2">
+              <Label>Payment Type *</Label>
+              <RadioGroup
+                value={formData.paymentType}
+                onValueChange={(v) => setFormData({ ...formData, paymentType: v, cashAccountId: v === "CREDIT" ? "" : formData.cashAccountId })}
+                className="flex gap-4"
+                data-testid="radio-payment-type"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="PAID_NOW" id="paid-now" data-testid="radio-paid-now" />
+                  <Label htmlFor="paid-now" className="cursor-pointer font-normal">Paid Now</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="CREDIT" id="credit" data-testid="radio-credit" />
+                  <Label htmlFor="credit" className="cursor-pointer font-normal">Pay Later (Credit)</Label>
+                </div>
+              </RadioGroup>
+            </div>
+
+            {formData.paymentType === "PAID_NOW" && (
+              <div className="space-y-2">
+                <Label>Cash/Bank Account *</Label>
+                <Select value={formData.cashAccountId} onValueChange={(v) => setFormData({ ...formData, cashAccountId: v })}>
+                  <SelectTrigger data-testid="select-receipt-account">
+                    <SelectValue placeholder="Select account" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {cashAccounts.map((a) => (
+                      <SelectItem key={a.id} value={a.id} data-testid={`option-account-${a.id}`}>
+                        {a.name} ({formatPKR(a.balance)})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {formData.paymentType === "CREDIT" && (
+              <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-md p-3 text-sm text-blue-800 dark:text-blue-200" data-testid="text-credit-info">
+                This purchase will be added to the supplier's payable balance. Use "Money Out" in the Money section to pay the supplier later.
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="receipt-description">Description</Label>
               <Input

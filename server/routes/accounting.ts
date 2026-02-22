@@ -565,9 +565,29 @@ export function registerAccountingRoutes(app: Express) {
   app.post("/api/accounting/stock-receipts", isAuthenticated, async (req: any, res) => {
     try {
       const merchantId = await getMerchantId(req);
-      const { productId, supplierId, quantity, unitCost, extraCosts, paidNow, cashAccountId, date, notes } = req.body;
+      const { productId, supplierId, quantity, unitCost, extraCosts, paymentType, cashAccountId, date, notes } = req.body;
+
+      if (!supplierId) {
+        return res.status(400).json({ message: "Supplier party is required." });
+      }
+
+      const pType = paymentType || "PAID_NOW";
+      if (!["PAID_NOW", "CREDIT"].includes(pType)) {
+        return res.status(400).json({ message: "Payment type must be PAID_NOW or CREDIT." });
+      }
+
+      if (pType === "PAID_NOW" && !cashAccountId) {
+        return res.status(400).json({ message: "Cash/Bank account is required for Paid Now purchases." });
+      }
+      if (pType === "CREDIT" && cashAccountId) {
+        return res.status(400).json({ message: "Cash/Bank account must not be set for Credit purchases." });
+      }
+
       const qty = parseInt(quantity);
       const cost = parseFloat(unitCost);
+      if (!qty || qty <= 0) return res.status(400).json({ message: "Quantity must be greater than zero." });
+      if (!cost || cost <= 0) return res.status(400).json({ message: "Unit cost must be greater than zero." });
+
       const totalCost = qty * cost;
 
       let extraTotal = 0;
@@ -590,10 +610,17 @@ export function registerAccountingRoutes(app: Express) {
             await updatePartyBalance(merchantId, ec.vendorPartyId, ec.paidNow ? 0 : ecAmt);
           }
         }
+      } else if (extraCosts && typeof extraCosts === "number" && extraCosts > 0) {
+        extraTotal = extraCosts;
+        landedExtraCosts = [{ name: "Extra costs", amount: extraCosts, addToProductCost: true }];
       }
 
       const landedTotal = totalCost + extraTotal;
       const landedUnitCost = landedTotal / qty;
+
+      if (landedTotal <= 0) {
+        return res.status(400).json({ message: "Inventory value must be greater than zero." });
+      }
 
       const [product] = await db.select().from(accountingProducts).where(eq(accountingProducts.id, productId));
       if (!product) return res.status(404).json({ message: "Product not found" });
@@ -607,31 +634,37 @@ export function registerAccountingRoutes(app: Express) {
         stockQty: newQty, avgUnitCost: newAvg.toFixed(2), updatedAt: new Date(),
       }).where(eq(accountingProducts.id, productId));
 
+      const paidNow = pType === "PAID_NOW";
       const [receipt] = await db.insert(stockReceipts).values({
         merchantId, productId, supplierId, quantity: qty,
         unitCost: cost.toFixed(2), totalCost: totalCost.toFixed(2),
         landedCost: landedTotal.toFixed(2), landedUnitCost: landedUnitCost.toFixed(2),
-        extraCosts: landedExtraCosts, paidNow, cashAccountId, date: new Date(date), notes,
+        extraCosts: landedExtraCosts, paidNow, paymentType: pType,
+        cashAccountId: pType === "PAID_NOW" ? cashAccountId : null,
+        inventoryValue: landedTotal.toFixed(2),
+        date: new Date(date), notes,
       }).returning();
 
-      if (paidNow && cashAccountId) {
-        await updateCashAccountBalance(cashAccountId, -totalCost);
+      if (pType === "PAID_NOW") {
+        await updateCashAccountBalance(cashAccountId, -landedTotal);
         await db.insert(cashMovements).values({
-          merchantId, cashAccountId, type: "out", amount: totalCost.toFixed(2),
+          merchantId, cashAccountId, type: "out", amount: landedTotal.toFixed(2),
           relatedReceiptId: receipt.id, description: `Stock purchase: ${product.name}`,
           date: new Date(date),
         });
       }
-      if (supplierId) {
-        await updatePartyBalance(merchantId, supplierId, paidNow ? 0 : totalCost);
+
+      if (pType === "CREDIT") {
+        await updatePartyBalance(merchantId, supplierId, landedTotal);
       }
 
+      const creditSide = pType === "PAID_NOW" ? `cash:${cashAccountId}` : `payable:${supplierId}`;
       await createLedgerEntry(merchantId, new Date(date), `Stock receipt: ${product.name} x${qty}`,
-        `inventory:${productId}`, paidNow ? `cash:${cashAccountId}` : `payable:${supplierId}`,
+        `inventory:${productId}`, creditSide,
         landedTotal, "stock_receipt", receipt.id);
 
       await createAuditEntry(merchantId, "STOCK_RECEIPT", "stock_receipt", receipt.id,
-        `Received ${qty} x ${product.name} at ${cost}/unit (landed: ${landedUnitCost.toFixed(2)}/unit)`,
+        `Received ${qty} x ${product.name} at ${cost}/unit (landed: ${landedUnitCost.toFixed(2)}/unit, ${pType})`,
         { stockQty: oldQty, avgCost: oldAvg },
         { stockQty: newQty, avgCost: newAvg },
         req.user?.id);
