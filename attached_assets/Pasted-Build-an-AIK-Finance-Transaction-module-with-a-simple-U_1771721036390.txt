@@ -1,0 +1,157 @@
+Build an AIK Finance Transaction module with a simple UI (3 buttons) but strict backend rules so reporting/ledger never breaks.
+
+GOAL
+- Front-end has 3 actions: Money In, Money Out, Transfer
+- Backend enforces valid structures, creates balanced ledger lines, supports 2-minute edit window, then only reversal (no delete).
+- Reversals must still post to ledger, but UI can hide them by default.
+
+DATA MODEL (recommended)
+Use true double-entry style:
+1) transactions
+- id (uuid)
+- txn_type ENUM: MONEY_IN | MONEY_OUT | TRANSFER | REVERSAL
+- transfer_mode ENUM NULLABLE: ACCOUNT_TO_ACCOUNT | PARTY_TO_PARTY (only for TRANSFER)
+- category (string/enum)
+- description (text)
+- reference_id (string nullable)
+- amount (decimal)
+- date (date)
+- from_party_id (nullable)
+- to_party_id (nullable)
+- from_account_id (nullable)
+- to_account_id (nullable)
+- created_by (user id)
+- created_at (timestamp)
+- updated_at (timestamp)
+- is_locked (bool) (or compute lock via created_at)
+- reversal_of (nullable transaction id) (only for REVERSAL)
+- reversed_by (nullable user id)
+- reversed_at (nullable timestamp)
+- reversal_reason (nullable text)
+
+2) ledger_lines (journal lines)
+- id (uuid)
+- transaction_id (fk)
+- entity_type ENUM: ACCOUNT | PARTY
+- entity_id (fk to accounts or parties)
+- direction ENUM: DEBIT | CREDIT
+- amount (decimal)
+- created_at
+
+3) audit_log
+- id (uuid)
+- transaction_id (fk)
+- action ENUM: CREATE | EDIT | REVERSE
+- actor_user_id
+- action_at (timestamp)
+- before_json (nullable)
+- after_json (nullable)
+- reason (nullable)
+
+ENTITIES
+- accounts table: id, name, type (cash/bank/wallet/etc)
+- parties table: id, name, type (customer/supplier/courier/other)
+
+STRICT VALIDATION RULES (NON-NEGOTIABLE)
+Every transaction must create EXACTLY 2 ledger_lines and must balance.
+
+A) MONEY IN (Party -> Our Account)
+Required:
+- from_party_id NOT NULL
+- to_account_id NOT NULL
+Forbidden (must be NULL):
+- from_account_id
+- to_party_id
+Ledger lines:
+- DEBIT  ACCOUNT(to_account_id) amount
+- CREDIT PARTY(from_party_id) amount
+Reject request if forbidden fields present or required missing.
+
+B) MONEY OUT (Our Account -> Party)
+Required:
+- from_account_id NOT NULL
+- to_party_id NOT NULL
+Forbidden:
+- to_account_id
+- from_party_id
+Ledger lines:
+- CREDIT ACCOUNT(from_account_id) amount
+- DEBIT  PARTY(to_party_id) amount
+
+C) TRANSFER
+Transfer must be exactly ONE of these two modes:
+
+C1) ACCOUNT_TO_ACCOUNT
+Required:
+- from_account_id NOT NULL
+- to_account_id NOT NULL
+Forbidden:
+- from_party_id
+- to_party_id
+Extra rules:
+- from_account_id != to_account_id
+Ledger:
+- CREDIT ACCOUNT(from_account_id) amount
+- DEBIT  ACCOUNT(to_account_id) amount
+
+C2) PARTY_TO_PARTY (direct settlement; money may not touch our accounts)
+Required:
+- from_party_id NOT NULL
+- to_party_id NOT NULL
+Forbidden:
+- from_account_id
+- to_account_id
+Extra rules:
+- from_party_id != to_party_id
+- description REQUIRED (non-empty)
+- reference_id strongly recommended; if possible enforce required for PARTY_TO_PARTY
+Ledger:
+- CREDIT PARTY(from_party_id) amount
+- DEBIT  PARTY(to_party_id) amount
+
+IMPORTANT: Never allow mixed party+account transfers in one transaction. If both party fields and account fields are provided => reject with clear error.
+
+EDIT / LOCK / REVERSAL POLICY
+- A transaction is editable ONLY within 2 minutes of created_at.
+- After 2 minutes: editing forbidden. No deletes ever.
+- After 2 minutes: user can only REVERSE.
+
+Edit:
+- Only allowed if now <= created_at + 2 minutes AND transaction is not already reversed.
+- When editing, write audit_log with before_json and after_json.
+- Recompute ledger_lines (delete old lines + insert new) ONLY if within 2 minutes.
+
+Reverse:
+- Create a NEW transaction row with txn_type=REVERSAL and reversal_of=original_id.
+- reversal_reason required.
+- Copy the original transaction structure but invert ledger directions (swap DEBIT/CREDIT) for the two ledger lines, same amount.
+- Post reversal to ledger_lines (2 lines).
+- Mark original transaction as reversed logically by linking reversal_of and storing reversed_at, reversed_by.
+- Original remains immutable.
+
+REPORTING
+- Ledger/balances must include reversals (so net becomes correct).
+- UI default views can hide REVERSAL rows; provide a toggle “Show reversed entries”.
+- When opening a transaction details screen: show original + linked reversal (if any) + audit history.
+
+API ENDPOINTS (suggested)
+- POST /transactions (create money in/out/transfer)
+- PATCH /transactions/:id (edit only if within 2 minutes)
+- POST /transactions/:id/reverse (creates reversal)
+- GET /transactions (filters: type, date range, party, account, include_reversals)
+- GET /transactions/:id (details + ledger lines + audit log)
+- GET /reports/balances (account balances, party balances; net of reversals)
+
+ERROR MESSAGES
+Return human-friendly validation errors, e.g.:
+- “Money In requires From Party and To Account.”
+- “Transfer must be either Account↔Account OR Party↔Party, not both.”
+- “This transaction is locked. Please reverse it instead.”
+
+IMPLEMENTATION NOTES
+- Use database transactions so writing transaction + 2 ledger lines + audit log is atomic.
+- Use decimals for money (no floats).
+- Add indexes on: created_at/date, party_id, account_id, txn_type, reversal_of.
+
+DELIVERABLE
+Implement backend + minimal UI with the 3 buttons and forms. Ensure all validation rules, audit log, 2-minute lock, and reversal logic work end-to-end.
