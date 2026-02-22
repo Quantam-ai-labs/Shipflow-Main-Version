@@ -64,6 +64,7 @@ import {
   Landmark,
   Scale,
   Cog,
+  ArrowLeftRight,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery } from "@tanstack/react-query";
@@ -134,6 +135,7 @@ const codSubItems = [
 
 const accountingOverviewItems = [
   { title: "Overview", url: "/accounting", icon: Wallet },
+  { title: "Transactions", url: "/accounting/transactions", icon: ArrowLeftRight },
   { title: "Money", url: "/accounting/money", icon: Banknote },
   { title: "Parties", url: "/accounting/parties", icon: UserCircle },
 ];

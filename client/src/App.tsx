@@ -57,6 +57,7 @@ import AccountingLedger from "@/pages/accounting/ledger";
 import AccountingTrialBalance from "@/pages/accounting/trial-balance";
 import AccountingCashAccounts from "@/pages/accounting/cash-accounts";
 import AccountingSettings from "@/pages/accounting/settings";
+import AccountingTransactions from "@/pages/accounting/transactions";
 import NotFound from "@/pages/not-found";
 
 function OnboardingBanner() {
@@ -101,6 +102,7 @@ function AppRoutes() {
       <Route path="/financial-dashboard" component={FinancialDashboard} />
       <Route path="/stock-ledger" component={StockLedger} />
       <Route path="/accounting" component={AccountingOverview} />
+      <Route path="/accounting/transactions" component={AccountingTransactions} />
       <Route path="/accounting/money" component={MoneyPage} />
       <Route path="/accounting/parties" component={AccountingParties} />
       <Route path="/accounting/products" component={AccountingProducts} />

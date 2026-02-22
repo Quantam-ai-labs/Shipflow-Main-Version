@@ -1333,3 +1333,69 @@ export const insertAccountingSettingsSchema = createInsertSchema(accountingSetti
 });
 export type InsertAccountingSettings = z.infer<typeof insertAccountingSettingsSchema>;
 export type AccountingSettings = typeof accountingSettings.$inferSelect;
+
+// ============================================
+// ACCOUNTING: TRANSACTIONS (Unified Money In/Out/Transfer/Reversal)
+// ============================================
+export const transactions = pgTable("transactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  txnType: varchar("txn_type", { length: 20 }).notNull(),
+  transferMode: varchar("transfer_mode", { length: 30 }),
+  category: varchar("category", { length: 100 }),
+  description: text("description"),
+  referenceId: varchar("reference_id", { length: 255 }),
+  amount: decimal("amount", { precision: 14, scale: 2 }).notNull(),
+  date: timestamp("date").notNull(),
+  fromPartyId: varchar("from_party_id").references(() => parties.id),
+  toPartyId: varchar("to_party_id").references(() => parties.id),
+  fromAccountId: varchar("from_account_id").references(() => cashAccounts.id),
+  toAccountId: varchar("to_account_id").references(() => cashAccounts.id),
+  createdBy: varchar("created_by"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  reversalOf: varchar("reversal_of"),
+  reversedBy: varchar("reversed_by"),
+  reversedAt: timestamp("reversed_at"),
+  reversalReason: text("reversal_reason"),
+}, (table) => [
+  index("idx_txn_merchant").on(table.merchantId),
+  index("idx_txn_type").on(table.merchantId, table.txnType),
+  index("idx_txn_date").on(table.merchantId, table.date),
+  index("idx_txn_party_from").on(table.fromPartyId),
+  index("idx_txn_party_to").on(table.toPartyId),
+  index("idx_txn_account_from").on(table.fromAccountId),
+  index("idx_txn_account_to").on(table.toAccountId),
+  index("idx_txn_reversal_of").on(table.reversalOf),
+]);
+
+export const insertTransactionSchema = createInsertSchema(transactions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
+export type Transaction = typeof transactions.$inferSelect;
+
+// ============================================
+// ACCOUNTING: LEDGER LINES (Journal lines for double-entry)
+// ============================================
+export const ledgerLines = pgTable("ledger_lines", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  transactionId: varchar("transaction_id").notNull().references(() => transactions.id, { onDelete: "cascade" }),
+  entityType: varchar("entity_type", { length: 10 }).notNull(),
+  entityId: varchar("entity_id").notNull(),
+  direction: varchar("direction", { length: 10 }).notNull(),
+  amount: decimal("amount", { precision: 14, scale: 2 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_ll_transaction").on(table.transactionId),
+  index("idx_ll_entity").on(table.entityType, table.entityId),
+]);
+
+export const insertLedgerLineSchema = createInsertSchema(ledgerLines).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertLedgerLine = z.infer<typeof insertLedgerLineSchema>;
+export type LedgerLine = typeof ledgerLines.$inferSelect;
