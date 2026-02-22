@@ -1,0 +1,59 @@
+Update “Add Stock Receipt” form + backend logic.
+
+PROBLEM
+Current form requires Cash Account and makes Supplier optional. This assumes every stock receipt is paid immediately, which is wrong. We need credit purchases + proper supplier payable tracking.
+
+UI CHANGES
+1) Make “Supplier Party” REQUIRED (not optional).
+2) Add a new required field: Payment Type
+   - Paid Now
+   - Pay Later (Credit)
+
+3) Conditional fields:
+   - If Payment Type = Paid Now:
+       - Show Cash/Bank Account (REQUIRED)
+   - If Payment Type = Pay Later (Credit):
+       - Hide Cash/Bank Account (must be NULL)
+
+ACCOUNTING / LEDGER RULES
+When stock receipt is created, always post inventory value:
+inventory_value = (quantity * unit_cost) + extra_costs
+
+A) If Payment Type = Paid Now
+- Debit: Inventory (or Stock Asset) = inventory_value
+- Credit: Selected Cash/Bank Account = inventory_value
+- Supplier payable should NOT increase (supplier balance unchanged unless you also track vendor history)
+
+B) If Payment Type = Pay Later (Credit)
+- Debit: Inventory (or Stock Asset) = inventory_value
+- Credit: Supplier Payable (party ledger for that supplier) = inventory_value
+- No cash/bank account movement
+
+PAYMENT LATER FLOW
+When paying supplier later:
+- Use Finance module “Money Out”
+  - From Account: Cash/Bank
+  - To Party: Supplier
+  - Amount: payment amount
+This reduces supplier payable correctly.
+
+VALIDATION (STRICT)
+- Supplier Party must always be present.
+- If Paid Now: cash_account_id required.
+- If Pay Later: cash_account_id must be NULL.
+- inventory_value must be > 0.
+- Create exactly 2 balanced ledger lines.
+
+DATABASE FIELDS (if needed)
+Add to stock_receipts:
+- supplier_party_id (required)
+- payment_type ENUM: PAID_NOW | CREDIT
+- cash_account_id (nullable, required only if PAID_NOW)
+- inventory_value (decimal)
+
+REPORTING BENEFIT
+- Accurate supplier payable balances
+- Accurate cash flow
+- Inventory valuation stays correct
+
+Implement with clean error messages and prevent any mixed/invalid state.
