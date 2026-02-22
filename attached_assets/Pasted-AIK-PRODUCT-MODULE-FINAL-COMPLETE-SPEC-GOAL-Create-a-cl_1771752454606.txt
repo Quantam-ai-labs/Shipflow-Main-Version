@@ -1,0 +1,219 @@
+AIK – PRODUCT MODULE (FINAL COMPLETE SPEC)
+
+GOAL:
+Create a clean, minimal, scalable Product system with:
+- Enforced unique SKU (auto-generated if empty)
+- Minimal primary form
+- Advanced collapsible section
+- CSV + Excel bulk import
+- Safe validation
+- No duplicate products
+- Atomic inserts
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1) MENU STRUCTURE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Stock & Sales →
+   - Products
+       Buttons:
+          + Add Product
+          📥 Bulk Import
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2) PRODUCT FORM STRUCTURE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PRIMARY (always visible):
+
+1) Name (required, unique normalized)
+2) SKU (required in DB, auto-generated if empty)
+3) Sale Price (required, decimal >= 0)
+
+ADVANCED (collapsible, default collapsed):
+
+- Unit (default "pcs")
+- Track Inventory (toggle, default ON)
+- Default Purchase Cost (decimal, optional)
+- Category (text)
+- Barcode (optional, must be unique if provided)
+- Costing Method (dropdown, default AVERAGE)
+
+Behavior:
+- If Track Inventory = OFF:
+    hide Purchase Cost and Costing Method
+- Name must be unique (normalized trim + lowercase)
+- SKU must be unique (case-insensitive)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3) SKU ENFORCEMENT (CRITICAL)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+SKU RULES:
+
+1) SKU is REQUIRED in database (NOT NULL).
+2) SKU must be UNIQUE (case-insensitive).
+3) If SKU is empty:
+   - Auto-generate using incremental sequence:
+     Format: SKU-000001, SKU-000002, ...
+4) SKU can be edited later but must remain unique.
+
+Normalization:
+- sku_normalized = UPPER(TRIM(sku))
+- Add unique index on sku_normalized
+
+Concurrency Safe Implementation (Postgres preferred):
+
+- Create sequence: product_sku_seq
+- On insert when sku missing:
+   next_val = nextval('product_sku_seq')
+   sku = 'SKU-' || LPAD(next_val::text, 6, '0')
+
+All foreign keys must use product_id, NOT SKU.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+4) DATABASE MODEL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+products:
+- id (UUID or auto ID)
+- name
+- name_normalized
+- sku
+- sku_normalized
+- sale_price (DECIMAL(18,2))
+- unit
+- track_inventory (boolean)
+- purchase_cost (DECIMAL(18,2), nullable)
+- category
+- barcode
+- costing_method
+- active (boolean default true)
+- created_at
+- updated_at
+
+Indexes:
+- UNIQUE(name_normalized)
+- UNIQUE(sku_normalized)
+- UNIQUE(barcode) if not null
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+5) BULK IMPORT PRODUCTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Location:
+Stock & Sales → Products → Bulk Import
+
+Accept:
+- .xlsx
+- .csv
+Max file size reasonable (e.g. 5MB)
+
+Sheet Name (Excel):
+Products
+If missing → use first sheet.
+
+Required Columns:
+- name
+- sale_price
+
+Optional Columns:
+- sku
+- unit
+- track_inventory
+- purchase_cost
+- category
+- barcode
+
+Column Rules:
+
+name:
+- required
+- unique normalized
+- reject duplicates within file
+- reject if already exists in system
+
+sale_price:
+- required
+- decimal >= 0
+
+sku:
+- optional
+- if empty → auto-generate
+- if provided → must be unique
+- reject duplicate SKUs in file
+- reject if already exists
+
+unit:
+- default "pcs"
+
+track_inventory:
+- YES/NO
+- default YES
+
+purchase_cost:
+- allowed only if track_inventory=YES
+
+barcode:
+- must be unique if provided
+
+category:
+- auto-create if not exists
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+6) IMPORT PROCESS (SAFE FLOW)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Step 1: Upload file
+Step 2: Parse rows
+Step 3: Validate entire file
+   - Missing fields
+   - Duplicate names inside file
+   - Duplicate SKUs inside file
+   - Existing conflicts in DB
+Step 4: Show Preview:
+   - Valid rows count
+   - Errors count
+   - Auto-SKU preview
+   - Category auto-create notice
+Step 5: User clicks Confirm Import
+Step 6: Insert all products inside ONE database transaction
+   - If any error → rollback entire batch
+
+IMPORTANT:
+- Do NOT allow updating existing products in bulk import (create-only version).
+- No partial imports allowed.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+7) MONEY SAFETY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+- All monetary values stored as DECIMAL(18,2)
+- Round to 2 decimals on input
+- No floating point
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+8) ADDITIONAL SAFETY RULES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+- Reject ambiguous duplicates
+- Reject negative prices
+- Reject invalid units
+- Enforce strict uniqueness
+- Do not allow deleting products that have transactions
+- Use soft-delete (active=false) instead
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FINAL RESULT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+This Product module must:
+
+✔ Enforce unique SKU
+✔ Auto-generate SKU safely
+✔ Support CSV + Excel import
+✔ Prevent duplicates
+✔ Keep UI minimal
+✔ Hide advanced fields unless needed
+✔ Use atomic DB transactions
+✔ Be scalable and ERP-safe
