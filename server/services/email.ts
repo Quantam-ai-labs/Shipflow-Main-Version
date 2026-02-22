@@ -140,7 +140,9 @@ interface MerchantSetupEmailParams {
 
 export async function sendMerchantSetupEmail(params: MerchantSetupEmailParams): Promise<{ success: boolean; error?: string }> {
   try {
+    console.log(`[Email] Preparing merchant setup email for ${params.toEmail}...`);
     const { client, fromEmail } = await getResendClient();
+    console.log(`[Email] Using from address: ${fromEmail}`);
     const { toEmail, merchantName, firstName, setupUrl, expiresAt } = params;
     const expiryStr = expiresAt.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
@@ -194,15 +196,15 @@ export async function sendMerchantSetupEmail(params: MerchantSetupEmailParams): 
     });
 
     if (result.error) {
-      console.error('[Email] Resend error:', result.error);
-      return { success: false, error: result.error.message || 'Email send failed' };
+      console.error('[Email] Resend error:', JSON.stringify(result.error));
+      return { success: false, error: result.error.message || JSON.stringify(result.error) };
     }
 
     console.log(`[Email] Merchant setup email sent to ${toEmail} (id: ${result.data?.id})`);
     return { success: true };
   } catch (err: any) {
-    console.error('[Email] Failed to send merchant setup email:', err.message);
-    return { success: false, error: err.message };
+    console.error('[Email] Failed to send merchant setup email:', err.message, err.stack);
+    return { success: false, error: err.message || 'Unknown email error' };
   }
 }
 

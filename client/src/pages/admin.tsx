@@ -276,7 +276,10 @@ function MerchantsTab() {
       return res.json();
     },
     onSuccess: (data) => {
-      toast({ title: "Merchant Created", description: data.message });
+      toast({ title: "Merchant Created", description: data.message, duration: 8000 });
+      if (!data.emailSent && data.emailError) {
+        toast({ title: "Email Failed", description: `Setup invite email could not be sent: ${data.emailError}`, variant: "destructive", duration: 12000 });
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/admin/merchants"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/platform-stats"] });
       setCreateOpen(false);
