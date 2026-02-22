@@ -72,7 +72,7 @@ import {
   checkWebhookHealth,
 } from "./services/webhookRegistration";
 import { webhookHandler } from "./services/webhookHandler";
-import { sendInviteEmail } from "./services/email";
+import { sendInviteEmail, sendMerchantSetupEmail } from "./services/email";
 import {
   writeBackAddress,
   writeBackCancel,
@@ -8149,7 +8149,6 @@ export async function registerRoutes(
       const createSchema = z.object({
         merchantName: z.string().min(1, "Business name is required"),
         email: z.string().email("Valid email is required"),
-        password: z.string().min(6, "Password must be at least 6 characters"),
         firstName: z.string().min(1, "First name is required"),
         lastName: z.string().optional(),
         phone: z.string().optional(),
@@ -8165,8 +8164,8 @@ export async function registerRoutes(
         return res.status(400).json({ message: "An account with this email already exists" });
       }
 
-      const bcrypt = await import("bcrypt");
-      const passwordHash = await bcrypt.hash(body.password, 12);
+      const setupToken = crypto.randomBytes(32).toString("hex");
+      const setupTokenExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
       const normalizedPhone = normalizePakistaniPhone(body.phone);
       const slug = body.merchantName
         .toLowerCase()
@@ -8189,10 +8188,11 @@ export async function registerRoutes(
           email: body.email,
           firstName: body.firstName,
           lastName: body.lastName || null,
-          passwordHash,
           role: "USER",
           isActive: true,
           merchantId: merchant.id,
+          setupToken,
+          setupTokenExpiresAt,
         }).returning();
 
         await tx.insert(teamMembers).values({
@@ -8213,8 +8213,19 @@ export async function registerRoutes(
         details: `Merchant "${body.merchantName}" created by admin with plan: ${body.subscriptionPlan}`,
       });
 
+      const setupUrl = `${req.protocol}://${req.get("host")}/merchant-setup/${setupToken}`;
+      const emailResult = await sendMerchantSetupEmail({
+        toEmail: body.email,
+        merchantName: body.merchantName,
+        firstName: body.firstName,
+        setupUrl,
+        expiresAt: setupTokenExpiresAt,
+      });
+
       res.json({
-        message: `Merchant "${body.merchantName}" created successfully`,
+        message: `Merchant "${body.merchantName}" created successfully. ${emailResult.success ? "Setup invite sent to " + body.email : "Account created but email failed to send."}`,
+        emailSent: emailResult.success,
+        emailError: emailResult.error,
         merchant: result.merchant,
         user: { id: result.user.id, email: result.user.email, firstName: result.user.firstName },
       });
@@ -8224,6 +8235,77 @@ export async function registerRoutes(
       }
       console.error("Admin create merchant error:", error);
       res.status(500).json({ message: "Failed to create merchant" });
+    }
+  });
+
+  // ============================================
+  // MERCHANT SETUP (Set password via invite link)
+  // ============================================
+
+  app.get("/api/merchant-setup/:token", async (req, res) => {
+    try {
+      const { token } = req.params;
+      const [user] = await db.select().from(users).where(eq(users.setupToken, token));
+      if (!user) {
+        return res.status(404).json({ message: "Invalid or expired setup link." });
+      }
+      if (user.setupTokenExpiresAt && new Date(user.setupTokenExpiresAt) < new Date()) {
+        return res.status(410).json({ message: "This setup link has expired. Please contact your administrator." });
+      }
+      if (user.passwordHash) {
+        return res.status(400).json({ message: "Account already set up. Please log in instead." });
+      }
+
+      let merchantName = null;
+      if (user.merchantId) {
+        const [m] = await db.select().from(merchants).where(eq(merchants.id, user.merchantId));
+        merchantName = m?.name;
+      }
+
+      res.json({
+        email: user.email,
+        firstName: user.firstName,
+        merchantName,
+      });
+    } catch (error) {
+      console.error("Setup token validation error:", error);
+      res.status(500).json({ message: "Failed to validate setup link" });
+    }
+  });
+
+  app.post("/api/merchant-setup/:token", async (req, res) => {
+    try {
+      const { token } = req.params;
+      const { password } = req.body;
+
+      if (!password || password.length < 6) {
+        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      }
+
+      const [user] = await db.select().from(users).where(eq(users.setupToken, token));
+      if (!user) {
+        return res.status(404).json({ message: "Invalid or expired setup link." });
+      }
+      if (user.setupTokenExpiresAt && new Date(user.setupTokenExpiresAt) < new Date()) {
+        return res.status(410).json({ message: "This setup link has expired. Please contact your administrator." });
+      }
+      if (user.passwordHash) {
+        return res.status(400).json({ message: "Account already set up. Please log in instead." });
+      }
+
+      const bcrypt = await import("bcrypt");
+      const passwordHash = await bcrypt.hash(password, 12);
+
+      await db.update(users).set({
+        passwordHash,
+        setupToken: null,
+        setupTokenExpiresAt: null,
+      }).where(eq(users.id, user.id));
+
+      res.json({ message: "Password set successfully! You can now log in." });
+    } catch (error) {
+      console.error("Setup password error:", error);
+      res.status(500).json({ message: "Failed to set password" });
     }
   });
 

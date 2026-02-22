@@ -30,6 +30,7 @@ import Settings from "@/pages/settings";
 import Onboarding from "@/pages/onboarding";
 import AdminPanel from "@/pages/admin";
 import AdminLoginPage from "@/pages/admin-login";
+import MerchantSetup from "@/pages/merchant-setup";
 import InviteAccept from "@/pages/invite-accept";
 import PrintLabels from "@/pages/print-labels";
 import Products from "@/pages/products";
@@ -236,6 +237,15 @@ function MainApp() {
     return (
       <Switch>
         <Route path="/invite/:token" component={InviteAccept} />
+      </Switch>
+    );
+  }
+
+  // Merchant setup page is accessible without authentication
+  if (location.startsWith("/merchant-setup/")) {
+    return (
+      <Switch>
+        <Route path="/merchant-setup/:token" component={MerchantSetup} />
       </Switch>
     );
   }

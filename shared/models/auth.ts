@@ -23,6 +23,8 @@ export const users = pgTable("users", {
   merchantId: varchar("merchant_id"),
   sidebarMode: varchar("sidebar_mode", { length: 20 }).notNull().default("advanced"),
   sidebarPinnedPages: text("sidebar_pinned_pages").array(),
+  setupToken: varchar("setup_token", { length: 255 }),
+  setupTokenExpiresAt: timestamp("setup_token_expires_at"),
   lastLoginAt: timestamp("last_login_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

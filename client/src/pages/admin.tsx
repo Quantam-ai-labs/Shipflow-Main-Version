@@ -188,7 +188,7 @@ function MerchantsTab() {
   const [subDialog, setSubDialog] = useState<{ merchant: any; plan: string } | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState({
-    merchantName: "", email: "", password: "", firstName: "", lastName: "", phone: "", city: "", subscriptionPlan: "free", skipOnboarding: false,
+    merchantName: "", email: "", firstName: "", lastName: "", phone: "", city: "", subscriptionPlan: "free", skipOnboarding: false,
   });
 
   const { data: merchantList = [], isLoading } = useQuery<any[]>({
@@ -280,7 +280,7 @@ function MerchantsTab() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/merchants"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/platform-stats"] });
       setCreateOpen(false);
-      setCreateForm({ merchantName: "", email: "", password: "", firstName: "", lastName: "", phone: "", city: "", subscriptionPlan: "free", skipOnboarding: false });
+      setCreateForm({ merchantName: "", email: "", firstName: "", lastName: "", phone: "", city: "", subscriptionPlan: "free", skipOnboarding: false });
     },
     onError: (err: any) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
   });
@@ -574,10 +574,7 @@ function MerchantsTab() {
               <Label htmlFor="cm-email">Email *</Label>
               <Input id="cm-email" data-testid="input-create-email" type="email" placeholder="merchant@example.com" value={createForm.email} onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })} required />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="cm-password">Password *</Label>
-              <Input id="cm-password" data-testid="input-create-password" type="password" placeholder="Min 6 characters" value={createForm.password} onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })} required minLength={6} />
-            </div>
+            <p className="text-xs text-muted-foreground bg-muted/50 rounded px-3 py-2">A setup invite email will be sent to the merchant so they can set their own password.</p>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="cm-phone">Phone</Label>
