@@ -14,6 +14,8 @@ export interface AuthUser {
     status: string;
     onboardingStep: string;
   } | null;
+  sidebarMode: string;
+  sidebarPinnedPages: string[];
 }
 
 export function useAuth() {

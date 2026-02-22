@@ -145,6 +145,8 @@ export function registerAuthRoutes(app: Express): void {
         role: user.role,
         merchantId: user.merchantId,
         merchant: merchantData,
+        sidebarMode: user.sidebarMode || "advanced",
+        sidebarPinnedPages: user.sidebarPinnedPages || [],
       });
     } catch (error: any) {
       if (error instanceof z.ZodError) {
@@ -202,6 +204,8 @@ export function registerAuthRoutes(app: Express): void {
         role: user.role,
         merchantId: user.merchantId,
         merchant: merchantData,
+        sidebarMode: user.sidebarMode || "advanced",
+        sidebarPinnedPages: user.sidebarPinnedPages || [],
       });
     } catch (error) {
       console.error("Error fetching user:", error);

@@ -5014,6 +5014,44 @@ export async function registerRoutes(
     },
   );
 
+  app.get("/api/sidebar-preferences", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const [user] = await db.select({
+        sidebarMode: users.sidebarMode,
+        sidebarPinnedPages: users.sidebarPinnedPages,
+      }).from(users).where(eq(users.id, userId));
+      res.json({
+        sidebarMode: user?.sidebarMode || "advanced",
+        sidebarPinnedPages: user?.sidebarPinnedPages || [],
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch sidebar preferences" });
+    }
+  });
+
+  app.patch("/api/sidebar-preferences", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { sidebarMode, sidebarPinnedPages } = req.body;
+      const updates: any = { updatedAt: new Date() };
+      if (sidebarMode && ["simple", "advanced"].includes(sidebarMode)) {
+        updates.sidebarMode = sidebarMode;
+      }
+      if (Array.isArray(sidebarPinnedPages)) {
+        updates.sidebarPinnedPages = sidebarPinnedPages;
+      }
+      await db.update(users).set(updates).where(eq(users.id, userId));
+      const [updated] = await db.select({
+        sidebarMode: users.sidebarMode,
+        sidebarPinnedPages: users.sidebarPinnedPages,
+      }).from(users).where(eq(users.id, userId));
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update sidebar preferences" });
+    }
+  });
+
   // Settings
   app.get("/api/settings", isAuthenticated, async (req, res) => {
     try {

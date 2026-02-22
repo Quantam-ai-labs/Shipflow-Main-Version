@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, jsonb, pgTable, timestamp, varchar, boolean } from "drizzle-orm/pg-core";
+import { index, jsonb, pgTable, timestamp, varchar, boolean, text } from "drizzle-orm/pg-core";
 
 export const sessions = pgTable(
   "sessions",
@@ -21,6 +21,8 @@ export const users = pgTable("users", {
   role: varchar("role", { length: 20 }).notNull().default("USER"),
   isActive: boolean("is_active").notNull().default(true),
   merchantId: varchar("merchant_id"),
+  sidebarMode: varchar("sidebar_mode", { length: 20 }).notNull().default("advanced"),
+  sidebarPinnedPages: text("sidebar_pinned_pages").array(),
   lastLoginAt: timestamp("last_login_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
