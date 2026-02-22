@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -18,71 +18,63 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import {
-  RadioGroup, RadioGroupItem,
-} from "@/components/ui/radio-group";
-import { Plus } from "lucide-react";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Plus, Trash2, ChevronDown, ChevronRight } from "lucide-react";
 
-interface StockReceipt {
-  id: string;
+interface ReceiptItem {
   productId: string;
   productName?: string;
   quantity: number | string;
   unitCost: number | string;
-  extraCosts?: number | string;
-  totalLandedCost?: number | string;
+  lineTotal: string;
+  allocatedExtra?: string;
+  finalUnitCost?: string;
+}
+
+interface StockReceipt {
+  id: string;
+  supplierId: string;
   supplierName?: string;
-  paymentType?: string;
-  paidNow?: boolean;
+  paymentType: string;
+  extraCosts: string;
+  itemsSubtotal: string;
+  inventoryValue: string;
+  description?: string;
   date: string;
+  items: ReceiptItem[];
 }
 
-interface Product {
-  id: string;
-  name: string;
-}
+interface Product { id: string; name: string; }
+interface CashAccount { id: string; name: string; balance: string; }
+interface Party { id: string; name: string; type: string; }
 
-interface CashAccount {
-  id: string;
-  name: string;
-  balance: string;
-}
-
-interface Party {
-  id: string;
-  name: string;
-  type: string;
-}
-
-interface ReceiptFormData {
+interface FormItem {
   productId: string;
   quantity: string;
   unitCost: string;
-  extraCosts: string;
-  paymentType: string;
-  cashAccountId: string;
-  supplierId: string;
-  description: string;
-  date: string;
 }
 
 const todayStr = () => new Date().toISOString().split("T")[0];
 
-const emptyForm: ReceiptFormData = {
-  productId: "", quantity: "", unitCost: "", extraCosts: "",
-  paymentType: "PAID_NOW", cashAccountId: "", supplierId: "", description: "", date: todayStr(),
-};
-
 function formatPKR(amount: number | string): string {
   const num = typeof amount === "string" ? parseFloat(amount) : amount;
   if (isNaN(num)) return "Rs. 0";
-  return `Rs. ${num.toLocaleString()}`;
+  return `Rs. ${num.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 }
+
+const emptyItem = (): FormItem => ({ productId: "", quantity: "", unitCost: "" });
 
 export default function AccountingStockReceipts() {
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [formData, setFormData] = useState<ReceiptFormData>(emptyForm);
+  const [formItems, setFormItems] = useState<FormItem[]>([emptyItem()]);
+  const [supplierId, setSupplierId] = useState("");
+  const [paymentType, setPaymentType] = useState("PAID_NOW");
+  const [cashAccountId, setCashAccountId] = useState("");
+  const [extraCosts, setExtraCosts] = useState("");
+  const [description, setDescription] = useState("");
+  const [dateStr, setDateStr] = useState(todayStr());
+  const [expandedReceipts, setExpandedReceipts] = useState<Set<string>>(new Set());
 
   const { data: receipts = [], isLoading } = useQuery<StockReceipt[]>({
     queryKey: ["/api/accounting/stock-receipts"],
@@ -100,21 +92,31 @@ export default function AccountingStockReceipts() {
     queryKey: ["/api/accounting/parties?type=supplier"],
   });
 
+  function resetForm() {
+    setFormItems([emptyItem()]);
+    setSupplierId("");
+    setPaymentType("PAID_NOW");
+    setCashAccountId("");
+    setExtraCosts("");
+    setDescription("");
+    setDateStr(todayStr());
+  }
+
   const createMutation = useMutation({
-    mutationFn: async (data: ReceiptFormData) => {
+    mutationFn: async () => {
       const body: any = {
-        productId: data.productId,
-        supplierId: data.supplierId,
-        quantity: parseFloat(data.quantity),
-        unitCost: parseFloat(data.unitCost),
-        extraCosts: data.extraCosts ? parseFloat(data.extraCosts) : 0,
-        paymentType: data.paymentType,
-        date: data.date,
-        notes: data.description || undefined,
+        items: formItems.map(i => ({
+          productId: i.productId,
+          quantity: parseFloat(i.quantity),
+          unitCost: parseFloat(i.unitCost),
+        })),
+        supplierId,
+        paymentType,
+        extraCosts: parseFloat(extraCosts) || 0,
+        description: description || undefined,
+        date: dateStr,
       };
-      if (data.paymentType === "PAID_NOW") {
-        body.cashAccountId = data.cashAccountId;
-      }
+      if (paymentType === "PAID_NOW") body.cashAccountId = cashAccountId;
       const res = await apiRequest("POST", "/api/accounting/stock-receipts", body);
       return res.json();
     },
@@ -126,7 +128,7 @@ export default function AccountingStockReceipts() {
       queryClient.invalidateQueries({ queryKey: ["/api/accounting/parties"] });
       toast({ title: "Stock receipt recorded successfully" });
       setDialogOpen(false);
-      setFormData(emptyForm);
+      resetForm();
     },
     onError: (err: Error) => {
       toast({ title: "Failed to record stock receipt", description: err.message, variant: "destructive" });
@@ -134,48 +136,70 @@ export default function AccountingStockReceipts() {
   });
 
   function handleSubmit() {
-    if (!formData.productId) {
-      toast({ title: "Product is required", variant: "destructive" });
-      return;
+    if (formItems.length === 0) {
+      toast({ title: "Add at least one item", variant: "destructive" }); return;
     }
-    if (!formData.quantity || parseFloat(formData.quantity) <= 0) {
-      toast({ title: "Valid quantity is required", variant: "destructive" });
-      return;
+    for (let i = 0; i < formItems.length; i++) {
+      const item = formItems[i];
+      if (!item.productId) { toast({ title: `Item ${i + 1}: Select a product`, variant: "destructive" }); return; }
+      if (!item.quantity || parseFloat(item.quantity) <= 0) { toast({ title: `Item ${i + 1}: Quantity must be > 0`, variant: "destructive" }); return; }
+      if (item.unitCost === "" || parseFloat(item.unitCost) < 0) { toast({ title: `Item ${i + 1}: Unit cost must be >= 0`, variant: "destructive" }); return; }
     }
-    if (!formData.unitCost || parseFloat(formData.unitCost) <= 0) {
-      toast({ title: "Valid unit cost is required", variant: "destructive" });
-      return;
-    }
-    if (!formData.supplierId) {
-      toast({ title: "Supplier is required", variant: "destructive" });
-      return;
-    }
-    if (formData.paymentType === "PAID_NOW" && !formData.cashAccountId) {
-      toast({ title: "Cash/Bank account is required for Paid Now", variant: "destructive" });
-      return;
-    }
-    createMutation.mutate(formData);
+    const pIds = formItems.map(i => i.productId);
+    if (new Set(pIds).size !== pIds.length) { toast({ title: "Duplicate products found. Each product can only appear once.", variant: "destructive" }); return; }
+    if (!supplierId) { toast({ title: "Supplier is required", variant: "destructive" }); return; }
+    if (paymentType === "PAID_NOW" && !cashAccountId) { toast({ title: "Cash/Bank account is required for Paid Now", variant: "destructive" }); return; }
+    createMutation.mutate();
   }
 
-  const qty = parseFloat(formData.quantity) || 0;
-  const uc = parseFloat(formData.unitCost) || 0;
-  const ec = parseFloat(formData.extraCosts) || 0;
-  const previewInventoryValue = (qty * uc) + ec;
+  function updateItem(index: number, field: keyof FormItem, value: string) {
+    setFormItems(prev => prev.map((item, i) => i === index ? { ...item, [field]: value } : item));
+  }
+
+  function addItem() {
+    setFormItems(prev => [...prev, emptyItem()]);
+  }
+
+  function removeItem(index: number) {
+    if (formItems.length <= 1) return;
+    setFormItems(prev => prev.filter((_, i) => i !== index));
+  }
+
+  function getLineTotal(item: FormItem): number {
+    const qty = parseFloat(item.quantity) || 0;
+    const uc = parseFloat(item.unitCost) || 0;
+    return qty * uc;
+  }
+
+  const itemsSubtotal = formItems.reduce((s, i) => s + getLineTotal(i), 0);
+  const extraVal = parseFloat(extraCosts) || 0;
+  const inventoryValue = itemsSubtotal + extraVal;
+
+  function getProductName(productId: string): string {
+    return products.find(p => p.id === productId)?.name || "";
+  }
+
+  function isProductUsed(productId: string, currentIndex: number): boolean {
+    return formItems.some((item, i) => i !== currentIndex && item.productId === productId);
+  }
+
+  function toggleExpanded(receiptId: string) {
+    setExpandedReceipts(prev => {
+      const next = new Set(prev);
+      if (next.has(receiptId)) next.delete(receiptId); else next.add(receiptId);
+      return next;
+    });
+  }
 
   return (
     <div className="space-y-6" data-testid="accounting-stock-receipts">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight" data-testid="text-page-title">
-            Add Stock (Receipts)
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Record inventory purchases and stock receipts
-          </p>
+          <h1 className="text-3xl font-bold tracking-tight" data-testid="text-page-title">Add Stock</h1>
+          <p className="text-muted-foreground mt-1">Record inventory purchases from suppliers</p>
         </div>
-        <Button onClick={() => { setFormData(emptyForm); setDialogOpen(true); }} data-testid="button-add-stock-receipt">
-          <Plus className="w-4 h-4 mr-2" />
-          Add Stock Receipt
+        <Button onClick={() => { resetForm(); setDialogOpen(true); }} data-testid="button-add-stock-receipt">
+          <Plus className="w-4 h-4 mr-2" /> Add Stock Receipt
         </Button>
       </div>
 
@@ -183,9 +207,7 @@ export default function AccountingStockReceipts() {
         <CardContent className="p-0">
           {isLoading ? (
             <div className="p-6 space-y-3" data-testid="table-skeleton">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Skeleton key={i} className="h-12 w-full" />
-              ))}
+              {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
             </div>
           ) : receipts.length === 0 ? (
             <div className="py-12 text-center text-muted-foreground" data-testid="text-no-receipts">
@@ -195,54 +217,70 @@ export default function AccountingStockReceipts() {
             <Table data-testid="table-stock-receipts">
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-8"></TableHead>
                   <TableHead>Date</TableHead>
-                  <TableHead>Product</TableHead>
-                  <TableHead className="text-right">Quantity</TableHead>
-                  <TableHead className="text-right">Unit Cost</TableHead>
-                  <TableHead className="text-right">Extra Costs</TableHead>
-                  <TableHead className="text-right">Total Landed Cost</TableHead>
                   <TableHead>Supplier</TableHead>
+                  <TableHead>Items</TableHead>
+                  <TableHead className="text-right">Subtotal</TableHead>
+                  <TableHead className="text-right">Extra Costs</TableHead>
+                  <TableHead className="text-right">Inventory Value</TableHead>
                   <TableHead>Payment</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {receipts.map((receipt) => {
-                  const qty = typeof receipt.quantity === "string" ? parseFloat(receipt.quantity) : receipt.quantity;
-                  const unitCost = typeof receipt.unitCost === "string" ? parseFloat(receipt.unitCost) : receipt.unitCost;
-                  const extra = typeof receipt.extraCosts === "string" ? parseFloat(receipt.extraCosts) : (receipt.extraCosts || 0);
-                  const totalLanded = receipt.totalLandedCost
-                    ? (typeof receipt.totalLandedCost === "string" ? parseFloat(receipt.totalLandedCost) : receipt.totalLandedCost)
-                    : (qty * unitCost + extra);
-                  const paymentLabel = receipt.paymentType === "CREDIT" ? "Credit" : "Paid";
+                  const expanded = expandedReceipts.has(receipt.id);
+                  const itemCount = receipt.items?.length || 0;
+                  const itemSummary = receipt.items?.map(i => i.productName).filter(Boolean).join(", ") || "-";
                   return (
-                    <TableRow key={receipt.id} data-testid={`row-receipt-${receipt.id}`}>
-                      <TableCell data-testid={`text-receipt-date-${receipt.id}`}>
-                        {receipt.date ? format(new Date(receipt.date), "dd MMM yyyy") : "-"}
-                      </TableCell>
-                      <TableCell className="font-medium" data-testid={`text-receipt-product-${receipt.id}`}>
-                        {receipt.productName || "-"}
-                      </TableCell>
-                      <TableCell className="text-right" data-testid={`text-receipt-qty-${receipt.id}`}>
-                        {qty}
-                      </TableCell>
-                      <TableCell className="text-right" data-testid={`text-receipt-unitcost-${receipt.id}`}>
-                        {formatPKR(unitCost)}
-                      </TableCell>
-                      <TableCell className="text-right" data-testid={`text-receipt-extracosts-${receipt.id}`}>
-                        {formatPKR(extra)}
-                      </TableCell>
-                      <TableCell className="text-right" data-testid={`text-receipt-totalcost-${receipt.id}`}>
-                        {formatPKR(totalLanded)}
-                      </TableCell>
-                      <TableCell data-testid={`text-receipt-supplier-${receipt.id}`}>
-                        {receipt.supplierName || "-"}
-                      </TableCell>
-                      <TableCell data-testid={`text-receipt-payment-${receipt.id}`}>
-                        <Badge variant={receipt.paymentType === "CREDIT" ? "outline" : "secondary"} className="text-xs">
-                          {paymentLabel}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
+                    <React.Fragment key={receipt.id}>
+                      <TableRow className="cursor-pointer" onClick={() => toggleExpanded(receipt.id)} data-testid={`row-receipt-${receipt.id}`}>
+                        <TableCell>
+                          {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                        </TableCell>
+                        <TableCell data-testid={`text-receipt-date-${receipt.id}`}>
+                          {receipt.date ? format(new Date(receipt.date), "dd MMM yyyy") : "-"}
+                        </TableCell>
+                        <TableCell data-testid={`text-receipt-supplier-${receipt.id}`}>
+                          {receipt.supplierName || "-"}
+                        </TableCell>
+                        <TableCell className="max-w-[200px] truncate" data-testid={`text-receipt-items-${receipt.id}`}>
+                          {itemCount} item{itemCount !== 1 ? "s" : ""}: {itemSummary}
+                        </TableCell>
+                        <TableCell className="text-right" data-testid={`text-receipt-subtotal-${receipt.id}`}>
+                          {formatPKR(receipt.itemsSubtotal)}
+                        </TableCell>
+                        <TableCell className="text-right" data-testid={`text-receipt-extra-${receipt.id}`}>
+                          {formatPKR(receipt.extraCosts)}
+                        </TableCell>
+                        <TableCell className="text-right font-medium" data-testid={`text-receipt-total-${receipt.id}`}>
+                          {formatPKR(receipt.inventoryValue)}
+                        </TableCell>
+                        <TableCell data-testid={`text-receipt-payment-${receipt.id}`}>
+                          <Badge variant={receipt.paymentType === "CREDIT" ? "outline" : "secondary"} className="text-xs">
+                            {receipt.paymentType === "CREDIT" ? "Credit" : "Paid"}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                      {expanded && receipt.items?.map((item, idx) => (
+                        <TableRow key={`${receipt.id}-item-${idx}`} className="bg-muted/30">
+                          <TableCell />
+                          <TableCell />
+                          <TableCell />
+                          <TableCell className="font-medium">{item.productName || "-"}</TableCell>
+                          <TableCell className="text-right text-muted-foreground">
+                            {item.quantity} x {formatPKR(item.unitCost)} = {formatPKR(item.lineTotal)}
+                          </TableCell>
+                          <TableCell className="text-right text-muted-foreground">
+                            {formatPKR(item.allocatedExtra || "0")}
+                          </TableCell>
+                          <TableCell className="text-right text-muted-foreground">
+                            {formatPKR(item.finalUnitCost || "0")}/unit
+                          </TableCell>
+                          <TableCell />
+                        </TableRow>
+                      ))}
+                    </React.Fragment>
                   );
                 })}
               </TableBody>
@@ -251,78 +289,127 @@ export default function AccountingStockReceipts() {
         </CardContent>
       </Card>
 
-      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) { setDialogOpen(false); setFormData(emptyForm); } }}>
-        <DialogContent data-testid="dialog-stock-receipt-form">
+      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) { setDialogOpen(false); resetForm(); } }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="dialog-stock-receipt-form">
           <DialogHeader>
             <DialogTitle data-testid="text-dialog-title">Add Stock Receipt</DialogTitle>
-            <DialogDescription>Record a new inventory purchase from a supplier.</DialogDescription>
+            <DialogDescription>Record a purchase with multiple products from a single supplier.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label>Product *</Label>
-              <Select value={formData.productId} onValueChange={(v) => setFormData({ ...formData, productId: v })}>
-                <SelectTrigger data-testid="select-receipt-product">
-                  <SelectValue placeholder="Select product" />
-                </SelectTrigger>
-                <SelectContent>
-                  {products.map((p) => (
-                    <SelectItem key={p.id} value={p.id} data-testid={`option-product-${p.id}`}>
-                      {p.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label htmlFor="receipt-quantity">Quantity *</Label>
-                <Input
-                  id="receipt-quantity"
-                  type="number"
-                  step="1"
-                  value={formData.quantity}
-                  onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
-                  placeholder="0"
-                  data-testid="input-receipt-quantity"
-                />
+
+          <div className="space-y-5 py-2">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <Label className="text-base font-semibold">Items</Label>
+                <Button type="button" variant="outline" size="sm" onClick={addItem} data-testid="button-add-item">
+                  <Plus className="w-3 h-3 mr-1" /> Add Item
+                </Button>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="receipt-unitcost">Unit Cost *</Label>
-                <Input
-                  id="receipt-unitcost"
-                  type="number"
-                  step="0.01"
-                  value={formData.unitCost}
-                  onChange={(e) => setFormData({ ...formData, unitCost: e.target.value })}
-                  placeholder="0.00"
-                  data-testid="input-receipt-unitcost"
-                />
+
+              <div className="border rounded-md overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="min-w-[180px]">Product *</TableHead>
+                      <TableHead className="w-[100px]">Qty *</TableHead>
+                      <TableHead className="w-[120px]">Unit Cost *</TableHead>
+                      <TableHead className="w-[120px] text-right">Line Total</TableHead>
+                      <TableHead className="w-[40px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {formItems.map((item, index) => {
+                      const lt = getLineTotal(item);
+                      return (
+                        <TableRow key={index}>
+                          <TableCell className="p-2">
+                            <Select value={item.productId} onValueChange={(v) => {
+                              if (isProductUsed(v, index)) {
+                                toast({ title: "Product already added", variant: "destructive" });
+                                return;
+                              }
+                              updateItem(index, "productId", v);
+                            }}>
+                              <SelectTrigger className="h-9" data-testid={`select-item-product-${index}`}>
+                                <SelectValue placeholder="Select product" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {products.map((p) => (
+                                  <SelectItem key={p.id} value={p.id} disabled={isProductUsed(p.id, index)}>
+                                    {p.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell className="p-2">
+                            <Input
+                              type="number" step="1" min="1"
+                              className="h-9"
+                              value={item.quantity}
+                              onChange={(e) => updateItem(index, "quantity", e.target.value)}
+                              placeholder="0"
+                              data-testid={`input-item-qty-${index}`}
+                            />
+                          </TableCell>
+                          <TableCell className="p-2">
+                            <Input
+                              type="number" step="0.01" min="0"
+                              className="h-9"
+                              value={item.unitCost}
+                              onChange={(e) => updateItem(index, "unitCost", e.target.value)}
+                              placeholder="0.00"
+                              data-testid={`input-item-unitcost-${index}`}
+                            />
+                          </TableCell>
+                          <TableCell className="p-2 text-right font-medium" data-testid={`text-item-linetotal-${index}`}>
+                            {lt > 0 ? formatPKR(lt) : "-"}
+                          </TableCell>
+                          <TableCell className="p-2">
+                            {formItems.length > 1 && (
+                              <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeItem(index)} data-testid={`button-remove-item-${index}`}>
+                                <Trash2 className="w-4 h-4 text-destructive" />
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
               </div>
             </div>
+
             <div className="space-y-2">
-              <Label htmlFor="receipt-extracosts">Extra Costs (shipping/customs)</Label>
+              <Label htmlFor="receipt-extracosts">Extra Costs (shipping / customs)</Label>
               <Input
-                id="receipt-extracosts"
-                type="number"
-                step="0.01"
-                value={formData.extraCosts}
-                onChange={(e) => setFormData({ ...formData, extraCosts: e.target.value })}
+                id="receipt-extracosts" type="number" step="0.01" min="0"
+                value={extraCosts}
+                onChange={(e) => setExtraCosts(e.target.value)}
                 placeholder="0.00"
                 data-testid="input-receipt-extracosts"
               />
             </div>
 
-            {previewInventoryValue > 0 && (
-              <div className="bg-muted/50 rounded-md p-3 text-sm" data-testid="text-inventory-preview">
-                <span className="text-muted-foreground">Inventory Value: </span>
-                <span className="font-semibold">{formatPKR(previewInventoryValue)}</span>
-                <span className="text-muted-foreground ml-2">({qty} x {formatPKR(uc)}{ec > 0 ? ` + ${formatPKR(ec)} extra` : ""})</span>
+            <div className="bg-muted/50 rounded-md p-3 space-y-1 text-sm" data-testid="text-totals-preview">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Items Subtotal</span>
+                <span className="font-medium">{formatPKR(itemsSubtotal)}</span>
               </div>
-            )}
+              {extraVal > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Extra Costs</span>
+                  <span className="font-medium">+ {formatPKR(extraVal)}</span>
+                </div>
+              )}
+              <div className="flex justify-between border-t pt-1 mt-1">
+                <span className="font-semibold">Inventory Value</span>
+                <span className="font-bold text-base">{formatPKR(inventoryValue)}</span>
+              </div>
+            </div>
 
             <div className="space-y-2">
               <Label>Supplier Party *</Label>
-              <Select value={formData.supplierId} onValueChange={(v) => setFormData({ ...formData, supplierId: v })}>
+              <Select value={supplierId} onValueChange={setSupplierId}>
                 <SelectTrigger data-testid="select-receipt-supplier">
                   <SelectValue placeholder="Select supplier" />
                 </SelectTrigger>
@@ -339,8 +426,8 @@ export default function AccountingStockReceipts() {
             <div className="space-y-2">
               <Label>Payment Type *</Label>
               <RadioGroup
-                value={formData.paymentType}
-                onValueChange={(v) => setFormData({ ...formData, paymentType: v, cashAccountId: v === "CREDIT" ? "" : formData.cashAccountId })}
+                value={paymentType}
+                onValueChange={(v) => { setPaymentType(v); if (v === "CREDIT") setCashAccountId(""); }}
                 className="flex gap-4"
                 data-testid="radio-payment-type"
               >
@@ -355,10 +442,10 @@ export default function AccountingStockReceipts() {
               </RadioGroup>
             </div>
 
-            {formData.paymentType === "PAID_NOW" && (
+            {paymentType === "PAID_NOW" && (
               <div className="space-y-2">
                 <Label>Cash/Bank Account *</Label>
-                <Select value={formData.cashAccountId} onValueChange={(v) => setFormData({ ...formData, cashAccountId: v })}>
+                <Select value={cashAccountId} onValueChange={setCashAccountId}>
                   <SelectTrigger data-testid="select-receipt-account">
                     <SelectValue placeholder="Select account" />
                   </SelectTrigger>
@@ -373,35 +460,33 @@ export default function AccountingStockReceipts() {
               </div>
             )}
 
-            {formData.paymentType === "CREDIT" && (
+            {paymentType === "CREDIT" && (
               <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-md p-3 text-sm text-blue-800 dark:text-blue-200" data-testid="text-credit-info">
-                This purchase will be added to the supplier's payable balance. Use "Money Out" in the Money section to pay the supplier later.
+                This purchase will be added to the supplier's payable balance. Pay the supplier later via "Money Out".
               </div>
             )}
 
             <div className="space-y-2">
               <Label htmlFor="receipt-description">Description</Label>
               <Input
-                id="receipt-description"
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Description"
+                id="receipt-description" value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Optional notes"
                 data-testid="input-receipt-description"
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="receipt-date">Date</Label>
               <Input
-                id="receipt-date"
-                type="date"
-                value={formData.date}
-                onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                id="receipt-date" type="date" value={dateStr}
+                onChange={(e) => setDateStr(e.target.value)}
                 data-testid="input-receipt-date"
               />
             </div>
           </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setDialogOpen(false); setFormData(emptyForm); }} data-testid="button-cancel">
+            <Button variant="outline" onClick={() => { setDialogOpen(false); resetForm(); }} data-testid="button-cancel">
               Cancel
             </Button>
             <Button onClick={handleSubmit} disabled={createMutation.isPending} data-testid="button-submit-receipt">

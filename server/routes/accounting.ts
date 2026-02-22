@@ -11,6 +11,7 @@ import {
   expensePayments,
   accountingProducts, insertAccountingProductSchema,
   stockReceipts,
+  stockReceiptItems,
   sales,
   courierSettlements,
   ledgerEntries,
@@ -561,118 +562,146 @@ export function registerAccountingRoutes(app: Express) {
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
-  // ========== ADD STOCK (RECEIPT) ==========
+  // ========== ADD STOCK (RECEIPT) - MULTI-ITEM ==========
   app.post("/api/accounting/stock-receipts", isAuthenticated, async (req: any, res) => {
     try {
       const merchantId = await getMerchantId(req);
-      const { productId, supplierId, quantity, unitCost, extraCosts, paymentType, cashAccountId, date, notes } = req.body;
+      const { items, supplierId, paymentType, cashAccountId, extraCosts: rawExtra, description, date } = req.body;
 
-      if (!supplierId) {
-        return res.status(400).json({ message: "Supplier party is required." });
-      }
+      if (!supplierId) return res.status(400).json({ message: "Supplier party is required." });
+      if (!items || !Array.isArray(items) || items.length === 0) return res.status(400).json({ message: "At least one item is required." });
 
       const pType = paymentType || "PAID_NOW";
-      if (!["PAID_NOW", "CREDIT"].includes(pType)) {
-        return res.status(400).json({ message: "Payment type must be PAID_NOW or CREDIT." });
+      if (!["PAID_NOW", "CREDIT"].includes(pType)) return res.status(400).json({ message: "Payment type must be PAID_NOW or CREDIT." });
+      if (pType === "PAID_NOW" && !cashAccountId) return res.status(400).json({ message: "Cash/Bank account is required for Paid Now purchases." });
+      if (pType === "CREDIT" && cashAccountId) return res.status(400).json({ message: "Cash/Bank account must not be set for Credit purchases." });
+
+      const extra = parseFloat(rawExtra) || 0;
+      if (extra < 0) return res.status(400).json({ message: "Extra costs must be >= 0." });
+
+      const productIds = new Set<string>();
+      const parsedItems: { productId: string; quantity: number; unitCost: number; lineTotal: number }[] = [];
+      for (const item of items) {
+        if (!item.productId) return res.status(400).json({ message: "Each item must have a product." });
+        if (productIds.has(item.productId)) return res.status(400).json({ message: "Duplicate product found. Each product can only appear once." });
+        productIds.add(item.productId);
+        const qty = parseInt(item.quantity);
+        const uc = parseFloat(item.unitCost);
+        if (!qty || qty <= 0) return res.status(400).json({ message: "Each item quantity must be > 0." });
+        if (isNaN(uc) || uc < 0) return res.status(400).json({ message: "Each item unit cost must be >= 0." });
+        parsedItems.push({ productId: item.productId, quantity: qty, unitCost: uc, lineTotal: qty * uc });
       }
 
-      if (pType === "PAID_NOW" && !cashAccountId) {
-        return res.status(400).json({ message: "Cash/Bank account is required for Paid Now purchases." });
-      }
-      if (pType === "CREDIT" && cashAccountId) {
-        return res.status(400).json({ message: "Cash/Bank account must not be set for Credit purchases." });
-      }
+      const itemsSubtotal = parsedItems.reduce((s, i) => s + i.lineTotal, 0);
+      if (itemsSubtotal <= 0) return res.status(400).json({ message: "Items subtotal must be > 0." });
+      const inventoryValue = itemsSubtotal + extra;
 
-      const qty = parseInt(quantity);
-      const cost = parseFloat(unitCost);
-      if (!qty || qty <= 0) return res.status(400).json({ message: "Quantity must be greater than zero." });
-      if (!cost || cost <= 0) return res.status(400).json({ message: "Unit cost must be greater than zero." });
-
-      const totalCost = qty * cost;
-
-      let extraTotal = 0;
-      let landedExtraCosts: any[] = [];
-      if (extraCosts && Array.isArray(extraCosts)) {
-        for (const ec of extraCosts) {
-          const ecAmt = parseFloat(ec.amount);
-          extraTotal += ec.addToProductCost ? ecAmt : 0;
-          landedExtraCosts.push(ec);
-
-          if (ec.paidNow && ec.cashAccountId) {
-            await updateCashAccountBalance(ec.cashAccountId, -ecAmt);
-            await db.insert(cashMovements).values({
-              merchantId, cashAccountId: ec.cashAccountId, type: "out",
-              amount: ecAmt.toFixed(2), description: `Extra cost: ${ec.name}`,
-              date: new Date(date),
-            });
-          }
-          if (ec.vendorPartyId) {
-            await updatePartyBalance(merchantId, ec.vendorPartyId, ec.paidNow ? 0 : ecAmt);
-          }
-        }
-      } else if (extraCosts && typeof extraCosts === "number" && extraCosts > 0) {
-        extraTotal = extraCosts;
-        landedExtraCosts = [{ name: "Extra costs", amount: extraCosts, addToProductCost: true }];
-      }
-
-      const landedTotal = totalCost + extraTotal;
-      const landedUnitCost = landedTotal / qty;
-
-      if (landedTotal <= 0) {
-        return res.status(400).json({ message: "Inventory value must be greater than zero." });
-      }
-
-      const [product] = await db.select().from(accountingProducts).where(eq(accountingProducts.id, productId));
-      if (!product) return res.status(404).json({ message: "Product not found" });
-
-      const oldQty = product.stockQty;
-      const oldAvg = parseFloat(product.avgUnitCost);
-      const newQty = oldQty + qty;
-      const newAvg = newQty > 0 ? ((oldQty * oldAvg) + landedTotal) / newQty : landedUnitCost;
-
-      await db.update(accountingProducts).set({
-        stockQty: newQty, avgUnitCost: newAvg.toFixed(2), updatedAt: new Date(),
-      }).where(eq(accountingProducts.id, productId));
-
-      const paidNow = pType === "PAID_NOW";
-      const [receipt] = await db.insert(stockReceipts).values({
-        merchantId, productId, supplierId, quantity: qty,
-        unitCost: cost.toFixed(2), totalCost: totalCost.toFixed(2),
-        landedCost: landedTotal.toFixed(2), landedUnitCost: landedUnitCost.toFixed(2),
-        extraCosts: landedExtraCosts, paidNow, paymentType: pType,
-        cashAccountId: pType === "PAID_NOW" ? cashAccountId : null,
-        inventoryValue: landedTotal.toFixed(2),
-        date: new Date(date), notes,
-      }).returning();
-
-      if (pType === "PAID_NOW") {
-        await updateCashAccountBalance(cashAccountId, -landedTotal);
-        await db.insert(cashMovements).values({
-          merchantId, cashAccountId, type: "out", amount: landedTotal.toFixed(2),
-          relatedReceiptId: receipt.id, description: `Stock purchase: ${product.name}`,
-          date: new Date(date),
-        });
-      }
-
-      if (pType === "CREDIT") {
-        await updatePartyBalance(merchantId, supplierId, landedTotal);
-      }
-
-      const creditSide = pType === "PAID_NOW" ? `cash:${cashAccountId}` : `payable:${supplierId}`;
-      await createLedgerEntry(merchantId, new Date(date), `Stock receipt: ${product.name} x${qty}`,
-        `inventory:${productId}`, creditSide,
-        landedTotal, "stock_receipt", receipt.id);
-
-      await createAuditEntry(merchantId, "STOCK_RECEIPT", "stock_receipt", receipt.id,
-        `Received ${qty} x ${product.name} at ${cost}/unit (landed: ${landedUnitCost.toFixed(2)}/unit, ${pType})`,
-        { stockQty: oldQty, avgCost: oldAvg },
-        { stockQty: newQty, avgCost: newAvg },
-        req.user?.id);
-
-      res.json({
-        receipt, stockBefore: oldQty, stockAfter: newQty,
-        avgCostBefore: oldAvg, avgCostAfter: newAvg,
+      const allocatedItems = parsedItems.map(item => {
+        const allocatedExtra = itemsSubtotal > 0 ? (item.lineTotal / itemsSubtotal) * extra : 0;
+        const finalUnitCost = item.quantity > 0 ? (item.lineTotal + allocatedExtra) / item.quantity : 0;
+        return { ...item, allocatedExtra, finalUnitCost };
       });
+
+      const receiptDate = new Date(date);
+      if (isNaN(receiptDate.getTime())) return res.status(400).json({ message: "Invalid date." });
+
+      const allProductIds = allocatedItems.map(i => i.productId);
+      const existingProducts = await db.select().from(accountingProducts)
+        .where(sql`${accountingProducts.id} IN (${sql.join(allProductIds.map(id => sql`${id}`), sql`, `)})`);
+      if (existingProducts.length !== allProductIds.length) {
+        const found = new Set(existingProducts.map(p => p.id));
+        const missing = allProductIds.filter(id => !found.has(id));
+        return res.status(404).json({ message: `Product(s) not found: ${missing.join(", ")}` });
+      }
+      const productMap = new Map(existingProducts.map(p => [p.id, p]));
+
+      const result = await db.transaction(async (tx) => {
+        const [receipt] = await tx.insert(stockReceipts).values({
+          merchantId, supplierId, paymentType: pType,
+          cashAccountId: pType === "PAID_NOW" ? cashAccountId : null,
+          extraCosts: extra.toFixed(2),
+          itemsSubtotal: itemsSubtotal.toFixed(2),
+          inventoryValue: inventoryValue.toFixed(2),
+          description: description || null,
+          date: receiptDate,
+        }).returning();
+
+        const stockUpdates: { productName: string; oldQty: number; newQty: number; oldAvg: number; newAvg: number }[] = [];
+        const productNames: string[] = [];
+
+        for (const item of allocatedItems) {
+          await tx.insert(stockReceiptItems).values({
+            stockReceiptId: receipt.id,
+            productId: item.productId,
+            quantity: item.quantity,
+            unitCost: item.unitCost.toFixed(2),
+            lineTotal: item.lineTotal.toFixed(2),
+            allocatedExtra: item.allocatedExtra.toFixed(2),
+            finalUnitCost: item.finalUnitCost.toFixed(2),
+          });
+
+          const product = productMap.get(item.productId)!;
+          productNames.push(product.name);
+          const oldQty = product.stockQty;
+          const oldAvg = parseFloat(product.avgUnitCost);
+          const landedItemTotal = item.lineTotal + item.allocatedExtra;
+          const newQty = oldQty + item.quantity;
+          const newAvg = newQty > 0 ? ((oldQty * oldAvg) + landedItemTotal) / newQty : item.finalUnitCost;
+
+          await tx.update(accountingProducts).set({
+            stockQty: newQty, avgUnitCost: newAvg.toFixed(2), updatedAt: new Date(),
+          }).where(eq(accountingProducts.id, item.productId));
+
+          stockUpdates.push({ productName: product.name, oldQty, newQty, oldAvg, newAvg });
+        }
+
+        const currentSupplierBal = parseFloat(await getOrCreatePartyBalance(merchantId, supplierId));
+        const newSupplierBal = currentSupplierBal + inventoryValue;
+        await tx.update(partyBalances).set({ balance: newSupplierBal.toFixed(2), updatedAt: new Date() })
+          .where(and(eq(partyBalances.merchantId, merchantId), eq(partyBalances.partyId, supplierId)));
+
+        await tx.insert(ledgerEntries).values({
+          merchantId, date: receiptDate,
+          description: `Stock receipt: ${productNames.join(", ")}`,
+          debitAccount: `inventory:multi`, creditAccount: `payable:${supplierId}`,
+          amount: inventoryValue.toFixed(2), referenceType: "stock_receipt", referenceId: receipt.id,
+        });
+
+        if (pType === "PAID_NOW") {
+          const settledBal = newSupplierBal - inventoryValue;
+          await tx.update(partyBalances).set({ balance: settledBal.toFixed(2), updatedAt: new Date() })
+            .where(and(eq(partyBalances.merchantId, merchantId), eq(partyBalances.partyId, supplierId)));
+
+          const [acct] = await tx.select().from(cashAccounts).where(eq(cashAccounts.id, cashAccountId));
+          if (!acct) throw new Error("Cash account not found");
+          const cashAfter = parseFloat(acct.balance) - inventoryValue;
+          await tx.update(cashAccounts).set({ balance: cashAfter.toFixed(2), updatedAt: new Date() })
+            .where(eq(cashAccounts.id, cashAccountId));
+
+          await tx.insert(cashMovements).values({
+            merchantId, cashAccountId, type: "out", amount: inventoryValue.toFixed(2),
+            relatedReceiptId: receipt.id, description: `Stock purchase: ${productNames.join(", ")}`,
+            date: receiptDate,
+          });
+
+          await tx.insert(ledgerEntries).values({
+            merchantId, date: receiptDate,
+            description: `Payment for stock receipt: ${productNames.join(", ")}`,
+            debitAccount: `payable:${supplierId}`, creditAccount: `cash:${cashAccountId}`,
+            amount: inventoryValue.toFixed(2), referenceType: "stock_receipt", referenceId: receipt.id,
+          });
+        }
+
+        await tx.insert(accountingAuditLog).values({
+          merchantId, eventType: "STOCK_RECEIPT", entityType: "stock_receipt", entityId: receipt.id,
+          description: `Stock receipt: ${allocatedItems.length} items, subtotal=${itemsSubtotal}, extra=${extra}, total=${inventoryValue}, ${pType}`,
+          balancesBefore: null, balancesAfter: { stockUpdates }, actorUserId: req.user?.id,
+        });
+
+        return { receipt, items: allocatedItems, stockUpdates, productNames };
+      });
+
+      res.json({ receipt: result.receipt, items: result.items, stockUpdates: result.stockUpdates });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
@@ -1131,16 +1160,30 @@ export function registerAccountingRoutes(app: Express) {
   app.get("/api/accounting/stock-receipts", isAuthenticated, async (req: any, res) => {
     try {
       const merchantId = await getMerchantId(req);
-      const results = await db.select({
+      const receipts = await db.select({
         receipt: stockReceipts,
-        productName: accountingProducts.name,
         supplierName: parties.name,
       }).from(stockReceipts)
-        .leftJoin(accountingProducts, eq(accountingProducts.id, stockReceipts.productId))
         .leftJoin(parties, eq(parties.id, stockReceipts.supplierId))
         .where(eq(stockReceipts.merchantId, merchantId))
         .orderBy(desc(stockReceipts.date));
-      res.json(results.map(r => ({ ...r.receipt, productName: r.productName, supplierName: r.supplierName })));
+
+      const result = [];
+      for (const r of receipts) {
+        const items = await db.select({
+          item: stockReceiptItems,
+          productName: accountingProducts.name,
+        }).from(stockReceiptItems)
+          .leftJoin(accountingProducts, eq(accountingProducts.id, stockReceiptItems.productId))
+          .where(eq(stockReceiptItems.stockReceiptId, r.receipt.id));
+
+        result.push({
+          ...r.receipt,
+          supplierName: r.supplierName,
+          items: items.map(i => ({ ...i.item, productName: i.productName })),
+        });
+      }
+      res.json(result);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
