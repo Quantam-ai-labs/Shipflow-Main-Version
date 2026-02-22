@@ -19,10 +19,13 @@ import {
   ledgerEntries,
   accountingAuditLog,
   accountingSettings,
+  openingBalanceBatches,
+  openingBalanceLines,
   orders,
   shipments,
   codReconciliation,
   teamMembers,
+  transactions,
 } from "../../shared/schema";
 import type {
   Party, CashAccount, AccountingProduct,
@@ -1554,6 +1557,366 @@ export function registerAccountingRoutes(app: Express) {
           result.accountName = acct.name;
         }
       }
+      res.json(result);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // ========== OPENING BALANCES ==========
+
+  async function isSystemLocked(merchantId: string): Promise<boolean> {
+    const [completedSale] = await db.select({ id: sales.id }).from(sales)
+      .where(and(eq(sales.merchantId, merchantId), eq(sales.status, "COMPLETED"))).limit(1);
+    if (completedSale) return true;
+    const [txn] = await db.select({ id: transactions.id }).from(transactions)
+      .where(eq(transactions.merchantId, merchantId)).limit(1);
+    if (txn) return true;
+    const [sr] = await db.select({ id: stockReceipts.id }).from(stockReceipts)
+      .where(eq(stockReceipts.merchantId, merchantId)).limit(1);
+    if (sr) return true;
+    return false;
+  }
+
+  async function getNextBatchNumber(merchantId: string): Promise<string> {
+    const [result] = await db.select({ cnt: count() }).from(openingBalanceBatches)
+      .where(eq(openingBalanceBatches.merchantId, merchantId));
+    const num = (parseInt(String(result?.cnt || "0")) + 1).toString().padStart(4, "0");
+    return `OB-${num}`;
+  }
+
+  app.get("/api/accounting/opening-balances/lock-status", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const locked = await isSystemLocked(merchantId);
+      res.json({ locked });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/accounting/opening-balances", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const batches = await db.select().from(openingBalanceBatches)
+        .where(eq(openingBalanceBatches.merchantId, merchantId))
+        .orderBy(desc(openingBalanceBatches.createdAt));
+      const result = [];
+      for (const batch of batches) {
+        const lines = await db.select().from(openingBalanceLines)
+          .where(eq(openingBalanceLines.batchId, batch.id));
+        result.push({ ...batch, lines });
+      }
+      res.json(result);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/accounting/opening-balances/parse", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const { rows } = req.body;
+      if (!Array.isArray(rows) || rows.length === 0) {
+        return res.status(400).json({ message: "No rows provided" });
+      }
+
+      const allAccounts = await db.select().from(cashAccounts)
+        .where(eq(cashAccounts.merchantId, merchantId));
+      const allParties = await db.select().from(parties)
+        .where(eq(parties.merchantId, merchantId));
+
+      const validRows: any[] = [];
+      const errors: any[] = [];
+
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const rowNum = i + 1;
+        const entityType = (row.entity_type || "").toString().trim().toUpperCase();
+        const entityName = (row.entity_name || "").toString().trim();
+        const balanceType = (row.balance_type || "").toString().trim().toUpperCase();
+        const amount = parseFloat(row.amount);
+
+        if (!entityType || !entityName || !balanceType) {
+          errors.push({ row: rowNum, message: "Missing required fields" });
+          continue;
+        }
+        if (!["ACCOUNT", "PARTY"].includes(entityType)) {
+          errors.push({ row: rowNum, message: `Invalid entity_type: ${entityType}` });
+          continue;
+        }
+        if (entityType === "ACCOUNT" && !["INCREASE", "DECREASE"].includes(balanceType)) {
+          errors.push({ row: rowNum, message: `Invalid balance_type for ACCOUNT: ${balanceType}` });
+          continue;
+        }
+        if (entityType === "PARTY" && !["RECEIVABLE", "PAYABLE"].includes(balanceType)) {
+          errors.push({ row: rowNum, message: `Invalid balance_type for PARTY: ${balanceType}` });
+          continue;
+        }
+        if (isNaN(amount) || amount <= 0) {
+          errors.push({ row: rowNum, message: "Amount must be a positive number" });
+          continue;
+        }
+
+        const normalizedName = entityName.toLowerCase().replace(/\s+/g, " ").trim();
+        let entityId: string | null = null;
+        let willCreate = false;
+
+        if (entityType === "ACCOUNT") {
+          const matches = allAccounts.filter(a => a.name.toLowerCase().replace(/\s+/g, " ").trim() === normalizedName);
+          if (matches.length === 1) {
+            entityId = matches[0].id;
+          } else if (matches.length === 0) {
+            willCreate = true;
+          } else {
+            errors.push({ row: rowNum, message: `Ambiguous account name: ${entityName}` });
+            continue;
+          }
+        } else {
+          const matches = allParties.filter(p => p.name.toLowerCase().replace(/\s+/g, " ").trim() === normalizedName);
+          if (matches.length === 1) {
+            entityId = matches[0].id;
+          } else if (matches.length === 0) {
+            willCreate = true;
+          } else {
+            errors.push({ row: rowNum, message: `Ambiguous party name: ${entityName}` });
+            continue;
+          }
+        }
+
+        validRows.push({
+          row: rowNum,
+          entityType,
+          entityName,
+          entityId,
+          balanceType,
+          amount,
+          willCreate,
+        });
+      }
+
+      res.json({ validRows, errors, totalRows: rows.length });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/accounting/opening-balances", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const userId = req.session?.userId;
+
+      const locked = await isSystemLocked(merchantId);
+      if (locked) {
+        return res.status(400).json({ message: "System is locked. Opening balances cannot be posted after the first transaction." });
+      }
+
+      const { openingDate, lines } = req.body;
+      if (!openingDate || !Array.isArray(lines) || lines.length === 0) {
+        return res.status(400).json({ message: "Opening date and at least one line are required." });
+      }
+
+      const result = await db.transaction(async (tx) => {
+        const batchNumber = await getNextBatchNumber(merchantId);
+        const [batch] = await tx.insert(openingBalanceBatches).values({
+          merchantId,
+          batchNumber,
+          openingDate: new Date(openingDate),
+          status: "POSTED",
+          createdBy: userId,
+        }).returning();
+
+        for (const line of lines) {
+          const { entityType, entityName, balanceType, amount } = line;
+          let { entityId } = line;
+          const amt = parseFloat(amount);
+
+          if (!entityId) {
+            if (entityType === "ACCOUNT") {
+              const [newAcct] = await tx.insert(cashAccounts).values({
+                merchantId,
+                name: entityName,
+                type: "other",
+                balance: "0",
+              }).returning();
+              entityId = newAcct.id;
+            } else {
+              const [newParty] = await tx.insert(parties).values({
+                merchantId,
+                name: entityName,
+                type: "other",
+              }).returning();
+              entityId = newParty.id;
+              await tx.insert(partyBalances).values({
+                merchantId,
+                partyId: entityId,
+                balance: "0",
+              });
+            }
+          }
+
+          await tx.insert(openingBalanceLines).values({
+            batchId: batch.id,
+            entityType,
+            entityId,
+            entityName,
+            balanceType,
+            amount: amt.toFixed(2),
+          });
+
+          if (entityType === "ACCOUNT") {
+            const [acct] = await tx.select().from(cashAccounts)
+              .where(and(eq(cashAccounts.id, entityId), eq(cashAccounts.merchantId, merchantId)));
+            if (!acct) throw new Error(`Account not found or access denied: ${entityName}`);
+            const curBal = parseFloat(acct.balance || "0");
+            const delta = balanceType === "INCREASE" ? amt : -amt;
+            await tx.update(cashAccounts).set({
+              balance: (curBal + delta).toFixed(2),
+              updatedAt: new Date(),
+            }).where(and(eq(cashAccounts.id, entityId), eq(cashAccounts.merchantId, merchantId)));
+
+            await tx.insert(ledgerEntries).values({
+              merchantId,
+              date: new Date(openingDate),
+              description: `Opening Balance: ${entityName}`,
+              debitAccount: balanceType === "INCREASE" ? `cash:${entityId}` : "equity:opening_balance",
+              creditAccount: balanceType === "INCREASE" ? "equity:opening_balance" : `cash:${entityId}`,
+              amount: amt.toFixed(2),
+              referenceType: "opening_balance",
+              referenceId: batch.id,
+            });
+          } else {
+            const [pb] = await tx.select().from(partyBalances)
+              .where(and(eq(partyBalances.merchantId, merchantId), eq(partyBalances.partyId, entityId)));
+            const curBal = parseFloat(pb?.balance || "0");
+            const delta = balanceType === "RECEIVABLE" ? amt : -amt;
+            await tx.update(partyBalances).set({
+              balance: (curBal + delta).toFixed(2),
+              updatedAt: new Date(),
+            }).where(and(eq(partyBalances.merchantId, merchantId), eq(partyBalances.partyId, entityId)));
+
+            await tx.insert(ledgerEntries).values({
+              merchantId,
+              date: new Date(openingDate),
+              description: `Opening Balance: ${entityName}`,
+              debitAccount: balanceType === "RECEIVABLE" ? `receivable:${entityId}` : "equity:opening_balance",
+              creditAccount: balanceType === "RECEIVABLE" ? "equity:opening_balance" : `payable:${entityId}`,
+              amount: amt.toFixed(2),
+              referenceType: "opening_balance",
+              referenceId: batch.id,
+            });
+          }
+        }
+
+        await tx.insert(accountingAuditLog).values({
+          merchantId,
+          eventType: "opening_balance_posted",
+          entityType: "opening_balance_batch",
+          entityId: batch.id,
+          description: `Opening balance batch ${batchNumber} posted with ${lines.length} lines`,
+          actorUserId: userId,
+        });
+
+        return batch;
+      });
+
+      res.json(result);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/accounting/opening-balances/:id/reverse", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const userId = req.session?.userId;
+      const batchId = req.params.id;
+      const { reason } = req.body;
+
+      const [batch] = await db.select().from(openingBalanceBatches)
+        .where(and(eq(openingBalanceBatches.id, batchId), eq(openingBalanceBatches.merchantId, merchantId)));
+      if (!batch) return res.status(404).json({ message: "Batch not found" });
+      if (batch.status === "REVERSED") return res.status(400).json({ message: "Batch already reversed" });
+
+      const lines = await db.select().from(openingBalanceLines)
+        .where(eq(openingBalanceLines.batchId, batchId));
+
+      const result = await db.transaction(async (tx) => {
+        await tx.update(openingBalanceBatches).set({ status: "REVERSED" })
+          .where(eq(openingBalanceBatches.id, batchId));
+
+        const reversalBatchNumber = await getNextBatchNumber(merchantId);
+        const [reversalBatch] = await tx.insert(openingBalanceBatches).values({
+          merchantId,
+          batchNumber: reversalBatchNumber,
+          openingDate: batch.openingDate,
+          status: "POSTED",
+          reversalOf: batchId,
+          reversalReason: reason || "Reversed",
+          createdBy: userId,
+        }).returning();
+
+        for (const line of lines) {
+          const amt = parseFloat(line.amount);
+          const invertedType = line.balanceType === "INCREASE" ? "DECREASE"
+            : line.balanceType === "DECREASE" ? "INCREASE"
+            : line.balanceType === "RECEIVABLE" ? "PAYABLE" : "RECEIVABLE";
+
+          await tx.insert(openingBalanceLines).values({
+            batchId: reversalBatch.id,
+            entityType: line.entityType,
+            entityId: line.entityId,
+            entityName: line.entityName,
+            balanceType: invertedType,
+            amount: line.amount,
+          });
+
+          if (line.entityType === "ACCOUNT") {
+            const [acct] = await tx.select().from(cashAccounts)
+              .where(and(eq(cashAccounts.id, line.entityId), eq(cashAccounts.merchantId, merchantId)));
+            if (!acct) throw new Error(`Account not found: ${line.entityName}`);
+            const curBal = parseFloat(acct.balance || "0");
+            const delta = line.balanceType === "INCREASE" ? -amt : amt;
+            await tx.update(cashAccounts).set({
+              balance: (curBal + delta).toFixed(2),
+              updatedAt: new Date(),
+            }).where(and(eq(cashAccounts.id, line.entityId), eq(cashAccounts.merchantId, merchantId)));
+
+            await tx.insert(ledgerEntries).values({
+              merchantId,
+              date: batch.openingDate,
+              description: `Reversal of Opening Balance: ${line.entityName}`,
+              debitAccount: line.balanceType === "INCREASE" ? "equity:opening_balance" : `cash:${line.entityId}`,
+              creditAccount: line.balanceType === "INCREASE" ? `cash:${line.entityId}` : "equity:opening_balance",
+              amount: amt.toFixed(2),
+              referenceType: "opening_balance_reversal",
+              referenceId: reversalBatch.id,
+            });
+          } else {
+            const [pb] = await tx.select().from(partyBalances)
+              .where(and(eq(partyBalances.merchantId, merchantId), eq(partyBalances.partyId, line.entityId)));
+            const curBal = parseFloat(pb?.balance || "0");
+            const delta = line.balanceType === "RECEIVABLE" ? -amt : amt;
+            await tx.update(partyBalances).set({
+              balance: (curBal + delta).toFixed(2),
+              updatedAt: new Date(),
+            }).where(and(eq(partyBalances.merchantId, merchantId), eq(partyBalances.partyId, line.entityId)));
+
+            await tx.insert(ledgerEntries).values({
+              merchantId,
+              date: batch.openingDate,
+              description: `Reversal of Opening Balance: ${line.entityName}`,
+              debitAccount: line.balanceType === "RECEIVABLE" ? "equity:opening_balance" : `payable:${line.entityId}`,
+              creditAccount: line.balanceType === "RECEIVABLE" ? `receivable:${line.entityId}` : "equity:opening_balance",
+              amount: amt.toFixed(2),
+              referenceType: "opening_balance_reversal",
+              referenceId: reversalBatch.id,
+            });
+          }
+        }
+
+        await tx.insert(accountingAuditLog).values({
+          merchantId,
+          eventType: "opening_balance_reversed",
+          entityType: "opening_balance_batch",
+          entityId: batchId,
+          description: `Opening balance batch ${batch.batchNumber} reversed. Reason: ${reason || "N/A"}`,
+          actorUserId: userId,
+        });
+
+        return reversalBatch;
+      });
+
       res.json(result);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });

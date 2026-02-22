@@ -1459,3 +1459,49 @@ export const insertLedgerLineSchema = createInsertSchema(ledgerLines).omit({
 });
 export type InsertLedgerLine = z.infer<typeof insertLedgerLineSchema>;
 export type LedgerLine = typeof ledgerLines.$inferSelect;
+
+// ============================================
+// ACCOUNTING: OPENING BALANCE BATCHES
+// ============================================
+export const openingBalanceBatches = pgTable("opening_balance_batches", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  batchNumber: varchar("batch_number", { length: 20 }).notNull(),
+  openingDate: timestamp("opening_date").notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("POSTED"),
+  reversalOf: varchar("reversal_of"),
+  reversalReason: text("reversal_reason"),
+  createdBy: varchar("created_by"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_ob_batches_merchant").on(table.merchantId),
+  index("idx_ob_batches_status").on(table.merchantId, table.status),
+]);
+
+export const insertOpeningBalanceBatchSchema = createInsertSchema(openingBalanceBatches).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertOpeningBalanceBatch = z.infer<typeof insertOpeningBalanceBatchSchema>;
+export type OpeningBalanceBatch = typeof openingBalanceBatches.$inferSelect;
+
+// ============================================
+// ACCOUNTING: OPENING BALANCE LINES
+// ============================================
+export const openingBalanceLines = pgTable("opening_balance_lines", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  batchId: varchar("batch_id").notNull().references(() => openingBalanceBatches.id, { onDelete: "cascade" }),
+  entityType: varchar("entity_type", { length: 20 }).notNull(),
+  entityId: varchar("entity_id").notNull(),
+  entityName: varchar("entity_name", { length: 255 }).notNull(),
+  balanceType: varchar("balance_type", { length: 20 }).notNull(),
+  amount: decimal("amount", { precision: 14, scale: 2 }).notNull(),
+}, (table) => [
+  index("idx_ob_lines_batch").on(table.batchId),
+]);
+
+export const insertOpeningBalanceLineSchema = createInsertSchema(openingBalanceLines).omit({
+  id: true,
+});
+export type InsertOpeningBalanceLine = z.infer<typeof insertOpeningBalanceLineSchema>;
+export type OpeningBalanceLine = typeof openingBalanceLines.$inferSelect;

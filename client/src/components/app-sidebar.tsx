@@ -170,6 +170,10 @@ const accountingAdvancedItems = [
   { title: "Cash Accounts", url: "/accounting/cash-accounts", icon: Landmark },
 ];
 
+const accountingSetupItems = [
+  { title: "Opening Balances", url: "/accounting/opening-balances", icon: Calculator },
+];
+
 const accountingSettingsItems = [
   { title: "Preferences", url: "/accounting/settings", icon: Cog },
 ];
@@ -486,6 +490,16 @@ export function AppSidebar() {
                           ))}
                         </>
                       )}
+                      {accountingSetupItems.map((item) => (
+                        <SidebarMenuSubItem key={item.title}>
+                          <SidebarMenuSubButton asChild isActive={location === item.url}>
+                            <Link href={item.url} data-testid={`nav-acct-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                              <item.icon className="w-3.5 h-3.5" />
+                              <span>{item.title}</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
                       {accountingSettingsItems.map((item) => (
                         <SidebarMenuSubItem key={item.title}>
                           <SidebarMenuSubButton asChild isActive={location === item.url}>
