@@ -1,0 +1,104 @@
+UPDATE: Add Stock Receipt must support MULTIPLE PRODUCTS (line items).
+
+PROBLEM
+Current Add Stock Receipt form only allows 1 product per receipt. Real purchasing often includes multiple products in a single supplier receipt/invoice. We need a line-items table.
+
+UI CHANGES
+1) Replace single Product/Quantity/Unit Cost fields with an ITEMS TABLE (repeatable rows).
+
+Items table columns:
+- Product (required dropdown)
+- Quantity (required > 0)
+- Unit Cost (required >= 0)
+- Line Total (read-only) = qty * unit_cost
+
+Buttons:
+- “+ Add Item” (adds a new row)
+- Remove row (trash icon)
+Rules:
+- At least 1 item is required.
+- Prevent duplicate product rows OR allow duplicates but auto-merge quantities (choose simplest: prevent duplicates, show error "Product already added").
+
+2) Keep existing fields below items:
+- Extra Costs (shipping/customs) (>= 0)
+- Supplier Party (REQUIRED)
+- Payment Type (REQUIRED): Paid Now / Pay Later (Credit)
+- Cash/Bank Account (REQUIRED only if Paid Now; hidden and must be NULL if Credit)
+- Description (optional)
+- Date (required)
+
+3) Show live totals:
+- Items Subtotal = sum(line totals)
+- Inventory Value = Items Subtotal + Extra Costs
+
+ACCOUNTING / LEDGER LOGIC (ERP-READY SIMPLE)
+Compute:
+items_subtotal = Σ(qty_i * unit_cost_i)
+inventory_value = items_subtotal + extra_costs
+
+Post base entries ALWAYS:
+- Debit Inventory = inventory_value
+- Credit Supplier Payable (supplier party ledger) = inventory_value
+
+If Payment Type = Paid Now:
+- Debit Supplier Payable = inventory_value
+- Credit Cash/Bank Account = inventory_value
+
+If Payment Type = Credit:
+- No cash/bank movement
+
+COSTING (SIMPLE)
+Allocate Extra Costs into items by LINE VALUE proportion:
+allocated_extra_i = (line_total_i / items_subtotal) * extra_costs
+final_unit_cost_i = (line_total_i + allocated_extra_i) / qty_i
+Store per line:
+- line_total
+- allocated_extra
+- final_unit_cost
+
+STOCK MOVEMENT
+For each item line:
+- Increase stock qty for product by qty
+- Update average cost using final_unit_cost (or store receipt cost and let average cost update function handle it)
+
+DATABASE CHANGES
+Replace stock_receipt single product fields with line items:
+
+stock_receipts:
+- id
+- supplier_party_id (required)
+- payment_type (PAID_NOW | CREDIT)
+- cash_account_id (nullable)
+- extra_costs
+- items_subtotal
+- inventory_value
+- description
+- date
+- created_at
+
+stock_receipt_items:
+- id
+- stock_receipt_id (FK)
+- product_id
+- quantity
+- unit_cost
+- line_total
+- allocated_extra
+- final_unit_cost
+
+VALIDATION (STRICT)
+- Supplier required
+- At least 1 item
+- qty > 0, unit_cost >= 0
+- extra_costs >= 0
+- items_subtotal > 0
+- If Paid Now: cash_account_id required
+- If Credit: cash_account_id must be NULL
+- Ledger must balance
+
+UI/UX NOTE
+Keep modal clean:
+- Items table at top
+- Totals under table
+- Payment type and conditional account below
+- Submit button: “Add Stock Receipt”
