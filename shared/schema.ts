@@ -1213,35 +1213,80 @@ export type InsertStockReceiptItem = z.infer<typeof insertStockReceiptItemSchema
 export type StockReceiptItem = typeof stockReceiptItems.$inferSelect;
 
 // ============================================
-// ACCOUNTING: SALES (Manual sell records)
+// ACCOUNTING: SALES (Multi-product invoices with split payments)
 // ============================================
 export const sales = pgTable("sales", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
-  productId: varchar("product_id").notNull().references(() => accountingProducts.id),
   customerId: varchar("customer_id").references(() => parties.id),
-  quantity: integer("quantity").notNull(),
-  unitPrice: decimal("unit_price", { precision: 12, scale: 2 }).notNull(),
-  totalRevenue: decimal("total_revenue", { precision: 14, scale: 2 }).notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("DRAFT"),
+  total: decimal("total", { precision: 14, scale: 2 }).notNull().default("0"),
   cogsTotal: decimal("cogs_total", { precision: 14, scale: 2 }),
   grossProfit: decimal("gross_profit", { precision: 14, scale: 2 }),
-  paidNow: boolean("paid_now").default(false),
-  cashAccountId: varchar("cash_account_id").references(() => cashAccounts.id),
+  paidNow: decimal("paid_now_amount", { precision: 14, scale: 2 }).notNull().default("0"),
+  remaining: decimal("remaining", { precision: 14, scale: 2 }).notNull().default("0"),
+  paymentMode: varchar("payment_mode", { length: 20 }).notNull().default("RECEIVE_NOW"),
+  referenceId: varchar("reference_id", { length: 100 }),
   date: timestamp("date").notNull(),
   notes: text("notes"),
+  completedAt: timestamp("completed_at"),
+  reversedAt: timestamp("reversed_at"),
   createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
   index("idx_sales_merchant").on(table.merchantId),
-  index("idx_sales_product").on(table.productId),
+  index("idx_sales_status").on(table.merchantId, table.status),
   index("idx_sales_date").on(table.merchantId, table.date),
 ]);
 
 export const insertSaleSchema = createInsertSchema(sales).omit({
   id: true,
   createdAt: true,
+  updatedAt: true,
 });
 export type InsertSale = z.infer<typeof insertSaleSchema>;
 export type Sale = typeof sales.$inferSelect;
+
+// ============================================
+// ACCOUNTING: SALE ITEMS (line items per sale)
+// ============================================
+export const saleItems = pgTable("sale_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  saleId: varchar("sale_id").notNull().references(() => sales.id, { onDelete: "cascade" }),
+  productId: varchar("product_id").notNull().references(() => accountingProducts.id),
+  quantity: integer("quantity").notNull(),
+  unitPrice: decimal("unit_price", { precision: 12, scale: 2 }).notNull(),
+  lineTotal: decimal("line_total", { precision: 14, scale: 2 }).notNull(),
+  cogsPerUnit: decimal("cogs_per_unit", { precision: 12, scale: 2 }),
+  cogsTotal: decimal("cogs_total", { precision: 14, scale: 2 }),
+}, (table) => [
+  index("idx_sale_items_sale").on(table.saleId),
+  index("idx_sale_items_product").on(table.productId),
+]);
+
+export const insertSaleItemSchema = createInsertSchema(saleItems).omit({
+  id: true,
+});
+export type InsertSaleItem = z.infer<typeof insertSaleItemSchema>;
+export type SaleItem = typeof saleItems.$inferSelect;
+
+// ============================================
+// ACCOUNTING: SALE PAYMENTS (split payment lines)
+// ============================================
+export const salePayments = pgTable("sale_payments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  saleId: varchar("sale_id").notNull().references(() => sales.id, { onDelete: "cascade" }),
+  cashAccountId: varchar("cash_account_id").notNull().references(() => cashAccounts.id),
+  amount: decimal("amount", { precision: 14, scale: 2 }).notNull(),
+}, (table) => [
+  index("idx_sale_payments_sale").on(table.saleId),
+]);
+
+export const insertSalePaymentSchema = createInsertSchema(salePayments).omit({
+  id: true,
+});
+export type InsertSalePayment = z.infer<typeof insertSalePaymentSchema>;
+export type SalePayment = typeof salePayments.$inferSelect;
 
 // ============================================
 // ACCOUNTING: COURIER SETTLEMENTS (COD / charge settlements)

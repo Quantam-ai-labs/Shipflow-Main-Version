@@ -13,6 +13,8 @@ import {
   stockReceipts,
   stockReceiptItems,
   sales,
+  saleItems,
+  salePayments,
   courierSettlements,
   ledgerEntries,
   accountingAuditLog,
@@ -705,64 +707,367 @@ export function registerAccountingRoutes(app: Express) {
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
-  // ========== SELL ==========
+  // ========== SALES: CREATE DRAFT ==========
   app.post("/api/accounting/sales", isAuthenticated, async (req: any, res) => {
     try {
       const merchantId = await getMerchantId(req);
-      const { productId, customerId, quantity, unitPrice, paidNow, cashAccountId, date, notes } = req.body;
-      const qty = parseInt(quantity);
-      const price = parseFloat(unitPrice);
-      const totalRevenue = qty * price;
+      const { customerId, items, payments, paymentMode, date, notes, referenceId } = req.body;
 
-      const [product] = await db.select().from(accountingProducts).where(eq(accountingProducts.id, productId));
-      if (!product) return res.status(404).json({ message: "Product not found" });
-      if (product.stockQty < qty) return res.status(400).json({ message: "Insufficient stock" });
-
-      const avgCost = parseFloat(product.avgUnitCost);
-      const cogsTotal = qty * avgCost;
-      const grossProfit = totalRevenue - cogsTotal;
-      const newQty = product.stockQty - qty;
-
-      await db.update(accountingProducts).set({
-        stockQty: newQty, updatedAt: new Date(),
-      }).where(eq(accountingProducts.id, productId));
+      const saleDate = date ? new Date(date) : new Date();
+      let total = 0;
+      if (items && Array.isArray(items)) {
+        for (const item of items) {
+          const qty = parseInt(item.quantity) || 0;
+          const price = parseFloat(item.unitPrice) || 0;
+          total += qty * price;
+        }
+      }
+      let paidNowAmt = 0;
+      if (paymentMode === "RECEIVE_NOW" && payments && Array.isArray(payments)) {
+        for (const p of payments) paidNowAmt += parseFloat(p.amount) || 0;
+      }
+      const remainingAmt = total - paidNowAmt;
 
       const [sale] = await db.insert(sales).values({
-        merchantId, productId, customerId, quantity: qty,
-        unitPrice: price.toFixed(2), totalRevenue: totalRevenue.toFixed(2),
-        cogsTotal: cogsTotal.toFixed(2), grossProfit: grossProfit.toFixed(2),
-        paidNow, cashAccountId, date: new Date(date), notes,
+        merchantId, customerId: customerId || null,
+        status: "DRAFT", total: total.toFixed(2),
+        paidNow: paidNowAmt.toFixed(2), remaining: remainingAmt.toFixed(2),
+        paymentMode: paymentMode || "RECEIVE_NOW",
+        referenceId: referenceId || null,
+        date: saleDate, notes: notes || null,
       }).returning();
 
-      if (paidNow && cashAccountId) {
-        const acctDelta = await updateCashAccountBalance(cashAccountId, totalRevenue);
-        await db.insert(cashMovements).values({
-          merchantId, cashAccountId, type: "in", amount: totalRevenue.toFixed(2),
-          balanceAfter: acctDelta.after.toFixed(2), partyId: customerId,
-          relatedSaleId: sale.id, description: `Sale: ${product.name}`,
-          date: new Date(date),
+      if (items && Array.isArray(items)) {
+        for (const item of items) {
+          if (!item.productId) continue;
+          const qty = parseInt(item.quantity) || 0;
+          const price = parseFloat(item.unitPrice) || 0;
+          const lineTotal = qty * price;
+          await db.insert(saleItems).values({
+            saleId: sale.id, productId: item.productId,
+            quantity: qty, unitPrice: price.toFixed(2), lineTotal: lineTotal.toFixed(2),
+          });
+        }
+      }
+
+      if (paymentMode === "RECEIVE_NOW" && payments && Array.isArray(payments)) {
+        for (const p of payments) {
+          if (!p.cashAccountId || !p.amount) continue;
+          await db.insert(salePayments).values({
+            saleId: sale.id, cashAccountId: p.cashAccountId,
+            amount: (parseFloat(p.amount) || 0).toFixed(2),
+          });
+        }
+      }
+
+      res.json({ sale });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // ========== SALES: AUTOSAVE DRAFT ==========
+  app.patch("/api/accounting/sales/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const saleId = req.params.id;
+      const [existing] = await db.select().from(sales)
+        .where(and(eq(sales.id, saleId), eq(sales.merchantId, merchantId)));
+      if (!existing) return res.status(404).json({ message: "Sale not found" });
+
+      const isEditable = existing.status === "DRAFT" ||
+        (existing.status === "COMPLETED" && existing.completedAt &&
+          (Date.now() - new Date(existing.completedAt).getTime()) < 2 * 60 * 1000);
+      if (!isEditable) return res.status(400).json({ message: "Sale cannot be edited" });
+
+      const { customerId, items, payments, paymentMode, date, notes, referenceId } = req.body;
+
+      let total = 0;
+      if (items && Array.isArray(items)) {
+        for (const item of items) {
+          total += (parseInt(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0);
+        }
+      }
+      let paidNowAmt = 0;
+      if (paymentMode === "RECEIVE_NOW" && payments && Array.isArray(payments)) {
+        for (const p of payments) paidNowAmt += parseFloat(p.amount) || 0;
+      }
+
+      await db.update(sales).set({
+        customerId: customerId || null,
+        total: total.toFixed(2),
+        paidNow: paidNowAmt.toFixed(2),
+        remaining: (total - paidNowAmt).toFixed(2),
+        paymentMode: paymentMode || "RECEIVE_NOW",
+        referenceId: referenceId || null,
+        date: date ? new Date(date) : existing.date,
+        notes: notes || null,
+        updatedAt: new Date(),
+      }).where(eq(sales.id, saleId));
+
+      await db.delete(saleItems).where(eq(saleItems.saleId, saleId));
+      if (items && Array.isArray(items)) {
+        for (const item of items) {
+          if (!item.productId) continue;
+          const qty = parseInt(item.quantity) || 0;
+          const price = parseFloat(item.unitPrice) || 0;
+          await db.insert(saleItems).values({
+            saleId, productId: item.productId,
+            quantity: qty, unitPrice: price.toFixed(2), lineTotal: (qty * price).toFixed(2),
+          });
+        }
+      }
+
+      await db.delete(salePayments).where(eq(salePayments.saleId, saleId));
+      if (paymentMode === "RECEIVE_NOW" && payments && Array.isArray(payments)) {
+        for (const p of payments) {
+          if (!p.cashAccountId || !p.amount) continue;
+          await db.insert(salePayments).values({
+            saleId, cashAccountId: p.cashAccountId,
+            amount: (parseFloat(p.amount) || 0).toFixed(2),
+          });
+        }
+      }
+
+      const [updated] = await db.select().from(sales).where(eq(sales.id, saleId));
+      res.json({ sale: updated });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // ========== SALES: COMPLETE ==========
+  app.post("/api/accounting/sales/:id/complete", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const saleId = req.params.id;
+      const [sale] = await db.select().from(sales)
+        .where(and(eq(sales.id, saleId), eq(sales.merchantId, merchantId)));
+      if (!sale) return res.status(404).json({ message: "Sale not found" });
+      if (sale.status !== "DRAFT") return res.status(400).json({ message: "Only draft sales can be completed" });
+
+      const items = await db.select().from(saleItems).where(eq(saleItems.saleId, saleId));
+      if (items.length === 0) return res.status(400).json({ message: "Sale must have at least one item" });
+
+      const total = parseFloat(sale.total);
+      if (total <= 0) return res.status(400).json({ message: "Sale total must be greater than zero" });
+
+      const pmts = await db.select().from(salePayments).where(eq(salePayments.saleId, saleId));
+      const paidNow = pmts.reduce((s, p) => s + parseFloat(p.amount), 0);
+
+      if (sale.paymentMode === "RECEIVE_NOW") {
+        if (pmts.length === 0) return res.status(400).json({ message: "At least one payment line is required" });
+        if (paidNow > total + 0.01) return res.status(400).json({ message: "Paid amount cannot exceed total" });
+      }
+
+      const remaining = total - paidNow;
+
+      await db.transaction(async (tx) => {
+        let totalCogs = 0;
+        const itemDescriptions: string[] = [];
+
+        for (const item of items) {
+          const [product] = await tx.select().from(accountingProducts)
+            .where(eq(accountingProducts.id, item.productId));
+          if (!product) throw new Error(`Product not found: ${item.productId}`);
+          if (product.stockQty < item.quantity) throw new Error(`Insufficient stock for ${product.name}`);
+
+          const avgCost = parseFloat(product.avgUnitCost);
+          const itemCogs = item.quantity * avgCost;
+          totalCogs += itemCogs;
+
+          await tx.update(saleItems).set({
+            cogsPerUnit: avgCost.toFixed(2),
+            cogsTotal: itemCogs.toFixed(2),
+          }).where(eq(saleItems.id, item.id));
+
+          const newQty = product.stockQty - item.quantity;
+          await tx.update(accountingProducts).set({
+            stockQty: newQty, updatedAt: new Date(),
+          }).where(eq(accountingProducts.id, item.productId));
+
+          itemDescriptions.push(`${product.name} x${item.quantity}`);
+
+          await createLedgerEntry(merchantId, sale.date, `COGS: ${product.name} x${item.quantity}`,
+            `cogs:sales`, `inventory:${item.productId}`, itemCogs, "cogs", saleId);
+        }
+
+        const grossProfit = total - totalCogs;
+
+        await tx.update(sales).set({
+          status: "COMPLETED",
+          cogsTotal: totalCogs.toFixed(2),
+          grossProfit: grossProfit.toFixed(2),
+          paidNow: paidNow.toFixed(2),
+          remaining: remaining.toFixed(2),
+          completedAt: new Date(),
+          updatedAt: new Date(),
+        }).where(eq(sales.id, saleId));
+
+        await createLedgerEntry(merchantId, sale.date,
+          `Sale: ${itemDescriptions.join(", ")}`,
+          remaining > 0 ? `receivable:${sale.customerId}` : `cash:split`,
+          `revenue:sales`, total, "sale", saleId);
+
+        for (const pmt of pmts) {
+          const acctDelta = await updateCashAccountBalance(pmt.cashAccountId, parseFloat(pmt.amount));
+          await tx.insert(cashMovements).values({
+            merchantId, cashAccountId: pmt.cashAccountId,
+            type: "in", amount: pmt.amount,
+            balanceAfter: acctDelta.after.toFixed(2),
+            partyId: sale.customerId,
+            relatedSaleId: saleId,
+            description: `Sale payment: ${itemDescriptions.join(", ")}`,
+            date: sale.date,
+          });
+        }
+
+        if (remaining > 0 && sale.customerId) {
+          await updatePartyBalance(merchantId, sale.customerId, remaining);
+
+          await createLedgerEntry(merchantId, sale.date,
+            `Customer receivable: ${itemDescriptions.join(", ")}`,
+            `receivable:${sale.customerId}`, `cash:deferred`, remaining, "sale_receivable", saleId);
+        }
+
+        await createAuditEntry(merchantId, "SALE_COMPLETE", "sale", saleId,
+          `Completed sale: ${itemDescriptions.join(", ")}. Total: ${total}, Paid: ${paidNow}, Remaining: ${remaining}`,
+          {}, { total, paidNow, remaining, cogs: totalCogs, profit: grossProfit },
+          req.user?.id);
+      });
+
+      const [updated] = await db.select().from(sales).where(eq(sales.id, saleId));
+      res.json({ sale: updated });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // ========== SALES: REVERSE ==========
+  app.post("/api/accounting/sales/:id/reverse", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const saleId = req.params.id;
+      const [sale] = await db.select().from(sales)
+        .where(and(eq(sales.id, saleId), eq(sales.merchantId, merchantId)));
+      if (!sale) return res.status(404).json({ message: "Sale not found" });
+      if (sale.status !== "COMPLETED") return res.status(400).json({ message: "Only completed sales can be reversed" });
+
+      const items = await db.select().from(saleItems).where(eq(saleItems.saleId, saleId));
+      const pmts = await db.select().from(salePayments).where(eq(salePayments.saleId, saleId));
+      const total = parseFloat(sale.total);
+      const paidNow = parseFloat(sale.paidNow);
+      const remaining = parseFloat(sale.remaining);
+
+      await db.transaction(async (tx) => {
+        for (const item of items) {
+          const [product] = await tx.select().from(accountingProducts)
+            .where(eq(accountingProducts.id, item.productId));
+          if (product) {
+            const newQty = product.stockQty + item.quantity;
+            await tx.update(accountingProducts).set({
+              stockQty: newQty, updatedAt: new Date(),
+            }).where(eq(accountingProducts.id, item.productId));
+          }
+        }
+
+        for (const pmt of pmts) {
+          const amt = parseFloat(pmt.amount);
+          const acctDelta = await updateCashAccountBalance(pmt.cashAccountId, -amt);
+          await tx.insert(cashMovements).values({
+            merchantId, cashAccountId: pmt.cashAccountId,
+            type: "out", amount: pmt.amount,
+            balanceAfter: acctDelta.after.toFixed(2),
+            partyId: sale.customerId,
+            relatedSaleId: saleId,
+            description: `Reversal of sale`,
+            date: new Date(),
+          });
+        }
+
+        if (remaining > 0 && sale.customerId) {
+          await updatePartyBalance(merchantId, sale.customerId, -remaining);
+        }
+
+        await createLedgerEntry(merchantId, new Date(), `REVERSAL: Sale #${saleId}`,
+          `revenue:sales`, `cash:reversal`, total, "sale_reversal", saleId);
+
+        await tx.update(sales).set({
+          status: "REVERSED", reversedAt: new Date(), updatedAt: new Date(),
+        }).where(eq(sales.id, saleId));
+
+        await createAuditEntry(merchantId, "SALE_REVERSE", "sale", saleId,
+          `Reversed sale. Total: ${total}, refunded: ${paidNow}, receivable cleared: ${remaining}`,
+          {}, { reversed: true }, req.user?.id);
+      });
+
+      const [updated] = await db.select().from(sales).where(eq(sales.id, saleId));
+      res.json({ sale: updated });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // ========== SALES: DUPLICATE ==========
+  app.post("/api/accounting/sales/:id/duplicate", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const saleId = req.params.id;
+      const [sale] = await db.select().from(sales)
+        .where(and(eq(sales.id, saleId), eq(sales.merchantId, merchantId)));
+      if (!sale) return res.status(404).json({ message: "Sale not found" });
+
+      const items = await db.select().from(saleItems).where(eq(saleItems.saleId, saleId));
+      const pmts = await db.select().from(salePayments).where(eq(salePayments.saleId, saleId));
+
+      const [newSale] = await db.insert(sales).values({
+        merchantId, customerId: sale.customerId,
+        status: "DRAFT", total: sale.total,
+        paidNow: sale.paidNow, remaining: sale.remaining,
+        paymentMode: sale.paymentMode,
+        date: new Date(), notes: sale.notes,
+      }).returning();
+
+      for (const item of items) {
+        await db.insert(saleItems).values({
+          saleId: newSale.id, productId: item.productId,
+          quantity: item.quantity, unitPrice: item.unitPrice, lineTotal: item.lineTotal,
         });
       }
 
-      if (customerId) {
-        await updatePartyBalance(merchantId, customerId, paidNow ? 0 : -totalRevenue);
+      for (const pmt of pmts) {
+        await db.insert(salePayments).values({
+          saleId: newSale.id, cashAccountId: pmt.cashAccountId, amount: pmt.amount,
+        });
       }
 
-      await createLedgerEntry(merchantId, new Date(date), `Sale: ${product.name} x${qty}`,
-        paidNow ? `cash:${cashAccountId}` : `receivable:${customerId}`,
-        `revenue:sales`, totalRevenue, "sale", sale.id);
-      await createLedgerEntry(merchantId, new Date(date), `COGS: ${product.name} x${qty}`,
-        `cogs:sales`, `inventory:${productId}`, cogsTotal, "cogs", sale.id);
+      res.json({ sale: newSale });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
 
-      await createAuditEntry(merchantId, "SALE", "sale", sale.id,
-        `Sold ${qty} x ${product.name} at ${price}/unit. Margin: ${grossProfit.toFixed(2)}`,
-        { stockQty: product.stockQty, avgCost },
-        { stockQty: newQty, revenue: totalRevenue, cogs: cogsTotal, profit: grossProfit },
-        req.user?.id);
+  // ========== SALES: GET SINGLE ==========
+  app.get("/api/accounting/sales/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const [sale] = await db.select({
+        sale: sales,
+        customerName: parties.name,
+      }).from(sales)
+        .leftJoin(parties, eq(parties.id, sales.customerId))
+        .where(and(eq(sales.id, req.params.id), eq(sales.merchantId, merchantId)));
+      if (!sale) return res.status(404).json({ message: "Sale not found" });
+
+      const items = await db.select({
+        item: saleItems,
+        productName: accountingProducts.name,
+      }).from(saleItems)
+        .leftJoin(accountingProducts, eq(accountingProducts.id, saleItems.productId))
+        .where(eq(saleItems.saleId, req.params.id));
+
+      const payments = await db.select({
+        payment: salePayments,
+        accountName: cashAccounts.name,
+      }).from(salePayments)
+        .leftJoin(cashAccounts, eq(cashAccounts.id, salePayments.cashAccountId))
+        .where(eq(salePayments.saleId, req.params.id));
 
       res.json({
-        sale, stockBefore: product.stockQty, stockAfter: newQty,
-        cogs: cogsTotal, grossProfit,
+        ...sale.sale,
+        customerName: sale.customerName,
+        items: items.map(i => ({ ...i.item, productName: i.productName })),
+        payments: payments.map(p => ({ ...p.payment, accountName: p.accountName })),
       });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
@@ -898,10 +1203,10 @@ export function registerAccountingRoutes(app: Express) {
       if (endDate) dateConditions.push(lte(sales.date, new Date(endDate as string)));
 
       const [salesSummary] = await db.select({
-        revenue: sql<string>`COALESCE(SUM(${sales.totalRevenue}::numeric), 0)`,
+        revenue: sql<string>`COALESCE(SUM(${sales.total}::numeric), 0)`,
         cogs: sql<string>`COALESCE(SUM(${sales.cogsTotal}::numeric), 0)`,
         profit: sql<string>`COALESCE(SUM(${sales.grossProfit}::numeric), 0)`,
-      }).from(sales).where(and(...dateConditions));
+      }).from(sales).where(and(...dateConditions, eq(sales.status, "COMPLETED")));
 
       const expConditions: any[] = [eq(expenses.merchantId, merchantId)];
       if (startDate) expConditions.push(gte(expenses.date, new Date(startDate as string)));
@@ -956,9 +1261,9 @@ export function registerAccountingRoutes(app: Express) {
       };
 
       const [salesData] = await db.select({
-        revenue: sql<string>`COALESCE(SUM(${sales.totalRevenue}::numeric), 0)`,
+        revenue: sql<string>`COALESCE(SUM(${sales.total}::numeric), 0)`,
         cogs: sql<string>`COALESCE(SUM(${sales.cogsTotal}::numeric), 0)`,
-      }).from(sales).where(dateFilter(sales));
+      }).from(sales).where(and(dateFilter(sales), eq(sales.status, "COMPLETED")));
 
       const expensesByCategory = await db.select({
         category: expenses.category,
@@ -1187,20 +1492,41 @@ export function registerAccountingRoutes(app: Express) {
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
-  // ========== SALES HISTORY ==========
+  // ========== SALES LIST (with filters) ==========
   app.get("/api/accounting/sales", isAuthenticated, async (req: any, res) => {
     try {
       const merchantId = await getMerchantId(req);
+      const { status, customerId: filterCustomerId } = req.query;
+      const conditions: any[] = [eq(sales.merchantId, merchantId)];
+      if (status) conditions.push(eq(sales.status, status as string));
+      if (filterCustomerId) conditions.push(eq(sales.customerId, filterCustomerId as string));
+
       const results = await db.select({
         sale: sales,
-        productName: accountingProducts.name,
         customerName: parties.name,
       }).from(sales)
-        .leftJoin(accountingProducts, eq(accountingProducts.id, sales.productId))
         .leftJoin(parties, eq(parties.id, sales.customerId))
-        .where(eq(sales.merchantId, merchantId))
+        .where(and(...conditions))
         .orderBy(desc(sales.date));
-      res.json(results.map(r => ({ ...r.sale, productName: r.productName, customerName: r.customerName })));
+
+      const salesWithItems = [];
+      for (const r of results) {
+        const items = await db.select({
+          item: saleItems,
+          productName: accountingProducts.name,
+        }).from(saleItems)
+          .leftJoin(accountingProducts, eq(accountingProducts.id, saleItems.productId))
+          .where(eq(saleItems.saleId, r.sale.id));
+
+        salesWithItems.push({
+          ...r.sale,
+          customerName: r.customerName,
+          itemCount: items.length,
+          itemsSummary: items.map(i => i.productName).filter(Boolean).join(", "),
+        });
+      }
+
+      res.json(salesWithItems);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 

@@ -142,6 +142,7 @@ const accountingStockItems = [
   { title: "Products", url: "/accounting/products", icon: ShoppingBag },
   { title: "Add Stock", url: "/accounting/stock-receipts", icon: ArrowDownLeft },
   { title: "Sell", url: "/accounting/sales", icon: ShoppingCart },
+  { title: "Sale Orders", url: "/accounting/sale-orders", icon: BookOpen },
 ];
 
 const accountingExpenseItems = [

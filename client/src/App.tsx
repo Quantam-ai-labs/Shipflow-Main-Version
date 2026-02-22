@@ -42,6 +42,7 @@ import AccountingParties from "@/pages/accounting/parties";
 import AccountingProducts from "@/pages/accounting/products";
 import AccountingStockReceipts from "@/pages/accounting/stock-receipts";
 import AccountingSales from "@/pages/accounting/sales";
+import SaleOrdersPage from "@/pages/accounting/sale-orders";
 import AccountingExpenses from "@/pages/accounting/expenses";
 import AccountingExpensesUnpaid from "@/pages/accounting/expenses-unpaid";
 import AccountingCodReceivable from "@/pages/accounting/cod-receivable";
@@ -106,6 +107,7 @@ function AppRoutes() {
       <Route path="/accounting/products" component={AccountingProducts} />
       <Route path="/accounting/stock-receipts" component={AccountingStockReceipts} />
       <Route path="/accounting/sales" component={AccountingSales} />
+      <Route path="/accounting/sale-orders" component={SaleOrdersPage} />
       <Route path="/accounting/expenses" component={AccountingExpenses} />
       <Route path="/accounting/expenses-unpaid" component={AccountingExpensesUnpaid} />
       <Route path="/accounting/cod-receivable" component={AccountingCodReceivable} />
