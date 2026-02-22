@@ -38,7 +38,6 @@ import StockLedger from "@/pages/stock-ledger";
 import CourierDues from "@/pages/courier-dues";
 import FinancialDashboard from "@/pages/financial-dashboard";
 import AccountingOverview from "@/pages/accounting/overview";
-import MoneyPage from "@/pages/accounting/money";
 import AccountingParties from "@/pages/accounting/parties";
 import AccountingProducts from "@/pages/accounting/products";
 import AccountingStockReceipts from "@/pages/accounting/stock-receipts";
@@ -103,7 +102,6 @@ function AppRoutes() {
       <Route path="/stock-ledger" component={StockLedger} />
       <Route path="/accounting" component={AccountingOverview} />
       <Route path="/accounting/transactions" component={AccountingTransactions} />
-      <Route path="/accounting/money" component={MoneyPage} />
       <Route path="/accounting/parties" component={AccountingParties} />
       <Route path="/accounting/products" component={AccountingProducts} />
       <Route path="/accounting/stock-receipts" component={AccountingStockReceipts} />

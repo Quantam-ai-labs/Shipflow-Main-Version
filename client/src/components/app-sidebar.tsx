@@ -56,7 +56,6 @@ import {
   Wallet,
   ArrowDownLeft,
   ArrowUpRight,
-  Banknote,
   UserCircle,
   ShoppingCart,
   PieChart,
@@ -136,7 +135,6 @@ const codSubItems = [
 const accountingOverviewItems = [
   { title: "Overview", url: "/accounting", icon: Wallet },
   { title: "Transactions", url: "/accounting/transactions", icon: ArrowLeftRight },
-  { title: "Money", url: "/accounting/money", icon: Banknote },
   { title: "Parties", url: "/accounting/parties", icon: UserCircle },
 ];
 
