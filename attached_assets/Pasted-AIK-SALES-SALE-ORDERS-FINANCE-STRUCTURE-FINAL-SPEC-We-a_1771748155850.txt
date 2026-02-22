@@ -1,0 +1,182 @@
+AIK SALES + SALE ORDERS + FINANCE STRUCTURE (FINAL SPEC)
+
+We are building a Sales module with:
+- Multi-product invoices
+- Split payments (multi-account)
+- Customer balance preview
+- Draft autosave
+- Complete workflow
+- Reverse + Duplicate
+- Sale Orders log section
+- Strict backend validation
+
+────────────────────────────────────────
+1) SIDEBAR STRUCTURE
+────────────────────────────────────────
+
+Under STOCK & SALES:
+
+- Products
+- Add Stock
+- Sell
+- Sale Orders   <-- ADD THIS
+
+Sale Orders must be separate from Sell form.
+Sell = create/edit
+Sale Orders = log/history
+
+────────────────────────────────────────
+2) SELL FORM (RECORD SALE)
+────────────────────────────────────────
+
+A) HEADER
+- Sale Date (default today)
+- Customer (REQUIRED; allow default "Walk-in Customer")
+- Customer Balance Card:
+    - Previous Balance
+    - Balance After This Sale (live update)
+
+Balance logic:
+balance = SUM(PARTY debits) - SUM(PARTY credits)
+Positive = customer owes us.
+
+────────────────────────────────────────
+B) ITEMS SECTION (MULTI PRODUCT)
+
+Repeatable rows:
+- Product (required)
+- Quantity (>0)
+- Unit Price (>=0)
+- Line Total (auto)
+
+Buttons:
+- + Add Item
+- Remove Item
+
+Totals:
+- Subtotal
+- Total
+
+Validation:
+- Must have at least 1 item
+- Total > 0
+
+────────────────────────────────────────
+C) PAYMENT SECTION (SPLIT PAYMENTS)
+
+Payment Mode toggle:
+- Receive Now
+- No Payment (Full Credit)
+
+If Receive Now:
+- Payment Lines (repeatable rows):
+    - Account (required)
+    - Amount (>0)
+- + Add Payment
+- Paid Now = sum(payment rows)
+- Remaining = Total - Paid Now
+
+If No Payment:
+- Hide payment lines
+- Paid Now = 0
+- Remaining = Total
+
+Validation:
+- If Receive Now:
+    - at least 1 payment line
+    - paid_now <= total
+- If No Payment:
+    - no payment lines
+- Remaining >= 0
+
+────────────────────────────────────────
+D) NOTES
+- Description
+- Reference ID (optional invoice number)
+
+────────────────────────────────────────
+E) ACTION BUTTONS
+
+If DRAFT:
+- Save Draft
+- Complete Sale
+
+If COMPLETED (within 2 minutes):
+- Edit
+- Reverse
+- Duplicate
+
+If COMPLETED (after 2 minutes):
+- Reverse
+- Duplicate
+
+If REVERSED:
+- Duplicate
+- View only
+
+No delete allowed.
+
+────────────────────────────────────────
+3) DRAFT + AUTO SAVE LOGIC
+────────────────────────────────────────
+
+When user starts a sale:
+- Create sale with status=DRAFT immediately.
+
+Auto-save:
+- On any field change (debounced).
+- On leaving page.
+
+DRAFT:
+- Editable anytime.
+- Does NOT post ledger.
+- Does NOT deduct stock.
+
+On Complete:
+- Validate strictly.
+- Post ledger lines.
+- Deduct stock.
+- Change status to COMPLETED.
+- Lock after 2 minutes.
+
+────────────────────────────────────────
+4) LEDGER POSTING (ON COMPLETE ONLY)
+
+Let:
+total = sum(items)
+paid_now = sum(payment lines)
+remaining = total - paid_now
+
+Ledger lines:
+
+1) CREDIT Sales Revenue = total
+
+2) For each payment line:
+   DEBIT Account(account_id) = amount
+
+3) If remaining > 0:
+   DEBIT Customer Receivable (party ledger) = remaining
+
+Inventory:
+- Deduct stock per item.
+
+Later collection:
+- Use Finance -> Money In (from_party=customer, to_account=account)
+
+────────────────────────────────────────
+5) SALE ORDERS PAGE
+────────────────────────────────────────
+
+Sale Orders page shows:
+Columns:
+- Date
+- Customer
+- Total
+- Paid Now
+- Remaining
+- Status
+
+Filters:
+- Status (Draft / Completed / Reversed)
+- Customer
+-
