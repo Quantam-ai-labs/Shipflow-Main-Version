@@ -1,0 +1,260 @@
+AIK – UNIVERSAL OPENING BALANCE MODULE (FINAL VERSION WITH CSV + EXCEL SUPPORT)
+
+GOAL:
+Create a secure, minimal, universal Opening Balance system that supports:
+- Accounts
+- Parties
+- Excel (.xlsx) import
+- CSV (.csv) import
+- AUTO entity creation
+- Immutable logs
+- Global opening date
+- System lock after first transaction
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1) MENU STRUCTURE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Accounting →
+   - Opening Balances
+
+Inside Opening Balances:
+
+Tabs:
+1) Create Manually
+2) Bulk Import (CSV / Excel)
+3) Opening Balance Logs
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2) SUPPORTED FILE TYPES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Accept:
+- .xlsx
+- .csv
+
+File size limit: reasonable (e.g. 5MB)
+
+If CSV:
+- UTF-8 encoding required
+- Comma separated
+- First row = headers
+
+If Excel:
+- Sheet name: "OpeningBalances"
+- If sheet name missing → use first sheet
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3) REQUIRED COLUMNS (SAME FOR CSV + EXCEL)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Columns (case-insensitive):
+
+- entity_type
+- entity_name
+- balance_type
+- amount
+
+No other columns required.
+
+Reject file if required columns missing.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+4) COLUMN RULES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+entity_type:
+- ACCOUNT
+- PARTY
+
+entity_name:
+- Required
+- Trim spaces
+- Case-insensitive matching
+
+balance_type:
+
+If entity_type = ACCOUNT:
+   - INCREASE
+   - DECREASE
+
+If entity_type = PARTY:
+   - RECEIVABLE
+   - PAYABLE
+
+amount:
+- Must be positive decimal
+- > 0
+- No negative values allowed
+
+Reject rows with:
+- Missing values
+- Invalid combinations
+- Invalid numbers
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+5) GLOBAL OPENING DATE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Before posting batch:
+
+Require one UI field:
+- Opening Balance Date
+
+All imported rows use this same date.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+6) AUTO ENTITY CREATION (DEFAULT)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+For each row:
+
+Normalize entity_name:
+- trim
+- lowercase
+- collapse multiple spaces
+
+Matching logic:
+
+If exactly one entity exists:
+   → Use it.
+
+If none exists:
+   → Auto-create new entity.
+
+If more than one match:
+   → Reject row (ambiguous name).
+
+Defaults for auto-created entities:
+
+ACCOUNT:
+- name = entity_name
+- type = "Other"
+- active = true
+
+PARTY:
+- name = entity_name
+- party_type = "Other"
+- active = true
+
+Only name is mandatory.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+7) IMPORT PROCESS (SAFE)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Step 1: Upload file
+Step 2: Parse + Validate rows
+Step 3: Show Preview:
+   - Valid rows count
+   - Errors count
+   - “Will create new entity” indicator
+Step 4: User clicks "Post Opening Balance Batch"
+Step 5: System posts ledger entries atomically
+
+No direct posting without preview confirmation.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+8) LEDGER POSTING RULES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+System Account required:
+OPENING_BALANCE_EQUITY
+
+Posting logic per row:
+
+If ACCOUNT:
+
+   INCREASE:
+      Debit Account
+      Credit Opening Balance Equity
+
+   DECREASE:
+      Credit Account
+      Debit Opening Balance Equity
+
+If PARTY:
+
+   RECEIVABLE:
+      Debit Party
+      Credit Opening Balance Equity
+
+   PAYABLE:
+      Credit Party
+      Debit Opening Balance Equity
+
+All rows must create balanced ledger lines.
+
+Use database transaction for entire batch.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+9) LOGS (IMMUTABLE)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Each posting creates:
+
+opening_balance_batches:
+- id
+- batch_number (OB-0001...)
+- opening_date
+- created_by
+- created_at
+- status (POSTED / REVERSED)
+- reversal_reference (nullable)
+
+opening_balance_lines:
+- id
+- batch_id
+- entity_type
+- entity_id
+- balance_type
+- amount
+
+Rules:
+- No edit
+- No delete
+- Only Reverse Batch allowed
+
+Reverse:
+- Create new batch
+- Invert ledger entries
+- Link to original
+- Require reason
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+10) SYSTEM LOCK RULE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+After first normal transaction (Sale completed OR Money In/Out OR Stock movement):
+
+Block:
+- Creating new Opening Balance batches
+
+Allow:
+- Viewing logs
+- Reversing existing batch only
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+11) PERMISSIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Only ADMIN can:
+- Import file
+- Post batch
+- Reverse batch
+
+Other users:
+- View only
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+12) DATA SAFETY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+- Use DECIMAL type for money
+- No negative amounts
+- Reject invalid rows
+- Reject duplicate ambiguous names
+- No direct balance editing allowed anywhere
+- All ledger posting must be atomic
+
+This module must be implemented exactly as specified.
