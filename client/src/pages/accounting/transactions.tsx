@@ -228,7 +228,7 @@ export default function TransactionsPage() {
     <div className="p-4 md:p-6 space-y-6 max-w-6xl">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold" data-testid="text-page-title">Transactions</h1>
+          <h1 className="text-2xl font-bold" data-testid="text-page-title">Money</h1>
           <p className="text-sm text-muted-foreground mt-1">Manage all financial transactions with double-entry ledger</p>
         </div>
       </div>
