@@ -1,0 +1,250 @@
+Your task is to design and build this module with production-level architecture, scalable backend logic, and clean frontend UI.
+
+--------------------------------------------------
+🎯 OBJECTIVE
+--------------------------------------------------
+
+Integrate Facebook (Meta) Ads API so we can:
+
+• Fetch ads performance data
+• Store it in database
+• Calculate profitability
+• Show reports dashboard
+• Filter by date ranges
+• Track active campaigns live
+
+--------------------------------------------------
+🔗 API INTEGRATION REQUIREMENTS
+--------------------------------------------------
+
+Integrate Meta Marketing API using:
+
+• OAuth authentication
+• Access Token storage
+• Auto refresh token handling
+• Secure encrypted storage
+
+Fetch these objects:
+
+1) Ad Accounts
+2) Campaigns
+3) Ad Sets
+4) Ads
+5) Insights Metrics
+
+--------------------------------------------------
+📊 REQUIRED METRICS TO FETCH
+--------------------------------------------------
+
+For each Ad / Adset / Campaign fetch:
+
+- impressions
+- reach
+- clicks
+- cpc
+- cpm
+- ctr
+- spend
+- purchases
+- purchase conversion value
+- cost per purchase
+- frequency
+- add_to_cart
+- initiate_checkout
+- video_views (if available)
+
+--------------------------------------------------
+📅 DATE FILTER SYSTEM
+--------------------------------------------------
+
+Dashboard must support:
+
+• Today
+• Yesterday
+• Last 7 Days
+• Last 30 Days
+• Month To Date
+• Custom Range
+
+Changing date range must:
+
+→ re-fetch data from API
+→ update database cache
+→ update dashboard instantly
+
+--------------------------------------------------
+🧠 DATA STORAGE DESIGN
+--------------------------------------------------
+
+Create database schema:
+
+TABLE ad_accounts
+- id
+- account_id
+- name
+- currency
+- timezone
+
+TABLE campaigns
+- id
+- campaign_id
+- name
+- status
+- objective
+
+TABLE adsets
+- id
+- adset_id
+- campaign_id
+- name
+- daily_budget
+- status
+
+TABLE ads
+- id
+- ad_id
+- adset_id
+- name
+- status
+
+TABLE insights
+- id
+- entity_id
+- level (campaign/adset/ad)
+- date
+- impressions
+- clicks
+- spend
+- purchases
+- revenue
+- cpc
+- cpm
+- ctr
+
+--------------------------------------------------
+⚡ DATA SYNC LOGIC
+--------------------------------------------------
+
+Implement:
+
+• Initial full sync
+• Scheduled background sync every 15 minutes
+• Live sync for active campaigns every 2 minutes
+• Only update changed records
+• Avoid duplicate entries
+
+--------------------------------------------------
+📈 DASHBOARD UI REQUIREMENTS
+--------------------------------------------------
+
+Build a modern analytics dashboard with:
+
+Top KPI Cards
+--------------
+Total Spend
+Total Revenue
+ROAS
+CPA
+Total Purchases
+
+Charts
+--------------
+Line chart → Spend vs Revenue
+Bar chart → Campaign performance
+Pie chart → Spend distribution by campaign
+
+Tables
+--------------
+Sortable table showing:
+
+Campaign | Spend | Purchases | CPA | ROAS | CTR | Status
+
+--------------------------------------------------
+🧮 PROFITABILITY CALCULATION
+--------------------------------------------------
+
+Allow system to accept product cost data from our internal database.
+
+Calculate:
+
+Profit = Revenue − Ad Spend − Product Cost
+
+Show:
+
+• Profit per campaign
+• Profit per ad
+• Profit per day
+
+--------------------------------------------------
+🔥 ACTIVE CAMPAIGNS PRIORITY VIEW
+--------------------------------------------------
+
+Create separate section:
+
+"Live Campaign Monitor"
+
+This should show only:
+
+status = ACTIVE
+
+Refresh every 60 seconds.
+
+--------------------------------------------------
+🔐 SECURITY REQUIREMENTS
+--------------------------------------------------
+
+• Encrypt tokens
+• Validate API responses
+• Add rate-limit handling
+• Retry failed requests
+• Log API errors
+
+--------------------------------------------------
+🧱 ARCHITECTURE RULES
+--------------------------------------------------
+
+Backend:
+- Node.js + Express
+- Modular service structure
+- Separate API service layer
+
+Frontend:
+- React dashboard
+- Chart library for graphs
+
+Workers:
+- Background cron jobs for sync
+
+--------------------------------------------------
+📦 OUTPUT REQUIREMENTS
+--------------------------------------------------
+
+Generate:
+
+1) Backend folder structure
+2) Database schema
+3) API service functions
+4) Sync worker script
+5) Frontend dashboard components
+6) Environment variable template
+7) Setup instructions
+
+Code must be production-ready, clean, commented, and scalable.
+
+--------------------------------------------------
+IMPORTANT
+--------------------------------------------------
+
+System must be modular so later we can plug:
+
+• TikTok Ads
+• Google Ads
+• Snapchat Ads
+
+using same architecture.
+
+Design system with provider abstraction layer.
+
+--------------------------------------------------
+END OF TASK
+--------------------------------------------------
