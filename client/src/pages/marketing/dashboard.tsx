@@ -149,7 +149,10 @@ export default function MarketingDashboard() {
     color: CHART_COLORS[i % CHART_COLORS.length],
   })) || [];
 
-  const sortedCampaigns = [...(campaigns || [])].sort((a: any, b: any) => b.spend - a.spend);
+  const sortedCampaigns = [...(campaigns || [])].sort((a: any, b: any) => b.spend - a.spend).map((c: any) => ({
+    ...c,
+    revenue: c.purchaseValue || c.revenue || 0,
+  }));
 
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-[1400px] mx-auto" data-testid="marketing-dashboard">
@@ -342,7 +345,7 @@ export default function MarketingDashboard() {
                         {c.name}
                       </TableCell>
                       <TableCell className="text-sm text-right">{formatCurrency(c.spend)}</TableCell>
-                      <TableCell className="text-sm text-right">{formatCurrency(c.revenue)}</TableCell>
+                      <TableCell className="text-sm text-right">{formatCurrency(c.purchaseValue || c.revenue || 0)}</TableCell>
                       <TableCell className="text-sm text-right">{c.purchases}</TableCell>
                       <TableCell className="text-sm text-right">{formatCurrency(c.cpa)}</TableCell>
                       <TableCell className="text-sm text-right">

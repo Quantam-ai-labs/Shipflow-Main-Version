@@ -1,6 +1,6 @@
 import { db } from "../db";
-import { adAccounts, adCampaigns, adSets, adCreatives, adInsights, marketingSyncLogs, merchants } from "@shared/schema";
-import { eq, and, sql, desc, gte, lte } from "drizzle-orm";
+import { adAccounts, adCampaigns, adSets, adCreatives, adInsights, metaSyncRuns, marketingSyncLogs, merchants } from "@shared/schema";
+import { eq, and, sql, desc, gte, lte, inArray, like } from "drizzle-orm";
 import { decryptToken } from "./encryption";
 
 const META_API_VERSION = "v21.0";
@@ -52,8 +52,7 @@ export async function testFacebookConnection(creds: MetaApiOptions): Promise<{ s
   }
 }
 
-async function metaApiFetch(merchantId: string, endpoint: string, params: Record<string, string> = {}): Promise<any> {
-  const creds = await getCredentialsForMerchant(merchantId);
+async function metaApiFetch(creds: MetaApiOptions, endpoint: string, params: Record<string, string> = {}): Promise<any> {
   const url = new URL(`${META_BASE_URL}/${endpoint}`);
   url.searchParams.set("access_token", creds.accessToken);
   for (const [k, v] of Object.entries(params)) {
@@ -69,20 +68,18 @@ async function metaApiFetch(merchantId: string, endpoint: string, params: Record
   return response.json();
 }
 
-async function fetchAllPages(merchantId: string, endpoint: string, params: Record<string, string> = {}): Promise<any[]> {
+async function fetchAllPages(creds: MetaApiOptions, endpoint: string, params: Record<string, string> = {}): Promise<any[]> {
   let results: any[] = [];
-  let url: string | null = null;
-
-  const creds = await getCredentialsForMerchant(merchantId);
   const initialUrl = new URL(`${META_BASE_URL}/${endpoint}`);
   initialUrl.searchParams.set("access_token", creds.accessToken);
   initialUrl.searchParams.set("limit", "500");
   for (const [k, v] of Object.entries(params)) {
     initialUrl.searchParams.set(k, v);
   }
-  url = initialUrl.toString();
+  let url: string | null = initialUrl.toString();
 
-  while (url) {
+  let pageCount = 0;
+  while (url && pageCount < 50) {
     const resp: globalThis.Response = await fetch(url);
     if (!resp.ok) {
       const errorBody = await resp.text();
@@ -94,13 +91,32 @@ async function fetchAllPages(merchantId: string, endpoint: string, params: Recor
       results = results.concat(body.data);
     }
     url = body.paging?.next || null;
+    pageCount++;
   }
   return results;
 }
 
-export async function syncAdAccount(merchantId: string): Promise<any> {
+function parseActionValue(actions: any[], ...actionTypes: string[]): number {
+  if (!actions || !Array.isArray(actions)) return 0;
+  for (const type of actionTypes) {
+    const found = actions.find((a: any) => a.action_type === type);
+    if (found) return Math.round(parseFloat(found.value) || 0);
+  }
+  return 0;
+}
+
+function parseActionDecimal(actions: any[], ...actionTypes: string[]): string {
+  if (!actions || !Array.isArray(actions)) return "0";
+  for (const type of actionTypes) {
+    const found = actions.find((a: any) => a.action_type === type);
+    if (found) return String(found.value || "0");
+  }
+  return "0";
+}
+
+export async function syncAdAccount(merchantId: string): Promise<{ dbId: string; currency: string; timezone: string }> {
   const creds = await getCredentialsForMerchant(merchantId);
-  const data = await metaApiFetch(merchantId, creds.adAccountId, {
+  const data = await metaApiFetch(creds, creds.adAccountId, {
     fields: "account_id,name,currency,timezone_name,account_status",
   });
 
@@ -120,19 +136,22 @@ export async function syncAdAccount(merchantId: string): Promise<any> {
     lastSyncedAt: new Date(),
   };
 
+  let dbId: string;
   if (existing.length > 0) {
     await db.update(adAccounts).set(accountData).where(eq(adAccounts.id, existing[0].id));
-    return existing[0].id;
+    dbId = existing[0].id;
   } else {
     const [inserted] = await db.insert(adAccounts).values(accountData).returning({ id: adAccounts.id });
-    return inserted.id;
+    dbId = inserted.id;
   }
+  return { dbId, currency: data.currency || "PKR", timezone: data.timezone_name || "Asia/Karachi" };
 }
 
 export async function syncCampaigns(merchantId: string, adAccountDbId: string): Promise<number> {
   const creds = await getCredentialsForMerchant(merchantId);
-  const campaigns = await fetchAllPages(merchantId, `${creds.adAccountId}/campaigns`, {
-    fields: "id,name,status,objective,daily_budget,lifetime_budget",
+  const campaigns = await fetchAllPages(creds, `${creds.adAccountId}/campaigns`, {
+    fields: "id,name,status,effective_status,configured_status,objective,buying_type,daily_budget,lifetime_budget,created_time",
+    effective_status: JSON.stringify(["ACTIVE", "PAUSED", "DELETED", "ARCHIVED", "IN_PROCESS", "WITH_ISSUES"]),
   });
 
   let count = 0;
@@ -143,17 +162,26 @@ export async function syncCampaigns(merchantId: string, adAccountDbId: string): 
       campaignId: c.id,
       name: c.name,
       status: c.status,
+      effectiveStatus: c.effective_status,
+      configuredStatus: c.configured_status,
       objective: c.objective,
+      buyingType: c.buying_type,
       dailyBudget: c.daily_budget ? (parseFloat(c.daily_budget) / 100).toFixed(2) : null,
       lifetimeBudget: c.lifetime_budget ? (parseFloat(c.lifetime_budget) / 100).toFixed(2) : null,
+      createdTime: c.created_time ? new Date(c.created_time) : null,
+      rawJson: c,
     }).onConflictDoUpdate({
       target: [adCampaigns.merchantId, adCampaigns.campaignId],
       set: {
         name: sql`excluded.name`,
         status: sql`excluded.status`,
+        effectiveStatus: sql`excluded.effective_status`,
+        configuredStatus: sql`excluded.configured_status`,
         objective: sql`excluded.objective`,
+        buyingType: sql`excluded.buying_type`,
         dailyBudget: sql`excluded.daily_budget`,
         lifetimeBudget: sql`excluded.lifetime_budget`,
+        rawJson: sql`excluded.raw_json`,
         updatedAt: new Date(),
       },
     });
@@ -164,8 +192,9 @@ export async function syncCampaigns(merchantId: string, adAccountDbId: string): 
 
 export async function syncAdSets(merchantId: string, adAccountDbId: string): Promise<number> {
   const creds = await getCredentialsForMerchant(merchantId);
-  const adsets = await fetchAllPages(merchantId, `${creds.adAccountId}/adsets`, {
-    fields: "id,name,campaign_id,status,daily_budget,targeting",
+  const adsets = await fetchAllPages(creds, `${creds.adAccountId}/adsets`, {
+    fields: "id,name,campaign_id,status,effective_status,optimization_goal,billing_event,daily_budget,lifetime_budget,promoted_object,targeting",
+    effective_status: JSON.stringify(["ACTIVE", "PAUSED", "DELETED", "ARCHIVED", "IN_PROCESS", "WITH_ISSUES"]),
   });
 
   let count = 0;
@@ -177,15 +206,27 @@ export async function syncAdSets(merchantId: string, adAccountDbId: string): Pro
       adsetId: a.id,
       name: a.name,
       status: a.status,
+      effectiveStatus: a.effective_status,
+      optimizationGoal: a.optimization_goal,
+      billingEvent: a.billing_event,
       dailyBudget: a.daily_budget ? (parseFloat(a.daily_budget) / 100).toFixed(2) : null,
+      lifetimeBudget: a.lifetime_budget ? (parseFloat(a.lifetime_budget) / 100).toFixed(2) : null,
+      promotedObject: a.promoted_object || null,
       targeting: a.targeting || null,
+      rawJson: a,
     }).onConflictDoUpdate({
       target: [adSets.merchantId, adSets.adsetId],
       set: {
         name: sql`excluded.name`,
         status: sql`excluded.status`,
+        effectiveStatus: sql`excluded.effective_status`,
+        optimizationGoal: sql`excluded.optimization_goal`,
+        billingEvent: sql`excluded.billing_event`,
         dailyBudget: sql`excluded.daily_budget`,
+        lifetimeBudget: sql`excluded.lifetime_budget`,
+        promotedObject: sql`excluded.promoted_object`,
         targeting: sql`excluded.targeting`,
+        rawJson: sql`excluded.raw_json`,
         updatedAt: new Date(),
       },
     });
@@ -196,8 +237,9 @@ export async function syncAdSets(merchantId: string, adAccountDbId: string): Pro
 
 export async function syncAds(merchantId: string, adAccountDbId: string): Promise<number> {
   const creds = await getCredentialsForMerchant(merchantId);
-  const ads = await fetchAllPages(merchantId, `${creds.adAccountId}/ads`, {
-    fields: "id,name,adset_id,status",
+  const ads = await fetchAllPages(creds, `${creds.adAccountId}/ads`, {
+    fields: "id,name,adset_id,campaign_id,status,effective_status,creative{id}",
+    effective_status: JSON.stringify(["ACTIVE", "PAUSED", "DELETED", "ARCHIVED", "IN_PROCESS", "WITH_ISSUES"]),
   });
 
   let count = 0;
@@ -205,15 +247,23 @@ export async function syncAds(merchantId: string, adAccountDbId: string): Promis
     await db.insert(adCreatives).values({
       merchantId,
       adAccountId: adAccountDbId,
+      campaignId: ad.campaign_id || null,
       adsetId: ad.adset_id,
       adId: ad.id,
       name: ad.name,
       status: ad.status,
+      effectiveStatus: ad.effective_status,
+      creativeId: ad.creative?.id || null,
+      rawJson: ad,
     }).onConflictDoUpdate({
       target: [adCreatives.merchantId, adCreatives.adId],
       set: {
         name: sql`excluded.name`,
         status: sql`excluded.status`,
+        effectiveStatus: sql`excluded.effective_status`,
+        campaignId: sql`excluded.campaign_id`,
+        creativeId: sql`excluded.creative_id`,
+        rawJson: sql`excluded.raw_json`,
         updatedAt: new Date(),
       },
     });
@@ -222,13 +272,35 @@ export async function syncAds(merchantId: string, adAccountDbId: string): Promis
   return count;
 }
 
-export async function syncInsights(merchantId: string, adAccountDbId: string, dateFrom: string, dateTo: string): Promise<number> {
+const INSIGHTS_FIELDS = [
+  "campaign_id", "adset_id", "ad_id", "campaign_name", "adset_name", "ad_name",
+  "impressions", "reach", "frequency", "clicks", "spend",
+  "cpc", "cpm", "ctr",
+  "inline_link_clicks", "landing_page_views",
+  "outbound_clicks", "unique_outbound_clicks",
+  "actions", "action_values", "cost_per_action_type",
+  "purchase_roas",
+  "video_play_actions", "video_thruplay_watched_actions",
+  "video_p25_watched_actions", "video_p50_watched_actions",
+  "video_p75_watched_actions", "video_p95_watched_actions",
+  "video_30_sec_watched_actions",
+].join(",");
+
+export async function syncInsights(
+  merchantId: string,
+  adAccountDbId: string,
+  dateFrom: string,
+  dateTo: string,
+  level: "campaign" | "adset" | "ad" = "campaign"
+): Promise<number> {
   const creds = await getCredentialsForMerchant(merchantId);
 
-  const actionFields = "actions,action_values,cost_per_action_type";
-  const insightsData = await fetchAllPages(merchantId, `${creds.adAccountId}/insights`, {
-    fields: `campaign_id,impressions,reach,clicks,cpc,cpm,ctr,spend,frequency,video_views,${actionFields}`,
-    level: "campaign",
+  const entityTypeMap = { campaign: "campaign", adset: "adset", ad: "ad" };
+  const entityIdField = { campaign: "campaign_id", adset: "adset_id", ad: "ad_id" };
+
+  const insightsData = await fetchAllPages(creds, `${creds.adAccountId}/insights`, {
+    fields: INSIGHTS_FIELDS,
+    level,
     time_range: JSON.stringify({ since: dateFrom, until: dateTo }),
     time_increment: "1",
   });
@@ -239,49 +311,123 @@ export async function syncInsights(merchantId: string, adAccountDbId: string, da
     const actionValues = row.action_values || [];
     const costPerAction = row.cost_per_action_type || [];
 
-    const purchases = actions.find((a: any) => a.action_type === "purchase")?.value || 0;
-    const revenue = actionValues.find((a: any) => a.action_type === "purchase")?.value || 0;
-    const addToCart = actions.find((a: any) => a.action_type === "add_to_cart")?.value || 0;
-    const initiateCheckout = actions.find((a: any) => a.action_type === "initiate_checkout")?.value || 0;
-    const costPerPurchase = costPerAction.find((a: any) => a.action_type === "purchase")?.value || 0;
+    const purchases = parseActionValue(actions, "purchase", "offsite_conversion.fb_pixel_purchase", "omni_purchase");
+    const purchaseValueStr = parseActionDecimal(actionValues, "purchase", "offsite_conversion.fb_pixel_purchase", "omni_purchase");
+    const purchaseValue = parseFloat(purchaseValueStr) || 0;
+    const viewContent = parseActionValue(actions, "view_content", "offsite_conversion.fb_pixel_view_content");
+    const addToCart = parseActionValue(actions, "add_to_cart", "offsite_conversion.fb_pixel_add_to_cart");
+    const initiateCheckout = parseActionValue(actions, "initiate_checkout", "offsite_conversion.fb_pixel_initiate_checkout");
+    const linkClicks = parseInt(row.inline_link_clicks || "0") || 0;
+    const landingPageViews = parseActionValue(actions, "landing_page_view");
+    if (row.landing_page_views) {
+      // direct field takes priority
+    }
+
+    const costPerPurchase = parseActionDecimal(costPerAction, "purchase", "offsite_conversion.fb_pixel_purchase", "omni_purchase");
+    const costPerCheckout = parseActionDecimal(costPerAction, "initiate_checkout", "offsite_conversion.fb_pixel_initiate_checkout");
+    const costPerAddToCart = parseActionDecimal(costPerAction, "add_to_cart", "offsite_conversion.fb_pixel_add_to_cart");
+    const costPerViewContent = parseActionDecimal(costPerAction, "view_content", "offsite_conversion.fb_pixel_view_content");
+
+    const spend = parseFloat(row.spend || "0");
+    let roas: string | null = null;
+    if (row.purchase_roas && Array.isArray(row.purchase_roas) && row.purchase_roas.length > 0) {
+      roas = String(row.purchase_roas[0].value || "0");
+    } else if (spend > 0 && purchaseValue > 0) {
+      roas = (purchaseValue / spend).toFixed(4);
+    }
+
+    const outboundClicks = row.outbound_clicks
+      ? (Array.isArray(row.outbound_clicks) ? parseInt(row.outbound_clicks[0]?.value || "0") : parseInt(row.outbound_clicks || "0"))
+      : 0;
+    const uniqueOutboundClicks = row.unique_outbound_clicks
+      ? (Array.isArray(row.unique_outbound_clicks) ? parseInt(row.unique_outbound_clicks[0]?.value || "0") : parseInt(row.unique_outbound_clicks || "0"))
+      : 0;
+
+    const videoViews = row.video_play_actions
+      ? parseInt(row.video_play_actions[0]?.value || "0")
+      : 0;
+    const videoThruPlays = row.video_thruplay_watched_actions
+      ? parseInt(row.video_thruplay_watched_actions[0]?.value || "0")
+      : 0;
+    const video3sViews = row.video_30_sec_watched_actions
+      ? parseInt(row.video_30_sec_watched_actions[0]?.value || "0")
+      : 0;
+    const video95pViews = row.video_p95_watched_actions
+      ? parseInt(row.video_p95_watched_actions[0]?.value || "0")
+      : 0;
+
+    const entityId = row[entityIdField[level]];
+    if (!entityId) continue;
 
     await db.insert(adInsights).values({
       merchantId,
       adAccountId: adAccountDbId,
-      entityId: row.campaign_id,
-      entityType: "campaign",
+      level,
+      entityId,
+      entityType: entityTypeMap[level],
       date: row.date_start,
       impressions: parseInt(row.impressions || "0"),
       reach: parseInt(row.reach || "0"),
       clicks: parseInt(row.clicks || "0"),
       spend: row.spend || "0",
-      purchases: parseInt(purchases),
-      revenue: String(revenue),
-      cpc: row.cpc || "0",
-      cpm: row.cpm || "0",
-      ctr: row.ctr || "0",
       frequency: row.frequency || "0",
-      addToCart: parseInt(addToCart),
-      initiateCheckout: parseInt(initiateCheckout),
-      videoViews: parseInt(row.video_views || "0"),
-      costPerPurchase: String(costPerPurchase),
+      cpc: row.cpc || null,
+      cpm: row.cpm || null,
+      ctr: row.ctr || null,
+      linkClicks,
+      landingPageViews: parseInt(row.landing_page_views || "0") || landingPageViews,
+      outboundClicks,
+      uniqueOutboundClicks,
+      viewContent,
+      addToCart,
+      initiateCheckout,
+      purchases,
+      purchaseValue: purchaseValueStr,
+      roas,
+      costPerPurchase: costPerPurchase !== "0" ? costPerPurchase : (purchases > 0 ? (spend / purchases).toFixed(2) : null),
+      costPerCheckout: costPerCheckout !== "0" ? costPerCheckout : null,
+      costPerAddToCart: costPerAddToCart !== "0" ? costPerAddToCart : null,
+      costPerViewContent: costPerViewContent !== "0" ? costPerViewContent : null,
+      videoViews,
+      videoThruPlays,
+      video3sViews,
+      video95pViews,
+      rawJson: row,
+      rawActionsJson: actions.length > 0 ? actions : null,
+      rawCostPerActionJson: costPerAction.length > 0 ? costPerAction : null,
     }).onConflictDoUpdate({
       target: [adInsights.merchantId, adInsights.entityId, adInsights.entityType, adInsights.date],
       set: {
+        level: sql`excluded.level`,
         impressions: sql`excluded.impressions`,
         reach: sql`excluded.reach`,
         clicks: sql`excluded.clicks`,
         spend: sql`excluded.spend`,
-        purchases: sql`excluded.purchases`,
-        revenue: sql`excluded.revenue`,
+        frequency: sql`excluded.frequency`,
         cpc: sql`excluded.cpc`,
         cpm: sql`excluded.cpm`,
         ctr: sql`excluded.ctr`,
-        frequency: sql`excluded.frequency`,
+        linkClicks: sql`excluded.link_clicks`,
+        landingPageViews: sql`excluded.landing_page_views`,
+        outboundClicks: sql`excluded.outbound_clicks`,
+        uniqueOutboundClicks: sql`excluded.unique_outbound_clicks`,
+        viewContent: sql`excluded.view_content`,
         addToCart: sql`excluded.add_to_cart`,
         initiateCheckout: sql`excluded.initiate_checkout`,
-        videoViews: sql`excluded.video_views`,
+        purchases: sql`excluded.purchases`,
+        purchaseValue: sql`excluded.purchase_value`,
+        roas: sql`excluded.roas`,
         costPerPurchase: sql`excluded.cost_per_purchase`,
+        costPerCheckout: sql`excluded.cost_per_checkout`,
+        costPerAddToCart: sql`excluded.cost_per_add_to_cart`,
+        costPerViewContent: sql`excluded.cost_per_view_content`,
+        videoViews: sql`excluded.video_views`,
+        videoThruPlays: sql`excluded.video_thru_plays`,
+        video3sViews: sql`excluded.video_3s_views`,
+        video95pViews: sql`excluded.video_95p_views`,
+        rawJson: sql`excluded.raw_json`,
+        rawActionsJson: sql`excluded.raw_actions_json`,
+        rawCostPerActionJson: sql`excluded.raw_cost_per_action_json`,
         updatedAt: new Date(),
       },
     });
@@ -290,34 +436,243 @@ export async function syncInsights(merchantId: string, adAccountDbId: string, da
   return count;
 }
 
-export async function fullSync(merchantId: string, dateFrom?: string, dateTo?: string): Promise<{ campaigns: number; adsets: number; ads: number; insights: number }> {
+export async function fullSync(
+  merchantId: string,
+  options?: { dateFrom?: string; dateTo?: string; level?: "campaign" | "adset" | "ad"; force?: boolean }
+): Promise<{ campaigns: number; adsets: number; ads: number; insights: number; syncRunId: string }> {
+  const { dateFrom: optFrom, dateTo: optTo, level = "campaign", force = false } = options || {};
+
+  const [syncRun] = await db.insert(metaSyncRuns).values({
+    merchantId,
+    level,
+    status: "running",
+    dateFrom: optFrom || null,
+    dateTo: optTo || null,
+  }).returning({ id: metaSyncRuns.id });
+
   const logId = await createSyncLog(merchantId, "full_sync", "in_progress");
 
   try {
-    const adAccountDbId = await syncAdAccount(merchantId);
+    const { dbId: adAccountDbId } = await syncAdAccount(merchantId);
+
+    await db.update(metaSyncRuns).set({ adAccountId: adAccountDbId }).where(eq(metaSyncRuns.id, syncRun.id));
+
     const campaigns = await syncCampaigns(merchantId, adAccountDbId);
     const adsets = await syncAdSets(merchantId, adAccountDbId);
     const ads = await syncAds(merchantId, adAccountDbId);
 
     const now = new Date();
-    const from = dateFrom || new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
-    const to = dateTo || now.toISOString().split("T")[0];
-    const insights = await syncInsights(merchantId, adAccountDbId, from, to);
+    const from = optFrom || new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
+    const to = optTo || now.toISOString().split("T")[0];
 
-    await completeSyncLog(logId, "completed", campaigns + adsets + ads + insights);
-    console.log(`[MetaAds] Full sync done: ${campaigns} campaigns, ${adsets} adsets, ${ads} ads, ${insights} insights`);
-    return { campaigns, adsets, ads, insights };
+    let totalInsights = 0;
+    totalInsights += await syncInsights(merchantId, adAccountDbId, from, to, "campaign");
+
+    if (level === "adset" || level === "ad") {
+      totalInsights += await syncInsights(merchantId, adAccountDbId, from, to, "adset");
+    }
+    if (level === "ad") {
+      totalInsights += await syncInsights(merchantId, adAccountDbId, from, to, "ad");
+    }
+
+    await db.update(metaSyncRuns).set({
+      status: "completed",
+      rowsUpserted: campaigns + adsets + ads + totalInsights,
+      finishedAt: new Date(),
+    }).where(eq(metaSyncRuns.id, syncRun.id));
+
+    await completeSyncLog(logId, "completed", campaigns + adsets + ads + totalInsights);
+    console.log(`[MetaAds] Full sync done: ${campaigns} campaigns, ${adsets} adsets, ${ads} ads, ${totalInsights} insights`);
+    return { campaigns, adsets, ads, insights: totalInsights, syncRunId: syncRun.id };
   } catch (error: any) {
+    await db.update(metaSyncRuns).set({
+      status: "failed",
+      errorMessage: error.message,
+      finishedAt: new Date(),
+    }).where(eq(metaSyncRuns.id, syncRun.id));
     await completeSyncLog(logId, "failed", 0, error.message);
     console.error(`[MetaAds] Full sync failed:`, error.message);
     throw error;
   }
 }
 
+export async function quickSyncToday(merchantId: string, level: "campaign" | "adset" | "ad" = "campaign"): Promise<number> {
+  try {
+    const { dbId: adAccountDbId } = await syncAdAccount(merchantId);
+    const today = new Date().toISOString().split("T")[0];
+    return await syncInsights(merchantId, adAccountDbId, today, today, level);
+  } catch (err: any) {
+    console.error(`[MetaAds] Quick sync today failed:`, err.message);
+    return 0;
+  }
+}
+
+export async function getInsightsForTable(
+  merchantId: string,
+  params: {
+    level: "campaign" | "adset" | "ad";
+    dateFrom: string;
+    dateTo: string;
+    statusFilter?: string[];
+    search?: string;
+    sortBy?: string;
+    sortDir?: "asc" | "desc";
+  }
+) {
+  const { level, dateFrom, dateTo, statusFilter, search } = params;
+
+  const entityType = level;
+
+  const insightsQuery = db.select({
+    entityId: adInsights.entityId,
+    totalSpend: sql<string>`COALESCE(SUM(${adInsights.spend}::numeric), 0)`,
+    totalImpressions: sql<number>`COALESCE(SUM(${adInsights.impressions}), 0)`,
+    totalReach: sql<number>`COALESCE(SUM(${adInsights.reach}), 0)`,
+    totalClicks: sql<number>`COALESCE(SUM(${adInsights.clicks}), 0)`,
+    totalLinkClicks: sql<number>`COALESCE(SUM(${adInsights.linkClicks}), 0)`,
+    totalLandingPageViews: sql<number>`COALESCE(SUM(${adInsights.landingPageViews}), 0)`,
+    totalOutboundClicks: sql<number>`COALESCE(SUM(${adInsights.outboundClicks}), 0)`,
+    totalViewContent: sql<number>`COALESCE(SUM(${adInsights.viewContent}), 0)`,
+    totalAddToCart: sql<number>`COALESCE(SUM(${adInsights.addToCart}), 0)`,
+    totalInitiateCheckout: sql<number>`COALESCE(SUM(${adInsights.initiateCheckout}), 0)`,
+    totalPurchases: sql<number>`COALESCE(SUM(${adInsights.purchases}), 0)`,
+    totalPurchaseValue: sql<string>`COALESCE(SUM(${adInsights.purchaseValue}::numeric), 0)`,
+    totalVideoViews: sql<number>`COALESCE(SUM(${adInsights.videoViews}), 0)`,
+    totalVideoThruPlays: sql<number>`COALESCE(SUM(${adInsights.videoThruPlays}), 0)`,
+    totalVideo3sViews: sql<number>`COALESCE(SUM(${adInsights.video3sViews}), 0)`,
+    totalVideo95pViews: sql<number>`COALESCE(SUM(${adInsights.video95pViews}), 0)`,
+    avgFrequency: sql<string>`COALESCE(AVG(${adInsights.frequency}::numeric), 0)`,
+  }).from(adInsights)
+    .where(and(
+      eq(adInsights.merchantId, merchantId),
+      eq(adInsights.entityType, entityType),
+      gte(adInsights.date, dateFrom),
+      lte(adInsights.date, dateTo),
+    ))
+    .groupBy(adInsights.entityId);
+
+  const insightsResults = await insightsQuery;
+
+  let entities: any[] = [];
+  if (level === "campaign") {
+    const conditions: any[] = [eq(adCampaigns.merchantId, merchantId)];
+    if (statusFilter && statusFilter.length > 0 && !statusFilter.includes("ALL")) {
+      conditions.push(inArray(adCampaigns.effectiveStatus, statusFilter));
+    }
+    if (search) {
+      conditions.push(like(adCampaigns.name, `%${search}%`));
+    }
+    entities = await db.select().from(adCampaigns).where(and(...conditions));
+  } else if (level === "adset") {
+    const conditions: any[] = [eq(adSets.merchantId, merchantId)];
+    if (statusFilter && statusFilter.length > 0 && !statusFilter.includes("ALL")) {
+      conditions.push(inArray(adSets.effectiveStatus, statusFilter));
+    }
+    if (search) {
+      conditions.push(like(adSets.name, `%${search}%`));
+    }
+    entities = await db.select().from(adSets).where(and(...conditions));
+  } else {
+    const conditions: any[] = [eq(adCreatives.merchantId, merchantId)];
+    if (statusFilter && statusFilter.length > 0 && !statusFilter.includes("ALL")) {
+      conditions.push(inArray(adCreatives.effectiveStatus, statusFilter));
+    }
+    if (search) {
+      conditions.push(like(adCreatives.name, `%${search}%`));
+    }
+    entities = await db.select().from(adCreatives).where(and(...conditions));
+  }
+
+  const insightMap = new Map(insightsResults.map(i => [i.entityId, i]));
+
+  const getEntityId = (e: any) => {
+    if (level === "campaign") return e.campaignId;
+    if (level === "adset") return e.adsetId;
+    return e.adId;
+  };
+
+  const rows = entities.map(entity => {
+    const id = getEntityId(entity);
+    const ins = insightMap.get(id);
+    const spend = ins ? parseFloat(ins.totalSpend) : 0;
+    const purchaseValue = ins ? parseFloat(ins.totalPurchaseValue) : 0;
+    const purchases = ins?.totalPurchases || 0;
+    const impressions = ins?.totalImpressions || 0;
+    const linkClicks = ins?.totalLinkClicks || 0;
+    const clicks = ins?.totalClicks || 0;
+
+    return {
+      entityId: id,
+      name: entity.name || "Unknown",
+      status: entity.effectiveStatus || entity.status || "UNKNOWN",
+      configuredStatus: entity.configuredStatus || entity.status,
+      objective: level === "campaign" ? entity.objective : undefined,
+      buyingType: level === "campaign" ? entity.buyingType : undefined,
+      optimizationGoal: level === "adset" ? entity.optimizationGoal : undefined,
+      dailyBudget: entity.dailyBudget ? parseFloat(entity.dailyBudget) : null,
+      lifetimeBudget: entity.lifetimeBudget ? parseFloat(entity.lifetimeBudget) : null,
+      campaignId: level !== "campaign" ? entity.campaignId : undefined,
+      adsetId: level === "ad" ? entity.adsetId : undefined,
+      spend,
+      impressions,
+      reach: ins?.totalReach || 0,
+      frequency: ins ? parseFloat(ins.avgFrequency) : 0,
+      clicks,
+      linkClicks,
+      landingPageViews: ins?.totalLandingPageViews || 0,
+      outboundClicks: ins?.totalOutboundClicks || 0,
+      viewContent: ins?.totalViewContent || 0,
+      addToCart: ins?.totalAddToCart || 0,
+      initiateCheckout: ins?.totalInitiateCheckout || 0,
+      purchases,
+      purchaseValue,
+      roas: spend > 0 ? purchaseValue / spend : 0,
+      cpc: clicks > 0 ? spend / clicks : 0,
+      cpm: impressions > 0 ? (spend / impressions) * 1000 : 0,
+      ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
+      costPerPurchase: purchases > 0 ? spend / purchases : 0,
+      costPerCheckout: (ins?.totalInitiateCheckout || 0) > 0 ? spend / ins!.totalInitiateCheckout : 0,
+      costPerAddToCart: (ins?.totalAddToCart || 0) > 0 ? spend / ins!.totalAddToCart : 0,
+      costPerViewContent: (ins?.totalViewContent || 0) > 0 ? spend / ins!.totalViewContent : 0,
+      videoViews: ins?.totalVideoViews || 0,
+      videoThruPlays: ins?.totalVideoThruPlays || 0,
+      video3sViews: ins?.totalVideo3sViews || 0,
+      video95pViews: ins?.totalVideo95pViews || 0,
+    };
+  });
+
+  const totals = {
+    spend: rows.reduce((s, r) => s + r.spend, 0),
+    impressions: rows.reduce((s, r) => s + r.impressions, 0),
+    reach: rows.reduce((s, r) => s + r.reach, 0),
+    clicks: rows.reduce((s, r) => s + r.clicks, 0),
+    linkClicks: rows.reduce((s, r) => s + r.linkClicks, 0),
+    landingPageViews: rows.reduce((s, r) => s + r.landingPageViews, 0),
+    viewContent: rows.reduce((s, r) => s + r.viewContent, 0),
+    addToCart: rows.reduce((s, r) => s + r.addToCart, 0),
+    initiateCheckout: rows.reduce((s, r) => s + r.initiateCheckout, 0),
+    purchases: rows.reduce((s, r) => s + r.purchases, 0),
+    purchaseValue: rows.reduce((s, r) => s + r.purchaseValue, 0),
+    videoViews: rows.reduce((s, r) => s + r.videoViews, 0),
+    roas: 0 as number,
+    cpm: 0 as number,
+    ctr: 0 as number,
+    cpc: 0 as number,
+    costPerPurchase: 0 as number,
+  };
+  totals.roas = totals.spend > 0 ? totals.purchaseValue / totals.spend : 0;
+  totals.cpm = totals.impressions > 0 ? (totals.spend / totals.impressions) * 1000 : 0;
+  totals.ctr = totals.impressions > 0 ? (totals.clicks / totals.impressions) * 100 : 0;
+  totals.cpc = totals.clicks > 0 ? totals.spend / totals.clicks : 0;
+  totals.costPerPurchase = totals.purchases > 0 ? totals.spend / totals.purchases : 0;
+
+  return { rows, totals };
+}
+
 export async function getInsightsSummary(merchantId: string, dateFrom: string, dateTo: string) {
   const result = await db.select({
     totalSpend: sql<string>`COALESCE(SUM(${adInsights.spend}::numeric), 0)`,
-    totalRevenue: sql<string>`COALESCE(SUM(${adInsights.revenue}::numeric), 0)`,
+    totalPurchaseValue: sql<string>`COALESCE(SUM(${adInsights.purchaseValue}::numeric), 0)`,
     totalPurchases: sql<number>`COALESCE(SUM(${adInsights.purchases}), 0)`,
     totalImpressions: sql<number>`COALESCE(SUM(${adInsights.impressions}), 0)`,
     totalClicks: sql<number>`COALESCE(SUM(${adInsights.clicks}), 0)`,
@@ -325,38 +680,36 @@ export async function getInsightsSummary(merchantId: string, dateFrom: string, d
   }).from(adInsights)
     .where(and(
       eq(adInsights.merchantId, merchantId),
+      eq(adInsights.entityType, "campaign"),
       gte(adInsights.date, dateFrom),
       lte(adInsights.date, dateTo),
     ));
 
   const summary = result[0];
   const spend = parseFloat(summary.totalSpend);
-  const revenue = parseFloat(summary.totalRevenue);
+  const purchaseValue = parseFloat(summary.totalPurchaseValue);
 
   return {
     totalSpend: spend,
-    totalRevenue: revenue,
+    totalRevenue: purchaseValue,
     totalPurchases: summary.totalPurchases,
     totalImpressions: summary.totalImpressions,
     totalClicks: summary.totalClicks,
     totalReach: summary.totalReach,
-    roas: spend > 0 ? (revenue / spend) : 0,
+    roas: spend > 0 ? (purchaseValue / spend) : 0,
     cpa: summary.totalPurchases > 0 ? (spend / summary.totalPurchases) : 0,
     avgCtr: summary.totalImpressions > 0 ? ((summary.totalClicks / summary.totalImpressions) * 100) : 0,
   };
 }
 
-export async function getCampaignInsights(merchantId: string, dateFrom: string, dateTo: string) {
-  const result = await db.select({
-    campaignId: adInsights.entityId,
+export async function getDailyInsights(merchantId: string, dateFrom: string, dateTo: string) {
+  return db.select({
+    date: adInsights.date,
     totalSpend: sql<string>`COALESCE(SUM(${adInsights.spend}::numeric), 0)`,
-    totalRevenue: sql<string>`COALESCE(SUM(${adInsights.revenue}::numeric), 0)`,
+    totalRevenue: sql<string>`COALESCE(SUM(${adInsights.purchaseValue}::numeric), 0)`,
     totalPurchases: sql<number>`COALESCE(SUM(${adInsights.purchases}), 0)`,
-    totalImpressions: sql<number>`COALESCE(SUM(${adInsights.impressions}), 0)`,
     totalClicks: sql<number>`COALESCE(SUM(${adInsights.clicks}), 0)`,
-    totalReach: sql<number>`COALESCE(SUM(${adInsights.reach}), 0)`,
-    avgCpc: sql<string>`COALESCE(AVG(${adInsights.cpc}::numeric), 0)`,
-    avgCtr: sql<string>`COALESCE(AVG(${adInsights.ctr}::numeric), 0)`,
+    totalImpressions: sql<number>`COALESCE(SUM(${adInsights.impressions}), 0)`,
   }).from(adInsights)
     .where(and(
       eq(adInsights.merchantId, merchantId),
@@ -364,87 +717,13 @@ export async function getCampaignInsights(merchantId: string, dateFrom: string, 
       gte(adInsights.date, dateFrom),
       lte(adInsights.date, dateTo),
     ))
-    .groupBy(adInsights.entityId);
-
-  const campaigns = await db.select().from(adCampaigns).where(eq(adCampaigns.merchantId, merchantId));
-  const campaignMap = new Map(campaigns.map(c => [c.campaignId, c]));
-
-  return result.map(r => {
-    const campaign = campaignMap.get(r.campaignId);
-    const spend = parseFloat(r.totalSpend);
-    const revenue = parseFloat(r.totalRevenue);
-    return {
-      campaignId: r.campaignId,
-      name: campaign?.name || "Unknown",
-      status: campaign?.status || "UNKNOWN",
-      objective: campaign?.objective,
-      spend,
-      revenue,
-      purchases: r.totalPurchases,
-      impressions: r.totalImpressions,
-      clicks: r.totalClicks,
-      reach: r.totalReach,
-      cpc: parseFloat(r.avgCpc),
-      ctr: parseFloat(r.avgCtr),
-      roas: spend > 0 ? revenue / spend : 0,
-      cpa: r.totalPurchases > 0 ? spend / r.totalPurchases : 0,
-    };
-  });
-}
-
-export async function getDailyInsights(merchantId: string, dateFrom: string, dateTo: string) {
-  return db.select({
-    date: adInsights.date,
-    totalSpend: sql<string>`COALESCE(SUM(${adInsights.spend}::numeric), 0)`,
-    totalRevenue: sql<string>`COALESCE(SUM(${adInsights.revenue}::numeric), 0)`,
-    totalPurchases: sql<number>`COALESCE(SUM(${adInsights.purchases}), 0)`,
-    totalClicks: sql<number>`COALESCE(SUM(${adInsights.clicks}), 0)`,
-    totalImpressions: sql<number>`COALESCE(SUM(${adInsights.impressions}), 0)`,
-  }).from(adInsights)
-    .where(and(
-      eq(adInsights.merchantId, merchantId),
-      gte(adInsights.date, dateFrom),
-      lte(adInsights.date, dateTo),
-    ))
     .groupBy(adInsights.date)
     .orderBy(adInsights.date);
 }
 
-export async function getActiveCampaigns(merchantId: string) {
-  const campaigns = await db.select().from(adCampaigns)
-    .where(and(eq(adCampaigns.merchantId, merchantId), eq(adCampaigns.status, "ACTIVE")));
-
-  const today = new Date().toISOString().split("T")[0];
-  const insights = await db.select({
-    entityId: adInsights.entityId,
-    spend: sql<string>`COALESCE(SUM(${adInsights.spend}::numeric), 0)`,
-    revenue: sql<string>`COALESCE(SUM(${adInsights.revenue}::numeric), 0)`,
-    purchases: sql<number>`COALESCE(SUM(${adInsights.purchases}), 0)`,
-    impressions: sql<number>`COALESCE(SUM(${adInsights.impressions}), 0)`,
-    clicks: sql<number>`COALESCE(SUM(${adInsights.clicks}), 0)`,
-  }).from(adInsights)
-    .where(and(
-      eq(adInsights.merchantId, merchantId),
-      eq(adInsights.date, today),
-    ))
-    .groupBy(adInsights.entityId);
-
-  const insightMap = new Map(insights.map(i => [i.entityId, i]));
-
-  return campaigns.map(c => {
-    const todayData = insightMap.get(c.campaignId);
-    const spend = todayData ? parseFloat(todayData.spend) : 0;
-    const revenue = todayData ? parseFloat(todayData.revenue) : 0;
-    return {
-      ...c,
-      todaySpend: spend,
-      todayRevenue: revenue,
-      todayPurchases: todayData?.purchases || 0,
-      todayImpressions: todayData?.impressions || 0,
-      todayClicks: todayData?.clicks || 0,
-      todayRoas: spend > 0 ? revenue / spend : 0,
-    };
-  });
+export async function getAdAccountInfo(merchantId: string) {
+  const accounts = await db.select().from(adAccounts).where(eq(adAccounts.merchantId, merchantId));
+  return accounts[0] || null;
 }
 
 export async function getLastSyncInfo(merchantId: string) {
@@ -453,6 +732,14 @@ export async function getLastSyncInfo(merchantId: string) {
     .orderBy(desc(marketingSyncLogs.startedAt))
     .limit(1);
   return result[0] || null;
+}
+
+export async function getSyncRunStatus(merchantId: string) {
+  const runs = await db.select().from(metaSyncRuns)
+    .where(eq(metaSyncRuns.merchantId, merchantId))
+    .orderBy(desc(metaSyncRuns.startedAt))
+    .limit(5);
+  return runs;
 }
 
 async function createSyncLog(merchantId: string, syncType: string, status: string): Promise<string> {
@@ -473,24 +760,41 @@ async function completeSyncLog(logId: string, status: string, recordsProcessed: 
   }).where(eq(marketingSyncLogs.id, logId));
 }
 
-let syncIntervalId: ReturnType<typeof setInterval> | null = null;
+let campaignSyncIntervalId: ReturnType<typeof setInterval> | null = null;
+let adsetSyncIntervalId: ReturnType<typeof setInterval> | null = null;
 
 export function startMarketingSyncScheduler() {
-  if (syncIntervalId) return;
+  if (campaignSyncIntervalId) return;
 
-  console.log("[MetaAds] Starting marketing sync scheduler (every 15 min)");
-  syncIntervalId = setInterval(async () => {
+  console.log("[MetaAds] Starting tiered marketing sync scheduler");
+
+  campaignSyncIntervalId = setInterval(async () => {
     try {
       const accounts = await db.select().from(adAccounts);
       for (const account of accounts) {
         try {
-          await fullSync(account.merchantId);
+          await quickSyncToday(account.merchantId, "campaign");
         } catch (err: any) {
-          console.error(`[MetaAds] Scheduled sync failed for merchant ${account.merchantId}:`, err.message);
+          console.error(`[MetaAds] Campaign quick sync failed for merchant ${account.merchantId}:`, err.message);
         }
       }
     } catch (err: any) {
-      console.error("[MetaAds] Scheduler error:", err.message);
+      console.error("[MetaAds] Campaign scheduler error:", err.message);
+    }
+  }, 60 * 1000);
+
+  adsetSyncIntervalId = setInterval(async () => {
+    try {
+      const accounts = await db.select().from(adAccounts);
+      for (const account of accounts) {
+        try {
+          await quickSyncToday(account.merchantId, "adset");
+        } catch (err: any) {
+          console.error(`[MetaAds] Adset quick sync failed for merchant ${account.merchantId}:`, err.message);
+        }
+      }
+    } catch (err: any) {
+      console.error("[MetaAds] Adset scheduler error:", err.message);
     }
   }, 15 * 60 * 1000);
 }
