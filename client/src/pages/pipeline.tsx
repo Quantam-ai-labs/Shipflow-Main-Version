@@ -339,7 +339,7 @@ export default function Pipeline() {
       .filter((p): p is string => !!p && p.length > 0);
   }, [orders]);
 
-  const { data: customerHistory } = useQuery<Record<string, { orderCount: number; lastOrderDate: string | null }>>({
+  const { data: customerHistory } = useQuery<Record<string, { orderCount: number; lastOrderDate: string | null; orderDates: string[] }>>({
     queryKey: ["/api/orders/customer-history-batch", phoneNumbers],
     queryFn: async () => {
       if (phoneNumbers.length === 0) return {};
@@ -349,6 +349,22 @@ export default function Pipeline() {
     enabled: phoneNumbers.length > 0,
     staleTime: 60 * 1000,
   });
+
+  const getProximityColor = useCallback((orderDate: string | Date | null | undefined, orderDates: string[]) => {
+    if (!orderDate || orderDates.length <= 1) return null;
+    const current = new Date(orderDate).getTime();
+    let minDays = Infinity;
+    for (const d of orderDates) {
+      const t = new Date(d).getTime();
+      if (t === current) continue;
+      const diff = Math.abs(t - current) / (1000 * 60 * 60 * 24);
+      if (diff < minDays) minDays = diff;
+    }
+    if (minDays === Infinity) return null;
+    if (minDays <= 5) return "red";
+    if (minDays <= 10) return "blue";
+    return "green";
+  }, []);
 
   const [historyPopup, setHistoryPopup] = useState<{ phone: string; customerName: string } | null>(null);
 
@@ -1028,7 +1044,7 @@ export default function Pipeline() {
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Order</th>
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Customer</th>
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground hidden md:table-cell">City</th>
-                <th className="px-3 py-2.5 text-center font-medium text-muted-foreground w-[70px]" data-testid="header-history">History</th>
+                <th className="px-2 py-2.5 text-center font-medium text-muted-foreground w-[40px]" data-testid="header-history">#</th>
                 {(activeTab === "NEW" || activeTab === "PENDING") && (
                   <>
                     <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Address</th>
@@ -1063,9 +1079,14 @@ export default function Pipeline() {
                   className={`border-b transition-colors hover-elevate ${
                     selectedIds.has(order.id) ? "bg-primary/5" : ""
                   } ${activeTab === "HOLD" && order.holdUntil && isPast(new Date(order.holdUntil)) ? "bg-red-50/50 dark:bg-red-950/30" : ""} ${
-                    order.customerPhone && customerHistory && (customerHistory[order.customerPhone]?.orderCount || 0) > 1
-                      ? "bg-blue-50/40 dark:bg-blue-950/20 border-l-2 border-l-blue-400 dark:border-l-blue-600"
-                      : ""
+                    (() => {
+                      const hist = order.customerPhone && customerHistory ? customerHistory[order.customerPhone] : null;
+                      if (!hist || hist.orderCount <= 1) return "";
+                      const c = getProximityColor(order.orderDate, hist.orderDates || []);
+                      if (c === "red") return "bg-red-50/40 dark:bg-red-950/20 border-l-2 border-l-red-400 dark:border-l-red-600";
+                      if (c === "blue") return "bg-blue-50/40 dark:bg-blue-950/20 border-l-2 border-l-blue-400 dark:border-l-blue-600";
+                      return "bg-green-50/40 dark:bg-green-950/20 border-l-2 border-l-green-400 dark:border-l-green-600";
+                    })()
                   }`}
                   data-testid={`order-row-${order.id}`}
                 >
@@ -1140,25 +1161,26 @@ export default function Pipeline() {
                     )}
                   </td>
                   <td className="px-3 py-1.5 hidden md:table-cell text-sm truncate max-w-[100px]" title={order.city || ""}>{order.city && order.city.length > 15 ? order.city.slice(0, 13) + ".." : (order.city || "-")}</td>
-                  <td className="px-3 py-1.5 text-center w-[70px]" data-testid={`cell-history-${order.id}`}>
+                  <td className="px-1 py-1.5 text-center w-[40px]" data-testid={`cell-history-${order.id}`}>
                     {(() => {
                       const hist = order.customerPhone && customerHistory ? customerHistory[order.customerPhone] : null;
                       const count = hist?.orderCount || 0;
-                      if (count <= 1) return <span className="text-xs text-muted-foreground">-</span>;
+                      if (count <= 1) return <span className="text-[11px] text-muted-foreground">-</span>;
+                      const color = getProximityColor(order.orderDate, hist?.orderDates || []);
+                      const colorClasses = color === "red"
+                        ? "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 border-red-200 dark:border-red-700"
+                        : color === "blue"
+                        ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 border-blue-200 dark:border-blue-700"
+                        : "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 border-green-200 dark:border-green-700";
                       return (
                         <button
-                          className="inline-flex flex-col items-center cursor-pointer hover:opacity-80"
+                          className="cursor-pointer hover:opacity-80"
                           onClick={() => setHistoryPopup({ phone: order.customerPhone!, customerName: order.customerName || "Customer" })}
                           data-testid={`button-history-${order.id}`}
                         >
-                          <Badge className="text-[10px] px-1.5 py-0 leading-4 bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 border-blue-200 dark:border-blue-700">
-                            {count} orders
+                          <Badge className={`text-[10px] px-1.5 py-0 leading-4 ${colorClasses}`}>
+                            {count}
                           </Badge>
-                          {hist?.lastOrderDate && (
-                            <span className="text-[9px] text-muted-foreground mt-0.5 leading-none">
-                              {formatDistanceToNow(new Date(hist.lastOrderDate), { addSuffix: true })}
-                            </span>
-                          )}
                         </button>
                       );
                     })()}

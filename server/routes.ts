@@ -636,7 +636,8 @@ export async function registerRoutes(
         SELECT 
           customer_phone,
           COUNT(*)::int as order_count,
-          MAX(order_date) as last_order_date
+          MAX(order_date) as last_order_date,
+          array_agg(order_date ORDER BY order_date DESC) as order_dates
         FROM orders 
         WHERE merchant_id = ${merchantId} 
           AND customer_phone IN ${sql.raw(`(${uniquePhones.map(p => `'${p.replace(/'/g, "''")}'`).join(",")})`)}
@@ -644,11 +645,19 @@ export async function registerRoutes(
           AND customer_phone != ''
         GROUP BY customer_phone
       `);
-      const historyMap: Record<string, { orderCount: number; lastOrderDate: string | null }> = {};
+      const historyMap: Record<string, { orderCount: number; lastOrderDate: string | null; orderDates: string[] }> = {};
       for (const row of results.rows) {
+        const rawDates = row.order_dates as any;
+        let orderDates: string[] = [];
+        if (Array.isArray(rawDates)) {
+          orderDates = rawDates.filter(Boolean).map((d: any) => String(d));
+        } else if (typeof rawDates === "string") {
+          orderDates = rawDates.replace(/[{}]/g, "").split(",").filter(Boolean);
+        }
         historyMap[row.customer_phone as string] = {
           orderCount: row.order_count as number,
           lastOrderDate: row.last_order_date as string | null,
+          orderDates,
         };
       }
       res.json(historyMap);
