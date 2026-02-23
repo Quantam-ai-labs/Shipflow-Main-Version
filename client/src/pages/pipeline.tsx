@@ -1100,9 +1100,16 @@ export default function Pipeline() {
                     </td>
                   )}
                   <td className="px-3 py-1.5">
-                    <Link href={`/orders/detail/${order.id}`} className="font-medium text-sm hover:underline" data-testid={`link-order-${order.id}`}>
-                      {order.orderNumber}
-                    </Link>
+                    <div className="flex items-center gap-1.5">
+                      <Link href={`/orders/detail/${order.id}`} className="font-medium text-sm hover:underline" data-testid={`link-order-${order.id}`}>
+                        {order.orderNumber}
+                      </Link>
+                      {order.orderSource === "shopify_draft_order" && (
+                        <Badge className="text-[9px] px-1 py-0 bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 border-purple-200 dark:border-purple-700" data-testid={`badge-draft-${order.id}`}>
+                          Draft
+                        </Badge>
+                      )}
+                    </div>
                     <div className="text-xs text-muted-foreground">
                       {order.orderDate ? format(new Date(order.orderDate), "MMM d, h:mm a") : ""}
                     </div>

@@ -865,6 +865,7 @@ export class ShopifyService {
       referringSite,
       browserIp,
       rawShopifyData: shopifyOrder as unknown as Record<string, any>,
+      orderSource: shopifyOrder.source_name || null,
     };
   }
 

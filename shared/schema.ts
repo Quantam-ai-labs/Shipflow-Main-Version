@@ -223,6 +223,7 @@ export const orders = pgTable("orders", {
   codRemaining: decimal("cod_remaining", { precision: 12, scale: 2 }),
   codPaymentStatus: varchar("cod_payment_status", { length: 20 }).default("UNPAID"),
   lastPaymentAt: timestamp("last_payment_at"),
+  orderSource: varchar("order_source", { length: 50 }),
 }, (table) => [
   index("idx_orders_merchant").on(table.merchantId),
   index("idx_orders_shopify_id").on(table.shopifyOrderId),
