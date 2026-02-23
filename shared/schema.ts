@@ -1521,3 +1521,149 @@ export const insertOpeningBalanceLineSchema = createInsertSchema(openingBalanceL
 });
 export type InsertOpeningBalanceLine = z.infer<typeof insertOpeningBalanceLineSchema>;
 export type OpeningBalanceLine = typeof openingBalanceLines.$inferSelect;
+
+// ============================================
+// MARKETING: AD ACCOUNTS
+// ============================================
+export const adAccounts = pgTable("ad_accounts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  provider: varchar("provider", { length: 50 }).notNull().default("facebook"),
+  accountId: varchar("account_id", { length: 100 }).notNull(),
+  name: varchar("name", { length: 255 }),
+  currency: varchar("currency", { length: 10 }),
+  timezone: varchar("timezone", { length: 100 }),
+  status: varchar("status", { length: 20 }).default("ACTIVE"),
+  lastSyncedAt: timestamp("last_synced_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_ad_accounts_merchant").on(table.merchantId),
+]);
+
+export const insertAdAccountSchema = createInsertSchema(adAccounts).omit({ id: true, createdAt: true });
+export type InsertAdAccount = z.infer<typeof insertAdAccountSchema>;
+export type AdAccount = typeof adAccounts.$inferSelect;
+
+// ============================================
+// MARKETING: CAMPAIGNS
+// ============================================
+export const adCampaigns = pgTable("ad_campaigns", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  adAccountId: varchar("ad_account_id").notNull().references(() => adAccounts.id, { onDelete: "cascade" }),
+  campaignId: varchar("campaign_id", { length: 100 }).notNull(),
+  name: varchar("name", { length: 500 }),
+  status: varchar("status", { length: 30 }),
+  objective: varchar("objective", { length: 100 }),
+  dailyBudget: decimal("daily_budget", { precision: 14, scale: 2 }),
+  lifetimeBudget: decimal("lifetime_budget", { precision: 14, scale: 2 }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_ad_campaigns_merchant").on(table.merchantId),
+  index("idx_ad_campaigns_account").on(table.adAccountId),
+  uniqueIndex("idx_ad_campaigns_unique").on(table.merchantId, table.campaignId),
+]);
+
+export const insertAdCampaignSchema = createInsertSchema(adCampaigns).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertAdCampaign = z.infer<typeof insertAdCampaignSchema>;
+export type AdCampaign = typeof adCampaigns.$inferSelect;
+
+// ============================================
+// MARKETING: AD SETS
+// ============================================
+export const adSets = pgTable("ad_sets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  adAccountId: varchar("ad_account_id").notNull().references(() => adAccounts.id, { onDelete: "cascade" }),
+  campaignId: varchar("campaign_id", { length: 100 }).notNull(),
+  adsetId: varchar("adset_id", { length: 100 }).notNull(),
+  name: varchar("name", { length: 500 }),
+  status: varchar("status", { length: 30 }),
+  dailyBudget: decimal("daily_budget", { precision: 14, scale: 2 }),
+  targeting: jsonb("targeting"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_ad_sets_merchant").on(table.merchantId),
+  uniqueIndex("idx_ad_sets_unique").on(table.merchantId, table.adsetId),
+]);
+
+export const insertAdSetSchema = createInsertSchema(adSets).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertAdSet = z.infer<typeof insertAdSetSchema>;
+export type AdSet = typeof adSets.$inferSelect;
+
+// ============================================
+// MARKETING: ADS
+// ============================================
+export const adCreatives = pgTable("ad_creatives", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  adAccountId: varchar("ad_account_id").notNull().references(() => adAccounts.id, { onDelete: "cascade" }),
+  adsetId: varchar("adset_id", { length: 100 }).notNull(),
+  adId: varchar("ad_id", { length: 100 }).notNull(),
+  name: varchar("name", { length: 500 }),
+  status: varchar("status", { length: 30 }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_ad_creatives_merchant").on(table.merchantId),
+  uniqueIndex("idx_ad_creatives_unique").on(table.merchantId, table.adId),
+]);
+
+export const insertAdCreativeSchema = createInsertSchema(adCreatives).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertAdCreative = z.infer<typeof insertAdCreativeSchema>;
+export type AdCreative = typeof adCreatives.$inferSelect;
+
+// ============================================
+// MARKETING: INSIGHTS
+// ============================================
+export const adInsights = pgTable("ad_insights", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  adAccountId: varchar("ad_account_id").notNull().references(() => adAccounts.id, { onDelete: "cascade" }),
+  entityId: varchar("entity_id", { length: 100 }).notNull(),
+  entityType: varchar("entity_type", { length: 20 }).notNull(),
+  date: varchar("date", { length: 10 }).notNull(),
+  impressions: integer("impressions").default(0),
+  reach: integer("reach").default(0),
+  clicks: integer("clicks").default(0),
+  spend: decimal("spend", { precision: 14, scale: 2 }).default("0"),
+  purchases: integer("purchases").default(0),
+  revenue: decimal("revenue", { precision: 14, scale: 2 }).default("0"),
+  cpc: decimal("cpc", { precision: 10, scale: 4 }).default("0"),
+  cpm: decimal("cpm", { precision: 10, scale: 4 }).default("0"),
+  ctr: decimal("ctr", { precision: 8, scale: 4 }).default("0"),
+  frequency: decimal("frequency", { precision: 8, scale: 4 }).default("0"),
+  addToCart: integer("add_to_cart").default(0),
+  initiateCheckout: integer("initiate_checkout").default(0),
+  videoViews: integer("video_views").default(0),
+  costPerPurchase: decimal("cost_per_purchase", { precision: 14, scale: 2 }).default("0"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_ad_insights_merchant").on(table.merchantId),
+  index("idx_ad_insights_date").on(table.date),
+  uniqueIndex("idx_ad_insights_unique").on(table.merchantId, table.entityId, table.entityType, table.date),
+]);
+
+export const insertAdInsightSchema = createInsertSchema(adInsights).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertAdInsight = z.infer<typeof insertAdInsightSchema>;
+export type AdInsight = typeof adInsights.$inferSelect;
+
+// ============================================
+// MARKETING: SYNC LOG
+// ============================================
+export const marketingSyncLogs = pgTable("marketing_sync_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  provider: varchar("provider", { length: 50 }).notNull().default("facebook"),
+  syncType: varchar("sync_type", { length: 30 }).notNull(),
+  status: varchar("status", { length: 20 }).notNull(),
+  recordsProcessed: integer("records_processed").default(0),
+  errorMessage: text("error_message"),
+  startedAt: timestamp("started_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+}, (table) => [
+  index("idx_marketing_sync_merchant").on(table.merchantId),
+]);

@@ -6,6 +6,7 @@ import { db } from "./db";
 import { normalizePakistaniPhone } from "./utils/phone";
 import { registerAccountingRoutes } from "./routes/accounting";
 import { registerTransactionRoutes } from "./routes/transactions";
+import { registerMarketingRoutes } from "./routes/marketing";
 import {
   shipmentPrintRecords,
   users,
@@ -437,6 +438,7 @@ export async function registerRoutes(
   registerAuthRoutes(app);
   registerAccountingRoutes(app);
   registerTransactionRoutes(app);
+  registerMarketingRoutes(app);
 
   // Seed demo data on startup
   await storage.seedDemoData();

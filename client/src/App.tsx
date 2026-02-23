@@ -61,6 +61,8 @@ import AccountingCashAccounts from "@/pages/accounting/cash-accounts";
 import AccountingSettings from "@/pages/accounting/settings";
 import AccountingTransactions from "@/pages/accounting/transactions";
 import OpeningBalancesPage from "@/pages/accounting/opening-balances";
+import MarketingDashboard from "@/pages/marketing/dashboard";
+import LiveCampaigns from "@/pages/marketing/live-campaigns";
 import NotFound from "@/pages/not-found";
 
 function OnboardingBanner() {
@@ -125,6 +127,8 @@ function AppRoutes() {
       <Route path="/accounting/trial-balance" component={AccountingTrialBalance} />
       <Route path="/accounting/cash-accounts" component={AccountingCashAccounts} />
       <Route path="/accounting/opening-balances" component={OpeningBalancesPage} />
+      <Route path="/marketing" component={MarketingDashboard} />
+      <Route path="/marketing/live" component={LiveCampaigns} />
       <Route path="/accounting/settings" component={AccountingSettings} />
       <Route path="/settings" component={Settings} />
       <Route path="/onboarding" component={Onboarding} />

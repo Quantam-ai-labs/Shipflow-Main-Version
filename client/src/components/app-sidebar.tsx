@@ -76,6 +76,8 @@ import {
   ToggleLeft,
   ToggleRight,
   SlidersHorizontal,
+  Megaphone,
+  Activity,
   type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -159,6 +161,15 @@ const allNavGroups: NavGroup[] = [
       { id: "party-balances", title: "Party Balances", url: "/accounting/reports/party-balances", icon: Users },
       { id: "product-analytics", title: "Product Analytics", url: "/product-analytics", icon: TrendingUp },
       { id: "analytics-dashboard", title: "Analytics", url: "/analytics", icon: BarChart3 },
+    ],
+  },
+  {
+    id: "marketing",
+    title: "Marketing",
+    icon: Megaphone,
+    items: [
+      { id: "ads-dashboard", title: "Ads Dashboard", url: "/marketing", icon: BarChart3 },
+      { id: "live-campaigns", title: "Live Campaigns", url: "/marketing/live", icon: Activity },
     ],
   },
   {
