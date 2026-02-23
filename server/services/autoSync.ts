@@ -34,6 +34,16 @@ export function isMerchantSyncing(merchantId: string): boolean {
   return merchantSyncLocks.has(merchantId);
 }
 
+export async function waitForMerchantSyncLock(merchantId: string, timeoutMs: number = 15000): Promise<boolean> {
+  if (acquireMerchantSyncLock(merchantId)) return true;
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    if (acquireMerchantSyncLock(merchantId)) return true;
+  }
+  return false;
+}
+
 async function runStaleOrderCheck() {
   try {
     const allMerchants = await db.select({ id: merchants.id }).from(merchants);

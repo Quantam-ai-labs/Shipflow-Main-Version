@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -122,6 +122,14 @@ export default function Orders() {
   const [page, setPage] = useState(1);
   const [pageSize] = useState(200);
   
+  const courierSyncPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (courierSyncPollRef.current) clearInterval(courierSyncPollRef.current);
+    };
+  }, []);
+
   const [remarkDialogOpen, setRemarkDialogOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [remarkValue, setRemarkValue] = useState("");
@@ -213,23 +221,46 @@ export default function Orders() {
   }, [syncStatus?.lastSync?.timestamp]);
 
   const syncCourierStatusMutation = useMutation({
-    mutationFn: async (forceRefresh?: boolean) => {
-      const response = await apiRequest("POST", "/api/couriers/sync-statuses", { forceRefresh: forceRefresh || false });
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/couriers/sync-statuses");
       return response.json();
     },
     onSuccess: (result) => {
-      const parts = [];
-      if (result.updated > 0) parts.push(`${result.updated} updated`);
-      if (result.failed > 0) parts.push(`${result.failed} failed`);
-      if (result.skipped > 0) parts.push(`${result.skipped} skipped (no credentials)`);
-      
-      toast({
-        title: result.updated > 0 ? "Courier Status Updated" : "Sync Complete",
-        description: result.total === 0 
-          ? "All shipments are already up to date." 
-          : `${parts.join(', ')} out of ${result.total} shipments.`,
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      if (result.status === 'started' || result.status === 'already_running') {
+        toast({
+          title: "Courier Sync Running",
+          description: "Syncing all courier statuses in the background. This may take a moment.",
+        });
+        if (courierSyncPollRef.current) clearInterval(courierSyncPollRef.current);
+        courierSyncPollRef.current = setInterval(async () => {
+          try {
+            const res = await fetch("/api/couriers/manual-sync-progress", { credentials: "include" });
+            if (!res.ok) { if (courierSyncPollRef.current) clearInterval(courierSyncPollRef.current); return; }
+            const progress = await res.json();
+            if (progress.status === 'done' && progress.result) {
+              if (courierSyncPollRef.current) clearInterval(courierSyncPollRef.current);
+              const r = progress.result;
+              const parts = [];
+              if (r.updated > 0) parts.push(`${r.updated} updated`);
+              if (r.failed > 0) parts.push(`${r.failed} failed`);
+              if (r.skipped > 0) parts.push(`${r.skipped} skipped`);
+              if (r.transitioned > 0) parts.push(`${r.transitioned} transitioned`);
+              toast({
+                title: r.updated > 0 ? "Courier Status Updated" : "Sync Complete",
+                description: r.total === 0
+                  ? "All shipments are already up to date."
+                  : `${parts.join(', ')} out of ${r.total} shipments.`,
+              });
+              queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+            } else if (progress.status === 'error') {
+              if (courierSyncPollRef.current) clearInterval(courierSyncPollRef.current);
+              toast({ title: "Courier Sync Failed", description: progress.error || "Unknown error", variant: "destructive" });
+            }
+          } catch { if (courierSyncPollRef.current) clearInterval(courierSyncPollRef.current); }
+        }, 3000);
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      }
     },
     onError: (error: Error) => {
       toast({ title: "Status Sync Failed", description: error.message, variant: "destructive" });
@@ -360,7 +391,7 @@ export default function Orders() {
           <Button 
             variant="outline" 
             size="sm" 
-            onClick={() => syncCourierStatusMutation.mutate(false)}
+            onClick={() => syncCourierStatusMutation.mutate()}
             disabled={syncCourierStatusMutation.isPending}
             className="h-9"
             data-testid="button-sync-courier-status"

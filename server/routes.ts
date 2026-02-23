@@ -3927,14 +3927,15 @@ export async function registerRoutes(
           });
         }
 
-        const { acquireMerchantSyncLock, releaseMerchantSyncLock } =
+        const { waitForMerchantSyncLock, releaseMerchantSyncLock } =
           await import("./services/autoSync");
-        if (!acquireMerchantSyncLock(merchantId)) {
+        const lockAcquired = await waitForMerchantSyncLock(merchantId, 15000);
+        if (!lockAcquired) {
           return res
             .status(409)
             .json({
               message:
-                "A sync is already in progress. Please wait and try again.",
+                "Another sync is still running after waiting 15 seconds. Please try again in a moment.",
             });
         }
 
@@ -3957,9 +3958,16 @@ export async function registerRoutes(
         }
       } catch (error: any) {
         console.error("Error syncing Shopify:", error);
+        const userMessage = error.message?.includes('rate limit')
+          ? "Shopify rate limit reached. The sync will resume automatically — please wait a minute."
+          : error.message?.includes('access token') || error.message?.includes('401')
+          ? "Shopify access token is invalid or expired. Please reconnect your Shopify store."
+          : error.message?.includes('Max retries')
+          ? "Shopify is temporarily slow. The auto-sync will retry shortly."
+          : error.message || "Failed to sync with Shopify. Please try again.";
         res
           .status(500)
-          .json({ message: error.message || "Failed to sync Shopify" });
+          .json({ message: userMessage });
       }
     },
   );
@@ -5215,21 +5223,54 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
 
-      const { syncMerchantCourierStatuses } = await import(
+      const { startManualCourierSync, getManualSyncProgress } = await import(
         "./services/courierSyncScheduler"
       );
-      const result = await syncMerchantCourierStatuses(merchantId);
+
+      const existing = getManualSyncProgress(merchantId);
+      if (existing?.status === 'running') {
+        return res.json({
+          success: true,
+          status: 'already_running',
+          message: "Courier sync is already running in the background.",
+          startedAt: existing.startedAt,
+        });
+      }
+
+      const started = startManualCourierSync(merchantId);
+      if (!started) {
+        return res.status(409).json({ message: "Courier sync is already running." });
+      }
 
       res.json({
         success: true,
-        updated: result.updated,
-        failed: result.failed,
-        skipped: result.skipped,
-        total: result.total,
+        status: 'started',
+        message: "Courier sync started in the background. Check status for progress.",
       });
+    } catch (error: any) {
+      console.error("Error starting courier sync:", error);
+      const userMessage = error.message?.includes('API') || error.message?.includes('401')
+        ? "Courier API credentials may be invalid. Check your courier settings."
+        : error.message || "Failed to start courier sync. Please try again.";
+      res.status(500).json({ message: userMessage });
+    }
+  });
+
+  app.get("/api/couriers/manual-sync-progress", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const { getManualSyncProgress } = await import(
+        "./services/courierSyncScheduler"
+      );
+      const progress = getManualSyncProgress(merchantId);
+      if (!progress) {
+        return res.json({ status: 'idle' });
+      }
+      res.json(progress);
     } catch (error) {
-      console.error("Error syncing courier statuses:", error);
-      res.status(500).json({ message: "Failed to sync courier statuses" });
+      res.status(500).json({ message: "Failed to get sync progress" });
     }
   });
 
