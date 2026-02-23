@@ -1,6 +1,7 @@
 import { db } from "../db";
 import { adAccounts, adCampaigns, adSets, adCreatives, adInsights, marketingSyncLogs, merchants } from "@shared/schema";
 import { eq, and, sql, desc, gte, lte } from "drizzle-orm";
+import { decryptToken } from "./encryption";
 
 const META_API_VERSION = "v21.0";
 const META_BASE_URL = `https://graph.facebook.com/${META_API_VERSION}`;
@@ -16,7 +17,7 @@ export async function getCredentialsForMerchant(merchantId: string): Promise<Met
   if (merchant?.facebookAccessToken && merchant?.facebookAdAccountId) {
     const adAccountId = merchant.facebookAdAccountId;
     return {
-      accessToken: merchant.facebookAccessToken,
+      accessToken: decryptToken(merchant.facebookAccessToken),
       adAccountId: adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`,
     };
   }
