@@ -56,6 +56,7 @@ import {
   Plus,
   FileText,
   History,
+  PenLine,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -1105,9 +1106,9 @@ export default function Pipeline() {
                         {order.orderNumber}
                       </Link>
                       {order.orderSource === "shopify_draft_order" && (
-                        <Badge className="text-[9px] px-1 py-0 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 border-green-200 dark:border-green-700" data-testid={`badge-draft-${order.id}`}>
-                          Custom
-                        </Badge>
+                        <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-green-100 dark:bg-green-900 border border-green-300 dark:border-green-700" title="Custom Order" data-testid={`badge-draft-${order.id}`}>
+                          <PenLine className="w-2.5 h-2.5 text-green-700 dark:text-green-300" />
+                        </span>
                       )}
                     </div>
                     <div className="text-xs text-muted-foreground">

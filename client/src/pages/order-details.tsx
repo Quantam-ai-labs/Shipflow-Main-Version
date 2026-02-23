@@ -49,6 +49,7 @@ import {
   ChevronUp,
   Bot,
   UserCircle,
+  PenLine,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -920,9 +921,9 @@ export default function OrderDetails() {
             <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-2xl font-bold">Order # {String(order.orderNumber).replace(/^#/, '')}</h1>
               {(order as any).orderSource === "shopify_draft_order" && (
-                <Badge className="text-[10px] px-1.5 py-0.5 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 border-green-200 dark:border-green-700" data-testid="badge-draft-order">
-                  Custom
-                </Badge>
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-green-100 dark:bg-green-900 border border-green-300 dark:border-green-700" title="Custom Order" data-testid="badge-draft-order">
+                  <PenLine className="w-3 h-3 text-green-700 dark:text-green-300" />
+                </span>
               )}
               {getWorkflowBadge(order.workflowStatus)}
               {getShipmentStatusBadge(order.shipmentStatus, (order as any).courierRawStatus)}
