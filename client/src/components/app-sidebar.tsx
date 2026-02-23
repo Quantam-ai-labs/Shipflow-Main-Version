@@ -187,9 +187,12 @@ const allNavGroups: NavGroup[] = [
 
 const settingsItems: NavItem[] = [
   { id: "team", title: "Team", url: "/team", icon: Users },
-  { id: "integrations", title: "Integrations", url: "/integrations", icon: Store },
+  { id: "settings", title: "General", url: "/settings", icon: Settings },
+  { id: "settings-shopify", title: "Shopify", url: "/settings/shopify", icon: Store },
+  { id: "settings-couriers", title: "Couriers", url: "/settings/couriers", icon: Truck },
+  { id: "settings-status-mapping", title: "Status Mapping", url: "/settings/status-mapping", icon: ArrowLeftRight },
+  { id: "settings-marketing", title: "Marketing", url: "/settings/marketing", icon: Megaphone },
   { id: "preferences", title: "Preferences", url: "/accounting/settings", icon: Cog },
-  { id: "settings", title: "Settings", url: "/settings", icon: Settings },
 ];
 
 const allPageIds = [
@@ -202,7 +205,7 @@ const defaultPinnedPages = [
   "products", "add-stock",
   "money", "cod-reconciliation", "customers",
   "overview", "profit-loss",
-  "team", "settings",
+  "team", "settings", "settings-shopify", "settings-couriers",
 ];
 
 export function AppSidebar() {
@@ -395,24 +398,43 @@ export function AppSidebar() {
 
         {filteredSettings.length > 0 && (
           <SidebarGroup>
-            <SidebarGroupLabel>Settings</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {filteredSettings.map((item) => (
-                  <SidebarMenuItem key={item.id}>
-                    <SidebarMenuButton asChild isActive={location === item.url}>
-                      <Link href={item.url} data-testid={`nav-${item.id}`}>
-                        <item.icon className="w-4 h-4" />
-                        <span className="flex-1">{item.title}</span>
-                        {item.id === "settings" && (unmappedCount?.count ?? 0) > 0 && (
+                <Collapsible defaultOpen={location.startsWith("/settings") || location === "/team" || location === "/accounting/settings"} asChild className="group/settings-collapsible">
+                  <SidebarMenuItem>
+                    <CollapsibleTrigger asChild>
+                      <SidebarMenuButton data-testid="nav-settings-toggle" tooltip="Settings">
+                        <Settings className="w-4 h-4" />
+                        <span className="flex-1">Settings</span>
+                        {(unmappedCount?.count ?? 0) > 0 && (
                           <Badge variant="destructive" className="text-[10px] px-1.5 py-0 min-w-[18px] justify-center" data-testid="badge-unmapped-statuses">
                             {unmappedCount!.count}
                           </Badge>
                         )}
-                      </Link>
-                    </SidebarMenuButton>
+                        <ChevronRight className="w-4 h-4 ml-auto transition-transform duration-200 group-data-[state=open]/settings-collapsible:rotate-90" />
+                      </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <SidebarMenuSub>
+                        {filteredSettings.map((item) => (
+                          <SidebarMenuSubItem key={item.id}>
+                            <SidebarMenuSubButton asChild isActive={location === item.url}>
+                              <Link href={item.url} data-testid={`nav-${item.id}`}>
+                                <item.icon className="w-3.5 h-3.5" />
+                                <span className="flex-1">{item.title}</span>
+                                {item.id === "settings-status-mapping" && (unmappedCount?.count ?? 0) > 0 && (
+                                  <Badge variant="destructive" className="text-[10px] px-1.5 py-0 min-w-[18px] justify-center">
+                                    {unmappedCount!.count}
+                                  </Badge>
+                                )}
+                              </Link>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        ))}
+                      </SidebarMenuSub>
+                    </CollapsibleContent>
                   </SidebarMenuItem>
-                ))}
+                </Collapsible>
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>

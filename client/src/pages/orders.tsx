@@ -295,7 +295,7 @@ export default function Orders() {
           <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
           <div className="text-sm">
             <span className="font-medium text-amber-800 dark:text-amber-200">Customer data missing for some orders.</span>{" "}
-            <Link href="/integrations" className="underline text-amber-700 dark:text-amber-300">Update Shopify permissions</Link> and re-sync.
+            <Link href="/settings/shopify" className="underline text-amber-700 dark:text-amber-300">Update Shopify permissions</Link> and re-sync.
           </div>
         </div>
       )}

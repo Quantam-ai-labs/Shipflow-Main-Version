@@ -37,7 +37,7 @@ Preferred communication style: Simple, everyday language.
 ### Core Features & Data Models
 - **Merchant Management**: Root tenant entity with subscription and profile.
 - **Team Collaboration**: `teamMembers` for user-to-merchant links and roles; token-based team invite system with email integration.
-- **Shopify Integration**: OAuth-based credentials per merchant, encrypted access tokens, webhook processing for orders and fulfillments, and reconciliation. Merchants choose a `shopifySyncFromDate` during onboarding to control how far back Shopify data is imported; this date is stored on the merchant record and used by both the batch import job and incremental sync. Changeable later via Integrations page.
+- **Shopify Integration**: OAuth-based credentials per merchant, encrypted access tokens, webhook processing for orders and fulfillments, and reconciliation. Merchants choose a `shopifySyncFromDate` during onboarding to control how far back Shopify data is imported; this date is stored on the merchant record and used by both the batch import job and incremental sync. Changeable later via Settings > Shopify page (`/settings/shopify`).
 - **Courier Management**: Per-courier API credentials (Leopards, PostEx, TCS) with environment secret fallback, specific handling for PostEx booking parameters. Leopards parser combines "Pending" status with Reason field for granular mapping (e.g., "Pending - CONSIGNEE NOT AVAILABLE"). Unmapped courier statuses are tracked in `unmapped_courier_statuses` table with notification badge on Settings sidebar and auto-resolution when mappings are created.
 - **Order Management**: Syncs from Shopify, tracks status, and allows remarks.
 - **Shipment Tracking**: Records courier tracking and events with universal status normalization.
@@ -54,7 +54,14 @@ Preferred communication style: Simple, everyday language.
   - Workflow status changes update Shopify tags (SF-Confirmed, SF-Hold, SF-Cancelled, etc.)
   - Loop prevention via in-memory cooldown map (10s) to skip webhook echoes from our own writes
   - Bulk write-backs are serialized with 500ms delay for Shopify API rate limit compliance
-- **Webhook Resilience**: All webhook endpoints respond 200 immediately before processing, preventing Shopify from removing webhooks due to timeouts. Webhook health check API and re-register UI button in Integrations page.
+- **Webhook Resilience**: All webhook endpoints respond 200 immediately before processing, preventing Shopify from removing webhooks due to timeouts. Webhook health check API and re-register UI button in Settings > Shopify page.
+- **Settings Page Organization**: Settings section uses collapsible sidebar group with sub-pages:
+  - General (`/settings`): Business Profile, Notifications, Security
+  - Shopify (`/settings/shopify`): Shopify connection, sync, webhooks, data quality
+  - Couriers (`/settings/couriers`): Leopards, PostEx, TCS credentials and configuration
+  - Status Mapping (`/settings/status-mapping`): Courier status to workflow stage mappings
+  - Marketing (`/settings/marketing`): Facebook/Meta Ads integration settings
+  - The old `/integrations` route redirects to `/settings/shopify`
 - **Product & Inventory Management**: Shopify product sync via `products` table. Stores product title, variants (with SKU, price, inventory per variant), images, tags, vendor, type, and total inventory. Synced via `POST /api/products/sync` endpoint using paginated Shopify Admin API calls. Products page (`/products`) shows searchable/filterable product catalog with inventory levels, variant details, and product images. Order line items display product thumbnails captured during order sync.
 - **Order Detail Layout**: Shopify-style layout with Order Summary (line items with product thumbnails, pricing breakdown) in the main content area and Customer Details (name, phone, email, shipping address) in the right sidebar.
 - **Accounting & Finance Module**: Comprehensive Vyapar/QuickBooks-like accounting system with double-entry ledger backbone, 19 dedicated pages under collapsible "Accounting" sidebar group with sub-sections:

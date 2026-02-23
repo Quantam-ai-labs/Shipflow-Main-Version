@@ -27,7 +27,6 @@ import CodReconciliation from "@/pages/cod-reconciliation";
 import PaymentLedger from "@/pages/payment-ledger";
 import ManageCheques from "@/pages/manage-cheques";
 import Team from "@/pages/team";
-import Integrations from "@/pages/integrations";
 import Settings from "@/pages/settings";
 import Onboarding from "@/pages/onboarding";
 import AdminPanel from "@/pages/admin";
@@ -65,6 +64,10 @@ import AccountingTransactions from "@/pages/accounting/transactions";
 import OpeningBalancesPage from "@/pages/accounting/opening-balances";
 import MarketingDashboard from "@/pages/marketing/dashboard";
 import LiveCampaigns from "@/pages/marketing/live-campaigns";
+import SettingsShopify from "@/pages/settings/shopify";
+import SettingsCouriers from "@/pages/settings/couriers";
+import SettingsStatusMapping from "@/pages/settings/status-mapping";
+import SettingsMarketing from "@/pages/settings/marketing";
 import NotFound from "@/pages/not-found";
 
 function OnboardingBanner() {
@@ -101,7 +104,9 @@ function AppRoutes() {
       <Route path="/payment-ledger" component={PaymentLedger} />
       <Route path="/manage-cheques" component={ManageCheques} />
       <Route path="/team" component={Team} />
-      <Route path="/integrations" component={Integrations} />
+      <Route path="/integrations">
+        <Redirect to="/settings/shopify" />
+      </Route>
       <Route path="/products" component={Products} />
       <Route path="/product-analytics" component={ProductAnalytics} />
       <Route path="/expense-tracker" component={ExpenseTracker} />
@@ -132,6 +137,10 @@ function AppRoutes() {
       <Route path="/marketing" component={MarketingDashboard} />
       <Route path="/marketing/live" component={LiveCampaigns} />
       <Route path="/accounting/settings" component={AccountingSettings} />
+      <Route path="/settings/shopify" component={SettingsShopify} />
+      <Route path="/settings/couriers" component={SettingsCouriers} />
+      <Route path="/settings/status-mapping" component={SettingsStatusMapping} />
+      <Route path="/settings/marketing" component={SettingsMarketing} />
       <Route path="/settings" component={Settings} />
       <Route path="/onboarding" component={Onboarding} />
       <Route path="/admin" component={AdminPanel} />

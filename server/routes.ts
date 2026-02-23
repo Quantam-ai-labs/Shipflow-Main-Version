@@ -4360,7 +4360,7 @@ export async function registerRoutes(
 
       if (!code || !shop || !state) {
         return res.redirect(
-          "/integrations?shopify=error&message=Missing+required+parameters",
+          "/settings/shopify?shopify=error&message=Missing+required+parameters",
         );
       }
 
@@ -4389,7 +4389,7 @@ export async function registerRoutes(
           { received: state, sessionId: req.sessionID },
         );
         return res.redirect(
-          "/integrations?shopify=error&message=Invalid+state+parameter",
+          "/settings/shopify?shopify=error&message=Invalid+state+parameter",
         );
       }
 
@@ -4409,14 +4409,14 @@ export async function registerRoutes(
           `[Shopify OAuth Callback] Shop domain mismatch: expected=${expectedShop}, received=${shop}`,
         );
         return res.redirect(
-          "/integrations?shopify=error&message=Shop+domain+mismatch",
+          "/settings/shopify?shopify=error&message=Shop+domain+mismatch",
         );
       }
 
       const shopDomainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com$/;
       if (!shopDomainRegex.test(shop as string)) {
         return res.redirect(
-          "/integrations?shopify=error&message=Invalid+shop+domain",
+          "/settings/shopify?shopify=error&message=Invalid+shop+domain",
         );
       }
 
@@ -4430,7 +4430,7 @@ export async function registerRoutes(
         const userId = getSessionUserId(req);
         if (!userId) {
           return res.redirect(
-            "/integrations?shopify=error&message=Not+authenticated",
+            "/settings/shopify?shopify=error&message=Not+authenticated",
           );
         }
         merchantId =
@@ -4441,7 +4441,7 @@ export async function registerRoutes(
 
       if (!merchantId) {
         return res.redirect(
-          "/integrations?shopify=error&message=No+merchant+account",
+          "/settings/shopify?shopify=error&message=No+merchant+account",
         );
       }
 
@@ -4577,12 +4577,12 @@ export async function registerRoutes(
       delete req.session.shopDomain;
 
       const redirectPath = isOnboardingComplete
-        ? "/integrations"
+        ? "/settings/shopify"
         : "/onboarding";
       res.redirect(`${redirectPath}?shopify=connected`);
     } catch (error) {
       console.error("Error in Shopify callback:", error);
-      const errorRedirect = "/integrations";
+      const errorRedirect = "/settings/shopify";
       res.redirect(
         `${errorRedirect}?shopify=error&message=` +
           encodeURIComponent(String(error)),
