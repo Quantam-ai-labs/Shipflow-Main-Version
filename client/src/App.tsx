@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Switch, Route, Redirect, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -12,7 +13,8 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { useAuth } from "@/hooks/use-auth";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, ArrowRight, ShieldAlert } from "lucide-react";
+import { AlertTriangle, ArrowRight, RefreshCw, ShieldAlert } from "lucide-react";
+import { refreshAllData } from "./lib/queryClient";
 import { Link } from "wouter";
 
 import AuthPage from "@/pages/auth";
@@ -149,6 +151,29 @@ function HeaderDateRangePicker() {
   );
 }
 
+function GlobalRefreshButton() {
+  const [spinning, setSpinning] = useState(false);
+
+  const handleRefresh = () => {
+    setSpinning(true);
+    refreshAllData();
+    setTimeout(() => setSpinning(false), 1000);
+  };
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={handleRefresh}
+      title="Refresh all data"
+      data-testid="button-global-refresh"
+      className="h-8 w-8"
+    >
+      <RefreshCw className={`h-4 w-4 ${spinning ? "animate-spin" : ""}`} />
+    </Button>
+  );
+}
+
 function AuthenticatedLayout() {
   const { user } = useAuth();
   const onboardingIncomplete = user?.merchant?.onboardingStep !== "COMPLETED";
@@ -167,6 +192,7 @@ function AuthenticatedLayout() {
             <header className="flex items-center justify-between gap-4 p-3 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
               <SidebarTrigger data-testid="button-sidebar-toggle" />
               <div className="flex items-center gap-2">
+                <GlobalRefreshButton />
                 <HeaderDateRangePicker />
                 <ThemeToggle />
               </div>

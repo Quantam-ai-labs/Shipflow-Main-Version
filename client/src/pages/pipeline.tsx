@@ -57,6 +57,7 @@ import {
   FileText,
   History,
   PenLine,
+  RefreshCw,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -822,6 +823,19 @@ export default function Pipeline() {
 
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           {total > 0 && <span className="font-extrabold text-[#ffffff] bg-[#00000000]">{total.toLocaleString()} orders</span>}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => {
+              queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+              queryClient.invalidateQueries({ queryKey: ["/api/orders/workflow-counts"] });
+            }}
+            title="Refresh pipeline data"
+            data-testid="button-refresh-pipeline"
+          >
+            <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
+          </Button>
         </div>
       </div>
       {/* Bulk Actions Bar */}
