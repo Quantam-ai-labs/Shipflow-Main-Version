@@ -1106,7 +1106,7 @@ export default function Pipeline() {
                       </Link>
                       {order.orderSource === "shopify_draft_order" && (
                         <Badge className="text-[9px] px-1 py-0 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 border-green-200 dark:border-green-700" data-testid={`badge-draft-${order.id}`}>
-                          Draft
+                          Custom
                         </Badge>
                       )}
                     </div>
