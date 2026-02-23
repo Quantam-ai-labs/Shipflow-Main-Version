@@ -100,11 +100,19 @@ export function registerAuthRoutes(app: Express): void {
       const body = loginSchema.parse(req.body);
 
       const [user] = await db.select().from(users).where(eq(users.email, body.email));
+      console.log("[LOGIN DEBUG] Email lookup:", body.email, "Found:", !!user, "Has hash:", !!user?.passwordHash);
       if (!user || !user.passwordHash) {
         return res.status(401).json({ message: "Invalid email or password" });
       }
 
-      const valid = await bcrypt.compare(body.password, user.passwordHash);
+      let valid: boolean;
+      try {
+        valid = await bcrypt.compare(body.password, user.passwordHash);
+        console.log("[LOGIN DEBUG] bcrypt.compare result:", valid);
+      } catch (bcryptErr: any) {
+        console.error("[LOGIN DEBUG] bcrypt.compare threw error:", bcryptErr.message, bcryptErr.stack);
+        return res.status(500).json({ message: "Authentication error. Please try again." });
+      }
       if (!valid) {
         return res.status(401).json({ message: "Invalid email or password" });
       }
