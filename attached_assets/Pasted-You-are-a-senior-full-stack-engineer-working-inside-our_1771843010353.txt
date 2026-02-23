@@ -1,0 +1,288 @@
+You are a senior full-stack engineer working inside our existing ShipFlow app (React 18 + Vite + TS, Tailwind, shadcn/ui, Wouter, React Query) with Node/Express TS backend (ESM), Zod validation, Postgres + Drizzle ORM.
+
+We already integrated Meta (Facebook) OAuth and we can hit Marketing API, but our metrics are incorrect and the UI table is too small. We need to rebuild the marketing reporting module to be “Ads Manager-like”: full detailed table, correct metrics, multiple column presets, filters, breakdowns, and DB storage (sync engine). Do NOT mock data.
+
+========================
+GOAL
+========================
+Build a professional “Ads Manager style” reporting system inside Marketing > Ads Dashboard + Live Campaigns:
+- Accurate spend & performance metrics
+- Multiple preset views (Sales, Video, Traffic, Retargeting, etc.)
+- Ability to view Active + Inactive campaigns (and filter by delivery status)
+- Real-time-ish refresh (but must be rate-limit safe)
+- Store all fetched insights in our Postgres DB for fast UI and historical trending
+- Date range selector (already exists) must work properly
+
+IMPORTANT: “Real-time” means auto-refresh every 60s for today + hourly backfill, but UI reads from DB; we do not call Meta API on every table render.
+
+========================
+KNOWN ISSUES TO FIX
+========================
+1) Spend/metrics are showing 0 or wrong due to:
+   - wrong time_range / date_preset usage
+   - wrong level (campaign vs adset vs ad)
+   - wrong fields selection (missing actions parsing)
+   - wrong currency conversion/format
+2) Current table shows too few columns and no presets
+3) Only active campaigns shown; must allow active+inactive (including paused/deleted) with filters
+
+========================
+META DATA SOURCES (STRICT)
+========================
+Use Marketing API:
+- /act_{ad_account_id}/campaigns to fetch campaigns (including status)
+- /act_{ad_account_id}/adsets and /ads for details when needed
+- /act_{ad_account_id}/insights for metrics
+
+We must support metrics at levels:
+- campaign
+- adset
+- ad
+
+We must support time increments:
+- daily (time_increment=1) for charts and daily table
+- total for a date range (no increment) for summary
+
+We must parse action metrics properly:
+Meta returns actions in arrays. Normalize them into columns for:
+- purchases (website + app where applicable)
+- purchase_value
+- add_to_cart
+- initiate_checkout
+- view_content
+- link_click
+- landing_page_views
+Also include:
+- impressions, reach, frequency
+- spend
+- cpm, cpc, ctr, cpc_link_click (where available)
+- outbound_clicks / unique_outbound_clicks if available
+- cost_per_action_type (normalize to common CPA columns)
+- roas: purchase_roas if returned; otherwise compute ROAS = purchase_value / spend when possible
+
+IMPORTANT:
+- Always store raw JSON responses too for debugging (raw_actions_json)
+- Keep currency fields consistent; store numeric in DB, format in UI
+
+========================
+DATABASE DESIGN (DRIZZLE)
+========================
+Add/upgrade these tables (do migrations safely):
+
+1) meta_ad_accounts
+- id, user_id/merchant_id
+- ad_account_id (act_xxx)
+- currency, timezone, name
+- status
+- created_at
+
+2) meta_campaigns
+- id (meta id)
+- ad_account_id
+- name
+- status (effective_status)
+- configured_status
+- objective
+- buying_type
+- created_time, updated_time
+- raw_json
+Indexes: ad_account_id, status
+
+3) meta_adsets
+- id, campaign_id, ad_account_id
+- name, status, optimization_goal, billing_event
+- daily_budget, lifetime_budget
+- promoted_object
+- raw_json
+
+4) meta_ads
+- id, adset_id, campaign_id, ad_account_id
+- name, status
+- creative_id (if available)
+- raw_json
+
+5) meta_insights_daily (the most important)
+Grain: (ad_account_id, level, entity_id, date)
+- id
+- ad_account_id
+- level ENUM('campaign','adset','ad')
+- entity_id (campaign_id / adset_id / ad_id)
+- date (YYYY-MM-DD)
+Core numeric columns:
+- spend
+- impressions
+- reach
+- frequency
+- clicks
+- link_clicks
+- landing_page_views
+- outbound_clicks
+- ctr
+- cpc
+- cpm
+Funnel:
+- view_content
+- add_to_cart
+- initiate_checkout
+- purchases
+- purchase_value
+Derived:
+- roas (computed if purchase_value and spend)
+- cpa_purchase (computed if purchases)
+- cpa_checkout (computed if initiate_checkout)
+Storage:
+- raw_json (full insights row)
+- raw_actions_json (actions arrays)
+- raw_cost_per_action_json
+Indexes: (ad_account_id, level, entity_id, date) unique
+
+6) meta_sync_runs
+- id, started_at, finished_at
+- ad_account_id, date_from, date_to
+- level
+- status, error_message
+- rows_upserted
+
+========================
+SYNC ENGINE (IMPORTANT)
+========================
+Implement backend sync jobs that:
+A) Refresh structure (campaign/adset/ad lists) daily or on-demand:
+- Fetch campaigns (active+inactive)
+- Fetch adsets and ads as needed
+- Upsert into DB
+
+B) Refresh insights:
+- For date range selected, read mostly from DB.
+- Auto sync strategy:
+  - Every 60 seconds: sync TODAY only (time_increment=1) for all active campaigns at campaign level
+  - Every 15 minutes: sync TODAY at adset level
+  - Every 60 minutes: sync TODAY at ad level
+  - Nightly backfill: re-sync last 7 days at all levels to fix attribution delays
+C) Prevent rate limit issues:
+- Use batching and pagination
+- Use filtering by effective_status in campaign fetch
+- Avoid requesting 100 fields at once; use a curated field set
+- Store “last_synced_at” per account/level
+
+Provide an API endpoint:
+POST /api/marketing/meta/sync
+Body: { adAccountId, dateFrom, dateTo, level, force?: boolean }
+This triggers sync and returns progress.
+
+Also provide:
+GET /api/marketing/meta/status -> { lastSyncedAt, lastRunStatus, errors }
+
+========================
+UI REQUIREMENTS (ADS MANAGER-LIKE TABLE)
+========================
+Replace the current “Live Campaign Monitor” table with a full table component:
+- Table supports:
+  - column visibility
+  - presets (saved views)
+  - sorting
+  - search by name
+  - filters: status (Active/Paused/Deleted), objective, buying_type
+  - level switch: Campaigns / Ad sets / Ads
+  - date range selector
+  - refresh button + auto refresh toggle
+  - pagination
+  - export CSV (from DB)
+
+Columns required (base preset):
+- Name (campaign/adset/ad)
+- Delivery status (effective_status)
+- Objective
+- Budget (daily/lifetime)
+- Spend
+- Purchases
+- Purchase value
+- ROAS
+- Cost per purchase
+- Impressions
+- Reach
+- Frequency
+- Link clicks
+- Landing page views
+- CTR
+- CPC
+- CPM
+- Adds to cart
+- Checkouts initiated
+- Cost per checkout
+- Cost per add to cart
+- View content
+
+Make sure totals row exists like Ads Manager:
+- Total spend
+- Total purchases
+- Total value
+- ROAS total
+
+IMPORTANT:
+Show correct currency formatting based on account currency.
+
+========================
+PRESETS (MULTIPLE VIEWS)
+========================
+Implement a “Columns Preset” dropdown like Ads Manager.
+Ship with these presets:
+
+1) Sales (default ecommerce)
+- spend, purchases, purchase_value, roas, cost_per_purchase, add_to_cart, checkout, cpm, ctr, link_clicks
+
+2) Funnel
+- view_content, add_to_cart, checkout, purchases + their costs
+
+3) Traffic
+- spend, impressions, reach, frequency, link_clicks, landing_page_views, ctr, cpc, cpm
+
+4) Video Performance
+- video views, thruplays, 3s views, 95% views, cost per thruplay, hook rate (if possible)
+NOTE: Only show these columns if API returns them. If not available, hide gracefully.
+
+5) Delivery/Health
+- status, budget, spend, cpm, frequency, learning phase indicators if available
+
+Allow user to save custom presets into DB table:
+meta_column_presets:
+- id, user_id, name, level, columns json
+
+========================
+ACTIVE + INACTIVE CAMPAIGNS
+========================
+By default show ALL campaigns (active + paused).
+Provide quick filters:
+- Active
+- Paused
+- All
+Also show “Off/On” toggle state like Ads Manager (read-only for now).
+
+========================
+METRIC CORRECTNESS (CRITICAL)
+========================
+Fix the metrics logic:
+- Purchases must come from actions:
+   - use 'purchase' and/or 'offsite_conversion.fb_pixel_purchase' depending on availability
+- Purchase value must map from 'purchase' value actions where available
+- ROAS use 'purchase_roas' when returned; otherwise compute from purchase_value/spend
+- Date range: use time_range properly (since/until) matching user selector
+- Ensure timezone alignment (ad account timezone)
+- Ensure we don’t show zeros because the query uses wrong date_preset
+- Ensure level matches the entity shown
+
+Implement a debug panel (dev-only):
+- “View raw row” JSON for a selected record
+- Show last sync timestamp
+
+========================
+DELIVERABLE
+========================
+1) Accurate Ads Manager-like table with multiple presets and DB-backed data
+2) Sync engine storing all metrics daily
+3) Ability to view active and inactive campaigns
+4) Live monitor auto-refresh uses DB + sync jobs
+5) CSV export
+6) Correct totals row and correct currency formatting
+
+Implement now: update DB migrations with Drizzle, add backend sync routes + job scheduler, update frontend pages and table with presets and filters, test using our connected ad account and verify numbers match Ads Manager for same date range (within expected Meta reporting delay).
