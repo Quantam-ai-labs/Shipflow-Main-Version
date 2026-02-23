@@ -8346,18 +8346,28 @@ export async function registerRoutes(
       });
 
       const setupUrl = `${req.protocol}://${req.get("host")}/merchant-setup/${setupToken}`;
-      const emailResult = await sendMerchantSetupEmail({
-        toEmail: body.email,
-        merchantName: body.merchantName,
-        firstName: body.firstName,
-        setupUrl,
-        expiresAt: setupTokenExpiresAt,
-      });
+
+      let emailSent = false;
+      let emailError: string | undefined;
+      try {
+        const { Resend } = await import("resend");
+        const resend = new Resend(process.env.RESEND_API_KEY);
+        const sendResult = await resend.emails.send({
+          from: "onboarding@resend.dev",
+          to: body.email,
+          subject: `Welcome to ShipFlow`,
+          html: `<p>Hello ${body.firstName},</p><p>You have been onboarded to <strong>${body.merchantName}</strong> on ShipFlow.</p><p><a href="${setupUrl}">Accept Invitation</a></p>`,
+        });
+        emailSent = !sendResult.error;
+        if (sendResult.error) emailError = sendResult.error.message;
+      } catch (err: any) {
+        emailError = err.message;
+      }
 
       res.json({
-        message: `Merchant "${body.merchantName}" created successfully. ${emailResult.success ? "Setup invite sent to " + body.email : "Account created but email failed to send."}`,
-        emailSent: emailResult.success,
-        emailError: emailResult.error,
+        message: `Merchant "${body.merchantName}" created successfully. ${emailSent ? "Invite sent to " + body.email : "Account created but email failed to send."}`,
+        emailSent,
+        emailError,
         merchant: result.merchant,
         user: { id: result.user.id, email: result.user.email, firstName: result.user.firstName },
       });
