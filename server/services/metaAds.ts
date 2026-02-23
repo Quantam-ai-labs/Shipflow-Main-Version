@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { adAccounts, adCampaigns, adSets, adCreatives, adInsights, marketingSyncLogs } from "@shared/schema";
+import { adAccounts, adCampaigns, adSets, adCreatives, adInsights, marketingSyncLogs, merchants } from "@shared/schema";
 import { eq, and, sql, desc, gte, lte } from "drizzle-orm";
 
 const META_API_VERSION = "v21.0";
@@ -10,11 +10,21 @@ interface MetaApiOptions {
   adAccountId: string;
 }
 
-function getCredentials(): MetaApiOptions {
+export async function getCredentialsForMerchant(merchantId: string): Promise<MetaApiOptions> {
+  const [merchant] = await db.select().from(merchants).where(eq(merchants.id, merchantId));
+
+  if (merchant?.facebookAccessToken && merchant?.facebookAdAccountId) {
+    const adAccountId = merchant.facebookAdAccountId;
+    return {
+      accessToken: merchant.facebookAccessToken,
+      adAccountId: adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`,
+    };
+  }
+
   const accessToken = process.env.FACEBOOK_ACCESS_TOKEN;
   const adAccountId = process.env.FACEBOOK_AD_ACCOUNT_ID;
   if (!accessToken || !adAccountId) {
-    throw new Error("Facebook credentials not configured");
+    throw new Error("Facebook credentials not configured. Go to Settings > Marketing to add your Facebook App credentials.");
   }
   return {
     accessToken,
@@ -22,8 +32,27 @@ function getCredentials(): MetaApiOptions {
   };
 }
 
-async function metaApiFetch(endpoint: string, params: Record<string, string> = {}): Promise<any> {
-  const creds = getCredentials();
+export async function testFacebookConnection(creds: MetaApiOptions): Promise<{ success: boolean; accountName?: string; error?: string }> {
+  try {
+    const adAccountId = creds.adAccountId.startsWith("act_") ? creds.adAccountId : `act_${creds.adAccountId}`;
+    const url = new URL(`${META_BASE_URL}/${adAccountId}`);
+    url.searchParams.set("access_token", creds.accessToken);
+    url.searchParams.set("fields", "account_id,name,account_status");
+
+    const response = await fetch(url.toString());
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({ error: { message: "Unknown error" } }));
+      return { success: false, error: errorBody?.error?.message || `API returned status ${response.status}` };
+    }
+    const data = await response.json();
+    return { success: true, accountName: data.name };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+async function metaApiFetch(merchantId: string, endpoint: string, params: Record<string, string> = {}): Promise<any> {
+  const creds = await getCredentialsForMerchant(merchantId);
   const url = new URL(`${META_BASE_URL}/${endpoint}`);
   url.searchParams.set("access_token", creds.accessToken);
   for (const [k, v] of Object.entries(params)) {
@@ -39,11 +68,11 @@ async function metaApiFetch(endpoint: string, params: Record<string, string> = {
   return response.json();
 }
 
-async function fetchAllPages(endpoint: string, params: Record<string, string> = {}): Promise<any[]> {
+async function fetchAllPages(merchantId: string, endpoint: string, params: Record<string, string> = {}): Promise<any[]> {
   let results: any[] = [];
   let url: string | null = null;
 
-  const creds = getCredentials();
+  const creds = await getCredentialsForMerchant(merchantId);
   const initialUrl = new URL(`${META_BASE_URL}/${endpoint}`);
   initialUrl.searchParams.set("access_token", creds.accessToken);
   initialUrl.searchParams.set("limit", "500");
@@ -69,8 +98,8 @@ async function fetchAllPages(endpoint: string, params: Record<string, string> = 
 }
 
 export async function syncAdAccount(merchantId: string): Promise<any> {
-  const creds = getCredentials();
-  const data = await metaApiFetch(creds.adAccountId, {
+  const creds = await getCredentialsForMerchant(merchantId);
+  const data = await metaApiFetch(merchantId, creds.adAccountId, {
     fields: "account_id,name,currency,timezone_name,account_status",
   });
 
@@ -100,8 +129,8 @@ export async function syncAdAccount(merchantId: string): Promise<any> {
 }
 
 export async function syncCampaigns(merchantId: string, adAccountDbId: string): Promise<number> {
-  const creds = getCredentials();
-  const campaigns = await fetchAllPages(`${creds.adAccountId}/campaigns`, {
+  const creds = await getCredentialsForMerchant(merchantId);
+  const campaigns = await fetchAllPages(merchantId, `${creds.adAccountId}/campaigns`, {
     fields: "id,name,status,objective,daily_budget,lifetime_budget",
   });
 
@@ -133,8 +162,8 @@ export async function syncCampaigns(merchantId: string, adAccountDbId: string): 
 }
 
 export async function syncAdSets(merchantId: string, adAccountDbId: string): Promise<number> {
-  const creds = getCredentials();
-  const adsets = await fetchAllPages(`${creds.adAccountId}/adsets`, {
+  const creds = await getCredentialsForMerchant(merchantId);
+  const adsets = await fetchAllPages(merchantId, `${creds.adAccountId}/adsets`, {
     fields: "id,name,campaign_id,status,daily_budget,targeting",
   });
 
@@ -165,8 +194,8 @@ export async function syncAdSets(merchantId: string, adAccountDbId: string): Pro
 }
 
 export async function syncAds(merchantId: string, adAccountDbId: string): Promise<number> {
-  const creds = getCredentials();
-  const ads = await fetchAllPages(`${creds.adAccountId}/ads`, {
+  const creds = await getCredentialsForMerchant(merchantId);
+  const ads = await fetchAllPages(merchantId, `${creds.adAccountId}/ads`, {
     fields: "id,name,adset_id,status",
   });
 
@@ -193,10 +222,10 @@ export async function syncAds(merchantId: string, adAccountDbId: string): Promis
 }
 
 export async function syncInsights(merchantId: string, adAccountDbId: string, dateFrom: string, dateTo: string): Promise<number> {
-  const creds = getCredentials();
+  const creds = await getCredentialsForMerchant(merchantId);
 
   const actionFields = "actions,action_values,cost_per_action_type";
-  const insightsData = await fetchAllPages(`${creds.adAccountId}/insights`, {
+  const insightsData = await fetchAllPages(merchantId, `${creds.adAccountId}/insights`, {
     fields: `campaign_id,impressions,reach,clicks,cpc,cpm,ctr,spend,frequency,video_views,${actionFields}`,
     level: "campaign",
     time_range: JSON.stringify({ since: dateFrom, until: dateTo }),

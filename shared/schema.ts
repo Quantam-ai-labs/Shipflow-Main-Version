@@ -26,6 +26,10 @@ export const merchants = pgTable("merchants", {
   shopifyAppClientId: varchar("shopify_app_client_id", { length: 255 }),
   shopifyAppClientSecret: text("shopify_app_client_secret"),
   shopifySyncFromDate: timestamp("shopify_sync_from_date"),
+  facebookAppId: varchar("facebook_app_id", { length: 255 }),
+  facebookAppSecret: text("facebook_app_secret"),
+  facebookAccessToken: text("facebook_access_token"),
+  facebookAdAccountId: varchar("facebook_ad_account_id", { length: 255 }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
