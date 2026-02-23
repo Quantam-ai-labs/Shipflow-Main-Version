@@ -920,7 +920,7 @@ export default function OrderDetails() {
             <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-2xl font-bold">Order # {String(order.orderNumber).replace(/^#/, '')}</h1>
               {(order as any).orderSource === "shopify_draft_order" && (
-                <Badge className="text-[10px] px-1.5 py-0.5 bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 border-purple-200 dark:border-purple-700" data-testid="badge-draft-order">
+                <Badge className="text-[10px] px-1.5 py-0.5 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 border-green-200 dark:border-green-700" data-testid="badge-draft-order">
                   Draft Order
                 </Badge>
               )}
