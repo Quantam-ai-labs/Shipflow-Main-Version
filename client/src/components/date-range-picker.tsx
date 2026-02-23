@@ -2,16 +2,10 @@ import { useState, useRef } from "react";
 import {
   format,
   subDays,
-  subMonths,
-  subYears,
   startOfWeek,
   startOfMonth,
   startOfQuarter,
   startOfYear,
-  endOfWeek,
-  endOfMonth,
-  endOfQuarter,
-  endOfYear,
 } from "date-fns";
 import { Calendar as CalendarIcon, ChevronDown } from "lucide-react";
 import { DateRange } from "react-day-picker";
@@ -46,45 +40,7 @@ const presets = [
     label: "Last 90 days",
     getValue: () => ({ from: subDays(new Date(), 89), to: new Date() }),
   },
-  {
-    label: "Last 365 days",
-    getValue: () => ({ from: subDays(new Date(), 364), to: new Date() }),
-  },
-  {
-    label: "Last 12 months",
-    getValue: () => ({ from: subMonths(new Date(), 12), to: new Date() }),
-  },
   { divider: true, label: "divider-1", getValue: () => ({ from: new Date(), to: new Date() }) },
-  {
-    label: "Last week",
-    getValue: () => {
-      const lastWeekStart = startOfWeek(subDays(new Date(), 7), { weekStartsOn: 1 });
-      const lastWeekEnd = endOfWeek(subDays(new Date(), 7), { weekStartsOn: 1 });
-      return { from: lastWeekStart, to: lastWeekEnd };
-    },
-  },
-  {
-    label: "Last month",
-    getValue: () => {
-      const lm = subMonths(new Date(), 1);
-      return { from: startOfMonth(lm), to: endOfMonth(lm) };
-    },
-  },
-  {
-    label: "Last quarter",
-    getValue: () => {
-      const lq = subMonths(new Date(), 3);
-      return { from: startOfQuarter(lq), to: endOfQuarter(lq) };
-    },
-  },
-  {
-    label: "Last year",
-    getValue: () => {
-      const ly = subYears(new Date(), 1);
-      return { from: startOfYear(ly), to: endOfYear(ly) };
-    },
-  },
-  { divider: true, label: "divider-2", getValue: () => ({ from: new Date(), to: new Date() }) },
   {
     label: "Week to date",
     getValue: () => ({
