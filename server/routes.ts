@@ -619,6 +619,86 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/orders/customer-history-batch", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { phoneNumbers } = req.body as { phoneNumbers: string[] };
+      if (!phoneNumbers || !Array.isArray(phoneNumbers) || phoneNumbers.length === 0) {
+        return res.json({});
+      }
+      const normalized = phoneNumbers
+        .map(p => normalizePakistaniPhone(p) || p)
+        .filter(Boolean);
+      const uniquePhones = [...new Set(normalized)];
+
+      const results = await db.execute(sql`
+        SELECT 
+          customer_phone,
+          COUNT(*)::int as order_count,
+          MAX(order_date) as last_order_date
+        FROM orders 
+        WHERE merchant_id = ${merchantId} 
+          AND customer_phone IN ${sql.raw(`(${uniquePhones.map(p => `'${p.replace(/'/g, "''")}'`).join(",")})`)}
+          AND customer_phone IS NOT NULL 
+          AND customer_phone != ''
+        GROUP BY customer_phone
+      `);
+      const historyMap: Record<string, { orderCount: number; lastOrderDate: string | null }> = {};
+      for (const row of results.rows) {
+        historyMap[row.customer_phone as string] = {
+          orderCount: row.order_count as number,
+          lastOrderDate: row.last_order_date as string | null,
+        };
+      }
+      res.json(historyMap);
+    } catch (error) {
+      console.error("Error fetching customer history batch:", error);
+      res.status(500).json({ message: "Failed to fetch customer history" });
+    }
+  });
+
+  app.get("/api/orders/customer-history/:phone", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const phone = normalizePakistaniPhone(decodeURIComponent(req.params.phone)) || decodeURIComponent(req.params.phone);
+
+      const result = await db.execute(sql`
+        SELECT 
+          id, order_number, customer_name, total_amount, currency, 
+          workflow_status, order_date, city, courier_name, courier_tracking,
+          shipment_status, payment_method, item_summary
+        FROM orders 
+        WHERE merchant_id = ${merchantId} 
+          AND customer_phone = ${phone}
+        ORDER BY order_date DESC
+      `);
+      res.json({
+        phone,
+        orderCount: result.rows.length,
+        orders: result.rows.map((r: any) => ({
+          id: r.id,
+          orderNumber: r.order_number,
+          customerName: r.customer_name,
+          totalAmount: r.total_amount,
+          currency: r.currency,
+          workflowStatus: r.workflow_status,
+          orderDate: r.order_date,
+          city: r.city,
+          courierName: r.courier_name,
+          courierTracking: r.courier_tracking,
+          shipmentStatus: r.shipment_status,
+          paymentMethod: r.payment_method,
+          itemSummary: r.item_summary,
+        })),
+      });
+    } catch (error) {
+      console.error("Error fetching customer history:", error);
+      res.status(500).json({ message: "Failed to fetch customer history" });
+    }
+  });
+
   app.post("/api/orders/:id/workflow", isAuthenticated, async (req, res) => {
     try {
       const merchantId = await requireMerchant(req, res);

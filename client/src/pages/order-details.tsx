@@ -672,6 +672,18 @@ export default function OrderDetails() {
     enabled: !!id,
   });
 
+  const customerPhone = order?.customerPhone;
+  const { data: customerHistoryData } = useQuery<{ phone: string; orderCount: number; orders: any[] }>({
+    queryKey: ["/api/orders/customer-history", customerPhone],
+    queryFn: async () => {
+      const res = await fetch(`/api/orders/customer-history/${encodeURIComponent(customerPhone!)}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: !!customerPhone,
+    staleTime: 60 * 1000,
+  });
+
   const addPaymentMutation = useMutation({
     mutationFn: async (data: { amount: number; method: string; reference?: string; notes?: string }) => {
       return apiRequest("POST", `/api/orders/${id}/payments`, data);
@@ -1288,6 +1300,56 @@ export default function OrderDetails() {
               )}
             </CardContent>
           </Card>
+
+          {/* Customer Order History */}
+          {customerHistoryData && customerHistoryData.orderCount > 1 && (
+            <Card data-testid="card-customer-history">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <History className="w-4 h-4" />
+                  Order History
+                  <Badge className="text-[10px] px-1.5 py-0 bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 border-blue-200 dark:border-blue-700">
+                    {customerHistoryData.orderCount} orders
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="space-y-1.5 max-h-[240px] overflow-y-auto">
+                  {customerHistoryData.orders
+                    .filter((o: any) => String(o.id) !== String(id))
+                    .map((o: any) => (
+                    <Link
+                      key={o.id}
+                      href={`/orders/detail/${o.id}`}
+                      className="flex items-center justify-between p-2 rounded-md border bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer block"
+                      data-testid={`history-order-link-${o.id}`}
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-medium text-primary">{o.orderNumber}</span>
+                          <Badge className={`text-[9px] px-1 py-0 ${
+                            o.workflowStatus === "DELIVERED" ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" :
+                            o.workflowStatus === "CANCELLED" ? "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300" :
+                            o.workflowStatus === "RETURN" ? "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300" :
+                            "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                          }`}>
+                            {o.workflowStatus}
+                          </Badge>
+                        </div>
+                        <span className="text-[10px] text-muted-foreground">
+                          {o.orderDate ? format(new Date(o.orderDate), "MMM d, yyyy") : "No date"}
+                        </span>
+                      </div>
+                      <span className="text-xs font-medium shrink-0 ml-2">{Number(o.totalAmount).toLocaleString()}</span>
+                    </Link>
+                  ))}
+                  {customerHistoryData.orders.filter((o: any) => String(o.id) !== String(id)).length === 0 && (
+                    <p className="text-xs text-muted-foreground text-center py-2">This is their only order</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Payments */}
           <Card>

@@ -55,6 +55,7 @@ import {
   CreditCard,
   Plus,
   FileText,
+  History,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -331,6 +332,35 @@ export default function Pipeline() {
   const orders = data?.orders || [];
   const total = data?.total || 0;
   const totalPages = Math.ceil(total / pageSize);
+
+  const phoneNumbers = useMemo(() => {
+    return orders
+      .map(o => o.customerPhone)
+      .filter((p): p is string => !!p && p.length > 0);
+  }, [orders]);
+
+  const { data: customerHistory } = useQuery<Record<string, { orderCount: number; lastOrderDate: string | null }>>({
+    queryKey: ["/api/orders/customer-history-batch", phoneNumbers],
+    queryFn: async () => {
+      if (phoneNumbers.length === 0) return {};
+      const res = await apiRequest("POST", "/api/orders/customer-history-batch", { phoneNumbers });
+      return res.json();
+    },
+    enabled: phoneNumbers.length > 0,
+    staleTime: 60 * 1000,
+  });
+
+  const [historyPopup, setHistoryPopup] = useState<{ phone: string; customerName: string } | null>(null);
+
+  const { data: historyDetail } = useQuery<{ phone: string; orderCount: number; orders: any[] }>({
+    queryKey: ["/api/orders/customer-history", historyPopup?.phone],
+    queryFn: async () => {
+      const res = await fetch(`/api/orders/customer-history/${encodeURIComponent(historyPopup!.phone)}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: !!historyPopup?.phone,
+  });
 
   const workflowMutation = useMutation({
     mutationFn: async ({ orderId, action, extra }: { orderId: string; action: string; extra?: any }) => {
@@ -998,6 +1028,7 @@ export default function Pipeline() {
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Order</th>
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Customer</th>
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground hidden md:table-cell">City</th>
+                <th className="px-3 py-2.5 text-center font-medium text-muted-foreground w-[70px]" data-testid="header-history">History</th>
                 {(activeTab === "NEW" || activeTab === "PENDING") && (
                   <>
                     <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Address</th>
@@ -1031,7 +1062,11 @@ export default function Pipeline() {
                   key={order.id}
                   className={`border-b transition-colors hover-elevate ${
                     selectedIds.has(order.id) ? "bg-primary/5" : ""
-                  } ${activeTab === "HOLD" && order.holdUntil && isPast(new Date(order.holdUntil)) ? "bg-red-50/50 dark:bg-red-950/30" : ""}`}
+                  } ${activeTab === "HOLD" && order.holdUntil && isPast(new Date(order.holdUntil)) ? "bg-red-50/50 dark:bg-red-950/30" : ""} ${
+                    order.customerPhone && customerHistory && (customerHistory[order.customerPhone]?.orderCount || 0) > 1
+                      ? "bg-blue-50/40 dark:bg-blue-950/20 border-l-2 border-l-blue-400 dark:border-l-blue-600"
+                      : ""
+                  }`}
                   data-testid={`order-row-${order.id}`}
                 >
                   {activeTab !== "CANCELLED" && activeTab !== "DELIVERED" && activeTab !== "RETURN" && (
@@ -1105,6 +1140,29 @@ export default function Pipeline() {
                     )}
                   </td>
                   <td className="px-3 py-1.5 hidden md:table-cell text-sm truncate max-w-[100px]" title={order.city || ""}>{order.city && order.city.length > 15 ? order.city.slice(0, 13) + ".." : (order.city || "-")}</td>
+                  <td className="px-3 py-1.5 text-center w-[70px]" data-testid={`cell-history-${order.id}`}>
+                    {(() => {
+                      const hist = order.customerPhone && customerHistory ? customerHistory[order.customerPhone] : null;
+                      const count = hist?.orderCount || 0;
+                      if (count <= 1) return <span className="text-xs text-muted-foreground">-</span>;
+                      return (
+                        <button
+                          className="inline-flex flex-col items-center cursor-pointer hover:opacity-80"
+                          onClick={() => setHistoryPopup({ phone: order.customerPhone!, customerName: order.customerName || "Customer" })}
+                          data-testid={`button-history-${order.id}`}
+                        >
+                          <Badge className="text-[10px] px-1.5 py-0 leading-4 bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 border-blue-200 dark:border-blue-700">
+                            {count} orders
+                          </Badge>
+                          {hist?.lastOrderDate && (
+                            <span className="text-[9px] text-muted-foreground mt-0.5 leading-none">
+                              {formatDistanceToNow(new Date(hist.lastOrderDate), { addSuffix: true })}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })()}
+                  </td>
                   {(activeTab === "NEW" || activeTab === "PENDING") && (
                     <>
                       <td className="px-3 py-1.5 max-w-[220px]" data-testid={`cell-address-${order.id}`}>
@@ -1944,6 +2002,67 @@ export default function Pipeline() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {/* Customer Order History Dialog */}
+      <Dialog open={!!historyPopup} onOpenChange={open => { if (!open) setHistoryPopup(null); }}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="w-4 h-4" />
+              Customer Order History
+            </DialogTitle>
+            <DialogDescription>
+              {historyPopup?.customerName} &middot; {historyPopup?.phone} &middot; {historyDetail?.orderCount || 0} orders
+            </DialogDescription>
+          </DialogHeader>
+          <div className="overflow-y-auto flex-1 -mx-6 px-6">
+            {historyDetail?.orders && historyDetail.orders.length > 0 ? (
+              <div className="space-y-2">
+                {historyDetail.orders.map((o: any) => (
+                  <div
+                    key={o.id}
+                    className="flex items-center justify-between p-2.5 rounded-md border bg-muted/30 hover:bg-muted/50 transition-colors"
+                    data-testid={`history-order-${o.id}`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={`/orders/detail/${o.id}`}
+                          className="font-medium text-sm text-primary hover:underline"
+                          onClick={() => setHistoryPopup(null)}
+                          data-testid={`history-link-${o.id}`}
+                        >
+                          {o.orderNumber}
+                        </Link>
+                        <Badge className={`text-[10px] px-1.5 py-0 ${
+                          o.workflowStatus === "DELIVERED" ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" :
+                          o.workflowStatus === "CANCELLED" ? "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300" :
+                          o.workflowStatus === "RETURN" ? "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300" :
+                          "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                        }`}>
+                          {o.workflowStatus}
+                        </Badge>
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {o.orderDate ? format(new Date(o.orderDate), "MMM d, yyyy h:mm a") : "No date"}
+                        {o.city ? ` · ${o.city}` : ""}
+                      </div>
+                      {o.itemSummary && (
+                        <div className="text-xs text-muted-foreground truncate mt-0.5">{o.itemSummary}</div>
+                      )}
+                    </div>
+                    <div className="text-right ml-3 shrink-0">
+                      <div className="font-medium text-sm">{Number(o.totalAmount).toLocaleString()}</div>
+                      <div className="text-xs text-muted-foreground">{o.currency || "PKR"}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center text-muted-foreground text-sm py-8">Loading order history...</div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
