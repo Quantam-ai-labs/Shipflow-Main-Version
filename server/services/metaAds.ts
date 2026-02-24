@@ -488,14 +488,14 @@ export async function fullSync(
   }
 }
 
-export async function quickSyncToday(merchantId: string, level: "campaign" | "adset" | "ad" = "campaign"): Promise<number> {
+export async function quickSyncToday(merchantId: string, level: "campaign" | "adset" | "ad" = "campaign", days: number = 7): Promise<number> {
   try {
     const { dbId: adAccountDbId } = await syncAdAccount(merchantId);
     const now = new Date();
     const today = now.toISOString().split("T")[0];
-    const weekAgo = new Date(now);
-    weekAgo.setDate(weekAgo.getDate() - 6);
-    const dateFrom = weekAgo.toISOString().split("T")[0];
+    const rangeStart = new Date(now);
+    rangeStart.setDate(rangeStart.getDate() - (days - 1));
+    const dateFrom = rangeStart.toISOString().split("T")[0];
     let total = 0;
     total += await syncInsights(merchantId, adAccountDbId, dateFrom, today, "campaign");
     total += await syncInsights(merchantId, adAccountDbId, dateFrom, today, "adset");
@@ -771,7 +771,23 @@ let syncIntervalId: ReturnType<typeof setInterval> | null = null;
 export function startMarketingSyncScheduler() {
   if (syncIntervalId) return;
 
-  console.log("[MetaAds] Starting marketing sync scheduler (all levels every 120s)");
+  console.log("[MetaAds] Starting marketing sync scheduler (37-day backfill on start, 7-day sync every 120s)");
+
+  (async () => {
+    try {
+      const accounts = await db.select().from(adAccounts);
+      for (const account of accounts) {
+        try {
+          await quickSyncToday(account.merchantId, "campaign", 37);
+          console.log(`[MetaAds] Initial 37-day backfill completed for merchant ${account.merchantId}`);
+        } catch (err: any) {
+          console.error(`[MetaAds] Initial backfill failed for merchant ${account.merchantId}:`, err.message);
+        }
+      }
+    } catch (err: any) {
+      console.error("[MetaAds] Initial backfill error:", err.message);
+    }
+  })();
 
   syncIntervalId = setInterval(async () => {
     try {
