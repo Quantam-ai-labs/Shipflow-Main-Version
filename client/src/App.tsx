@@ -35,6 +35,7 @@ import MerchantSetup from "@/pages/merchant-setup";
 import InviteAccept from "@/pages/invite-accept";
 import PrintLabels from "@/pages/print-labels";
 import Products from "@/pages/products";
+import ShopifyProducts from "@/pages/shopify-products";
 import ProductAnalytics from "@/pages/product-analytics";
 import ExpenseTracker from "@/pages/expense-tracker";
 import StockLedger from "@/pages/stock-ledger";
@@ -109,6 +110,7 @@ function AppRoutes() {
         <Redirect to="/settings/shopify" />
       </Route>
       <Route path="/products" component={Products} />
+      <Route path="/shopify-products" component={ShopifyProducts} />
       <Route path="/product-analytics" component={ProductAnalytics} />
       <Route path="/expense-tracker" component={ExpenseTracker} />
       <Route path="/courier-dues" component={CourierDues} />

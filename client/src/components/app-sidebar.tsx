@@ -129,6 +129,7 @@ const allNavGroups: NavGroup[] = [
     icon: ShoppingBag,
     items: [
       { id: "products", title: "Products", url: "/accounting/products", icon: ShoppingBag },
+      { id: "shopify-products", title: "Shopify Products", url: "/shopify-products", icon: Store },
       { id: "add-stock", title: "Add Stock", url: "/accounting/stock-receipts", icon: ArrowDownLeft },
     ],
   },
