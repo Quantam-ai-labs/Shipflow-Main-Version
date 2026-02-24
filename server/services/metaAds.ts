@@ -151,7 +151,7 @@ export async function syncCampaigns(merchantId: string, adAccountDbId: string): 
   const creds = await getCredentialsForMerchant(merchantId);
   const campaigns = await fetchAllPages(creds, `${creds.adAccountId}/campaigns`, {
     fields: "id,name,status,effective_status,configured_status,objective,buying_type,daily_budget,lifetime_budget,created_time",
-    effective_status: JSON.stringify(["ACTIVE", "PAUSED", "DELETED", "ARCHIVED", "IN_PROCESS", "WITH_ISSUES"]),
+    effective_status: JSON.stringify(["ACTIVE", "PAUSED", "ARCHIVED", "IN_PROCESS", "WITH_ISSUES"]),
   });
 
   let count = 0;
@@ -194,7 +194,7 @@ export async function syncAdSets(merchantId: string, adAccountDbId: string): Pro
   const creds = await getCredentialsForMerchant(merchantId);
   const adsets = await fetchAllPages(creds, `${creds.adAccountId}/adsets`, {
     fields: "id,name,campaign_id,status,effective_status,optimization_goal,billing_event,daily_budget,lifetime_budget,promoted_object,targeting",
-    effective_status: JSON.stringify(["ACTIVE", "PAUSED", "DELETED", "ARCHIVED", "IN_PROCESS", "WITH_ISSUES"]),
+    effective_status: JSON.stringify(["ACTIVE", "PAUSED", "ARCHIVED", "IN_PROCESS", "WITH_ISSUES"]),
   });
 
   let count = 0;
@@ -239,7 +239,7 @@ export async function syncAds(merchantId: string, adAccountDbId: string): Promis
   const creds = await getCredentialsForMerchant(merchantId);
   const ads = await fetchAllPages(creds, `${creds.adAccountId}/ads`, {
     fields: "id,name,adset_id,campaign_id,status,effective_status,creative{id}",
-    effective_status: JSON.stringify(["ACTIVE", "PAUSED", "DELETED", "ARCHIVED", "IN_PROCESS", "WITH_ISSUES"]),
+    effective_status: JSON.stringify(["ACTIVE", "PAUSED", "ARCHIVED", "IN_PROCESS", "WITH_ISSUES"]),
   });
 
   let count = 0;
@@ -788,6 +788,13 @@ export function startMarketingSyncScheduler() {
 
           if (!earliestDate || earliestDate > backfillFrom) {
             const { dbId } = await syncAdAccount(account.merchantId);
+            try {
+              await syncCampaigns(account.merchantId, dbId);
+              await syncAdSets(account.merchantId, dbId);
+              await syncAds(account.merchantId, dbId);
+            } catch (err: any) {
+              console.error(`[MetaAds] Campaign metadata sync failed for ${account.merchantId}:`, err.message);
+            }
             const now = new Date();
             const today = now.toISOString().split("T")[0];
             const chunkDays = 90;
@@ -815,6 +822,14 @@ export function startMarketingSyncScheduler() {
             await quickSyncToday(account.merchantId, "campaign", 37);
             console.log(`[MetaAds] Backfill completed for merchant ${account.merchantId}`);
           } else {
+            const { dbId } = await syncAdAccount(account.merchantId);
+            try {
+              await syncCampaigns(account.merchantId, dbId);
+              await syncAdSets(account.merchantId, dbId);
+              await syncAds(account.merchantId, dbId);
+            } catch (err: any) {
+              console.error(`[MetaAds] Campaign metadata sync failed for ${account.merchantId}:`, err.message);
+            }
             await quickSyncToday(account.merchantId, "campaign", 37);
             console.log(`[MetaAds] 37-day refresh completed for merchant ${account.merchantId}`);
           }
