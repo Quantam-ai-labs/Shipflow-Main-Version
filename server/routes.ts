@@ -8350,16 +8350,15 @@ export async function registerRoutes(
       let emailSent = false;
       let emailError: string | undefined;
       try {
-        const { Resend } = await import("resend");
-        const resend = new Resend(process.env.RESEND_API_KEY);
-        const sendResult = await resend.emails.send({
-          from: "onboarding@resend.dev",
-          to: body.email,
-          subject: `Welcome to ShipFlow`,
-          html: `<p>Hello ${body.firstName},</p><p>You have been onboarded to <strong>${body.merchantName}</strong> on ShipFlow.</p><p><a href="${setupUrl}">Accept Invitation</a></p>`,
+        const emailResult = await sendMerchantSetupEmail({
+          toEmail: body.email,
+          merchantName: body.merchantName,
+          firstName: body.firstName,
+          setupUrl,
+          expiresAt: setupTokenExpiresAt,
         });
-        emailSent = !sendResult.error;
-        if (sendResult.error) emailError = sendResult.error.message;
+        emailSent = emailResult.success;
+        if (!emailResult.success) emailError = emailResult.error;
       } catch (err: any) {
         emailError = err.message;
       }
