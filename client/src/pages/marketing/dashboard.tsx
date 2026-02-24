@@ -340,7 +340,7 @@ export default function MarketingDashboard() {
                 </TableHeader>
                 <TableBody>
                   {sortedCampaigns.map((c: any, i: number) => (
-                    <TableRow key={c.campaignId} data-testid={`row-campaign-${i}`}>
+                    <TableRow key={c.entityId || i} data-testid={`row-campaign-${i}`}>
                       <TableCell className="text-sm font-medium max-w-[200px] truncate" data-testid={`text-campaign-name-${i}`}>
                         {c.name}
                       </TableCell>

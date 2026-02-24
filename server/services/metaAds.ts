@@ -276,7 +276,7 @@ const INSIGHTS_FIELDS = [
   "campaign_id", "adset_id", "ad_id", "campaign_name", "adset_name", "ad_name",
   "impressions", "reach", "frequency", "clicks", "spend",
   "cpc", "cpm", "ctr",
-  "inline_link_clicks", "landing_page_views",
+  "inline_link_clicks",
   "outbound_clicks", "unique_outbound_clicks",
   "actions", "action_values", "cost_per_action_type",
   "purchase_roas",
@@ -319,9 +319,6 @@ export async function syncInsights(
     const initiateCheckout = parseActionValue(actions, "initiate_checkout", "offsite_conversion.fb_pixel_initiate_checkout");
     const linkClicks = parseInt(row.inline_link_clicks || "0") || 0;
     const landingPageViews = parseActionValue(actions, "landing_page_view");
-    if (row.landing_page_views) {
-      // direct field takes priority
-    }
 
     const costPerPurchase = parseActionDecimal(costPerAction, "purchase", "offsite_conversion.fb_pixel_purchase", "omni_purchase");
     const costPerCheckout = parseActionDecimal(costPerAction, "initiate_checkout", "offsite_conversion.fb_pixel_initiate_checkout");
@@ -375,7 +372,7 @@ export async function syncInsights(
       cpm: row.cpm || null,
       ctr: row.ctr || null,
       linkClicks,
-      landingPageViews: parseInt(row.landing_page_views || "0") || landingPageViews,
+      landingPageViews,
       outboundClicks,
       uniqueOutboundClicks,
       viewContent,
