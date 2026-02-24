@@ -428,16 +428,33 @@ export class ShopifyService {
       status: 'any',
     };
 
+    let shopifyOrders: ShopifyOrder[];
+
     if (isIncremental) {
       const lastSyncDate = new Date(store.lastSyncAt!);
       lastSyncDate.setHours(lastSyncDate.getHours() - 1);
       fetchParams.updated_at_min = lastSyncDate.toISOString();
+
+      const updatedOrders = await this.fetchAllOrders(shopDomain, plainToken, fetchParams);
+
+      const createdOrders = await this.fetchAllOrders(shopDomain, plainToken, {
+        status: 'any',
+        created_at_min: lastSyncDate.toISOString(),
+      });
+
+      const seenIds = new Set<number>();
+      shopifyOrders = [];
+      for (const o of [...updatedOrders, ...createdOrders]) {
+        if (!seenIds.has(o.id)) {
+          seenIds.add(o.id);
+          shopifyOrders.push(o);
+        }
+      }
     } else {
       fetchParams.created_at_min = MIN_ORDER_DATE;
       console.log(`[Shopify] Starting FULL sync for merchant ${merchantId} from ${MIN_ORDER_DATE}...`);
+      shopifyOrders = await this.fetchAllOrders(shopDomain, plainToken, fetchParams);
     }
-
-    const shopifyOrders = await this.fetchAllOrders(shopDomain, plainToken, fetchParams);
     
     if (shopifyOrders.length === 0 && isIncremental) {
       await storage.updateShopifyStore(store.id, { lastSyncAt: syncStartTime });
