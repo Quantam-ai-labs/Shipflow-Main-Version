@@ -58,6 +58,7 @@ const DATE_PRESETS = [
   { value: "last14", label: "Last 14 Days" },
   { value: "last30", label: "Last 30 Days" },
   { value: "mtd", label: "Month to Date" },
+  { value: "maximum", label: "Maximum" },
   { value: "custom", label: "Custom" },
 ];
 
@@ -159,6 +160,7 @@ function getDateRangeFromPreset(preset: string): { dateFrom: string; dateTo: str
       const mtd = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
       return { dateFrom: mtd, dateTo: today };
     }
+    case "maximum": return { dateFrom: "2020-01-01", dateTo: today };
     default: return { dateFrom: daysAgo(6), dateTo: today };
   }
 }
