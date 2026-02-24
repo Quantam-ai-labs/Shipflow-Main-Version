@@ -31,6 +31,11 @@ import {
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   RefreshCw,
   Download,
   Search,
@@ -43,6 +48,7 @@ import {
   ToggleRight,
   ChevronLeft,
   ChevronRight,
+  Calendar,
 } from "lucide-react";
 
 const DATE_PRESETS = [
@@ -52,6 +58,7 @@ const DATE_PRESETS = [
   { value: "last14", label: "Last 14 Days" },
   { value: "last30", label: "Last 30 Days" },
   { value: "mtd", label: "Month to Date" },
+  { value: "custom", label: "Custom" },
 ];
 
 const LEVELS = [
@@ -134,8 +141,41 @@ const PRESETS: Record<string, { label: string; columns: string[] }> = {
 
 const PAGE_SIZE = 25;
 
+function getDateRangeFromPreset(preset: string): { dateFrom: string; dateTo: string } {
+  const now = new Date();
+  const today = now.toISOString().split("T")[0];
+  const daysAgo = (n: number) => {
+    const d = new Date(now);
+    d.setDate(d.getDate() - n);
+    return d.toISOString().split("T")[0];
+  };
+  switch (preset) {
+    case "today": return { dateFrom: today, dateTo: today };
+    case "yesterday": return { dateFrom: daysAgo(1), dateTo: daysAgo(1) };
+    case "last7": return { dateFrom: daysAgo(6), dateTo: today };
+    case "last14": return { dateFrom: daysAgo(13), dateTo: today };
+    case "last30": return { dateFrom: daysAgo(29), dateTo: today };
+    case "mtd": {
+      const mtd = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
+      return { dateFrom: mtd, dateTo: today };
+    }
+    default: return { dateFrom: daysAgo(6), dateTo: today };
+  }
+}
+
+function formatDateLabel(dateFrom: string, dateTo: string): string {
+  const fmt = (d: string) => {
+    const date = new Date(d + "T00:00:00");
+    return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  };
+  if (dateFrom === dateTo) return fmt(dateFrom);
+  return `${fmt(dateFrom)} – ${fmt(dateTo)}`;
+}
+
 export default function AdsManager() {
-  const [preset, setPreset] = useState("last7");
+  const [datePreset, setDatePreset] = useState("last7");
+  const [customDateFrom, setCustomDateFrom] = useState("");
+  const [customDateTo, setCustomDateTo] = useState("");
   const [level, setLevel] = useState("campaign");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [searchQuery, setSearchQuery] = useState("");
@@ -147,6 +187,13 @@ export default function AdsManager() {
   const [currentPage, setCurrentPage] = useState(1);
   const { toast } = useToast();
 
+  const { dateFrom, dateTo } = useMemo(() => {
+    if (datePreset === "custom" && customDateFrom && customDateTo) {
+      return { dateFrom: customDateFrom, dateTo: customDateTo };
+    }
+    return getDateRangeFromPreset(datePreset);
+  }, [datePreset, customDateFrom, customDateTo]);
+
   useEffect(() => {
     if (PRESETS[columnPreset]) {
       setVisibleColumns(PRESETS[columnPreset].columns);
@@ -155,7 +202,7 @@ export default function AdsManager() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [level, statusFilter, searchQuery, preset]);
+  }, [level, statusFilter, searchQuery, datePreset, customDateFrom, customDateTo]);
 
   const statusParam = statusFilter === "ALL" ? "" : statusFilter;
 
@@ -168,9 +215,9 @@ export default function AdsManager() {
     dateTo: string;
     level: string;
   }>({
-    queryKey: ["/api/marketing/meta/insights", preset, level, statusParam, searchQuery],
+    queryKey: ["/api/marketing/meta/insights", dateFrom, dateTo, level, statusParam, searchQuery],
     queryFn: async () => {
-      const params = new URLSearchParams({ preset, level });
+      const params = new URLSearchParams({ level, dateFrom, dateTo });
       if (statusParam) params.set("status", statusParam);
       if (searchQuery) params.set("search", searchQuery);
       const res = await fetch(`/api/marketing/meta/insights?${params}`, { credentials: "include" });
@@ -184,32 +231,9 @@ export default function AdsManager() {
     queryKey: ["/api/marketing/meta/status"],
   });
 
-  const getDateRangeFromPreset = (p: string): { dateFrom: string; dateTo: string } => {
-    const now = new Date();
-    const today = now.toISOString().split("T")[0];
-    const daysAgo = (n: number) => {
-      const d = new Date(now);
-      d.setDate(d.getDate() - n);
-      return d.toISOString().split("T")[0];
-    };
-    switch (p) {
-      case "today": return { dateFrom: today, dateTo: today };
-      case "yesterday": return { dateFrom: daysAgo(1), dateTo: daysAgo(1) };
-      case "last7": return { dateFrom: daysAgo(6), dateTo: today };
-      case "last14": return { dateFrom: daysAgo(13), dateTo: today };
-      case "last30": return { dateFrom: daysAgo(29), dateTo: today };
-      case "mtd": {
-        const mtd = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
-        return { dateFrom: mtd, dateTo: today };
-      }
-      default: return { dateFrom: daysAgo(6), dateTo: today };
-    }
-  };
-
   const syncMutation = useMutation({
     mutationFn: async () => {
-      const { dateFrom, dateTo } = getDateRangeFromPreset(preset);
-      const res = await apiRequest("POST", "/api/marketing/meta/sync", { level, dateFrom, dateTo });
+      const res = await apiRequest("POST", "/api/marketing/meta/sync", { dateFrom, dateTo });
       return res.json();
     },
     onSuccess: (result) => {
@@ -287,7 +311,7 @@ export default function AdsManager() {
   };
 
   const handleExportCSV = () => {
-    const params = new URLSearchParams({ preset, level });
+    const params = new URLSearchParams({ dateFrom, dateTo, level });
     if (statusParam) params.set("status", statusParam);
     window.open(`/api/marketing/meta/insights/csv?${params}`, "_blank");
   };
@@ -325,6 +349,23 @@ export default function AdsManager() {
     ? new Date(metaStatus.lastSync.completedAt).toLocaleString("en-PK", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
     : null;
 
+  const handlePresetChange = (val: string) => {
+    if (val !== "custom") {
+      setDatePreset(val);
+      setCustomDateFrom("");
+      setCustomDateTo("");
+    } else {
+      const { dateFrom: df, dateTo: dt } = getDateRangeFromPreset("last7");
+      setCustomDateFrom(df);
+      setCustomDateTo(dt);
+      setDatePreset("custom");
+    }
+  };
+
+  const activeDateLabel = datePreset === "custom"
+    ? formatDateLabel(dateFrom, dateTo)
+    : DATE_PRESETS.find(p => p.value === datePreset)?.label || "Last 7 Days";
+
   return (
     <div className="p-4 md:p-6 space-y-4 max-w-[1600px] mx-auto" data-testid="ads-manager-page">
       <div className="flex flex-col gap-3">
@@ -332,9 +373,7 @@ export default function AdsManager() {
           <div>
             <h1 className="text-2xl font-bold" data-testid="text-page-title">Ads Manager</h1>
             <p className="text-sm text-muted-foreground">
-              {data?.dateFrom && data?.dateTo
-                ? `${data.dateFrom} to ${data.dateTo}`
-                : "Facebook Ads reporting"}
+              {formatDateLabel(dateFrom, dateTo)}
               {lastSyncTime && <span className="ml-2">· Last synced {lastSyncTime}</span>}
               {metaStatus?.account?.currency && (
                 <span className="ml-2">· {metaStatus.account.currency}</span>
@@ -370,16 +409,56 @@ export default function AdsManager() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Select value={preset} onValueChange={setPreset}>
-            <SelectTrigger className="w-[140px] h-8 text-xs" data-testid="select-date-preset">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {DATE_PRESETS.map(p => (
-                <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" data-testid="button-date-range">
+                <Calendar className="w-3.5 h-3.5" />
+                {activeDateLabel}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[280px] p-2" align="start">
+              <div className="space-y-1">
+                {DATE_PRESETS.filter(p => p.value !== "custom").map(p => (
+                  <button
+                    key={p.value}
+                    onClick={() => handlePresetChange(p.value)}
+                    className={`w-full text-left text-xs px-3 py-2 rounded-md transition-colors ${datePreset === p.value ? "bg-primary text-primary-foreground font-medium" : "hover:bg-muted"}`}
+                    data-testid={`date-preset-${p.value}`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+                <div className="border-t pt-2 mt-2">
+                  <div className="px-3 pb-1.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Custom Range</div>
+                  <div className="flex items-center gap-2 px-3">
+                    <input
+                      type="date"
+                      value={customDateFrom || dateFrom}
+                      onChange={(e) => {
+                        setCustomDateFrom(e.target.value);
+                        if (!customDateTo) setCustomDateTo(dateTo);
+                        setDatePreset("custom");
+                      }}
+                      className="flex-1 text-xs border rounded px-2 py-1.5 bg-background"
+                      data-testid="input-date-from"
+                    />
+                    <span className="text-xs text-muted-foreground">to</span>
+                    <input
+                      type="date"
+                      value={customDateTo || dateTo}
+                      onChange={(e) => {
+                        setCustomDateTo(e.target.value);
+                        if (!customDateFrom) setCustomDateFrom(dateFrom);
+                        setDatePreset("custom");
+                      }}
+                      className="flex-1 text-xs border rounded px-2 py-1.5 bg-background"
+                      data-testid="input-date-to"
+                    />
+                  </div>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
 
           <Select value={level} onValueChange={setLevel}>
             <SelectTrigger className="w-[120px] h-8 text-xs" data-testid="select-level">

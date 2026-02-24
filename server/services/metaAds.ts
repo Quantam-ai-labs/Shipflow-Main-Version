@@ -464,13 +464,8 @@ export async function fullSync(
 
     let totalInsights = 0;
     totalInsights += await syncInsights(merchantId, adAccountDbId, from, to, "campaign");
-
-    if (level === "adset" || level === "ad") {
-      totalInsights += await syncInsights(merchantId, adAccountDbId, from, to, "adset");
-    }
-    if (level === "ad") {
-      totalInsights += await syncInsights(merchantId, adAccountDbId, from, to, "ad");
-    }
+    totalInsights += await syncInsights(merchantId, adAccountDbId, from, to, "adset");
+    totalInsights += await syncInsights(merchantId, adAccountDbId, from, to, "ad");
 
     await db.update(metaSyncRuns).set({
       status: "completed",
@@ -501,7 +496,11 @@ export async function quickSyncToday(merchantId: string, level: "campaign" | "ad
     const weekAgo = new Date(now);
     weekAgo.setDate(weekAgo.getDate() - 6);
     const dateFrom = weekAgo.toISOString().split("T")[0];
-    return await syncInsights(merchantId, adAccountDbId, dateFrom, today, level);
+    let total = 0;
+    total += await syncInsights(merchantId, adAccountDbId, dateFrom, today, "campaign");
+    total += await syncInsights(merchantId, adAccountDbId, dateFrom, today, "adset");
+    total += await syncInsights(merchantId, adAccountDbId, dateFrom, today, "ad");
+    return total;
   } catch (err: any) {
     console.error(`[MetaAds] Quick sync failed:`, err.message);
     return 0;
@@ -767,41 +766,25 @@ async function completeSyncLog(logId: string, status: string, recordsProcessed: 
   }).where(eq(marketingSyncLogs.id, logId));
 }
 
-let campaignSyncIntervalId: ReturnType<typeof setInterval> | null = null;
-let adsetSyncIntervalId: ReturnType<typeof setInterval> | null = null;
+let syncIntervalId: ReturnType<typeof setInterval> | null = null;
 
 export function startMarketingSyncScheduler() {
-  if (campaignSyncIntervalId) return;
+  if (syncIntervalId) return;
 
-  console.log("[MetaAds] Starting tiered marketing sync scheduler");
+  console.log("[MetaAds] Starting marketing sync scheduler (all levels every 120s)");
 
-  campaignSyncIntervalId = setInterval(async () => {
+  syncIntervalId = setInterval(async () => {
     try {
       const accounts = await db.select().from(adAccounts);
       for (const account of accounts) {
         try {
-          await quickSyncToday(account.merchantId, "campaign");
+          await quickSyncToday(account.merchantId);
         } catch (err: any) {
-          console.error(`[MetaAds] Campaign quick sync failed for merchant ${account.merchantId}:`, err.message);
+          console.error(`[MetaAds] Quick sync failed for merchant ${account.merchantId}:`, err.message);
         }
       }
     } catch (err: any) {
-      console.error("[MetaAds] Campaign scheduler error:", err.message);
+      console.error("[MetaAds] Scheduler error:", err.message);
     }
-  }, 60 * 1000);
-
-  adsetSyncIntervalId = setInterval(async () => {
-    try {
-      const accounts = await db.select().from(adAccounts);
-      for (const account of accounts) {
-        try {
-          await quickSyncToday(account.merchantId, "adset");
-        } catch (err: any) {
-          console.error(`[MetaAds] Adset quick sync failed for merchant ${account.merchantId}:`, err.message);
-        }
-      }
-    } catch (err: any) {
-      console.error("[MetaAds] Adset scheduler error:", err.message);
-    }
-  }, 15 * 60 * 1000);
+  }, 120 * 1000);
 }
