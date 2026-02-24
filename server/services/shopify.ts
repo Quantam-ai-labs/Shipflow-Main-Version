@@ -599,7 +599,7 @@ export class ShopifyService {
         }
         if (initialWorkflowStatus === 'BOOKED') {
           if (!createData.shipmentStatus || createData.shipmentStatus === 'Unfulfilled' || createData.shipmentStatus === 'pending') {
-            createData.shipmentStatus = 'BOOKED';
+            createData.shipmentStatus = 'Awaiting Pickup';
           }
         }
         const created = await storage.createOrder(createData);

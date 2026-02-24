@@ -106,8 +106,15 @@ export async function transitionOrder(params: TransitionParams): Promise<Transit
     ...extraData,
   };
 
-  if (order.workflowStatus === "BOOKED" && toStatus === "FULFILLED") {
+  if (toStatus === "BOOKED") {
     const staleStatuses = ["Unfulfilled", "pending", null, undefined, ""];
+    if (staleStatuses.includes(order.shipmentStatus as any)) {
+      updateData.shipmentStatus = "Awaiting Pickup";
+    }
+  }
+
+  if (order.workflowStatus === "BOOKED" && toStatus === "FULFILLED") {
+    const staleStatuses = ["Unfulfilled", "pending", "Awaiting Pickup", null, undefined, ""];
     if (staleStatuses.includes(order.shipmentStatus as any)) {
       updateData.shipmentStatus = "IN_TRANSIT";
     }
