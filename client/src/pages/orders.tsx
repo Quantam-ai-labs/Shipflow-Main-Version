@@ -97,7 +97,12 @@ const courierOptions = [
   { value: "tcs", label: "TCS" },
 ];
 
-function getStatusBadge(status: string | null, hasCourierTracking: boolean, rawStatus?: string | null) {
+function getStatusBadge(status: string | null, hasCourierTracking: boolean, rawStatus?: string | null, workflowStatus?: string | null) {
+  const postBookedStages = ['BOOKED', 'FULFILLED', 'DELIVERED', 'RETURN'];
+  const isPostBooked = workflowStatus && postBookedStages.includes(workflowStatus);
+  if (!hasCourierTracking && isPostBooked && (!status || status === 'Unfulfilled' || status === 'pending' || status === 'BOOKED' || status === 'Awaiting Pickup')) {
+    return <span className="text-muted-foreground text-xs" data-testid="badge-status-none">—</span>;
+  }
   const displayStatus = (!hasCourierTracking && (!status || status === 'pending')) ? 'Unfulfilled' : (status || 'Unfulfilled');
   const colorClass = getStatusColor(displayStatus);
   const label = rawStatus || getStatusLabel(displayStatus);
@@ -289,7 +294,7 @@ export default function Orders() {
 
   const handleExport = () => {
     const csv = orders.map((o) => 
-      `"${o.orderNumber}","${o.customerName}","${o.customerPhone || ""}","${o.city || ""}","${(o.shippingAddress || "").replace(/"/g, '""')}","${o.totalQuantity || 1}","${o.totalAmount}","${(o.tags || []).join(";")}","${o.courierTracking ? getStatusLabel(o.shipmentStatus || "BOOKED") : "Unfulfilled"}","${(o.remark || "").replace(/"/g, '""')}"`
+      `"${o.orderNumber}","${o.customerName}","${o.customerPhone || ""}","${o.city || ""}","${(o.shippingAddress || "").replace(/"/g, '""')}","${o.totalQuantity || 1}","${o.totalAmount}","${(o.tags || []).join(";")}","${o.courierTracking ? getStatusLabel(o.shipmentStatus || "BOOKED") : (['BOOKED','FULFILLED','DELIVERED','RETURN'].includes(o.workflowStatus) ? "—" : "Unfulfilled")}","${(o.remark || "").replace(/"/g, '""')}"`
     ).join("\n");
     const header = "Order ID,Customer Name,Phone,City,Address,Qty,Amount,Tags,Status,Remark\n";
     const blob = new Blob([header + csv], { type: "text/csv" });
@@ -575,7 +580,7 @@ export default function Orders() {
                     data-testid={`table-row-order-${order.id}`}
                   >
                     <td className="p-2 pl-4">
-                      {getStatusBadge(order.shipmentStatus, !!order.courierTracking, (order as any).courierRawStatus)}
+                      {getStatusBadge(order.shipmentStatus, !!order.courierTracking, (order as any).courierRawStatus, order.workflowStatus)}
                     </td>
                     <td className="p-2">
                       <Link 
