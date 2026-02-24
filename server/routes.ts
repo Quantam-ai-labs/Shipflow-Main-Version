@@ -4500,7 +4500,7 @@ export async function registerRoutes(
         merchantCreds,
       );
 
-      const requestedScopes = (process.env.SHOPIFY_APP_SCOPES || 'read_orders,write_orders,read_fulfillments,write_fulfillments,write_webhooks,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders').split(',').map(s => s.trim());
+      const requestedScopes = (process.env.SHOPIFY_APP_SCOPES || 'read_orders,write_orders,read_fulfillments,write_fulfillments,read_inventory,write_webhooks,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders').split(',').map(s => s.trim());
       const grantedScopes = scope ? scope.split(',').map((s: string) => s.trim()) : [];
       const isScopeSatisfied = (required: string, granted: string[]): boolean => {
         if (granted.includes(required)) return true;
@@ -4732,7 +4732,7 @@ export async function registerRoutes(
         return res.json({ connected: false, grantedScopes: [], missingScopes: [], requiredScopes: [] });
       }
 
-      const requiredScopes = (process.env.SHOPIFY_APP_SCOPES || 'read_orders,write_orders,read_fulfillments,write_fulfillments,write_webhooks,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders').split(',').map(s => s.trim());
+      const requiredScopes = (process.env.SHOPIFY_APP_SCOPES || 'read_orders,write_orders,read_fulfillments,write_fulfillments,read_inventory,write_webhooks,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders').split(',').map(s => s.trim());
       const grantedScopes = store.scopes ? store.scopes.split(',').map(s => s.trim()) : [];
 
       const isScopeSatisfied = (required: string, granted: string[]): boolean => {
@@ -9135,7 +9135,10 @@ export async function registerRoutes(
         }
       }
 
+      console.log(`[Products Sync] Collected ${allInventoryItemIds.length} inventory item IDs for cost lookup`);
       const costMap = await shopifyService.fetchInventoryItemCosts(store.shopDomain, accessToken, allInventoryItemIds);
+      const costsFound = Array.from(costMap.values()).filter(v => v !== null).length;
+      console.log(`[Products Sync] Cost data: ${costMap.size} items queried, ${costsFound} with cost values`);
 
       let synced = 0;
       for (const sp of shopifyProducts) {
