@@ -154,21 +154,40 @@ export default function ShopifySettings() {
 
   const courierSyncMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("POST", "/api/couriers/sync-statuses", {});
+      const res = await apiRequest("POST", "/api/couriers/sync-statuses", {});
+      const startResult = await res.json();
+      if (!startResult.success) throw new Error(startResult.message || "Failed to start sync");
+
+      const maxWait = 120000;
+      const pollInterval = 2000;
+      const start = Date.now();
+      while (Date.now() - start < maxWait) {
+        await new Promise(r => setTimeout(r, pollInterval));
+        const progressRes = await fetch("/api/couriers/manual-sync-progress", { credentials: "include" });
+        if (!progressRes.ok) continue;
+        const progress = await progressRes.json();
+        if (progress.status === "done" && progress.result) {
+          return progress.result;
+        }
+        if (progress.status === "error") {
+          throw new Error(progress.error || "Courier sync failed");
+        }
+      }
+      throw new Error("Sync is taking longer than expected. It will continue in the background.");
     },
-    onSuccess: async (res) => {
-      const result = await res.json();
+    onSuccess: (result: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/couriers/sync-status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       toast({
         title: "Courier Sync Complete",
-        description: `${result.updated} updated, ${result.failed} failed, ${result.skipped} skipped out of ${result.total} shipments`,
+        description: `${result.updated ?? 0} updated, ${result.failed ?? 0} failed, ${result.skipped ?? 0} skipped out of ${result.total ?? 0} shipments`,
       });
     },
-    onError: () => {
+    onError: (err: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/couriers/sync-status"] });
       toast({
         title: "Courier Sync Failed",
-        description: "Could not sync courier statuses. Please try again.",
+        description: err.message || "Could not sync courier statuses. Please try again.",
         variant: "destructive",
       });
     },
