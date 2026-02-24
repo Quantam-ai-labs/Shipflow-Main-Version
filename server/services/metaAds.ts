@@ -771,15 +771,53 @@ let syncIntervalId: ReturnType<typeof setInterval> | null = null;
 export function startMarketingSyncScheduler() {
   if (syncIntervalId) return;
 
-  console.log("[MetaAds] Starting marketing sync scheduler (37-day backfill on start, 7-day sync every 120s)");
+  console.log("[MetaAds] Starting marketing sync scheduler (full historical backfill on start, 7-day sync every 120s)");
 
   (async () => {
     try {
       const accounts = await db.select().from(adAccounts);
       for (const account of accounts) {
         try {
-          await quickSyncToday(account.merchantId, "campaign", 37);
-          console.log(`[MetaAds] Initial 37-day backfill completed for merchant ${account.merchantId}`);
+          const existing = await db.select({ earliest: sql<string>`MIN(${adInsights.date})` })
+            .from(adInsights)
+            .where(eq(adInsights.merchantId, account.merchantId));
+          const earliestDate = existing[0]?.earliest;
+          const maxBack = new Date();
+          maxBack.setMonth(maxBack.getMonth() - 36);
+          const backfillFrom = maxBack.toISOString().split("T")[0];
+
+          if (!earliestDate || earliestDate > backfillFrom) {
+            const { dbId } = await syncAdAccount(account.merchantId);
+            const now = new Date();
+            const today = now.toISOString().split("T")[0];
+            const chunkDays = 90;
+
+            const backfillEnd = earliestDate 
+              ? new Date(new Date(earliestDate).getTime() - 86400000).toISOString().split("T")[0]
+              : today;
+            console.log(`[MetaAds] Backfill gap: ${backfillFrom} to ${backfillEnd} for merchant ${account.merchantId}`);
+
+            let chunkStart = new Date(backfillFrom);
+            const endDate = new Date(backfillEnd);
+            while (chunkStart <= endDate) {
+              const chunkEnd = new Date(chunkStart);
+              chunkEnd.setDate(chunkEnd.getDate() + chunkDays - 1);
+              if (chunkEnd > endDate) chunkEnd.setTime(endDate.getTime());
+              const from = chunkStart.toISOString().split("T")[0];
+              const to = chunkEnd.toISOString().split("T")[0];
+              console.log(`[MetaAds] Backfill chunk: ${from} to ${to}`);
+              await syncInsights(account.merchantId, dbId, from, to, "campaign");
+              await syncInsights(account.merchantId, dbId, from, to, "adset");
+              await syncInsights(account.merchantId, dbId, from, to, "ad");
+              chunkStart = new Date(chunkEnd);
+              chunkStart.setDate(chunkStart.getDate() + 1);
+            }
+            await quickSyncToday(account.merchantId, "campaign", 37);
+            console.log(`[MetaAds] Backfill completed for merchant ${account.merchantId}`);
+          } else {
+            await quickSyncToday(account.merchantId, "campaign", 37);
+            console.log(`[MetaAds] 37-day refresh completed for merchant ${account.merchantId}`);
+          }
         } catch (err: any) {
           console.error(`[MetaAds] Initial backfill failed for merchant ${account.merchantId}:`, err.message);
         }

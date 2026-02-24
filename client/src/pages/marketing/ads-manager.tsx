@@ -160,7 +160,11 @@ function getDateRangeFromPreset(preset: string): { dateFrom: string; dateTo: str
       const mtd = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
       return { dateFrom: mtd, dateTo: today };
     }
-    case "maximum": return { dateFrom: "2020-01-01", dateTo: today };
+    case "maximum": {
+      const maxBack = new Date(now);
+      maxBack.setMonth(maxBack.getMonth() - 36);
+      return { dateFrom: maxBack.toISOString().split("T")[0], dateTo: today };
+    }
     default: return { dateFrom: daysAgo(6), dateTo: today };
   }
 }
