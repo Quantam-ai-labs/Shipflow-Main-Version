@@ -111,7 +111,7 @@ export class ShopifyService {
     const clientSecret = process.env.SHOPIFY_APP_CLIENT_SECRET || '';
     const appUrl = (process.env.SHOPIFY_APP_URL || '').replace(/\/$/, '');
     const redirectUrl = process.env.SHOPIFY_APP_REDIRECT_URL || '';
-    const scopes = process.env.SHOPIFY_APP_SCOPES || 'read_all_orders,read_analytics,read_customers,write_customers,write_draft_orders,read_draft_orders,read_fulfillments,write_fulfillments,read_orders,write_orders,read_products,write_products,write_webhooks,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders';
+    const scopes = process.env.SHOPIFY_APP_SCOPES || 'read_all_orders,read_analytics,read_customers,write_customers,write_draft_orders,read_draft_orders,read_fulfillments,write_fulfillments,read_orders,write_orders,read_products,write_products,read_inventory,write_webhooks,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders';
 
     const missing: string[] = [];
     if (!clientId) missing.push('SHOPIFY_APP_CLIENT_ID');
@@ -967,6 +967,52 @@ export class ShopifyService {
 
     console.log(`[Shopify Products] Fetched ${allProducts.length} products total.`);
     return allProducts;
+  }
+
+  async fetchInventoryItemCosts(shop: string, accessToken: string, inventoryItemIds: string[]): Promise<Map<string, string | null>> {
+    const costMap = new Map<string, string | null>();
+    if (inventoryItemIds.length === 0) return costMap;
+
+    const headers = this.getAuthHeaders(accessToken);
+    const batchSize = 100;
+
+    for (let i = 0; i < inventoryItemIds.length; i += batchSize) {
+      const batch = inventoryItemIds.slice(i, i + batchSize);
+      const idsParam = batch.join(",");
+      const url = `https://${shop}/admin/api/2025-01/inventory_items.json?ids=${idsParam}`;
+
+      try {
+        const response = await fetch(url, { headers });
+
+        if (response.status === 429) {
+          const retryAfter = response.headers.get('Retry-After');
+          const delay = retryAfter ? parseInt(retryAfter) * 1000 : 2000;
+          console.log(`[Shopify Products] Rate limited on inventory items, waiting ${delay}ms...`);
+          await this.sleep(delay);
+          i -= batchSize;
+          continue;
+        }
+
+        if (!response.ok) {
+          console.error(`[Shopify Products] Failed to fetch inventory items batch: ${response.status}`);
+          continue;
+        }
+
+        const data = await response.json();
+        if (data.inventory_items && Array.isArray(data.inventory_items)) {
+          for (const item of data.inventory_items) {
+            costMap.set(String(item.id), item.cost ?? null);
+          }
+        }
+
+        await this.sleep(300);
+      } catch (error: any) {
+        console.error(`[Shopify Products] Error fetching inventory items batch:`, error.message);
+      }
+    }
+
+    console.log(`[Shopify Products] Fetched costs for ${costMap.size} inventory items.`);
+    return costMap;
   }
 }
 

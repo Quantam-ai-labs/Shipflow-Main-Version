@@ -9126,23 +9126,38 @@ export async function registerRoutes(
       const accessToken = decryptToken(store.accessToken);
       const shopifyProducts = await shopifyService.fetchAllProducts(store.shopDomain, accessToken);
 
+      const allInventoryItemIds: string[] = [];
+      for (const sp of shopifyProducts) {
+        for (const v of (sp.variants || [])) {
+          if (v.inventory_item_id) {
+            allInventoryItemIds.push(String(v.inventory_item_id));
+          }
+        }
+      }
+
+      const costMap = await shopifyService.fetchInventoryItemCosts(store.shopDomain, accessToken, allInventoryItemIds);
+
       let synced = 0;
       for (const sp of shopifyProducts) {
         const totalInventory = (sp.variants || []).reduce((sum: number, v: any) => sum + (v.inventory_quantity || 0), 0);
-        const variantsData = (sp.variants || []).map((v: any) => ({
-          id: String(v.id),
-          title: v.title,
-          sku: v.sku,
-          price: v.price,
-          compareAtPrice: v.compare_at_price,
-          inventoryQuantity: v.inventory_quantity || 0,
-          inventoryItemId: v.inventory_item_id ? String(v.inventory_item_id) : null,
-          weight: v.weight,
-          weightUnit: v.weight_unit,
-          option1: v.option1,
-          option2: v.option2,
-          option3: v.option3,
-        }));
+        const variantsData = (sp.variants || []).map((v: any) => {
+          const invItemId = v.inventory_item_id ? String(v.inventory_item_id) : null;
+          return {
+            id: String(v.id),
+            title: v.title,
+            sku: v.sku,
+            price: v.price,
+            compareAtPrice: v.compare_at_price,
+            cost: invItemId ? (costMap.get(invItemId) ?? null) : null,
+            inventoryQuantity: v.inventory_quantity || 0,
+            inventoryItemId: invItemId,
+            weight: v.weight,
+            weightUnit: v.weight_unit,
+            option1: v.option1,
+            option2: v.option2,
+            option3: v.option3,
+          };
+        });
         const imagesData = (sp.images || []).map((img: any) => ({
           id: String(img.id),
           src: img.src,

@@ -144,6 +144,7 @@ interface ProductVariant {
   sku: string | null;
   price: string;
   compareAtPrice: string | null;
+  cost: string | null;
   inventoryQuantity: number;
   inventoryItemId: string | null;
   weight: number | null;
@@ -232,9 +233,9 @@ export default function ShopifyProductsPage() {
   };
 
   const getCostRange = (variants: ProductVariant[]) => {
-    if (variants.length === 0) return "N/A";
-    const costs = variants.map(v => v.compareAtPrice ? parseFloat(v.compareAtPrice) : NaN).filter(p => !isNaN(p));
-    if (costs.length === 0) return "N/A";
+    if (variants.length === 0) return "";
+    const costs = variants.map(v => v.cost ? parseFloat(v.cost) : NaN).filter(p => !isNaN(p));
+    if (costs.length === 0) return "";
     const min = Math.min(...costs);
     const max = Math.max(...costs);
     if (min === max) return `PKR ${min.toLocaleString()}`;
@@ -489,7 +490,7 @@ export default function ShopifyProductsPage() {
                           <TableCell className="font-medium">{variant.title || "Default"}</TableCell>
                           <TableCell className="text-sm text-muted-foreground">{variant.sku || "-"}</TableCell>
                           <TableCell className="text-sm" data-testid={`text-variant-cost-${variant.id}`}>
-                            {variant.compareAtPrice ? `PKR ${parseFloat(variant.compareAtPrice).toLocaleString()}` : "-"}
+                            {variant.cost ? `PKR ${parseFloat(variant.cost).toLocaleString()}` : ""}
                           </TableCell>
                           <TableCell className="text-sm" data-testid={`text-variant-sale-price-${variant.id}`}>PKR {parseFloat(variant.price).toLocaleString()}</TableCell>
                           <TableCell>{getInventoryBadge(variant.inventoryQuantity)}</TableCell>
