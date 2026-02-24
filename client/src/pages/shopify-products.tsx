@@ -231,6 +231,16 @@ export default function ShopifyProductsPage() {
     return `PKR ${min.toLocaleString()} - ${max.toLocaleString()}`;
   };
 
+  const getCostRange = (variants: ProductVariant[]) => {
+    if (variants.length === 0) return "N/A";
+    const costs = variants.map(v => v.compareAtPrice ? parseFloat(v.compareAtPrice) : NaN).filter(p => !isNaN(p));
+    if (costs.length === 0) return "N/A";
+    const min = Math.min(...costs);
+    const max = Math.max(...costs);
+    if (min === max) return `PKR ${min.toLocaleString()}`;
+    return `PKR ${min.toLocaleString()} - ${max.toLocaleString()}`;
+  };
+
   return (
     <div className="p-4 md:p-6 space-y-4 max-w-[1400px] mx-auto">
       <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -314,7 +324,8 @@ export default function ShopifyProductsPage() {
                   <TableHead>Product</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Inventory</TableHead>
-                  <TableHead>Price</TableHead>
+                  <TableHead>Cost</TableHead>
+                  <TableHead>Sale Price</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Vendor</TableHead>
                 </TableRow>
@@ -353,7 +364,8 @@ export default function ShopifyProductsPage() {
                       </TableCell>
                       <TableCell>{getStatusBadge(product.status)}</TableCell>
                       <TableCell>{getInventoryBadge(product.totalInventory || 0)}</TableCell>
-                      <TableCell className="text-sm">{getPriceRange(variants)}</TableCell>
+                      <TableCell className="text-sm" data-testid={`text-cost-${product.id}`}>{getCostRange(variants)}</TableCell>
+                      <TableCell className="text-sm" data-testid={`text-sale-price-${product.id}`}>{getPriceRange(variants)}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{product.productType || "-"}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{product.vendor || "-"}</TableCell>
                     </TableRow>
@@ -466,7 +478,8 @@ export default function ShopifyProductsPage() {
                       <TableRow>
                         <TableHead>Variant</TableHead>
                         <TableHead>SKU</TableHead>
-                        <TableHead>Price</TableHead>
+                        <TableHead>Cost</TableHead>
+                        <TableHead>Sale Price</TableHead>
                         <TableHead>Stock</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -475,7 +488,10 @@ export default function ShopifyProductsPage() {
                         <TableRow key={variant.id} data-testid={`row-variant-${variant.id}`}>
                           <TableCell className="font-medium">{variant.title || "Default"}</TableCell>
                           <TableCell className="text-sm text-muted-foreground">{variant.sku || "-"}</TableCell>
-                          <TableCell className="text-sm">PKR {parseFloat(variant.price).toLocaleString()}</TableCell>
+                          <TableCell className="text-sm" data-testid={`text-variant-cost-${variant.id}`}>
+                            {variant.compareAtPrice ? `PKR ${parseFloat(variant.compareAtPrice).toLocaleString()}` : "-"}
+                          </TableCell>
+                          <TableCell className="text-sm" data-testid={`text-variant-sale-price-${variant.id}`}>PKR {parseFloat(variant.price).toLocaleString()}</TableCell>
                           <TableCell>{getInventoryBadge(variant.inventoryQuantity)}</TableCell>
                         </TableRow>
                       ))}
