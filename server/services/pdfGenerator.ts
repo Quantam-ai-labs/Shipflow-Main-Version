@@ -415,8 +415,8 @@ async function drawSingleAirwayBill(
   const orderBarcode = await generateBarcodePng(
     data.orderNumber,
     "code128",
-    10,
-    2,
+    15,
+    4,
     false,
   );
   if (orderBarcode) {
@@ -432,7 +432,7 @@ async function drawSingleAirwayBill(
   }
 
   // QR Code for Order (Alignment right)
-  const qrCodeImg = await generateBarcodePng(data.orderNumber, "qrcode", 20, 2);
+  const qrCodeImg = await generateBarcodePng(data.orderNumber, "qrcode", 30, 6);
   if (qrCodeImg) {
     try {
       const img = await pdfDoc.embedPng(qrCodeImg);
@@ -510,8 +510,8 @@ async function drawSingleAirwayBill(
   const amountBarcode = await generateBarcodePng(
     String(Math.round(data.codAmount)),
     "code128",
-    10,
-    2,
+    15,
+    4,
   );
   if (amountBarcode) {
     try {
@@ -569,8 +569,8 @@ async function drawSingleAirwayBill(
   const trackQr = await generateBarcodePng(
     data.trackingNumber,
     "qrcode",
-    20,
-    2,
+    30,
+    6,
   );
   if (trackQr) {
     try {
@@ -596,8 +596,8 @@ async function drawSingleAirwayBill(
   const trackBarcode = await generateBarcodePng(
     data.trackingNumber,
     "code128",
-    16,
-    2,
+    20,
+    4,
   );
   if (trackBarcode) {
     try {
