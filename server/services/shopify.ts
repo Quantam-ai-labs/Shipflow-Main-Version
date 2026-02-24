@@ -535,12 +535,15 @@ export class ShopifyService {
           shopifyUpdatedAt: new Date(shopifyOrder.updated_at),
         };
         
-        const postBookedStages = ['BOOKED', 'FULFILLED', 'DELIVERED', 'RETURN', 'CANCELLED'];
-        const isPostBooked = existingOrder && postBookedStages.includes(existingOrder.workflowStatus);
-        if (!hasCourierStatus && !isPostBooked) {
+        if (!hasCourierStatus && !isInManagedWorkflow) {
           updateData.shipmentStatus = transformedOrder.shipmentStatus;
           updateData.courierName = transformedOrder.courierName;
           updateData.courierTracking = transformedOrder.courierTracking;
+        }
+
+        if (!hasCourierStatus && transformedOrder.courierTracking) {
+          updateData.courierTracking = transformedOrder.courierTracking;
+          updateData.courierName = transformedOrder.courierName;
         }
 
         await storage.updateOrder(merchantId, existingOrderId, updateData);
@@ -786,6 +789,25 @@ export class ShopifyService {
           courierName = attr.value;
         } else if (attr.name === 'hxs_courier_tracking') {
           courierTracking = attr.value;
+        }
+      }
+    }
+
+    if (!courierTracking && shopifyOrder.fulfillments && Array.isArray(shopifyOrder.fulfillments)) {
+      for (const fulfillment of shopifyOrder.fulfillments) {
+        if (fulfillment.tracking_number && fulfillment.status === 'success') {
+          courierTracking = fulfillment.tracking_number;
+          const company = (fulfillment.tracking_company || '').toLowerCase();
+          if (company.includes('leopard')) {
+            courierName = 'Leopards';
+          } else if (company.includes('postex') || company.includes('post ex')) {
+            courierName = 'PostEx';
+          } else if (company.includes('tcs')) {
+            courierName = 'TCS';
+          } else if (fulfillment.tracking_company) {
+            courierName = fulfillment.tracking_company;
+          }
+          break;
         }
       }
     }
