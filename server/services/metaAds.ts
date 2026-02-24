@@ -496,10 +496,14 @@ export async function fullSync(
 export async function quickSyncToday(merchantId: string, level: "campaign" | "adset" | "ad" = "campaign"): Promise<number> {
   try {
     const { dbId: adAccountDbId } = await syncAdAccount(merchantId);
-    const today = new Date().toISOString().split("T")[0];
-    return await syncInsights(merchantId, adAccountDbId, today, today, level);
+    const now = new Date();
+    const today = now.toISOString().split("T")[0];
+    const weekAgo = new Date(now);
+    weekAgo.setDate(weekAgo.getDate() - 6);
+    const dateFrom = weekAgo.toISOString().split("T")[0];
+    return await syncInsights(merchantId, adAccountDbId, dateFrom, today, level);
   } catch (err: any) {
-    console.error(`[MetaAds] Quick sync today failed:`, err.message);
+    console.error(`[MetaAds] Quick sync failed:`, err.message);
     return 0;
   }
 }
@@ -554,7 +558,9 @@ export async function getInsightsForTable(
   if (level === "campaign") {
     const conditions: any[] = [eq(adCampaigns.merchantId, merchantId)];
     if (statusFilter && statusFilter.length > 0 && !statusFilter.includes("ALL")) {
-      conditions.push(inArray(adCampaigns.effectiveStatus, statusFilter));
+      conditions.push(
+        sql`COALESCE(${adCampaigns.effectiveStatus}, ${adCampaigns.status}) IN (${sql.join(statusFilter.map(s => sql`${s}`), sql`, `)})`
+      );
     }
     if (search) {
       conditions.push(like(adCampaigns.name, `%${search}%`));
@@ -563,7 +569,9 @@ export async function getInsightsForTable(
   } else if (level === "adset") {
     const conditions: any[] = [eq(adSets.merchantId, merchantId)];
     if (statusFilter && statusFilter.length > 0 && !statusFilter.includes("ALL")) {
-      conditions.push(inArray(adSets.effectiveStatus, statusFilter));
+      conditions.push(
+        sql`COALESCE(${adSets.effectiveStatus}, ${adSets.status}) IN (${sql.join(statusFilter.map(s => sql`${s}`), sql`, `)})`
+      );
     }
     if (search) {
       conditions.push(like(adSets.name, `%${search}%`));
@@ -572,7 +580,9 @@ export async function getInsightsForTable(
   } else {
     const conditions: any[] = [eq(adCreatives.merchantId, merchantId)];
     if (statusFilter && statusFilter.length > 0 && !statusFilter.includes("ALL")) {
-      conditions.push(inArray(adCreatives.effectiveStatus, statusFilter));
+      conditions.push(
+        sql`COALESCE(${adCreatives.effectiveStatus}, ${adCreatives.status}) IN (${sql.join(statusFilter.map(s => sql`${s}`), sql`, `)})`
+      );
     }
     if (search) {
       conditions.push(like(adCreatives.name, `%${search}%`));
@@ -591,12 +601,12 @@ export async function getInsightsForTable(
   const rows = entities.map(entity => {
     const id = getEntityId(entity);
     const ins = insightMap.get(id);
-    const spend = ins ? parseFloat(ins.totalSpend) : 0;
-    const purchaseValue = ins ? parseFloat(ins.totalPurchaseValue) : 0;
-    const purchases = ins?.totalPurchases || 0;
-    const impressions = ins?.totalImpressions || 0;
-    const linkClicks = ins?.totalLinkClicks || 0;
-    const clicks = ins?.totalClicks || 0;
+    const spend = ins ? parseFloat(String(ins.totalSpend)) || 0 : 0;
+    const purchaseValue = ins ? parseFloat(String(ins.totalPurchaseValue)) || 0 : 0;
+    const purchases = ins ? Number(ins.totalPurchases) || 0 : 0;
+    const impressions = ins ? Number(ins.totalImpressions) || 0 : 0;
+    const linkClicks = ins ? Number(ins.totalLinkClicks) || 0 : 0;
+    const clicks = ins ? Number(ins.totalClicks) || 0 : 0;
 
     return {
       entityId: id,
@@ -612,15 +622,15 @@ export async function getInsightsForTable(
       adsetId: level === "ad" ? entity.adsetId : undefined,
       spend,
       impressions,
-      reach: ins?.totalReach || 0,
-      frequency: ins ? parseFloat(ins.avgFrequency) : 0,
+      reach: ins ? Number(ins.totalReach) || 0 : 0,
+      frequency: ins ? parseFloat(String(ins.avgFrequency)) || 0 : 0,
       clicks,
       linkClicks,
-      landingPageViews: ins?.totalLandingPageViews || 0,
-      outboundClicks: ins?.totalOutboundClicks || 0,
-      viewContent: ins?.totalViewContent || 0,
-      addToCart: ins?.totalAddToCart || 0,
-      initiateCheckout: ins?.totalInitiateCheckout || 0,
+      landingPageViews: ins ? Number(ins.totalLandingPageViews) || 0 : 0,
+      outboundClicks: ins ? Number(ins.totalOutboundClicks) || 0 : 0,
+      viewContent: ins ? Number(ins.totalViewContent) || 0 : 0,
+      addToCart: ins ? Number(ins.totalAddToCart) || 0 : 0,
+      initiateCheckout: ins ? Number(ins.totalInitiateCheckout) || 0 : 0,
       purchases,
       purchaseValue,
       roas: spend > 0 ? purchaseValue / spend : 0,
@@ -628,13 +638,13 @@ export async function getInsightsForTable(
       cpm: impressions > 0 ? (spend / impressions) * 1000 : 0,
       ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
       costPerPurchase: purchases > 0 ? spend / purchases : 0,
-      costPerCheckout: (ins?.totalInitiateCheckout || 0) > 0 ? spend / ins!.totalInitiateCheckout : 0,
-      costPerAddToCart: (ins?.totalAddToCart || 0) > 0 ? spend / ins!.totalAddToCart : 0,
-      costPerViewContent: (ins?.totalViewContent || 0) > 0 ? spend / ins!.totalViewContent : 0,
-      videoViews: ins?.totalVideoViews || 0,
-      videoThruPlays: ins?.totalVideoThruPlays || 0,
-      video3sViews: ins?.totalVideo3sViews || 0,
-      video95pViews: ins?.totalVideo95pViews || 0,
+      costPerCheckout: (ins ? Number(ins.totalInitiateCheckout) || 0 : 0) > 0 ? spend / Number(ins!.totalInitiateCheckout) : 0,
+      costPerAddToCart: (ins ? Number(ins.totalAddToCart) || 0 : 0) > 0 ? spend / Number(ins!.totalAddToCart) : 0,
+      costPerViewContent: (ins ? Number(ins.totalViewContent) || 0 : 0) > 0 ? spend / Number(ins!.totalViewContent) : 0,
+      videoViews: ins ? Number(ins.totalVideoViews) || 0 : 0,
+      videoThruPlays: ins ? Number(ins.totalVideoThruPlays) || 0 : 0,
+      video3sViews: ins ? Number(ins.totalVideo3sViews) || 0 : 0,
+      video95pViews: ins ? Number(ins.totalVideo95pViews) || 0 : 0,
     };
   });
 

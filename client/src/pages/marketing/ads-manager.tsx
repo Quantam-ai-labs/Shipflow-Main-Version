@@ -184,9 +184,32 @@ export default function AdsManager() {
     queryKey: ["/api/marketing/meta/status"],
   });
 
+  const getDateRangeFromPreset = (p: string): { dateFrom: string; dateTo: string } => {
+    const now = new Date();
+    const today = now.toISOString().split("T")[0];
+    const daysAgo = (n: number) => {
+      const d = new Date(now);
+      d.setDate(d.getDate() - n);
+      return d.toISOString().split("T")[0];
+    };
+    switch (p) {
+      case "today": return { dateFrom: today, dateTo: today };
+      case "yesterday": return { dateFrom: daysAgo(1), dateTo: daysAgo(1) };
+      case "last7": return { dateFrom: daysAgo(6), dateTo: today };
+      case "last14": return { dateFrom: daysAgo(13), dateTo: today };
+      case "last30": return { dateFrom: daysAgo(29), dateTo: today };
+      case "mtd": {
+        const mtd = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
+        return { dateFrom: mtd, dateTo: today };
+      }
+      default: return { dateFrom: daysAgo(6), dateTo: today };
+    }
+  };
+
   const syncMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/marketing/meta/sync", { level });
+      const { dateFrom, dateTo } = getDateRangeFromPreset(preset);
+      const res = await apiRequest("POST", "/api/marketing/meta/sync", { level, dateFrom, dateTo });
       return res.json();
     },
     onSuccess: (result) => {
