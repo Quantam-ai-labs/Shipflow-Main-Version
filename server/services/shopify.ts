@@ -535,7 +535,9 @@ export class ShopifyService {
           shopifyUpdatedAt: new Date(shopifyOrder.updated_at),
         };
         
-        if (!hasCourierStatus) {
+        const postBookedStages = ['BOOKED', 'FULFILLED', 'DELIVERED', 'RETURN', 'CANCELLED'];
+        const isPostBooked = existingOrder && postBookedStages.includes(existingOrder.workflowStatus);
+        if (!hasCourierStatus && !isPostBooked) {
           updateData.shipmentStatus = transformedOrder.shipmentStatus;
           updateData.courierName = transformedOrder.courierName;
           updateData.courierTracking = transformedOrder.courierTracking;
