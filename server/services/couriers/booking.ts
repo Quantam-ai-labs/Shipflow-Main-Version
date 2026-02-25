@@ -340,25 +340,32 @@ export async function bookLeopardsPacket(
   }
 }
 
+async function runWithConcurrency<T>(
+  items: T[],
+  fn: (item: T) => Promise<any>,
+  concurrency: number
+): Promise<any[]> {
+  const results: any[] = new Array(items.length);
+  for (let i = 0; i < items.length; i += concurrency) {
+    const batch = items.slice(i, i + concurrency);
+    const batchResults = await Promise.all(batch.map(fn));
+    for (let j = 0; j < batchResults.length; j++) {
+      results[i + j] = batchResults[j];
+    }
+  }
+  return results;
+}
+
 export async function bookLeopardsBatch(
   packets: BookingPacket[],
   credentials: { apiKey: string; apiPassword: string },
   shipperInfo: { name: string; phone: string; address: string; city: string; shipperId?: string }
 ): Promise<BookingResult[]> {
-  const results: BookingResult[] = [];
   const cities = await loadLeopardsCities(credentials.apiKey, credentials.apiPassword);
 
-  console.log(`[Leopards] Booking ${packets.length} packets sequentially...`);
+  console.log(`[Leopards] Booking ${packets.length} packets with concurrency 3...`);
 
-  for (let i = 0; i < packets.length; i++) {
-    const result = await bookLeopardsPacket(packets[i], credentials, shipperInfo, cities);
-    results.push(result);
-    if (i < packets.length - 1) {
-      await new Promise((r) => setTimeout(r, 300));
-    }
-  }
-
-  return results;
+  return runWithConcurrency(packets, (pkt) => bookLeopardsPacket(pkt, credentials, shipperInfo, cities), 3);
 }
 
 // ============================================
@@ -454,15 +461,7 @@ export async function bookPostExBulk(
   token: string,
   shipperInfo: { name: string; phone: string; address: string; city: string; pickupAddressCode?: string; storeAddressCode?: string }
 ): Promise<BookingResult[]> {
-  const results: BookingResult[] = [];
+  console.log(`[PostEx] Booking ${packets.length} packets with concurrency 3...`);
 
-  for (let i = 0; i < packets.length; i++) {
-    const result = await bookPostExOrder(packets[i], token, shipperInfo);
-    results.push(result);
-    if (i < packets.length - 1) {
-      await new Promise((r) => setTimeout(r, 300));
-    }
-  }
-
-  return results;
+  return runWithConcurrency(packets, (pkt) => bookPostExOrder(pkt, token, shipperInfo), 3);
 }

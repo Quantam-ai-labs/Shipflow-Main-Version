@@ -5980,7 +5980,7 @@ export async function registerRoutes(
       }
 
       const jobMap = new Map<string, string>();
-      for (const order of toBook) {
+      await Promise.all(toBook.map(async (order) => {
         const job = await storage.createBookingJob({
           merchantId,
           orderId: order.id,
@@ -5988,7 +5988,7 @@ export async function registerRoutes(
           status: "processing",
         });
         jobMap.set(order.id, job.id);
-      }
+      }));
 
       const packets = toBook.map((order) => {
         const pkt = orderToPacket(order);
@@ -6034,7 +6034,7 @@ export async function registerRoutes(
         );
       }
 
-      for (const br of bookingResults) {
+      await Promise.all(bookingResults.map(async (br) => {
         const jobId = jobMap.get(br.orderId);
         if (jobId) {
           await storage.updateBookingJob(jobId, {
@@ -6112,7 +6112,7 @@ export async function registerRoutes(
           slipUrl: br.slipUrl,
           error: br.error,
         });
-      }
+      }));
 
       const successCount = results.filter((r) => r.success).length;
       const failedCount = results.filter((r) => !r.success).length;
@@ -6129,8 +6129,8 @@ export async function registerRoutes(
         status: batchStatus,
       });
 
-      for (const r of results) {
-        await storage.createShipmentBatchItem({
+      await Promise.all(results.map((r) =>
+        storage.createShipmentBatchItem({
           batchId: batch.id,
           orderId: r.orderId,
           orderNumber: r.orderNumber,
@@ -6149,71 +6149,75 @@ export async function registerRoutes(
             (fetchedOrders.find((o) => o.id === r.orderId)?.codRemaining ??
               fetchedOrders.find((o) => o.id === r.orderId)?.totalAmount) ||
             null,
-        });
-      }
-
-      try {
-        for (const r of results.filter((r) => r.success && r.trackingNumber)) {
-          const order = fetchedOrders.find((o) => o.id === r.orderId);
-          if (!order) continue;
-
-          const shipmentsList = await storage.getShipmentsByOrderId(
-            merchantId,
-            order.id,
-          );
-          const shipment = shipmentsList.find(
-            (s) => s.trackingNumber === r.trackingNumber,
-          );
-
-          await storage.createShipmentPrintRecord({
-            merchantId,
-            shipmentId: shipment?.id || null,
-            orderId: order.id,
-            courierName: courier,
-            trackingNumber: r.trackingNumber!,
-            generatedByUserId: userId,
-            pdfPath: null,
-            source: "COURIER_NATIVE",
-            isLatest: true,
-          });
-        }
-
-        const batchLoadsheetPath = await generateBatchLoadsheetPdf({
-          batchId: batch.id,
-          courierName: courier === "leopards" ? "Leopards" : "PostEx",
-          createdBy: userId,
-          createdAt: new Date().toLocaleDateString(),
-          merchantName: merchant.name,
-          totalCount: results.length,
-          successCount,
-          failedCount,
-          items: results.map((r) => {
-            const order = fetchedOrders.find((o) => o.id === r.orderId);
-            return {
-              orderNumber: r.orderNumber,
-              trackingNumber: r.trackingNumber || "",
-              consigneeName: order?.customerName || "",
-              consigneeCity: order?.city || "",
-              consigneePhone: order?.customerPhone || "",
-              codAmount: Number(order?.totalAmount) || 0,
-              status: r.success ? "BOOKED" : "FAILED",
-              error: r.error,
-            };
-          }),
-        });
-
-        await storage.updateShipmentBatch(batch.id, {
-          pdfBatchPath: batchLoadsheetPath,
-        });
-      } catch (pdfErr) {
-        console.error("[Booking] PDF generation error (non-blocking):", pdfErr);
-      }
+        })
+      ));
 
       console.log(
         `[Booking] ${courier}: ${successCount} success, ${failedCount} failed out of ${results.length}, batch=${batch.id}`,
       );
 
       res.json({ successCount, failedCount, results, batchId: batch.id });
+
+      const bgResults = [...results];
+      const bgFetchedOrders = [...fetchedOrders];
+      (async () => {
+        try {
+          await Promise.all(bgResults.filter((r) => r.success && r.trackingNumber).map(async (r) => {
+            const order = bgFetchedOrders.find((o) => o.id === r.orderId);
+            if (!order) return;
+
+            const shipmentsList = await storage.getShipmentsByOrderId(
+              merchantId,
+              order.id,
+            );
+            const shipment = shipmentsList.find(
+              (s) => s.trackingNumber === r.trackingNumber,
+            );
+
+            await storage.createShipmentPrintRecord({
+              merchantId,
+              shipmentId: shipment?.id || null,
+              orderId: order.id,
+              courierName: courier,
+              trackingNumber: r.trackingNumber!,
+              generatedByUserId: userId,
+              pdfPath: null,
+              source: "COURIER_NATIVE",
+              isLatest: true,
+            });
+          }));
+
+          const batchLoadsheetPath = await generateBatchLoadsheetPdf({
+            batchId: batch.id,
+            courierName: courier === "leopards" ? "Leopards" : "PostEx",
+            createdBy: userId,
+            createdAt: new Date().toLocaleDateString(),
+            merchantName: merchant.name,
+            totalCount: bgResults.length,
+            successCount,
+            failedCount,
+            items: bgResults.map((r) => {
+              const order = bgFetchedOrders.find((o) => o.id === r.orderId);
+              return {
+                orderNumber: r.orderNumber,
+                trackingNumber: r.trackingNumber || "",
+                consigneeName: order?.customerName || "",
+                consigneeCity: order?.city || "",
+                consigneePhone: order?.customerPhone || "",
+                codAmount: Number(order?.totalAmount) || 0,
+                status: r.success ? "BOOKED" : "FAILED",
+                error: r.error,
+              };
+            }),
+          });
+
+          await storage.updateShipmentBatch(batch.id, {
+            pdfBatchPath: batchLoadsheetPath,
+          });
+        } catch (pdfErr) {
+          console.error("[Booking] Background PDF/print record error:", pdfErr);
+        }
+      })();
     } catch (error) {
       console.error("Error booking orders:", error);
       res.status(500).json({ message: "Failed to book orders" });
