@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { useDateRange } from "@/contexts/date-range-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +10,13 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Command,
   CommandEmpty,
@@ -53,6 +59,9 @@ import {
   X,
   Check,
   Pencil,
+  CalendarDays,
+  Filter,
+  ListOrdered,
 } from "lucide-react";
 import type { Product } from "@shared/schema";
 
@@ -131,15 +140,21 @@ function MatchIndicator({ type }: { type: string }) {
   );
 }
 
+type StatusFilter = "ALL" | "ACTIVE" | "PAUSED" | "ARCHIVED";
+type OrderTypeForCalc = "total" | "dispatched" | "delivered";
+
 export default function AdsProfitability() {
   const { toast } = useToast();
-  const { dateParams } = useDateRange();
 
   const [dollarRate, setDollarRate] = useState<string>("280");
   const [deliveryCharges, setDeliveryCharges] = useState<string>("0");
   const [packingExpense, setPackingExpense] = useState<string>("0");
   const [manualOverrides, setManualOverrides] = useState<Record<string, string>>({});
   const [openCombobox, setOpenCombobox] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
+  const [orderTypeForCalc, setOrderTypeForCalc] = useState<OrderTypeForCalc>("total");
 
   useEffect(() => {
     try {
@@ -149,6 +164,10 @@ export default function AdsProfitability() {
         if (parsed.dollarRate) setDollarRate(parsed.dollarRate);
         if (parsed.deliveryCharges) setDeliveryCharges(parsed.deliveryCharges);
         if (parsed.packingExpense) setPackingExpense(parsed.packingExpense);
+        if (parsed.statusFilter) setStatusFilter(parsed.statusFilter);
+        if (parsed.dateFrom) setDateFrom(parsed.dateFrom);
+        if (parsed.dateTo) setDateTo(parsed.dateTo);
+        if (parsed.orderTypeForCalc) setOrderTypeForCalc(parsed.orderTypeForCalc);
       }
     } catch {}
   }, []);
@@ -156,16 +175,16 @@ export default function AdsProfitability() {
   useEffect(() => {
     localStorage.setItem(
       "shipflow-profitability-settings",
-      JSON.stringify({ dollarRate, deliveryCharges, packingExpense })
+      JSON.stringify({ dollarRate, deliveryCharges, packingExpense, statusFilter, dateFrom, dateTo, orderTypeForCalc })
     );
-  }, [dollarRate, deliveryCharges, packingExpense]);
+  }, [dollarRate, deliveryCharges, packingExpense, statusFilter, dateFrom, dateTo, orderTypeForCalc]);
 
   const { data: calcData, isLoading } = useQuery<{ campaigns: CampaignData[] }>({
-    queryKey: ["/api/marketing/profitability/calculator", dateParams.dateFrom, dateParams.dateTo],
+    queryKey: ["/api/marketing/profitability/calculator", dateFrom, dateTo],
     queryFn: async () => {
       const params = new URLSearchParams();
-      if (dateParams.dateFrom) params.set("dateFrom", dateParams.dateFrom);
-      if (dateParams.dateTo) params.set("dateTo", dateParams.dateTo);
+      if (dateFrom) params.set("dateFrom", dateFrom);
+      if (dateTo) params.set("dateTo", dateTo);
       const res = await fetch(`/api/marketing/profitability/calculator?${params}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch calculator data");
       return res.json();
@@ -215,7 +234,20 @@ export default function AdsProfitability() {
   const delCharges = parseFloat(deliveryCharges) || 0;
   const packExp = parseFloat(packingExpense) || 0;
 
-  const computedRows = campaigns.map(c => {
+  const orderTypeLabel = orderTypeForCalc === "total" ? "Total Orders" : orderTypeForCalc === "dispatched" ? "Dispatched" : "Delivered";
+
+  function getOrderCount(orders: CampaignData["orders"]): number {
+    if (orderTypeForCalc === "dispatched") return orders.dispatched;
+    if (orderTypeForCalc === "delivered") return orders.delivered;
+    return orders.total;
+  }
+
+  const filteredCampaigns = campaigns.filter(c => {
+    if (statusFilter === "ALL") return true;
+    return c.status === statusFilter;
+  });
+
+  const computedRows = filteredCampaigns.map(c => {
     const overrideProductId = manualOverrides[c.campaignId];
     let product = c.product;
     let matchType = c.matchType;
@@ -243,10 +275,10 @@ export default function AdsProfitability() {
 
     const salePrice = product?.salePrice ?? 0;
     const costPrice = product?.costPrice ?? 0;
-    const totalOrders = c.orders.total;
-    const cpa = totalOrders > 0 ? (c.adSpend / totalOrders) * dRate : 0;
+    const selectedOrders = getOrderCount(c.orders);
+    const cpa = selectedOrders > 0 ? (c.adSpend / selectedOrders) * dRate : 0;
     const profitMargin = salePrice - costPrice - cpa - delCharges - packExp;
-    const netProfit = profitMargin * totalOrders;
+    const netProfit = profitMargin * selectedOrders;
 
     return {
       ...c,
@@ -255,6 +287,7 @@ export default function AdsProfitability() {
       cpa,
       profitMargin,
       netProfit,
+      selectedOrders,
     };
   });
 
@@ -322,7 +355,7 @@ export default function AdsProfitability() {
             Calculation Settings
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-1.5">
               <Label htmlFor="dollar-rate">USD to PKR Rate</Label>
@@ -367,6 +400,70 @@ export default function AdsProfitability() {
                   placeholder="0"
                   data-testid="input-packing-expense"
                 />
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t pt-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="date-from" className="flex items-center gap-1.5">
+                  <CalendarDays className="w-3.5 h-3.5" />
+                  Date From
+                </Label>
+                <Input
+                  id="date-from"
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  data-testid="input-date-from"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="date-to" className="flex items-center gap-1.5">
+                  <CalendarDays className="w-3.5 h-3.5" />
+                  Date To
+                </Label>
+                <Input
+                  id="date-to"
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  data-testid="input-date-to"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="flex items-center gap-1.5">
+                  <Filter className="w-3.5 h-3.5" />
+                  Campaign Status
+                </Label>
+                <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
+                  <SelectTrigger data-testid="select-status-filter">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">All Campaigns</SelectItem>
+                    <SelectItem value="ACTIVE">Active Only</SelectItem>
+                    <SelectItem value="PAUSED">Paused Only</SelectItem>
+                    <SelectItem value="ARCHIVED">Archived Only</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="flex items-center gap-1.5">
+                  <ListOrdered className="w-3.5 h-3.5" />
+                  Orders Used in CPA & Profit
+                </Label>
+                <Select value={orderTypeForCalc} onValueChange={(v) => setOrderTypeForCalc(v as OrderTypeForCalc)}>
+                  <SelectTrigger data-testid="select-order-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="total">Total Orders</SelectItem>
+                    <SelectItem value="dispatched">Dispatched</SelectItem>
+                    <SelectItem value="delivered">Delivered</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </div>
@@ -633,6 +730,9 @@ export default function AdsProfitability() {
               <p><span className="font-medium text-foreground">USD to PKR Rate</span> — The exchange rate used to convert Facebook ad spend (in USD) to Pakistani Rupees. Update this to match the current market rate.</p>
               <p><span className="font-medium text-foreground">Delivery Charges</span> — The courier/shipping cost you pay per order. Deducted from each order's profit calculation.</p>
               <p><span className="font-medium text-foreground">Packing Expense</span> — Any packaging cost per order (boxes, tape, labels, etc.). Deducted from each order's profit calculation.</p>
+              <p><span className="font-medium text-foreground">Date From / Date To</span> — Filters both ad spend (from Facebook insights) and Shopify orders to the selected date range. Leave empty to include all dates.</p>
+              <p><span className="font-medium text-foreground">Campaign Status</span> — Filter which campaigns are shown: All, Active only, Paused only, or Archived only.</p>
+              <p><span className="font-medium text-foreground">Orders Used in CPA & Profit</span> — Choose which order count to use in CPA and Net Profit formulas: Total Orders (all orders), Dispatched (shipped out), or Delivered (confirmed delivery). This lets you calculate profitability based on actual deliveries rather than total orders.</p>
             </div>
           </div>
 
@@ -665,8 +765,8 @@ export default function AdsProfitability() {
               </div>
               <div>
                 <p className="font-medium text-foreground">CPA (Cost Per Acquisition)</p>
-                <p>How much it costs you in PKR to acquire one order through this campaign.</p>
-                <p className="mt-1 font-mono text-xs bg-muted rounded px-2 py-1 inline-block">CPA = (Ad Spend USD ÷ Total Orders) × Dollar Rate</p>
+                <p>How much it costs you in PKR to acquire one order through this campaign. The order count used in this formula depends on your "Orders Used in CPA & Profit" setting (currently: <span className="font-medium text-foreground">{orderTypeLabel}</span>).</p>
+                <p className="mt-1 font-mono text-xs bg-muted rounded px-2 py-1 inline-block">CPA = (Ad Spend USD ÷ {orderTypeLabel}) × Dollar Rate</p>
                 <p className="mt-1">Example: If you spent $50 on ads and got 10 orders at a rate of Rs. 280/$ → CPA = ($50 ÷ 10) × 280 = Rs. 1,400 per order.</p>
               </div>
               <div>
@@ -677,8 +777,8 @@ export default function AdsProfitability() {
               </div>
               <div>
                 <p className="font-medium text-foreground">Net Profit</p>
-                <p>The total profit (or loss) for the entire campaign — how much money this campaign actually made or lost you.</p>
-                <p className="mt-1 font-mono text-xs bg-muted rounded px-2 py-1 inline-block">Net Profit = Profit Margin × Total Orders</p>
+                <p>The total profit (or loss) for the entire campaign — how much money this campaign actually made or lost you. Uses the same order count as CPA (currently: <span className="font-medium text-foreground">{orderTypeLabel}</span>).</p>
+                <p className="mt-1 font-mono text-xs bg-muted rounded px-2 py-1 inline-block">Net Profit = Profit Margin × {orderTypeLabel}</p>
                 <p className="mt-1">This is the bottom line. <span className="text-green-600 font-medium">Green with ↑</span> means the campaign is profitable, <span className="text-red-600 font-medium">Red with ↓</span> means it's losing money and you should consider optimizing or pausing it.</p>
               </div>
             </div>
