@@ -695,7 +695,7 @@ async function drawSingleAirwayBill(
   drawTextSafe(
     page,
     font,
-    `- ${cleanRemarks}`,
+    `${cleanRemarks}`,
     x + pad + 40,
     remarksTopY - 13,
     8,
