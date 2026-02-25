@@ -1624,6 +1624,8 @@ export const adCreatives = pgTable("ad_creatives", {
   status: varchar("status", { length: 30 }),
   effectiveStatus: varchar("effective_status", { length: 30 }),
   creativeId: varchar("creative_id", { length: 100 }),
+  destinationUrl: text("destination_url"),
+  matchedProductId: varchar("matched_product_id").references(() => products.id, { onDelete: "set null" }),
   rawJson: jsonb("raw_json"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

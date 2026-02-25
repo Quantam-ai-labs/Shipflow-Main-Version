@@ -2,12 +2,13 @@ import { Express, Response } from "express";
 import { db } from "../db";
 import { eq, and, sql, gte, lte, inArray } from "drizzle-orm";
 import { z } from "zod";
-import { adCampaigns, adAccounts, teamMembers, merchants, adProfitabilityEntries, orders, products } from "@shared/schema";
+import { adCampaigns, adAccounts, adCreatives, adInsights, teamMembers, merchants, adProfitabilityEntries, orders, products } from "@shared/schema";
 import {
   fullSync,
   quickSyncToday,
   getInsightsSummary,
   getInsightsForTable,
+  matchProductsForMerchant,
   getDailyInsights,
   getAdAccountInfo,
   getLastSyncInfo,
@@ -580,6 +581,234 @@ export function registerMarketingRoutes(app: Express) {
       }
 
       res.json({ stats });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/marketing/profitability/calculator", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const { dateFrom, dateTo } = req.query;
+
+      const campaigns = await db
+        .select()
+        .from(adCampaigns)
+        .where(eq(adCampaigns.merchantId, merchantId));
+
+      if (campaigns.length === 0) {
+        return res.json({ campaigns: [] });
+      }
+
+      const campaignIds = campaigns.map(c => c.campaignId);
+
+      const insightsConditions: any[] = [
+        eq(adInsights.merchantId, merchantId),
+        eq(adInsights.entityType, "campaign"),
+      ];
+      if (dateFrom) insightsConditions.push(gte(adInsights.date, dateFrom as string));
+      if (dateTo) insightsConditions.push(lte(adInsights.date, dateTo as string));
+
+      const spendData = await db
+        .select({
+          entityId: adInsights.entityId,
+          totalSpend: sql<string>`COALESCE(SUM(${adInsights.spend}::numeric), 0)`,
+        })
+        .from(adInsights)
+        .where(and(...insightsConditions))
+        .groupBy(adInsights.entityId);
+
+      const spendMap = new Map(spendData.map(s => [s.entityId, parseFloat(String(s.totalSpend)) || 0]));
+
+      const allAds = await db
+        .select({
+          campaignId: adCreatives.campaignId,
+          matchedProductId: adCreatives.matchedProductId,
+          destinationUrl: adCreatives.destinationUrl,
+        })
+        .from(adCreatives)
+        .where(and(
+          eq(adCreatives.merchantId, merchantId),
+          sql`${adCreatives.campaignId} IS NOT NULL`,
+        ));
+
+      const campaignProductMap = new Map<string, { productId: string | null; url: string | null }>();
+      for (const ad of allAds) {
+        if (ad.campaignId && ad.matchedProductId && !campaignProductMap.has(ad.campaignId)) {
+          campaignProductMap.set(ad.campaignId, { productId: ad.matchedProductId, url: ad.destinationUrl });
+        }
+      }
+      for (const ad of allAds) {
+        if (ad.campaignId && !campaignProductMap.has(ad.campaignId)) {
+          campaignProductMap.set(ad.campaignId, { productId: null, url: ad.destinationUrl });
+        }
+      }
+
+      const matchedProductIds = [...new Set(
+        [...campaignProductMap.values()].map(v => v.productId).filter(Boolean) as string[]
+      )];
+
+      let productDetailsMap = new Map<string, { title: string; handle: string | null; imageUrl: string | null; salePrice: number; costPrice: number; shopifyProductId: string }>();
+      if (matchedProductIds.length > 0) {
+        const productRows = await db
+          .select({
+            id: products.id,
+            title: products.title,
+            handle: products.handle,
+            imageUrl: products.imageUrl,
+            shopifyProductId: products.shopifyProductId,
+            variants: products.variants,
+          })
+          .from(products)
+          .where(and(eq(products.merchantId, merchantId), inArray(products.id, matchedProductIds)));
+
+        for (const p of productRows) {
+          let salePrice = 0, costPrice = 0;
+          const variants = p.variants as any[];
+          if (variants && Array.isArray(variants) && variants.length > 0) {
+            salePrice = parseFloat(variants[0].price || "0");
+            costPrice = parseFloat(variants[0].cost || "0");
+          }
+          productDetailsMap.set(p.id, {
+            title: p.title,
+            handle: p.handle,
+            imageUrl: p.imageUrl,
+            salePrice,
+            costPrice,
+            shopifyProductId: p.shopifyProductId,
+          });
+        }
+      }
+
+      const orderConditions: any[] = [eq(orders.merchantId, merchantId)];
+      if (dateFrom) orderConditions.push(gte(orders.orderDate, new Date(dateFrom as string)));
+      if (dateTo) {
+        const toDate = new Date(dateTo as string);
+        toDate.setHours(23, 59, 59, 999);
+        orderConditions.push(lte(orders.orderDate, toDate));
+      }
+
+      let orderStats = new Map<string, { total: number; dispatched: number; delivered: number }>();
+      if (matchedProductIds.length > 0) {
+        const shopifyProductIdToDbId = new Map<string, string>();
+        for (const [dbId, details] of productDetailsMap) {
+          shopifyProductIdToDbId.set(details.shopifyProductId, dbId);
+        }
+
+        const allOrders = await db
+          .select({
+            lineItems: orders.lineItems,
+            workflowStatus: orders.workflowStatus,
+          })
+          .from(orders)
+          .where(and(...orderConditions));
+
+        for (const [dbId] of productDetailsMap) {
+          orderStats.set(dbId, { total: 0, dispatched: 0, delivered: 0 });
+        }
+
+        for (const order of allOrders) {
+          const items = order.lineItems as any[];
+          if (!items || !Array.isArray(items)) continue;
+
+          const matched = new Set<string>();
+          for (const item of items) {
+            const dbId = shopifyProductIdToDbId.get(String(item.productId));
+            if (dbId) matched.add(dbId);
+          }
+
+          for (const dbId of matched) {
+            const s = orderStats.get(dbId);
+            if (!s) continue;
+            s.total++;
+            const ws = order.workflowStatus;
+            if (ws === "FULFILLED" || ws === "DELIVERED" || ws === "RETURN") s.dispatched++;
+            if (ws === "DELIVERED") s.delivered++;
+          }
+        }
+      }
+
+      const result = campaigns.map(campaign => {
+        const spend = spendMap.get(campaign.campaignId) || 0;
+        const productMapping = campaignProductMap.get(campaign.campaignId);
+        const productId = productMapping?.productId || null;
+        const product = productId ? productDetailsMap.get(productId) : null;
+        const stats = productId ? orderStats.get(productId) : null;
+
+        return {
+          campaignId: campaign.campaignId,
+          campaignName: campaign.name || "Unknown",
+          status: campaign.effectiveStatus || campaign.status || "UNKNOWN",
+          objective: campaign.objective,
+          adSpend: spend,
+          destinationUrl: productMapping?.url || null,
+          matchType: productId ? "auto" : "unmatched",
+          product: product ? {
+            id: productId,
+            title: product.title,
+            handle: product.handle,
+            imageUrl: product.imageUrl,
+            salePrice: product.salePrice,
+            costPrice: product.costPrice,
+          } : null,
+          orders: {
+            total: stats?.total || 0,
+            dispatched: stats?.dispatched || 0,
+            delivered: stats?.delivered || 0,
+          },
+        };
+      });
+
+      result.sort((a, b) => b.adSpend - a.adSpend);
+
+      res.json({ campaigns: result });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.put("/api/marketing/profitability/match/:campaignId", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const { campaignId } = req.params;
+      const { productId } = req.body;
+
+      if (!productId) {
+        await db.update(adCreatives)
+          .set({ matchedProductId: null, updatedAt: new Date() })
+          .where(and(eq(adCreatives.merchantId, merchantId), eq(adCreatives.campaignId, campaignId)));
+        return res.json({ success: true });
+      }
+
+      const [product] = await db.select({ id: products.id })
+        .from(products)
+        .where(and(eq(products.merchantId, merchantId), eq(products.id, productId)));
+
+      if (!product) return res.status(404).json({ error: "Product not found" });
+
+      const campaignAds = await db.select({ id: adCreatives.id })
+        .from(adCreatives)
+        .where(and(eq(adCreatives.merchantId, merchantId), eq(adCreatives.campaignId, campaignId)));
+
+      if (campaignAds.length === 0) {
+        return res.status(404).json({ error: "No ads found for this campaign" });
+      }
+
+      await db.update(adCreatives)
+        .set({ matchedProductId: productId, updatedAt: new Date() })
+        .where(and(eq(adCreatives.merchantId, merchantId), eq(adCreatives.campaignId, campaignId)));
+
+      res.json({ success: true, matched: campaignAds.length });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/marketing/profitability/rematch", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const matched = await matchProductsForMerchant(merchantId);
+      res.json({ success: true, matched });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

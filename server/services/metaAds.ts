@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { adAccounts, adCampaigns, adSets, adCreatives, adInsights, metaSyncRuns, marketingSyncLogs, merchants } from "@shared/schema";
+import { adAccounts, adCampaigns, adSets, adCreatives, adInsights, metaSyncRuns, marketingSyncLogs, merchants, products } from "@shared/schema";
 import { eq, and, sql, desc, gte, lte, inArray, like } from "drizzle-orm";
 import { decryptToken } from "./encryption";
 
@@ -235,15 +235,45 @@ export async function syncAdSets(merchantId: string, adAccountDbId: string): Pro
   return count;
 }
 
+function extractDestinationUrl(ad: any): string | null {
+  try {
+    const creative = ad.creative;
+    if (creative) {
+      if (creative.object_story_spec?.link_data?.link) {
+        return creative.object_story_spec.link_data.link;
+      }
+      if (creative.object_story_spec?.link_data?.call_to_action?.value?.link) {
+        return creative.object_story_spec.link_data.call_to_action.value.link;
+      }
+      if (creative.asset_feed_spec?.link_urls && creative.asset_feed_spec.link_urls.length > 0) {
+        const linkUrl = creative.asset_feed_spec.link_urls[0];
+        if (typeof linkUrl === "object" && linkUrl.website_url) return linkUrl.website_url;
+        if (typeof linkUrl === "string") return linkUrl;
+      }
+      if (creative.object_url) return creative.object_url;
+      if (creative.link_url) return creative.link_url;
+    }
+    if (ad.adcreatives?.data) {
+      for (const cr of ad.adcreatives.data) {
+        if (cr.object_url) return cr.object_url;
+        if (cr.link_url) return cr.link_url;
+        if (cr.object_story_spec?.link_data?.link) return cr.object_story_spec.link_data.link;
+      }
+    }
+  } catch {}
+  return null;
+}
+
 export async function syncAds(merchantId: string, adAccountDbId: string): Promise<number> {
   const creds = await getCredentialsForMerchant(merchantId);
   const ads = await fetchAllPages(creds, `${creds.adAccountId}/ads`, {
-    fields: "id,name,adset_id,campaign_id,status,effective_status,creative{id}",
+    fields: "id,name,adset_id,campaign_id,status,effective_status,creative{id,object_story_spec,asset_feed_spec,object_url,link_url},adcreatives{object_url,link_url,object_story_spec}",
     effective_status: JSON.stringify(["ACTIVE", "PAUSED", "ARCHIVED", "IN_PROCESS", "WITH_ISSUES"]),
   });
 
   let count = 0;
   for (const ad of ads) {
+    const destinationUrl = extractDestinationUrl(ad);
     await db.insert(adCreatives).values({
       merchantId,
       adAccountId: adAccountDbId,
@@ -254,6 +284,7 @@ export async function syncAds(merchantId: string, adAccountDbId: string): Promis
       status: ad.status,
       effectiveStatus: ad.effective_status,
       creativeId: ad.creative?.id || null,
+      destinationUrl,
       rawJson: ad,
     }).onConflictDoUpdate({
       target: [adCreatives.merchantId, adCreatives.adId],
@@ -263,13 +294,83 @@ export async function syncAds(merchantId: string, adAccountDbId: string): Promis
         effectiveStatus: sql`excluded.effective_status`,
         campaignId: sql`excluded.campaign_id`,
         creativeId: sql`excluded.creative_id`,
+        destinationUrl: sql`excluded.destination_url`,
         rawJson: sql`excluded.raw_json`,
         updatedAt: new Date(),
       },
     });
     count++;
   }
+
+  await matchProductsForMerchant(merchantId);
+
   return count;
+}
+
+export async function matchProductsForMerchant(merchantId: string): Promise<number> {
+  const merchantProducts = await db
+    .select({ id: products.id, handle: products.handle, title: products.title, shopifyProductId: products.shopifyProductId })
+    .from(products)
+    .where(eq(products.merchantId, merchantId));
+
+  if (merchantProducts.length === 0) return 0;
+
+  const unmatched = await db
+    .select({ id: adCreatives.id, destinationUrl: adCreatives.destinationUrl })
+    .from(adCreatives)
+    .where(and(
+      eq(adCreatives.merchantId, merchantId),
+      sql`${adCreatives.destinationUrl} IS NOT NULL`,
+    ));
+
+  let matched = 0;
+  for (const ad of unmatched) {
+    const productId = matchProductFromUrl(ad.destinationUrl!, merchantProducts);
+    if (productId) {
+      await db.update(adCreatives)
+        .set({ matchedProductId: productId, updatedAt: new Date() })
+        .where(eq(adCreatives.id, ad.id));
+      matched++;
+    }
+  }
+  console.log(`[MetaAds] Product matching: ${matched}/${unmatched.length} ads matched for merchant ${merchantId}`);
+  return matched;
+}
+
+function matchProductFromUrl(
+  url: string,
+  productsList: { id: string; handle: string | null; title: string; shopifyProductId: string }[]
+): string | null {
+  try {
+    const parsed = new URL(url);
+    const pathParts = parsed.pathname.split("/").filter(Boolean);
+
+    const productsIdx = pathParts.indexOf("products");
+    if (productsIdx !== -1 && productsIdx < pathParts.length - 1) {
+      const handle = pathParts[productsIdx + 1].split("?")[0].toLowerCase();
+      const match = productsList.find(p => p.handle && p.handle.toLowerCase() === handle);
+      if (match) return match.id;
+    }
+
+    for (const part of pathParts) {
+      const cleanPart = part.split("?")[0].toLowerCase();
+      const match = productsList.find(p => p.handle && p.handle.toLowerCase() === cleanPart);
+      if (match) return match.id;
+    }
+
+    const lastSegment = pathParts[pathParts.length - 1]?.split("?")[0].toLowerCase().replace(/-/g, " ");
+    if (lastSegment) {
+      const match = productsList.find(p => p.title.toLowerCase() === lastSegment);
+      if (match) return match.id;
+
+      const fuzzy = productsList.find(p => {
+        const titleLower = p.title.toLowerCase();
+        return titleLower.includes(lastSegment) || lastSegment.includes(titleLower);
+      });
+      if (fuzzy) return fuzzy.id;
+    }
+  } catch {}
+  return null;
 }
 
 const INSIGHTS_FIELDS = [

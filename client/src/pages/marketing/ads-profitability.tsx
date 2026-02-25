@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -7,7 +7,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Select,
   SelectContent,
@@ -24,8 +26,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  Plus,
-  Trash2,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Calculator,
   TrendingUp,
   TrendingDown,
@@ -34,16 +39,37 @@ import {
   Truck,
   CheckCircle,
   Loader2,
+  Link2,
+  Zap,
+  Hand,
+  HelpCircle,
+  RefreshCw,
+  ShoppingCart,
+  Target,
 } from "lucide-react";
-import type { AdProfitabilityEntry, Product } from "@shared/schema";
+import type { Product } from "@shared/schema";
 
-interface ProductStats {
-  totalOrders: number;
-  dispatched: number;
-  delivered: number;
-  salePrice: number;
-  costPrice: number;
-  productTitle: string;
+interface CampaignData {
+  campaignId: string;
+  campaignName: string;
+  status: string;
+  objective: string | null;
+  adSpend: number;
+  destinationUrl: string | null;
+  matchType: "auto" | "manual" | "unmatched";
+  product: {
+    id: string;
+    title: string;
+    handle: string | null;
+    imageUrl: string | null;
+    salePrice: number;
+    costPrice: number;
+  } | null;
+  orders: {
+    total: number;
+    dispatched: number;
+    delivered: number;
+  };
 }
 
 function formatCurrency(val: number): string {
@@ -55,6 +81,49 @@ function formatCurrency(val: number): string {
   }).format(val);
 }
 
+function formatUsd(val: number): string {
+  return `$${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const color =
+    status === "ACTIVE" ? "bg-green-500/10 text-green-600 border-green-500/20" :
+    status === "PAUSED" ? "bg-yellow-500/10 text-yellow-600 border-yellow-500/20" :
+    "bg-zinc-500/10 text-zinc-500 border-zinc-500/20";
+  return <Badge className={`text-[10px] ${color}`}>{status}</Badge>;
+}
+
+function MatchIndicator({ type }: { type: string }) {
+  if (type === "auto") {
+    return (
+      <Tooltip>
+        <TooltipTrigger>
+          <Zap className="w-3.5 h-3.5 text-green-500" />
+        </TooltipTrigger>
+        <TooltipContent>Auto-matched from ad destination URL</TooltipContent>
+      </Tooltip>
+    );
+  }
+  if (type === "manual") {
+    return (
+      <Tooltip>
+        <TooltipTrigger>
+          <Hand className="w-3.5 h-3.5 text-blue-500" />
+        </TooltipTrigger>
+        <TooltipContent>Manually matched</TooltipContent>
+      </Tooltip>
+    );
+  }
+  return (
+    <Tooltip>
+      <TooltipTrigger>
+        <HelpCircle className="w-3.5 h-3.5 text-muted-foreground" />
+      </TooltipTrigger>
+      <TooltipContent>No product matched — select one manually</TooltipContent>
+    </Tooltip>
+  );
+}
+
 export default function AdsProfitability() {
   const { toast } = useToast();
   const { dateParams } = useDateRange();
@@ -62,6 +131,7 @@ export default function AdsProfitability() {
   const [dollarRate, setDollarRate] = useState<string>("280");
   const [deliveryCharges, setDeliveryCharges] = useState<string>("0");
   const [packingExpense, setPackingExpense] = useState<string>("0");
+  const [manualOverrides, setManualOverrides] = useState<Record<string, string>>({});
 
   useEffect(() => {
     try {
@@ -82,8 +152,16 @@ export default function AdsProfitability() {
     );
   }, [dollarRate, deliveryCharges, packingExpense]);
 
-  const { data: entriesData, isLoading: entriesLoading } = useQuery<{ entries: AdProfitabilityEntry[] }>({
-    queryKey: ["/api/marketing/profitability"],
+  const { data: calcData, isLoading } = useQuery<{ campaigns: CampaignData[] }>({
+    queryKey: ["/api/marketing/profitability/calculator", dateParams.dateFrom, dateParams.dateTo],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (dateParams.dateFrom) params.set("dateFrom", dateParams.dateFrom);
+      if (dateParams.dateTo) params.set("dateTo", dateParams.dateTo);
+      const res = await fetch(`/api/marketing/profitability/calculator?${params}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch calculator data");
+      return res.json();
+    },
   });
 
   const { data: productsData } = useQuery<{ products: Product[]; total: number }>({
@@ -95,131 +173,105 @@ export default function AdsProfitability() {
     },
   });
 
-  const entries = entriesData?.entries ?? [];
-  const productsList = productsData?.products ?? [];
-
-  const productIds = useMemo(
-    () => entries.map((e) => e.productId).filter(Boolean).join(","),
-    [entries]
-  );
-
-  const { data: statsData, isLoading: statsLoading } = useQuery<{ stats: Record<string, ProductStats> }>({
-    queryKey: ["/api/marketing/profitability/stats", productIds, dateParams.dateFrom, dateParams.dateTo],
-    queryFn: async () => {
-      if (!productIds) return { stats: {} };
-      const params = new URLSearchParams();
-      params.set("productIds", productIds);
-      if (dateParams.dateFrom) params.set("dateFrom", dateParams.dateFrom);
-      if (dateParams.dateTo) params.set("dateTo", dateParams.dateTo);
-      const res = await fetch(`/api/marketing/profitability/stats?${params}`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch stats");
+  const matchMutation = useMutation({
+    mutationFn: async ({ campaignId, productId }: { campaignId: string; productId: string | null }) => {
+      const res = await apiRequest("PUT", `/api/marketing/profitability/match/${campaignId}`, { productId });
       return res.json();
     },
-    enabled: productIds.length > 0,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/marketing/profitability/calculator"] });
+      toast({ title: "Product updated", description: "Campaign product match saved." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
   });
 
-  const stats = statsData?.stats ?? {};
-
-  const createMutation = useMutation({
+  const rematchMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/marketing/profitability", {
-        campaignName: "New Campaign",
-        productId: null,
-        adSpend: "0",
-      });
+      const res = await apiRequest("POST", "/api/marketing/profitability/rematch", {});
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/marketing/profitability"] });
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/marketing/profitability/calculator"] });
+      toast({ title: "Re-matched", description: `${data.matched} ads matched to products.` });
     },
     onError: (error: any) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
 
-  const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: Record<string, any> }) => {
-      const res = await apiRequest("PUT", `/api/marketing/profitability/${id}`, data);
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/marketing/profitability"] });
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await apiRequest("DELETE", `/api/marketing/profitability/${id}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/marketing/profitability"] });
-      toast({ title: "Deleted", description: "Campaign entry removed." });
-    },
-    onError: (error: any) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    },
-  });
-
-  const [editingField, setEditingField] = useState<{ id: string; field: string } | null>(null);
-  const [editValue, setEditValue] = useState("");
-
-  const handleFieldEdit = (id: string, field: string, currentValue: string) => {
-    setEditingField({ id, field });
-    setEditValue(currentValue);
-  };
-
-  const handleFieldSave = (id: string, field: string) => {
-    updateMutation.mutate({ id, data: { [field]: editValue } });
-    setEditingField(null);
-  };
-
-  const handleProductChange = (entryId: string, productId: string) => {
-    updateMutation.mutate({ id: entryId, data: { productId: productId === "none" ? null : productId } });
-  };
-
+  const campaigns = calcData?.campaigns ?? [];
+  const productsList = productsData?.products ?? [];
   const dRate = parseFloat(dollarRate) || 280;
   const delCharges = parseFloat(deliveryCharges) || 0;
   const packExp = parseFloat(packingExpense) || 0;
 
-  const computedRows = entries.map((entry) => {
-    const productStat = entry.productId ? stats[entry.productId] : null;
-    const adSpend = parseFloat(entry.adSpend || "0");
-    const totalOrders = productStat?.totalOrders ?? 0;
-    const dispatched = productStat?.dispatched ?? 0;
-    const delivered = productStat?.delivered ?? 0;
-    const salePrice = productStat?.salePrice ?? 0;
-    const costPrice = productStat?.costPrice ?? 0;
+  const computedRows = campaigns.map(c => {
+    const overrideProductId = manualOverrides[c.campaignId];
+    let product = c.product;
+    let matchType = c.matchType;
 
-    const cpa = totalOrders > 0 ? (adSpend / totalOrders) * dRate : 0;
+    if (overrideProductId && overrideProductId !== c.product?.id) {
+      const overrideProduct = productsList.find(p => p.id === overrideProductId);
+      if (overrideProduct) {
+        const variants = overrideProduct.variants as any[];
+        let salePrice = 0, costPrice = 0;
+        if (variants && Array.isArray(variants) && variants.length > 0) {
+          salePrice = parseFloat(variants[0].price || "0");
+          costPrice = parseFloat(variants[0].cost || "0");
+        }
+        product = {
+          id: overrideProduct.id,
+          title: overrideProduct.title,
+          handle: overrideProduct.handle,
+          imageUrl: overrideProduct.imageUrl,
+          salePrice,
+          costPrice,
+        };
+        matchType = "manual";
+      }
+    }
+
+    const salePrice = product?.salePrice ?? 0;
+    const costPrice = product?.costPrice ?? 0;
+    const totalOrders = c.orders.total;
+    const cpa = totalOrders > 0 ? (c.adSpend / totalOrders) * dRate : 0;
     const profitMargin = salePrice - costPrice - cpa - delCharges - packExp;
     const netProfit = profitMargin * totalOrders;
 
     return {
-      ...entry,
-      totalOrders,
-      dispatched,
-      delivered,
-      salePrice,
-      costPrice,
+      ...c,
+      product,
+      matchType,
       cpa,
       profitMargin,
       netProfit,
-      productTitle: productStat?.productTitle || "",
     };
   });
 
   const totals = computedRows.reduce(
-    (acc, row) => ({
-      adSpend: acc.adSpend + parseFloat(row.adSpend || "0"),
-      totalOrders: acc.totalOrders + row.totalOrders,
-      dispatched: acc.dispatched + row.dispatched,
-      delivered: acc.delivered + row.delivered,
-      netProfit: acc.netProfit + row.netProfit,
+    (acc, r) => ({
+      adSpend: acc.adSpend + r.adSpend,
+      totalOrders: acc.totalOrders + r.orders.total,
+      dispatched: acc.dispatched + r.orders.dispatched,
+      delivered: acc.delivered + r.orders.delivered,
+      netProfit: acc.netProfit + r.netProfit,
     }),
     { adSpend: 0, totalOrders: 0, dispatched: 0, delivered: 0, netProfit: 0 }
   );
 
-  if (entriesLoading) {
+  const handleProductOverride = (campaignId: string, productId: string) => {
+    if (productId === "none") {
+      setManualOverrides(prev => { const n = { ...prev }; delete n[campaignId]; return n; });
+      matchMutation.mutate({ campaignId, productId: null });
+    } else {
+      setManualOverrides(prev => ({ ...prev, [campaignId]: productId }));
+      matchMutation.mutate({ campaignId, productId });
+    }
+  };
+
+  if (isLoading) {
     return (
       <div className="space-y-6">
         <Skeleton className="h-8 w-64" />
@@ -237,20 +289,21 @@ export default function AdsProfitability() {
             Ads Profitability Calculator
           </h1>
           <p className="text-muted-foreground">
-            Track your ad campaign profitability by linking campaigns to products.
+            Campaign data pulled from Facebook Ads. Products auto-matched from destination URLs.
           </p>
         </div>
         <Button
-          onClick={() => createMutation.mutate()}
-          disabled={createMutation.isPending}
-          data-testid="button-add-campaign"
+          variant="outline"
+          onClick={() => rematchMutation.mutate()}
+          disabled={rematchMutation.isPending}
+          data-testid="button-rematch"
         >
-          {createMutation.isPending ? (
+          {rematchMutation.isPending ? (
             <Loader2 className="w-4 h-4 mr-2 animate-spin" />
           ) : (
-            <Plus className="w-4 h-4 mr-2" />
+            <RefreshCw className="w-4 h-4 mr-2" />
           )}
-          Add Campaign
+          Re-match Products
         </Button>
       </div>
 
@@ -312,191 +365,168 @@ export default function AdsProfitability() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="min-w-[180px]">Campaign Name</TableHead>
-                  <TableHead className="min-w-[200px]">Product</TableHead>
-                  <TableHead className="min-w-[120px] text-right">Ad Spend ($)</TableHead>
-                  <TableHead className="text-right">Shopify Orders</TableHead>
-                  <TableHead className="text-right">Dispatched</TableHead>
-                  <TableHead className="text-right">Delivered</TableHead>
-                  <TableHead className="text-right">CPA (PKR)</TableHead>
-                  <TableHead className="text-right">Profit Margin</TableHead>
-                  <TableHead className="text-right">Net Profit</TableHead>
-                  <TableHead className="w-[50px]"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {computedRows.length === 0 ? (
+      {campaigns.length === 0 ? (
+        <Card>
+          <CardContent className="py-16 text-center text-muted-foreground">
+            <Target className="w-12 h-12 mx-auto mb-4 opacity-30" />
+            <p className="text-lg font-medium mb-1">No Facebook campaigns found</p>
+            <p className="text-sm">Make sure your Facebook Ads are connected in Settings and data has been synced.</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-12 text-muted-foreground">
-                      No campaigns added yet. Click "Add Campaign" to get started.
-                    </TableCell>
+                    <TableHead className="min-w-[200px]">Campaign</TableHead>
+                    <TableHead className="min-w-[220px]">Product</TableHead>
+                    <TableHead className="text-right min-w-[100px]">Ad Spend</TableHead>
+                    <TableHead className="text-right">Orders</TableHead>
+                    <TableHead className="text-right">Dispatched</TableHead>
+                    <TableHead className="text-right">Delivered</TableHead>
+                    <TableHead className="text-right">CPA (PKR)</TableHead>
+                    <TableHead className="text-right">Profit Margin</TableHead>
+                    <TableHead className="text-right min-w-[120px]">Net Profit</TableHead>
                   </TableRow>
-                ) : (
-                  computedRows.map((row) => {
-                    const isEditingName = editingField?.id === row.id && editingField.field === "campaignName";
-                    const isEditingSpend = editingField?.id === row.id && editingField.field === "adSpend";
-
-                    return (
-                      <TableRow key={row.id} data-testid={`row-campaign-${row.id}`}>
-                        <TableCell>
-                          {isEditingName ? (
-                            <Input
-                              value={editValue}
-                              onChange={(e) => setEditValue(e.target.value)}
-                              onBlur={() => handleFieldSave(row.id, "campaignName")}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") handleFieldSave(row.id, "campaignName");
-                                if (e.key === "Escape") setEditingField(null);
-                              }}
-                              autoFocus
-                              className="h-8 text-sm"
-                              data-testid={`input-campaign-name-${row.id}`}
-                            />
-                          ) : (
-                            <span
-                              className="cursor-pointer hover:text-primary font-medium"
-                              onClick={() => handleFieldEdit(row.id, "campaignName", row.campaignName)}
-                              data-testid={`text-campaign-name-${row.id}`}
-                            >
+                </TableHeader>
+                <TableBody>
+                  {computedRows.map((row) => (
+                    <TableRow key={row.campaignId} data-testid={`row-campaign-${row.campaignId}`}>
+                      <TableCell>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm" data-testid={`text-campaign-name-${row.campaignId}`}>
                               {row.campaignName}
                             </span>
+                            <StatusBadge status={row.status} />
+                          </div>
+                          {row.destinationUrl && (
+                            <div className="flex items-center gap-1 text-[11px] text-muted-foreground truncate max-w-[200px]">
+                              <Link2 className="w-3 h-3 flex-shrink-0" />
+                              <span className="truncate">{row.destinationUrl}</span>
+                            </div>
                           )}
-                        </TableCell>
-                        <TableCell>
-                          <Select
-                            value={row.productId || "none"}
-                            onValueChange={(val) => handleProductChange(row.id, val)}
-                          >
-                            <SelectTrigger className="h-8 text-sm" data-testid={`select-product-${row.id}`}>
-                              <SelectValue placeholder="Select product" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="none">-- No Product --</SelectItem>
-                              {productsList.map((p) => (
-                                <SelectItem key={p.id} value={p.id}>
-                                  {p.title}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {isEditingSpend ? (
-                            <Input
-                              type="number"
-                              value={editValue}
-                              onChange={(e) => setEditValue(e.target.value)}
-                              onBlur={() => handleFieldSave(row.id, "adSpend")}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") handleFieldSave(row.id, "adSpend");
-                                if (e.key === "Escape") setEditingField(null);
-                              }}
-                              autoFocus
-                              className="h-8 text-sm w-24 ml-auto text-right"
-                              data-testid={`input-ad-spend-${row.id}`}
-                            />
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <MatchIndicator type={row.matchType} />
+                          {row.product ? (
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Avatar className="h-7 w-7 rounded">
+                                <AvatarImage src={row.product.imageUrl || undefined} alt={row.product.title} />
+                                <AvatarFallback className="rounded text-[10px]">
+                                  {row.product.title.charAt(0)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <span className="text-sm truncate max-w-[140px]" data-testid={`text-product-${row.campaignId}`}>
+                                {row.product.title}
+                              </span>
+                            </div>
                           ) : (
-                            <span
-                              className="cursor-pointer hover:text-primary tabular-nums"
-                              onClick={() => handleFieldEdit(row.id, "adSpend", row.adSpend || "0")}
-                              data-testid={`text-ad-spend-${row.id}`}
+                            <Select
+                              value="none"
+                              onValueChange={(val) => handleProductOverride(row.campaignId, val)}
                             >
-                              ${parseFloat(row.adSpend || "0").toLocaleString()}
-                            </span>
+                              <SelectTrigger className="h-8 text-xs w-[160px]" data-testid={`select-product-${row.campaignId}`}>
+                                <SelectValue placeholder="Select product" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">-- Select Product --</SelectItem>
+                                {productsList.map((p) => (
+                                  <SelectItem key={p.id} value={p.id}>
+                                    {p.title}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           )}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums" data-testid={`text-total-orders-${row.id}`}>
-                          {statsLoading ? <Skeleton className="h-4 w-8 ml-auto" /> : row.totalOrders}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums" data-testid={`text-dispatched-${row.id}`}>
-                          {statsLoading ? <Skeleton className="h-4 w-8 ml-auto" /> : row.dispatched}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums" data-testid={`text-delivered-${row.id}`}>
-                          {statsLoading ? <Skeleton className="h-4 w-8 ml-auto" /> : row.delivered}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums" data-testid={`text-cpa-${row.id}`}>
-                          {statsLoading ? (
-                            <Skeleton className="h-4 w-16 ml-auto" />
-                          ) : (
-                            formatCurrency(row.cpa)
+                          {row.product && (
+                            <Select
+                              value={row.product.id}
+                              onValueChange={(val) => handleProductOverride(row.campaignId, val)}
+                            >
+                              <SelectTrigger className="h-6 w-6 p-0 border-0 [&>svg]:hidden" data-testid={`select-override-${row.campaignId}`}>
+                                <span className="sr-only">Change product</span>
+                                <RefreshCw className="w-3 h-3 text-muted-foreground" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">-- No Product --</SelectItem>
+                                {productsList.map((p) => (
+                                  <SelectItem key={p.id} value={p.id}>
+                                    {p.title}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           )}
-                        </TableCell>
-                        <TableCell className="text-right" data-testid={`text-profit-margin-${row.id}`}>
-                          {statsLoading ? (
-                            <Skeleton className="h-4 w-16 ml-auto" />
-                          ) : (
-                            <span className={`tabular-nums font-medium ${row.profitMargin >= 0 ? "text-green-600" : "text-red-600"}`}>
-                              {formatCurrency(row.profitMargin)}
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right" data-testid={`text-net-profit-${row.id}`}>
-                          {statsLoading ? (
-                            <Skeleton className="h-4 w-20 ml-auto" />
-                          ) : (
-                            <span className={`tabular-nums font-semibold flex items-center justify-end gap-1 ${row.netProfit >= 0 ? "text-green-600" : "text-red-600"}`}>
-                              {row.netProfit >= 0 ? (
-                                <TrendingUp className="w-3.5 h-3.5" />
-                              ) : (
-                                <TrendingDown className="w-3.5 h-3.5" />
-                              )}
-                              {formatCurrency(row.netProfit)}
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                            onClick={() => deleteMutation.mutate(row.id)}
-                            disabled={deleteMutation.isPending}
-                            data-testid={`button-delete-${row.id}`}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                )}
-                {computedRows.length > 0 && (
-                  <TableRow className="bg-muted/50 font-semibold">
-                    <TableCell>Totals</TableCell>
-                    <TableCell></TableCell>
-                    <TableCell className="text-right tabular-nums" data-testid="text-total-ad-spend">
-                      ${totals.adSpend.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums" data-testid="text-total-all-orders">
-                      {totals.totalOrders}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums" data-testid="text-total-dispatched">
-                      {totals.dispatched}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums" data-testid="text-total-delivered">
-                      {totals.delivered}
-                    </TableCell>
-                    <TableCell></TableCell>
-                    <TableCell></TableCell>
-                    <TableCell className="text-right" data-testid="text-total-net-profit">
-                      <span className={`tabular-nums ${totals.netProfit >= 0 ? "text-green-600" : "text-red-600"}`}>
-                        {formatCurrency(totals.netProfit)}
-                      </span>
-                    </TableCell>
-                    <TableCell></TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums font-medium" data-testid={`text-ad-spend-${row.campaignId}`}>
+                        {formatUsd(row.adSpend)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums" data-testid={`text-total-orders-${row.campaignId}`}>
+                        {row.orders.total}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums" data-testid={`text-dispatched-${row.campaignId}`}>
+                        {row.orders.dispatched}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums" data-testid={`text-delivered-${row.campaignId}`}>
+                        {row.orders.delivered}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums" data-testid={`text-cpa-${row.campaignId}`}>
+                        {row.orders.total > 0 ? formatCurrency(row.cpa) : "—"}
+                      </TableCell>
+                      <TableCell className="text-right" data-testid={`text-profit-margin-${row.campaignId}`}>
+                        {row.product ? (
+                          <span className={`tabular-nums font-medium ${row.profitMargin >= 0 ? "text-green-600" : "text-red-600"}`}>
+                            {formatCurrency(row.profitMargin)}
+                          </span>
+                        ) : "—"}
+                      </TableCell>
+                      <TableCell className="text-right" data-testid={`text-net-profit-${row.campaignId}`}>
+                        {row.product ? (
+                          <span className={`tabular-nums font-semibold flex items-center justify-end gap-1 ${row.netProfit >= 0 ? "text-green-600" : "text-red-600"}`}>
+                            {row.netProfit >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                            {formatCurrency(row.netProfit)}
+                          </span>
+                        ) : "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {computedRows.length > 0 && (
+                    <TableRow className="bg-muted/50 font-semibold">
+                      <TableCell>Totals</TableCell>
+                      <TableCell></TableCell>
+                      <TableCell className="text-right tabular-nums" data-testid="text-total-ad-spend">
+                        {formatUsd(totals.adSpend)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums" data-testid="text-total-all-orders">
+                        {totals.totalOrders}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums" data-testid="text-total-dispatched">
+                        {totals.dispatched}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums" data-testid="text-total-delivered">
+                        {totals.delivered}
+                      </TableCell>
+                      <TableCell></TableCell>
+                      <TableCell></TableCell>
+                      <TableCell className="text-right" data-testid="text-total-net-profit">
+                        <span className={`tabular-nums ${totals.netProfit >= 0 ? "text-green-600" : "text-red-600"}`}>
+                          {formatCurrency(totals.netProfit)}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {computedRows.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -507,14 +537,14 @@ export default function AdsProfitability() {
                 Total Ad Spend
               </div>
               <p className="text-xl font-bold tabular-nums" data-testid="text-summary-ad-spend">
-                ${totals.adSpend.toLocaleString()}
+                {formatUsd(totals.adSpend)}
               </p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-                <Package className="w-4 h-4" />
+                <ShoppingCart className="w-4 h-4" />
                 Total Orders
               </div>
               <p className="text-xl font-bold tabular-nums" data-testid="text-summary-total-orders">
