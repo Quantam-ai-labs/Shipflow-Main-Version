@@ -245,6 +245,12 @@ export default function AdsProfitability() {
   const filteredCampaigns = campaigns.filter(c => {
     if (statusFilter === "ALL") return true;
     return c.status === statusFilter;
+  }).sort((a, b) => {
+    const statusOrder: Record<string, number> = { ACTIVE: 0, PAUSED: 1, ARCHIVED: 2 };
+    const sa = statusOrder[a.status] ?? 3;
+    const sb = statusOrder[b.status] ?? 3;
+    if (sa !== sb) return sa - sb;
+    return Number(b.campaignId) - Number(a.campaignId);
   });
 
   const computedRows = filteredCampaigns.map(c => {
@@ -470,18 +476,18 @@ export default function AdsProfitability() {
             <table className="w-full text-sm border-collapse">
               <thead className="sticky top-0 z-10 bg-emerald-700 dark:bg-emerald-800">
                 <tr>
-                  <th className="text-left text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap w-8">#</th>
+                  <th className="text-left text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap w-px">#</th>
                   <th className="text-left text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700">Campaign</th>
                   <th className="text-left text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700">Product</th>
-                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap">Sale Price</th>
-                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap">Cost Price</th>
-                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap">Ad Spend</th>
-                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap">Orders</th>
-                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap">Dispatched</th>
-                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap">Delivered</th>
-                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap">CPA (PKR)</th>
-                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap">Profit Margin</th>
-                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap">Net Profit</th>
+                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap w-px">Sale Price</th>
+                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap w-px">Cost Price</th>
+                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap w-px">Ad Spend</th>
+                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap w-px">Orders</th>
+                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap w-px">Dispatched</th>
+                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap w-px">Delivered</th>
+                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap w-px">CPA (PKR)</th>
+                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap w-px">Profit Margin</th>
+                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap w-px">Net Profit</th>
                 </tr>
               </thead>
               <tbody>
