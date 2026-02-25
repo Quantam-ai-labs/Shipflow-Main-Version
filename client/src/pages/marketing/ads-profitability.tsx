@@ -10,13 +10,15 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import {
   Table,
   TableBody,
@@ -46,6 +48,11 @@ import {
   RefreshCw,
   ShoppingCart,
   Target,
+  ChevronsUpDown,
+  Search,
+  X,
+  Check,
+  Pencil,
 } from "lucide-react";
 import type { Product } from "@shared/schema";
 
@@ -132,6 +139,7 @@ export default function AdsProfitability() {
   const [deliveryCharges, setDeliveryCharges] = useState<string>("0");
   const [packingExpense, setPackingExpense] = useState<string>("0");
   const [manualOverrides, setManualOverrides] = useState<Record<string, string>>({});
+  const [openCombobox, setOpenCombobox] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -413,55 +421,89 @@ export default function AdsProfitability() {
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <MatchIndicator type={row.matchType} />
-                          {row.product ? (
-                            <div className="flex items-center gap-2 min-w-0">
-                              <Avatar className="h-7 w-7 rounded">
-                                <AvatarImage src={row.product.imageUrl || undefined} alt={row.product.title} />
-                                <AvatarFallback className="rounded text-[10px]">
-                                  {row.product.title.charAt(0)}
-                                </AvatarFallback>
-                              </Avatar>
-                              <span className="text-sm truncate max-w-[140px]" data-testid={`text-product-${row.campaignId}`}>
-                                {row.product.title}
-                              </span>
-                            </div>
-                          ) : (
-                            <Select
-                              value="none"
-                              onValueChange={(val) => handleProductOverride(row.campaignId, val)}
-                            >
-                              <SelectTrigger className="h-8 text-xs w-[160px]" data-testid={`select-product-${row.campaignId}`}>
-                                <SelectValue placeholder="Select product" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">-- Select Product --</SelectItem>
-                                {productsList.map((p) => (
-                                  <SelectItem key={p.id} value={p.id}>
-                                    {p.title}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          )}
-                          {row.product && (
-                            <Select
-                              value={row.product.id}
-                              onValueChange={(val) => handleProductOverride(row.campaignId, val)}
-                            >
-                              <SelectTrigger className="h-6 w-6 p-0 border-0 [&>svg]:hidden" data-testid={`select-override-${row.campaignId}`}>
-                                <span className="sr-only">Change product</span>
-                                <RefreshCw className="w-3 h-3 text-muted-foreground" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">-- No Product --</SelectItem>
-                                {productsList.map((p) => (
-                                  <SelectItem key={p.id} value={p.id}>
-                                    {p.title}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          )}
+                          <Popover
+                            open={openCombobox === row.campaignId}
+                            onOpenChange={(open) => setOpenCombobox(open ? row.campaignId : null)}
+                          >
+                            <PopoverTrigger asChild>
+                              {row.product ? (
+                                <button
+                                  className="flex items-center gap-2 min-w-0 group cursor-pointer rounded-md px-1.5 py-1 -mx-1.5 hover:bg-accent transition-colors"
+                                  data-testid={`button-product-${row.campaignId}`}
+                                >
+                                  <Avatar className="h-7 w-7 rounded flex-shrink-0">
+                                    <AvatarImage src={row.product.imageUrl || undefined} alt={row.product.title} />
+                                    <AvatarFallback className="rounded text-[10px]">
+                                      {row.product.title.charAt(0)}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <span className="text-sm truncate max-w-[140px]" data-testid={`text-product-${row.campaignId}`}>
+                                    {row.product.title}
+                                  </span>
+                                  <Pencil className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                                </button>
+                              ) : (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 text-xs w-[180px] justify-between font-normal text-muted-foreground"
+                                  data-testid={`button-select-product-${row.campaignId}`}
+                                >
+                                  <span className="flex items-center gap-1.5">
+                                    <Search className="w-3 h-3" />
+                                    Search product...
+                                  </span>
+                                  <ChevronsUpDown className="w-3 h-3 opacity-50" />
+                                </Button>
+                              )}
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[280px] p-0" align="start">
+                              <Command>
+                                <CommandInput placeholder="Type product name..." data-testid={`input-search-product-${row.campaignId}`} />
+                                <CommandList>
+                                  <CommandEmpty>No products found.</CommandEmpty>
+                                  <CommandGroup>
+                                    {row.product && (
+                                      <CommandItem
+                                        value="__clear__"
+                                        onSelect={() => {
+                                          handleProductOverride(row.campaignId, "none");
+                                          setOpenCombobox(null);
+                                        }}
+                                        className="text-muted-foreground"
+                                        data-testid={`button-clear-product-${row.campaignId}`}
+                                      >
+                                        <X className="w-3.5 h-3.5 mr-2" />
+                                        Clear selection
+                                      </CommandItem>
+                                    )}
+                                    {productsList.map((p) => (
+                                      <CommandItem
+                                        key={p.id}
+                                        value={p.title}
+                                        onSelect={() => {
+                                          handleProductOverride(row.campaignId, p.id);
+                                          setOpenCombobox(null);
+                                        }}
+                                        data-testid={`option-product-${row.campaignId}-${p.id}`}
+                                      >
+                                        <Avatar className="h-6 w-6 rounded flex-shrink-0">
+                                          <AvatarImage src={p.imageUrl || undefined} alt={p.title} />
+                                          <AvatarFallback className="rounded text-[9px]">
+                                            {p.title.charAt(0)}
+                                          </AvatarFallback>
+                                        </Avatar>
+                                        <span className="truncate">{p.title}</span>
+                                        {row.product?.id === p.id && (
+                                          <Check className="w-3.5 h-3.5 ml-auto text-green-500 flex-shrink-0" />
+                                        )}
+                                      </CommandItem>
+                                    ))}
+                                  </CommandGroup>
+                                </CommandList>
+                              </Command>
+                            </PopoverContent>
+                          </Popover>
                         </div>
                       </TableCell>
                       <TableCell className="text-right tabular-nums font-medium" data-testid={`text-ad-spend-${row.campaignId}`}>
