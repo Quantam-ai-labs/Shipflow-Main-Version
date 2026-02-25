@@ -9127,18 +9127,23 @@ export async function registerRoutes(
       const shopifyProducts = await shopifyService.fetchAllProducts(store.shopDomain, accessToken);
 
       const allInventoryItemIds: string[] = [];
+      let variantsWithoutInvId = 0;
+      let totalVariants = 0;
       for (const sp of shopifyProducts) {
         for (const v of (sp.variants || [])) {
+          totalVariants++;
           if (v.inventory_item_id) {
             allInventoryItemIds.push(String(v.inventory_item_id));
+          } else {
+            variantsWithoutInvId++;
           }
         }
       }
 
-      console.log(`[Products Sync] Collected ${allInventoryItemIds.length} inventory item IDs for cost lookup`);
+      console.log(`[Products Sync] ${totalVariants} total variants, ${allInventoryItemIds.length} with inventory_item_id, ${variantsWithoutInvId} without`);
       const costMap = await shopifyService.fetchInventoryItemCosts(store.shopDomain, accessToken, allInventoryItemIds);
-      const costsFound = Array.from(costMap.values()).filter(v => v !== null).length;
-      console.log(`[Products Sync] Cost data: ${costMap.size} items queried, ${costsFound} with cost values`);
+      const costsFound = Array.from(costMap.values()).filter(v => v !== null && v !== "0.00").length;
+      console.log(`[Products Sync] Cost data: ${costMap.size} items queried, ${costsFound} with non-zero cost values`);
 
       let synced = 0;
       for (const sp of shopifyProducts) {

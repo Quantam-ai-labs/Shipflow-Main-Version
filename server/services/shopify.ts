@@ -974,12 +974,20 @@ export class ShopifyService {
     if (inventoryItemIds.length === 0) return costMap;
 
     const headers = this.getAuthHeaders(accessToken);
-    const batchSize = 100;
+    const batchSize = 50;
+    let totalWithCost = 0;
+    let totalWithoutCost = 0;
+    let retryCount = 0;
+    const maxRetries = 3;
+
+    console.log(`[Shopify Products] Fetching costs for ${inventoryItemIds.length} inventory items in batches of ${batchSize}...`);
 
     for (let i = 0; i < inventoryItemIds.length; i += batchSize) {
       const batch = inventoryItemIds.slice(i, i + batchSize);
       const idsParam = batch.join(",");
       const url = `https://${shop}/admin/api/2025-01/inventory_items.json?ids=${idsParam}`;
+      const batchNum = Math.floor(i / batchSize) + 1;
+      const totalBatches = Math.ceil(inventoryItemIds.length / batchSize);
 
       try {
         const response = await fetch(url, { headers });
@@ -987,31 +995,50 @@ export class ShopifyService {
         if (response.status === 429) {
           const retryAfter = response.headers.get('Retry-After');
           const delay = retryAfter ? parseInt(retryAfter) * 1000 : 2000;
-          console.log(`[Shopify Products] Rate limited on inventory items, waiting ${delay}ms...`);
+          console.log(`[Shopify Products] Rate limited on inventory items batch ${batchNum}/${totalBatches}, waiting ${delay}ms...`);
           await this.sleep(delay);
+          retryCount++;
+          if (retryCount > maxRetries) {
+            console.error(`[Shopify Products] Max retries exceeded on inventory items batch ${batchNum}`);
+            continue;
+          }
           i -= batchSize;
           continue;
         }
 
+        retryCount = 0;
+
         if (!response.ok) {
-          console.error(`[Shopify Products] Failed to fetch inventory items batch: ${response.status}`);
+          const errorBody = await response.text().catch(() => '');
+          console.error(`[Shopify Products] Failed to fetch inventory items batch ${batchNum}/${totalBatches}: ${response.status} ${errorBody.slice(0, 200)}`);
           continue;
         }
 
         const data = await response.json();
         if (data.inventory_items && Array.isArray(data.inventory_items)) {
           for (const item of data.inventory_items) {
-            costMap.set(String(item.id), item.cost ?? null);
+            const cost = item.cost ?? null;
+            costMap.set(String(item.id), cost);
+            if (cost !== null && cost !== "0.00") {
+              totalWithCost++;
+            } else {
+              totalWithoutCost++;
+            }
           }
+          if (data.inventory_items.length !== batch.length) {
+            console.warn(`[Shopify Products] Batch ${batchNum}: requested ${batch.length} items but got ${data.inventory_items.length}`);
+          }
+        } else {
+          console.warn(`[Shopify Products] Batch ${batchNum}: unexpected response structure`, Object.keys(data));
         }
 
         await this.sleep(300);
       } catch (error: any) {
-        console.error(`[Shopify Products] Error fetching inventory items batch:`, error.message);
+        console.error(`[Shopify Products] Error fetching inventory items batch ${batchNum}/${totalBatches}:`, error.message);
       }
     }
 
-    console.log(`[Shopify Products] Fetched costs for ${costMap.size} inventory items.`);
+    console.log(`[Shopify Products] Inventory item costs: ${costMap.size} total, ${totalWithCost} with cost values, ${totalWithoutCost} without cost`);
     return costMap;
   }
 }
