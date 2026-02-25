@@ -1,0 +1,132 @@
+========================
+CRITICAL SAFETY RULES
+========================
+1. DO NOT change, refactor, rename, or delete any existing files, logic, APIs, database tables, authentication, or authorization.
+2. DO NOT touch existing user signup, login, role, or permission logic.
+3. All changes must be ADDITIVE and ISOLATED.
+4. If anything is unclear, ASK before changing behavior.
+5. Do NOT “improve” unrelated code.
+
+========================
+SAFE RETURN POINT (MANDATORY FIRST STEP)
+========================
+Before implementing anything:
+* Create a git commit with message:
+  "SAFEPOINT: before user invite system"
+
+If git is unavailable:
+* Duplicate the current project into a folder named:
+  "backup_before_invite_system"
+
+All new logic must be removable without breaking the app.
+
+========================
+FEATURE: ADMIN USER INVITE SYSTEM
+========================
+
+Goal:
+Allow ADMIN users to invite new users via email invite link using AWS SES.
+
+========================
+ADMIN INVITE INPUT
+========================
+Admin provides:
+* name (required)
+* email (required)
+* role (optional, default = standard user)
+
+Only ADMIN users can access this feature.
+
+========================
+INVITE TOKEN LOGIC
+========================
+* Generate a cryptographically secure, unguessable token
+* Token must be single-use
+* Token must expire (48–72 hours)
+* Hash the token before storing in database
+
+========================
+DATABASE (NEW TABLE ONLY)
+========================
+Create a NEW table called `user_invites`.
+DO NOT modify existing user tables.
+
+Fields:
+* id
+* name
+* email
+* token_hash
+* role
+* status ENUM: invited | accepted | expired
+* created_by (admin user id)
+* expires_at
+* created_at
+
+========================
+SAVE INVITE
+========================
+On invite creation:
+* Save record in `user_invites`
+* status = "invited"
+
+========================
+EMAIL DELIVERY (AWS SES)
+========================
+Use AWS SES to send invitation email.
+
+Requirements:
+* Use environment variables for AWS credentials
+* Do NOT hardcode secrets
+* Email includes invite link:
+
+  https://<your-domain>/accept-invite?token=RAW_TOKEN
+
+Email content must include:
+* Inviter name
+* Assigned role (if any)
+* Expiration notice
+
+========================
+ACCEPT INVITE FLOW
+========================
+When invite link is opened:
+1. Validate token:
+   - Exists
+   - Not expired
+   - Status = invited
+2. If invalid → show error message
+3. If valid:
+   - Allow user to set password
+   - Create real user account using invite data
+   - Assign role
+   - Mark invite status = accepted
+   - Token becomes unusable
+
+========================
+SECURITY REQUIREMENTS
+========================
+* Token must be single-use
+* Prevent brute-force attempts
+* Reject reused or expired tokens
+* Admin-only access for invite creation
+
+========================
+NON-BREAKING GUARANTEE
+========================
+* Existing users must not be affected
+* Existing auth flows must continue working
+* Removing invite system must not break the app
+
+========================
+OPTIONAL (ONLY IF SIMPLE)
+========================
+* Admin UI to list pending / accepted / expired invites
+* Resend invite (new token, old invalidated)
+
+========================
+FINAL CHECK
+========================
+Before finishing:
+* Confirm rollback is possible
+* Confirm no existing logic was changed
+* Confirm new code is isolated
