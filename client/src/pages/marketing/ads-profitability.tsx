@@ -476,8 +476,7 @@ export default function AdsProfitability() {
             <table className="w-full text-sm border-collapse table-fixed">
               <colgroup>
                 <col style={{width: "3%"}} />
-                <col style={{width: "2%"}} />
-                <col style={{width: "15%"}} />
+                <col style={{width: "17%"}} />
                 <col style={{width: "14%"}} />
                 <col style={{width: "6%"}} />
                 <col style={{width: "6%"}} />
@@ -492,7 +491,6 @@ export default function AdsProfitability() {
               <thead className="sticky top-0 z-10 bg-emerald-700 dark:bg-emerald-800">
                 <tr>
                   <th className="text-center text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap overflow-hidden">Status</th>
-                  <th className="text-left text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700">#</th>
                   <th className="text-left text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 truncate overflow-hidden">Campaign</th>
                   <th className="text-left text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 truncate overflow-hidden">Product</th>
                   <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap overflow-hidden">Sale Price</th>
@@ -512,7 +510,6 @@ export default function AdsProfitability() {
                     <td className="border border-border px-2 py-1 text-xs text-center" data-testid={`text-status-${row.campaignId}`}>
                       <StatusBadge status={row.status} />
                     </td>
-                    <td className="border border-border px-2 py-1 text-xs text-muted-foreground tabular-nums">{idx + 1}</td>
                     <td className="border border-border px-2 py-1 text-xs overflow-hidden truncate">
                       <span className="font-medium truncate" data-testid={`text-campaign-name-${row.campaignId}`}>
                         {row.campaignName}
@@ -642,7 +639,6 @@ export default function AdsProfitability() {
                 ))}
                 {computedRows.length > 0 && (
                   <tr className="bg-emerald-700/10 dark:bg-emerald-900/30 font-semibold">
-                    <td className="border border-border px-2 py-1.5 text-xs"></td>
                     <td className="border border-border px-2 py-1.5 text-xs"></td>
                     <td className="border border-border px-2 py-1.5 text-xs font-semibold">Totals</td>
                     <td className="border border-border px-2 py-1.5 text-xs"></td>
