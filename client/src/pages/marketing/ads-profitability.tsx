@@ -618,6 +618,73 @@ export default function AdsProfitability() {
           </Card>
         </div>
       )}
+
+      <Card data-testid="card-column-guide">
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <HelpCircle className="w-4 h-4" />
+            Column Guide & Formulas
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6 text-sm">
+          <div>
+            <h3 className="font-semibold mb-2 text-base">Settings</h3>
+            <div className="grid gap-2 text-muted-foreground">
+              <p><span className="font-medium text-foreground">USD to PKR Rate</span> — The exchange rate used to convert Facebook ad spend (in USD) to Pakistani Rupees. Update this to match the current market rate.</p>
+              <p><span className="font-medium text-foreground">Delivery Charges</span> — The courier/shipping cost you pay per order. Deducted from each order's profit calculation.</p>
+              <p><span className="font-medium text-foreground">Packing Expense</span> — Any packaging cost per order (boxes, tape, labels, etc.). Deducted from each order's profit calculation.</p>
+            </div>
+          </div>
+
+          <div className="border-t pt-4">
+            <h3 className="font-semibold mb-3 text-base">Table Columns</h3>
+            <div className="grid gap-3 text-muted-foreground">
+              <div>
+                <p className="font-medium text-foreground">Campaign</p>
+                <p>The Facebook/Meta ad campaign name. This is pulled directly from your connected Facebook Ads account during sync. The status badge shows whether the campaign is Active, Paused, or Archived. The URL below shows the destination link from the ad creative.</p>
+              </div>
+              <div>
+                <p className="font-medium text-foreground">Product</p>
+                <p>The Shopify product linked to this campaign. Products are auto-matched by extracting the destination URL from the ad creative and matching the product handle (URL slug) against your Shopify catalog. A <span className="inline-flex items-center gap-1"><Zap className="w-3 h-3 text-green-500 inline" /></span> icon means it was auto-matched, <span className="inline-flex items-center gap-1"><Hand className="w-3 h-3 text-blue-500 inline" /></span> means you manually selected it, and <span className="inline-flex items-center gap-1"><HelpCircle className="w-3 h-3 inline" /></span> means no product has been matched yet. Click on any product (or the "Search product..." button) to search and select a different product.</p>
+              </div>
+              <div>
+                <p className="font-medium text-foreground">Ad Spend</p>
+                <p>Total amount spent on this campaign in USD, pulled from Facebook Ads insights. This is filtered by the date range selected at the top of the page.</p>
+              </div>
+              <div>
+                <p className="font-medium text-foreground">Orders</p>
+                <p>Total number of Shopify orders that contain the matched product within the selected date range. This counts all orders regardless of their fulfillment status.</p>
+              </div>
+              <div>
+                <p className="font-medium text-foreground">Dispatched</p>
+                <p>Orders that have been shipped out. This includes orders with status: Fulfilled, Delivered, or Return (since returned orders were dispatched before being returned).</p>
+              </div>
+              <div>
+                <p className="font-medium text-foreground">Delivered</p>
+                <p>Orders that have been successfully delivered to the customer. Only orders with "Delivered" status are counted here.</p>
+              </div>
+              <div>
+                <p className="font-medium text-foreground">CPA (Cost Per Acquisition)</p>
+                <p>How much it costs you in PKR to acquire one order through this campaign.</p>
+                <p className="mt-1 font-mono text-xs bg-muted rounded px-2 py-1 inline-block">CPA = (Ad Spend USD ÷ Total Orders) × Dollar Rate</p>
+                <p className="mt-1">Example: If you spent $50 on ads and got 10 orders at a rate of Rs. 280/$ → CPA = ($50 ÷ 10) × 280 = Rs. 1,400 per order.</p>
+              </div>
+              <div>
+                <p className="font-medium text-foreground">Profit Margin</p>
+                <p>The per-unit profit (or loss) on each order after deducting all costs from the sale price.</p>
+                <p className="mt-1 font-mono text-xs bg-muted rounded px-2 py-1 inline-block">Profit Margin = Sale Price − Cost Price − CPA − Delivery Charges − Packing Expense</p>
+                <p className="mt-1">Sale Price and Cost Price are taken from the first variant of the matched Shopify product. A <span className="text-green-600 font-medium">green</span> value means you're making profit per order, <span className="text-red-600 font-medium">red</span> means a loss.</p>
+              </div>
+              <div>
+                <p className="font-medium text-foreground">Net Profit</p>
+                <p>The total profit (or loss) for the entire campaign — how much money this campaign actually made or lost you.</p>
+                <p className="mt-1 font-mono text-xs bg-muted rounded px-2 py-1 inline-block">Net Profit = Profit Margin × Total Orders</p>
+                <p className="mt-1">This is the bottom line. <span className="text-green-600 font-medium">Green with ↑</span> means the campaign is profitable, <span className="text-red-600 font-medium">Red with ↓</span> means it's losing money and you should consider optimizing or pausing it.</p>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
