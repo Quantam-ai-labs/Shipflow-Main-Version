@@ -55,6 +55,7 @@ import {
   Pencil,
   Filter,
   ListOrdered,
+  Type,
 } from "lucide-react";
 import type { Product } from "@shared/schema";
 
@@ -65,7 +66,7 @@ interface CampaignData {
   objective: string | null;
   adSpend: number;
   destinationUrl: string | null;
-  matchType: "auto" | "manual" | "unmatched";
+  matchType: "auto" | "name" | "manual" | "unmatched";
   product: {
     id: string;
     title: string;
@@ -110,6 +111,16 @@ function MatchIndicator({ type }: { type: string }) {
           <Zap className="w-3.5 h-3.5 text-green-500" />
         </TooltipTrigger>
         <TooltipContent>Auto-matched from ad destination URL</TooltipContent>
+      </Tooltip>
+    );
+  }
+  if (type === "name") {
+    return (
+      <Tooltip>
+        <TooltipTrigger>
+          <Type className="w-3.5 h-3.5 text-amber-500" />
+        </TooltipTrigger>
+        <TooltipContent>Auto-matched from campaign name</TooltipContent>
       </Tooltip>
     );
   }
@@ -319,7 +330,7 @@ export default function AdsProfitability() {
       };
       const statusOrder: Record<string, number> = { ACTIVE: 0, PAUSED: 1, ARCHIVED: 2 };
       const bestStatus = group.reduce((best, r) => (statusOrder[r.status] ?? 3) < (statusOrder[best] ?? 3) ? r.status : best, group[0].status);
-      const bestMatch = group.some(r => r.matchType === "auto") ? "auto" as const : group.some(r => r.matchType === "manual") ? "manual" as const : "unmatched" as const;
+      const bestMatch = group.some(r => r.matchType === "auto") ? "auto" as const : group.some(r => r.matchType === "name") ? "name" as const : group.some(r => r.matchType === "manual") ? "manual" as const : "unmatched" as const;
       const campaignName = group.map(r => r.campaignName).join(", ");
       const salePrice = first.product?.salePrice ?? 0;
       const costPrice = first.product?.costPrice ?? 0;

@@ -643,41 +643,79 @@ export function registerMarketingRoutes(app: Express) {
         }
       }
 
+      const allProductRows = await db
+        .select({
+          id: products.id,
+          title: products.title,
+          handle: products.handle,
+          imageUrl: products.imageUrl,
+          shopifyProductId: products.shopifyProductId,
+          variants: products.variants,
+        })
+        .from(products)
+        .where(eq(products.merchantId, merchantId));
+
+      let productDetailsMap = new Map<string, { title: string; handle: string | null; imageUrl: string | null; salePrice: number; costPrice: number; shopifyProductId: string }>();
+      for (const p of allProductRows) {
+        let salePrice = 0, costPrice = 0;
+        const variants = p.variants as any[];
+        if (variants && Array.isArray(variants) && variants.length > 0) {
+          salePrice = parseFloat(variants[0].price || "0");
+          costPrice = parseFloat(variants[0].cost || "0");
+        }
+        productDetailsMap.set(p.id, {
+          title: p.title,
+          handle: p.handle,
+          imageUrl: p.imageUrl,
+          salePrice,
+          costPrice,
+          shopifyProductId: p.shopifyProductId,
+        });
+      }
+
+      const nameMatchedCampaigns = new Set<string>();
+      for (const campaign of campaigns) {
+        const existing = campaignProductMap.get(campaign.campaignId);
+        if (existing?.productId) continue;
+
+        const campaignNameLower = (campaign.name || "").toLowerCase();
+        if (!campaignNameLower) continue;
+
+        let bestMatch: { id: string; score: number } | null = null;
+        for (const [prodId, prod] of productDetailsMap) {
+          if (prod.handle) {
+            const handleLower = prod.handle.toLowerCase();
+            const handleWords = handleLower.split("-").filter(w => w.length > 2);
+            const matchingWords = handleWords.filter(w => campaignNameLower.includes(w));
+            if (matchingWords.length >= 2 && matchingWords.length / handleWords.length >= 0.3) {
+              const score = matchingWords.length / handleWords.length;
+              if (!bestMatch || score > bestMatch.score) {
+                bestMatch = { id: prodId, score };
+              }
+            }
+          }
+
+          const titleLower = prod.title.toLowerCase();
+          const titleWords = titleLower.split(/[\s\-–&]+/).filter(w => w.length > 2);
+          const campaignWords = campaignNameLower.split(/[\s\-–/]+/).filter(w => w.length > 2 && !/^\d+$/.test(w));
+          const matchingTitleWords = campaignWords.filter(w => titleWords.some(tw => tw.includes(w) || w.includes(tw)));
+          if (matchingTitleWords.length >= 2) {
+            const score = matchingTitleWords.length / Math.max(campaignWords.length, 1);
+            if (!bestMatch || score > bestMatch.score) {
+              bestMatch = { id: prodId, score };
+            }
+          }
+        }
+
+        if (bestMatch && bestMatch.score >= 0.3) {
+          campaignProductMap.set(campaign.campaignId, { productId: bestMatch.id, url: null });
+          nameMatchedCampaigns.add(campaign.campaignId);
+        }
+      }
+
       const matchedProductIds = [...new Set(
         [...campaignProductMap.values()].map(v => v.productId).filter(Boolean) as string[]
       )];
-
-      let productDetailsMap = new Map<string, { title: string; handle: string | null; imageUrl: string | null; salePrice: number; costPrice: number; shopifyProductId: string }>();
-      if (matchedProductIds.length > 0) {
-        const productRows = await db
-          .select({
-            id: products.id,
-            title: products.title,
-            handle: products.handle,
-            imageUrl: products.imageUrl,
-            shopifyProductId: products.shopifyProductId,
-            variants: products.variants,
-          })
-          .from(products)
-          .where(and(eq(products.merchantId, merchantId), inArray(products.id, matchedProductIds)));
-
-        for (const p of productRows) {
-          let salePrice = 0, costPrice = 0;
-          const variants = p.variants as any[];
-          if (variants && Array.isArray(variants) && variants.length > 0) {
-            salePrice = parseFloat(variants[0].price || "0");
-            costPrice = parseFloat(variants[0].cost || "0");
-          }
-          productDetailsMap.set(p.id, {
-            title: p.title,
-            handle: p.handle,
-            imageUrl: p.imageUrl,
-            salePrice,
-            costPrice,
-            shopifyProductId: p.shopifyProductId,
-          });
-        }
-      }
 
       const orderConditions: any[] = [eq(orders.merchantId, merchantId)];
       const merchantRow = await db.select().from(merchants).where(eq(merchants.id, merchantId)).limit(1);
@@ -741,7 +779,7 @@ export function registerMarketingRoutes(app: Express) {
           objective: campaign.objective,
           adSpend: spend,
           destinationUrl: productMapping?.url || null,
-          matchType: productId ? "auto" : "unmatched",
+          matchType: productId ? (nameMatchedCampaigns.has(campaign.campaignId) ? "name" : "auto") : "unmatched",
           product: product ? {
             id: productId,
             title: product.title,
