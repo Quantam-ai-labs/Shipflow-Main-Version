@@ -99,7 +99,7 @@ function StatusBadge({ status }: { status: string }) {
     status === "ACTIVE" ? "bg-green-500/10 text-green-600 border-green-500/20" :
     status === "PAUSED" ? "bg-yellow-500/10 text-yellow-600 border-yellow-500/20" :
     "bg-zinc-500/10 text-zinc-500 border-zinc-500/20";
-  return <Badge className={`text-[10px] ${color}`}>{status}</Badge>;
+  return <Badge className={`text-[8px] px-1 py-0 leading-tight ${color}`}>{status}</Badge>;
 }
 
 function MatchIndicator({ type }: { type: string }) {
@@ -475,10 +475,10 @@ export default function AdsProfitability() {
           <div className="overflow-x-auto max-h-[75vh]">
             <table className="w-full text-sm border-collapse table-fixed">
               <colgroup>
-                <col style={{width: "5%"}} />
+                <col style={{width: "3%"}} />
                 <col style={{width: "2%"}} />
+                <col style={{width: "15%"}} />
                 <col style={{width: "14%"}} />
-                <col style={{width: "18%"}} />
                 <col style={{width: "6%"}} />
                 <col style={{width: "6%"}} />
                 <col style={{width: "6%"}} />
