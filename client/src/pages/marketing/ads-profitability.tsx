@@ -473,38 +473,50 @@ export default function AdsProfitability() {
       ) : (
         <div className="border border-border rounded-lg overflow-hidden">
           <div className="overflow-x-auto max-h-[75vh]">
-            <table className="w-full text-sm border-collapse">
+            <table className="w-full text-sm border-collapse table-fixed">
+              <colgroup>
+                <col style={{width: "2%"}} />
+                <col style={{width: "15%"}} />
+                <col style={{width: "20%"}} />
+                <col style={{width: "6%"}} />
+                <col style={{width: "6%"}} />
+                <col style={{width: "6%"}} />
+                <col style={{width: "5%"}} />
+                <col style={{width: "7%"}} />
+                <col style={{width: "6%"}} />
+                <col style={{width: "7%"}} />
+                <col style={{width: "9%"}} />
+                <col style={{width: "11%"}} />
+              </colgroup>
               <thead className="sticky top-0 z-10 bg-emerald-700 dark:bg-emerald-800">
                 <tr>
-                  <th className="text-left text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap w-px">#</th>
-                  <th className="text-left text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 truncate" style={{width: "2%"}}>Campaign</th>
-                  <th className="text-left text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 truncate" style={{width: "25%"}}>Product</th>
-                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap w-px">Sale Price</th>
-                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap w-px">Cost Price</th>
-                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap w-px">Ad Spend</th>
-                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap w-px">Orders</th>
-                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap w-px">Dispatched</th>
-                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap w-px">Delivered</th>
-                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap w-px">CPA (PKR)</th>
-                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap w-px">Profit Margin</th>
-                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap w-px">Net Profit</th>
+                  <th className="text-left text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700">#</th>
+                  <th className="text-left text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 truncate overflow-hidden">Campaign</th>
+                  <th className="text-left text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 truncate overflow-hidden">Product</th>
+                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap overflow-hidden">Sale Price</th>
+                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap overflow-hidden">Cost Price</th>
+                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap overflow-hidden">Ad Spend</th>
+                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap overflow-hidden">Orders</th>
+                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap overflow-hidden">Dispatched</th>
+                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap overflow-hidden">Delivered</th>
+                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap overflow-hidden">CPA (PKR)</th>
+                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap overflow-hidden">Profit Margin</th>
+                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap overflow-hidden">Net Profit</th>
                 </tr>
               </thead>
               <tbody>
                 {computedRows.map((row, idx) => (
                   <tr key={row.campaignId} className="hover:bg-muted/30 transition-colors" data-testid={`row-campaign-${row.campaignId}`}>
                     <td className="border border-border px-2 py-1 text-xs text-muted-foreground tabular-nums">{idx + 1}</td>
-                    <td className="border border-border px-2 py-1 text-xs overflow-hidden">
-                      <div className="truncate">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-medium truncate" data-testid={`text-campaign-name-${row.campaignId}`}>
-                            {row.campaignName}
-                          </span>
-                          <StatusBadge status={row.status} />
-                        </div>
+                    <td className="border border-border px-2 py-1 text-xs overflow-hidden truncate">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="font-medium truncate" data-testid={`text-campaign-name-${row.campaignId}`}>
+                          {row.campaignName}
+                        </span>
+                        <StatusBadge status={row.status} />
                       </div>
                     </td>
-                    <td className="border border-border px-2 py-1 text-xs overflow-hidden">
+                    <td className="border border-border px-2 py-1 text-xs overflow-hidden truncate">
                       <div className="flex items-center gap-1.5 min-w-0">
                         <MatchIndicator type={row.matchType} />
                         <Popover
