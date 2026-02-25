@@ -689,10 +689,13 @@ async function drawSingleAirwayBill(
 
   // --- Remarks Row ---
   drawTextSafe(page, boldFont, "Remarks:", x + pad, remarksTopY - 13, 8, BLACK);
+  let cleanRemarks = data.remarks || "handle with care";
+  cleanRemarks = cleanRemarks.replace(/^\[\s*.*?\]\s*-?\s*/, "").trim();
+
   drawTextSafe(
     page,
     font,
-    `- ${data.remarks || "handle with care"}`,
+    `- ${cleanRemarks}`,
     x + pad + 40,
     remarksTopY - 13,
     8,
