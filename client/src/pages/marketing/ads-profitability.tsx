@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -147,6 +147,33 @@ export default function AdsProfitability() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [orderTypeForCalc, setOrderTypeForCalc] = useState<OrderTypeForCalc>("total");
+
+  const defaultColWidths = [28, 160, 150, 70, 52, 68, 62, 70, 82, 80];
+  const [colWidths, setColWidths] = useState<number[]>(defaultColWidths);
+  const resizingCol = useRef<{ idx: number; startX: number; startW: number } | null>(null);
+
+  const onResizeStart = useCallback((e: React.MouseEvent, idx: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    resizingCol.current = { idx, startX: e.clientX, startW: colWidths[idx] };
+    const onMove = (ev: MouseEvent) => {
+      if (!resizingCol.current) return;
+      const diff = ev.clientX - resizingCol.current.startX;
+      const newW = Math.max(28, resizingCol.current.startW + diff);
+      setColWidths((prev) => {
+        const next = [...prev];
+        next[resizingCol.current!.idx] = newW;
+        return next;
+      });
+    };
+    const onUp = () => {
+      resizingCol.current = null;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, [colWidths]);
 
   useEffect(() => {
     try {
@@ -465,43 +492,44 @@ export default function AdsProfitability() {
       ) : (
         <div className="border border-border rounded-lg overflow-hidden">
           <div className="overflow-x-auto max-h-[75vh]">
-            <table className="w-full text-sm border-collapse">
+            <table className="text-sm border-collapse" style={{ tableLayout: "fixed", width: colWidths.reduce((a, b) => a + b, 0) }}>
+              <colgroup>
+                {colWidths.map((w, i) => (
+                  <col key={i} style={{ width: w }} />
+                ))}
+              </colgroup>
               <thead className="sticky top-0 z-10 bg-emerald-700 dark:bg-emerald-800">
                 <tr>
-                  <th className="text-left text-white text-xs font-semibold px-3 py-2 border border-emerald-600 dark:border-emerald-700 w-8">#</th>
-                  <th className="text-left text-white text-xs font-semibold px-3 py-2 border border-emerald-600 dark:border-emerald-700 min-w-[200px]">Campaign</th>
-                  <th className="text-left text-white text-xs font-semibold px-3 py-2 border border-emerald-600 dark:border-emerald-700 min-w-[200px]">Product</th>
-                  <th className="text-right text-white text-xs font-semibold px-3 py-2 border border-emerald-600 dark:border-emerald-700 w-24">Ad Spend</th>
-                  <th className="text-right text-white text-xs font-semibold px-3 py-2 border border-emerald-600 dark:border-emerald-700 w-20">Orders</th>
-                  <th className="text-right text-white text-xs font-semibold px-3 py-2 border border-emerald-600 dark:border-emerald-700 w-24">Dispatched</th>
-                  <th className="text-right text-white text-xs font-semibold px-3 py-2 border border-emerald-600 dark:border-emerald-700 w-24">Delivered</th>
-                  <th className="text-right text-white text-xs font-semibold px-3 py-2 border border-emerald-600 dark:border-emerald-700 w-24">CPA (PKR)</th>
-                  <th className="text-right text-white text-xs font-semibold px-3 py-2 border border-emerald-600 dark:border-emerald-700 w-28">Profit Margin</th>
-                  <th className="text-right text-white text-xs font-semibold px-3 py-2 border border-emerald-600 dark:border-emerald-700 w-28">Net Profit</th>
+                  {["#", "Campaign", "Product", "Ad Spend", "Orders", "Dispatched", "Delivered", "CPA (PKR)", "Profit Margin", "Net Profit"].map((label, i) => (
+                    <th
+                      key={label}
+                      className={`${i >= 3 ? "text-right" : "text-left"} text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 relative select-none whitespace-nowrap overflow-hidden`}
+                    >
+                      {label}
+                      <div
+                        className="absolute top-0 right-0 w-1.5 h-full cursor-col-resize hover:bg-white/30 z-20"
+                        onMouseDown={(e) => onResizeStart(e, i)}
+                      />
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {computedRows.map((row, idx) => (
                   <tr key={row.campaignId} className="hover:bg-muted/30 transition-colors" data-testid={`row-campaign-${row.campaignId}`}>
-                    <td className="border border-border px-3 py-1.5 text-xs text-muted-foreground tabular-nums">{idx + 1}</td>
-                    <td className="border border-border px-3 py-1.5 text-xs">
-                      <div className="space-y-0.5">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium" data-testid={`text-campaign-name-${row.campaignId}`}>
+                    <td className="border border-border px-2 py-1 text-xs text-muted-foreground tabular-nums">{idx + 1}</td>
+                    <td className="border border-border px-2 py-1 text-xs overflow-hidden">
+                      <div className="truncate">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-medium truncate" data-testid={`text-campaign-name-${row.campaignId}`}>
                             {row.campaignName}
                           </span>
                           <StatusBadge status={row.status} />
                         </div>
-                        {row.destinationUrl && (
-                          <div className="flex items-center gap-1 text-[10px] text-muted-foreground truncate max-w-[200px]">
-                            <Link2 className="w-2.5 h-2.5 flex-shrink-0" />
-                            <span className="truncate">{row.destinationUrl}</span>
-                          </div>
-                        )}
                       </div>
                     </td>
-                    <td className="border border-border px-3 py-1.5 text-xs">
-                      <div className="flex items-center gap-2">
+                    <td className="border border-border px-2 py-1 text-xs overflow-hidden">
+                      <div className="flex items-center gap-1.5 min-w-0">
                         <MatchIndicator type={row.matchType} />
                         <Popover
                           open={openCombobox === row.campaignId}
@@ -510,32 +538,28 @@ export default function AdsProfitability() {
                           <PopoverTrigger asChild>
                             {row.product ? (
                               <button
-                                className="flex items-center gap-2 min-w-0 group cursor-pointer rounded-md px-1 py-0.5 -mx-1 hover:bg-accent transition-colors"
+                                className="flex items-center gap-1.5 min-w-0 group cursor-pointer rounded px-1 py-0.5 -mx-1 hover:bg-accent transition-colors"
                                 data-testid={`button-product-${row.campaignId}`}
                               >
-                                <Avatar className="h-6 w-6 rounded flex-shrink-0">
+                                <Avatar className="h-5 w-5 rounded flex-shrink-0">
                                   <AvatarImage src={row.product.imageUrl || undefined} alt={row.product.title} />
-                                  <AvatarFallback className="rounded text-[9px]">
+                                  <AvatarFallback className="rounded text-[8px]">
                                     {row.product.title.charAt(0)}
                                   </AvatarFallback>
                                 </Avatar>
-                                <span className="text-xs truncate max-w-[130px]" data-testid={`text-product-${row.campaignId}`}>
+                                <span className="text-xs truncate" data-testid={`text-product-${row.campaignId}`}>
                                   {row.product.title}
                                 </span>
-                                <Pencil className="w-2.5 h-2.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
                               </button>
                             ) : (
                               <Button
                                 variant="outline"
                                 size="sm"
-                                className="h-7 text-xs w-[160px] justify-between font-normal text-muted-foreground"
+                                className="h-6 text-[11px] justify-between font-normal text-muted-foreground"
                                 data-testid={`button-select-product-${row.campaignId}`}
                               >
-                                <span className="flex items-center gap-1.5">
-                                  <Search className="w-3 h-3" />
-                                  Search product...
-                                </span>
-                                <ChevronsUpDown className="w-3 h-3 opacity-50" />
+                                <Search className="w-3 h-3 mr-1" />
+                                Select...
                               </Button>
                             )}
                           </PopoverTrigger>
@@ -588,29 +612,29 @@ export default function AdsProfitability() {
                         </Popover>
                       </div>
                     </td>
-                    <td className="border border-border px-3 py-1.5 text-xs text-right tabular-nums font-medium" data-testid={`text-ad-spend-${row.campaignId}`}>
+                    <td className="border border-border px-2 py-1 text-xs text-right tabular-nums font-medium whitespace-nowrap" data-testid={`text-ad-spend-${row.campaignId}`}>
                       {formatUsd(row.adSpend)}
                     </td>
-                    <td className="border border-border px-3 py-1.5 text-xs text-right tabular-nums" data-testid={`text-total-orders-${row.campaignId}`}>
+                    <td className="border border-border px-2 py-1 text-xs text-right tabular-nums whitespace-nowrap" data-testid={`text-total-orders-${row.campaignId}`}>
                       {row.orders.total}
                     </td>
-                    <td className="border border-border px-3 py-1.5 text-xs text-right tabular-nums" data-testid={`text-dispatched-${row.campaignId}`}>
+                    <td className="border border-border px-2 py-1 text-xs text-right tabular-nums whitespace-nowrap" data-testid={`text-dispatched-${row.campaignId}`}>
                       {row.orders.dispatched}
                     </td>
-                    <td className="border border-border px-3 py-1.5 text-xs text-right tabular-nums" data-testid={`text-delivered-${row.campaignId}`}>
+                    <td className="border border-border px-2 py-1 text-xs text-right tabular-nums whitespace-nowrap" data-testid={`text-delivered-${row.campaignId}`}>
                       {row.orders.delivered}
                     </td>
-                    <td className="border border-border px-3 py-1.5 text-xs text-right tabular-nums" data-testid={`text-cpa-${row.campaignId}`}>
+                    <td className="border border-border px-2 py-1 text-xs text-right tabular-nums whitespace-nowrap" data-testid={`text-cpa-${row.campaignId}`}>
                       {row.orders.total > 0 ? formatCurrency(row.cpa) : "—"}
                     </td>
-                    <td className="border border-border px-3 py-1.5 text-xs text-right" data-testid={`text-profit-margin-${row.campaignId}`}>
+                    <td className="border border-border px-2 py-1 text-xs text-right whitespace-nowrap" data-testid={`text-profit-margin-${row.campaignId}`}>
                       {row.product ? (
                         <span className={`tabular-nums font-medium ${row.profitMargin >= 0 ? "text-green-500" : "text-red-500"}`}>
                           {formatCurrency(row.profitMargin)}
                         </span>
                       ) : "—"}
                     </td>
-                    <td className="border border-border px-3 py-1.5 text-xs text-right" data-testid={`text-net-profit-${row.campaignId}`}>
+                    <td className="border border-border px-2 py-1 text-xs text-right whitespace-nowrap" data-testid={`text-net-profit-${row.campaignId}`}>
                       {row.product ? (
                         <span className={`tabular-nums font-semibold flex items-center justify-end gap-1 ${row.netProfit >= 0 ? "text-green-500" : "text-red-500"}`}>
                           {row.netProfit >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
@@ -622,24 +646,24 @@ export default function AdsProfitability() {
                 ))}
                 {computedRows.length > 0 && (
                   <tr className="bg-emerald-700/10 dark:bg-emerald-900/30 font-semibold">
-                    <td className="border border-border px-3 py-2 text-xs"></td>
-                    <td className="border border-border px-3 py-2 text-xs font-semibold">Totals</td>
-                    <td className="border border-border px-3 py-2 text-xs"></td>
-                    <td className="border border-border px-3 py-2 text-xs text-right tabular-nums" data-testid="text-total-ad-spend">
+                    <td className="border border-border px-2 py-1.5 text-xs"></td>
+                    <td className="border border-border px-2 py-1.5 text-xs font-semibold">Totals</td>
+                    <td className="border border-border px-2 py-1.5 text-xs"></td>
+                    <td className="border border-border px-2 py-1.5 text-xs text-right tabular-nums whitespace-nowrap" data-testid="text-total-ad-spend">
                       {formatUsd(totals.adSpend)}
                     </td>
-                    <td className="border border-border px-3 py-2 text-xs text-right tabular-nums" data-testid="text-total-all-orders">
+                    <td className="border border-border px-2 py-1.5 text-xs text-right tabular-nums whitespace-nowrap" data-testid="text-total-all-orders">
                       {totals.totalOrders}
                     </td>
-                    <td className="border border-border px-3 py-2 text-xs text-right tabular-nums" data-testid="text-total-dispatched">
+                    <td className="border border-border px-2 py-1.5 text-xs text-right tabular-nums whitespace-nowrap" data-testid="text-total-dispatched">
                       {totals.dispatched}
                     </td>
-                    <td className="border border-border px-3 py-2 text-xs text-right tabular-nums" data-testid="text-total-delivered">
+                    <td className="border border-border px-2 py-1.5 text-xs text-right tabular-nums whitespace-nowrap" data-testid="text-total-delivered">
                       {totals.delivered}
                     </td>
-                    <td className="border border-border px-3 py-2 text-xs"></td>
-                    <td className="border border-border px-3 py-2 text-xs"></td>
-                    <td className="border border-border px-3 py-2 text-xs text-right" data-testid="text-total-net-profit">
+                    <td className="border border-border px-2 py-1.5 text-xs"></td>
+                    <td className="border border-border px-2 py-1.5 text-xs"></td>
+                    <td className="border border-border px-2 py-1.5 text-xs text-right whitespace-nowrap" data-testid="text-total-net-profit">
                       <span className={`tabular-nums ${totals.netProfit >= 0 ? "text-green-500" : "text-red-500"}`}>
                         {formatCurrency(totals.netProfit)}
                       </span>
