@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { decryptToken } from './encryption';
 import { normalizePakistaniPhone } from '../utils/phone';
+import { toMerchantStartOfDay, DEFAULT_TIMEZONE } from '../utils/timezone';
 
 interface ShopifyConfig {
   clientId: string;
@@ -420,9 +421,11 @@ export class ShopifyService {
     const syncStartTime = new Date();
 
     const merchant = await storage.getMerchant(merchantId);
+    const tz = (merchant as any)?.timezone || DEFAULT_TIMEZONE;
+    const yearStart = `${new Date().getFullYear()}-01-01`;
     const MIN_ORDER_DATE = merchant?.shopifySyncFromDate
       ? new Date(merchant.shopifySyncFromDate).toISOString()
-      : `${new Date().getFullYear()}-01-01T00:00:00.000Z`;
+      : toMerchantStartOfDay(yearStart, tz);
 
     let fetchParams: { status?: string; updated_at_min?: string; created_at_min?: string } = {
       status: 'any',

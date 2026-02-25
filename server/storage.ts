@@ -341,30 +341,40 @@ export class DatabaseStorage implements IStorage {
     }
 
     if (!options?.dateFrom && !options?.dateTo && options?.month && options.month !== "all") {
+      const tz = options?.timezone || DEFAULT_TIMEZONE;
       const now = new Date();
-      let startDate: Date;
-      let endDate: Date | null = null;
+      let startDateStr: string;
+      let endDateStr: string | null = null;
+      
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const toDateStr = (y: number, m: number, d: number) => `${y}-${pad(m)}-${pad(d)}`;
       
       if (/^\d{4}-\d{2}$/.test(options.month)) {
         const [year, month] = options.month.split("-").map(Number);
-        startDate = new Date(year, month - 1, 1);
-        endDate = new Date(year, month, 1);
+        startDateStr = toDateStr(year, month, 1);
+        const endMonth = month === 12 ? 1 : month + 1;
+        const endYear = month === 12 ? year + 1 : year;
+        endDateStr = toDateStr(endYear, endMonth, 1);
       } else if (options.month === "current") {
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        startDateStr = toDateStr(now.getFullYear(), now.getMonth() + 1, 1);
       } else if (options.month === "last") {
-        startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        endDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        const lastMonth = now.getMonth() === 0 ? 12 : now.getMonth();
+        const lastMonthYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+        startDateStr = toDateStr(lastMonthYear, lastMonth, 1);
+        endDateStr = toDateStr(now.getFullYear(), now.getMonth() + 1, 1);
       } else if (options.month === "2months") {
-        startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+        const d = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+        startDateStr = toDateStr(d.getFullYear(), d.getMonth() + 1, 1);
       } else if (options.month === "3months") {
-        startDate = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+        const d = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+        startDateStr = toDateStr(d.getFullYear(), d.getMonth() + 1, 1);
       } else {
-        startDate = new Date(0);
+        startDateStr = "1970-01-01";
       }
       
-      conditions.push(sql`${orders.orderDate} >= ${startDate.toISOString()}`);
-      if (endDate) {
-        conditions.push(sql`${orders.orderDate} < ${endDate.toISOString()}`);
+      conditions.push(sql`${orders.orderDate} >= ${toMerchantStartOfDay(startDateStr, tz)}`);
+      if (endDateStr) {
+        conditions.push(sql`${orders.orderDate} < ${toMerchantStartOfDay(endDateStr, tz)}`);
       }
     }
 

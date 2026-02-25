@@ -4553,6 +4553,23 @@ export async function registerRoutes(
         });
       }
 
+      try {
+        const shopInfoRes = await fetch(
+          `https://${shop}/admin/api/2025-01/shop.json`,
+          { headers: { "X-Shopify-Access-Token": accessToken, "Content-Type": "application/json" } }
+        );
+        if (shopInfoRes.ok) {
+          const shopData = await shopInfoRes.json();
+          const shopTimezone = shopData?.shop?.iana_timezone;
+          if (shopTimezone) {
+            await storage.updateMerchant(merchantId, { timezone: shopTimezone } as any);
+            console.log(`[Shopify OAuth] Set merchant timezone to ${shopTimezone}`);
+          }
+        }
+      } catch (tzErr) {
+        console.error("[Shopify OAuth] Failed to fetch shop timezone:", tzErr);
+      }
+
       const merchantBeforeUpdate = await storage.getMerchant(merchantId);
       const isOnboardingComplete =
         merchantBeforeUpdate?.onboardingStep === "COMPLETED";
