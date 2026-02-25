@@ -5951,7 +5951,7 @@ export async function registerRoutes(
           if (ovr.phone) orderForValidation.customerPhone = ovr.phone;
           if (ovr.address) orderForValidation.shippingAddress = ovr.address;
           if (ovr.city) orderForValidation.city = ovr.city;
-          if (ovr.codAmount !== undefined)
+          if (ovr.codAmount !== undefined && ovr.codAmount > 0)
             orderForValidation.totalAmount = String(ovr.codAmount);
         }
         const missing = validateOrderForBooking(orderForValidation);
