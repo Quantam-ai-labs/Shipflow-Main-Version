@@ -14,7 +14,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, ArrowRight, RefreshCw, ShieldAlert } from "lucide-react";
-import { refreshAllData } from "./lib/queryClient";
+import { refreshAllData, syncAndRefreshAllData } from "./lib/queryClient";
 import { Link } from "wouter";
 
 import AuthPage from "@/pages/auth";
@@ -167,12 +167,21 @@ function HeaderDateRangePicker() {
 }
 
 function GlobalRefreshButton() {
-  const [spinning, setSpinning] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
-  const handleRefresh = () => {
-    setSpinning(true);
-    refreshAllData();
-    setTimeout(() => setSpinning(false), 1000);
+  const handleRefresh = async () => {
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      const result = await syncAndRefreshAllData();
+      if (result.errors.length > 0) {
+        console.warn("[Refresh] Partial sync errors:", result.errors);
+      }
+    } catch (err) {
+      console.error("[Refresh] Sync failed:", err);
+    } finally {
+      setSyncing(false);
+    }
   };
 
   return (
@@ -180,11 +189,12 @@ function GlobalRefreshButton() {
       variant="ghost"
       size="icon"
       onClick={handleRefresh}
-      title="Refresh all data"
+      disabled={syncing}
+      title={syncing ? "Syncing with Shopify..." : "Refresh all data"}
       data-testid="button-global-refresh"
       className="h-8 w-8"
     >
-      <RefreshCw className={`h-4 w-4 ${spinning ? "animate-spin" : ""}`} />
+      <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
     </Button>
   );
 }

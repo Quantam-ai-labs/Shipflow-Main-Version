@@ -60,3 +60,45 @@ export const queryClient = new QueryClient({
 export function refreshAllData() {
   queryClient.invalidateQueries();
 }
+
+export async function syncAndRefreshAllData(): Promise<{ orders?: any; products?: any; errors: string[] }> {
+  const errors: string[] = [];
+  let ordersResult: any;
+  let productsResult: any;
+
+  try {
+    const orderRes = await fetch("/api/integrations/shopify/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ forceFullSync: false }),
+    });
+    if (orderRes.ok) {
+      ordersResult = await orderRes.json();
+    } else {
+      const text = await orderRes.text();
+      errors.push(`Order sync: ${text}`);
+    }
+  } catch (e: any) {
+    errors.push(`Order sync: ${e.message}`);
+  }
+
+  try {
+    const prodRes = await fetch("/api/products/sync", {
+      method: "POST",
+      credentials: "include",
+    });
+    if (prodRes.ok) {
+      productsResult = await prodRes.json();
+    } else {
+      const text = await prodRes.text();
+      errors.push(`Product sync: ${text}`);
+    }
+  } catch (e: any) {
+    errors.push(`Product sync: ${e.message}`);
+  }
+
+  queryClient.invalidateQueries();
+
+  return { orders: ordersResult, products: productsResult, errors };
+}
