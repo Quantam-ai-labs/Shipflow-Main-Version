@@ -536,6 +536,7 @@ export function registerMarketingRoutes(app: Express) {
       const stats: Record<string, {
         totalOrders: number;
         dispatched: number;
+        fulfilled: number;
         delivered: number;
         salePrice: number;
         costPrice: number;
@@ -552,7 +553,7 @@ export function registerMarketingRoutes(app: Express) {
           salePrice = parseFloat(variants[0].price || "0");
           costPrice = parseFloat(variants[0].cost || "0");
         }
-        stats[p.id] = { totalOrders: 0, dispatched: 0, delivered: 0, salePrice, costPrice, productTitle: p.title };
+        stats[p.id] = { totalOrders: 0, dispatched: 0, fulfilled: 0, delivered: 0, salePrice, costPrice, productTitle: p.title };
       }
 
       for (const order of allOrders) {
@@ -570,8 +571,11 @@ export function registerMarketingRoutes(app: Express) {
           if (!s) continue;
           s.totalOrders++;
           const ws = order.workflowStatus;
-          if (ws === "FULFILLED") {
+          if (ws === "FULFILLED" || ws === "DELIVERED" || ws === "RETURN") {
             s.dispatched++;
+          }
+          if (ws === "FULFILLED") {
+            s.fulfilled++;
           }
           if (ws === "DELIVERED") {
             s.delivered++;
@@ -725,7 +729,7 @@ export function registerMarketingRoutes(app: Express) {
         orderConditions.push(sql`${orders.orderDate} <= ${toMerchantEndOfDay(dateTo as string, tzCalc)}`);
       }
 
-      let orderStats = new Map<string, { total: number; dispatched: number; delivered: number }>();
+      let orderStats = new Map<string, { total: number; dispatched: number; fulfilled: number; delivered: number }>();
       if (matchedProductIds.length > 0) {
         const shopifyProductIdToDbId = new Map<string, string>();
         for (const [dbId, details] of productDetailsMap) {
@@ -741,7 +745,7 @@ export function registerMarketingRoutes(app: Express) {
           .where(and(...orderConditions));
 
         for (const [dbId] of productDetailsMap) {
-          orderStats.set(dbId, { total: 0, dispatched: 0, delivered: 0 });
+          orderStats.set(dbId, { total: 0, dispatched: 0, fulfilled: 0, delivered: 0 });
         }
 
         for (const order of allOrders) {
@@ -759,7 +763,8 @@ export function registerMarketingRoutes(app: Express) {
             if (!s) continue;
             s.total++;
             const ws = order.workflowStatus;
-            if (ws === "FULFILLED") s.dispatched++;
+            if (ws === "FULFILLED" || ws === "DELIVERED" || ws === "RETURN") s.dispatched++;
+            if (ws === "FULFILLED") s.fulfilled++;
             if (ws === "DELIVERED") s.delivered++;
           }
         }
@@ -791,6 +796,7 @@ export function registerMarketingRoutes(app: Express) {
           orders: {
             total: stats?.total || 0,
             dispatched: stats?.dispatched || 0,
+            fulfilled: stats?.fulfilled || 0,
             delivered: stats?.delivered || 0,
           },
         };

@@ -78,6 +78,7 @@ interface CampaignData {
   orders: {
     total: number;
     dispatched: number;
+    fulfilled: number;
     delivered: number;
   };
 }
@@ -249,7 +250,7 @@ export default function AdsProfitability() {
   function getOrderCount(orders: CampaignData["orders"]): number {
     if (orderTypeForCalc === "dispatched") return orders.dispatched;
     if (orderTypeForCalc === "delivered") return orders.delivered;
-    if (orderTypeForCalc === "delivered_plus_dispatch75") return orders.delivered + Math.round(orders.dispatched * 0.75);
+    if (orderTypeForCalc === "delivered_plus_dispatch75") return orders.delivered + Math.round(orders.fulfilled * 0.75);
     return orders.total;
   }
 
@@ -326,6 +327,7 @@ export default function AdsProfitability() {
       const mergedOrders = {
         total: group.reduce((s, r) => s + r.orders.total, 0),
         dispatched: group.reduce((s, r) => s + r.orders.dispatched, 0),
+        fulfilled: group.reduce((s, r) => s + r.orders.fulfilled, 0),
         delivered: group.reduce((s, r) => s + r.orders.delivered, 0),
       };
       const statusOrder: Record<string, number> = { ACTIVE: 0, PAUSED: 1, ARCHIVED: 2 };
@@ -792,7 +794,7 @@ export default function AdsProfitability() {
               <p><span className="font-medium text-foreground">Packing Expense</span> — Any packaging cost per order (boxes, tape, labels, etc.). Deducted from each order's profit calculation.</p>
               <p><span className="font-medium text-foreground">Date Range</span> — Filters both ad spend (from Facebook insights) and Shopify orders to the selected date range. Use presets like "Last 7 days" or "Last 30 days" for quick selection, or choose a custom range from the calendar. Set to "All dates" to include everything.</p>
               <p><span className="font-medium text-foreground">Campaign Status</span> — Filter which campaigns are shown: All, Active only, Paused only, or Archived only.</p>
-              <p><span className="font-medium text-foreground">Orders Used in CPA & Profit</span> — Choose which order count to use in CPA and Net Profit formulas: Total Orders (all orders), Dispatched (shipped out), or Delivered (confirmed delivery). This lets you calculate profitability based on actual deliveries rather than total orders.</p>
+              <p><span className="font-medium text-foreground">Orders Used in CPA & Profit</span> — Choose which order count to use in CPA and Net Profit formulas: Total Orders (all orders), Dispatched (all shipped out), Delivered (confirmed delivery), or Del + (Disp−25%) which adds Delivered count plus 75% of Fulfilled-only orders (excludes already delivered/returned from the 75% portion).</p>
             </div>
           </div>
 
@@ -817,7 +819,7 @@ export default function AdsProfitability() {
               </div>
               <div>
                 <p className="font-medium text-foreground">Dispatched</p>
-                <p>Orders that have been shipped out. This includes orders with status: Fulfilled, Delivered, or Return (since returned orders were dispatched before being returned).</p>
+                <p>Orders that have left the warehouse. This includes orders with status: Fulfilled, Delivered, or Return (since returned orders were dispatched before being returned).</p>
               </div>
               <div>
                 <p className="font-medium text-foreground">Delivered</p>
