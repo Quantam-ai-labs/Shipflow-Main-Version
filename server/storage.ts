@@ -1246,7 +1246,7 @@ export class DatabaseStorage implements IStorage {
       .where(and(
         eq(bookingJobs.merchantId, merchantId),
         eq(bookingJobs.orderId, orderId),
-        eq(bookingJobs.courierName, courierName)
+        sql`lower(${bookingJobs.courierName}) = lower(${courierName})`
       ))
       .orderBy(desc(bookingJobs.createdAt))
       .limit(1);

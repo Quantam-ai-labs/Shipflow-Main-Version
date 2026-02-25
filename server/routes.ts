@@ -5934,13 +5934,16 @@ export async function registerRoutes(
           continue;
         }
         if (existingJob && existingJob.status === "processing") {
-          results.push({
-            orderId: order.id,
-            orderNumber: order.orderNumber,
-            success: false,
-            error: "Booking in progress",
-          });
-          continue;
+          const jobAgeMs = Date.now() - new Date(existingJob.createdAt).getTime();
+          if (jobAgeMs < 5 * 60 * 1000) {
+            results.push({
+              orderId: order.id,
+              orderNumber: order.orderNumber,
+              success: false,
+              error: "Booking in progress",
+            });
+            continue;
+          }
         }
 
         const ovr = overridesMap.get(order.id);
