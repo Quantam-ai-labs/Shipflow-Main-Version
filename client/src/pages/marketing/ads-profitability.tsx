@@ -134,7 +134,7 @@ function MatchIndicator({ type }: { type: string }) {
 }
 
 type StatusFilter = "ALL" | "ACTIVE" | "PAUSED" | "ARCHIVED";
-type OrderTypeForCalc = "total" | "dispatched" | "delivered";
+type OrderTypeForCalc = "total" | "dispatched" | "delivered" | "delivered_plus_dispatch75";
 
 export default function AdsProfitability() {
   const { toast } = useToast();
@@ -148,7 +148,7 @@ export default function AdsProfitability() {
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [orderTypeForCalc, setOrderTypeForCalc] = useState<OrderTypeForCalc>("total");
 
-  const defaultColWidths = [28, 160, 150, 70, 52, 68, 62, 70, 82, 80];
+  const defaultColWidths = [28, 160, 150, 72, 72, 70, 52, 68, 62, 70, 82, 80];
   const [colWidths, setColWidths] = useState<number[]>(defaultColWidths);
   const resizingCol = useRef<{ idx: number; startX: number; startW: number } | null>(null);
 
@@ -261,11 +261,12 @@ export default function AdsProfitability() {
   const delCharges = parseFloat(deliveryCharges) || 0;
   const packExp = parseFloat(packingExpense) || 0;
 
-  const orderTypeLabel = orderTypeForCalc === "total" ? "Total Orders" : orderTypeForCalc === "dispatched" ? "Dispatched" : "Delivered";
+  const orderTypeLabel = orderTypeForCalc === "total" ? "Total Orders" : orderTypeForCalc === "dispatched" ? "Dispatched" : orderTypeForCalc === "delivered" ? "Delivered" : "Del + (Disp−25%)";
 
   function getOrderCount(orders: CampaignData["orders"]): number {
     if (orderTypeForCalc === "dispatched") return orders.dispatched;
     if (orderTypeForCalc === "delivered") return orders.delivered;
+    if (orderTypeForCalc === "delivered_plus_dispatch75") return orders.delivered + Math.round(orders.dispatched * 0.75);
     return orders.total;
   }
 
@@ -474,6 +475,7 @@ export default function AdsProfitability() {
                     <SelectItem value="total">Total Orders</SelectItem>
                     <SelectItem value="dispatched">Dispatched</SelectItem>
                     <SelectItem value="delivered">Delivered</SelectItem>
+                    <SelectItem value="delivered_plus_dispatch75">Delivered + (Dispatched − 25%)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -501,7 +503,7 @@ export default function AdsProfitability() {
               </colgroup>
               <thead className="sticky top-0 z-10 bg-emerald-700 dark:bg-emerald-800">
                 <tr>
-                  {["#", "Campaign", "Product", "Ad Spend", "Orders", "Dispatched", "Delivered", "CPA (PKR)", "Profit Margin", "Net Profit"].map((label, i) => (
+                  {["#", "Campaign", "Product", "Sale Price", "Cost Price", "Ad Spend", "Orders", "Dispatched", "Delivered", "CPA (PKR)", "Profit Margin", "Net Profit"].map((label, i) => (
                     <th
                       key={label}
                       className={`${i >= 3 ? "text-right" : "text-left"} text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 relative select-none whitespace-nowrap overflow-hidden`}
@@ -613,6 +615,12 @@ export default function AdsProfitability() {
                         </Popover>
                       </div>
                     </td>
+                    <td className="border border-border px-2 py-1 text-xs text-right tabular-nums whitespace-nowrap" data-testid={`text-sale-price-${row.campaignId}`}>
+                      {row.product ? formatCurrency(row.product.salePrice) : "—"}
+                    </td>
+                    <td className="border border-border px-2 py-1 text-xs text-right tabular-nums whitespace-nowrap" data-testid={`text-cost-price-${row.campaignId}`}>
+                      {row.product ? formatCurrency(row.product.costPrice) : "—"}
+                    </td>
                     <td className="border border-border px-2 py-1 text-xs text-right tabular-nums font-medium whitespace-nowrap" data-testid={`text-ad-spend-${row.campaignId}`}>
                       {formatUsd(row.adSpend)}
                     </td>
@@ -649,6 +657,8 @@ export default function AdsProfitability() {
                   <tr className="bg-emerald-700/10 dark:bg-emerald-900/30 font-semibold">
                     <td className="border border-border px-2 py-1.5 text-xs"></td>
                     <td className="border border-border px-2 py-1.5 text-xs font-semibold">Totals</td>
+                    <td className="border border-border px-2 py-1.5 text-xs"></td>
+                    <td className="border border-border px-2 py-1.5 text-xs"></td>
                     <td className="border border-border px-2 py-1.5 text-xs"></td>
                     <td className="border border-border px-2 py-1.5 text-xs text-right tabular-nums whitespace-nowrap" data-testid="text-total-ad-spend">
                       {formatUsd(totals.adSpend)}
