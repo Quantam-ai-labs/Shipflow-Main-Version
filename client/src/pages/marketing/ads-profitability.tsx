@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { DateRangePicker, dateRangeToParams } from "@/components/date-range-picker";
+import { DateRange } from "react-day-picker";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -59,7 +61,6 @@ import {
   X,
   Check,
   Pencil,
-  CalendarDays,
   Filter,
   ListOrdered,
 } from "lucide-react";
@@ -152,8 +153,7 @@ export default function AdsProfitability() {
   const [manualOverrides, setManualOverrides] = useState<Record<string, string>>({});
   const [openCombobox, setOpenCombobox] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
-  const [dateFrom, setDateFrom] = useState<string>("");
-  const [dateTo, setDateTo] = useState<string>("");
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [orderTypeForCalc, setOrderTypeForCalc] = useState<OrderTypeForCalc>("total");
 
   useEffect(() => {
@@ -165,26 +165,33 @@ export default function AdsProfitability() {
         if (parsed.deliveryCharges) setDeliveryCharges(parsed.deliveryCharges);
         if (parsed.packingExpense) setPackingExpense(parsed.packingExpense);
         if (parsed.statusFilter) setStatusFilter(parsed.statusFilter);
-        if (parsed.dateFrom) setDateFrom(parsed.dateFrom);
-        if (parsed.dateTo) setDateTo(parsed.dateTo);
         if (parsed.orderTypeForCalc) setOrderTypeForCalc(parsed.orderTypeForCalc);
+        if (parsed.dateRangeFrom && parsed.dateRangeTo) {
+          setDateRange({ from: new Date(parsed.dateRangeFrom), to: new Date(parsed.dateRangeTo) });
+        }
       }
     } catch {}
   }, []);
 
+  const dateParams = dateRangeToParams(dateRange);
+
   useEffect(() => {
     localStorage.setItem(
       "shipflow-profitability-settings",
-      JSON.stringify({ dollarRate, deliveryCharges, packingExpense, statusFilter, dateFrom, dateTo, orderTypeForCalc })
+      JSON.stringify({
+        dollarRate, deliveryCharges, packingExpense, statusFilter, orderTypeForCalc,
+        dateRangeFrom: dateRange?.from?.toISOString() || null,
+        dateRangeTo: dateRange?.to?.toISOString() || null,
+      })
     );
-  }, [dollarRate, deliveryCharges, packingExpense, statusFilter, dateFrom, dateTo, orderTypeForCalc]);
+  }, [dollarRate, deliveryCharges, packingExpense, statusFilter, dateRange, orderTypeForCalc]);
 
   const { data: calcData, isLoading } = useQuery<{ campaigns: CampaignData[] }>({
-    queryKey: ["/api/marketing/profitability/calculator", dateFrom, dateTo],
+    queryKey: ["/api/marketing/profitability/calculator", dateParams.dateFrom, dateParams.dateTo],
     queryFn: async () => {
       const params = new URLSearchParams();
-      if (dateFrom) params.set("dateFrom", dateFrom);
-      if (dateTo) params.set("dateTo", dateTo);
+      if (dateParams.dateFrom) params.set("dateFrom", dateParams.dateFrom);
+      if (dateParams.dateTo) params.set("dateTo", dateParams.dateTo);
       const res = await fetch(`/api/marketing/profitability/calculator?${params}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch calculator data");
       return res.json();
@@ -405,31 +412,16 @@ export default function AdsProfitability() {
           </div>
 
           <div className="border-t pt-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-1.5">
-                <Label htmlFor="date-from" className="flex items-center gap-1.5">
-                  <CalendarDays className="w-3.5 h-3.5" />
-                  Date From
+                <Label className="flex items-center gap-1.5">
+                  Date Range
                 </Label>
-                <Input
-                  id="date-from"
-                  type="date"
-                  value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
-                  data-testid="input-date-from"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="date-to" className="flex items-center gap-1.5">
-                  <CalendarDays className="w-3.5 h-3.5" />
-                  Date To
-                </Label>
-                <Input
-                  id="date-to"
-                  type="date"
-                  value={dateTo}
-                  onChange={(e) => setDateTo(e.target.value)}
-                  data-testid="input-date-to"
+                <DateRangePicker
+                  dateRange={dateRange}
+                  onDateRangeChange={setDateRange}
+                  align="start"
+                  className="w-full"
                 />
               </div>
               <div className="space-y-1.5">
@@ -730,7 +722,7 @@ export default function AdsProfitability() {
               <p><span className="font-medium text-foreground">USD to PKR Rate</span> — The exchange rate used to convert Facebook ad spend (in USD) to Pakistani Rupees. Update this to match the current market rate.</p>
               <p><span className="font-medium text-foreground">Delivery Charges</span> — The courier/shipping cost you pay per order. Deducted from each order's profit calculation.</p>
               <p><span className="font-medium text-foreground">Packing Expense</span> — Any packaging cost per order (boxes, tape, labels, etc.). Deducted from each order's profit calculation.</p>
-              <p><span className="font-medium text-foreground">Date From / Date To</span> — Filters both ad spend (from Facebook insights) and Shopify orders to the selected date range. Leave empty to include all dates.</p>
+              <p><span className="font-medium text-foreground">Date Range</span> — Filters both ad spend (from Facebook insights) and Shopify orders to the selected date range. Use presets like "Last 7 days" or "Last 30 days" for quick selection, or choose a custom range from the calendar. Set to "All dates" to include everything.</p>
               <p><span className="font-medium text-foreground">Campaign Status</span> — Filter which campaigns are shown: All, Active only, Paused only, or Archived only.</p>
               <p><span className="font-medium text-foreground">Orders Used in CPA & Profit</span> — Choose which order count to use in CPA and Net Profit formulas: Total Orders (all orders), Dispatched (shipped out), or Delivered (confirmed delivery). This lets you calculate profitability based on actual deliveries rather than total orders.</p>
             </div>
