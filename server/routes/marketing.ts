@@ -570,7 +570,7 @@ export function registerMarketingRoutes(app: Express) {
           if (!s) continue;
           s.totalOrders++;
           const ws = order.workflowStatus;
-          if (ws === "FULFILLED" || ws === "DELIVERED" || ws === "RETURN") {
+          if (ws === "FULFILLED") {
             s.dispatched++;
           }
           if (ws === "DELIVERED") {
@@ -759,7 +759,7 @@ export function registerMarketingRoutes(app: Express) {
             if (!s) continue;
             s.total++;
             const ws = order.workflowStatus;
-            if (ws === "FULFILLED" || ws === "DELIVERED" || ws === "RETURN") s.dispatched++;
+            if (ws === "FULFILLED") s.dispatched++;
             if (ws === "DELIVERED") s.delivered++;
           }
         }
