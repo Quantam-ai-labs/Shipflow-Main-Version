@@ -157,12 +157,13 @@ export default function AdsProfitability() {
     e.stopPropagation();
     resizingCol.current = { idx, startX: e.clientX, startW: colWidths[idx] };
     const onMove = (ev: MouseEvent) => {
-      if (!resizingCol.current) return;
-      const diff = ev.clientX - resizingCol.current.startX;
-      const newW = Math.max(28, resizingCol.current.startW + diff);
+      const cur = resizingCol.current;
+      if (!cur) return;
+      const diff = ev.clientX - cur.startX;
+      const newW = Math.max(28, cur.startW + diff);
       setColWidths((prev) => {
         const next = [...prev];
-        next[resizingCol.current!.idx] = newW;
+        next[cur.idx] = newW;
         return next;
       });
     };
