@@ -28,14 +28,6 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -471,192 +463,193 @@ export default function AdsProfitability() {
           </CardContent>
         </Card>
       ) : (
-        <Card>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="min-w-[200px]">Campaign</TableHead>
-                    <TableHead className="min-w-[220px]">Product</TableHead>
-                    <TableHead className="text-right min-w-[100px]">Ad Spend</TableHead>
-                    <TableHead className="text-right">Orders</TableHead>
-                    <TableHead className="text-right">Dispatched</TableHead>
-                    <TableHead className="text-right">Delivered</TableHead>
-                    <TableHead className="text-right">CPA (PKR)</TableHead>
-                    <TableHead className="text-right">Profit Margin</TableHead>
-                    <TableHead className="text-right min-w-[120px]">Net Profit</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {computedRows.map((row) => (
-                    <TableRow key={row.campaignId} data-testid={`row-campaign-${row.campaignId}`}>
-                      <TableCell>
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-sm" data-testid={`text-campaign-name-${row.campaignId}`}>
-                              {row.campaignName}
-                            </span>
-                            <StatusBadge status={row.status} />
-                          </div>
-                          {row.destinationUrl && (
-                            <div className="flex items-center gap-1 text-[11px] text-muted-foreground truncate max-w-[200px]">
-                              <Link2 className="w-3 h-3 flex-shrink-0" />
-                              <span className="truncate">{row.destinationUrl}</span>
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
+        <div className="border border-border rounded-lg overflow-hidden">
+          <div className="overflow-x-auto max-h-[75vh]">
+            <table className="w-full text-sm border-collapse">
+              <thead className="sticky top-0 z-10 bg-emerald-700 dark:bg-emerald-800">
+                <tr>
+                  <th className="text-left text-white text-xs font-semibold px-3 py-2 border border-emerald-600 dark:border-emerald-700 w-8">#</th>
+                  <th className="text-left text-white text-xs font-semibold px-3 py-2 border border-emerald-600 dark:border-emerald-700 min-w-[200px]">Campaign</th>
+                  <th className="text-left text-white text-xs font-semibold px-3 py-2 border border-emerald-600 dark:border-emerald-700 min-w-[200px]">Product</th>
+                  <th className="text-right text-white text-xs font-semibold px-3 py-2 border border-emerald-600 dark:border-emerald-700 w-24">Ad Spend</th>
+                  <th className="text-right text-white text-xs font-semibold px-3 py-2 border border-emerald-600 dark:border-emerald-700 w-20">Orders</th>
+                  <th className="text-right text-white text-xs font-semibold px-3 py-2 border border-emerald-600 dark:border-emerald-700 w-24">Dispatched</th>
+                  <th className="text-right text-white text-xs font-semibold px-3 py-2 border border-emerald-600 dark:border-emerald-700 w-24">Delivered</th>
+                  <th className="text-right text-white text-xs font-semibold px-3 py-2 border border-emerald-600 dark:border-emerald-700 w-24">CPA (PKR)</th>
+                  <th className="text-right text-white text-xs font-semibold px-3 py-2 border border-emerald-600 dark:border-emerald-700 w-28">Profit Margin</th>
+                  <th className="text-right text-white text-xs font-semibold px-3 py-2 border border-emerald-600 dark:border-emerald-700 w-28">Net Profit</th>
+                </tr>
+              </thead>
+              <tbody>
+                {computedRows.map((row, idx) => (
+                  <tr key={row.campaignId} className="hover:bg-muted/30 transition-colors" data-testid={`row-campaign-${row.campaignId}`}>
+                    <td className="border border-border px-3 py-1.5 text-xs text-muted-foreground tabular-nums">{idx + 1}</td>
+                    <td className="border border-border px-3 py-1.5 text-xs">
+                      <div className="space-y-0.5">
                         <div className="flex items-center gap-2">
-                          <MatchIndicator type={row.matchType} />
-                          <Popover
-                            open={openCombobox === row.campaignId}
-                            onOpenChange={(open) => setOpenCombobox(open ? row.campaignId : null)}
-                          >
-                            <PopoverTrigger asChild>
-                              {row.product ? (
-                                <button
-                                  className="flex items-center gap-2 min-w-0 group cursor-pointer rounded-md px-1.5 py-1 -mx-1.5 hover:bg-accent transition-colors"
-                                  data-testid={`button-product-${row.campaignId}`}
-                                >
-                                  <Avatar className="h-7 w-7 rounded flex-shrink-0">
-                                    <AvatarImage src={row.product.imageUrl || undefined} alt={row.product.title} />
-                                    <AvatarFallback className="rounded text-[10px]">
-                                      {row.product.title.charAt(0)}
-                                    </AvatarFallback>
-                                  </Avatar>
-                                  <span className="text-sm truncate max-w-[140px]" data-testid={`text-product-${row.campaignId}`}>
-                                    {row.product.title}
-                                  </span>
-                                  <Pencil className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
-                                </button>
-                              ) : (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-8 text-xs w-[180px] justify-between font-normal text-muted-foreground"
-                                  data-testid={`button-select-product-${row.campaignId}`}
-                                >
-                                  <span className="flex items-center gap-1.5">
-                                    <Search className="w-3 h-3" />
-                                    Search product...
-                                  </span>
-                                  <ChevronsUpDown className="w-3 h-3 opacity-50" />
-                                </Button>
-                              )}
-                            </PopoverTrigger>
-                            <PopoverContent className="w-[280px] p-0" align="start">
-                              <Command>
-                                <CommandInput placeholder="Type product name..." data-testid={`input-search-product-${row.campaignId}`} />
-                                <CommandList>
-                                  <CommandEmpty>No products found.</CommandEmpty>
-                                  <CommandGroup>
-                                    {row.product && (
-                                      <CommandItem
-                                        value="__clear__"
-                                        onSelect={() => {
-                                          handleProductOverride(row.campaignId, "none");
-                                          setOpenCombobox(null);
-                                        }}
-                                        className="text-muted-foreground"
-                                        data-testid={`button-clear-product-${row.campaignId}`}
-                                      >
-                                        <X className="w-3.5 h-3.5 mr-2" />
-                                        Clear selection
-                                      </CommandItem>
-                                    )}
-                                    {productsList.map((p) => (
-                                      <CommandItem
-                                        key={p.id}
-                                        value={p.title}
-                                        onSelect={() => {
-                                          handleProductOverride(row.campaignId, p.id);
-                                          setOpenCombobox(null);
-                                        }}
-                                        data-testid={`option-product-${row.campaignId}-${p.id}`}
-                                      >
-                                        <Avatar className="h-6 w-6 rounded flex-shrink-0">
-                                          <AvatarImage src={p.imageUrl || undefined} alt={p.title} />
-                                          <AvatarFallback className="rounded text-[9px]">
-                                            {p.title.charAt(0)}
-                                          </AvatarFallback>
-                                        </Avatar>
-                                        <span className="truncate">{p.title}</span>
-                                        {row.product?.id === p.id && (
-                                          <Check className="w-3.5 h-3.5 ml-auto text-green-500 flex-shrink-0" />
-                                        )}
-                                      </CommandItem>
-                                    ))}
-                                  </CommandGroup>
-                                </CommandList>
-                              </Command>
-                            </PopoverContent>
-                          </Popover>
+                          <span className="font-medium" data-testid={`text-campaign-name-${row.campaignId}`}>
+                            {row.campaignName}
+                          </span>
+                          <StatusBadge status={row.status} />
                         </div>
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums font-medium" data-testid={`text-ad-spend-${row.campaignId}`}>
-                        {formatUsd(row.adSpend)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums" data-testid={`text-total-orders-${row.campaignId}`}>
-                        {row.orders.total}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums" data-testid={`text-dispatched-${row.campaignId}`}>
-                        {row.orders.dispatched}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums" data-testid={`text-delivered-${row.campaignId}`}>
-                        {row.orders.delivered}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums" data-testid={`text-cpa-${row.campaignId}`}>
-                        {row.orders.total > 0 ? formatCurrency(row.cpa) : "—"}
-                      </TableCell>
-                      <TableCell className="text-right" data-testid={`text-profit-margin-${row.campaignId}`}>
-                        {row.product ? (
-                          <span className={`tabular-nums font-medium ${row.profitMargin >= 0 ? "text-green-600" : "text-red-600"}`}>
-                            {formatCurrency(row.profitMargin)}
-                          </span>
-                        ) : "—"}
-                      </TableCell>
-                      <TableCell className="text-right" data-testid={`text-net-profit-${row.campaignId}`}>
-                        {row.product ? (
-                          <span className={`tabular-nums font-semibold flex items-center justify-end gap-1 ${row.netProfit >= 0 ? "text-green-600" : "text-red-600"}`}>
-                            {row.netProfit >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-                            {formatCurrency(row.netProfit)}
-                          </span>
-                        ) : "—"}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {computedRows.length > 0 && (
-                    <TableRow className="bg-muted/50 font-semibold">
-                      <TableCell>Totals</TableCell>
-                      <TableCell></TableCell>
-                      <TableCell className="text-right tabular-nums" data-testid="text-total-ad-spend">
-                        {formatUsd(totals.adSpend)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums" data-testid="text-total-all-orders">
-                        {totals.totalOrders}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums" data-testid="text-total-dispatched">
-                        {totals.dispatched}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums" data-testid="text-total-delivered">
-                        {totals.delivered}
-                      </TableCell>
-                      <TableCell></TableCell>
-                      <TableCell></TableCell>
-                      <TableCell className="text-right" data-testid="text-total-net-profit">
-                        <span className={`tabular-nums ${totals.netProfit >= 0 ? "text-green-600" : "text-red-600"}`}>
-                          {formatCurrency(totals.netProfit)}
+                        {row.destinationUrl && (
+                          <div className="flex items-center gap-1 text-[10px] text-muted-foreground truncate max-w-[200px]">
+                            <Link2 className="w-2.5 h-2.5 flex-shrink-0" />
+                            <span className="truncate">{row.destinationUrl}</span>
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="border border-border px-3 py-1.5 text-xs">
+                      <div className="flex items-center gap-2">
+                        <MatchIndicator type={row.matchType} />
+                        <Popover
+                          open={openCombobox === row.campaignId}
+                          onOpenChange={(open) => setOpenCombobox(open ? row.campaignId : null)}
+                        >
+                          <PopoverTrigger asChild>
+                            {row.product ? (
+                              <button
+                                className="flex items-center gap-2 min-w-0 group cursor-pointer rounded-md px-1 py-0.5 -mx-1 hover:bg-accent transition-colors"
+                                data-testid={`button-product-${row.campaignId}`}
+                              >
+                                <Avatar className="h-6 w-6 rounded flex-shrink-0">
+                                  <AvatarImage src={row.product.imageUrl || undefined} alt={row.product.title} />
+                                  <AvatarFallback className="rounded text-[9px]">
+                                    {row.product.title.charAt(0)}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <span className="text-xs truncate max-w-[130px]" data-testid={`text-product-${row.campaignId}`}>
+                                  {row.product.title}
+                                </span>
+                                <Pencil className="w-2.5 h-2.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                              </button>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-xs w-[160px] justify-between font-normal text-muted-foreground"
+                                data-testid={`button-select-product-${row.campaignId}`}
+                              >
+                                <span className="flex items-center gap-1.5">
+                                  <Search className="w-3 h-3" />
+                                  Search product...
+                                </span>
+                                <ChevronsUpDown className="w-3 h-3 opacity-50" />
+                              </Button>
+                            )}
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[280px] p-0" align="start">
+                            <Command>
+                              <CommandInput placeholder="Type product name..." data-testid={`input-search-product-${row.campaignId}`} />
+                              <CommandList>
+                                <CommandEmpty>No products found.</CommandEmpty>
+                                <CommandGroup>
+                                  {row.product && (
+                                    <CommandItem
+                                      value="__clear__"
+                                      onSelect={() => {
+                                        handleProductOverride(row.campaignId, "none");
+                                        setOpenCombobox(null);
+                                      }}
+                                      className="text-muted-foreground"
+                                      data-testid={`button-clear-product-${row.campaignId}`}
+                                    >
+                                      <X className="w-3.5 h-3.5 mr-2" />
+                                      Clear selection
+                                    </CommandItem>
+                                  )}
+                                  {productsList.map((p) => (
+                                    <CommandItem
+                                      key={p.id}
+                                      value={p.title}
+                                      onSelect={() => {
+                                        handleProductOverride(row.campaignId, p.id);
+                                        setOpenCombobox(null);
+                                      }}
+                                      data-testid={`option-product-${row.campaignId}-${p.id}`}
+                                    >
+                                      <Avatar className="h-6 w-6 rounded flex-shrink-0">
+                                        <AvatarImage src={p.imageUrl || undefined} alt={p.title} />
+                                        <AvatarFallback className="rounded text-[9px]">
+                                          {p.title.charAt(0)}
+                                        </AvatarFallback>
+                                      </Avatar>
+                                      <span className="truncate">{p.title}</span>
+                                      {row.product?.id === p.id && (
+                                        <Check className="w-3.5 h-3.5 ml-auto text-green-500 flex-shrink-0" />
+                                      )}
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                    </td>
+                    <td className="border border-border px-3 py-1.5 text-xs text-right tabular-nums font-medium" data-testid={`text-ad-spend-${row.campaignId}`}>
+                      {formatUsd(row.adSpend)}
+                    </td>
+                    <td className="border border-border px-3 py-1.5 text-xs text-right tabular-nums" data-testid={`text-total-orders-${row.campaignId}`}>
+                      {row.orders.total}
+                    </td>
+                    <td className="border border-border px-3 py-1.5 text-xs text-right tabular-nums" data-testid={`text-dispatched-${row.campaignId}`}>
+                      {row.orders.dispatched}
+                    </td>
+                    <td className="border border-border px-3 py-1.5 text-xs text-right tabular-nums" data-testid={`text-delivered-${row.campaignId}`}>
+                      {row.orders.delivered}
+                    </td>
+                    <td className="border border-border px-3 py-1.5 text-xs text-right tabular-nums" data-testid={`text-cpa-${row.campaignId}`}>
+                      {row.orders.total > 0 ? formatCurrency(row.cpa) : "—"}
+                    </td>
+                    <td className="border border-border px-3 py-1.5 text-xs text-right" data-testid={`text-profit-margin-${row.campaignId}`}>
+                      {row.product ? (
+                        <span className={`tabular-nums font-medium ${row.profitMargin >= 0 ? "text-green-500" : "text-red-500"}`}>
+                          {formatCurrency(row.profitMargin)}
                         </span>
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
+                      ) : "—"}
+                    </td>
+                    <td className="border border-border px-3 py-1.5 text-xs text-right" data-testid={`text-net-profit-${row.campaignId}`}>
+                      {row.product ? (
+                        <span className={`tabular-nums font-semibold flex items-center justify-end gap-1 ${row.netProfit >= 0 ? "text-green-500" : "text-red-500"}`}>
+                          {row.netProfit >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                          {formatCurrency(row.netProfit)}
+                        </span>
+                      ) : "—"}
+                    </td>
+                  </tr>
+                ))}
+                {computedRows.length > 0 && (
+                  <tr className="bg-emerald-700/10 dark:bg-emerald-900/30 font-semibold">
+                    <td className="border border-border px-3 py-2 text-xs"></td>
+                    <td className="border border-border px-3 py-2 text-xs font-semibold">Totals</td>
+                    <td className="border border-border px-3 py-2 text-xs"></td>
+                    <td className="border border-border px-3 py-2 text-xs text-right tabular-nums" data-testid="text-total-ad-spend">
+                      {formatUsd(totals.adSpend)}
+                    </td>
+                    <td className="border border-border px-3 py-2 text-xs text-right tabular-nums" data-testid="text-total-all-orders">
+                      {totals.totalOrders}
+                    </td>
+                    <td className="border border-border px-3 py-2 text-xs text-right tabular-nums" data-testid="text-total-dispatched">
+                      {totals.dispatched}
+                    </td>
+                    <td className="border border-border px-3 py-2 text-xs text-right tabular-nums" data-testid="text-total-delivered">
+                      {totals.delivered}
+                    </td>
+                    <td className="border border-border px-3 py-2 text-xs"></td>
+                    <td className="border border-border px-3 py-2 text-xs"></td>
+                    <td className="border border-border px-3 py-2 text-xs text-right" data-testid="text-total-net-profit">
+                      <span className={`tabular-nums ${totals.netProfit >= 0 ? "text-green-500" : "text-red-500"}`}>
+                        {formatCurrency(totals.netProfit)}
+                      </span>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
 
       {computedRows.length > 0 && (
