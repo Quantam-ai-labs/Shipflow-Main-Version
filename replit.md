@@ -55,6 +55,7 @@ Preferred communication style: Simple, everyday language.
   - Loop prevention via in-memory cooldown map (10s) to skip webhook echoes from our own writes
   - Bulk write-backs are serialized with 500ms delay for Shopify API rate limit compliance
 - **Webhook Resilience**: All webhook endpoints respond 200 immediately before processing, preventing Shopify from removing webhooks due to timeouts. Webhook health check API and re-register UI button in Settings > Shopify page.
+- **Ads Profitability Calculator** (`/marketing/profitability`): Manual campaign profitability tracking. Users create campaign entries, link them to Shopify products, enter ad spend (in USD), and the system auto-calculates order stats (total orders, dispatched, delivered) from order data within the selected date range. Computes CPA (Ad Spend / Orders × USD-to-PKR rate), Profit Margin (Sale Price - Cost Price - CPA - Delivery Charges - Packing Expense), and Net Profit. Settings (dollar rate, delivery charges, packing expense) persist in localStorage. Data stored in `ad_profitability_entries` table; stats computed dynamically from orders + products tables.
 - **Settings Page Organization**: Settings section uses collapsible sidebar group with sub-pages:
   - General (`/settings`): Business Profile, Notifications, Security
   - Shopify (`/settings/shopify`): Shopify connection, sync, webhooks, data quality

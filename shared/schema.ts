@@ -1737,6 +1737,26 @@ export type MetaColumnPreset = typeof metaColumnPresets.$inferSelect;
 // ============================================
 // MARKETING: SYNC LOG (legacy, kept for compatibility)
 // ============================================
+export const adProfitabilityEntries = pgTable("ad_profitability_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  campaignName: varchar("campaign_name", { length: 500 }).notNull(),
+  productId: varchar("product_id").references(() => products.id, { onDelete: "set null" }),
+  adSpend: decimal("ad_spend", { precision: 14, scale: 2 }).notNull().default("0"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_ad_profitability_merchant").on(table.merchantId),
+]);
+
+export const insertAdProfitabilityEntrySchema = createInsertSchema(adProfitabilityEntries).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertAdProfitabilityEntry = z.infer<typeof insertAdProfitabilityEntrySchema>;
+export type AdProfitabilityEntry = typeof adProfitabilityEntries.$inferSelect;
+
 export const marketingSyncLogs = pgTable("marketing_sync_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),

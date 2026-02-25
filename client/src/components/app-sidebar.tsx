@@ -172,6 +172,7 @@ const allNavGroups: NavGroup[] = [
     items: [
       { id: "ads-dashboard", title: "Ads Dashboard", url: "/marketing", icon: BarChart3 },
       { id: "ads-manager", title: "Ads Manager", url: "/marketing/ads-manager", icon: LayoutList },
+      { id: "ads-profitability", title: "Ads Profitability", url: "/marketing/profitability", icon: Calculator },
       { id: "live-campaigns", title: "Live Campaigns", url: "/marketing/live", icon: Activity },
     ],
   },

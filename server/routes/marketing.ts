@@ -1,8 +1,8 @@
 import { Express, Response } from "express";
 import { db } from "../db";
-import { eq } from "drizzle-orm";
+import { eq, and, sql, gte, lte, inArray } from "drizzle-orm";
 import { z } from "zod";
-import { adCampaigns, adAccounts, teamMembers, merchants } from "@shared/schema";
+import { adCampaigns, adAccounts, teamMembers, merchants, adProfitabilityEntries, orders, products } from "@shared/schema";
 import {
   fullSync,
   quickSyncToday,
@@ -409,6 +409,179 @@ export function registerMarketingRoutes(app: Express) {
       res.json(result);
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.get("/api/marketing/profitability", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const entries = await db
+        .select()
+        .from(adProfitabilityEntries)
+        .where(eq(adProfitabilityEntries.merchantId, merchantId))
+        .orderBy(adProfitabilityEntries.createdAt);
+      res.json({ entries });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/marketing/profitability", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const schema = z.object({
+        campaignName: z.string().min(1),
+        productId: z.string().nullable().optional(),
+        adSpend: z.string().refine((v) => !isNaN(Number(v)), "Must be a number").default("0"),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid data", details: parsed.error.flatten() });
+
+      const [entry] = await db.insert(adProfitabilityEntries).values({
+        merchantId,
+        campaignName: parsed.data.campaignName,
+        productId: parsed.data.productId || null,
+        adSpend: parsed.data.adSpend,
+      }).returning();
+
+      res.json({ entry });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.put("/api/marketing/profitability/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const { id } = req.params;
+      const schema = z.object({
+        campaignName: z.string().min(1).optional(),
+        productId: z.string().nullable().optional(),
+        adSpend: z.string().refine((v) => !isNaN(Number(v)), "Must be a number").optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid data", details: parsed.error.flatten() });
+
+      const updates: Record<string, any> = { updatedAt: new Date() };
+      if (parsed.data.campaignName !== undefined) updates.campaignName = parsed.data.campaignName;
+      if (parsed.data.productId !== undefined) updates.productId = parsed.data.productId;
+      if (parsed.data.adSpend !== undefined) updates.adSpend = parsed.data.adSpend;
+
+      const [entry] = await db
+        .update(adProfitabilityEntries)
+        .set(updates)
+        .where(and(eq(adProfitabilityEntries.id, id), eq(adProfitabilityEntries.merchantId, merchantId)))
+        .returning();
+
+      if (!entry) return res.status(404).json({ error: "Entry not found" });
+      res.json({ entry });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/marketing/profitability/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const { id } = req.params;
+      await db
+        .delete(adProfitabilityEntries)
+        .where(and(eq(adProfitabilityEntries.id, id), eq(adProfitabilityEntries.merchantId, merchantId)));
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/marketing/profitability/stats", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const { productIds, dateFrom, dateTo } = req.query;
+
+      if (!productIds) return res.json({ stats: {} });
+
+      const ids = (productIds as string).split(",").filter(Boolean);
+      if (ids.length === 0) return res.json({ stats: {} });
+
+      const productRows = await db
+        .select({
+          id: products.id,
+          shopifyProductId: products.shopifyProductId,
+          title: products.title,
+          variants: products.variants,
+        })
+        .from(products)
+        .where(and(eq(products.merchantId, merchantId), inArray(products.id, ids)));
+
+      const shopifyProductIds = productRows.map(p => p.shopifyProductId);
+      if (shopifyProductIds.length === 0) return res.json({ stats: {} });
+
+      const conditions: any[] = [eq(orders.merchantId, merchantId)];
+      if (dateFrom) conditions.push(gte(orders.orderDate, new Date(dateFrom as string)));
+      if (dateTo) {
+        const toDate = new Date(dateTo as string);
+        toDate.setHours(23, 59, 59, 999);
+        conditions.push(lte(orders.orderDate, toDate));
+      }
+
+      const allOrders = await db
+        .select({
+          id: orders.id,
+          lineItems: orders.lineItems,
+          workflowStatus: orders.workflowStatus,
+        })
+        .from(orders)
+        .where(and(...conditions));
+
+      const stats: Record<string, {
+        totalOrders: number;
+        dispatched: number;
+        delivered: number;
+        salePrice: number;
+        costPrice: number;
+        productTitle: string;
+      }> = {};
+
+      const shopifyIdToProductId = new Map<string, string>();
+      for (const p of productRows) {
+        shopifyIdToProductId.set(String(p.shopifyProductId), p.id);
+        let salePrice = 0;
+        let costPrice = 0;
+        const variants = p.variants as any[];
+        if (variants && Array.isArray(variants) && variants.length > 0) {
+          salePrice = parseFloat(variants[0].price || "0");
+          costPrice = parseFloat(variants[0].cost || "0");
+        }
+        stats[p.id] = { totalOrders: 0, dispatched: 0, delivered: 0, salePrice, costPrice, productTitle: p.title };
+      }
+
+      for (const order of allOrders) {
+        const items = order.lineItems as any[];
+        if (!items || !Array.isArray(items)) continue;
+
+        const matchedProductIds = new Set<string>();
+        for (const item of items) {
+          const pid = shopifyIdToProductId.get(String(item.productId));
+          if (pid) matchedProductIds.add(pid);
+        }
+
+        for (const pid of matchedProductIds) {
+          const s = stats[pid];
+          if (!s) continue;
+          s.totalOrders++;
+          const ws = order.workflowStatus;
+          if (ws === "FULFILLED" || ws === "DELIVERED" || ws === "RETURN") {
+            s.dispatched++;
+          }
+          if (ws === "DELIVERED") {
+            s.delivered++;
+          }
+        }
+      }
+
+      res.json({ stats });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
     }
   });
 }

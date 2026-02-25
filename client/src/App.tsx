@@ -66,6 +66,7 @@ import OpeningBalancesPage from "@/pages/accounting/opening-balances";
 import MarketingDashboard from "@/pages/marketing/dashboard";
 import LiveCampaigns from "@/pages/marketing/live-campaigns";
 import AdsManager from "@/pages/marketing/ads-manager";
+import AdsProfitability from "@/pages/marketing/ads-profitability";
 import SettingsShopify from "@/pages/settings/shopify";
 import SettingsCouriers from "@/pages/settings/couriers";
 import SettingsStatusMapping from "@/pages/settings/status-mapping";
@@ -140,6 +141,7 @@ function AppRoutes() {
       <Route path="/marketing" component={MarketingDashboard} />
       <Route path="/marketing/live" component={LiveCampaigns} />
       <Route path="/marketing/ads-manager" component={AdsManager} />
+      <Route path="/marketing/profitability" component={AdsProfitability} />
       <Route path="/accounting/settings" component={AccountingSettings} />
       <Route path="/settings/shopify" component={SettingsShopify} />
       <Route path="/settings/couriers" component={SettingsCouriers} />
