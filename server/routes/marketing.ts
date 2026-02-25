@@ -2,6 +2,7 @@ import { Express, Response } from "express";
 import { db } from "../db";
 import { eq, and, sql, gte, lte, inArray } from "drizzle-orm";
 import { z } from "zod";
+import { toMerchantStartOfDay, toMerchantEndOfDay, DEFAULT_TIMEZONE } from "../utils/timezone";
 import { adCampaigns, adAccounts, adCreatives, adInsights, teamMembers, merchants, adProfitabilityEntries, orders, products } from "@shared/schema";
 import {
   fullSync,
@@ -518,12 +519,10 @@ export function registerMarketingRoutes(app: Express) {
       if (shopifyProductIds.length === 0) return res.json({ stats: {} });
 
       const conditions: any[] = [eq(orders.merchantId, merchantId)];
-      if (dateFrom) conditions.push(gte(orders.orderDate, new Date(dateFrom as string)));
-      if (dateTo) {
-        const toDate = new Date(dateTo as string);
-        toDate.setHours(23, 59, 59, 999);
-        conditions.push(lte(orders.orderDate, toDate));
-      }
+      const merchant = await db.select().from(merchants).where(eq(merchants.id, merchantId)).limit(1);
+      const tz = (merchant[0] as any)?.timezone || DEFAULT_TIMEZONE;
+      if (dateFrom) conditions.push(sql`${orders.orderDate} >= ${toMerchantStartOfDay(dateFrom as string, tz)}`);
+      if (dateTo) conditions.push(sql`${orders.orderDate} <= ${toMerchantEndOfDay(dateTo as string, tz)}`);
 
       const allOrders = await db
         .select({
@@ -681,11 +680,11 @@ export function registerMarketingRoutes(app: Express) {
       }
 
       const orderConditions: any[] = [eq(orders.merchantId, merchantId)];
-      if (dateFrom) orderConditions.push(gte(orders.orderDate, new Date(dateFrom as string)));
+      const merchantRow = await db.select().from(merchants).where(eq(merchants.id, merchantId)).limit(1);
+      const tzCalc = (merchantRow[0] as any)?.timezone || DEFAULT_TIMEZONE;
+      if (dateFrom) orderConditions.push(sql`${orders.orderDate} >= ${toMerchantStartOfDay(dateFrom as string, tzCalc)}`);
       if (dateTo) {
-        const toDate = new Date(dateTo as string);
-        toDate.setHours(23, 59, 59, 999);
-        orderConditions.push(lte(orders.orderDate, toDate));
+        orderConditions.push(sql`${orders.orderDate} <= ${toMerchantEndOfDay(dateTo as string, tzCalc)}`);
       }
 
       let orderStats = new Map<string, { total: number; dispatched: number; delivered: number }>();

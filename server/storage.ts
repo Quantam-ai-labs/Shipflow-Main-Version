@@ -1,3 +1,4 @@
+import { toMerchantStartOfDay, toMerchantEndOfDay, DEFAULT_TIMEZONE } from "./utils/timezone";
 import {
   merchants, teamMembers, shopifyStores, courierAccounts,
   orders, shipments, shipmentEvents, remarks, codReconciliation, syncLogs, workflowAuditLog, bookingJobs,
@@ -61,7 +62,7 @@ export interface IStorage {
   updateCourierAccount(id: string, data: Partial<InsertCourierAccount>): Promise<CourierAccount | undefined>;
 
   // Orders - All scoped by merchantId
-  getOrders(merchantId: string, options?: { search?: string; searchOrderNumber?: string; searchTracking?: string; searchName?: string; searchPhone?: string; status?: string; courier?: string; city?: string; month?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number; workflowStatus?: string; pendingReasonType?: string; shipmentStatus?: string; excludeHeavyFields?: boolean }): Promise<{ orders: Order[]; total: number }>;
+  getOrders(merchantId: string, options?: { search?: string; searchOrderNumber?: string; searchTracking?: string; searchName?: string; searchPhone?: string; status?: string; courier?: string; city?: string; month?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number; workflowStatus?: string; pendingReasonType?: string; shipmentStatus?: string; excludeHeavyFields?: boolean; timezone?: string }): Promise<{ orders: Order[]; total: number }>;
   getUniqueCities(merchantId: string): Promise<string[]>;
   getUniqueStatuses(merchantId: string): Promise<string[]>;
   getOrderById(merchantId: string, id: string): Promise<Order | undefined>;
@@ -78,7 +79,7 @@ export interface IStorage {
   updateOrder(merchantId: string, id: string, data: Partial<InsertOrder>): Promise<Order | undefined>;
 
   // Shipments - All scoped by merchantId
-  getShipments(merchantId: string, options?: { search?: string; status?: string; courier?: string; page?: number; pageSize?: number }): Promise<{ shipments: Shipment[]; total: number }>;
+  getShipments(merchantId: string, options?: { search?: string; status?: string; courier?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number; timezone?: string }): Promise<{ shipments: Shipment[]; total: number }>;
   getShipmentsByOrderId(merchantId: string, orderId: string): Promise<Shipment[]>;
   getShipmentsByOrderIds(merchantId: string, orderIds: string[]): Promise<Shipment[]>;
   createShipment(shipment: InsertShipment): Promise<Shipment>;
@@ -93,7 +94,7 @@ export interface IStorage {
   createRemark(merchantId: string, remark: InsertRemark): Promise<Remark>;
 
   // COD Reconciliation - All scoped by merchantId
-  getCodReconciliation(merchantId: string, options?: { search?: string; status?: string; page?: number; pageSize?: number }): Promise<{ records: CodReconciliation[]; total: number; summary: any }>;
+  getCodReconciliation(merchantId: string, options?: { search?: string; status?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number; timezone?: string }): Promise<{ records: CodReconciliation[]; total: number; summary: any }>;
   getCodRecordById(merchantId: string, id: string): Promise<CodReconciliation | undefined>;
   createCodReconciliation(record: InsertCodReconciliation): Promise<CodReconciliation>;
   updateCodReconciliation(merchantId: string, id: string, data: Partial<InsertCodReconciliation>): Promise<CodReconciliation | undefined>;
@@ -118,13 +119,13 @@ export interface IStorage {
   getBookingJobsByOrderIds(merchantId: string, orderIds: string[]): Promise<BookingJob[]>;
   createBookingJob(job: InsertBookingJob): Promise<BookingJob>;
   updateBookingJob(id: string, data: Partial<InsertBookingJob>): Promise<BookingJob | undefined>;
-  getBookingLogs(merchantId: string, options?: { page?: number; pageSize?: number; courier?: string; status?: string; dateFrom?: string; dateTo?: string }): Promise<{ logs: any[]; total: number }>;
+  getBookingLogs(merchantId: string, options?: { page?: number; pageSize?: number; courier?: string; status?: string; dateFrom?: string; dateTo?: string; timezone?: string }): Promise<{ logs: any[]; total: number }>;
   getOrdersByIds(merchantId: string, orderIds: string[]): Promise<Order[]>;
   updateOrderWorkflow(merchantId: string, orderId: string, data: Partial<InsertOrder>): Promise<Order | undefined>;
 
   // Analytics
-  getDashboardStats(merchantId: string, options?: { dateFrom?: string; dateTo?: string }): Promise<any>;
-  getAnalytics(merchantId: string, dateRange: string): Promise<any>;
+  getDashboardStats(merchantId: string, options?: { dateFrom?: string; dateTo?: string; timezone?: string }): Promise<any>;
+  getAnalytics(merchantId: string, dateRange: string, options?: { dateFrom?: string; dateTo?: string; timezone?: string }): Promise<any>;
 
   // Shipment Batches
   createShipmentBatch(batch: InsertShipmentBatch): Promise<ShipmentBatch>;
@@ -290,7 +291,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Orders - All scoped by merchantId
-  async getOrders(merchantId: string, options?: { search?: string; searchOrderNumber?: string; searchTracking?: string; searchName?: string; searchPhone?: string; status?: string; courier?: string; city?: string; month?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number; workflowStatus?: string; pendingReasonType?: string; shipmentStatus?: string; excludeHeavyFields?: boolean }): Promise<{ orders: Order[]; total: number }> {
+  async getOrders(merchantId: string, options?: { search?: string; searchOrderNumber?: string; searchTracking?: string; searchName?: string; searchPhone?: string; status?: string; courier?: string; city?: string; month?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number; workflowStatus?: string; pendingReasonType?: string; shipmentStatus?: string; excludeHeavyFields?: boolean; timezone?: string }): Promise<{ orders: Order[]; total: number }> {
     const page = options?.page || 1;
     const pageSize = options?.pageSize || 20;
     const offset = (page - 1) * pageSize;
@@ -331,14 +332,12 @@ export class DatabaseStorage implements IStorage {
     }
 
     if (options?.dateFrom) {
-      const fromDate = new Date(options.dateFrom);
-      fromDate.setHours(0, 0, 0, 0);
-      conditions.push(sql`${orders.orderDate} >= ${fromDate.toISOString()}`);
+      const tz = options?.timezone || DEFAULT_TIMEZONE;
+      conditions.push(sql`${orders.orderDate} >= ${toMerchantStartOfDay(options.dateFrom, tz)}`);
     }
     if (options?.dateTo) {
-      const toDate = new Date(options.dateTo);
-      toDate.setHours(23, 59, 59, 999);
-      conditions.push(sql`${orders.orderDate} <= ${toDate.toISOString()}`);
+      const tz = options?.timezone || DEFAULT_TIMEZONE;
+      conditions.push(sql`${orders.orderDate} <= ${toMerchantEndOfDay(options.dateTo, tz)}`);
     }
 
     if (!options?.dateFrom && !options?.dateTo && options?.month && options.month !== "all") {
@@ -489,20 +488,19 @@ export class DatabaseStorage implements IStorage {
     return result.map(r => r.status).filter((s): s is string => s !== null);
   }
 
-  async getWorkflowCounts(merchantId: string, options?: { dateFrom?: string; dateTo?: string }): Promise<Record<string, number>> {
+  async getWorkflowCounts(merchantId: string, options?: { dateFrom?: string; dateTo?: string; timezone?: string }): Promise<Record<string, number>> {
     let conditions = [eq(orders.merchantId, merchantId)];
+    const tz = options?.timezone || DEFAULT_TIMEZONE;
     if (options?.dateFrom) {
       const fromDate = new Date(options.dateFrom);
       if (!isNaN(fromDate.getTime())) {
-        fromDate.setHours(0, 0, 0, 0);
-        conditions.push(sql`${orders.orderDate} >= ${fromDate.toISOString()}`);
+        conditions.push(sql`${orders.orderDate} >= ${toMerchantStartOfDay(options.dateFrom, tz)}`);
       }
     }
     if (options?.dateTo) {
       const toDate = new Date(options.dateTo);
       if (!isNaN(toDate.getTime())) {
-        toDate.setHours(23, 59, 59, 999);
-        conditions.push(sql`${orders.orderDate} <= ${toDate.toISOString()}`);
+        conditions.push(sql`${orders.orderDate} <= ${toMerchantEndOfDay(options.dateTo, tz)}`);
       }
     }
     const result = await db.select({
@@ -747,10 +745,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Shipments - All scoped by merchantId
-  async getShipments(merchantId: string, options?: { search?: string; status?: string; courier?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number }): Promise<{ shipments: Shipment[]; total: number }> {
+  async getShipments(merchantId: string, options?: { search?: string; status?: string; courier?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number; timezone?: string }): Promise<{ shipments: Shipment[]; total: number }> {
     const page = options?.page || 1;
     const pageSize = options?.pageSize || 20;
     const offset = (page - 1) * pageSize;
+    const tz = options?.timezone || DEFAULT_TIMEZONE;
 
     let conditions = [eq(shipments.merchantId, merchantId)];
 
@@ -763,14 +762,10 @@ export class DatabaseStorage implements IStorage {
     }
 
     if (options?.dateFrom) {
-      const fromDate = new Date(options.dateFrom);
-      fromDate.setHours(0, 0, 0, 0);
-      conditions.push(sql`${shipments.createdAt} >= ${fromDate.toISOString()}`);
+      conditions.push(sql`${shipments.createdAt} >= ${toMerchantStartOfDay(options.dateFrom, tz)}`);
     }
     if (options?.dateTo) {
-      const toDate = new Date(options.dateTo);
-      toDate.setHours(23, 59, 59, 999);
-      conditions.push(sql`${shipments.createdAt} <= ${toDate.toISOString()}`);
+      conditions.push(sql`${shipments.createdAt} <= ${toMerchantEndOfDay(options.dateTo, tz)}`);
     }
 
     const whereClause = and(...conditions);
@@ -851,7 +846,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // COD Reconciliation - All scoped by merchantId
-  async getCodReconciliation(merchantId: string, options?: { search?: string; status?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number }): Promise<{ records: CodReconciliation[]; total: number; summary: any }> {
+  async getCodReconciliation(merchantId: string, options?: { search?: string; status?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number; timezone?: string }): Promise<{ records: CodReconciliation[]; total: number; summary: any }> {
     const page = options?.page || 1;
     const pageSize = options?.pageSize || 20;
     const offset = (page - 1) * pageSize;
@@ -863,14 +858,12 @@ export class DatabaseStorage implements IStorage {
     }
 
     if (options?.dateFrom) {
-      const fromDate = new Date(options.dateFrom);
-      fromDate.setHours(0, 0, 0, 0);
-      conditions.push(sql`${codReconciliation.createdAt} >= ${fromDate.toISOString()}`);
+      const tz = options?.timezone || DEFAULT_TIMEZONE;
+      conditions.push(sql`${codReconciliation.createdAt} >= ${toMerchantStartOfDay(options.dateFrom, tz)}`);
     }
     if (options?.dateTo) {
-      const toDate = new Date(options.dateTo);
-      toDate.setHours(23, 59, 59, 999);
-      conditions.push(sql`${codReconciliation.createdAt} <= ${toDate.toISOString()}`);
+      const tz = options?.timezone || DEFAULT_TIMEZONE;
+      conditions.push(sql`${codReconciliation.createdAt} <= ${toMerchantEndOfDay(options.dateTo, tz)}`);
     }
 
     const whereClause = and(...conditions);
@@ -979,20 +972,19 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Analytics
-  async getDashboardStats(merchantId: string, options?: { dateFrom?: string; dateTo?: string }): Promise<any> {
+  async getDashboardStats(merchantId: string, options?: { dateFrom?: string; dateTo?: string; timezone?: string }): Promise<any> {
     let conditions = [eq(orders.merchantId, merchantId)];
+    const tz = options?.timezone || DEFAULT_TIMEZONE;
     if (options?.dateFrom) {
       const fromDate = new Date(options.dateFrom);
       if (!isNaN(fromDate.getTime())) {
-        fromDate.setHours(0, 0, 0, 0);
-        conditions.push(sql`${orders.orderDate} >= ${fromDate.toISOString()}`);
+        conditions.push(sql`${orders.orderDate} >= ${toMerchantStartOfDay(options.dateFrom, tz)}`);
       }
     }
     if (options?.dateTo) {
       const toDate = new Date(options.dateTo);
       if (!isNaN(toDate.getTime())) {
-        toDate.setHours(23, 59, 59, 999);
-        conditions.push(sql`${orders.orderDate} <= ${toDate.toISOString()}`);
+        conditions.push(sql`${orders.orderDate} <= ${toMerchantEndOfDay(options.dateTo, tz)}`);
       }
     }
     const allOrders = await db.select().from(orders).where(and(...conditions));
@@ -1058,18 +1050,15 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getAnalytics(merchantId: string, dateRange: string, options?: { dateFrom?: string; dateTo?: string }): Promise<any> {
+  async getAnalytics(merchantId: string, dateRange: string, options?: { dateFrom?: string; dateTo?: string; timezone?: string }): Promise<any> {
     let conditions = [eq(orders.merchantId, merchantId)];
+    const tz = options?.timezone || DEFAULT_TIMEZONE;
     
     if (options?.dateFrom) {
-      const fromDate = new Date(options.dateFrom);
-      fromDate.setHours(0, 0, 0, 0);
-      conditions.push(sql`${orders.orderDate} >= ${fromDate.toISOString()}`);
+      conditions.push(sql`${orders.orderDate} >= ${toMerchantStartOfDay(options.dateFrom, tz)}`);
     }
     if (options?.dateTo) {
-      const toDate = new Date(options.dateTo);
-      toDate.setHours(23, 59, 59, 999);
-      conditions.push(sql`${orders.orderDate} <= ${toDate.toISOString()}`);
+      conditions.push(sql`${orders.orderDate} <= ${toMerchantEndOfDay(options.dateTo, tz)}`);
     }
     
     const allOrders = await db.select().from(orders).where(and(...conditions));
@@ -1276,7 +1265,7 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async getBookingLogs(merchantId: string, options?: { page?: number; pageSize?: number; courier?: string; status?: string; dateFrom?: string; dateTo?: string }): Promise<{ logs: any[]; total: number }> {
+  async getBookingLogs(merchantId: string, options?: { page?: number; pageSize?: number; courier?: string; status?: string; dateFrom?: string; dateTo?: string; timezone?: string }): Promise<{ logs: any[]; total: number }> {
     const page = options?.page || 1;
     const pageSize = options?.pageSize || 20;
     const offset = (page - 1) * pageSize;
@@ -1289,14 +1278,12 @@ export class DatabaseStorage implements IStorage {
       conditions.push(eq(bookingJobs.status, options.status));
     }
     if (options?.dateFrom) {
-      const fromDate = new Date(options.dateFrom);
-      fromDate.setHours(0, 0, 0, 0);
-      conditions.push(sql`${bookingJobs.createdAt} >= ${fromDate.toISOString()}`);
+      const tz = options?.timezone || DEFAULT_TIMEZONE;
+      conditions.push(sql`${bookingJobs.createdAt} >= ${toMerchantStartOfDay(options.dateFrom, tz)}`);
     }
     if (options?.dateTo) {
-      const toDate = new Date(options.dateTo);
-      toDate.setHours(23, 59, 59, 999);
-      conditions.push(sql`${bookingJobs.createdAt} <= ${toDate.toISOString()}`);
+      const tz = options?.timezone || DEFAULT_TIMEZONE;
+      conditions.push(sql`${bookingJobs.createdAt} <= ${toMerchantEndOfDay(options.dateTo, tz)}`);
     }
 
     const whereClause = and(...conditions);

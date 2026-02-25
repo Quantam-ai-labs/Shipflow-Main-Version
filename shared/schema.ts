@@ -30,6 +30,7 @@ export const merchants = pgTable("merchants", {
   facebookAppSecret: text("facebook_app_secret"),
   facebookAccessToken: text("facebook_access_token"),
   facebookAdAccountId: varchar("facebook_ad_account_id", { length: 255 }),
+  timezone: varchar("timezone", { length: 100 }).default("Asia/Karachi"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

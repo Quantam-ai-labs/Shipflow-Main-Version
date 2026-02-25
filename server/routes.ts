@@ -4,6 +4,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
 import { normalizePakistaniPhone } from "./utils/phone";
+import { DEFAULT_TIMEZONE, toMerchantStartOfDay, toMerchantEndOfDay } from "./utils/timezone";
 import { registerAccountingRoutes } from "./routes/accounting";
 import { registerTransactionRoutes } from "./routes/transactions";
 import { registerMarketingRoutes } from "./routes/marketing";
@@ -429,6 +430,18 @@ async function requireMerchant(req: any, res: any): Promise<string | null> {
   return merchantId;
 }
 
+const merchantTimezoneCache = new Map<string, { tz: string; fetchedAt: number }>();
+async function getMerchantTimezone(merchantId: string): Promise<string> {
+  const cached = merchantTimezoneCache.get(merchantId);
+  if (cached && Date.now() - cached.fetchedAt < 300000) {
+    return cached.tz;
+  }
+  const merchant = await storage.getMerchant(merchantId);
+  const tz = (merchant as any)?.timezone || DEFAULT_TIMEZONE;
+  merchantTimezoneCache.set(merchantId, { tz, fetchedAt: Date.now() });
+  return tz;
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express,
@@ -492,9 +505,11 @@ export async function registerRoutes(
       if (!merchantId) return;
 
       const { dateFrom, dateTo } = req.query;
+      const timezone = await getMerchantTimezone(merchantId);
       const stats = await storage.getDashboardStats(merchantId, {
         dateFrom: dateFrom as string,
         dateTo: dateTo as string,
+        timezone,
       });
       res.json(stats);
     } catch (error) {
@@ -542,6 +557,7 @@ export async function registerRoutes(
         light,
       } = req.query;
 
+      const timezone = await getMerchantTimezone(merchantId);
       const result = await storage.getOrders(merchantId, {
         search: search as string,
         searchOrderNumber: searchOrderNumber as string,
@@ -560,6 +576,7 @@ export async function registerRoutes(
         pendingReasonType: pendingReasonType as string,
         shipmentStatus: shipmentStatus as string,
         excludeHeavyFields: light === "1" || light === "true",
+        timezone,
       });
 
       res.json(result);
@@ -610,9 +627,11 @@ export async function registerRoutes(
         dateFrom?: string;
         dateTo?: string;
       };
+      const timezone = await getMerchantTimezone(merchantId);
       const counts = await storage.getWorkflowCounts(merchantId, {
         dateFrom,
         dateTo,
+        timezone,
       });
       res.json(counts);
     } catch (error) {
@@ -2189,15 +2208,12 @@ export async function registerRoutes(
         );
       }
 
+      const tz = await getMerchantTimezone(merchantId);
       if (dateFrom) {
-        const fromDate = new Date(dateFrom as string);
-        fromDate.setHours(0, 0, 0, 0);
-        conditions.push(gte(orders.orderDate, fromDate));
+        conditions.push(sql`${orders.orderDate} >= ${toMerchantStartOfDay(dateFrom as string, tz)}`);
       }
       if (dateTo) {
-        const toDate = new Date(dateTo as string);
-        toDate.setHours(23, 59, 59, 999);
-        conditions.push(lte(orders.orderDate, toDate));
+        conditions.push(sql`${orders.orderDate} <= ${toMerchantEndOfDay(dateTo as string, tz)}`);
       }
 
       const whereClause = and(...conditions);
@@ -2240,14 +2256,10 @@ export async function registerRoutes(
         inArray(orders.workflowStatus, targetStatuses),
       ];
       if (dateFrom) {
-        const fromDate = new Date(dateFrom as string);
-        fromDate.setHours(0, 0, 0, 0);
-        countConditions.push(gte(orders.orderDate, fromDate));
+        countConditions.push(sql`${orders.orderDate} >= ${toMerchantStartOfDay(dateFrom as string, tz)}`);
       }
       if (dateTo) {
-        const toDate = new Date(dateTo as string);
-        toDate.setHours(23, 59, 59, 999);
-        countConditions.push(lte(orders.orderDate, toDate));
+        countConditions.push(sql`${orders.orderDate} <= ${toMerchantEndOfDay(dateTo as string, tz)}`);
       }
 
       const countsByStatus = await db
@@ -2328,15 +2340,12 @@ export async function registerRoutes(
           mapCourierSlugToName(courier as string) || (courier as string);
         conditions.push(eq(orders.courierName, mappedCourier));
       }
+      const tz = await getMerchantTimezone(merchantId);
       if (dateFrom) {
-        const fromDate = new Date(dateFrom as string);
-        fromDate.setHours(0, 0, 0, 0);
-        conditions.push(sql`${orders.orderDate} >= ${fromDate.toISOString()}`);
+        conditions.push(sql`${orders.orderDate} >= ${toMerchantStartOfDay(dateFrom as string, tz)}`);
       }
       if (dateTo) {
-        const toDate = new Date(dateTo as string);
-        toDate.setHours(23, 59, 59, 999);
-        conditions.push(sql`${orders.orderDate} <= ${toDate.toISOString()}`);
+        conditions.push(sql`${orders.orderDate} <= ${toMerchantEndOfDay(dateTo as string, tz)}`);
       }
 
       const whereClause = and(...conditions);
@@ -2409,9 +2418,11 @@ export async function registerRoutes(
 
       const dateRange = (req.query.dateRange as string) || "30d";
       const { dateFrom, dateTo } = req.query;
+      const timezone = await getMerchantTimezone(merchantId);
       const analytics = await storage.getAnalytics(merchantId, dateRange, {
         dateFrom: dateFrom as string,
         dateTo: dateTo as string,
+        timezone,
       });
       res.json(analytics);
     } catch (error) {
@@ -2452,18 +2463,15 @@ export async function registerRoutes(
       if (courier && courier !== "all") {
         conditions.push(eq(codReconciliation.courierName, courier as string));
       }
+      const tz = await getMerchantTimezone(merchantId);
       if (dateFrom) {
-        const fromDate = new Date(dateFrom as string);
-        fromDate.setHours(0, 0, 0, 0);
         conditions.push(
-          sql`${codReconciliation.createdAt} >= ${fromDate.toISOString()}`,
+          sql`${codReconciliation.createdAt} >= ${toMerchantStartOfDay(dateFrom as string, tz)}`,
         );
       }
       if (dateTo) {
-        const toDate = new Date(dateTo as string);
-        toDate.setHours(23, 59, 59, 999);
         conditions.push(
-          sql`${codReconciliation.createdAt} <= ${toDate.toISOString()}`,
+          sql`${codReconciliation.createdAt} <= ${toMerchantEndOfDay(dateTo as string, tz)}`,
         );
       }
 
@@ -2726,6 +2734,7 @@ export async function registerRoutes(
       if (!merchantId) return;
 
       const { search, status, dateFrom, dateTo, page, pageSize } = req.query;
+      const timezone = await getMerchantTimezone(merchantId);
       const result = await storage.getCodReconciliation(merchantId, {
         search: search as string,
         status: status as string,
@@ -2733,6 +2742,7 @@ export async function registerRoutes(
         dateTo: dateTo as string,
         page: parseInt(page as string) || 1,
         pageSize: parseInt(pageSize as string) || 20,
+        timezone,
       });
       res.json(result);
     } catch (error) {
@@ -8929,16 +8939,13 @@ export async function registerRoutes(
 
       const { dateFrom, dateTo } = req.query;
 
+      const tz = await getMerchantTimezone(merchantId);
       let dateFilterSql = sql``;
       if (dateFrom) {
-        const fromDate = new Date(dateFrom as string);
-        fromDate.setHours(0, 0, 0, 0);
-        dateFilterSql = sql`${dateFilterSql} AND o.order_date >= ${fromDate.toISOString()}`;
+        dateFilterSql = sql`${dateFilterSql} AND o.order_date >= ${toMerchantStartOfDay(dateFrom as string, tz)}`;
       }
       if (dateTo) {
-        const toDate = new Date(dateTo as string);
-        toDate.setHours(23, 59, 59, 999);
-        dateFilterSql = sql`${dateFilterSql} AND o.order_date <= ${toDate.toISOString()}`;
+        dateFilterSql = sql`${dateFilterSql} AND o.order_date <= ${toMerchantEndOfDay(dateTo as string, tz)}`;
       }
 
       const [productResults, trendResults, perProductDailyResults] = await Promise.all([
