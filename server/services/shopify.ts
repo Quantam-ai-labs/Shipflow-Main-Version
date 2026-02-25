@@ -566,6 +566,14 @@ export class ShopifyService {
           updateData.courierName = transformedOrder.courierName;
         }
 
+        const isPrepaid = transformedOrder.paymentMethod === 'prepaid';
+        const existingOrder = await storage.getOrderById(merchantId, existingOrderId);
+        if (isPrepaid && existingOrder && existingOrder.paymentMethod !== 'prepaid') {
+          updateData.codRemaining = "0";
+          updateData.prepaidAmount = transformedOrder.totalAmount;
+          updateData.codPaymentStatus = "PAID";
+        }
+
         await storage.updateOrder(merchantId, existingOrderId, updateData);
 
         try {
@@ -608,15 +616,16 @@ export class ShopifyService {
         }
         updatedCount++;
       } else {
+        const isPrepaidNew = transformedOrder.paymentMethod === 'prepaid';
         const createData: any = {
           ...transformedOrder,
           merchantId,
           workflowStatus: initialWorkflowStatus,
           lastApiSyncAt: now,
           shopifyUpdatedAt: new Date(shopifyOrder.updated_at),
-          codRemaining: transformedOrder.totalAmount,
-          prepaidAmount: "0",
-          codPaymentStatus: "UNPAID",
+          codRemaining: isPrepaidNew ? "0" : transformedOrder.totalAmount,
+          prepaidAmount: isPrepaidNew ? transformedOrder.totalAmount : "0",
+          codPaymentStatus: isPrepaidNew ? "PAID" : "UNPAID",
         };
         if (initialWorkflowStatus === 'CANCELLED') {
           createData.cancelledAt = shopifyOrder.cancelled_at ? new Date(shopifyOrder.cancelled_at) : now;
