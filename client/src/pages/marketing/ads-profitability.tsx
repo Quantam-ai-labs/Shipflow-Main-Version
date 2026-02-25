@@ -297,7 +297,52 @@ export default function AdsProfitability() {
     };
   });
 
-  const totals = computedRows.reduce(
+  const mergedRows = (() => {
+    const grouped = new Map<string, typeof computedRows>();
+    for (const row of computedRows) {
+      const key = row.product?.id ?? `unmatched-${row.campaignId}`;
+      const existing = grouped.get(key);
+      if (existing) {
+        existing.push(row);
+      } else {
+        grouped.set(key, [row]);
+      }
+    }
+    return Array.from(grouped.values()).map(group => {
+      if (group.length === 1) return group[0];
+      const first = group[0];
+      const mergedAdSpend = group.reduce((s, r) => s + r.adSpend, 0);
+      const mergedOrders = {
+        total: group.reduce((s, r) => s + r.orders.total, 0),
+        dispatched: group.reduce((s, r) => s + r.orders.dispatched, 0),
+        delivered: group.reduce((s, r) => s + r.orders.delivered, 0),
+      };
+      const statusOrder: Record<string, number> = { ACTIVE: 0, PAUSED: 1, ARCHIVED: 2 };
+      const bestStatus = group.reduce((best, r) => (statusOrder[r.status] ?? 3) < (statusOrder[best] ?? 3) ? r.status : best, group[0].status);
+      const bestMatch = group.some(r => r.matchType === "auto") ? "auto" as const : group.some(r => r.matchType === "manual") ? "manual" as const : "unmatched" as const;
+      const campaignName = group.map(r => r.campaignName).join(", ");
+      const salePrice = first.product?.salePrice ?? 0;
+      const costPrice = first.product?.costPrice ?? 0;
+      const selectedOrders = getOrderCount(mergedOrders);
+      const cpa = selectedOrders > 0 ? (mergedAdSpend / selectedOrders) * dRate : 0;
+      const profitMargin = salePrice - costPrice - cpa - delCharges - packExp;
+      const netProfit = profitMargin * selectedOrders;
+      return {
+        ...first,
+        campaignName,
+        status: bestStatus,
+        matchType: bestMatch,
+        adSpend: mergedAdSpend,
+        orders: mergedOrders,
+        selectedOrders,
+        cpa,
+        profitMargin,
+        netProfit,
+      };
+    });
+  })();
+
+  const totals = mergedRows.reduce(
     (acc, r) => ({
       adSpend: acc.adSpend + r.adSpend,
       totalOrders: acc.totalOrders + r.orders.total,
@@ -505,7 +550,7 @@ export default function AdsProfitability() {
                 </tr>
               </thead>
               <tbody>
-                {computedRows.map((row, idx) => (
+                {mergedRows.map((row, idx) => (
                   <tr key={row.campaignId} className="hover:bg-muted/30 transition-colors" data-testid={`row-campaign-${row.campaignId}`}>
                     <td className="border border-border px-2 py-1 text-xs text-center" data-testid={`text-status-${row.campaignId}`}>
                       <StatusBadge status={row.status} />
@@ -637,7 +682,7 @@ export default function AdsProfitability() {
                     </td>
                   </tr>
                 ))}
-                {computedRows.length > 0 && (
+                {mergedRows.length > 0 && (
                   <tr className="bg-emerald-700/10 dark:bg-emerald-900/30 font-semibold">
                     <td className="border border-border px-2 py-1.5 text-xs"></td>
                     <td className="border border-border px-2 py-1.5 text-xs font-semibold">Totals</td>
