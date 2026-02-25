@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -147,34 +147,6 @@ export default function AdsProfitability() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [orderTypeForCalc, setOrderTypeForCalc] = useState<OrderTypeForCalc>("total");
-
-  const defaultColWidths = [28, 160, 150, 72, 72, 70, 52, 68, 62, 70, 82, 80];
-  const [colWidths, setColWidths] = useState<number[]>(defaultColWidths);
-  const resizingCol = useRef<{ idx: number; startX: number; startW: number } | null>(null);
-
-  const onResizeStart = useCallback((e: React.MouseEvent, idx: number) => {
-    e.preventDefault();
-    e.stopPropagation();
-    resizingCol.current = { idx, startX: e.clientX, startW: colWidths[idx] };
-    const onMove = (ev: MouseEvent) => {
-      const cur = resizingCol.current;
-      if (!cur) return;
-      const diff = ev.clientX - cur.startX;
-      const newW = Math.max(28, cur.startW + diff);
-      setColWidths((prev) => {
-        const next = [...prev];
-        next[cur.idx] = newW;
-        return next;
-      });
-    };
-    const onUp = () => {
-      resizingCol.current = null;
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-    };
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
-  }, [colWidths]);
 
   useEffect(() => {
     try {
@@ -495,26 +467,21 @@ export default function AdsProfitability() {
       ) : (
         <div className="border border-border rounded-lg overflow-hidden">
           <div className="overflow-x-auto max-h-[75vh]">
-            <table className="text-sm border-collapse" style={{ tableLayout: "fixed", width: colWidths.reduce((a, b) => a + b, 0) }}>
-              <colgroup>
-                {colWidths.map((w, i) => (
-                  <col key={i} style={{ width: w }} />
-                ))}
-              </colgroup>
+            <table className="w-full text-sm border-collapse">
               <thead className="sticky top-0 z-10 bg-emerald-700 dark:bg-emerald-800">
                 <tr>
-                  {["#", "Campaign", "Product", "Sale Price", "Cost Price", "Ad Spend", "Orders", "Dispatched", "Delivered", "CPA (PKR)", "Profit Margin", "Net Profit"].map((label, i) => (
-                    <th
-                      key={label}
-                      className={`${i >= 3 ? "text-right" : "text-left"} text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 relative select-none whitespace-nowrap overflow-hidden`}
-                    >
-                      {label}
-                      <div
-                        className="absolute top-0 right-0 w-1.5 h-full cursor-col-resize hover:bg-white/30 z-20"
-                        onMouseDown={(e) => onResizeStart(e, i)}
-                      />
-                    </th>
-                  ))}
+                  <th className="text-left text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap w-8">#</th>
+                  <th className="text-left text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700">Campaign</th>
+                  <th className="text-left text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700">Product</th>
+                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap">Sale Price</th>
+                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap">Cost Price</th>
+                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap">Ad Spend</th>
+                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap">Orders</th>
+                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap">Dispatched</th>
+                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap">Delivered</th>
+                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap">CPA (PKR)</th>
+                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap">Profit Margin</th>
+                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-600 dark:border-emerald-700 whitespace-nowrap">Net Profit</th>
                 </tr>
               </thead>
               <tbody>
