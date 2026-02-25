@@ -36,7 +36,7 @@ Preferred communication style: Simple, everyday language.
 
 ### Core Features & Data Models
 - **Merchant Management**: Root tenant entity with subscription and profile.
-- **Team Collaboration**: `teamMembers` for user-to-merchant links and roles; token-based team invite system with email integration.
+- **Team Collaboration**: `teamMembers` for user-to-merchant links and roles; token-based team invite system with email via AWS SES (`server/services/sesEmail.ts`). Invite accept page (`/invite/:token`) supports two flows: logged-in users click Accept; new users see a signup form (name + password) to create account and join team in one step via `POST /api/team/invite/:token/accept-with-signup`. Resend integration remains for other email types (merchant setup, test emails).
 - **Shopify Integration**: OAuth-based credentials per merchant, encrypted access tokens, webhook processing for orders and fulfillments, and reconciliation. Merchants choose a `shopifySyncFromDate` during onboarding to control how far back Shopify data is imported; this date is stored on the merchant record and used by both the batch import job and incremental sync. Changeable later via Settings > Shopify page (`/settings/shopify`).
 - **Courier Management**: Per-courier API credentials (Leopards, PostEx, TCS) with environment secret fallback, specific handling for PostEx booking parameters. Leopards parser combines "Pending" status with Reason field for granular mapping (e.g., "Pending - CONSIGNEE NOT AVAILABLE"). Unmapped courier statuses are tracked in `unmapped_courier_statuses` table with notification badge on Settings sidebar and auto-resolution when mappings are created.
 - **Order Management**: Syncs from Shopify, tracks status, and allows remarks.

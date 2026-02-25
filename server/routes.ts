@@ -75,6 +75,7 @@ import {
 } from "./services/webhookRegistration";
 import { webhookHandler } from "./services/webhookHandler";
 import { sendInviteEmail, sendMerchantSetupEmail } from "./services/email";
+import { sendInviteEmailSES } from "./services/sesEmail";
 import {
   writeBackAddress,
   writeBackCancel,
@@ -3190,7 +3191,7 @@ export async function registerRoutes(
             "A team admin"
           : "A team admin";
 
-        const emailResult = await sendInviteEmail({
+        const emailResult = await sendInviteEmailSES({
           toEmail: email,
           merchantName: merchant?.name || "ShipFlow Team",
           role: role || "agent",
@@ -3281,7 +3282,7 @@ export async function registerRoutes(
             "A team admin"
           : "A team admin";
 
-        const emailResult = await sendInviteEmail({
+        const emailResult = await sendInviteEmailSES({
           toEmail: invite.email,
           merchantName: merchant?.name || "ShipFlow Team",
           role: invite.role,
@@ -3593,6 +3594,128 @@ export async function registerRoutes(
       } catch (error) {
         console.error("Error accepting invite:", error);
         res.status(500).json({ message: "Failed to accept invite" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/team/invite/:token/accept-with-signup",
+    async (req, res) => {
+      try {
+        const { token } = req.params;
+        const { firstName, lastName, password } = req.body;
+
+        if (!firstName || !password) {
+          return res.status(400).json({ message: "First name and password are required" });
+        }
+
+        if (password.length < 6) {
+          return res.status(400).json({ message: "Password must be at least 6 characters" });
+        }
+
+        const [invite] = await db
+          .select()
+          .from(teamInvites)
+          .where(eq(teamInvites.token, token));
+
+        if (!invite) {
+          return res.status(404).json({ message: "Invite not found" });
+        }
+
+        if (invite.status === "revoked") {
+          return res.status(400).json({ message: "This invitation has been revoked" });
+        }
+
+        if (invite.status === "accepted") {
+          return res.status(400).json({ message: "This invitation has already been accepted" });
+        }
+
+        if (invite.status !== "pending") {
+          return res.status(400).json({ message: "This invitation is no longer valid" });
+        }
+
+        if (invite.expiresAt && new Date() > invite.expiresAt) {
+          return res.status(400).json({ message: "This invitation has expired" });
+        }
+
+        const [existingUser] = await db
+          .select()
+          .from(users)
+          .where(eq(users.email, invite.email));
+
+        if (existingUser) {
+          return res.status(400).json({
+            message: "An account with this email already exists. Please log in and accept the invite from your dashboard.",
+          });
+        }
+
+        const bcrypt = await import("bcrypt");
+        const passwordHash = await bcrypt.hash(password, 12);
+
+        const newUser = await db.transaction(async (tx) => {
+          const updated = await tx
+            .update(teamInvites)
+            .set({
+              status: "accepted",
+              acceptedAt: new Date(),
+            })
+            .where(and(eq(teamInvites.id, invite.id), eq(teamInvites.status, "pending")))
+            .returning();
+
+          if (updated.length === 0) {
+            throw new Error("Invite is no longer available");
+          }
+
+          const [createdUser] = await tx
+            .insert(users)
+            .values({
+              email: invite.email,
+              firstName: firstName.trim(),
+              lastName: lastName?.trim() || null,
+              passwordHash,
+              role: "USER",
+              isActive: true,
+              merchantId: invite.merchantId,
+            })
+            .returning();
+
+          await tx.insert(teamMembers).values({
+            userId: createdUser.id,
+            merchantId: invite.merchantId,
+            role: invite.role,
+            isActive: true,
+            joinedAt: new Date(),
+          });
+
+          await tx
+            .update(teamInvites)
+            .set({ acceptedByUserId: createdUser.id })
+            .where(eq(teamInvites.id, invite.id));
+
+          return createdUser;
+        });
+
+        await new Promise<void>((resolve, reject) => {
+          req.session.regenerate((err) => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+        (req.session as any).userId = newUser.id;
+        await new Promise<void>((resolve, reject) => {
+          req.session.save((err) => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+
+        res.json({
+          message: "Account created and team joined!",
+          merchantId: invite.merchantId,
+        });
+      } catch (error) {
+        console.error("Error accepting invite with signup:", error);
+        res.status(500).json({ message: "Failed to create account" });
       }
     },
   );
