@@ -475,9 +475,9 @@ export default function AdsProfitability() {
           <div className="overflow-x-auto max-h-[75vh]">
             <table className="w-full text-sm border-collapse table-fixed">
               <colgroup>
-                <col style={{width: "3%"}} />
-                <col style={{width: "17%"}} />
-                <col style={{width: "14%"}} />
+                <col style={{width: "6%"}} />
+                <col style={{width: "16%"}} />
+                <col style={{width: "12%"}} />
                 <col style={{width: "6%"}} />
                 <col style={{width: "6%"}} />
                 <col style={{width: "6%"}} />
