@@ -326,8 +326,14 @@ export class ShopifyService {
 
     console.log(`[Shopify] Starting paginated fetch from ${shop}...`);
 
+    const maxPages = 4;
+
     while (url) {
       pageCount++;
+      if (pageCount > maxPages) {
+        console.log(`[Shopify] Reached max ${maxPages} pages (${allOrders.length} orders), stopping pagination`);
+        break;
+      }
       console.log(`[Shopify] Fetching page ${pageCount}... (${allOrders.length} orders so far)`);
 
       try {

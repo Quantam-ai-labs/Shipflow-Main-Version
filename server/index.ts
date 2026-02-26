@@ -2,9 +2,40 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
-import { startAutoSync } from "./services/autoSync";
-import { startCourierSyncScheduler } from "./services/courierSyncScheduler";
-import { startMarketingSyncScheduler } from "./services/metaAds";
+import { initSyncManager, shutdownSyncManager } from "./services/syncManager";
+
+process.on('uncaughtException', (err) => {
+  console.error('[FATAL] Uncaught exception:', err.message, err.stack);
+});
+
+process.on('unhandledRejection', (reason: any) => {
+  console.error('[FATAL] Unhandled rejection:', reason?.message || reason, reason?.stack);
+});
+
+const origExit = process.exit.bind(process);
+(process as any).exit = (code?: number) => {
+  const fs = require('fs');
+  const msg = `[FATAL] process.exit(${code}) at ${new Date().toISOString()} from:\n${new Error().stack}\n`;
+  try { fs.appendFileSync('/tmp/crash.log', msg); } catch(e) {}
+  console.error(msg);
+  origExit(code);
+};
+
+process.on('beforeExit', (code) => {
+  const fs = require('fs');
+  try { fs.appendFileSync('/tmp/crash.log', `[beforeExit] code=${code} at ${new Date().toISOString()}\n`); } catch(e) {}
+});
+
+process.on('exit', (code) => {
+  const fs = require('fs');
+  try { fs.appendFileSync('/tmp/crash.log', `[exit] code=${code} at ${new Date().toISOString()}\n`); } catch(e) {}
+});
+
+const memLog = () => {
+  const used = process.memoryUsage();
+  console.log(`[Memory] RSS: ${Math.round(used.rss / 1024 / 1024)}MB, Heap: ${Math.round(used.heapUsed / 1024 / 1024)}/${Math.round(used.heapTotal / 1024 / 1024)}MB`);
+};
+setInterval(memLog, 15000);
 
 const app = express();
 const httpServer = createServer(app);
@@ -62,6 +93,17 @@ app.use((req, res, next) => {
   next();
 });
 
+process.on('SIGTERM', () => {
+  console.log('[Server] SIGTERM received, shutting down gracefully');
+  shutdownSyncManager();
+  httpServer.close(() => process.exit(0));
+});
+
+process.on('SIGINT', () => {
+  console.log('[Server] SIGINT received, shutting down gracefully');
+  shutdownSyncManager();
+  httpServer.close(() => process.exit(0));
+});
 
 (async () => {
   await registerRoutes(httpServer, app);
@@ -79,9 +121,6 @@ app.use((req, res, next) => {
     return res.status(status).json({ message });
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
   if (process.env.NODE_ENV === "production") {
     serveStatic(app);
   } else {
@@ -89,10 +128,6 @@ app.use((req, res, next) => {
     await setupVite(httpServer, app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
   httpServer.listen(
     {
@@ -102,9 +137,7 @@ app.use((req, res, next) => {
     },
     () => {
       log(`serving on port ${port}`);
-      startAutoSync();
-      startCourierSyncScheduler();
-      startMarketingSyncScheduler();
+      initSyncManager();
     },
   );
 })();

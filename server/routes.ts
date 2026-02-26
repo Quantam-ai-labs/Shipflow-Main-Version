@@ -86,6 +86,7 @@ import { leopardsService } from "./services/couriers/leopards";
 import { postexService } from "./services/couriers/postex";
 import { getCourierSyncMetrics, cleanupStaleManualSyncProgress, autoTransitionOrder } from "./services/courierSyncScheduler";
 import { getShopifySyncMetrics } from "./services/autoSync";
+import { getAllSyncStatus, getSyncQueueInfo } from "./services/syncManager";
 
 const oauthStateStore = new Map<
   string,
@@ -3855,6 +3856,24 @@ export async function registerRoutes(
   });
 
   // Integrations
+  app.get("/api/sync/status", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const allStatus = await getAllSyncStatus();
+      const merchantStatus = allStatus.filter(s => s.merchantId === merchantId);
+      const queueInfo = getSyncQueueInfo();
+
+      res.json({
+        syncTypes: merchantStatus,
+        queue: queueInfo,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.get("/api/integrations", isAuthenticated, async (req, res) => {
     try {
       const merchantId = await requireMerchant(req, res);

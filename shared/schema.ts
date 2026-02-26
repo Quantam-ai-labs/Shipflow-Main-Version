@@ -1760,6 +1760,24 @@ export const insertAdProfitabilityEntrySchema = createInsertSchema(adProfitabili
 export type InsertAdProfitabilityEntry = z.infer<typeof insertAdProfitabilityEntrySchema>;
 export type AdProfitabilityEntry = typeof adProfitabilityEntries.$inferSelect;
 
+export const syncState = pgTable("sync_state", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  syncType: varchar("sync_type", { length: 50 }).notNull(),
+  lastSuccessfulSync: timestamp("last_successful_sync"),
+  backfillCompleted: boolean("backfill_completed").default(false),
+  backfillCursor: text("backfill_cursor"),
+  lastError: text("last_error"),
+  errorCount: integer("error_count").default(0),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("idx_sync_state_merchant_type").on(table.merchantId, table.syncType),
+]);
+
+export const insertSyncStateSchema = createInsertSchema(syncState).omit({ id: true, updatedAt: true });
+export type InsertSyncState = z.infer<typeof insertSyncStateSchema>;
+export type SyncState = typeof syncState.$inferSelect;
+
 export const marketingSyncLogs = pgTable("marketing_sync_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
