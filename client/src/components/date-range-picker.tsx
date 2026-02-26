@@ -29,16 +29,20 @@ type ViewMode = "presets" | "calendar";
 
 const presets = [
   {
+    label: "Yesterday",
+    getValue: () => ({ from: subDays(new Date(), 1), to: subDays(new Date(), 1) }),
+  },
+  {
     label: "Last 7 days",
-    getValue: () => ({ from: subDays(new Date(), 6), to: new Date() }),
+    getValue: () => ({ from: subDays(new Date(), 7), to: subDays(new Date(), 1) }),
   },
   {
     label: "Last 30 days",
-    getValue: () => ({ from: subDays(new Date(), 29), to: new Date() }),
+    getValue: () => ({ from: subDays(new Date(), 30), to: subDays(new Date(), 1) }),
   },
   {
     label: "Last 90 days",
-    getValue: () => ({ from: subDays(new Date(), 89), to: new Date() }),
+    getValue: () => ({ from: subDays(new Date(), 90), to: subDays(new Date(), 1) }),
   },
   { divider: true, label: "divider-1", getValue: () => ({ from: new Date(), to: new Date() }) },
   {
