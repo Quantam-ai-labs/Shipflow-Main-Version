@@ -32,7 +32,7 @@ Preferred communication style: Simple, everyday language.
 - **Print & Logs System**: Generates native courier airway bills and batch loadsheets.
 - **Shopify Write-Back System**: Bi-directional sync for address/phone/email edits, order cancellations, and workflow status updates via Shopify tags. Includes rate limit compliance and webhook echo prevention.
 - **Webhook Resilience**: Immediate 200 responses to prevent timeouts and a webhook health check API.
-- **Ads Profitability Calculator**: Tracks Facebook/Meta campaign profitability, auto-syncs campaign data, and provides detailed financial metrics with a flexible product matching system. Historical backfill runs once per ad account (tracked via `backfillCompletedAt` flag on `ad_accounts`), then only 37-day refreshes on subsequent restarts.
+- **Ads Profitability Calculator**: Tracks Facebook/Meta campaign profitability, auto-syncs campaign data, and provides detailed financial metrics with a flexible product matching system.
 - **Settings Page**: Organized into a collapsible sidebar with sections for General, Shopify, Couriers, Status Mapping, and Marketing configurations.
 - **Timezone-Aware Date Filtering**: All date-based queries use the merchant's timezone for accurate data representation, particularly for dashboard stats, orders, and financial reporting.
 - **Product & Inventory Management**: Syncs Shopify product data (title, variants, SKU, price, cost, inventory) and displays a searchable/filterable product catalog.

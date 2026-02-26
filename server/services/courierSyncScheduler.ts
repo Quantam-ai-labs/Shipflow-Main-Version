@@ -578,8 +578,7 @@ export function startCourierSyncScheduler() {
 
   console.log(`[CourierSync] Starting courier status sync every ${COURIER_SYNC_INTERVAL_MS / 1000}s`);
 
-  const initialDelay = process.env.NODE_ENV === 'production' ? 60000 : 120000;
-  setTimeout(() => runCourierSync(), initialDelay);
+  setTimeout(() => runCourierSync(), 30000);
   syncTimer = setInterval(runCourierSync, COURIER_SYNC_INTERVAL_MS);
 }
 
