@@ -408,6 +408,12 @@ export default function Dashboard() {
     refetchInterval: 30000,
   });
 
+  const workflowCountsUrl = `/api/orders/workflow-counts${statsQueryString ? `?${statsQueryString}` : ""}`;
+  const { data: workflowCounts, isLoading: countsLoading } = useQuery<Record<string, number>>({
+    queryKey: [workflowCountsUrl],
+    refetchInterval: 30000,
+  });
+
   const { data: recentOrders, isLoading: ordersLoading } = useQuery<RecentOrder[]>({
     queryKey: ["/api/orders/recent"],
     refetchInterval: 30000,
@@ -470,6 +476,45 @@ export default function Dashboard() {
           isLoading={statsLoading}
         />
       </div>
+
+      {/* Status Breakdown */}
+      <Card>
+        <CardContent className="p-4">
+          {countsLoading ? (
+            <div className="flex gap-2 flex-wrap">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Skeleton key={i} className="h-8 w-24 rounded-full" />
+              ))}
+            </div>
+          ) : workflowCounts ? (
+            <div className="flex gap-2 flex-wrap" data-testid="status-breakdown-chips">
+              {[
+                { key: 'NEW', label: 'New', color: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300' },
+                { key: 'PENDING', label: 'Pending', color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' },
+                { key: 'HOLD', label: 'Hold', color: 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300' },
+                { key: 'READY_TO_SHIP', label: 'Ready to Ship', color: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900 dark:text-cyan-300' },
+                { key: 'BOOKED', label: 'Booked', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300' },
+                { key: 'FULFILLED', label: 'Fulfilled', color: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300' },
+                { key: 'DELIVERED', label: 'Delivered', color: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' },
+                { key: 'RETURN', label: 'Return', color: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' },
+                { key: 'CANCELLED', label: 'Cancelled', color: 'bg-red-100 text-red-600 dark:bg-red-900/50 dark:text-red-400' },
+              ]
+                .filter(s => (workflowCounts[s.key] || 0) > 0)
+                .map(s => (
+                  <Link key={s.key} href={`/orders?workflowStatus=${s.key}`}>
+                    <span
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium cursor-pointer hover:opacity-80 transition-opacity ${s.color}`}
+                      data-testid={`chip-dashboard-${s.key}`}
+                    >
+                      {s.label}
+                      <span className="font-bold">{(workflowCounts[s.key] || 0).toLocaleString()}</span>
+                    </span>
+                  </Link>
+                ))}
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
 
       {/* COD Pending Card */}
       <Card className="bg-gradient-to-r from-primary/5 to-primary/10 border-primary/20">
