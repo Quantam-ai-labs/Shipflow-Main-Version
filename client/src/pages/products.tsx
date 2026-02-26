@@ -69,6 +69,8 @@ interface Purchase {
   unitPrice: string | null;
 }
 
+const STATUS_ORDER = ['NEW', 'PENDING', 'HOLD', 'READY_TO_SHIP', 'BOOKED', 'FULFILLED', 'DELIVERED', 'RETURN', 'CANCELLED'];
+
 function PurchaseSummary({ productId }: { productId: string }) {
   const [, navigate] = useLocation();
   const { data, isLoading } = useQuery<{ purchases: Purchase[]; totalPurchases: number }>({
@@ -93,7 +95,38 @@ function PurchaseSummary({ productId }: { productId: string }) {
     );
   }
 
+  const statusCounts = purchases.reduce<Record<string, number>>((acc, p) => {
+    acc[p.workflowStatus] = (acc[p.workflowStatus] || 0) + 1;
+    return acc;
+  }, {});
+
+  const statusChips = STATUS_ORDER
+    .filter(s => statusCounts[s] > 0)
+    .map(s => ({ status: s, count: statusCounts[s] }));
+
+  const otherStatuses = Object.entries(statusCounts)
+    .filter(([s]) => !STATUS_ORDER.includes(s))
+    .map(([s, count]) => ({ status: s, count }));
+
+  const allChips = [...statusChips, ...otherStatuses];
+
   return (
+    <div className="space-y-3" data-testid="purchase-summary-wrapper">
+      <div className="flex flex-wrap gap-2" data-testid="status-summary-chips">
+        {allChips.map(({ status, count }) => {
+          const colorClass = WORKFLOW_STATUS_COLORS[status] || "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300";
+          return (
+            <span
+              key={status}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${colorClass}`}
+              data-testid={`chip-status-${status}`}
+            >
+              {status.replace(/_/g, ' ')}
+              <span className="font-bold">{count}</span>
+            </span>
+          );
+        })}
+      </div>
     <div className="border rounded-md overflow-hidden" data-testid="table-purchase-summary">
       <Table>
         <TableHeader>
@@ -134,6 +167,7 @@ function PurchaseSummary({ productId }: { productId: string }) {
           })}
         </TableBody>
       </Table>
+    </div>
     </div>
   );
 }
