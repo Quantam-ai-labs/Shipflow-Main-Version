@@ -23,120 +23,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Separator } from "@/components/ui/separator";
-import {
   Search,
   RefreshCw,
   Package,
   ChevronLeft,
   ChevronRight,
-  Box,
   Image as ImageIcon,
-  Tag,
-  AlertCircle,
   TrendingUp,
-  ShoppingCart,
-  Loader2,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import type { Product } from "@shared/schema";
-
-const WORKFLOW_STATUS_COLORS: Record<string, string> = {
-  'NEW': "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
-  'PENDING': "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300",
-  'HOLD': "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300",
-  'READY_TO_SHIP': "bg-cyan-100 text-cyan-700 dark:bg-cyan-900 dark:text-cyan-300",
-  'BOOKED': "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
-  'FULFILLED': "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300",
-  'DELIVERED': "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
-  'RETURN': "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
-  'CANCELLED': "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
-};
-
-interface Purchase {
-  orderId: string;
-  orderNumber: string;
-  customerName: string;
-  customerPhone: string | null;
-  workflowStatus: string;
-  orderDate: string;
-  quantity: number;
-  unitPrice: string | null;
-}
-
-function PurchaseSummary({ productId }: { productId: string }) {
-  const [, navigate] = useLocation();
-  const { data, isLoading } = useQuery<{ purchases: Purchase[]; totalPurchases: number }>({
-    queryKey: [`/api/products/${productId}/purchases`],
-    enabled: !!productId,
-  });
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-6 text-sm text-muted-foreground gap-2" data-testid="loading-purchases">
-        <Loader2 className="w-4 h-4 animate-spin" />
-        Loading purchase history...
-      </div>
-    );
-  }
-
-  const purchases = data?.purchases || [];
-
-  if (purchases.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground py-3" data-testid="text-no-purchases">No purchase records found for this product.</p>
-    );
-  }
-
-  return (
-    <div className="border rounded-md overflow-hidden" data-testid="table-purchase-summary">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Customer</TableHead>
-            <TableHead>Order ID</TableHead>
-            <TableHead>Qty</TableHead>
-            <TableHead>Status</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {purchases.map((p) => {
-            const colorClass = WORKFLOW_STATUS_COLORS[p.workflowStatus] || "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300";
-            return (
-              <TableRow
-                key={`${p.orderId}-${p.quantity}`}
-                className="cursor-pointer"
-                onClick={() => navigate(`/orders/${p.orderId}`)}
-                data-testid={`row-purchase-${p.orderId}`}
-              >
-                <TableCell className="font-medium text-sm">
-                  <div>
-                    {p.customerName}
-                    {p.customerPhone && (
-                      <span className="block text-xs text-muted-foreground">{p.customerPhone}</span>
-                    )}
-                  </div>
-                </TableCell>
-                <TableCell className="text-sm">#{p.orderNumber}</TableCell>
-                <TableCell className="text-sm">{p.quantity}</TableCell>
-                <TableCell>
-                  <Badge className={`${colorClass} text-xs font-medium`} data-testid={`badge-purchase-status-${p.orderId}`}>
-                    {p.workflowStatus.replace(/_/g, ' ')}
-                  </Badge>
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
-    </div>
-  );
-}
 
 interface ProductVariant {
   id: string;
@@ -154,21 +50,12 @@ interface ProductVariant {
   option3: string | null;
 }
 
-interface ProductImage {
-  id: string;
-  src: string;
-  alt: string | null;
-  position: number;
-  width: number;
-  height: number;
-}
-
 export default function ShopifyProductsPage() {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const pageSize = 25;
 
   const buildQueryUrl = () => {
@@ -202,11 +89,6 @@ export default function ShopifyProductsPage() {
   const getVariants = (product: Product): ProductVariant[] => {
     if (!product.variants) return [];
     return product.variants as unknown as ProductVariant[];
-  };
-
-  const getImages = (product: Product): ProductImage[] => {
-    if (!product.images) return [];
-    return product.images as unknown as ProductImage[];
   };
 
   const getInventoryBadge = (qty: number) => {
@@ -338,7 +220,7 @@ export default function ShopifyProductsPage() {
                     <TableRow
                       key={product.id}
                       className="cursor-pointer hover-elevate"
-                      onClick={() => setSelectedProduct(product)}
+                      onClick={() => navigate(`/shopify-products/${product.id}`)}
                       data-testid={`row-shopify-product-${product.id}`}
                     >
                       <TableCell>
@@ -406,142 +288,6 @@ export default function ShopifyProductsPage() {
         </div>
       )}
 
-      <Dialog open={!!selectedProduct} onOpenChange={() => setSelectedProduct(null)}>
-        {selectedProduct && (
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-3">
-                {selectedProduct.imageUrl ? (
-                  <img
-                    src={selectedProduct.imageUrl}
-                    alt={selectedProduct.title}
-                    className="w-12 h-12 rounded-md object-cover border"
-                  />
-                ) : (
-                  <div className="w-12 h-12 rounded-md border flex items-center justify-center bg-muted">
-                    <ImageIcon className="w-5 h-5 text-muted-foreground" />
-                  </div>
-                )}
-                <div className="min-w-0">
-                  <p className="truncate" data-testid="text-detail-shopify-product-title">{selectedProduct.title}</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    {getStatusBadge(selectedProduct.status)}
-                    {getInventoryBadge(selectedProduct.totalInventory || 0)}
-                  </div>
-                </div>
-              </DialogTitle>
-            </DialogHeader>
-
-            <div className="space-y-4 mt-2">
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div>
-                  <p className="text-muted-foreground">Vendor</p>
-                  <p className="font-medium">{selectedProduct.vendor || "-"}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Type</p>
-                  <p className="font-medium">{selectedProduct.productType || "-"}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Handle</p>
-                  <p className="font-medium">{selectedProduct.handle || "-"}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Total Inventory</p>
-                  <p className="font-medium">{selectedProduct.totalInventory || 0}</p>
-                </div>
-              </div>
-
-              {selectedProduct.tags && (
-                <div>
-                  <p className="text-sm text-muted-foreground mb-1.5">Tags</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {selectedProduct.tags.split(",").filter(Boolean).map((tag, i) => (
-                      <Badge key={i} variant="outline" className="text-xs">
-                        <Tag className="w-3 h-3 mr-1" />
-                        {tag.trim()}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <Separator />
-
-              <div>
-                <h4 className="font-medium mb-2 flex items-center gap-2">
-                  <Box className="w-4 h-4" />
-                  Variants ({getVariants(selectedProduct).length})
-                </h4>
-                <div className="border rounded-md overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Variant</TableHead>
-                        <TableHead>SKU</TableHead>
-                        <TableHead>Cost</TableHead>
-                        <TableHead>Sale Price</TableHead>
-                        <TableHead>Stock</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {getVariants(selectedProduct).map((variant) => (
-                        <TableRow key={variant.id} data-testid={`row-variant-${variant.id}`}>
-                          <TableCell className="font-medium">{variant.title || "Default"}</TableCell>
-                          <TableCell className="text-sm text-muted-foreground">{variant.sku || "-"}</TableCell>
-                          <TableCell className="text-sm" data-testid={`text-variant-cost-${variant.id}`}>
-                            {variant.cost ? `PKR ${parseFloat(variant.cost).toLocaleString()}` : ""}
-                          </TableCell>
-                          <TableCell className="text-sm" data-testid={`text-variant-sale-price-${variant.id}`}>PKR {parseFloat(variant.price).toLocaleString()}</TableCell>
-                          <TableCell>{getInventoryBadge(variant.inventoryQuantity)}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </div>
-
-              {getImages(selectedProduct).length > 1 && (
-                <>
-                  <Separator />
-                  <div>
-                    <h4 className="font-medium mb-2 flex items-center gap-2">
-                      <ImageIcon className="w-4 h-4" />
-                      Images ({getImages(selectedProduct).length})
-                    </h4>
-                    <div className="grid grid-cols-4 gap-2">
-                      {getImages(selectedProduct).map((img) => (
-                        <img
-                          key={img.id}
-                          src={img.src}
-                          alt={img.alt || selectedProduct.title}
-                          className="w-full aspect-square rounded-md object-cover border"
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
-
-              <Separator />
-
-              <div>
-                <h4 className="font-medium mb-2 flex items-center gap-2">
-                  <ShoppingCart className="w-4 h-4" />
-                  Purchase Summary
-                </h4>
-                <PurchaseSummary productId={selectedProduct.id} />
-              </div>
-
-              {selectedProduct.shopifySyncedAt && (
-                <p className="text-xs text-muted-foreground text-right">
-                  Last synced: {new Date(selectedProduct.shopifySyncedAt).toLocaleString()}
-                </p>
-              )}
-            </div>
-          </DialogContent>
-        )}
-      </Dialog>
     </div>
   );
 }
