@@ -2949,98 +2949,107 @@ export async function registerRoutes(
           };
 
           if (postexRecords.length > 0) {
-            for (const record of postexRecords) {
-              if (!record.trackingNumber) continue;
+            const POSTEX_COD_BATCH_SIZE = 5;
+            for (let i = 0; i < postexRecords.length; i += POSTEX_COD_BATCH_SIZE) {
+              const batch = postexRecords.slice(i, i + POSTEX_COD_BATCH_SIZE);
 
-              try {
-                const financialResult =
-                  await postexService.getTrackingWithFinancials(
-                    record.trackingNumber,
-                    { apiToken: postexCreds.apiKey },
-                  );
-                await new Promise((resolve) => setTimeout(resolve, 200));
-                const paymentResult = await postexService.getPaymentStatus(
-                  record.trackingNumber,
-                  { apiToken: postexCreds.apiKey },
-                );
+              const batchResults = await Promise.allSettled(
+                batch.map(async (record) => {
+                  if (!record.trackingNumber) return 'skip';
 
-                const updateData: any = { lastSyncedAt: new Date() };
+                  const [financialResult, paymentResult] = await Promise.all([
+                    postexService.getTrackingWithFinancials(
+                      record.trackingNumber,
+                      { apiToken: postexCreds.apiKey },
+                    ),
+                    postexService.getPaymentStatus(
+                      record.trackingNumber,
+                      { apiToken: postexCreds.apiKey },
+                    ),
+                  ]);
 
-                if (financialResult.success) {
-                  updateData.transactionFee =
-                    financialResult.transactionFee?.toString() || null;
-                  updateData.transactionTax =
-                    financialResult.transactionTax?.toString() || null;
-                  updateData.reversalFee =
-                    financialResult.reversalFee?.toString() || null;
-                  updateData.reversalTax =
-                    financialResult.reversalTax?.toString() || null;
-                  updateData.upfrontPayment =
-                    financialResult.upfrontPayment?.toString() || null;
-                  updateData.reservePayment =
-                    financialResult.reservePayment?.toString() || null;
-                  updateData.balancePayment =
-                    financialResult.balancePayment?.toString() || null;
+                  const updateData: any = { lastSyncedAt: new Date() };
 
-                  const totalFees =
-                    (financialResult.transactionFee || 0) +
-                    (financialResult.transactionTax || 0);
-                  if (totalFees > 0) {
-                    updateData.courierFee = totalFees.toString();
-                    const codAmt = Number(record.codAmount) || 0;
-                    updateData.netAmount = (codAmt - totalFees).toString();
-                  }
-                }
+                  if (financialResult.success) {
+                    updateData.transactionFee =
+                      financialResult.transactionFee?.toString() || null;
+                    updateData.transactionTax =
+                      financialResult.transactionTax?.toString() || null;
+                    updateData.reversalFee =
+                      financialResult.reversalFee?.toString() || null;
+                    updateData.reversalTax =
+                      financialResult.reversalTax?.toString() || null;
+                    updateData.upfrontPayment =
+                      financialResult.upfrontPayment?.toString() || null;
+                    updateData.reservePayment =
+                      financialResult.reservePayment?.toString() || null;
+                    updateData.balancePayment =
+                      financialResult.balancePayment?.toString() || null;
 
-                if (paymentResult.success) {
-                  updateData.courierPaymentStatus = paymentResult.settled
-                    ? "Settled"
-                    : "Pending";
-
-                  if (paymentResult.cprNumber1) {
-                    updateData.courierPaymentRef = paymentResult.cprNumber1;
-                  }
-                  if (paymentResult.cprNumber2) {
-                    updateData.courierPaymentRef =
-                      (updateData.courierPaymentRef
-                        ? updateData.courierPaymentRef + ", "
-                        : "") + paymentResult.cprNumber2;
-                  }
-
-                  if (paymentResult.settlementDate) {
-                    const settleDate = new Date(paymentResult.settlementDate);
-                    if (!isNaN(settleDate.getTime())) {
-                      updateData.courierSettlementDate = settleDate;
+                    const totalFees =
+                      (financialResult.transactionFee || 0) +
+                      (financialResult.transactionTax || 0);
+                    if (totalFees > 0) {
+                      updateData.courierFee = totalFees.toString();
+                      const codAmt = Number(record.codAmount) || 0;
+                      updateData.netAmount = (codAmt - totalFees).toString();
                     }
                   }
 
-                  if (paymentResult.settled && record.status === "pending") {
-                    updateData.status = "received";
-                    updateData.courierSettlementRef =
-                      updateData.courierPaymentRef ||
-                      "PostEx settlement confirmed";
-                    updateData.reconciliatedAt = new Date();
-                    updateData.reconciliatedBy = "system_sync";
-                  }
-                }
+                  if (paymentResult.success) {
+                    updateData.courierPaymentStatus = paymentResult.settled
+                      ? "Settled"
+                      : "Pending";
 
-                await storage.updateCodReconciliation(
-                  merchantId,
-                  record.id,
-                  updateData,
-                );
-                courierResults.postex.updated++;
-                totalUpdated++;
-              } catch (err) {
-                console.error(
-                  `[COD Sync] PostEx error for ${record.trackingNumber}:`,
-                  err,
-                );
-                courierResults.postex.errors++;
-                totalErrors++;
+                    if (paymentResult.cprNumber1) {
+                      updateData.courierPaymentRef = paymentResult.cprNumber1;
+                    }
+                    if (paymentResult.cprNumber2) {
+                      updateData.courierPaymentRef =
+                        (updateData.courierPaymentRef
+                          ? updateData.courierPaymentRef + ", "
+                          : "") + paymentResult.cprNumber2;
+                    }
+
+                    if (paymentResult.settlementDate) {
+                      const settleDate = new Date(paymentResult.settlementDate);
+                      if (!isNaN(settleDate.getTime())) {
+                        updateData.courierSettlementDate = settleDate;
+                      }
+                    }
+
+                    if (paymentResult.settled && record.status === "pending") {
+                      updateData.status = "received";
+                      updateData.courierSettlementRef =
+                        updateData.courierPaymentRef ||
+                        "PostEx settlement confirmed";
+                      updateData.reconciliatedAt = new Date();
+                      updateData.reconciliatedBy = "system_sync";
+                    }
+                  }
+
+                  await storage.updateCodReconciliation(
+                    merchantId,
+                    record.id,
+                    updateData,
+                  );
+                  return 'updated';
+                })
+              );
+
+              for (const r of batchResults) {
+                if (r.status === 'fulfilled' && r.value === 'updated') {
+                  courierResults.postex.updated++;
+                  totalUpdated++;
+                } else if (r.status === 'rejected') {
+                  courierResults.postex.errors++;
+                  totalErrors++;
+                }
               }
 
-              await new Promise((resolve) => setTimeout(resolve, 200));
+              if (i + POSTEX_COD_BATCH_SIZE < postexRecords.length) {
+                await new Promise((resolve) => setTimeout(resolve, 300));
+              }
             }
           }
         }

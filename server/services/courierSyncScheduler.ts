@@ -2,12 +2,14 @@ import { db } from '../db';
 import { orders, merchants, courierAccounts } from '../../shared/schema';
 import { eq, and, or, isNull, sql, desc, notInArray } from 'drizzle-orm';
 import { trackShipment, getWorkflowStageMapping, detectCourierType, type CourierCredentials } from './couriers';
+import { leopardsService } from './couriers/leopards';
+import { normalizeStatus, type UniversalStatus, DEFAULT_WORKFLOW_STAGE_MAP } from './statusNormalization';
 import { storage } from '../storage';
 import { transitionOrder } from './workflowTransition';
-import { DEFAULT_WORKFLOW_STAGE_MAP } from './statusNormalization';
 
 const COURIER_SYNC_INTERVAL_MS = 5 * 60 * 1000;
 const LEOPARDS_BATCH_SIZE = 10;
+const POSTEX_BATCH_SIZE = 10;
 const POSTEX_DELAY_MS = 300;
 const BATCH_DELAY_MS = 500;
 
@@ -235,81 +237,114 @@ async function syncMerchantCourierStatuses(merchantId: string, options?: { force
     return cn !== 'leopards' && cn !== 'postex';
   });
 
-  for (let i = 0; i < leopardsOrders.length; i += LEOPARDS_BATCH_SIZE) {
-    const batch = leopardsOrders.slice(i, i + LEOPARDS_BATCH_SIZE);
-    const creds = courierCredsCache.get('leopards');
-    if (!creds || !creds.apiKey) {
-      skipped += batch.length;
-      continue;
-    }
+  const leopardsCreds = courierCredsCache.get('leopards');
+  if (!leopardsCreds || !leopardsCreds.apiKey) {
+    skipped += leopardsOrders.length;
+  } else if (leopardsOrders.length > 0) {
+    const trackingNumbers = leopardsOrders.map(o => o.courierTracking!).filter(Boolean);
+    const bulkResults = await leopardsService.trackMultiple(trackingNumbers, {
+      apiKey: leopardsCreds.apiKey,
+      apiPassword: leopardsCreds.apiSecret || undefined,
+    });
 
-    const results = await Promise.allSettled(
-      batch.map(async (order) => {
-        try {
-          const credObj: CourierCredentials = { apiKey: creds.apiKey || undefined, apiSecret: creds.apiSecret || undefined };
-          const result = await trackShipment(order.courierName!, order.courierTracking!, credObj, order.shipmentStatus, order.workflowStatus, merchantId);
-          if (result && result.success) {
-            await storage.updateOrder(merchantId, order.id, {
-              shipmentStatus: result.normalizedStatus,
-              courierRawStatus: result.rawCourierStatus,
-              lastTrackingUpdate: new Date(),
-            });
-
-            const newWorkflow = await autoTransitionOrder(merchantId, order, result.normalizedStatus, result.rawCourierStatus);
-            if (newWorkflow) transitioned++;
-
-            return 'updated';
+    const courierType = detectCourierType(leopardsOrders[0].courierName || 'leopards');
+    let customMappings: Record<string, string> | undefined;
+    if (courierType) {
+      try {
+        const mappingRows = await storage.getCourierStatusMappings(merchantId, courierType);
+        if (mappingRows && mappingRows.length > 0) {
+          customMappings = {};
+          for (const m of mappingRows) {
+            customMappings[m.courierStatus] = m.normalizedStatus;
           }
-          return 'failed';
-        } catch {
-          return 'failed';
         }
-      })
-    );
+      } catch {}
+    }
 
-    for (const r of results) {
-      if (r.status === 'fulfilled') {
-        if (r.value === 'updated') updated++;
-        else failed++;
-      } else {
+    for (const order of leopardsOrders) {
+      const trackResult = bulkResults.get(order.courierTracking!);
+      if (!trackResult || !trackResult.success) {
         failed++;
+        continue;
       }
-    }
 
-    if (i + LEOPARDS_BATCH_SIZE < leopardsOrders.length) {
-      await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS));
-    }
-  }
+      try {
+        const rawCourierStatus = trackResult.courierStatus || trackResult.status;
+        const { normalizedStatus, mapped } = normalizeStatus(
+          rawCourierStatus,
+          courierType || 'leopards',
+          order.shipmentStatus,
+          trackResult.events,
+          order.workflowStatus,
+          customMappings,
+        );
 
-  for (const order of postexOrders) {
-    const creds = courierCredsCache.get('postex');
-    if (!creds || !creds.apiKey) {
-      skipped++;
-      continue;
-    }
+        if (!mapped && rawCourierStatus) {
+          try {
+            await storage.recordUnmappedStatus(merchantId, courierType || 'leopards', rawCourierStatus, order.courierTracking!);
+          } catch {}
+        }
 
-    try {
-      const credObj: CourierCredentials = { apiKey: creds.apiKey || undefined, apiSecret: creds.apiSecret || undefined };
-      const result = await trackShipment(order.courierName!, order.courierTracking!, credObj, order.shipmentStatus, order.workflowStatus, merchantId);
-      if (result && result.success) {
         await storage.updateOrder(merchantId, order.id, {
-          shipmentStatus: result.normalizedStatus,
-          courierRawStatus: result.rawCourierStatus,
+          shipmentStatus: normalizedStatus,
+          courierRawStatus: rawCourierStatus,
           lastTrackingUpdate: new Date(),
         });
 
-        const newWorkflow = await autoTransitionOrder(merchantId, order, result.normalizedStatus, result.rawCourierStatus);
+        const newWorkflow = await autoTransitionOrder(merchantId, order, normalizedStatus, rawCourierStatus);
         if (newWorkflow) transitioned++;
 
         updated++;
-      } else {
+      } catch {
         failed++;
       }
-    } catch {
-      failed++;
     }
+  }
 
-    await new Promise(resolve => setTimeout(resolve, POSTEX_DELAY_MS));
+  const postexCreds = courierCredsCache.get('postex');
+  if (!postexCreds || !postexCreds.apiKey) {
+    skipped += postexOrders.length;
+  } else {
+    for (let i = 0; i < postexOrders.length; i += POSTEX_BATCH_SIZE) {
+      const batch = postexOrders.slice(i, i + POSTEX_BATCH_SIZE);
+
+      const results = await Promise.allSettled(
+        batch.map(async (order) => {
+          try {
+            const credObj: CourierCredentials = { apiKey: postexCreds.apiKey || undefined, apiSecret: postexCreds.apiSecret || undefined };
+            const result = await trackShipment(order.courierName!, order.courierTracking!, credObj, order.shipmentStatus, order.workflowStatus, merchantId);
+            if (result && result.success) {
+              await storage.updateOrder(merchantId, order.id, {
+                shipmentStatus: result.normalizedStatus,
+                courierRawStatus: result.rawCourierStatus,
+                lastTrackingUpdate: new Date(),
+              });
+
+              const newWorkflow = await autoTransitionOrder(merchantId, order, result.normalizedStatus, result.rawCourierStatus);
+              if (newWorkflow) transitioned++;
+
+              return 'updated';
+            }
+            return 'failed';
+          } catch {
+            return 'failed';
+          }
+        })
+      );
+
+      for (const r of results) {
+        if (r.status === 'fulfilled') {
+          if (r.value === 'updated') updated++;
+          else failed++;
+        } else {
+          failed++;
+        }
+      }
+
+      if (i + POSTEX_BATCH_SIZE < postexOrders.length) {
+        await new Promise(resolve => setTimeout(resolve, POSTEX_DELAY_MS));
+      }
+    }
   }
 
   skipped += otherOrders.length;
