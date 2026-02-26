@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -26,6 +28,9 @@ import {
   Hash,
   Store,
   Layers,
+  Search,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import type { Product } from "@shared/schema";
 
@@ -77,8 +82,13 @@ interface Purchase {
   unitPrice: string | null;
 }
 
+const PAGE_SIZE = 100;
+
 function PurchaseSummary({ productId }: { productId: string }) {
   const [, navigate] = useLocation();
+  const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+
   const { data, isLoading } = useQuery<{ purchases: Purchase[]; totalPurchases: number }>({
     queryKey: [`/api/products/${productId}/purchases`],
     enabled: !!productId,
@@ -154,22 +164,83 @@ function PurchaseSummary({ productId }: { productId: string }) {
     }] : []),
   ];
 
+  const lowerSearch = searchTerm.toLowerCase();
+  const filtered = searchTerm
+    ? purchases.filter(
+        (p) =>
+          (p.customerName && p.customerName.toLowerCase().includes(lowerSearch)) ||
+          (p.orderNumber && String(p.orderNumber).includes(lowerSearch)) ||
+          (p.customerPhone && p.customerPhone.includes(lowerSearch))
+      )
+    : purchases;
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
+  const pageStart = (safePage - 1) * PAGE_SIZE;
+  const pageEnd = Math.min(pageStart + PAGE_SIZE, filtered.length);
+  const paginated = filtered.slice(pageStart, pageEnd);
+
+  const handleSearch = (value: string) => {
+    setSearchTerm(value);
+    setCurrentPage(1);
+  };
+
   return (
     <div data-testid="table-purchase-summary">
+      <div className="relative mb-4" data-testid="input-search-purchases">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+        <Input
+          value={searchTerm}
+          onChange={(e) => handleSearch(e.target.value)}
+          placeholder="Search by customer, order #, or phone..."
+          className="pl-9"
+        />
+      </div>
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-7 gap-2 mb-4" data-testid="purchase-stats-cards">
         {summaryCards.map((card) => (
           <div
             key={card.label}
             className={`rounded-lg border px-3 py-2.5 flex flex-col gap-0.5 ${card.color} ${card.border}`}
-            data-testid={`stat-card-${card.label.toLowerCase()}`}
+            data-testid={`stat-card-${card.label.toLowerCase().replace(" ", "-")}`}
           >
             <span className="text-xs font-medium opacity-80">{card.label}</span>
             <span className="text-xl font-bold leading-none">{card.count}</span>
           </div>
         ))}
       </div>
-      <div className="text-xs text-muted-foreground mb-2">
-        Showing {purchases.length} of {data?.totalPurchases ?? purchases.length} total orders
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs text-muted-foreground">
+          {filtered.length === purchases.length
+            ? `Showing ${pageStart + 1}–${pageEnd} of ${filtered.length} orders`
+            : `Showing ${filtered.length > 0 ? pageStart + 1 : 0}–${pageEnd} of ${filtered.length} filtered (${purchases.length} total)`}
+        </span>
+        {totalPages > 1 && (
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={safePage === 1}
+              data-testid="button-prev-page"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <span className="text-xs text-muted-foreground px-1">
+              Page {safePage} of {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={safePage === totalPages}
+              data-testid="button-next-page"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
+        )}
       </div>
       <div className="border rounded-lg overflow-hidden">
         <Table>
@@ -184,44 +255,82 @@ function PurchaseSummary({ productId }: { productId: string }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {purchases.map((p) => {
-              const colorClass =
-                WORKFLOW_STATUS_COLORS[p.workflowStatus] ||
-                "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300";
-              return (
-                <TableRow
-                  key={p.orderId}
-                  className="cursor-pointer hover:bg-muted/50 transition-colors"
-                  onClick={() => navigate(`/orders/${p.orderId}`)}
-                  data-testid={`row-purchase-${p.orderId}`}
-                >
-                  <TableCell className="font-medium text-sm">
-                    <div>
-                      {p.customerName}
-                      {p.customerPhone && (
-                        <span className="block text-xs text-muted-foreground">{p.customerPhone}</span>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-sm font-mono">#{p.orderNumber}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {p.orderDate ? new Date(p.orderDate).toLocaleDateString() : "-"}
-                  </TableCell>
-                  <TableCell className="text-sm font-medium">{p.quantity}</TableCell>
-                  <TableCell className="text-sm">
-                    {p.unitPrice ? `PKR ${parseFloat(p.unitPrice).toLocaleString()}` : "-"}
-                  </TableCell>
-                  <TableCell>
-                    <Badge className={`${colorClass} text-xs font-medium`} data-testid={`badge-purchase-status-${p.orderId}`}>
-                      {p.workflowStatus.replace(/_/g, " ")}
-                    </Badge>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
+            {paginated.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center py-8 text-sm text-muted-foreground">
+                  No orders match your search.
+                </TableCell>
+              </TableRow>
+            ) : (
+              paginated.map((p) => {
+                const colorClass =
+                  WORKFLOW_STATUS_COLORS[p.workflowStatus] ||
+                  "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300";
+                return (
+                  <TableRow
+                    key={p.orderId}
+                    className="cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => navigate(`/orders/${p.orderId}`)}
+                    data-testid={`row-purchase-${p.orderId}`}
+                  >
+                    <TableCell className="font-medium text-sm">
+                      <div>
+                        {p.customerName}
+                        {p.customerPhone && (
+                          <span className="block text-xs text-muted-foreground">{p.customerPhone}</span>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-sm font-mono">#{p.orderNumber}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {p.orderDate ? new Date(p.orderDate).toLocaleDateString() : "-"}
+                    </TableCell>
+                    <TableCell className="text-sm font-medium">{p.quantity}</TableCell>
+                    <TableCell className="text-sm">
+                      {p.unitPrice ? `PKR ${parseFloat(p.unitPrice).toLocaleString()}` : "-"}
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={`${colorClass} text-xs font-medium`} data-testid={`badge-purchase-status-${p.orderId}`}>
+                        {p.workflowStatus.replace(/_/g, " ")}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+            )}
           </TableBody>
         </Table>
       </div>
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between mt-3">
+          <span className="text-xs text-muted-foreground">
+            Page {safePage} of {totalPages}
+          </span>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={safePage === 1}
+              data-testid="button-prev-page-bottom"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <span className="text-xs px-1">{safePage} / {totalPages}</span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={safePage === totalPages}
+              data-testid="button-next-page-bottom"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
