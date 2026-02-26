@@ -34,15 +34,15 @@ const presets = [
   },
   {
     label: "Last 7 days",
-    getValue: () => ({ from: subDays(new Date(), 7), to: subDays(new Date(), 1) }),
+    getValue: () => ({ from: subDays(new Date(), 7), to: new Date() }),
   },
   {
     label: "Last 30 days",
-    getValue: () => ({ from: subDays(new Date(), 30), to: subDays(new Date(), 1) }),
+    getValue: () => ({ from: subDays(new Date(), 30), to: new Date() }),
   },
   {
     label: "Last 90 days",
-    getValue: () => ({ from: subDays(new Date(), 90), to: subDays(new Date(), 1) }),
+    getValue: () => ({ from: subDays(new Date(), 90), to: new Date() }),
   },
   { divider: true, label: "divider-1", getValue: () => ({ from: new Date(), to: new Date() }) },
   {
