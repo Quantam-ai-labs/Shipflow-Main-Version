@@ -20,7 +20,7 @@ Preferred communication style: Simple, everyday language.
 - **Runtime**: Node.js with Express.js
 - **Language**: TypeScript (ESM modules)
 - **API Pattern**: RESTful JSON APIs with Zod validation
-- **Authentication**: Replit OpenID Connect (OIDC) via Passport.js
+- **Authentication**: Email/password with bcrypt (case-insensitive email lookup via `ilike`), includes forgot/reset password flow via AWS SES
 - **Session Management**: PostgreSQL-backed sessions using connect-pg-simple
 
 ### Database

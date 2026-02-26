@@ -33,6 +33,7 @@ import AdminPanel from "@/pages/admin";
 import AdminLoginPage from "@/pages/admin-login";
 import MerchantSetup from "@/pages/merchant-setup";
 import InviteAccept from "@/pages/invite-accept";
+import ResetPasswordPage from "@/pages/reset-password";
 import PrintLabels from "@/pages/print-labels";
 import Products from "@/pages/products";
 import ShopifyProducts from "@/pages/shopify-products";
@@ -292,6 +293,14 @@ function MainApp() {
     return (
       <Switch>
         <Route path="/invite/:token" component={InviteAccept} />
+      </Switch>
+    );
+  }
+
+  if (location.startsWith("/reset-password/")) {
+    return (
+      <Switch>
+        <Route path="/reset-password/:token" component={ResetPasswordPage} />
       </Switch>
     );
   }

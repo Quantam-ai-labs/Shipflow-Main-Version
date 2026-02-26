@@ -1,10 +1,12 @@
 import type { Express } from "express";
 import { db } from "../../db";
 import { users, merchants, teamMembers } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { eq, ilike } from "drizzle-orm";
 import { isAuthenticated } from "./replitAuth";
 import bcrypt from "bcrypt";
+import crypto from "crypto";
 import { z } from "zod";
+import { sendPasswordResetEmailSES } from "../../services/sesEmail";
 
 const registerSchema = z.object({
   email: z.string().email("Valid email is required"),
@@ -19,6 +21,15 @@ const loginSchema = z.object({
   password: z.string().min(1, "Password is required"),
 });
 
+const forgotPasswordSchema = z.object({
+  email: z.string().email("Valid email is required"),
+});
+
+const resetPasswordSchema = z.object({
+  token: z.string().min(1, "Token is required"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+});
+
 function generateSlug(name: string): string {
   return name
     .toLowerCase()
@@ -30,8 +41,9 @@ export function registerAuthRoutes(app: Express): void {
   app.post("/api/auth/register", async (req, res) => {
     try {
       const body = registerSchema.parse(req.body);
+      const normalizedEmail = body.email.toLowerCase().trim();
 
-      const existing = await db.select().from(users).where(eq(users.email, body.email));
+      const existing = await db.select().from(users).where(ilike(users.email, normalizedEmail));
       if (existing.length > 0) {
         return res.status(400).json({ message: "An account with this email already exists" });
       }
@@ -43,13 +55,13 @@ export function registerAuthRoutes(app: Express): void {
         const [merchant] = await tx.insert(merchants).values({
           name: body.merchantName,
           slug,
-          email: body.email,
+          email: normalizedEmail,
           status: "ACTIVE",
           onboardingStep: "ACCOUNT_CREATED",
         }).returning();
 
         const [user] = await tx.insert(users).values({
-          email: body.email,
+          email: normalizedEmail,
           firstName: body.firstName,
           lastName: body.lastName || null,
           passwordHash,
@@ -98,8 +110,9 @@ export function registerAuthRoutes(app: Express): void {
   app.post("/api/auth/login", async (req, res) => {
     try {
       const body = loginSchema.parse(req.body);
+      const normalizedEmail = body.email.toLowerCase().trim();
 
-      const [user] = await db.select().from(users).where(eq(users.email, body.email));
+      const [user] = await db.select().from(users).where(ilike(users.email, normalizedEmail));
       if (!user || !user.passwordHash) {
         return res.status(401).json({ message: "Invalid email or password" });
       }
@@ -154,6 +167,102 @@ export function registerAuthRoutes(app: Express): void {
       }
       console.error("Login error:", error);
       res.status(500).json({ message: "Login failed" });
+    }
+  });
+
+  app.post("/api/auth/forgot-password", async (req, res) => {
+    try {
+      const body = forgotPasswordSchema.parse(req.body);
+      const normalizedEmail = body.email.toLowerCase().trim();
+
+      const [user] = await db.select().from(users).where(ilike(users.email, normalizedEmail));
+
+      if (!user || !user.passwordHash) {
+        return res.json({ message: "If an account exists with that email, a reset link has been sent." });
+      }
+
+      const token = crypto.randomBytes(32).toString("hex");
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+
+      await db.update(users).set({
+        passwordResetToken: token,
+        passwordResetExpiresAt: expiresAt,
+      }).where(eq(users.id, user.id));
+
+      const baseUrl = process.env.REPLIT_DEV_DOMAIN
+        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+        : process.env.REPLIT_DOMAINS
+          ? `https://${process.env.REPLIT_DOMAINS}`
+          : "https://shipflow.replit.app";
+
+      const resetUrl = `${baseUrl}/reset-password/${token}`;
+
+      const emailResult = await sendPasswordResetEmailSES({
+        toEmail: user.email!,
+        resetUrl,
+        firstName: user.firstName || "there",
+        expiresAt,
+      });
+
+      if (!emailResult.success) {
+        console.error("Failed to send password reset email:", emailResult.error);
+      }
+
+      res.json({ message: "If an account exists with that email, a reset link has been sent." });
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors[0].message });
+      }
+      console.error("Forgot password error:", error);
+      res.status(500).json({ message: "Failed to process request" });
+    }
+  });
+
+  app.post("/api/auth/reset-password", async (req, res) => {
+    try {
+      const body = resetPasswordSchema.parse(req.body);
+
+      const [user] = await db.select().from(users).where(eq(users.passwordResetToken, body.token));
+      if (!user) {
+        return res.status(400).json({ message: "Invalid or expired reset link" });
+      }
+
+      if (!user.passwordResetExpiresAt || user.passwordResetExpiresAt < new Date()) {
+        return res.status(400).json({ message: "This reset link has expired. Please request a new one." });
+      }
+
+      const passwordHash = await bcrypt.hash(body.password, 12);
+
+      await db.update(users).set({
+        passwordHash,
+        passwordResetToken: null,
+        passwordResetExpiresAt: null,
+        updatedAt: new Date(),
+      }).where(eq(users.id, user.id));
+
+      res.json({ message: "Password has been reset successfully. You can now sign in." });
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors[0].message });
+      }
+      console.error("Reset password error:", error);
+      res.status(500).json({ message: "Failed to reset password" });
+    }
+  });
+
+  app.get("/api/auth/reset-password/:token/validate", async (req, res) => {
+    try {
+      const { token } = req.params;
+      const [user] = await db.select().from(users).where(eq(users.passwordResetToken, token));
+
+      if (!user || !user.passwordResetExpiresAt || user.passwordResetExpiresAt < new Date()) {
+        return res.status(400).json({ valid: false, message: "Invalid or expired reset link" });
+      }
+
+      res.json({ valid: true, email: user.email });
+    } catch (error) {
+      console.error("Token validation error:", error);
+      res.status(500).json({ valid: false, message: "Failed to validate token" });
     }
   });
 
