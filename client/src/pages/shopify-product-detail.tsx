@@ -190,7 +190,7 @@ function PurchaseSummary({ productId }: { productId: string }) {
                 "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300";
               return (
                 <TableRow
-                  key={`${p.orderId}-${p.quantity}`}
+                  key={p.orderId}
                   className="cursor-pointer hover:bg-muted/50 transition-colors"
                   onClick={() => navigate(`/orders/${p.orderId}`)}
                   data-testid={`row-purchase-${p.orderId}`}

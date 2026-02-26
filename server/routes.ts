@@ -9626,16 +9626,25 @@ export async function registerRoutes(
       `);
 
       const rows = (results as any).rows || results;
-      const purchases = (rows as any[]).map((r: any) => ({
-        orderId: r.id,
-        orderNumber: r.order_number,
-        customerName: r.customer_name,
-        customerPhone: r.customer_phone,
-        workflowStatus: r.workflow_status,
-        orderDate: r.order_date,
-        quantity: parseInt(r.quantity) || 0,
-        unitPrice: r.unit_price,
-      }));
+      const purchaseMap = new Map<string, any>();
+      for (const r of rows as any[]) {
+        const existing = purchaseMap.get(r.id);
+        if (existing) {
+          existing.quantity += parseInt(r.quantity) || 0;
+        } else {
+          purchaseMap.set(r.id, {
+            orderId: r.id,
+            orderNumber: r.order_number,
+            customerName: r.customer_name,
+            customerPhone: r.customer_phone,
+            workflowStatus: r.workflow_status,
+            orderDate: r.order_date,
+            quantity: parseInt(r.quantity) || 0,
+            unitPrice: r.unit_price,
+          });
+        }
+      }
+      const purchases = Array.from(purchaseMap.values());
 
       res.json({ purchases, totalPurchases: purchases.length });
     } catch (error: any) {
