@@ -9623,7 +9623,6 @@ export async function registerRoutes(
             OR (item->>'productId' IS NULL AND LOWER(TRIM(item->>'name')) = LOWER(TRIM(${product.title})))
           )
         ORDER BY o.order_date DESC
-        LIMIT 100
       `);
 
       const rows = (results as any).rows || results;
