@@ -5,9 +5,6 @@ import { createServer } from "http";
 import { startAutoSync } from "./services/autoSync";
 import { startCourierSyncScheduler } from "./services/courierSyncScheduler";
 import { startMarketingSyncScheduler } from "./services/metaAds";
-import { db } from "./db";
-import { shopifyStores } from "../shared/schema";
-import { eq } from "drizzle-orm";
 
 const app = express();
 const httpServer = createServer(app);
@@ -65,36 +62,6 @@ app.use((req, res, next) => {
   next();
 });
 
-async function scheduleStartupRecovery() {
-  // One-time full sync for all connected merchants after server start.
-  // Recovers orders missed due to the UTC-vs-PKT timezone bug in created_at_min.
-  // Runs after a 15s delay to avoid slowing server startup.
-  setTimeout(async () => {
-    try {
-      const connectedStores = await db
-        .select()
-        .from(shopifyStores)
-        .where(eq(shopifyStores.isConnected, true));
-
-      if (connectedStores.length === 0) return;
-
-      const { ShopifyService } = await import('./services/shopify');
-      const shopifyService = new ShopifyService();
-
-      for (const store of connectedStores) {
-        if (!store.accessToken || !store.shopDomain || !store.merchantId) continue;
-        try {
-          console.log(`[StartupRecovery] Full sync for merchant ${store.merchantId} (${store.shopDomain}) to recover timezone-missed orders`);
-          await shopifyService.syncOrders(store.merchantId, store.shopDomain, true);
-        } catch (err: any) {
-          console.error(`[StartupRecovery] Failed for merchant ${store.merchantId}:`, err.message);
-        }
-      }
-    } catch (err: any) {
-      console.error('[StartupRecovery] Error:', err.message);
-    }
-  }, 15000);
-}
 
 (async () => {
   await registerRoutes(httpServer, app);
@@ -138,7 +105,6 @@ async function scheduleStartupRecovery() {
       startAutoSync();
       startCourierSyncScheduler();
       startMarketingSyncScheduler();
-      scheduleStartupRecovery();
     },
   );
 })();
