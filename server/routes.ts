@@ -9618,7 +9618,10 @@ export async function registerRoutes(
         CROSS JOIN LATERAL jsonb_array_elements(o.line_items) as item
         WHERE o.merchant_id = ${merchantId}
           AND o.line_items IS NOT NULL
-          AND LOWER(TRIM(item->>'name')) = LOWER(TRIM(${product.title}))
+          AND (
+            item->>'productId' = ${product.shopifyProductId}
+            OR (item->>'productId' IS NULL AND LOWER(TRIM(item->>'name')) = LOWER(TRIM(${product.title})))
+          )
         ORDER BY o.order_date DESC
         LIMIT 100
       `);
