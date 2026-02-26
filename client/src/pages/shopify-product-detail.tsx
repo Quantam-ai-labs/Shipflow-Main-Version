@@ -117,8 +117,8 @@ function PurchaseSummary({ productId }: { productId: string }) {
       border: "border-blue-200 dark:border-blue-800",
     },
     {
-      label: "New",
-      count: statusCounts["NEW"] || 0,
+      label: "Not Dispatched",
+      count: (statusCounts["NEW"] || 0) + (statusCounts["PENDING"] || 0) + (statusCounts["HOLD"] || 0) + (statusCounts["READY_TO_SHIP"] || 0),
       color: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
       border: "border-slate-200 dark:border-slate-700",
     },
