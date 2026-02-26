@@ -689,12 +689,21 @@ async function drawSingleAirwayBill(
 
   // --- Remarks Row ---
   drawTextSafe(page, boldFont, "Remarks:", x + pad, remarksTopY - 13, 8, BLACK);
-  const extraText = " - Allow Open Parcel - Must call before Delivery - Handle with care";
-
   let cleanRemarks = data.remarks || "";
-  if (!cleanRemarks.includes(extraText.trim())) {
-    cleanRemarks += extraText;
-  }
+  let lowerRemarks = cleanRemarks.toLowerCase();
+
+  const conditions = [
+    "Allow Open Parcel",
+    "Must call before Delivery",
+    "Handle with care"
+  ];
+
+  conditions.forEach(text => {
+    if (!lowerRemarks.includes(text.toLowerCase())) {
+      cleanRemarks += (cleanRemarks ? " - " : "") + text;
+      lowerRemarks = cleanRemarks.toLowerCase(); // update after append
+    }
+  });
   cleanRemarks = cleanRemarks.replace(/^\[\s*.*?\]\s*-?\s*/, "").trim();
 
   drawTextSafe(
