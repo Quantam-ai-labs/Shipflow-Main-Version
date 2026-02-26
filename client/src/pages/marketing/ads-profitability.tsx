@@ -296,7 +296,7 @@ export default function AdsProfitability() {
     const selectedOrders = getOrderCount(c.orders);
     const cpa = selectedOrders > 0 ? (c.adSpend / selectedOrders) * dRate : 0;
     const profitMargin = salePrice - costPrice - cpa - delCharges - packExp;
-    const netProfit = profitMargin * selectedOrders;
+    const netProfit = selectedOrders > 0 ? profitMargin * selectedOrders : -(c.adSpend * dRate);
 
     return {
       ...c,
@@ -339,7 +339,7 @@ export default function AdsProfitability() {
       const selectedOrders = getOrderCount(mergedOrders);
       const cpa = selectedOrders > 0 ? (mergedAdSpend / selectedOrders) * dRate : 0;
       const profitMargin = salePrice - costPrice - cpa - delCharges - packExp;
-      const netProfit = profitMargin * selectedOrders;
+      const netProfit = selectedOrders > 0 ? profitMargin * selectedOrders : -(mergedAdSpend * dRate);
       return {
         ...first,
         campaignName,
