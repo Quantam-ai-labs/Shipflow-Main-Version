@@ -605,8 +605,37 @@ export default function Shipments() {
                             <TableCell data-testid={`badge-status-${order.id}`}>
                               {getWorkflowBadge(order.workflowStatus)}
                             </TableCell>
-                            <TableCell className="text-muted-foreground text-sm">
-                              {order.courierRawStatus || order.shipmentStatus || "-"}
+                            <TableCell className="text-sm" title={order.courierRawStatus ? `Courier: ${order.courierRawStatus}` : undefined}>
+                              {order.shipmentStatus ? (
+                                <Badge className={`text-xs font-medium ${
+                                  ({
+                                    'BOOKED': "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
+                                    'PICKED_UP': "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300",
+                                    'ARRIVED_AT_ORIGIN': "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
+                                    'IN_TRANSIT': "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300",
+                                    'ARRIVED_AT_DESTINATION': "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
+                                    'OUT_FOR_DELIVERY': "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300",
+                                    'DELIVERY_ATTEMPTED': "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300",
+                                    'DELIVERED': "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
+                                    'DELIVERY_FAILED': "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
+                                    'RETURNED_TO_SHIPPER': "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
+                                    'READY_FOR_RETURN': "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300",
+                                    'RETURN_IN_TRANSIT': "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
+                                    'RETURNED_TO_ORIGIN': "bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300",
+                                    'CANCELLED': "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
+                                  } as Record<string, string>)[order.shipmentStatus] || "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                                }`}>
+                                  {({
+                                    'BOOKED': 'Booked', 'PICKED_UP': 'Picked Up', 'ARRIVED_AT_ORIGIN': 'At Origin',
+                                    'IN_TRANSIT': 'In Transit', 'ARRIVED_AT_DESTINATION': 'At Destination',
+                                    'OUT_FOR_DELIVERY': 'Out for Delivery', 'DELIVERY_ATTEMPTED': 'Attempted',
+                                    'DELIVERED': 'Delivered', 'DELIVERY_FAILED': 'Failed',
+                                    'RETURNED_TO_SHIPPER': 'Returned', 'READY_FOR_RETURN': 'Ready for Return',
+                                    'RETURN_IN_TRANSIT': 'Return in Transit', 'RETURNED_TO_ORIGIN': 'Returned to Origin',
+                                    'CANCELLED': 'Cancelled',
+                                  } as Record<string, string>)[order.shipmentStatus] || order.shipmentStatus}
+                                </Badge>
+                              ) : "-"}
                             </TableCell>
                             <TableCell data-testid={`text-remark-${order.id}`}>
                               {order.remark ? (

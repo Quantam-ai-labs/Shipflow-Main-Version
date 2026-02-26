@@ -1278,8 +1278,9 @@ export default function Pipeline() {
                       </td>
                       <td className="px-3 py-1.5">
                         <Badge className={`text-xs ${UNIVERSAL_STATUS_COLORS[order.shipmentStatus || ""] || "bg-slate-100 text-slate-700"}`}
-                          data-testid={`badge-status-${order.id}`}>
-                          {order.courierRawStatus || UNIVERSAL_STATUS_LABELS[order.shipmentStatus || ""] || order.shipmentStatus || "Unknown"}
+                          data-testid={`badge-status-${order.id}`}
+                          title={order.courierRawStatus ? `Courier: ${order.courierRawStatus}` : undefined}>
+                          {UNIVERSAL_STATUS_LABELS[order.shipmentStatus || ""] || order.shipmentStatus || "Unknown"}
                         </Badge>
                       </td>
                     </>

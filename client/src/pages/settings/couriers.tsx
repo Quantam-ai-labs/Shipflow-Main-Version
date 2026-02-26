@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
 import {
   Dialog,
   DialogContent,
@@ -23,6 +24,9 @@ import {
   Lock,
   Loader2,
   MapPin,
+  RefreshCw,
+  Copy,
+  Webhook,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -319,6 +323,98 @@ export default function CouriersSettings() {
     }
   };
 
+  const { data: courierSyncStatus } = useQuery<{
+    autoSyncEnabled: boolean;
+    intervalSeconds: number;
+    isRunning: boolean;
+    lastResult: {
+      timestamp: string;
+      updated: number;
+      failed: number;
+      skipped: number;
+      total: number;
+      error?: string;
+    } | null;
+  }>({
+    queryKey: ["/api/couriers/sync-status"],
+    refetchInterval: 30000,
+  });
+
+  const [courierSyncProgress, setCourierSyncProgress] = useState<{ processed: number; total: number } | null>(null);
+  const [syncingCourier, setSyncingCourier] = useState<string | null>(null);
+
+  const pollCourierProgress = async () => {
+    const maxWait = 120000;
+    const pollInterval = 1500;
+    const start = Date.now();
+    while (Date.now() - start < maxWait) {
+      await new Promise(r => setTimeout(r, pollInterval));
+      try {
+        const progressRes = await fetch("/api/couriers/manual-sync-progress", { credentials: "include" });
+        if (!progressRes.ok) continue;
+        const progress = await progressRes.json();
+        if (progress.processed !== undefined && progress.total !== undefined) {
+          setCourierSyncProgress({ processed: progress.processed, total: progress.total });
+        }
+        if (progress.status === "done" && progress.result) {
+          setCourierSyncProgress(null);
+          return progress.result;
+        }
+        if (progress.status === "error") {
+          setCourierSyncProgress(null);
+          throw new Error(progress.error || "Courier sync failed");
+        }
+      } catch (e: any) {
+        if (e.message?.includes("Courier sync failed")) throw e;
+      }
+    }
+    setCourierSyncProgress(null);
+    throw new Error("Sync is taking longer than expected. It will continue in the background.");
+  };
+
+  const courierSyncMutation = useMutation({
+    mutationFn: async (courier?: string) => {
+      const url = courier
+        ? `/api/couriers/sync-statuses?courier=${encodeURIComponent(courier)}`
+        : "/api/couriers/sync-statuses";
+      const res = await apiRequest("POST", url, {});
+      const startResult = await res.json();
+
+      setCourierSyncProgress({ processed: 0, total: 0 });
+      setSyncingCourier(courier || "all");
+
+      if (startResult.status === 'already_running') {
+        toast({ title: "Sync already running", description: "Showing current progress..." });
+      } else if (!startResult.success) {
+        setCourierSyncProgress(null);
+        setSyncingCourier(null);
+        throw new Error(startResult.message || "Failed to start sync");
+      }
+
+      return pollCourierProgress();
+    },
+    onSuccess: (result: any) => {
+      setCourierSyncProgress(null);
+      setSyncingCourier(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/couriers/sync-status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      toast({
+        title: "Courier Sync Complete",
+        description: `${result.updated ?? 0} updated, ${result.failed ?? 0} failed, ${result.skipped ?? 0} skipped out of ${result.total ?? 0} shipments`,
+      });
+    },
+    onError: (err: any) => {
+      setCourierSyncProgress(null);
+      setSyncingCourier(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/couriers/sync-status"] });
+      toast({
+        title: "Courier Sync Failed",
+        description: err.message || "Could not sync courier statuses. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const couriersList = Object.entries(COURIER_CONFIG).map(([name, config]) => ({
     name,
     ...config,
@@ -355,6 +451,84 @@ export default function CouriersSettings() {
         <h1 className="text-2xl font-bold" data-testid="text-couriers-title">Courier Integrations</h1>
         <p className="text-muted-foreground">Connect and configure your courier accounts for shipment tracking and booking.</p>
       </div>
+
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between gap-4 flex-wrap mb-3">
+            <div className="flex items-center gap-3">
+              <RefreshCw className="w-5 h-5 text-muted-foreground" />
+              <div>
+                <p className="font-medium text-sm">Courier Tracking Sync</p>
+                <p className="text-xs text-muted-foreground">
+                  Fetch latest shipment statuses from courier APIs.
+                  {courierSyncStatus?.autoSyncEnabled && (
+                    <span> Auto-syncs every {Math.round((courierSyncStatus.intervalSeconds || 300) / 60)} min.</span>
+                  )}
+                </p>
+                {courierSyncStatus?.lastResult && (
+                  <p className="text-xs text-muted-foreground mt-1" data-testid="text-courier-last-sync">
+                    Last sync: {new Date(courierSyncStatus.lastResult.timestamp).toLocaleString()}
+                    {courierSyncStatus.lastResult.total > 0 && (
+                      <span> ({courierSyncStatus.lastResult.updated} updated, {courierSyncStatus.lastResult.total} total)</span>
+                    )}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => courierSyncMutation.mutate(undefined)}
+              disabled={courierSyncMutation.isPending}
+              data-testid="button-courier-sync-all"
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${courierSyncMutation.isPending && syncingCourier === 'all' ? 'animate-spin' : ''}`} />
+              {courierSyncMutation.isPending && syncingCourier === 'all' ? "Syncing All..." : "Sync All Couriers"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => courierSyncMutation.mutate("leopards")}
+              disabled={courierSyncMutation.isPending}
+              data-testid="button-courier-sync-leopards"
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${courierSyncMutation.isPending && syncingCourier === 'leopards' ? 'animate-spin' : ''}`} />
+              {courierSyncMutation.isPending && syncingCourier === 'leopards' ? "Syncing..." : "Sync Leopards"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => courierSyncMutation.mutate("postex")}
+              disabled={courierSyncMutation.isPending}
+              data-testid="button-courier-sync-postex"
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${courierSyncMutation.isPending && syncingCourier === 'postex' ? 'animate-spin' : ''}`} />
+              {courierSyncMutation.isPending && syncingCourier === 'postex' ? "Syncing..." : "Sync PostEx"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled
+              data-testid="button-courier-sync-tcs"
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Sync TCS
+            </Button>
+          </div>
+          {courierSyncMutation.isPending && courierSyncProgress && (
+            <div className="mt-3 space-y-1" data-testid="courier-sync-progress">
+              <Progress value={courierSyncProgress.total > 0 ? (courierSyncProgress.processed / courierSyncProgress.total) * 100 : undefined} className="h-2" />
+              <p className="text-xs text-muted-foreground">
+                {courierSyncProgress.total > 0
+                  ? `Syncing ${courierSyncProgress.processed} of ${courierSyncProgress.total} orders...`
+                  : "Starting sync..."}
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
         {couriersList.map((courier) => {
@@ -401,6 +575,34 @@ export default function CouriersSettings() {
                         <span>Using custom credentials</span>
                       </>
                     )}
+                  </div>
+                )}
+
+                {courier.name === 'postex' && status.connected && (
+                  <div className="mb-3 p-3 rounded-lg border bg-muted/30">
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <Webhook className="w-3.5 h-3.5 text-muted-foreground" />
+                      <span className="text-xs font-medium">Webhook URL</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <code className="text-xs bg-muted px-2 py-1 rounded flex-1 truncate" data-testid="text-postex-webhook-url">
+                        {`${window.location.origin}/webhooks/postex/status-update`}
+                      </code>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          navigator.clipboard.writeText(`${window.location.origin}/webhooks/postex/status-update`);
+                          toast({ title: "Copied", description: "Webhook URL copied to clipboard." });
+                        }}
+                        data-testid="button-copy-postex-webhook"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1.5">
+                      Paste this URL in your PostEx dashboard under Webhook Configuration. Set the Header Key to <strong>x-webhook-secret</strong> and the Header Value to your configured webhook secret for authentication.
+                    </p>
                   </div>
                 )}
 

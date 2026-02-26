@@ -84,7 +84,7 @@ import {
 } from "./services/shopifyWriteBack";
 import { leopardsService } from "./services/couriers/leopards";
 import { postexService } from "./services/couriers/postex";
-import { getCourierSyncMetrics, cleanupStaleManualSyncProgress } from "./services/courierSyncScheduler";
+import { getCourierSyncMetrics, cleanupStaleManualSyncProgress, autoTransitionOrder } from "./services/courierSyncScheduler";
 import { getShopifySyncMetrics } from "./services/autoSync";
 
 const oauthStateStore = new Map<
@@ -4800,6 +4800,122 @@ export async function registerRoutes(
     }
   });
 
+  // PostEx Webhook Route (no auth - public endpoint for PostEx to push status updates)
+  app.post("/webhooks/postex/status-update", async (req: any, res) => {
+    const webhookSecret = process.env.POSTEX_WEBHOOK_SECRET;
+    if (!webhookSecret) {
+      console.warn("[PostEx Webhook] POSTEX_WEBHOOK_SECRET not configured — rejecting request");
+      res.status(403).json({ error: "Webhook not configured" });
+      return;
+    }
+
+    const headerToken = req.headers["x-webhook-secret"] || req.headers["authorization"];
+    if (headerToken !== webhookSecret && headerToken !== `Bearer ${webhookSecret}`) {
+      console.warn("[PostEx Webhook] Invalid webhook secret header — rejecting");
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    res.status(200).json({ received: true });
+
+    try {
+      const payload = req.body;
+      if (!payload) {
+        console.warn("[PostEx Webhook] Empty payload");
+        return;
+      }
+
+      const trackingNumber = payload.trackingNumber || payload.tracking_number || payload.cn || payload.consignmentNumber || payload.TrackingNumber;
+      const rawStatus = payload.status || payload.orderStatus || payload.Status || payload.transactionStatus;
+
+      if (!trackingNumber || !rawStatus) {
+        console.warn("[PostEx Webhook] Missing trackingNumber or status in payload:", JSON.stringify(payload).slice(0, 500));
+        return;
+      }
+
+      console.log(`[PostEx Webhook] Received status update: tracking=${trackingNumber}, status=${rawStatus}`);
+
+      (async () => {
+        try {
+          const matchingOrders = await db.select().from(orders)
+            .where(
+              and(
+                eq(orders.courierTracking, trackingNumber),
+                sql`LOWER(${orders.courierName}) LIKE '%postex%'`
+              )
+            );
+
+          if (matchingOrders.length > 1) {
+            console.warn(`[PostEx Webhook] Multiple orders found for tracking ${trackingNumber} across ${matchingOrders.length} merchants — skipping to prevent cross-tenant update`);
+            return;
+          }
+
+          if (matchingOrders.length === 0) {
+            console.warn(`[PostEx Webhook] No order found for tracking number: ${trackingNumber}`);
+            return;
+          }
+
+          const order = matchingOrders[0];
+          const merchantId = order.merchantId;
+
+          let customMappings: Record<string, string> | undefined;
+          try {
+            const mappingRows = await storage.getCourierStatusMappings(merchantId, 'postex');
+            if (mappingRows && mappingRows.length > 0) {
+              customMappings = {};
+              for (const m of mappingRows) {
+                customMappings[m.courierStatus] = m.normalizedStatus;
+              }
+            }
+          } catch {}
+
+          const { normalizeStatus, isValidUniversalStatus } = await import("./services/statusNormalization");
+          const { normalizedStatus, mapped } = normalizeStatus(
+            rawStatus,
+            'postex',
+            order.shipmentStatus,
+            undefined,
+            order.workflowStatus,
+            customMappings,
+          );
+
+          if (!mapped) {
+            try {
+              await storage.recordUnmappedStatus(merchantId, 'postex', rawStatus, trackingNumber);
+            } catch {}
+          }
+
+          if (!isValidUniversalStatus(normalizedStatus)) {
+            console.warn(`[PostEx Webhook] Invalid normalized status "${normalizedStatus}" for tracking ${trackingNumber}`);
+            return;
+          }
+
+          if (normalizedStatus === order.shipmentStatus) {
+            console.log(`[PostEx Webhook] Status unchanged for ${trackingNumber}: ${normalizedStatus}`);
+            return;
+          }
+
+          await storage.updateOrder(merchantId, order.id, {
+            shipmentStatus: normalizedStatus,
+            courierRawStatus: rawStatus,
+            lastTrackingUpdate: new Date(),
+          });
+
+          const freshOrder = await storage.getOrderById(merchantId, order.id);
+          if (freshOrder) {
+            await autoTransitionOrder(merchantId, freshOrder, normalizedStatus, rawStatus);
+          }
+
+          console.log(`[PostEx Webhook] Updated order ${order.orderNumber}: ${order.shipmentStatus} -> ${normalizedStatus} (raw: ${rawStatus})`);
+        } catch (err: any) {
+          console.error(`[PostEx Webhook] Error processing tracking ${trackingNumber}:`, err.message);
+        }
+      })();
+    } catch (error: any) {
+      console.error("[PostEx Webhook] Error:", error.message);
+    }
+  });
+
   // Shopify Webhook Routes (no auth - verified via HMAC)
   app.post("/webhooks/shopify/orders-create", async (req: any, res) => {
     res.status(200).json({ received: true });
@@ -5439,7 +5555,8 @@ export async function registerRoutes(
         });
       }
 
-      const started = startManualCourierSync(merchantId);
+      const courierFilter = (req.query.courier as string) || (req.body?.courier as string) || undefined;
+      const started = startManualCourierSync(merchantId, courierFilter);
       if (!started) {
         return res.status(409).json({ message: "Courier sync is already running." });
       }

@@ -105,8 +105,8 @@ function getStatusBadge(status: string | null, hasCourierTracking: boolean, rawS
   }
   const displayStatus = (!hasCourierTracking && (!status || status === 'pending')) ? 'Unfulfilled' : (status || 'Unfulfilled');
   const colorClass = getStatusColor(displayStatus);
-  const label = rawStatus || getStatusLabel(displayStatus);
-  return <Badge className={`${colorClass} text-xs font-medium`} data-testid={`badge-status-${displayStatus.toLowerCase().replace(/\s+/g, '-')}`}>{label}</Badge>;
+  const label = getStatusLabel(displayStatus);
+  return <Badge className={`${colorClass} text-xs font-medium`} data-testid={`badge-status-${displayStatus.toLowerCase().replace(/\s+/g, '-')}`} title={rawStatus ? `Courier: ${rawStatus}` : undefined}>{label}</Badge>;
 }
 
 interface OrdersResponse {

@@ -28,6 +28,7 @@ let syncTimer: ReturnType<typeof setInterval> | null = null;
 let isSyncing = false;
 let syncCycleCounter = 0;
 const LOW_PRIORITY_CYCLE_INTERVAL = 3;
+const TERMINAL_SWEEP_CYCLE_INTERVAL = 12;
 const lastSyncResults = new Map<string, CourierSyncResult>();
 
 interface CourierSyncMetrics {
@@ -173,7 +174,7 @@ async function cancelShopifyFulfillmentForOrder(merchantId: string, order: any):
   }
 }
 
-async function autoTransitionOrder(merchantId: string, order: any, newShipmentStatus: string, rawCourierStatus?: string): Promise<string | null> {
+export async function autoTransitionOrder(merchantId: string, order: any, newShipmentStatus: string, rawCourierStatus?: string): Promise<string | null> {
   const currentWorkflow = order.workflowStatus;
   const targetWorkflow = await resolveTargetWorkflowStage(merchantId, order.courierName || '', newShipmentStatus, rawCourierStatus);
 
@@ -248,15 +249,20 @@ async function autoTransitionOrder(merchantId: string, order: any, newShipmentSt
   return null;
 }
 
-async function syncMerchantCourierStatuses(merchantId: string, options?: { forceRefresh?: boolean; limit?: number; includeLowPriority?: boolean; onProgress?: (processed: number, total: number) => void }): Promise<CourierSyncResult> {
+async function syncMerchantCourierStatuses(merchantId: string, options?: { forceRefresh?: boolean; limit?: number; includeLowPriority?: boolean; onProgress?: (processed: number, total: number) => void; courierFilter?: string }): Promise<CourierSyncResult> {
   const syncLimit = options?.limit || 2000;
   const forceRefresh = options?.forceRefresh || false;
   const includeLowPriority = options?.includeLowPriority !== false;
-  const trackableOrders = await storage.getOrdersForCourierSync(merchantId, {
+  const courierFilter = options?.courierFilter ? normalizeCourierName(options.courierFilter) : undefined;
+  let trackableOrders = await storage.getOrdersForCourierSync(merchantId, {
     forceRefresh,
     limit: syncLimit,
     includeLowPriority,
   });
+
+  if (courierFilter) {
+    trackableOrders = trackableOrders.filter(o => normalizeCourierName(o.courierName!) === courierFilter);
+  }
 
   if (trackableOrders.length === 0) {
     return { timestamp: new Date(), updated: 0, failed: 0, skipped: 0, total: 0, transitioned: 0 };
@@ -489,8 +495,13 @@ async function runCourierSync() {
   try {
     const allMerchants = await db.select({ id: merchants.id }).from(merchants);
 
+    const runTerminalSweep = syncCycleCounter % TERMINAL_SWEEP_CYCLE_INTERVAL === 0;
+
     if (includeLowPriority) {
       console.log(`[CourierSync] Cycle ${syncCycleCounter}: Including low-priority orders (every ${LOW_PRIORITY_CYCLE_INTERVAL} cycles)`);
+    }
+    if (runTerminalSweep) {
+      console.log(`[CourierSync] Cycle ${syncCycleCounter}: Running terminal order re-check sweep (every ${TERMINAL_SWEEP_CYCLE_INTERVAL} cycles)`);
     }
 
     for (const m of allMerchants) {
@@ -535,6 +546,17 @@ async function runCourierSync() {
       if (syncLagMs > 15 * 60 * 1000) {
         console.warn(`[CourierSync] WARNING: Sync lag for merchant ${m.id} exceeds 15 minutes (${Math.round(syncLagMs / 60000)}m)`);
       }
+
+      if (runTerminalSweep) {
+        try {
+          const sweepResult = await sweepTerminalOrders(m.id);
+          if (sweepResult.rechecked > 0) {
+            console.log(`[CourierSync] Terminal sweep for merchant ${m.id}: ${sweepResult.rechecked} re-checked, ${sweepResult.updated} updated, ${sweepResult.reverted} reverted, ${sweepResult.failed} failed`);
+          }
+        } catch (sweepError: any) {
+          console.error(`[CourierSync] Terminal sweep error for merchant ${m.id}:`, sweepError.message);
+        }
+      }
     }
   } catch (error: any) {
     console.error('[CourierSync] Fatal error:', error.message);
@@ -568,7 +590,7 @@ export function stopCourierSyncScheduler() {
   console.log('[CourierSync] Stopped courier status sync');
 }
 
-export function startManualCourierSync(merchantId: string): boolean {
+export function startManualCourierSync(merchantId: string, courierFilter?: string): boolean {
   const existing = manualSyncProgress.get(merchantId);
   if (existing?.status === 'running') return false;
 
@@ -589,6 +611,7 @@ export function startManualCourierSync(merchantId: string): boolean {
           forceRefresh: false,
           limit: CHUNK_SIZE,
           includeLowPriority: true,
+          courierFilter,
           onProgress: (processed, total) => {
             const progress = manualSyncProgress.get(merchantId);
             if (progress) {
@@ -654,6 +677,150 @@ export function cleanupStaleManualSyncProgress() {
       }
     }
   });
+}
+
+async function sweepTerminalOrders(merchantId: string): Promise<{ rechecked: number; updated: number; reverted: number; failed: number }> {
+  let rechecked = 0, updated = 0, reverted = 0, failed = 0;
+
+  const terminalOrders = await storage.getRecentlyTerminalOrders(merchantId, 7, 24);
+  if (terminalOrders.length === 0) return { rechecked, updated, reverted, failed };
+
+  const courierCredsCache = new Map<string, { apiKey: string | null; apiSecret: string | null } | null>();
+  for (const order of terminalOrders) {
+    const cn = normalizeCourierName(order.courierName!);
+    if (!courierCredsCache.has(cn)) {
+      courierCredsCache.set(cn, await getCourierCredentials(merchantId, cn));
+    }
+  }
+
+  const leopardsOrders = terminalOrders.filter(o => normalizeCourierName(o.courierName!) === 'leopards');
+  const postexOrders = terminalOrders.filter(o => normalizeCourierName(o.courierName!) === 'postex');
+
+  if (leopardsOrders.length > 0) {
+    const leopardsCreds = courierCredsCache.get('leopards');
+    if (leopardsCreds?.apiKey) {
+      const trackingNumbers = leopardsOrders.map(o => o.courierTracking!).filter(Boolean);
+      const bulkResults = await leopardsService.trackMultiple(trackingNumbers, {
+        apiKey: leopardsCreds.apiKey,
+        apiPassword: leopardsCreds.apiSecret || undefined,
+      });
+
+      const courierType = detectCourierType(leopardsOrders[0].courierName || 'leopards');
+      let customMappings: Record<string, string> | undefined;
+      if (courierType) {
+        try {
+          const mappingRows = await storage.getCourierStatusMappings(merchantId, courierType);
+          if (mappingRows && mappingRows.length > 0) {
+            customMappings = {};
+            for (const m of mappingRows) {
+              customMappings[m.courierStatus] = m.normalizedStatus;
+            }
+          }
+        } catch {}
+      }
+
+      for (const order of leopardsOrders) {
+        rechecked++;
+        const trackResult = bulkResults.get(order.courierTracking!);
+        if (!trackResult || !trackResult.success) {
+          await storage.updateOrder(merchantId, order.id, { lastTrackingUpdate: new Date() });
+          failed++;
+          continue;
+        }
+
+        try {
+          const rawCourierStatus = trackResult.courierStatus || trackResult.status;
+          const { normalizedStatus } = normalizeStatus(
+            rawCourierStatus,
+            courierType || 'leopards',
+            order.shipmentStatus,
+            trackResult.events,
+            order.workflowStatus,
+            customMappings,
+          );
+
+          if (!isValidUniversalStatus(normalizedStatus)) {
+            await storage.updateOrder(merchantId, order.id, { lastTrackingUpdate: new Date() });
+            continue;
+          }
+
+          if (normalizedStatus !== order.shipmentStatus) {
+            await storage.updateOrder(merchantId, order.id, {
+              shipmentStatus: normalizedStatus,
+              courierRawStatus: rawCourierStatus,
+              lastTrackingUpdate: new Date(),
+            });
+            const newWorkflow = await autoTransitionOrder(merchantId, order, normalizedStatus, rawCourierStatus);
+            if (newWorkflow) reverted++;
+            updated++;
+          } else {
+            await storage.updateOrder(merchantId, order.id, { lastTrackingUpdate: new Date() });
+          }
+        } catch {
+          failed++;
+          await storage.updateOrder(merchantId, order.id, { lastTrackingUpdate: new Date() });
+        }
+      }
+    }
+  }
+
+  for (const order of postexOrders) {
+    rechecked++;
+    const postexCreds = courierCredsCache.get('postex');
+    if (!postexCreds?.apiKey) {
+      await storage.updateOrder(merchantId, order.id, { lastTrackingUpdate: new Date() });
+      continue;
+    }
+
+    try {
+      const credObj: CourierCredentials = { apiKey: postexCreds.apiKey || undefined, apiSecret: postexCreds.apiSecret || undefined };
+      const result = await trackShipment(order.courierName!, order.courierTracking!, credObj, order.shipmentStatus, order.workflowStatus, merchantId);
+
+      if (result && result.success && isValidUniversalStatus(result.normalizedStatus)) {
+        if (result.normalizedStatus !== order.shipmentStatus) {
+          await storage.updateOrder(merchantId, order.id, {
+            shipmentStatus: result.normalizedStatus,
+            courierRawStatus: result.rawCourierStatus,
+            lastTrackingUpdate: new Date(),
+          });
+          const newWorkflow = await autoTransitionOrder(merchantId, order, result.normalizedStatus, result.rawCourierStatus);
+          if (newWorkflow) reverted++;
+          updated++;
+        } else {
+          await storage.updateOrder(merchantId, order.id, { lastTrackingUpdate: new Date() });
+        }
+      } else {
+        await storage.updateOrder(merchantId, order.id, { lastTrackingUpdate: new Date() });
+        failed++;
+      }
+    } catch {
+      failed++;
+      await storage.updateOrder(merchantId, order.id, { lastTrackingUpdate: new Date() });
+    }
+
+    await new Promise(resolve => setTimeout(resolve, POSTEX_DELAY_MS));
+  }
+
+  return { rechecked, updated, reverted, failed };
+}
+
+async function runTerminalOrderSweep() {
+  try {
+    const allMerchants = await db.select({ id: merchants.id }).from(merchants);
+
+    for (const m of allMerchants) {
+      try {
+        const result = await sweepTerminalOrders(m.id);
+        if (result.rechecked > 0) {
+          console.log(`[CourierSync] Terminal sweep for merchant ${m.id}: ${result.rechecked} re-checked, ${result.updated} updated, ${result.reverted} reverted, ${result.failed} failed`);
+        }
+      } catch (error: any) {
+        console.error(`[CourierSync] Terminal sweep error for merchant ${m.id}:`, error.message);
+      }
+    }
+  } catch (error: any) {
+    console.error('[CourierSync] Terminal sweep fatal error:', error.message);
+  }
 }
 
 export { syncMerchantCourierStatuses };

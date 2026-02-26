@@ -252,45 +252,6 @@ export default function Integrations() {
     },
   });
 
-  const { data: courierSyncStatus } = useQuery<{
-    autoSyncEnabled: boolean;
-    intervalSeconds: number;
-    isRunning: boolean;
-    lastResult: {
-      timestamp: string;
-      updated: number;
-      failed: number;
-      skipped: number;
-      total: number;
-      error?: string;
-    } | null;
-  }>({
-    queryKey: ["/api/couriers/sync-status"],
-    refetchInterval: 30000,
-  });
-
-  const courierSyncMutation = useMutation({
-    mutationFn: async () => {
-      return apiRequest("POST", "/api/couriers/sync-statuses", {});
-    },
-    onSuccess: async (res) => {
-      const result = await res.json();
-      queryClient.invalidateQueries({ queryKey: ["/api/couriers/sync-status"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
-      toast({
-        title: "Courier Sync Complete",
-        description: `${result.updated} updated, ${result.failed} failed, ${result.skipped} skipped out of ${result.total} shipments`,
-      });
-    },
-    onError: () => {
-      toast({
-        title: "Courier Sync Failed",
-        description: "Could not sync courier statuses. Please try again.",
-        variant: "destructive",
-      });
-    },
-  });
-
   const manualConnectMutation = useMutation({
     mutationFn: async (data: { storeDomain: string; accessToken?: string; apiKey?: string; apiPassword?: string }) => {
       return apiRequest("POST", "/api/integrations/shopify/manual-connect", data);
@@ -1201,42 +1162,6 @@ export default function Integrations() {
           </CardContent>
         </Card>
 
-        <Card className="mt-4">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between gap-4 flex-wrap">
-              <div className="flex items-center gap-3">
-                <Truck className="w-5 h-5 text-muted-foreground" />
-                <div>
-                  <p className="font-medium text-sm">Courier Tracking Sync</p>
-                  <p className="text-xs text-muted-foreground">
-                    Fetch latest shipment statuses from Leopards & PostEx APIs.
-                    {courierSyncStatus?.autoSyncEnabled && (
-                      <span> Auto-syncs every {Math.round((courierSyncStatus.intervalSeconds || 300) / 60)} min.</span>
-                    )}
-                  </p>
-                  {courierSyncStatus?.lastResult && (
-                    <p className="text-xs text-muted-foreground mt-1" data-testid="text-courier-last-sync">
-                      Last sync: {new Date(courierSyncStatus.lastResult.timestamp).toLocaleString()}
-                      {courierSyncStatus.lastResult.total > 0 && (
-                        <span> ({courierSyncStatus.lastResult.updated} updated, {courierSyncStatus.lastResult.total} total)</span>
-                      )}
-                    </p>
-                  )}
-                </div>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => courierSyncMutation.mutate()}
-                disabled={courierSyncMutation.isPending}
-                data-testid="button-courier-sync"
-              >
-                <RefreshCw className={`w-4 h-4 mr-2 ${courierSyncMutation.isPending ? 'animate-spin' : ''}`} />
-                {courierSyncMutation.isPending ? "Syncing..." : "Sync Courier Statuses"}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Shopify Connection Dialog */}

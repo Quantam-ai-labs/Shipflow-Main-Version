@@ -190,6 +190,9 @@ export interface IStorage {
   upsertProduct(merchantId: string, shopifyProductId: string, data: Partial<InsertProduct>): Promise<Product>;
   deleteProductsByMerchant(merchantId: string): Promise<void>;
 
+  // Terminal Order Re-check
+  getRecentlyTerminalOrders(merchantId: string, daysSinceTerminal: number, minHoursSinceLastCheck: number): Promise<Order[]>;
+
   // Seed
   seedDemoData(): Promise<void>;
 }
@@ -1740,6 +1743,29 @@ export class DatabaseStorage implements IStorage {
 
   async deleteProductsByMerchant(merchantId: string): Promise<void> {
     await db.delete(products).where(eq(products.merchantId, merchantId));
+  }
+
+  async getRecentlyTerminalOrders(merchantId: string, daysSinceTerminal: number, minHoursSinceLastCheck: number): Promise<Order[]> {
+    const terminalStatuses = ['DELIVERED', 'RETURN', 'CANCELLED'];
+    const cutoffDate = new Date(Date.now() - daysSinceTerminal * 24 * 60 * 60 * 1000);
+    const lastCheckCutoff = new Date(Date.now() - minHoursSinceLastCheck * 60 * 60 * 1000);
+
+    const conditions = [
+      eq(orders.merchantId, merchantId),
+      inArray(orders.workflowStatus, terminalStatuses),
+      sql`${orders.courierTracking} IS NOT NULL AND ${orders.courierTracking} != ''`,
+      sql`${orders.courierName} IS NOT NULL AND ${orders.courierName} != ''`,
+      gte(orders.updatedAt, cutoffDate),
+      or(
+        isNull(orders.lastTrackingUpdate),
+        sql`${orders.lastTrackingUpdate} < ${lastCheckCutoff}`
+      )!,
+    ];
+
+    return db.select().from(orders)
+      .where(and(...conditions))
+      .orderBy(desc(orders.updatedAt))
+      .limit(100);
   }
 
   async seedDemoData(): Promise<void> {
