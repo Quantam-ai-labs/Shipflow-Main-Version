@@ -1540,6 +1540,7 @@ export const adAccounts = pgTable("ad_accounts", {
   timezone: varchar("timezone", { length: 100 }),
   status: varchar("status", { length: 20 }).default("ACTIVE"),
   lastSyncedAt: timestamp("last_synced_at"),
+  backfillCompletedAt: timestamp("backfill_completed_at"),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   index("idx_ad_accounts_merchant").on(table.merchantId),

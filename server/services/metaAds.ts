@@ -877,6 +877,7 @@ export function startMarketingSyncScheduler() {
 
   (async () => {
     try {
+      await db.execute(sql`ALTER TABLE ad_accounts ADD COLUMN IF NOT EXISTS backfill_completed_at TIMESTAMP`);
       const accounts = await db.select().from(adAccounts);
 
       if (isDev) {
@@ -894,34 +895,33 @@ export function startMarketingSyncScheduler() {
 
       for (const account of accounts) {
         try {
-          const existing = await db.select({ earliest: sql<string>`MIN(${adInsights.date})` })
-            .from(adInsights)
-            .where(eq(adInsights.merchantId, account.merchantId));
-          const earliestDate = existing[0]?.earliest;
-          const maxBack = new Date();
-          maxBack.setMonth(maxBack.getMonth() - 36);
-          const backfillFrom = maxBack.toISOString().split("T")[0];
+          const { dbId } = await syncAdAccount(account.merchantId);
+          try {
+            await syncCampaigns(account.merchantId, dbId);
+            await syncAdSets(account.merchantId, dbId);
+            await syncAds(account.merchantId, dbId);
+          } catch (err: any) {
+            console.error(`[MetaAds] Campaign metadata sync failed for ${account.merchantId}:`, err.message);
+          }
 
-          if (!earliestDate || earliestDate > backfillFrom) {
-            const { dbId } = await syncAdAccount(account.merchantId);
-            try {
-              await syncCampaigns(account.merchantId, dbId);
-              await syncAdSets(account.merchantId, dbId);
-              await syncAds(account.merchantId, dbId);
-            } catch (err: any) {
-              console.error(`[MetaAds] Campaign metadata sync failed for ${account.merchantId}:`, err.message);
-            }
-            const now = new Date();
-            const today = now.toISOString().split("T")[0];
+          const fresh = await db.select().from(adAccounts).where(eq(adAccounts.id, dbId));
+          const acct = fresh[0];
+
+          if (acct?.backfillCompletedAt) {
+            console.log(`[MetaAds] Backfill already completed on ${acct.backfillCompletedAt.toISOString().split("T")[0]} for merchant ${account.merchantId} — running 37-day refresh`);
+            await quickSyncToday(account.merchantId, "campaign", 37);
+            console.log(`[MetaAds] 37-day refresh completed for merchant ${account.merchantId}`);
+          } else {
+            const maxBack = new Date();
+            maxBack.setMonth(maxBack.getMonth() - 36);
+            const backfillFrom = maxBack.toISOString().split("T")[0];
+            const today = new Date().toISOString().split("T")[0];
             const chunkDays = 90;
 
-            const backfillEnd = earliestDate 
-              ? new Date(new Date(earliestDate).getTime() - 86400000).toISOString().split("T")[0]
-              : today;
-            console.log(`[MetaAds] Backfill gap: ${backfillFrom} to ${backfillEnd} for merchant ${account.merchantId}`);
+            console.log(`[MetaAds] First-time backfill: ${backfillFrom} to ${today} for merchant ${account.merchantId}`);
 
             let chunkStart = new Date(backfillFrom);
-            const endDate = new Date(backfillEnd);
+            const endDate = new Date(today);
             while (chunkStart <= endDate) {
               const chunkEnd = new Date(chunkStart);
               chunkEnd.setDate(chunkEnd.getDate() + chunkDays - 1);
@@ -936,21 +936,14 @@ export function startMarketingSyncScheduler() {
               chunkStart.setDate(chunkStart.getDate() + 1);
             }
             await quickSyncToday(account.merchantId, "campaign", 37);
-            console.log(`[MetaAds] Backfill completed for merchant ${account.merchantId}`);
-          } else {
-            const { dbId } = await syncAdAccount(account.merchantId);
-            try {
-              await syncCampaigns(account.merchantId, dbId);
-              await syncAdSets(account.merchantId, dbId);
-              await syncAds(account.merchantId, dbId);
-            } catch (err: any) {
-              console.error(`[MetaAds] Campaign metadata sync failed for ${account.merchantId}:`, err.message);
-            }
-            await quickSyncToday(account.merchantId, "campaign", 37);
-            console.log(`[MetaAds] 37-day refresh completed for merchant ${account.merchantId}`);
+
+            await db.update(adAccounts)
+              .set({ backfillCompletedAt: new Date() })
+              .where(eq(adAccounts.id, dbId));
+            console.log(`[MetaAds] Backfill completed and flagged for merchant ${account.merchantId}`);
           }
         } catch (err: any) {
-          console.error(`[MetaAds] Initial backfill failed for merchant ${account.merchantId}:`, err.message);
+          console.error(`[MetaAds] Initial sync failed for merchant ${account.merchantId}:`, err.message);
         }
       }
     } catch (err: any) {
