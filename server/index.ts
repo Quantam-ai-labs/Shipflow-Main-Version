@@ -65,35 +65,42 @@ app.use((req, res, next) => {
   next();
 });
 
-async function scheduleStartupRecovery() {
-  // One-time full sync for all connected merchants after server start.
+function scheduleStartupRecovery(): Promise<void> {
+  // One-time streamed full sync for all connected merchants after server start.
   // Recovers orders missed due to the UTC-vs-PKT timezone bug in created_at_min.
-  // Runs after a 15s delay to avoid slowing server startup.
-  setTimeout(async () => {
-    try {
-      const connectedStores = await db
-        .select()
-        .from(shopifyStores)
-        .where(eq(shopifyStores.isConnected, true));
+  // Processes page-by-page (250 orders at a time) to avoid memory exhaustion.
+  // Runs after a 30s delay so the server handles initial webhook traffic first.
+  return new Promise((resolve) => {
+    setTimeout(async () => {
+      try {
+        const connectedStores = await db
+          .select()
+          .from(shopifyStores)
+          .where(eq(shopifyStores.isConnected, true));
 
-      if (connectedStores.length === 0) return;
-
-      const { ShopifyService } = await import('./services/shopify');
-      const shopifyService = new ShopifyService();
-
-      for (const store of connectedStores) {
-        if (!store.accessToken || !store.shopDomain || !store.merchantId) continue;
-        try {
-          console.log(`[StartupRecovery] Full sync for merchant ${store.merchantId} (${store.shopDomain}) to recover timezone-missed orders`);
-          await shopifyService.syncOrders(store.merchantId, store.shopDomain, true);
-        } catch (err: any) {
-          console.error(`[StartupRecovery] Failed for merchant ${store.merchantId}:`, err.message);
+        if (connectedStores.length === 0) {
+          resolve();
+          return;
         }
+
+        const { ShopifyService } = await import('./services/shopify');
+        const shopifyService = new ShopifyService();
+
+        for (const store of connectedStores) {
+          if (!store.accessToken || !store.shopDomain || !store.merchantId) continue;
+          try {
+            console.log(`[StartupRecovery] Streamed full sync for merchant ${store.merchantId} (${store.shopDomain})`);
+            await shopifyService.syncOrders(store.merchantId, store.shopDomain, true);
+          } catch (err: any) {
+            console.error(`[StartupRecovery] Failed for merchant ${store.merchantId}:`, err.message);
+          }
+        }
+      } catch (err: any) {
+        console.error('[StartupRecovery] Error:', err.message);
       }
-    } catch (err: any) {
-      console.error('[StartupRecovery] Error:', err.message);
-    }
-  }, 15000);
+      resolve();
+    }, 30000);
+  });
 }
 
 (async () => {
@@ -137,8 +144,15 @@ async function scheduleStartupRecovery() {
       log(`serving on port ${port}`);
       startAutoSync();
       startCourierSyncScheduler();
-      startMarketingSyncScheduler();
-      scheduleStartupRecovery();
+      if (process.env.NODE_ENV === 'production') {
+        scheduleStartupRecovery().then(() => {
+          console.log('[StartupRecovery] Complete — starting MetaAds scheduler');
+          startMarketingSyncScheduler();
+        });
+      } else {
+        console.log('[StartupRecovery] Skipped in development — starting MetaAds scheduler immediately');
+        startMarketingSyncScheduler();
+      }
     },
   );
 })();

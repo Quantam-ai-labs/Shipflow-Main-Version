@@ -872,11 +872,26 @@ let syncIntervalId: ReturnType<typeof setInterval> | null = null;
 export function startMarketingSyncScheduler() {
   if (syncIntervalId) return;
 
-  console.log("[MetaAds] Starting marketing sync scheduler (full historical backfill on start, 7-day sync every 120s)");
+  const isDev = process.env.NODE_ENV !== 'production';
+  console.log(`[MetaAds] Starting marketing sync scheduler (${isDev ? 'dev: quick sync only' : 'full historical backfill on start'}, 7-day sync every 120s)`);
 
   (async () => {
     try {
       const accounts = await db.select().from(adAccounts);
+
+      if (isDev) {
+        for (const account of accounts) {
+          try {
+            const { dbId } = await syncAdAccount(account.merchantId);
+            await quickSyncToday(account.merchantId, "campaign", 7);
+            console.log(`[MetaAds] Dev quick sync done for merchant ${account.merchantId}`);
+          } catch (err: any) {
+            console.error(`[MetaAds] Dev quick sync failed for ${account.merchantId}:`, err.message);
+          }
+        }
+        return;
+      }
+
       for (const account of accounts) {
         try {
           const existing = await db.select({ earliest: sql<string>`MIN(${adInsights.date})` })
