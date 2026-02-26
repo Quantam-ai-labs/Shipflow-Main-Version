@@ -247,11 +247,11 @@ export function normalizeStatus(
   if (fallback) {
     if (fallback === 'ARRIVED_AT_ORIGIN' && hasPassedThroughTransit(currentStatus, workflowStatus, events)) {
       console.log(`[StatusNorm] Keyword fallback for "${rawStatus}" (${courier}) -> ARRIVED_AT_DESTINATION (post-transit)`);
-      return { normalizedStatus: 'ARRIVED_AT_DESTINATION', mapped: true };
+      return { normalizedStatus: 'ARRIVED_AT_DESTINATION', mapped: false };
     }
     const guarded = applyRegressionGuard(fallback);
     console.log(`[StatusNorm] Keyword fallback for "${rawStatus}" (${courier}) -> ${guarded}`);
-    return { normalizedStatus: guarded, mapped: true };
+    return { normalizedStatus: guarded, mapped: false };
   }
 
   console.warn(`[StatusNorm] UNMAPPED STATUS: "${rawStatus}" from ${courier} - keeping previous status`);
@@ -259,7 +259,11 @@ export function normalizeStatus(
     return { normalizedStatus: currentStatus as UniversalStatus, mapped: false };
   }
 
-  return { normalizedStatus: 'BOOKED', mapped: false };
+  if (!currentStatus) {
+    return { normalizedStatus: 'BOOKED', mapped: false };
+  }
+
+  return { normalizedStatus: (currentStatus as UniversalStatus) || 'BOOKED', mapped: false };
 }
 
 export const DEFAULT_WORKFLOW_STAGE_MAP: Record<string, string> = {
@@ -288,6 +292,10 @@ export function detectCourierType(courierName: string): CourierType | null {
 
 export function isFinalStatus(status: string): boolean {
   return FINAL_STATUSES.includes(status as UniversalStatus);
+}
+
+export function isValidUniversalStatus(status: string): boolean {
+  return UNIVERSAL_STATUSES.includes(status as UniversalStatus);
 }
 
 export function getStatusDisplayLabel(status: string): string {

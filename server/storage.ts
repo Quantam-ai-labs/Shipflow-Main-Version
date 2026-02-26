@@ -74,8 +74,9 @@ export interface IStorage {
   getOrdersInManagedWorkflow(merchantId: string, shopifyOrderIds: string[]): Promise<Set<string>>;
   getRecentOrders(merchantId: string, limit?: number): Promise<Order[]>;
   getOrdersWithMissingCity(merchantId: string, limit?: number): Promise<{ id: string; shopifyOrderId: string }[]>;
-  getOrdersForCourierSync(merchantId: string, options?: { forceRefresh?: boolean; limit?: number }): Promise<Order[]>;
+  getOrdersForCourierSync(merchantId: string, options?: { forceRefresh?: boolean; limit?: number; includeLowPriority?: boolean }): Promise<Order[]>;
   createOrder(order: InsertOrder): Promise<Order>;
+  createOrdersBulk(ordersList: InsertOrder[]): Promise<Order[]>;
   updateOrder(merchantId: string, id: string, data: Partial<InsertOrder>): Promise<Order | undefined>;
 
   // Shipments - All scoped by merchantId
@@ -698,15 +699,16 @@ export class DatabaseStorage implements IStorage {
     return result.filter(r => r.shopifyOrderId !== null) as { id: string; shopifyOrderId: string }[];
   }
 
-  async getOrdersForCourierSync(merchantId: string, options?: { forceRefresh?: boolean; limit?: number }): Promise<Order[]> {
+  async getOrdersForCourierSync(merchantId: string, options?: { forceRefresh?: boolean; limit?: number; includeLowPriority?: boolean }): Promise<Order[]> {
     const syncLimit = options?.limit || 1500;
     const forceRefresh = options?.forceRefresh || false;
+    const includeLowPriority = options?.includeLowPriority !== false;
 
     let conditions = [
       eq(orders.merchantId, merchantId),
       sql`${orders.courierTracking} IS NOT NULL AND ${orders.courierTracking} != ''`,
       sql`${orders.courierName} IS NOT NULL AND ${orders.courierName} != ''`,
-      sql`${orders.workflowStatus} IN ('BOOKED', 'FULFILLED', 'DELIVERED', 'RETURN', 'CANCELLED')`,
+      sql`${orders.workflowStatus} IN ('BOOKED', 'FULFILLED')`,
     ];
 
     if (!forceRefresh) {
@@ -715,6 +717,19 @@ export class DatabaseStorage implements IStorage {
         or(
           isNull(orders.lastTrackingUpdate),
           sql`${orders.lastTrackingUpdate} < ${oneHourAgo}`
+        )!
+      );
+    }
+
+    if (!includeLowPriority) {
+      const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
+      const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+      conditions.push(
+        or(
+          sql`${orders.bookedAt} >= ${fortyEightHoursAgo}`,
+          isNull(orders.bookedAt),
+          sql`${orders.lastTrackingUpdate} >= ${threeDaysAgo}`,
+          isNull(orders.lastTrackingUpdate)
         )!
       );
     }
@@ -742,6 +757,27 @@ export class DatabaseStorage implements IStorage {
     }
     const [created] = await db.insert(orders).values(order).returning();
     return created;
+  }
+
+  async createOrdersBulk(ordersList: InsertOrder[]): Promise<Order[]> {
+    if (ordersList.length === 0) return [];
+    const normalized = ordersList.map(order => {
+      if (order.customerPhone) {
+        return { ...order, customerPhone: normalizePakistaniPhone(order.customerPhone) };
+      }
+      return order;
+    });
+    const results = await db.insert(orders)
+      .values(normalized)
+      .onConflictDoUpdate({
+        target: [orders.merchantId, orders.shopifyOrderId],
+        targetWhere: sql`shopify_order_id IS NOT NULL`,
+        set: {
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return results;
   }
 
   async updateOrder(merchantId: string, id: string, data: Partial<InsertOrder>): Promise<Order | undefined> {

@@ -84,6 +84,8 @@ import {
 } from "./services/shopifyWriteBack";
 import { leopardsService } from "./services/couriers/leopards";
 import { postexService } from "./services/couriers/postex";
+import { getCourierSyncMetrics, cleanupStaleManualSyncProgress } from "./services/courierSyncScheduler";
+import { getShopifySyncMetrics } from "./services/autoSync";
 
 const oauthStateStore = new Map<
   string,
@@ -431,6 +433,23 @@ async function requireMerchant(req: any, res: any): Promise<string | null> {
   return merchantId;
 }
 
+const dashboardStatsCache = new Map<string, { data: any; fetchedAt: number }>();
+const workflowCountsCache = new Map<string, { data: any; fetchedAt: number }>();
+const DASHBOARD_CACHE_TTL_MS = 60000;
+const DASHBOARD_CACHE_MAX_SIZE = 100;
+
+function cleanExpiredCacheEntries(cache: Map<string, { data: any; fetchedAt: number }>) {
+  const now = Date.now();
+  for (const [key, entry] of cache) {
+    if (now - entry.fetchedAt > DASHBOARD_CACHE_TTL_MS) cache.delete(key);
+  }
+  if (cache.size > DASHBOARD_CACHE_MAX_SIZE) {
+    const entries = [...cache.entries()].sort((a, b) => a[1].fetchedAt - b[1].fetchedAt);
+    const toRemove = entries.slice(0, cache.size - DASHBOARD_CACHE_MAX_SIZE);
+    for (const [key] of toRemove) cache.delete(key);
+  }
+}
+
 const merchantTimezoneCache = new Map<string, { tz: string; fetchedAt: number }>();
 async function getMerchantTimezone(merchantId: string): Promise<string> {
   const cached = merchantTimezoneCache.get(merchantId);
@@ -506,12 +525,20 @@ export async function registerRoutes(
       if (!merchantId) return;
 
       const { dateFrom, dateTo } = req.query;
+      const cacheKey = `${merchantId}:${dateFrom || ""}:${dateTo || ""}`;
+      const cached = dashboardStatsCache.get(cacheKey);
+      if (cached && Date.now() - cached.fetchedAt < DASHBOARD_CACHE_TTL_MS) {
+        return res.json(cached.data);
+      }
+
       const timezone = await getMerchantTimezone(merchantId);
       const stats = await storage.getDashboardStats(merchantId, {
         dateFrom: dateFrom as string,
         dateTo: dateTo as string,
         timezone,
       });
+      dashboardStatsCache.set(cacheKey, { data: stats, fetchedAt: Date.now() });
+      cleanExpiredCacheEntries(dashboardStatsCache);
       res.json(stats);
     } catch (error) {
       console.error("Error fetching dashboard stats:", error);
@@ -628,12 +655,20 @@ export async function registerRoutes(
         dateFrom?: string;
         dateTo?: string;
       };
+      const cacheKey = `${merchantId}:${dateFrom || ""}:${dateTo || ""}`;
+      const cached = workflowCountsCache.get(cacheKey);
+      if (cached && Date.now() - cached.fetchedAt < DASHBOARD_CACHE_TTL_MS) {
+        return res.json(cached.data);
+      }
+
       const timezone = await getMerchantTimezone(merchantId);
       const counts = await storage.getWorkflowCounts(merchantId, {
         dateFrom,
         dateTo,
         timezone,
       });
+      workflowCountsCache.set(cacheKey, { data: counts, fetchedAt: Date.now() });
+      cleanExpiredCacheEntries(workflowCountsCache);
       res.json(counts);
     } catch (error) {
       console.error("Error fetching workflow counts:", error);
@@ -2822,8 +2857,27 @@ export async function registerRoutes(
     },
   );
 
-  // COD payment sync progress tracking
   const codSyncProgress = new Map<string, { status: 'running' | 'done' | 'error'; processed: number; total: number; result?: any; error?: string; startedAt: Date }>();
+
+  const STALE_PROGRESS_TTL_MS = 10 * 60 * 1000;
+  setInterval(() => {
+    const now = Date.now();
+    Array.from(codSyncProgress.entries()).forEach(([merchantId, progress]) => {
+      if (now - progress.startedAt.getTime() > STALE_PROGRESS_TTL_MS) {
+        if (progress.status === 'running') {
+          console.warn(`[COD Sync] Cleaning up stale COD sync progress for merchant ${merchantId} (started ${Math.round((now - progress.startedAt.getTime()) / 60000)}m ago)`);
+          codSyncProgress.set(merchantId, {
+            ...progress,
+            status: 'error',
+            error: 'Sync timed out after 10 minutes',
+          });
+        } else {
+          codSyncProgress.delete(merchantId);
+        }
+      }
+    });
+    cleanupStaleManualSyncProgress();
+  }, 60 * 1000);
 
   // Sync COD payment data from courier APIs (background job)
   app.post(
@@ -3017,6 +3071,15 @@ export async function registerRoutes(
           } catch (error: any) {
             console.error("Error syncing COD payments:", error);
             codSyncProgress.set(merchantId, { status: 'error', processed: 0, total: 0, error: error.message, startedAt: codSyncProgress.get(merchantId)!.startedAt });
+          } finally {
+            const progress = codSyncProgress.get(merchantId);
+            if (progress && progress.status === 'running') {
+              codSyncProgress.set(merchantId, {
+                ...progress,
+                status: 'error',
+                error: 'Sync ended unexpectedly',
+              });
+            }
           }
         })();
 
@@ -8640,6 +8703,87 @@ export async function registerRoutes(
       });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch health" });
+    }
+  });
+
+  app.get("/api/admin/sync-health", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+
+      const courierMetrics = getCourierSyncMetrics();
+      const shopifyMetrics = getShopifySyncMetrics();
+
+      const now = Date.now();
+      const merchantHealth: Record<string, any> = {};
+
+      const allMerchantIds = new Set([
+        ...courierMetrics.keys(),
+        ...shopifyMetrics.keys(),
+      ]);
+
+      for (const merchantId of allMerchantIds) {
+        const courier = courierMetrics.get(merchantId);
+        const shopify = shopifyMetrics.get(merchantId);
+
+        const courierLagMs = courier?.lastSyncTime
+          ? now - courier.lastSyncTime.getTime()
+          : null;
+        const shopifyLagMs = shopify?.lastSyncTime
+          ? now - shopify.lastSyncTime.getTime()
+          : null;
+
+        const courierLagWarning = courierLagMs !== null && courierLagMs > 15 * 60 * 1000;
+        const shopifyLagWarning = shopifyLagMs !== null && shopifyLagMs > 15 * 60 * 1000;
+
+        merchantHealth[merchantId] = {
+          courier: courier
+            ? {
+                lastSyncTime: courier.lastSyncTime,
+                lastSyncDurationMs: courier.lastSyncDurationMs,
+                syncLagMs: courierLagMs,
+                syncLagWarning: courierLagWarning,
+                totalSyncs: courier.totalSyncs,
+                totalErrors: courier.totalErrors,
+                ordersProcessed: courier.ordersProcessed,
+                lastError: courier.lastErrorMessage
+                  ? { message: courier.lastErrorMessage, time: courier.lastErrorTime }
+                  : null,
+              }
+            : null,
+          shopify: shopify
+            ? {
+                lastSyncTime: shopify.lastSyncTime,
+                lastSyncDurationMs: shopify.lastSyncDurationMs,
+                syncLagMs: shopifyLagMs,
+                syncLagWarning: shopifyLagWarning,
+                totalSyncs: shopify.totalSyncs,
+                totalErrors: shopify.totalErrors,
+                ordersCreated: shopify.ordersCreated,
+                ordersUpdated: shopify.ordersUpdated,
+                lastError: shopify.lastErrorMessage
+                  ? { message: shopify.lastErrorMessage, time: shopify.lastErrorTime }
+                  : null,
+              }
+            : null,
+        };
+      }
+
+      res.json({
+        timestamp: new Date().toISOString(),
+        merchants: merchantHealth,
+        summary: {
+          totalMerchants: allMerchantIds.size,
+          merchantsWithCourierLagWarning: Object.values(merchantHealth).filter(
+            (m: any) => m.courier?.syncLagWarning
+          ).length,
+          merchantsWithShopifyLagWarning: Object.values(merchantHealth).filter(
+            (m: any) => m.shopify?.syncLagWarning
+          ).length,
+        },
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch sync health" });
     }
   });
 

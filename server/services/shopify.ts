@@ -498,6 +498,24 @@ export class ShopifyService {
 
     const minOrderDate = new Date(MIN_ORDER_DATE);
 
+    interface PendingNewOrder {
+      createData: any;
+      initialWorkflowStatus: string;
+      tags: string[];
+    }
+
+    interface PendingUpdate {
+      existingOrderId: string;
+      updateData: any;
+      initialWorkflowStatus: string;
+      shopifyOrder: ShopifyOrder;
+      transformedOrder: any;
+      hasCourierStatus: boolean;
+    }
+
+    const pendingNewOrders: PendingNewOrder[] = [];
+    const pendingUpdates: PendingUpdate[] = [];
+
     for (const shopifyOrder of shopifyOrders) {
       const orderCreatedAt = new Date(shopifyOrder.created_at);
       if (orderCreatedAt < minOrderDate) {
@@ -507,7 +525,6 @@ export class ShopifyService {
       const shopifyOrderId = String(shopifyOrder.id);
       const transformedOrder = this.transformOrderForStorage(shopifyOrder);
       
-      // Enrich line items with product images from products table
       if (transformedOrder.lineItems && Array.isArray(transformedOrder.lineItems) && productImageMap.size > 0) {
         transformedOrder.lineItems = (transformedOrder.lineItems as any[]).map((item: any) => {
           if (!item.image && item.productId && productImageMap.has(item.productId)) {
@@ -566,55 +583,14 @@ export class ShopifyService {
           updateData.courierName = transformedOrder.courierName;
         }
 
-        const isPrepaid = transformedOrder.paymentMethod === 'prepaid';
-        const existingOrder = await storage.getOrderById(merchantId, existingOrderId);
-        if (isPrepaid && existingOrder && existingOrder.paymentMethod !== 'prepaid') {
-          updateData.codRemaining = "0";
-          updateData.prepaidAmount = transformedOrder.totalAmount;
-          updateData.codPaymentStatus = "PAID";
-        }
-
-        await storage.updateOrder(merchantId, existingOrderId, updateData);
-
-        try {
-          const { transitionOrder, applyRoboTags } = await import('./workflowTransition');
-          const terminalStates = ['DELIVERED', 'RETURN', 'CANCELLED'];
-          
-          if (initialWorkflowStatus === 'CANCELLED') {
-            await transitionOrder({
-              merchantId,
-              orderId: existingOrderId,
-              toStatus: 'CANCELLED',
-              action: 'shopify_sync',
-              actorType: 'system',
-              reason: 'Cancelled in Shopify',
-              extraData: {
-                cancelledAt: shopifyOrder.cancelled_at ? new Date(shopifyOrder.cancelled_at) : now,
-                cancelReason: 'Cancelled in Shopify',
-              },
-            });
-          } else if (initialWorkflowStatus === 'BOOKED') {
-            const existingOrder = await storage.getOrderById(merchantId, existingOrderId);
-            const preBookedStates = ['NEW', 'PENDING', 'HOLD', 'READY_TO_SHIP'];
-            if (existingOrder && preBookedStates.includes(existingOrder.workflowStatus)) {
-              await transitionOrder({
-                merchantId,
-                orderId: existingOrderId,
-                toStatus: 'BOOKED',
-                action: 'shopify_sync',
-                actorType: 'system',
-                reason: `Fulfilled in Shopify - moved to BOOKED (was ${existingOrder.workflowStatus} in ShipFlow)`,
-              });
-            }
-          }
-          
-          if (initialWorkflowStatus !== 'CANCELLED') {
-            await applyRoboTags(merchantId, existingOrderId, transformedOrder.tags);
-          }
-        } catch (e) {
-          console.error(`[Shopify] Error processing workflow for order ${existingOrderId}:`, e);
-        }
-        updatedCount++;
+        pendingUpdates.push({
+          existingOrderId,
+          updateData,
+          initialWorkflowStatus,
+          shopifyOrder,
+          transformedOrder,
+          hasCourierStatus,
+        });
       } else {
         const isPrepaidNew = transformedOrder.paymentMethod === 'prepaid';
         const createData: any = {
@@ -636,18 +612,131 @@ export class ShopifyService {
             createData.shipmentStatus = 'BOOKED';
           }
         }
-        const created = await storage.createOrder(createData);
-        if (created?.id && initialWorkflowStatus === 'NEW') {
-          try {
-            const { applyRoboTags } = await import('./workflowTransition');
-            await applyRoboTags(merchantId, created.id, transformedOrder.tags);
-          } catch (e) {}
-        }
-        newCount++;
+        pendingNewOrders.push({ createData, initialWorkflowStatus, tags: transformedOrder.tags });
       }
-      
-      if ((newCount + updatedCount) % 100 === 0) {
-        console.log(`[Shopify] Processed ${newCount + updatedCount}/${shopifyOrders.length} orders (${newCount} new, ${updatedCount} updated)...`);
+    }
+
+    const BULK_INSERT_SIZE = 50;
+    for (let i = 0; i < pendingNewOrders.length; i += BULK_INSERT_SIZE) {
+      const batch = pendingNewOrders.slice(i, i + BULK_INSERT_SIZE);
+      const createDataBatch = batch.map(item => item.createData);
+      try {
+        const createdOrders = await storage.createOrdersBulk(createDataBatch);
+        newCount += createdOrders.length;
+
+        const createdByShopifyId = new Map(createdOrders.map(o => [o.shopifyOrderId, o]));
+        const roboTagPromises: Promise<void>[] = [];
+        for (const pending of batch) {
+          const created = createdByShopifyId.get(pending.createData.shopifyOrderId);
+          if (created?.id && pending.initialWorkflowStatus === 'NEW') {
+            roboTagPromises.push(
+              (async () => {
+                try {
+                  const { applyRoboTags } = await import('./workflowTransition');
+                  await applyRoboTags(merchantId, created.id, pending.tags);
+                } catch (e) {}
+              })()
+            );
+          }
+        }
+        if (roboTagPromises.length > 0) {
+          await Promise.allSettled(roboTagPromises);
+        }
+      } catch (e) {
+        console.error(`[Shopify] Error in bulk insert batch (${batch.length} orders):`, e);
+        for (const item of batch) {
+          try {
+            const created = await storage.createOrder(item.createData);
+            if (created?.id && item.initialWorkflowStatus === 'NEW') {
+              try {
+                const { applyRoboTags } = await import('./workflowTransition');
+                await applyRoboTags(merchantId, created.id, item.tags);
+              } catch (e2) {}
+            }
+            newCount++;
+          } catch (e2) {
+            console.error(`[Shopify] Error creating order individually:`, e2);
+          }
+        }
+      }
+      if (newCount % 100 === 0 && newCount > 0) {
+        console.log(`[Shopify] Inserted ${newCount}/${pendingNewOrders.length} new orders...`);
+      }
+    }
+
+    if (pendingUpdates.length > 0) {
+      const existingOrderIds = pendingUpdates.map(u => u.existingOrderId);
+      const existingOrdersList = await storage.getOrdersByIds(merchantId, existingOrderIds);
+      const existingOrdersById = new Map<string, any>();
+      for (const o of existingOrdersList) {
+        existingOrdersById.set(o.id, o);
+      }
+
+      const PARALLEL_UPDATE_SIZE = 10;
+      for (let i = 0; i < pendingUpdates.length; i += PARALLEL_UPDATE_SIZE) {
+        const batch = pendingUpdates.slice(i, i + PARALLEL_UPDATE_SIZE);
+        const updatePromises = batch.map(async (pending) => {
+          const { existingOrderId, updateData, initialWorkflowStatus, shopifyOrder, transformedOrder } = pending;
+
+          const isPrepaid = transformedOrder.paymentMethod === 'prepaid';
+          const existingOrder = existingOrdersById.get(existingOrderId);
+          if (isPrepaid && existingOrder && existingOrder.paymentMethod !== 'prepaid') {
+            updateData.codRemaining = "0";
+            updateData.prepaidAmount = transformedOrder.totalAmount;
+            updateData.codPaymentStatus = "PAID";
+          }
+
+          await storage.updateOrder(merchantId, existingOrderId, updateData);
+
+          try {
+            const { transitionOrder, applyRoboTags } = await import('./workflowTransition');
+            
+            if (initialWorkflowStatus === 'CANCELLED') {
+              await transitionOrder({
+                merchantId,
+                orderId: existingOrderId,
+                toStatus: 'CANCELLED',
+                action: 'shopify_sync',
+                actorType: 'system',
+                reason: 'Cancelled in Shopify',
+                extraData: {
+                  cancelledAt: shopifyOrder.cancelled_at ? new Date(shopifyOrder.cancelled_at) : now,
+                  cancelReason: 'Cancelled in Shopify',
+                },
+              });
+            } else if (initialWorkflowStatus === 'BOOKED') {
+              const preBookedStates = ['NEW', 'PENDING', 'HOLD', 'READY_TO_SHIP'];
+              if (existingOrder && preBookedStates.includes(existingOrder.workflowStatus)) {
+                await transitionOrder({
+                  merchantId,
+                  orderId: existingOrderId,
+                  toStatus: 'BOOKED',
+                  action: 'shopify_sync',
+                  actorType: 'system',
+                  reason: `Fulfilled in Shopify - moved to BOOKED (was ${existingOrder.workflowStatus} in ShipFlow)`,
+                });
+              }
+            }
+            
+            if (initialWorkflowStatus !== 'CANCELLED') {
+              await applyRoboTags(merchantId, existingOrderId, transformedOrder.tags);
+            }
+          } catch (e) {
+            console.error(`[Shopify] Error processing workflow for order ${existingOrderId}:`, e);
+          }
+        });
+
+        const results = await Promise.allSettled(updatePromises);
+        for (const result of results) {
+          if (result.status === 'fulfilled') {
+            updatedCount++;
+          } else {
+            console.error(`[Shopify] Update failed:`, result.reason);
+          }
+        }
+      }
+      if (updatedCount > 0) {
+        console.log(`[Shopify] Updated ${updatedCount}/${pendingUpdates.length} existing orders`);
       }
     }
 

@@ -3,7 +3,7 @@ import { orders, merchants, courierAccounts } from '../../shared/schema';
 import { eq, and, or, isNull, sql, desc, notInArray } from 'drizzle-orm';
 import { trackShipment, getWorkflowStageMapping, detectCourierType, type CourierCredentials } from './couriers';
 import { leopardsService } from './couriers/leopards';
-import { normalizeStatus, type UniversalStatus, DEFAULT_WORKFLOW_STAGE_MAP } from './statusNormalization';
+import { normalizeStatus, type UniversalStatus, DEFAULT_WORKFLOW_STAGE_MAP, isValidUniversalStatus } from './statusNormalization';
 import { storage } from '../storage';
 import { transitionOrder } from './workflowTransition';
 
@@ -26,7 +26,42 @@ interface CourierSyncResult {
 
 let syncTimer: ReturnType<typeof setInterval> | null = null;
 let isSyncing = false;
+let syncCycleCounter = 0;
+const LOW_PRIORITY_CYCLE_INTERVAL = 3;
 const lastSyncResults = new Map<string, CourierSyncResult>();
+
+interface CourierSyncMetrics {
+  lastSyncTime: Date | null;
+  lastSyncDurationMs: number;
+  totalSyncs: number;
+  totalErrors: number;
+  ordersProcessed: { leopards: number; postex: number; other: number };
+  lastErrorMessage: string | null;
+  lastErrorTime: Date | null;
+}
+
+const courierSyncMetrics = new Map<string, CourierSyncMetrics>();
+
+function getOrCreateMetrics(merchantId: string): CourierSyncMetrics {
+  let m = courierSyncMetrics.get(merchantId);
+  if (!m) {
+    m = {
+      lastSyncTime: null,
+      lastSyncDurationMs: 0,
+      totalSyncs: 0,
+      totalErrors: 0,
+      ordersProcessed: { leopards: 0, postex: 0, other: 0 },
+      lastErrorMessage: null,
+      lastErrorTime: null,
+    };
+    courierSyncMetrics.set(merchantId, m);
+  }
+  return m;
+}
+
+export function getCourierSyncMetrics(): Map<string, CourierSyncMetrics> {
+  return courierSyncMetrics;
+}
 interface ManualSyncProgress {
   status: 'running' | 'done' | 'error';
   result?: CourierSyncResult;
@@ -213,12 +248,14 @@ async function autoTransitionOrder(merchantId: string, order: any, newShipmentSt
   return null;
 }
 
-async function syncMerchantCourierStatuses(merchantId: string, options?: { forceRefresh?: boolean; limit?: number; onProgress?: (processed: number, total: number) => void }): Promise<CourierSyncResult> {
+async function syncMerchantCourierStatuses(merchantId: string, options?: { forceRefresh?: boolean; limit?: number; includeLowPriority?: boolean; onProgress?: (processed: number, total: number) => void }): Promise<CourierSyncResult> {
   const syncLimit = options?.limit || 2000;
   const forceRefresh = options?.forceRefresh || false;
+  const includeLowPriority = options?.includeLowPriority !== false;
   const trackableOrders = await storage.getOrdersForCourierSync(merchantId, {
     forceRefresh,
     limit: syncLimit,
+    includeLowPriority,
   });
 
   if (trackableOrders.length === 0) {
@@ -249,10 +286,30 @@ async function syncMerchantCourierStatuses(merchantId: string, options?: { force
     return cn !== 'leopards' && cn !== 'postex';
   });
 
-  const leopardsCreds = courierCredsCache.get('leopards');
-  if (!leopardsCreds || !leopardsCreds.apiKey) {
-    skipped += leopardsOrders.length;
-  } else if (leopardsOrders.length > 0) {
+  let leopardsProcessed = 0;
+  let postexProcessed = 0;
+
+  const updateCombinedProgress = () => {
+    if (reportProgress) {
+      reportProgress(leopardsProcessed + postexProcessed + otherOrders.length, totalCount);
+    }
+  };
+
+  const syncLeopards = async (): Promise<{ updated: number; failed: number; skipped: number; transitioned: number }> => {
+    let lUpdated = 0, lFailed = 0, lSkipped = 0, lTransitioned = 0;
+
+    const leopardsCreds = courierCredsCache.get('leopards');
+    if (!leopardsCreds || !leopardsCreds.apiKey) {
+      lSkipped += leopardsOrders.length;
+      leopardsProcessed = leopardsOrders.length;
+      updateCombinedProgress();
+      return { updated: lUpdated, failed: lFailed, skipped: lSkipped, transitioned: lTransitioned };
+    }
+
+    if (leopardsOrders.length === 0) {
+      return { updated: 0, failed: 0, skipped: 0, transitioned: 0 };
+    }
+
     const trackingNumbers = leopardsOrders.map(o => o.courierTracking!).filter(Boolean);
     const bulkResults = await leopardsService.trackMultiple(trackingNumbers, {
       apiKey: leopardsCreds.apiKey,
@@ -276,9 +333,9 @@ async function syncMerchantCourierStatuses(merchantId: string, options?: { force
     for (const order of leopardsOrders) {
       const trackResult = bulkResults.get(order.courierTracking!);
       if (!trackResult || !trackResult.success) {
-        failed++;
-        processedCount++;
-        if (reportProgress) reportProgress(processedCount, totalCount);
+        lFailed++;
+        leopardsProcessed++;
+        updateCombinedProgress();
         continue;
       }
 
@@ -299,6 +356,14 @@ async function syncMerchantCourierStatuses(merchantId: string, options?: { force
           } catch {}
         }
 
+        if (!isValidUniversalStatus(normalizedStatus)) {
+          console.warn(`[CourierSync] Rejected invalid status "${normalizedStatus}" for order ${order.orderNumber} (raw: "${rawCourierStatus}") — keeping current status`);
+          lSkipped++;
+          leopardsProcessed++;
+          updateCombinedProgress();
+          continue;
+        }
+
         await storage.updateOrder(merchantId, order.id, {
           shipmentStatus: normalizedStatus,
           courierRawStatus: rawCourierStatus,
@@ -306,23 +371,30 @@ async function syncMerchantCourierStatuses(merchantId: string, options?: { force
         });
 
         const newWorkflow = await autoTransitionOrder(merchantId, order, normalizedStatus, rawCourierStatus);
-        if (newWorkflow) transitioned++;
+        if (newWorkflow) lTransitioned++;
 
-        updated++;
+        lUpdated++;
       } catch {
-        failed++;
+        lFailed++;
       }
-      processedCount++;
-      if (reportProgress) reportProgress(processedCount, totalCount);
+      leopardsProcessed++;
+      updateCombinedProgress();
     }
-  }
 
-  const postexCreds = courierCredsCache.get('postex');
-  if (!postexCreds || !postexCreds.apiKey) {
-    skipped += postexOrders.length;
-    processedCount += postexOrders.length;
-    if (reportProgress) reportProgress(processedCount, totalCount);
-  } else {
+    return { updated: lUpdated, failed: lFailed, skipped: lSkipped, transitioned: lTransitioned };
+  };
+
+  const syncPostex = async (): Promise<{ updated: number; failed: number; skipped: number; transitioned: number }> => {
+    let pUpdated = 0, pFailed = 0, pSkipped = 0, pTransitioned = 0;
+
+    const postexCreds = courierCredsCache.get('postex');
+    if (!postexCreds || !postexCreds.apiKey) {
+      pSkipped += postexOrders.length;
+      postexProcessed = postexOrders.length;
+      updateCombinedProgress();
+      return { updated: pUpdated, failed: pFailed, skipped: pSkipped, transitioned: pTransitioned };
+    }
+
     for (let i = 0; i < postexOrders.length; i += POSTEX_BATCH_SIZE) {
       const batch = postexOrders.slice(i, i + POSTEX_BATCH_SIZE);
 
@@ -332,6 +404,11 @@ async function syncMerchantCourierStatuses(merchantId: string, options?: { force
             const credObj: CourierCredentials = { apiKey: postexCreds.apiKey || undefined, apiSecret: postexCreds.apiSecret || undefined };
             const result = await trackShipment(order.courierName!, order.courierTracking!, credObj, order.shipmentStatus, order.workflowStatus, merchantId);
             if (result && result.success) {
+              if (!isValidUniversalStatus(result.normalizedStatus)) {
+                console.warn(`[CourierSync] Rejected invalid PostEx status "${result.normalizedStatus}" for order ${order.orderNumber} (raw: "${result.rawCourierStatus}") — keeping current status`);
+                return 'skipped';
+              }
+
               await storage.updateOrder(merchantId, order.id, {
                 shipmentStatus: result.normalizedStatus,
                 courierRawStatus: result.rawCourierStatus,
@@ -339,7 +416,7 @@ async function syncMerchantCourierStatuses(merchantId: string, options?: { force
               });
 
               const newWorkflow = await autoTransitionOrder(merchantId, order, result.normalizedStatus, result.rawCourierStatus);
-              if (newWorkflow) transitioned++;
+              if (newWorkflow) pTransitioned++;
 
               return 'updated';
             }
@@ -352,46 +429,98 @@ async function syncMerchantCourierStatuses(merchantId: string, options?: { force
 
       for (const r of results) {
         if (r.status === 'fulfilled') {
-          if (r.value === 'updated') updated++;
-          else failed++;
+          if (r.value === 'updated') pUpdated++;
+          else if (r.value === 'skipped') pSkipped++;
+          else pFailed++;
         } else {
-          failed++;
+          pFailed++;
         }
       }
 
-      processedCount += batch.length;
-      if (reportProgress) reportProgress(processedCount, totalCount);
+      postexProcessed += batch.length;
+      updateCombinedProgress();
 
       if (i + POSTEX_BATCH_SIZE < postexOrders.length) {
         await new Promise(resolve => setTimeout(resolve, POSTEX_DELAY_MS));
       }
     }
+
+    return { updated: pUpdated, failed: pFailed, skipped: pSkipped, transitioned: pTransitioned };
+  };
+
+  const [leopardsResult, postexResult] = await Promise.allSettled([syncLeopards(), syncPostex()]);
+
+  if (leopardsResult.status === 'fulfilled') {
+    updated += leopardsResult.value.updated;
+    failed += leopardsResult.value.failed;
+    skipped += leopardsResult.value.skipped;
+    transitioned += leopardsResult.value.transitioned;
+  } else {
+    console.error(`[CourierSync] Leopards sync failed for merchant ${merchantId}:`, leopardsResult.reason?.message || leopardsResult.reason);
+    failed += leopardsOrders.length;
+  }
+
+  if (postexResult.status === 'fulfilled') {
+    updated += postexResult.value.updated;
+    failed += postexResult.value.failed;
+    skipped += postexResult.value.skipped;
+    transitioned += postexResult.value.transitioned;
+  } else {
+    console.error(`[CourierSync] PostEx sync failed for merchant ${merchantId}:`, postexResult.reason?.message || postexResult.reason);
+    failed += postexOrders.length;
   }
 
   skipped += otherOrders.length;
-  processedCount += otherOrders.length;
+  processedCount = totalCount;
   if (reportProgress) reportProgress(processedCount, totalCount);
 
   return { timestamp: new Date(), updated, failed, skipped, total: trackableOrders.length, transitioned };
 }
 
 async function runCourierSync() {
-  if (isSyncing) return;
+  if (isSyncing) {
+    console.log('[CourierSync] Skipping cycle — previous sync still running');
+    return;
+  }
   isSyncing = true;
+  syncCycleCounter++;
+  const includeLowPriority = syncCycleCounter % LOW_PRIORITY_CYCLE_INTERVAL === 0;
 
   try {
     const allMerchants = await db.select({ id: merchants.id }).from(merchants);
 
+    if (includeLowPriority) {
+      console.log(`[CourierSync] Cycle ${syncCycleCounter}: Including low-priority orders (every ${LOW_PRIORITY_CYCLE_INTERVAL} cycles)`);
+    }
+
     for (const m of allMerchants) {
+      const metrics = getOrCreateMetrics(m.id);
+      const startMs = Date.now();
       try {
-        const result = await syncMerchantCourierStatuses(m.id);
+        const result = await syncMerchantCourierStatuses(m.id, { includeLowPriority });
         lastSyncResults.set(m.id, result);
+
+        metrics.lastSyncTime = new Date();
+        metrics.lastSyncDurationMs = Date.now() - startMs;
+        metrics.totalSyncs++;
 
         if (result.updated > 0 || result.failed > 0 || result.transitioned) {
           console.log(`[CourierSync] Merchant ${m.id}: ${result.updated} updated, ${result.failed} failed, ${result.skipped} skipped out of ${result.total}${result.transitioned ? `, ${result.transitioned} transitioned` : ''}`);
         }
+
+        if (result.error) {
+          metrics.totalErrors++;
+          metrics.lastErrorMessage = result.error;
+          metrics.lastErrorTime = new Date();
+        }
       } catch (error: any) {
         console.error(`[CourierSync] Error for merchant ${m.id}:`, error.message);
+        metrics.totalErrors++;
+        metrics.lastErrorMessage = error.message;
+        metrics.lastErrorTime = new Date();
+        metrics.lastSyncTime = new Date();
+        metrics.lastSyncDurationMs = Date.now() - startMs;
+        metrics.totalSyncs++;
         lastSyncResults.set(m.id, {
           timestamp: new Date(),
           updated: 0,
@@ -400,6 +529,11 @@ async function runCourierSync() {
           total: 0,
           error: error.message,
         });
+      }
+
+      const syncLagMs = metrics.lastSyncTime ? Date.now() - metrics.lastSyncTime.getTime() : 0;
+      if (syncLagMs > 15 * 60 * 1000) {
+        console.warn(`[CourierSync] WARNING: Sync lag for merchant ${m.id} exceeds 15 minutes (${Math.round(syncLagMs / 60000)}m)`);
       }
     }
   } catch (error: any) {
@@ -454,6 +588,7 @@ export function startManualCourierSync(merchantId: string): boolean {
         const result = await syncMerchantCourierStatuses(merchantId, {
           forceRefresh: false,
           limit: CHUNK_SIZE,
+          includeLowPriority: true,
           onProgress: (processed, total) => {
             const progress = manualSyncProgress.get(merchantId);
             if (progress) {
@@ -482,6 +617,15 @@ export function startManualCourierSync(merchantId: string): boolean {
     } catch (err: any) {
       manualSyncProgress.set(merchantId, { status: 'error', error: err.message, startedAt: manualSyncProgress.get(merchantId)!.startedAt, processed: 0, total: 0 });
       console.error(`[CourierSync] Manual sync error for merchant ${merchantId}:`, err.message);
+    } finally {
+      const progress = manualSyncProgress.get(merchantId);
+      if (progress && progress.status === 'running') {
+        manualSyncProgress.set(merchantId, {
+          ...progress,
+          status: 'error',
+          error: 'Sync ended unexpectedly',
+        });
+      }
     }
   })();
 
@@ -490,6 +634,26 @@ export function startManualCourierSync(merchantId: string): boolean {
 
 export function getManualSyncProgress(merchantId: string) {
   return manualSyncProgress.get(merchantId) || null;
+}
+
+const STALE_PROGRESS_TTL_MS = 10 * 60 * 1000;
+
+export function cleanupStaleManualSyncProgress() {
+  const now = Date.now();
+  Array.from(manualSyncProgress.entries()).forEach(([merchantId, progress]) => {
+    if (now - progress.startedAt.getTime() > STALE_PROGRESS_TTL_MS) {
+      if (progress.status === 'running') {
+        console.warn(`[CourierSync] Cleaning up stale manual sync progress for merchant ${merchantId} (started ${Math.round((now - progress.startedAt.getTime()) / 60000)}m ago)`);
+        manualSyncProgress.set(merchantId, {
+          ...progress,
+          status: 'error',
+          error: 'Sync timed out after 10 minutes',
+        });
+      } else {
+        manualSyncProgress.delete(merchantId);
+      }
+    }
+  });
 }
 
 export { syncMerchantCourierStatuses };

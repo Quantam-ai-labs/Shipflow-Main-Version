@@ -3,7 +3,7 @@ import { shopifyStores, merchants } from '../../shared/schema';
 import { eq } from 'drizzle-orm';
 import { autoMoveStalePending } from './workflowTransition';
 
-const SYNC_INTERVAL_MS = 30_000;
+const SYNC_INTERVAL_MS = 300_000;
 const STALE_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 
 interface SyncResult {
@@ -19,6 +19,41 @@ let staleTimer: ReturnType<typeof setInterval> | null = null;
 let isSyncing = false;
 const lastSyncResults = new Map<string, SyncResult>();
 const merchantSyncLocks = new Set<string>();
+
+interface ShopifySyncMetrics {
+  lastSyncTime: Date | null;
+  lastSyncDurationMs: number;
+  totalSyncs: number;
+  totalErrors: number;
+  ordersCreated: number;
+  ordersUpdated: number;
+  lastErrorMessage: string | null;
+  lastErrorTime: Date | null;
+}
+
+const shopifySyncMetrics = new Map<string, ShopifySyncMetrics>();
+
+function getOrCreateShopifyMetrics(merchantId: string): ShopifySyncMetrics {
+  let m = shopifySyncMetrics.get(merchantId);
+  if (!m) {
+    m = {
+      lastSyncTime: null,
+      lastSyncDurationMs: 0,
+      totalSyncs: 0,
+      totalErrors: 0,
+      ordersCreated: 0,
+      ordersUpdated: 0,
+      lastErrorMessage: null,
+      lastErrorTime: null,
+    };
+    shopifySyncMetrics.set(merchantId, m);
+  }
+  return m;
+}
+
+export function getShopifySyncMetrics(): Map<string, ShopifySyncMetrics> {
+  return shopifySyncMetrics;
+}
 
 export function acquireMerchantSyncLock(merchantId: string): boolean {
   if (merchantSyncLocks.has(merchantId)) return false;
@@ -95,6 +130,8 @@ async function runAutoSync() {
         continue;
       }
 
+      const metrics = getOrCreateShopifyMetrics(store.merchantId);
+      const startMs = Date.now();
       try {
         const shopifyService = new ShopifyService();
         const result = await shopifyService.syncOrders(store.merchantId, store.shopDomain, false);
@@ -106,11 +143,28 @@ async function runAutoSync() {
           totalFetched: result.total,
         });
 
+        metrics.lastSyncTime = new Date();
+        metrics.lastSyncDurationMs = Date.now() - startMs;
+        metrics.totalSyncs++;
+        metrics.ordersCreated += result.synced;
+        metrics.ordersUpdated += result.updated;
+
         if (result.synced > 0 || result.updated > 0) {
           console.log(`[AutoSync] Synced ${result.synced} new, ${result.updated} updated orders for ${store.shopDomain}`);
         }
+
+        const syncLagMs = metrics.lastSyncTime ? Date.now() - metrics.lastSyncTime.getTime() : 0;
+        if (syncLagMs > 15 * 60 * 1000) {
+          console.warn(`[AutoSync] WARNING: Shopify sync lag for merchant ${store.merchantId} exceeds 15 minutes (${Math.round(syncLagMs / 60000)}m)`);
+        }
       } catch (error: any) {
         console.error(`[AutoSync] Error syncing ${store.shopDomain}:`, error.message);
+        metrics.totalErrors++;
+        metrics.lastErrorMessage = error.message;
+        metrics.lastErrorTime = new Date();
+        metrics.lastSyncTime = new Date();
+        metrics.lastSyncDurationMs = Date.now() - startMs;
+        metrics.totalSyncs++;
         lastSyncResults.set(store.merchantId, {
           timestamp: new Date(),
           ordersCreated: 0,
