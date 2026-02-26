@@ -408,7 +408,7 @@ export class ShopifyService {
     return data.orders;
   }
 
-  async syncOrders(merchantId: string, shopDomain: string, forceFullSync: boolean = false): Promise<{ synced: number; updated: number; total: number }> {
+  async syncOrders(merchantId: string, shopDomain: string, forceFullSync: boolean = false, onProgress?: (processed: number, total: number) => void): Promise<{ synced: number; updated: number; total: number }> {
     const { storage } = await import('../storage');
     const store = await storage.getShopifyStore(merchantId);
     
@@ -467,6 +467,8 @@ export class ShopifyService {
     if (shopifyOrders.length > 0 || !isIncremental) {
       console.log(`[Shopify] Fetched ${shopifyOrders.length} orders (${isIncremental ? 'incremental' : 'full'} sync), processing...`);
     }
+
+    if (onProgress) onProgress(0, shopifyOrders.length);
     
     const allShopifyIds = shopifyOrders.map(o => String(o.id));
     const existingOrdersMap = await storage.getExistingOrdersByShopifyIds(merchantId, allShopifyIds);
@@ -494,6 +496,7 @@ export class ShopifyService {
 
     let newCount = 0;
     let updatedCount = 0;
+    let processedCount = 0;
     const now = new Date();
 
     const minOrderDate = new Date(MIN_ORDER_DATE);
@@ -517,6 +520,10 @@ export class ShopifyService {
     const pendingUpdates: PendingUpdate[] = [];
 
     for (const shopifyOrder of shopifyOrders) {
+      processedCount++;
+      if (processedCount % 10 === 0 && onProgress) {
+        onProgress(processedCount, shopifyOrders.length);
+      }
       const orderCreatedAt = new Date(shopifyOrder.created_at);
       if (orderCreatedAt < minOrderDate) {
         continue;

@@ -104,6 +104,28 @@ setInterval(() => {
   cleanupDbOAuthStates().catch(() => {});
 }, 60 * 1000);
 
+interface ShopifySyncProgress {
+  status: 'running' | 'done' | 'error';
+  processed: number;
+  total: number;
+  created: number;
+  updated: number;
+  error?: string;
+  completedAt?: number;
+}
+
+const shopifySyncProgress = new Map<string, ShopifySyncProgress>();
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [merchantId, progress] of shopifySyncProgress) {
+    const maxAge = progress.status === 'done' ? 5 * 60 * 1000 : (progress.status === 'error' ? 10 * 60 * 1000 : Infinity);
+    if (maxAge !== Infinity && progress.completedAt && (now - progress.completedAt) > maxAge) {
+      shopifySyncProgress.delete(merchantId);
+    }
+  }
+}, 60 * 1000);
+
 async function storeOAuthStateInDb(
   state: string,
   data: { merchantId: string; shopDomain: string; credSource: string },
@@ -4103,56 +4125,109 @@ export async function registerRoutes(
         }
 
         if (!store.accessToken || store.accessToken === "demo-access-token") {
-          const result = await syncShopifyOrders(merchantId, store.shopDomain!);
-          return res.json({
-            success: true,
-            message: `Successfully synced ${result.synced} orders (demo mode)`,
-            synced: result.synced,
-            total: result.total,
+          shopifySyncProgress.set(merchantId, {
+            status: 'running',
+            processed: 0,
+            total: 0,
+            created: 0,
+            updated: 0,
           });
+          (async () => {
+            try {
+              const result = await syncShopifyOrders(merchantId, store.shopDomain!);
+              shopifySyncProgress.set(merchantId, {
+                status: 'done',
+                processed: result.synced + result.total,
+                total: result.total,
+                created: result.synced,
+                updated: result.total,
+                ...(shopifySyncProgress.get(merchantId) && { completedAt: Date.now() }),
+              });
+            } catch (error: any) {
+              shopifySyncProgress.set(merchantId, {
+                status: 'error',
+                processed: 0,
+                total: 0,
+                created: 0,
+                updated: 0,
+                error: error.message,
+                ...(shopifySyncProgress.get(merchantId) && { completedAt: Date.now() }),
+              });
+            }
+          })();
+          return res.json({ started: true });
         }
 
-        const { waitForMerchantSyncLock, releaseMerchantSyncLock } =
+        const { waitForMerchantSyncLock, releaseMerchantSyncLock, acquireMerchantSyncLock } =
           await import("./services/autoSync");
-        const lockAcquired = await waitForMerchantSyncLock(merchantId, 15000);
-        if (!lockAcquired) {
-          return res
-            .status(409)
-            .json({
-              message:
-                "Another sync is still running after waiting 15 seconds. Please try again in a moment.",
-            });
+        
+        if (!acquireMerchantSyncLock(merchantId)) {
+          const existing = shopifySyncProgress.get(merchantId);
+          if (existing?.status === 'running') {
+            return res
+              .status(409)
+              .json({
+                message:
+                  "A sync is currently running. Please wait or check the progress.",
+              });
+          }
         }
 
-        try {
-          const forceFullSync = req.body?.forceFullSync === true;
-          const result = await shopifyService.syncOrders(
-            merchantId,
-            store.shopDomain!,
-            forceFullSync,
-          );
-          res.json({
-            success: true,
-            message: `Successfully synced ${result.synced} new orders, ${result.updated} updated`,
-            synced: result.synced,
-            updated: result.updated,
-            total: result.total,
-          });
-        } finally {
-          releaseMerchantSyncLock(merchantId);
-        }
+        shopifySyncProgress.set(merchantId, {
+          status: 'running',
+          processed: 0,
+          total: 0,
+          created: 0,
+          updated: 0,
+        });
+
+        (async () => {
+          try {
+            const forceFullSync = req.body?.forceFullSync === true;
+            const result = await shopifyService.syncOrders(
+              merchantId,
+              store.shopDomain!,
+              forceFullSync,
+              (processed, total) => {
+                shopifySyncProgress.set(merchantId, {
+                  status: 'running',
+                  processed,
+                  total,
+                  created: 0,
+                  updated: 0,
+                });
+              }
+            );
+            shopifySyncProgress.set(merchantId, {
+              status: 'done',
+              processed: result.total,
+              total: result.total,
+              created: result.synced,
+              updated: result.updated,
+              ...(shopifySyncProgress.get(merchantId) && { completedAt: Date.now() }),
+            });
+          } catch (error: any) {
+            console.error("Error syncing Shopify:", error);
+            shopifySyncProgress.set(merchantId, {
+              status: 'error',
+              processed: 0,
+              total: 0,
+              created: 0,
+              updated: 0,
+              error: error.message,
+              ...(shopifySyncProgress.get(merchantId) && { completedAt: Date.now() }),
+            });
+          } finally {
+            releaseMerchantSyncLock(merchantId);
+          }
+        })();
+
+        res.json({ started: true });
       } catch (error: any) {
-        console.error("Error syncing Shopify:", error);
-        const userMessage = error.message?.includes('rate limit')
-          ? "Shopify rate limit reached. The sync will resume automatically — please wait a minute."
-          : error.message?.includes('access token') || error.message?.includes('401')
-          ? "Shopify access token is invalid or expired. Please reconnect your Shopify store."
-          : error.message?.includes('Max retries')
-          ? "Shopify is temporarily slow. The auto-sync will retry shortly."
-          : error.message || "Failed to sync with Shopify. Please try again.";
+        console.error("Error starting Shopify sync:", error);
         res
           .status(500)
-          .json({ message: userMessage });
+          .json({ message: "Failed to start sync with Shopify. Please try again." });
       }
     },
   );
@@ -4178,6 +4253,31 @@ export async function registerRoutes(
         });
       } catch (error) {
         res.status(500).json({ message: "Failed to get sync status" });
+      }
+    },
+  );
+
+  app.get(
+    "/api/integrations/shopify/sync-progress",
+    isAuthenticated,
+    async (req, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+
+        const progress = shopifySyncProgress.get(merchantId);
+        if (!progress) {
+          return res.json({
+            status: 'idle',
+            processed: 0,
+            total: 0,
+            created: 0,
+            updated: 0,
+          });
+        }
+        res.json(progress);
+      } catch (error) {
+        res.status(500).json({ message: "Failed to get sync progress" });
       }
     },
   );
@@ -5590,6 +5690,26 @@ export async function registerRoutes(
       res.json(progress);
     } catch (error) {
       res.status(500).json({ message: "Failed to get sync progress" });
+    }
+  });
+
+  app.get("/api/couriers/postex-webhook-config", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const webhookUrl = `${req.protocol}://${req.get("host")}/webhooks/postex/status-update`;
+      const headerKey = "x-webhook-secret";
+      const headerValue = process.env.POSTEX_WEBHOOK_SECRET || "not-configured";
+
+      res.json({
+        webhookUrl,
+        headerKey,
+        headerValue,
+      });
+    } catch (error) {
+      console.error("Error fetching PostEx webhook config:", error);
+      res.status(500).json({ message: "Failed to fetch PostEx webhook config" });
     }
   });
 

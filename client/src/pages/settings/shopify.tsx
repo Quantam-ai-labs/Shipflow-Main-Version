@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
 import {
   Dialog,
   DialogContent,
@@ -68,6 +69,15 @@ interface DataHealthData {
   isConnected: boolean;
 }
 
+interface ShopifySyncProgress {
+  status: 'idle' | 'running' | 'done' | 'error';
+  processed: number;
+  total: number;
+  created: number;
+  updated: number;
+  error?: string;
+}
+
 export default function ShopifySettings() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -82,6 +92,14 @@ export default function ShopifySettings() {
   const [useLegacyAuth, setUseLegacyAuth] = useState(false);
   const [useManualAuth, setUseManualAuth] = useState(false);
   const [isOAuthRedirecting, setIsOAuthRedirecting] = useState(false);
+  const [shopifySyncProgress, setShopifySyncProgress] = useState<ShopifySyncProgress>({
+    status: 'idle',
+    processed: 0,
+    total: 0,
+    created: 0,
+    updated: 0,
+  });
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(searchString);
@@ -304,16 +322,67 @@ export default function ShopifySettings() {
     },
   });
 
+  const pollShopifySyncProgress = async () => {
+    try {
+      const res = await fetch("/api/integrations/shopify/sync-progress", {
+        credentials: "include",
+      });
+      if (!res.ok) return;
+      const progress = await res.json();
+      setShopifySyncProgress(progress);
+      
+      if (progress.status === 'done' || progress.status === 'error') {
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
+        }
+        if (progress.status === 'done') {
+          queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+          toast({
+            title: "Sync Complete",
+            description: `${progress.created} new, ${progress.updated} updated orders.`,
+          });
+          setTimeout(() => {
+            setShopifySyncProgress({
+              status: 'idle',
+              processed: 0,
+              total: 0,
+              created: 0,
+              updated: 0,
+            });
+          }, 2000);
+        } else if (progress.status === 'error') {
+          toast({
+            title: "Sync Failed",
+            description: progress.error || "An error occurred during sync.",
+            variant: "destructive",
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Error polling sync progress:", error);
+    }
+  };
+
   const syncShopifyMutation = useMutation({
     mutationFn: async () => {
       return apiRequest("POST", "/api/integrations/shopify/sync", {});
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
-      toast({
-        title: "Sync started",
-        description: "Syncing orders from Shopify. This may take a moment.",
-      });
+    onSuccess: async (res) => {
+      const result = await res.json();
+      if (result.started) {
+        setShopifySyncProgress({
+          status: 'running',
+          processed: 0,
+          total: 0,
+          created: 0,
+          updated: 0,
+        });
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current);
+        }
+        pollIntervalRef.current = setInterval(pollShopifySyncProgress, 1500);
+      }
     },
     onError: () => {
       toast({
@@ -323,6 +392,14 @@ export default function ShopifySettings() {
       });
     },
   });
+
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+    };
+  }, []);
 
   const retryFulfillmentMutation = useMutation({
     mutationFn: async () => {
@@ -526,16 +603,17 @@ export default function ShopifySettings() {
                   </div>
                 </div>
               )}
-              <div className="flex items-center gap-2 flex-wrap">
-                <Button
-                  variant="outline"
-                  onClick={() => syncShopifyMutation.mutate()}
-                  disabled={syncShopifyMutation.isPending}
-                  data-testid="button-sync-shopify"
-                >
-                  <RefreshCw className={`w-4 h-4 mr-2 ${syncShopifyMutation.isPending ? "animate-spin" : ""}`} />
-                  Sync Orders
-                </Button>
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Button
+                    variant="outline"
+                    onClick={() => syncShopifyMutation.mutate()}
+                    disabled={syncShopifyMutation.isPending || shopifySyncProgress.status === 'running'}
+                    data-testid="button-sync-shopify"
+                  >
+                    <RefreshCw className={`w-4 h-4 mr-2 ${syncShopifyMutation.isPending || shopifySyncProgress.status === 'running' ? "animate-spin" : ""}`} />
+                    Sync Orders
+                  </Button>
                 <Button
                   variant="outline"
                   onClick={() => {
@@ -608,6 +686,19 @@ export default function ShopifySettings() {
                 >
                   Disconnect
                 </Button>
+                </div>
+                {shopifySyncProgress.status === 'running' && shopifySyncProgress.total > 0 && (
+                  <div className="space-y-2" data-testid="shopify-sync-progress">
+                    <Progress 
+                      value={(shopifySyncProgress.processed / shopifySyncProgress.total) * 100} 
+                      className="h-2"
+                      data-testid="progress-shopify-sync"
+                    />
+                    <p className="text-sm text-muted-foreground" data-testid="text-sync-progress">
+                      Syncing {shopifySyncProgress.processed} of {shopifySyncProgress.total} orders...
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           ) : (

@@ -13,21 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Truck,
-  CheckCircle2,
-  Settings,
-  ExternalLink,
-  Zap,
-  ShieldCheck,
-  Key,
-  Lock,
-  Loader2,
-  MapPin,
-  RefreshCw,
-  Copy,
-  Webhook,
-} from "lucide-react";
+import { Truck, CheckCircle2, Settings, ExternalLink, Zap, ShieldCheck, Key, Lock, Loader2, MapPin, RefreshCw, Copy, Webhook, Eye, EyeOff } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -342,6 +328,16 @@ export default function CouriersSettings() {
 
   const [courierSyncProgress, setCourierSyncProgress] = useState<{ processed: number; total: number } | null>(null);
   const [syncingCourier, setSyncingCourier] = useState<string | null>(null);
+  const [showWebhookSecret, setShowWebhookSecret] = useState(false);
+
+  const { data: webhookConfig, isLoading: isLoadingWebhookConfig } = useQuery<{
+    webhookUrl: string;
+    headerKey: string;
+    headerValue: string;
+  }>({
+    queryKey: ["/api/couriers/postex-webhook-config"],
+    enabled: !!data?.couriers.find(c => c.name === 'postex' && c.isActive),
+  });
 
   const pollCourierProgress = async () => {
     const maxWait = 120000;
@@ -476,57 +472,92 @@ export default function CouriersSettings() {
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <Button
-              variant="default"
-              size="sm"
-              onClick={() => courierSyncMutation.mutate(undefined)}
-              disabled={courierSyncMutation.isPending}
-              data-testid="button-courier-sync-all"
-            >
-              <RefreshCw className={`w-4 h-4 mr-2 ${courierSyncMutation.isPending && syncingCourier === 'all' ? 'animate-spin' : ''}`} />
-              {courierSyncMutation.isPending && syncingCourier === 'all' ? "Syncing All..." : "Sync All Couriers"}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => courierSyncMutation.mutate("leopards")}
-              disabled={courierSyncMutation.isPending}
-              data-testid="button-courier-sync-leopards"
-            >
-              <RefreshCw className={`w-4 h-4 mr-2 ${courierSyncMutation.isPending && syncingCourier === 'leopards' ? 'animate-spin' : ''}`} />
-              {courierSyncMutation.isPending && syncingCourier === 'leopards' ? "Syncing..." : "Sync Leopards"}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => courierSyncMutation.mutate("postex")}
-              disabled={courierSyncMutation.isPending}
-              data-testid="button-courier-sync-postex"
-            >
-              <RefreshCw className={`w-4 h-4 mr-2 ${courierSyncMutation.isPending && syncingCourier === 'postex' ? 'animate-spin' : ''}`} />
-              {courierSyncMutation.isPending && syncingCourier === 'postex' ? "Syncing..." : "Sync PostEx"}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled
-              data-testid="button-courier-sync-tcs"
-            >
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Sync TCS
-            </Button>
-          </div>
-          {courierSyncMutation.isPending && courierSyncProgress && (
-            <div className="mt-3 space-y-1" data-testid="courier-sync-progress">
-              <Progress value={courierSyncProgress.total > 0 ? (courierSyncProgress.processed / courierSyncProgress.total) * 100 : undefined} className="h-2" />
-              <p className="text-xs text-muted-foreground">
-                {courierSyncProgress.total > 0
-                  ? `Syncing ${courierSyncProgress.processed} of ${courierSyncProgress.total} orders...`
-                  : "Starting sync..."}
-              </p>
+          <div className="flex items-center gap-4 flex-wrap">
+            <div className="flex flex-col gap-3">
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => courierSyncMutation.mutate(undefined)}
+                disabled={courierSyncMutation.isPending}
+                data-testid="button-courier-sync-all"
+                className="w-fit"
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${courierSyncMutation.isPending && syncingCourier === "all" ? "animate-spin" : ""}`} />
+                {courierSyncMutation.isPending && syncingCourier === "all" ? "Syncing All..." : "Sync All Couriers"}
+              </Button>
+              {courierSyncMutation.isPending && syncingCourier === "all" && courierSyncProgress && (
+                <div className="space-y-1 max-w-sm" data-testid="courier-sync-progress-all">
+                  <Progress value={courierSyncProgress.total > 0 ? (courierSyncProgress.processed / courierSyncProgress.total) * 100 : undefined} className="h-2" />
+                  <p className="text-xs text-muted-foreground">
+                    {courierSyncProgress.total > 0
+                      ? `Syncing ${courierSyncProgress.processed} of ${courierSyncProgress.total} orders...`
+                      : "Starting sync..."}
+                  </p>
+                </div>
+              )}
             </div>
-          )}
+
+            <div className="flex flex-col gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => courierSyncMutation.mutate("leopards")}
+                disabled={courierSyncMutation.isPending}
+                data-testid="button-courier-sync-leopards"
+                className="w-fit"
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${courierSyncMutation.isPending && syncingCourier === "leopards" ? "animate-spin" : ""}`} />
+                {courierSyncMutation.isPending && syncingCourier === "leopards" ? "Syncing..." : "Sync Leopards"}
+              </Button>
+              {courierSyncMutation.isPending && syncingCourier === "leopards" && courierSyncProgress && (
+                <div className="space-y-1 max-w-sm" data-testid="courier-sync-progress-leopards">
+                  <Progress value={courierSyncProgress.total > 0 ? (courierSyncProgress.processed / courierSyncProgress.total) * 100 : undefined} className="h-2" />
+                  <p className="text-xs text-muted-foreground">
+                    {courierSyncProgress.total > 0
+                      ? `Syncing ${courierSyncProgress.processed} of ${courierSyncProgress.total} orders...`
+                      : "Starting sync..."}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => courierSyncMutation.mutate("postex")}
+                disabled={courierSyncMutation.isPending}
+                data-testid="button-courier-sync-postex"
+                className="w-fit"
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${courierSyncMutation.isPending && syncingCourier === "postex" ? "animate-spin" : ""}`} />
+                {courierSyncMutation.isPending && syncingCourier === "postex" ? "Syncing..." : "Sync PostEx"}
+              </Button>
+              {courierSyncMutation.isPending && syncingCourier === "postex" && courierSyncProgress && (
+                <div className="space-y-1 max-w-sm" data-testid="courier-sync-progress-postex">
+                  <Progress value={courierSyncProgress.total > 0 ? (courierSyncProgress.processed / courierSyncProgress.total) * 100 : undefined} className="h-2" />
+                  <p className="text-xs text-muted-foreground">
+                    {courierSyncProgress.total > 0
+                      ? `Syncing ${courierSyncProgress.processed} of ${courierSyncProgress.total} orders...`
+                      : "Starting sync..."}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled
+                data-testid="button-courier-sync-tcs"
+                className="w-fit"
+              >
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Sync TCS
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
@@ -579,29 +610,93 @@ export default function CouriersSettings() {
                 )}
 
                 {courier.name === 'postex' && status.connected && (
-                  <div className="mb-3 p-3 rounded-lg border bg-muted/30">
-                    <div className="flex items-center gap-1.5 mb-1.5">
-                      <Webhook className="w-3.5 h-3.5 text-muted-foreground" />
-                      <span className="text-xs font-medium">Webhook URL</span>
-                    </div>
+                  <div className="mb-3 p-4 rounded-lg border bg-muted/30 space-y-4">
                     <div className="flex items-center gap-2">
-                      <code className="text-xs bg-muted px-2 py-1 rounded flex-1 truncate" data-testid="text-postex-webhook-url">
-                        {`${window.location.origin}/webhooks/postex/status-update`}
-                      </code>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          navigator.clipboard.writeText(`${window.location.origin}/webhooks/postex/status-update`);
-                          toast({ title: "Copied", description: "Webhook URL copied to clipboard." });
-                        }}
-                        data-testid="button-copy-postex-webhook"
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                      </Button>
+                      <Webhook className="w-4 h-4 text-primary" />
+                      <span className="text-sm font-semibold">Webhook Configuration</span>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1.5">
-                      Paste this URL in your PostEx dashboard under Webhook Configuration. Set the Header Key to <strong>x-webhook-secret</strong> and the Header Value to your configured webhook secret for authentication.
+
+                    <div className="space-y-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">Webhook URL</Label>
+                        <div className="flex items-center gap-2">
+                          <code className="text-xs bg-muted px-2 py-1.5 rounded flex-1 truncate border" data-testid="text-postex-webhook-url">
+                            {webhookConfig?.webhookUrl || "Loading..."}
+                          </code>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => {
+                              if (webhookConfig?.webhookUrl) {
+                                navigator.clipboard.writeText(webhookConfig.webhookUrl);
+                                toast({ title: "Copied", description: "Webhook URL copied to clipboard." });
+                              }
+                            }}
+                            data-testid="button-copy-postex-webhook-url"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">Header Key</Label>
+                        <div className="flex items-center gap-2">
+                          <code className="text-xs bg-muted px-2 py-1.5 rounded flex-1 truncate border" data-testid="text-postex-webhook-header-key">
+                            {webhookConfig?.headerKey || "x-webhook-secret"}
+                          </code>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => {
+                              navigator.clipboard.writeText(webhookConfig?.headerKey || "x-webhook-secret");
+                              toast({ title: "Copied", description: "Header Key copied to clipboard." });
+                            }}
+                            data-testid="button-copy-postex-webhook-header-key"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">Header Value (Secret)</Label>
+                        <div className="flex items-center gap-2">
+                          <div className="relative flex-1">
+                            <code className="text-xs bg-muted px-2 py-1.5 rounded w-full block truncate border pr-8" data-testid="text-postex-webhook-header-value">
+                              {showWebhookSecret ? (webhookConfig?.headerValue || "not-configured") : "••••••••••••••••"}
+                            </code>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 absolute right-1 top-1/2 -translate-y-1/2"
+                              onClick={() => setShowWebhookSecret(!showWebhookSecret)}
+                            >
+                              {showWebhookSecret ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                            </Button>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => {
+                              if (webhookConfig?.headerValue) {
+                                navigator.clipboard.writeText(webhookConfig.headerValue);
+                                toast({ title: "Copied", description: "Webhook secret copied to clipboard." });
+                              }
+                            }}
+                            data-testid="button-copy-postex-webhook-header-value"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="text-[10px] text-muted-foreground leading-relaxed italic">
+                      Copy these values into your PostEx dashboard. This ensures only authorized updates are processed.
                     </p>
                   </div>
                 )}
