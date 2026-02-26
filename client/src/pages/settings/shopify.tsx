@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -152,30 +153,55 @@ export default function ShopifySettings() {
     refetchInterval: 30000,
   });
 
+  const [courierSyncProgress, setCourierSyncProgress] = useState<{ processed: number; total: number } | null>(null);
+
+  const pollCourierProgress = async () => {
+    const maxWait = 120000;
+    const pollInterval = 1500;
+    const start = Date.now();
+    while (Date.now() - start < maxWait) {
+      await new Promise(r => setTimeout(r, pollInterval));
+      try {
+        const progressRes = await fetch("/api/couriers/manual-sync-progress", { credentials: "include" });
+        if (!progressRes.ok) continue;
+        const progress = await progressRes.json();
+        if (progress.processed !== undefined && progress.total !== undefined) {
+          setCourierSyncProgress({ processed: progress.processed, total: progress.total });
+        }
+        if (progress.status === "done" && progress.result) {
+          setCourierSyncProgress(null);
+          return progress.result;
+        }
+        if (progress.status === "error") {
+          setCourierSyncProgress(null);
+          throw new Error(progress.error || "Courier sync failed");
+        }
+      } catch (e: any) {
+        if (e.message?.includes("Courier sync failed")) throw e;
+      }
+    }
+    setCourierSyncProgress(null);
+    throw new Error("Sync is taking longer than expected. It will continue in the background.");
+  };
+
   const courierSyncMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/couriers/sync-statuses", {});
       const startResult = await res.json();
-      if (!startResult.success) throw new Error(startResult.message || "Failed to start sync");
 
-      const maxWait = 120000;
-      const pollInterval = 2000;
-      const start = Date.now();
-      while (Date.now() - start < maxWait) {
-        await new Promise(r => setTimeout(r, pollInterval));
-        const progressRes = await fetch("/api/couriers/manual-sync-progress", { credentials: "include" });
-        if (!progressRes.ok) continue;
-        const progress = await progressRes.json();
-        if (progress.status === "done" && progress.result) {
-          return progress.result;
-        }
-        if (progress.status === "error") {
-          throw new Error(progress.error || "Courier sync failed");
-        }
+      setCourierSyncProgress({ processed: 0, total: 0 });
+
+      if (startResult.status === 'already_running') {
+        toast({ title: "Sync already running", description: "Showing current progress..." });
+      } else if (!startResult.success) {
+        setCourierSyncProgress(null);
+        throw new Error(startResult.message || "Failed to start sync");
       }
-      throw new Error("Sync is taking longer than expected. It will continue in the background.");
+
+      return pollCourierProgress();
     },
     onSuccess: (result: any) => {
+      setCourierSyncProgress(null);
       queryClient.invalidateQueries({ queryKey: ["/api/couriers/sync-status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       toast({
@@ -184,6 +210,7 @@ export default function ShopifySettings() {
       });
     },
     onError: (err: any) => {
+      setCourierSyncProgress(null);
       queryClient.invalidateQueries({ queryKey: ["/api/couriers/sync-status"] });
       toast({
         title: "Courier Sync Failed",
@@ -842,6 +869,16 @@ export default function ShopifySettings() {
                 {courierSyncMutation.isPending ? "Syncing..." : "Sync Courier Statuses"}
               </Button>
             </div>
+            {courierSyncMutation.isPending && courierSyncProgress && (
+              <div className="mt-3 space-y-1" data-testid="courier-sync-progress">
+                <Progress value={courierSyncProgress.total > 0 ? (courierSyncProgress.processed / courierSyncProgress.total) * 100 : undefined} className="h-2" />
+                <p className="text-xs text-muted-foreground">
+                  {courierSyncProgress.total > 0
+                    ? `Syncing ${courierSyncProgress.processed} of ${courierSyncProgress.total} orders...`
+                    : "Starting sync..."}
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

@@ -2822,7 +2822,10 @@ export async function registerRoutes(
     },
   );
 
-  // Sync COD payment data from courier APIs
+  // COD payment sync progress tracking
+  const codSyncProgress = new Map<string, { status: 'running' | 'done' | 'error'; processed: number; total: number; result?: any; error?: string; startedAt: Date }>();
+
+  // Sync COD payment data from courier APIs (background job)
   app.post(
     "/api/cod-reconciliation/sync-payments",
     isAuthenticated,
@@ -2831,238 +2834,215 @@ export async function registerRoutes(
         const merchantId = await requireMerchant(req, res);
         if (!merchantId) return;
 
-        let totalUpdated = 0;
-        let totalErrors = 0;
-        const courierResults: Record<
-          string,
-          { updated: number; errors: number; total: number }
-        > = {};
-
-        // Process Leopards pending records
-        const leopardsCreds = await getCourierCredentials(
-          merchantId,
-          "leopards",
-        );
-        if (leopardsCreds?.apiKey) {
-          const leopardsRecords = await storage.getPendingCodRecordsByCourier(
-            merchantId,
-            "Leopards Courier",
-          );
-          courierResults.leopards = {
-            updated: 0,
-            errors: 0,
-            total: leopardsRecords.length,
-          };
-
-          if (leopardsRecords.length > 0) {
-            const trackingNumbers = leopardsRecords
-              .map((r) => r.trackingNumber)
-              .filter((tn): tn is string => !!tn);
-
-            if (trackingNumbers.length > 0) {
-              try {
-                const paymentResults = await leopardsService.getPaymentDetails(
-                  trackingNumbers,
-                  {
-                    apiKey: leopardsCreds.apiKey,
-                    apiPassword: leopardsCreds.apiSecret || undefined,
-                  },
-                );
-
-                for (const payment of paymentResults) {
-                  if (!payment.success) continue;
-
-                  const record = leopardsRecords.find(
-                    (r) => r.trackingNumber === payment.trackingNumber,
-                  );
-                  if (!record) continue;
-
-                  const isSettled =
-                    payment.paymentStatus?.toLowerCase() === "paid" ||
-                    payment.paymentStatus?.toLowerCase() === "settled";
-
-                  const updateData: any = {
-                    courierPaymentStatus: payment.paymentStatus || null,
-                    courierPaymentRef: payment.invoiceChequeNo || null,
-                    courierPaymentMethod: payment.paymentMethod || null,
-                    courierSlipLink: payment.slipLink || null,
-                    lastSyncedAt: new Date(),
-                  };
-
-                  const codAmt = Number(record.codAmount) || 0;
-                  if (codAmt > 0 && !record.transactionFee) {
-                    const existingFee = Number(record.courierFee) || 0;
-                    const leopardsFee = existingFee > 0 ? existingFee : Math.round(codAmt * 0.025 * 100) / 100;
-                    updateData.transactionFee = leopardsFee.toString();
-                    updateData.transactionTax = "0";
-                    if (!record.courierFee) {
-                      updateData.courierFee = leopardsFee.toString();
-                      updateData.netAmount = (codAmt - leopardsFee).toString();
-                    }
-                  }
-
-                  if (payment.invoiceChequeDate) {
-                    const chequeDate = new Date(payment.invoiceChequeDate);
-                    if (!isNaN(chequeDate.getTime())) {
-                      updateData.courierSettlementDate = chequeDate;
-                    }
-                  }
-
-                  if (isSettled && record.status === "pending") {
-                    updateData.status = "received";
-                    updateData.courierSettlementRef =
-                      payment.invoiceChequeNo ||
-                      payment.paymentMethod ||
-                      "Courier confirmed";
-                    updateData.reconciliatedAt = new Date();
-                    updateData.reconciliatedBy = "system_sync";
-                  }
-
-                  await storage.updateCodReconciliation(
-                    merchantId,
-                    record.id,
-                    updateData,
-                  );
-                  courierResults.leopards.updated++;
-                  totalUpdated++;
-                }
-              } catch (err) {
-                console.error("[COD Sync] Leopards payment fetch error:", err);
-                courierResults.leopards.errors++;
-                totalErrors++;
-              }
-            }
-          }
+        const existing = codSyncProgress.get(merchantId);
+        if (existing?.status === 'running') {
+          return res.json({ success: true, status: 'already_running', message: "COD sync is already running." });
         }
 
-        // Process PostEx pending records
-        const postexCreds = await getCourierCredentials(merchantId, "postex");
-        if (postexCreds?.apiKey) {
-          const postexRecords = await storage.getPendingCodRecordsByCourier(
-            merchantId,
-            "PostEx",
-          );
-          courierResults.postex = {
-            updated: 0,
-            errors: 0,
-            total: postexRecords.length,
-          };
+        codSyncProgress.set(merchantId, { status: 'running', processed: 0, total: 0, startedAt: new Date() });
 
-          if (postexRecords.length > 0) {
-            const POSTEX_COD_BATCH_SIZE = 5;
-            for (let i = 0; i < postexRecords.length; i += POSTEX_COD_BATCH_SIZE) {
-              const batch = postexRecords.slice(i, i + POSTEX_COD_BATCH_SIZE);
+        (async () => {
+          try {
+            let totalUpdated = 0;
+            let totalErrors = 0;
+            let processed = 0;
+            let totalRecords = 0;
+            const courierResults: Record<string, { updated: number; errors: number; total: number }> = {};
 
-              const batchResults = await Promise.allSettled(
-                batch.map(async (record) => {
-                  if (!record.trackingNumber) return 'skip';
+            const leopardsCreds = await getCourierCredentials(merchantId, "leopards");
+            const postexCreds = await getCourierCredentials(merchantId, "postex");
 
-                  const [financialResult, paymentResult] = await Promise.all([
-                    postexService.getTrackingWithFinancials(
-                      record.trackingNumber,
-                      { apiToken: postexCreds.apiKey },
-                    ),
-                    postexService.getPaymentStatus(
-                      record.trackingNumber,
-                      { apiToken: postexCreds.apiKey },
-                    ),
-                  ]);
+            let leopardsRecords: any[] = [];
+            let postexRecords: any[] = [];
 
-                  const updateData: any = { lastSyncedAt: new Date() };
+            if (leopardsCreds?.apiKey) {
+              leopardsRecords = await storage.getPendingCodRecordsByCourier(merchantId, "Leopards Courier");
+              courierResults.leopards = { updated: 0, errors: 0, total: leopardsRecords.length };
+            }
+            if (postexCreds?.apiKey) {
+              postexRecords = await storage.getPendingCodRecordsByCourier(merchantId, "PostEx");
+              courierResults.postex = { updated: 0, errors: 0, total: postexRecords.length };
+            }
 
-                  if (financialResult.success) {
-                    updateData.transactionFee =
-                      financialResult.transactionFee?.toString() || null;
-                    updateData.transactionTax =
-                      financialResult.transactionTax?.toString() || null;
-                    updateData.reversalFee =
-                      financialResult.reversalFee?.toString() || null;
-                    updateData.reversalTax =
-                      financialResult.reversalTax?.toString() || null;
-                    updateData.upfrontPayment =
-                      financialResult.upfrontPayment?.toString() || null;
-                    updateData.reservePayment =
-                      financialResult.reservePayment?.toString() || null;
-                    updateData.balancePayment =
-                      financialResult.balancePayment?.toString() || null;
+            totalRecords = leopardsRecords.length + postexRecords.length;
+            const progress = codSyncProgress.get(merchantId)!;
+            progress.total = totalRecords;
 
-                    const totalFees =
-                      (financialResult.transactionFee || 0) +
-                      (financialResult.transactionTax || 0);
-                    if (totalFees > 0) {
-                      updateData.courierFee = totalFees.toString();
-                      const codAmt = Number(record.codAmount) || 0;
-                      updateData.netAmount = (codAmt - totalFees).toString();
-                    }
-                  }
+            if (leopardsCreds?.apiKey && leopardsRecords.length > 0) {
+              const trackingNumbers = leopardsRecords.map((r) => r.trackingNumber).filter((tn): tn is string => !!tn);
+              if (trackingNumbers.length > 0) {
+                try {
+                  const paymentResults = await leopardsService.getPaymentDetails(trackingNumbers, {
+                    apiKey: leopardsCreds.apiKey,
+                    apiPassword: leopardsCreds.apiSecret || undefined,
+                  });
 
-                  if (paymentResult.success) {
-                    updateData.courierPaymentStatus = paymentResult.settled
-                      ? "Settled"
-                      : "Pending";
+                  for (const payment of paymentResults) {
+                    if (!payment.success) { processed++; progress.processed = processed; continue; }
+                    const record = leopardsRecords.find((r) => r.trackingNumber === payment.trackingNumber);
+                    if (!record) { processed++; progress.processed = processed; continue; }
 
-                    if (paymentResult.cprNumber1) {
-                      updateData.courierPaymentRef = paymentResult.cprNumber1;
-                    }
-                    if (paymentResult.cprNumber2) {
-                      updateData.courierPaymentRef =
-                        (updateData.courierPaymentRef
-                          ? updateData.courierPaymentRef + ", "
-                          : "") + paymentResult.cprNumber2;
-                    }
+                    const isSettled = payment.paymentStatus?.toLowerCase() === "paid" || payment.paymentStatus?.toLowerCase() === "settled";
+                    const updateData: any = {
+                      courierPaymentStatus: payment.paymentStatus || null,
+                      courierPaymentRef: payment.invoiceChequeNo || null,
+                      courierPaymentMethod: payment.paymentMethod || null,
+                      courierSlipLink: payment.slipLink || null,
+                      lastSyncedAt: new Date(),
+                    };
 
-                    if (paymentResult.settlementDate) {
-                      const settleDate = new Date(paymentResult.settlementDate);
-                      if (!isNaN(settleDate.getTime())) {
-                        updateData.courierSettlementDate = settleDate;
+                    const codAmt = Number(record.codAmount) || 0;
+                    if (codAmt > 0 && !record.transactionFee) {
+                      const existingFee = Number(record.courierFee) || 0;
+                      const leopardsFee = existingFee > 0 ? existingFee : Math.round(codAmt * 0.025 * 100) / 100;
+                      updateData.transactionFee = leopardsFee.toString();
+                      updateData.transactionTax = "0";
+                      if (!record.courierFee) {
+                        updateData.courierFee = leopardsFee.toString();
+                        updateData.netAmount = (codAmt - leopardsFee).toString();
                       }
                     }
 
-                    if (paymentResult.settled && record.status === "pending") {
+                    if (payment.invoiceChequeDate) {
+                      const chequeDate = new Date(payment.invoiceChequeDate);
+                      if (!isNaN(chequeDate.getTime())) updateData.courierSettlementDate = chequeDate;
+                    }
+
+                    if (isSettled && record.status === "pending") {
                       updateData.status = "received";
-                      updateData.courierSettlementRef =
-                        updateData.courierPaymentRef ||
-                        "PostEx settlement confirmed";
+                      updateData.courierSettlementRef = payment.invoiceChequeNo || payment.paymentMethod || "Courier confirmed";
                       updateData.reconciliatedAt = new Date();
                       updateData.reconciliatedBy = "system_sync";
                     }
+
+                    await storage.updateCodReconciliation(merchantId, record.id, updateData);
+                    courierResults.leopards.updated++;
+                    totalUpdated++;
+                    processed++;
+                    progress.processed = processed;
                   }
-
-                  await storage.updateCodReconciliation(
-                    merchantId,
-                    record.id,
-                    updateData,
-                  );
-                  return 'updated';
-                })
-              );
-
-              for (const r of batchResults) {
-                if (r.status === 'fulfilled' && r.value === 'updated') {
-                  courierResults.postex.updated++;
-                  totalUpdated++;
-                } else if (r.status === 'rejected') {
-                  courierResults.postex.errors++;
+                } catch (err) {
+                  console.error("[COD Sync] Leopards payment fetch error:", err);
+                  courierResults.leopards.errors++;
                   totalErrors++;
                 }
               }
+              processed = leopardsRecords.length;
+              progress.processed = processed;
+            }
 
-              if (i + POSTEX_COD_BATCH_SIZE < postexRecords.length) {
-                await new Promise((resolve) => setTimeout(resolve, 300));
+            if (postexCreds?.apiKey && postexRecords.length > 0) {
+              const POSTEX_COD_BATCH_SIZE = 5;
+              for (let i = 0; i < postexRecords.length; i += POSTEX_COD_BATCH_SIZE) {
+                const batch = postexRecords.slice(i, i + POSTEX_COD_BATCH_SIZE);
+
+                const batchResults = await Promise.allSettled(
+                  batch.map(async (record) => {
+                    if (!record.trackingNumber) return 'skip';
+
+                    const [financialResult, paymentResult] = await Promise.all([
+                      postexService.getTrackingWithFinancials(record.trackingNumber, { apiToken: postexCreds.apiKey }),
+                      postexService.getPaymentStatus(record.trackingNumber, { apiToken: postexCreds.apiKey }),
+                    ]);
+
+                    const updateData: any = { lastSyncedAt: new Date() };
+
+                    if (financialResult.success) {
+                      updateData.transactionFee = financialResult.transactionFee?.toString() || null;
+                      updateData.transactionTax = financialResult.transactionTax?.toString() || null;
+                      updateData.reversalFee = financialResult.reversalFee?.toString() || null;
+                      updateData.reversalTax = financialResult.reversalTax?.toString() || null;
+                      updateData.upfrontPayment = financialResult.upfrontPayment?.toString() || null;
+                      updateData.reservePayment = financialResult.reservePayment?.toString() || null;
+                      updateData.balancePayment = financialResult.balancePayment?.toString() || null;
+
+                      const totalFees = (financialResult.transactionFee || 0) + (financialResult.transactionTax || 0);
+                      if (totalFees > 0) {
+                        updateData.courierFee = totalFees.toString();
+                        const codAmt = Number(record.codAmount) || 0;
+                        updateData.netAmount = (codAmt - totalFees).toString();
+                      }
+                    }
+
+                    if (paymentResult.success) {
+                      updateData.courierPaymentStatus = paymentResult.settled ? "Settled" : "Pending";
+                      if (paymentResult.cprNumber1) updateData.courierPaymentRef = paymentResult.cprNumber1;
+                      if (paymentResult.cprNumber2) {
+                        updateData.courierPaymentRef = (updateData.courierPaymentRef ? updateData.courierPaymentRef + ", " : "") + paymentResult.cprNumber2;
+                      }
+                      if (paymentResult.settlementDate) {
+                        const settleDate = new Date(paymentResult.settlementDate);
+                        if (!isNaN(settleDate.getTime())) updateData.courierSettlementDate = settleDate;
+                      }
+                      if (paymentResult.settled && record.status === "pending") {
+                        updateData.status = "received";
+                        updateData.courierSettlementRef = updateData.courierPaymentRef || "PostEx settlement confirmed";
+                        updateData.reconciliatedAt = new Date();
+                        updateData.reconciliatedBy = "system_sync";
+                      }
+                    }
+
+                    await storage.updateCodReconciliation(merchantId, record.id, updateData);
+                    return 'updated';
+                  })
+                );
+
+                for (const r of batchResults) {
+                  if (r.status === 'fulfilled' && r.value === 'updated') {
+                    courierResults.postex.updated++;
+                    totalUpdated++;
+                  } else if (r.status === 'rejected') {
+                    courierResults.postex.errors++;
+                    totalErrors++;
+                  }
+                }
+
+                processed = leopardsRecords.length + Math.min(i + POSTEX_COD_BATCH_SIZE, postexRecords.length);
+                progress.processed = processed;
+
+                if (i + POSTEX_COD_BATCH_SIZE < postexRecords.length) {
+                  await new Promise((resolve) => setTimeout(resolve, 300));
+                }
               }
             }
-          }
-        }
 
-        res.json({
-          message: `Synced payment data: ${totalUpdated} records updated, ${totalErrors} errors`,
-          totalUpdated,
-          totalErrors,
-          courierResults,
-        });
+            const result = {
+              message: `Synced payment data: ${totalUpdated} records updated, ${totalErrors} errors`,
+              totalUpdated,
+              totalErrors,
+              courierResults,
+            };
+            codSyncProgress.set(merchantId, { status: 'done', processed: totalRecords, total: totalRecords, result, startedAt: codSyncProgress.get(merchantId)!.startedAt });
+            console.log(`[COD Sync] Done for merchant ${merchantId}: ${totalUpdated} updated, ${totalErrors} errors`);
+          } catch (error: any) {
+            console.error("Error syncing COD payments:", error);
+            codSyncProgress.set(merchantId, { status: 'error', processed: 0, total: 0, error: error.message, startedAt: codSyncProgress.get(merchantId)!.startedAt });
+          }
+        })();
+
+        res.json({ success: true, status: 'started', message: "COD payment sync started in the background." });
       } catch (error) {
-        console.error("Error syncing COD payments:", error);
-        res.status(500).json({ message: "Failed to sync COD payment data" });
+        console.error("Error starting COD sync:", error);
+        res.status(500).json({ message: "Failed to start COD payment sync" });
+      }
+    },
+  );
+
+  app.get(
+    "/api/cod-reconciliation/sync-progress",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+
+        const progress = codSyncProgress.get(merchantId);
+        if (!progress) {
+          return res.json({ status: 'idle' });
+        }
+        res.json(progress);
+      } catch (error) {
+        res.status(500).json({ message: "Failed to get sync progress" });
       }
     },
   );

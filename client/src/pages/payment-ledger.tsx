@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -115,23 +116,67 @@ export default function PaymentLedgerPage() {
   const totalPages = Math.ceil((data?.total ?? 0) / pageSize);
   const summary = data?.summary;
 
+  const [codSyncProgress, setCodSyncProgress] = useState<{ processed: number; total: number } | null>(null);
+
+  const pollCodProgress = async (cancelled: { current: boolean }) => {
+    const maxWait = 120000;
+    const pollInterval = 1500;
+    const start = Date.now();
+    while (Date.now() - start < maxWait && !cancelled.current) {
+      await new Promise(r => setTimeout(r, pollInterval));
+      if (cancelled.current) return null;
+      try {
+        const progressRes = await fetch("/api/cod-reconciliation/sync-progress", { credentials: "include" });
+        if (!progressRes.ok) continue;
+        const progress = await progressRes.json();
+        if (cancelled.current) return null;
+        if (progress.processed !== undefined && progress.total !== undefined) {
+          setCodSyncProgress({ processed: progress.processed, total: progress.total });
+        }
+        if (progress.status === "done") {
+          setCodSyncProgress(null);
+          return progress.result;
+        }
+        if (progress.status === "error") {
+          setCodSyncProgress(null);
+          throw new Error(progress.error || "COD sync failed");
+        }
+      } catch (e: any) {
+        if (e.message?.includes("COD sync failed")) throw e;
+      }
+    }
+    setCodSyncProgress(null);
+    throw new Error("Sync is taking longer than expected. It will continue in the background.");
+  };
+
   const syncPaymentsMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("POST", "/api/cod-reconciliation/sync-payments", {});
+      const cancelled = { current: false };
+      const res = await apiRequest("POST", "/api/cod-reconciliation/sync-payments", {});
+      const startResult = await res.json();
+
+      setCodSyncProgress({ processed: 0, total: 0 });
+
+      if (startResult.status === 'already_running') {
+        toast({ title: "Sync already running", description: "Showing current progress..." });
+      }
+
+      return pollCodProgress(cancelled);
     },
-    onSuccess: async (response: any) => {
-      const responseData = await response.json();
+    onSuccess: (result: any) => {
+      setCodSyncProgress(null);
       queryClient.invalidateQueries({ predicate: (query) => (query.queryKey[0] as string)?.startsWith("/api/payment-ledger") });
       queryClient.invalidateQueries({ predicate: (query) => (query.queryKey[0] as string)?.startsWith("/api/cod-reconciliation") });
       toast({
         title: "Payment ledger synced",
-        description: responseData.message,
+        description: result?.message || "COD payment data synced successfully.",
       });
     },
-    onError: () => {
+    onError: (err: any) => {
+      setCodSyncProgress(null);
       toast({
         title: "Sync failed",
-        description: "Could not fetch payment data from couriers. Please try again.",
+        description: err.message || "Could not fetch payment data from couriers. Please try again.",
         variant: "destructive",
       });
     },
@@ -195,21 +240,33 @@ export default function PaymentLedgerPage() {
           <h1 className="text-2xl font-bold" data-testid="text-ledger-title">Payment Ledger</h1>
           <p className="text-muted-foreground">Per-shipment financial breakdown: COD collected vs courier charges vs amount paid.</p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => syncPaymentsMutation.mutate()}
-            disabled={syncPaymentsMutation.isPending}
-            data-testid="button-import-ledger"
-          >
-            <CloudDownload className={`w-4 h-4 mr-2 ${syncPaymentsMutation.isPending ? 'animate-pulse' : ''}`} />
-            {syncPaymentsMutation.isPending ? 'Importing...' : 'Import Ledger'}
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleExport} data-testid="button-export-ledger">
-            <Download className="w-4 h-4 mr-2" />
-            Export CSV
-          </Button>
+        <div className="flex flex-col items-end gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => syncPaymentsMutation.mutate()}
+              disabled={syncPaymentsMutation.isPending}
+              data-testid="button-import-ledger"
+            >
+              <CloudDownload className={`w-4 h-4 mr-2 ${syncPaymentsMutation.isPending ? 'animate-pulse' : ''}`} />
+              {syncPaymentsMutation.isPending ? 'Importing...' : 'Import Ledger'}
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleExport} data-testid="button-export-ledger">
+              <Download className="w-4 h-4 mr-2" />
+              Export CSV
+            </Button>
+          </div>
+          {syncPaymentsMutation.isPending && codSyncProgress && (
+            <div className="w-48 space-y-1" data-testid="cod-sync-progress-ledger">
+              <Progress value={codSyncProgress.total > 0 ? (codSyncProgress.processed / codSyncProgress.total) * 100 : undefined} className="h-2" />
+              <p className="text-xs text-muted-foreground text-right">
+                {codSyncProgress.total > 0
+                  ? `Syncing ${codSyncProgress.processed} of ${codSyncProgress.total} records...`
+                  : "Starting sync..."}
+              </p>
+            </div>
+          )}
         </div>
       </div>
 

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -180,22 +181,66 @@ export default function CodReconciliationPage() {
     },
   });
 
+  const [codSyncProgress, setCodSyncProgress] = useState<{ processed: number; total: number } | null>(null);
+
+  const pollCodProgress = async (cancelled: { current: boolean }) => {
+    const maxWait = 120000;
+    const pollInterval = 1500;
+    const start = Date.now();
+    while (Date.now() - start < maxWait && !cancelled.current) {
+      await new Promise(r => setTimeout(r, pollInterval));
+      if (cancelled.current) return null;
+      try {
+        const progressRes = await fetch("/api/cod-reconciliation/sync-progress", { credentials: "include" });
+        if (!progressRes.ok) continue;
+        const progress = await progressRes.json();
+        if (cancelled.current) return null;
+        if (progress.processed !== undefined && progress.total !== undefined) {
+          setCodSyncProgress({ processed: progress.processed, total: progress.total });
+        }
+        if (progress.status === "done") {
+          setCodSyncProgress(null);
+          return progress.result;
+        }
+        if (progress.status === "error") {
+          setCodSyncProgress(null);
+          throw new Error(progress.error || "COD sync failed");
+        }
+      } catch (e: any) {
+        if (e.message?.includes("COD sync failed")) throw e;
+      }
+    }
+    setCodSyncProgress(null);
+    throw new Error("Sync is taking longer than expected. It will continue in the background.");
+  };
+
   const syncPaymentsMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("POST", "/api/cod-reconciliation/sync-payments", {});
+      const cancelled = { current: false };
+      const res = await apiRequest("POST", "/api/cod-reconciliation/sync-payments", {});
+      const startResult = await res.json();
+
+      setCodSyncProgress({ processed: 0, total: 0 });
+
+      if (startResult.status === 'already_running') {
+        toast({ title: "Sync already running", description: "Showing current progress..." });
+      }
+
+      return pollCodProgress(cancelled);
     },
-    onSuccess: async (response: any) => {
-      const data = await response.json();
+    onSuccess: (result: any) => {
+      setCodSyncProgress(null);
       queryClient.invalidateQueries({ predicate: (query) => (query.queryKey[0] as string)?.startsWith("/api/cod-reconciliation") });
       toast({
         title: "Payment sync complete",
-        description: data.message,
+        description: result?.message || "COD payment data synced successfully.",
       });
     },
-    onError: () => {
+    onError: (err: any) => {
+      setCodSyncProgress(null);
       toast({
         title: "Error",
-        description: "Failed to sync payment data from couriers.",
+        description: err.message || "Failed to sync payment data from couriers.",
         variant: "destructive",
       });
     },
@@ -297,16 +342,28 @@ export default function CodReconciliationPage() {
               Reconcile ({selectedRecords.length})
             </Button>
           )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => syncPaymentsMutation.mutate()}
-            disabled={syncPaymentsMutation.isPending}
-            data-testid="button-sync-payments"
-          >
-            <CloudDownload className={`w-4 h-4 mr-2 ${syncPaymentsMutation.isPending ? 'animate-pulse' : ''}`} />
-            {syncPaymentsMutation.isPending ? 'Syncing...' : 'Sync Payments'}
-          </Button>
+          <div className="flex flex-col items-end gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => syncPaymentsMutation.mutate()}
+              disabled={syncPaymentsMutation.isPending}
+              data-testid="button-sync-payments"
+            >
+              <CloudDownload className={`w-4 h-4 mr-2 ${syncPaymentsMutation.isPending ? 'animate-pulse' : ''}`} />
+              {syncPaymentsMutation.isPending ? 'Syncing...' : 'Sync Payments'}
+            </Button>
+            {syncPaymentsMutation.isPending && codSyncProgress && (
+              <div className="w-48 space-y-1" data-testid="cod-sync-progress">
+                <Progress value={codSyncProgress.total > 0 ? (codSyncProgress.processed / codSyncProgress.total) * 100 : undefined} className="h-2" />
+                <p className="text-xs text-muted-foreground text-right">
+                  {codSyncProgress.total > 0
+                    ? `Syncing ${codSyncProgress.processed} of ${codSyncProgress.total} records...`
+                    : "Starting sync..."}
+                </p>
+              </div>
+            )}
+          </div>
           <Button
             variant="outline"
             size="sm"

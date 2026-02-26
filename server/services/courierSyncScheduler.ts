@@ -27,7 +27,15 @@ interface CourierSyncResult {
 let syncTimer: ReturnType<typeof setInterval> | null = null;
 let isSyncing = false;
 const lastSyncResults = new Map<string, CourierSyncResult>();
-const manualSyncProgress = new Map<string, { status: 'running' | 'done' | 'error'; result?: CourierSyncResult; error?: string; startedAt: Date }>();
+interface ManualSyncProgress {
+  status: 'running' | 'done' | 'error';
+  result?: CourierSyncResult;
+  error?: string;
+  startedAt: Date;
+  processed: number;
+  total: number;
+}
+const manualSyncProgress = new Map<string, ManualSyncProgress>();
 
 function normalizeCourierName(raw: string): string {
   const name = raw.toLowerCase().trim();
@@ -205,7 +213,7 @@ async function autoTransitionOrder(merchantId: string, order: any, newShipmentSt
   return null;
 }
 
-async function syncMerchantCourierStatuses(merchantId: string, options?: { forceRefresh?: boolean; limit?: number }): Promise<CourierSyncResult> {
+async function syncMerchantCourierStatuses(merchantId: string, options?: { forceRefresh?: boolean; limit?: number; onProgress?: (processed: number, total: number) => void }): Promise<CourierSyncResult> {
   const syncLimit = options?.limit || 2000;
   const forceRefresh = options?.forceRefresh || false;
   const trackableOrders = await storage.getOrdersForCourierSync(merchantId, {
@@ -229,6 +237,10 @@ async function syncMerchantCourierStatuses(merchantId: string, options?: { force
   let failed = 0;
   let skipped = 0;
   let transitioned = 0;
+  let processedCount = 0;
+  const totalCount = trackableOrders.length;
+  const reportProgress = options?.onProgress;
+  if (reportProgress) reportProgress(0, totalCount);
 
   const leopardsOrders = trackableOrders.filter(o => normalizeCourierName(o.courierName!) === 'leopards');
   const postexOrders = trackableOrders.filter(o => normalizeCourierName(o.courierName!) === 'postex');
@@ -265,6 +277,8 @@ async function syncMerchantCourierStatuses(merchantId: string, options?: { force
       const trackResult = bulkResults.get(order.courierTracking!);
       if (!trackResult || !trackResult.success) {
         failed++;
+        processedCount++;
+        if (reportProgress) reportProgress(processedCount, totalCount);
         continue;
       }
 
@@ -298,12 +312,16 @@ async function syncMerchantCourierStatuses(merchantId: string, options?: { force
       } catch {
         failed++;
       }
+      processedCount++;
+      if (reportProgress) reportProgress(processedCount, totalCount);
     }
   }
 
   const postexCreds = courierCredsCache.get('postex');
   if (!postexCreds || !postexCreds.apiKey) {
     skipped += postexOrders.length;
+    processedCount += postexOrders.length;
+    if (reportProgress) reportProgress(processedCount, totalCount);
   } else {
     for (let i = 0; i < postexOrders.length; i += POSTEX_BATCH_SIZE) {
       const batch = postexOrders.slice(i, i + POSTEX_BATCH_SIZE);
@@ -341,6 +359,9 @@ async function syncMerchantCourierStatuses(merchantId: string, options?: { force
         }
       }
 
+      processedCount += batch.length;
+      if (reportProgress) reportProgress(processedCount, totalCount);
+
       if (i + POSTEX_BATCH_SIZE < postexOrders.length) {
         await new Promise(resolve => setTimeout(resolve, POSTEX_DELAY_MS));
       }
@@ -348,6 +369,8 @@ async function syncMerchantCourierStatuses(merchantId: string, options?: { force
   }
 
   skipped += otherOrders.length;
+  processedCount += otherOrders.length;
+  if (reportProgress) reportProgress(processedCount, totalCount);
 
   return { timestamp: new Date(), updated, failed, skipped, total: trackableOrders.length, transitioned };
 }
@@ -415,7 +438,7 @@ export function startManualCourierSync(merchantId: string): boolean {
   const existing = manualSyncProgress.get(merchantId);
   if (existing?.status === 'running') return false;
 
-  manualSyncProgress.set(merchantId, { status: 'running', startedAt: new Date() });
+  manualSyncProgress.set(merchantId, { status: 'running', startedAt: new Date(), processed: 0, total: 0 });
 
   (async () => {
     try {
@@ -423,12 +446,21 @@ export function startManualCourierSync(merchantId: string): boolean {
       const MAX_CHUNKS = 20;
       let totalResult: CourierSyncResult = { timestamp: new Date(), updated: 0, failed: 0, skipped: 0, total: 0, transitioned: 0 };
       let chunkCount = 0;
+      let cumulativeProcessed = 0;
 
       while (chunkCount < MAX_CHUNKS) {
         chunkCount++;
+        const chunkOffset = cumulativeProcessed;
         const result = await syncMerchantCourierStatuses(merchantId, {
           forceRefresh: false,
           limit: CHUNK_SIZE,
+          onProgress: (processed, total) => {
+            const progress = manualSyncProgress.get(merchantId);
+            if (progress) {
+              progress.processed = chunkOffset + processed;
+              progress.total = chunkOffset + total;
+            }
+          },
         });
 
         totalResult.updated += result.updated;
@@ -436,6 +468,7 @@ export function startManualCourierSync(merchantId: string): boolean {
         totalResult.skipped += result.skipped;
         totalResult.total += result.total;
         totalResult.transitioned = (totalResult.transitioned || 0) + (result.transitioned || 0);
+        cumulativeProcessed += result.total;
 
         if (result.total < CHUNK_SIZE) break;
 
@@ -443,11 +476,11 @@ export function startManualCourierSync(merchantId: string): boolean {
       }
 
       totalResult.timestamp = new Date();
-      manualSyncProgress.set(merchantId, { status: 'done', result: totalResult, startedAt: manualSyncProgress.get(merchantId)!.startedAt });
+      manualSyncProgress.set(merchantId, { status: 'done', result: totalResult, startedAt: manualSyncProgress.get(merchantId)!.startedAt, processed: cumulativeProcessed, total: cumulativeProcessed });
       lastSyncResults.set(merchantId, totalResult);
       console.log(`[CourierSync] Manual sync done for merchant ${merchantId}: ${totalResult.updated} updated, ${totalResult.failed} failed, ${totalResult.total} total (${chunkCount} chunks)`);
     } catch (err: any) {
-      manualSyncProgress.set(merchantId, { status: 'error', error: err.message, startedAt: manualSyncProgress.get(merchantId)!.startedAt });
+      manualSyncProgress.set(merchantId, { status: 'error', error: err.message, startedAt: manualSyncProgress.get(merchantId)!.startedAt, processed: 0, total: 0 });
       console.error(`[CourierSync] Manual sync error for merchant ${merchantId}:`, err.message);
     }
   })();
