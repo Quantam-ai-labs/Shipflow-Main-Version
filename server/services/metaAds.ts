@@ -887,7 +887,7 @@ export function startMarketingSyncScheduler() {
           maxBack.setMonth(maxBack.getMonth() - 36);
           const backfillFrom = maxBack.toISOString().split("T")[0];
 
-          if (!earliestDate || earliestDate > backfillFrom) {
+          if (!earliestDate) {
             const { dbId } = await syncAdAccount(account.merchantId);
             try {
               await syncCampaigns(account.merchantId, dbId);
