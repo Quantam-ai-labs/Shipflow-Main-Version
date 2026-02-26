@@ -2,40 +2,12 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
-import { initSyncManager, shutdownSyncManager } from "./services/syncManager";
-
-process.on('uncaughtException', (err) => {
-  console.error('[FATAL] Uncaught exception:', err.message, err.stack);
-});
-
-process.on('unhandledRejection', (reason: any) => {
-  console.error('[FATAL] Unhandled rejection:', reason?.message || reason, reason?.stack);
-});
-
-const origExit = process.exit.bind(process);
-(process as any).exit = (code?: number) => {
-  const fs = require('fs');
-  const msg = `[FATAL] process.exit(${code}) at ${new Date().toISOString()} from:\n${new Error().stack}\n`;
-  try { fs.appendFileSync('/tmp/crash.log', msg); } catch(e) {}
-  console.error(msg);
-  origExit(code);
-};
-
-process.on('beforeExit', (code) => {
-  const fs = require('fs');
-  try { fs.appendFileSync('/tmp/crash.log', `[beforeExit] code=${code} at ${new Date().toISOString()}\n`); } catch(e) {}
-});
-
-process.on('exit', (code) => {
-  const fs = require('fs');
-  try { fs.appendFileSync('/tmp/crash.log', `[exit] code=${code} at ${new Date().toISOString()}\n`); } catch(e) {}
-});
-
-const memLog = () => {
-  const used = process.memoryUsage();
-  console.log(`[Memory] RSS: ${Math.round(used.rss / 1024 / 1024)}MB, Heap: ${Math.round(used.heapUsed / 1024 / 1024)}/${Math.round(used.heapTotal / 1024 / 1024)}MB`);
-};
-setInterval(memLog, 15000);
+import { startAutoSync } from "./services/autoSync";
+import { startCourierSyncScheduler } from "./services/courierSyncScheduler";
+import { startMarketingSyncScheduler } from "./services/metaAds";
+import { db } from "./db";
+import { shopifyStores } from "../shared/schema";
+import { eq } from "drizzle-orm";
 
 const app = express();
 const httpServer = createServer(app);
@@ -93,17 +65,36 @@ app.use((req, res, next) => {
   next();
 });
 
-process.on('SIGTERM', () => {
-  console.log('[Server] SIGTERM received, shutting down gracefully');
-  shutdownSyncManager();
-  httpServer.close(() => process.exit(0));
-});
+async function scheduleStartupRecovery() {
+  // One-time full sync for all connected merchants after server start.
+  // Recovers orders missed due to the UTC-vs-PKT timezone bug in created_at_min.
+  // Runs after a 15s delay to avoid slowing server startup.
+  setTimeout(async () => {
+    try {
+      const connectedStores = await db
+        .select()
+        .from(shopifyStores)
+        .where(eq(shopifyStores.isConnected, true));
 
-process.on('SIGINT', () => {
-  console.log('[Server] SIGINT received, shutting down gracefully');
-  shutdownSyncManager();
-  httpServer.close(() => process.exit(0));
-});
+      if (connectedStores.length === 0) return;
+
+      const { ShopifyService } = await import('./services/shopify');
+      const shopifyService = new ShopifyService();
+
+      for (const store of connectedStores) {
+        if (!store.accessToken || !store.shopDomain || !store.merchantId) continue;
+        try {
+          console.log(`[StartupRecovery] Full sync for merchant ${store.merchantId} (${store.shopDomain}) to recover timezone-missed orders`);
+          await shopifyService.syncOrders(store.merchantId, store.shopDomain, true);
+        } catch (err: any) {
+          console.error(`[StartupRecovery] Failed for merchant ${store.merchantId}:`, err.message);
+        }
+      }
+    } catch (err: any) {
+      console.error('[StartupRecovery] Error:', err.message);
+    }
+  }, 15000);
+}
 
 (async () => {
   await registerRoutes(httpServer, app);
@@ -121,6 +112,9 @@ process.on('SIGINT', () => {
     return res.status(status).json({ message });
   });
 
+  // importantly only setup vite in development and after
+  // setting up all the other routes so the catch-all route
+  // doesn't interfere with the other routes
   if (process.env.NODE_ENV === "production") {
     serveStatic(app);
   } else {
@@ -128,6 +122,10 @@ process.on('SIGINT', () => {
     await setupVite(httpServer, app);
   }
 
+  // ALWAYS serve the app on the port specified in the environment variable PORT
+  // Other ports are firewalled. Default to 5000 if not specified.
+  // this serves both the API and the client.
+  // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
   httpServer.listen(
     {
@@ -137,7 +135,10 @@ process.on('SIGINT', () => {
     },
     () => {
       log(`serving on port ${port}`);
-      initSyncManager();
+      startAutoSync();
+      startCourierSyncScheduler();
+      startMarketingSyncScheduler();
+      scheduleStartupRecovery();
     },
   );
 })();

@@ -287,9 +287,9 @@ export default function CourierDuesPage() {
             <DollarSign className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold" data-testid="text-total-payable">
+            <p className="text-2xl font-bold" data-testid="text-total-payable">
               {summary ? formatPKR(summary.totalPayable) : <Skeleton className="h-8 w-32" />}
-            </div>
+            </p>
             <p className="text-xs text-muted-foreground mt-1">Pending + Partial</p>
           </CardContent>
         </Card>
@@ -299,9 +299,9 @@ export default function CourierDuesPage() {
             <Truck className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold" data-testid="text-total-receivable">
+            <p className="text-2xl font-bold" data-testid="text-total-receivable">
               {summary ? formatPKR(summary.totalReceivable) : <Skeleton className="h-8 w-32" />}
-            </div>
+            </p>
             <p className="text-xs text-muted-foreground mt-1">Pending + Partial</p>
           </CardContent>
         </Card>
@@ -311,9 +311,9 @@ export default function CourierDuesPage() {
             <CheckCircle className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold" data-testid="text-total-settled">
+            <p className="text-2xl font-bold" data-testid="text-total-settled">
               {summary ? formatPKR(summary.totalSettled) : <Skeleton className="h-8 w-32" />}
-            </div>
+            </p>
             <p className="text-xs text-muted-foreground mt-1">Paid total</p>
           </CardContent>
         </Card>
@@ -323,9 +323,9 @@ export default function CourierDuesPage() {
             <AlertTriangle className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold" data-testid="text-total-overdue">
+            <p className="text-2xl font-bold" data-testid="text-total-overdue">
               {summary ? formatPKR(summary.totalOverdue) : <Skeleton className="h-8 w-32" />}
-            </div>
+            </p>
             <p className="text-xs text-muted-foreground mt-1">Past due date</p>
           </CardContent>
         </Card>

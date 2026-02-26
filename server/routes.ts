@@ -86,7 +86,6 @@ import { leopardsService } from "./services/couriers/leopards";
 import { postexService } from "./services/couriers/postex";
 import { getCourierSyncMetrics, cleanupStaleManualSyncProgress, autoTransitionOrder } from "./services/courierSyncScheduler";
 import { getShopifySyncMetrics } from "./services/autoSync";
-import { getAllSyncStatus, getSyncQueueInfo } from "./services/syncManager";
 
 const oauthStateStore = new Map<
   string,
@@ -3856,24 +3855,6 @@ export async function registerRoutes(
   });
 
   // Integrations
-  app.get("/api/sync/status", isAuthenticated, async (req, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-
-      const allStatus = await getAllSyncStatus();
-      const merchantStatus = allStatus.filter(s => s.merchantId === merchantId);
-      const queueInfo = getSyncQueueInfo();
-
-      res.json({
-        syncTypes: merchantStatus,
-        queue: queueInfo,
-      });
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
-    }
-  });
-
   app.get("/api/integrations", isAuthenticated, async (req, res) => {
     try {
       const merchantId = await requireMerchant(req, res);
@@ -9642,28 +9623,20 @@ export async function registerRoutes(
             OR (item->>'productId' IS NULL AND LOWER(TRIM(item->>'name')) = LOWER(TRIM(${product.title})))
           )
         ORDER BY o.order_date DESC
+        LIMIT 100
       `);
 
       const rows = (results as any).rows || results;
-      const purchaseMap = new Map<string, any>();
-      for (const r of rows as any[]) {
-        const existing = purchaseMap.get(r.id);
-        if (existing) {
-          existing.quantity += parseInt(r.quantity) || 0;
-        } else {
-          purchaseMap.set(r.id, {
-            orderId: r.id,
-            orderNumber: r.order_number,
-            customerName: r.customer_name,
-            customerPhone: r.customer_phone,
-            workflowStatus: r.workflow_status,
-            orderDate: r.order_date,
-            quantity: parseInt(r.quantity) || 0,
-            unitPrice: r.unit_price,
-          });
-        }
-      }
-      const purchases = Array.from(purchaseMap.values());
+      const purchases = (rows as any[]).map((r: any) => ({
+        orderId: r.id,
+        orderNumber: r.order_number,
+        customerName: r.customer_name,
+        customerPhone: r.customer_phone,
+        workflowStatus: r.workflow_status,
+        orderDate: r.order_date,
+        quantity: parseInt(r.quantity) || 0,
+        unitPrice: r.unit_price,
+      }));
 
       res.json({ purchases, totalPurchases: purchases.length });
     } catch (error: any) {

@@ -573,47 +573,13 @@ export function isCourierSyncRunning() {
   return isSyncing;
 }
 
-export async function runCourierSyncForMerchant(merchantId: string): Promise<void> {
-  syncCycleCounter++;
-  const includeLowPriority = syncCycleCounter % LOW_PRIORITY_CYCLE_INTERVAL === 0;
-  const runTerminalSweep = syncCycleCounter % TERMINAL_SWEEP_CYCLE_INTERVAL === 0;
-
-  const metrics = getOrCreateMetrics(merchantId);
-  const startMs = Date.now();
-
-  try {
-    const result = await syncMerchantCourierStatuses(merchantId, { includeLowPriority, limit: 50 });
-    lastSyncResults.set(merchantId, result);
-
-    metrics.lastSyncTime = new Date();
-    metrics.lastSyncDurationMs = Date.now() - startMs;
-    metrics.totalSyncs++;
-
-    if (result.updated > 0 || result.failed > 0 || result.transitioned) {
-      console.log(`[CourierSync] Merchant ${merchantId}: ${result.updated} updated, ${result.failed} failed, ${result.skipped} skipped out of ${result.total}${result.transitioned ? `, ${result.transitioned} transitioned` : ''}`);
-    }
-
-    if (runTerminalSweep) {
-      try {
-        const sweepResult = await sweepTerminalOrders(merchantId);
-        if (sweepResult.rechecked > 0) {
-          console.log(`[CourierSync] Terminal sweep for merchant ${merchantId}: ${sweepResult.rechecked} re-checked, ${sweepResult.updated} updated, ${sweepResult.reverted} reverted, ${sweepResult.failed} failed`);
-        }
-      } catch (sweepError: any) {
-        console.error(`[CourierSync] Terminal sweep error for merchant ${merchantId}:`, sweepError.message);
-      }
-    }
-  } catch (error: any) {
-    console.error(`[CourierSync] Error for merchant ${merchantId}:`, error.message);
-    metrics.totalErrors++;
-    metrics.lastErrorMessage = error.message;
-    metrics.lastErrorTime = new Date();
-    throw error;
-  }
-}
-
 export function startCourierSyncScheduler() {
-  console.log('[CourierSync] Courier sync is now managed by SyncManager');
+  if (syncTimer) return;
+
+  console.log(`[CourierSync] Starting courier status sync every ${COURIER_SYNC_INTERVAL_MS / 1000}s`);
+
+  setTimeout(() => runCourierSync(), 30000);
+  syncTimer = setInterval(runCourierSync, COURIER_SYNC_INTERVAL_MS);
 }
 
 export function stopCourierSyncScheduler() {

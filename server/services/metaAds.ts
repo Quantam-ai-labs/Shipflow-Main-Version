@@ -867,91 +867,94 @@ async function completeSyncLog(logId: string, status: string, recordsProcessed: 
   }).where(eq(marketingSyncLogs.id, logId));
 }
 
-export async function runMetaQuickSync(merchantId: string): Promise<void> {
-  try {
-    const { dbId } = await syncAdAccount(merchantId);
-    const now = new Date();
-    const today = now.toISOString().split("T")[0];
-    const rangeStart = new Date(now);
-    rangeStart.setDate(rangeStart.getDate() - 2);
-    const dateFrom = rangeStart.toISOString().split("T")[0];
-
-    await syncInsights(merchantId, dbId, dateFrom, today, "campaign");
-    console.log(`[MetaAds] Quick sync completed for merchant ${merchantId} (${dateFrom} to ${today})`);
-  } catch (err: any) {
-    console.error(`[MetaAds] Quick sync failed for merchant ${merchantId}:`, err.message);
-    throw err;
-  }
-}
-
-const BACKFILL_CHUNK_DAYS = 30;
-const BACKFILL_MAX_MONTHS = 12;
-
-export async function runMetaBackfillChunk(merchantId: string): Promise<void> {
-  const { getSyncStateRecord, updateSyncState } = await import('./syncManager');
-  const state = await getSyncStateRecord(merchantId, 'meta_insights');
-
-  if (state?.backfillCompleted) {
-    return;
-  }
-
-  try {
-    const { dbId } = await syncAdAccount(merchantId);
-
-    if (!state?.backfillCursor) {
-      try {
-        await syncCampaigns(merchantId, dbId);
-        await syncAdSets(merchantId, dbId);
-        await syncAds(merchantId, dbId);
-        console.log(`[MetaAds] Metadata sync completed for merchant ${merchantId}`);
-      } catch (err: any) {
-        console.error(`[MetaAds] Metadata sync failed for ${merchantId}:`, err.message);
-      }
-    }
-
-    const now = new Date();
-    const today = now.toISOString().split("T")[0];
-    const maxBack = new Date();
-    maxBack.setMonth(maxBack.getMonth() - BACKFILL_MAX_MONTHS);
-    const backfillFrom = maxBack.toISOString().split("T")[0];
-
-    const cursor = state?.backfillCursor || backfillFrom;
-    const chunkStart = new Date(cursor);
-    const endDate = new Date(today);
-
-    if (chunkStart > endDate) {
-      await updateSyncState(merchantId, 'meta_insights', { backfillCompleted: true, backfillCursor: null });
-      console.log(`[MetaAds] Backfill completed for merchant ${merchantId}`);
-      return;
-    }
-
-    const chunkEnd = new Date(chunkStart);
-    chunkEnd.setDate(chunkEnd.getDate() + BACKFILL_CHUNK_DAYS - 1);
-    if (chunkEnd > endDate) chunkEnd.setTime(endDate.getTime());
-
-    const from = chunkStart.toISOString().split("T")[0];
-    const to = chunkEnd.toISOString().split("T")[0];
-
-    console.log(`[MetaAds] Backfill chunk: ${from} to ${to} for merchant ${merchantId}`);
-    await syncInsights(merchantId, dbId, from, to, "campaign");
-
-    const nextCursor = new Date(chunkEnd);
-    nextCursor.setDate(nextCursor.getDate() + 1);
-    const nextCursorStr = nextCursor.toISOString().split("T")[0];
-
-    if (nextCursor > endDate) {
-      await updateSyncState(merchantId, 'meta_insights', { backfillCompleted: true, backfillCursor: null });
-      console.log(`[MetaAds] Backfill completed for merchant ${merchantId}`);
-    } else {
-      await updateSyncState(merchantId, 'meta_insights', { backfillCursor: nextCursorStr });
-      console.log(`[MetaAds] Backfill progress saved, next chunk starts at ${nextCursorStr}`);
-    }
-  } catch (err: any) {
-    console.error(`[MetaAds] Backfill chunk failed for ${merchantId}:`, err.message);
-    throw err;
-  }
-}
+let syncIntervalId: ReturnType<typeof setInterval> | null = null;
 
 export function startMarketingSyncScheduler() {
-  console.log('[MetaAds] Marketing sync is now managed by SyncManager');
+  if (syncIntervalId) return;
+
+  console.log("[MetaAds] Starting marketing sync scheduler (full historical backfill on start, 7-day sync every 120s)");
+
+  (async () => {
+    try {
+      const accounts = await db.select().from(adAccounts);
+      for (const account of accounts) {
+        try {
+          const existing = await db.select({ earliest: sql<string>`MIN(${adInsights.date})` })
+            .from(adInsights)
+            .where(eq(adInsights.merchantId, account.merchantId));
+          const earliestDate = existing[0]?.earliest;
+          const maxBack = new Date();
+          maxBack.setMonth(maxBack.getMonth() - 36);
+          const backfillFrom = maxBack.toISOString().split("T")[0];
+
+          if (!earliestDate || earliestDate > backfillFrom) {
+            const { dbId } = await syncAdAccount(account.merchantId);
+            try {
+              await syncCampaigns(account.merchantId, dbId);
+              await syncAdSets(account.merchantId, dbId);
+              await syncAds(account.merchantId, dbId);
+            } catch (err: any) {
+              console.error(`[MetaAds] Campaign metadata sync failed for ${account.merchantId}:`, err.message);
+            }
+            const now = new Date();
+            const today = now.toISOString().split("T")[0];
+            const chunkDays = 90;
+
+            const backfillEnd = earliestDate 
+              ? new Date(new Date(earliestDate).getTime() - 86400000).toISOString().split("T")[0]
+              : today;
+            console.log(`[MetaAds] Backfill gap: ${backfillFrom} to ${backfillEnd} for merchant ${account.merchantId}`);
+
+            let chunkStart = new Date(backfillFrom);
+            const endDate = new Date(backfillEnd);
+            while (chunkStart <= endDate) {
+              const chunkEnd = new Date(chunkStart);
+              chunkEnd.setDate(chunkEnd.getDate() + chunkDays - 1);
+              if (chunkEnd > endDate) chunkEnd.setTime(endDate.getTime());
+              const from = chunkStart.toISOString().split("T")[0];
+              const to = chunkEnd.toISOString().split("T")[0];
+              console.log(`[MetaAds] Backfill chunk: ${from} to ${to}`);
+              await syncInsights(account.merchantId, dbId, from, to, "campaign");
+              await syncInsights(account.merchantId, dbId, from, to, "adset");
+              await syncInsights(account.merchantId, dbId, from, to, "ad");
+              chunkStart = new Date(chunkEnd);
+              chunkStart.setDate(chunkStart.getDate() + 1);
+            }
+            await quickSyncToday(account.merchantId, "campaign", 37);
+            console.log(`[MetaAds] Backfill completed for merchant ${account.merchantId}`);
+          } else {
+            const { dbId } = await syncAdAccount(account.merchantId);
+            try {
+              await syncCampaigns(account.merchantId, dbId);
+              await syncAdSets(account.merchantId, dbId);
+              await syncAds(account.merchantId, dbId);
+            } catch (err: any) {
+              console.error(`[MetaAds] Campaign metadata sync failed for ${account.merchantId}:`, err.message);
+            }
+            await quickSyncToday(account.merchantId, "campaign", 37);
+            console.log(`[MetaAds] 37-day refresh completed for merchant ${account.merchantId}`);
+          }
+        } catch (err: any) {
+          console.error(`[MetaAds] Initial backfill failed for merchant ${account.merchantId}:`, err.message);
+        }
+      }
+    } catch (err: any) {
+      console.error("[MetaAds] Initial backfill error:", err.message);
+    }
+  })();
+
+  syncIntervalId = setInterval(async () => {
+    try {
+      const accounts = await db.select().from(adAccounts);
+      for (const account of accounts) {
+        try {
+          await quickSyncToday(account.merchantId);
+        } catch (err: any) {
+          console.error(`[MetaAds] Quick sync failed for merchant ${account.merchantId}:`, err.message);
+        }
+      }
+    } catch (err: any) {
+      console.error("[MetaAds] Scheduler error:", err.message);
+    }
+  }, 120 * 1000);
 }
