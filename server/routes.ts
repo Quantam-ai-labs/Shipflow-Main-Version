@@ -4323,8 +4323,12 @@ export async function registerRoutes(
       }
 
       const merchant = await storage.getMerchant(merchantId);
-      const startDate = merchant?.shopifySyncFromDate
-        ? new Date(merchant.shopifySyncFromDate)
+      const merchantTz = (merchant as any)?.timezone || DEFAULT_TIMEZONE;
+      const syncFromStr = merchant?.shopifySyncFromDate
+        ? new Date(merchant.shopifySyncFromDate).toISOString().split('T')[0]
+        : null;
+      const startDate = syncFromStr
+        ? new Date(toMerchantStartOfDay(syncFromStr, merchantTz))
         : undefined;
 
       const job = await startImportJob({

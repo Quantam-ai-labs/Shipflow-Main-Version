@@ -423,9 +423,10 @@ export class ShopifyService {
     const merchant = await storage.getMerchant(merchantId);
     const tz = (merchant as any)?.timezone || DEFAULT_TIMEZONE;
     const yearStart = `${new Date().getFullYear()}-01-01`;
-    const MIN_ORDER_DATE = merchant?.shopifySyncFromDate
-      ? new Date(merchant.shopifySyncFromDate).toISOString()
-      : toMerchantStartOfDay(yearStart, tz);
+    const syncFromDateStr = merchant?.shopifySyncFromDate
+      ? new Date(merchant.shopifySyncFromDate).toISOString().split('T')[0]
+      : yearStart;
+    const MIN_ORDER_DATE = toMerchantStartOfDay(syncFromDateStr, tz);
 
     let fetchParams: { status?: string; updated_at_min?: string; created_at_min?: string } = {
       status: 'any',

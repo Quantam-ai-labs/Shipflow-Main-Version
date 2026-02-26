@@ -54,7 +54,8 @@ export async function startImportJob(options: StartImportOptions): Promise<Shopi
   const { merchantId, shopDomain, accessToken, batchSize = 200 } = options;
 
   const currentYear = new Date().getFullYear();
-  const startDate = options.startDate || new Date(`${currentYear}-01-01T00:00:00.000Z`);
+  // Default to PKT midnight (UTC+5): Jan 1 00:00 PKT = Dec 31 19:00 UTC of previous year
+  const startDate = options.startDate || new Date(Date.UTC(currentYear, 0, 1, 0, 0, 0) - 5 * 60 * 60 * 1000);
 
   const [job] = await db.insert(shopifyImportJobs).values({
     merchantId,
