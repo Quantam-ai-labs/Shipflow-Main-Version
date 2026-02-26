@@ -608,7 +608,7 @@ export function startManualCourierSync(merchantId: string, courierFilter?: strin
         chunkCount++;
         const chunkOffset = cumulativeProcessed;
         const result = await syncMerchantCourierStatuses(merchantId, {
-          forceRefresh: false,
+          forceRefresh: true,
           limit: CHUNK_SIZE,
           includeLowPriority: true,
           courierFilter,
