@@ -1692,10 +1692,11 @@ export async function registerRoutes(
             });
         }
 
-        if (order.cancelledAt) {
+        const rawShopify = order.rawShopifyData as any;
+        if (rawShopify?.cancelled_at) {
           return res
             .status(400)
-            .json({ message: "Order is already cancelled" });
+            .json({ message: "Order is already cancelled on Shopify" });
         }
 
         const store = await storage.getShopifyStore(merchantId);
@@ -1729,9 +1730,16 @@ export async function registerRoutes(
           );
         }
 
-        await storage.updateOrderWorkflow(merchantId, orderId, {
-          cancelledAt: new Date(),
-        });
+        if (!order.cancelledAt) {
+          await storage.updateOrderWorkflow(merchantId, orderId, {
+            cancelledAt: new Date(),
+          });
+        }
+        if (shopifyCancelled) {
+          await storage.updateOrderWorkflow(merchantId, orderId, {
+            cancelReason: "Cancelled in Shopify",
+          });
+        }
 
         const userId = getSessionUserId(req) || "system";
         const actorName = await getSessionUserName(req);

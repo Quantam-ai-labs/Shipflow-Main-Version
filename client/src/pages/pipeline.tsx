@@ -1373,6 +1373,14 @@ export default function Pipeline() {
                           <XCircle className="w-3.5 h-3.5 mr-1" />Cancel Shopify
                         </Button>
                       )}
+                      {activeTab === "CANCELLED" && order.shopifyOrderId && order.cancelReason !== "Cancelled in Shopify" && (
+                        <Button size="sm" variant="ghost" className="text-xs text-orange-600"
+                          onClick={() => setCancelConfirm({ open: true, orderId: order.id, type: "shopify", orderNumber: order.orderNumber })}
+                          disabled={cancelShopifyMutation.isPending}
+                          data-testid={`button-cancel-shopify-${order.id}`}>
+                          <XCircle className="w-3.5 h-3.5 mr-1" />Cancel on Shopify
+                        </Button>
+                      )}
                       {activeTab !== "NEW" && activeTab !== "BOOKED" && activeTab !== "FULFILLED" && activeTab !== "DELIVERED" && activeTab !== "RETURN" && order.previousWorkflowStatus && (
                         <Button size="icon" variant="ghost" className="text-muted-foreground"
                           onClick={() => workflowMutation.mutate({ orderId: order.id, action: "revert" })}
