@@ -843,8 +843,6 @@ export async function generateAirwayBillPdfBuffer(
   const USABLE_HEIGHT = A4_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM;
   const SECTION_HEIGHT = USABLE_HEIGHT / INVOICES_PER_PAGE;
 
-  let currentPage = pdfDoc.addPage([A4_WIDTH, A4_HEIGHT]);
-
   for (let i = 0; i < bills.length; i++) {
     if (i !== 0 && i % INVOICES_PER_PAGE === 0) {
       currentPage = pdfDoc.addPage([A4_WIDTH, A4_HEIGHT]);
