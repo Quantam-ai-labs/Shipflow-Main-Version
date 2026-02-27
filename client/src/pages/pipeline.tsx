@@ -1881,6 +1881,7 @@ export default function Pipeline() {
                     </div>
                     <div className="flex items-center gap-1 flex-wrap">
                       {bookingResultsModal.results.batchId && (
+                        <>
                         <Button size="sm" variant="outline" onClick={async () => {
                           try {
                             const resp = await fetch(`/api/print/batch-awb/${bookingResultsModal.results.batchId}.pdf`);
@@ -1900,9 +1901,35 @@ export default function Pipeline() {
                           } catch {
                             toast({ title: "Error", description: "Could not fetch airway bills", variant: "destructive" });
                           }
-                        }} data-testid="button-download-awb">
-                          <Printer className="w-3.5 h-3.5 mr-1" />Download Courier AWBs
+                        }} data-testid="button-print-awb">
+                          <Printer className="w-3.5 h-3.5 mr-1" />Print Courier AWBs
                         </Button>
+                        <Button size="sm" variant="outline" onClick={async () => {
+                          try {
+                            const resp = await fetch(`/api/print/batch-awb/${bookingResultsModal.results.batchId}.pdf`);
+                            if (!resp.ok) {
+                              const err = await resp.json().catch(() => ({ message: "Failed to fetch airway bills" }));
+                              toast({ title: "Invoice Error", description: err.message, variant: "destructive" });
+                              return;
+                            }
+                            const blob = await resp.blob();
+                            if (blob.size === 0 || blob.type.includes("json")) {
+                              toast({ title: "Invoice Error", description: "Invoices not available for this batch", variant: "destructive" });
+                              return;
+                            }
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement("a");
+                            a.href = url;
+                            a.download = `courier-awbs-${bookingResultsModal.results.batchId.substring(0, 8)}.pdf`;
+                            a.click();
+                            URL.revokeObjectURL(url);
+                          } catch {
+                            toast({ title: "Error", description: "Could not download airway bills", variant: "destructive" });
+                          }
+                        }} data-testid="button-download-awb">
+                          <Download className="w-3.5 h-3.5 mr-1" />Download AWBs
+                        </Button>
+                        </>
                       )}
                       <Button size="sm" variant="outline" onClick={() => {
                           const successIds = bookingResultsModal.results.results
