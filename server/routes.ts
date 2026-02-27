@@ -6849,7 +6849,7 @@ export async function registerRoutes(
           name: item.name || item.title || "Item",
           qty: item.quantity || 1,
           sku: item.sku || "",
-          variant: item.variant_title || "",
+          variant: item.variantTitle || item.variant_title || "",
         }));
 
         const codAmount = Number(order.codRemaining ?? order.totalAmount) || 0;

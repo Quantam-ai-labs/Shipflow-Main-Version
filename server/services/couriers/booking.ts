@@ -109,7 +109,7 @@ export function orderToPacket(order: Order): BookingPacket {
   const itemSummary = items && items.length > 0
     ? items.map((i: any) => {
         const name = (i.name || i.title || "Item").trim();
-        const variant = i.variant_title ? ` - ${i.variant_title}` : "";
+        const variant = (i.variantTitle || i.variant_title) ? ` - ${i.variantTitle || i.variant_title}` : "";
         const qty = ` x ${i.quantity || 1}`;
         return `${name}${variant}${qty}`;
       }).join(" | ")
