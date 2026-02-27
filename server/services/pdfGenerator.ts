@@ -227,7 +227,7 @@ async function drawSingleAirwayBill(
   const x = startX;
   const topY = startY;
   const w = BILL_WIDTH;
-
+  
   // Dimensions and Grid Layout
   const headerH = 20;
   const row1H = 120;
