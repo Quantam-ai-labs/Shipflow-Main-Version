@@ -645,6 +645,7 @@ export default function OrderDetails() {
   const [paymentMethod, setPaymentMethod] = useState("CASH");
   const [paymentRef, setPaymentRef] = useState("");
   const [paymentNotes, setPaymentNotes] = useState("");
+  const [showCancelShopifyConfirm, setShowCancelShopifyConfirm] = useState(false);
 
   const { data: auditLog } = useQuery<any[]>({
     queryKey: ["/api/orders", id, "audit-log"],
@@ -810,6 +811,27 @@ export default function OrderDetails() {
     },
   });
 
+  const cancelShopifyMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/orders/${id}/cancel-shopify`, { reason: "other" });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders", id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders/workflow-counts"] });
+      setShowCancelShopifyConfirm(false);
+      if (data.shopifyWarning) {
+        toast({ title: "Order cancelled locally", description: "Shopify sync failed but order is cancelled in ShipFlow.", variant: "destructive" });
+      } else {
+        toast({ title: "Cancelled on Shopify", description: "Order has been cancelled on Shopify successfully." });
+      }
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message || "Failed to cancel on Shopify.", variant: "destructive" });
+      setShowCancelShopifyConfirm(false);
+    },
+  });
+
   const handleAddRemark = () => {
     if (!newRemark.trim()) return;
     addRemarkMutation.mutate({ content: newRemark, remarkType });
@@ -817,6 +839,8 @@ export default function OrderDetails() {
 
   const PICKED_UP_STATUSES = ['PICKED_UP', 'IN_TRANSIT', 'ARRIVED_AT_DESTINATION', 'OUT_FOR_DELIVERY', 'DELIVERY_ATTEMPTED', 'DELIVERED', 'DELIVERY_FAILED', 'RETURNED_TO_SHIPPER', 'READY_FOR_RETURN', 'RETURN_IN_TRANSIT'];
   const isLocked = order?.workflowStatus === "DELIVERED" || order?.workflowStatus === "RETURN" || order?.workflowStatus === "CANCELLED";
+  const lockedReason = order?.workflowStatus === "CANCELLED" ? "Cancelled" : order?.workflowStatus === "RETURN" ? "Returned" : order?.workflowStatus === "DELIVERED" ? "Delivered" : "Booked";
+  const canCancelOnShopify = order?.workflowStatus === "CANCELLED" && (order as any).shopifyOrderId && (order as any).orderStatus !== "cancelled";
 
   const startEditingCustomer = () => {
     if (!order) return;
@@ -923,6 +947,22 @@ export default function OrderDetails() {
               )}
               {getWorkflowBadge(order.workflowStatus)}
               {getShipmentStatusBadge(order.shipmentStatus, (order as any).courierRawStatus)}
+              {canCancelOnShopify && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setShowCancelShopifyConfirm(true)}
+                  disabled={cancelShopifyMutation.isPending}
+                  data-testid="button-cancel-shopify"
+                >
+                  {cancelShopifyMutation.isPending ? (
+                    <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                  ) : (
+                    <XCircle className="w-3.5 h-3.5 mr-1.5" />
+                  )}
+                  Cancel on Shopify
+                </Button>
+              )}
             </div>
             <p className="text-muted-foreground text-sm">
               {order.orderDate ? format(new Date(order.orderDate), "MMMM dd, yyyy 'at' h:mm a") : ""}
@@ -930,6 +970,33 @@ export default function OrderDetails() {
           </div>
         </div>
       </div>
+
+      {showCancelShopifyConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" data-testid="modal-cancel-shopify">
+          <Card className="w-full max-w-md mx-4">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-destructive" />
+                Cancel on Shopify
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Are you sure you want to cancel order <strong>{order.orderNumber}</strong> on Shopify? This action cannot be undone.
+              </p>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setShowCancelShopifyConfirm(false)} disabled={cancelShopifyMutation.isPending} data-testid="button-cancel-shopify-no">
+                  No, Keep It
+                </Button>
+                <Button variant="destructive" onClick={() => cancelShopifyMutation.mutate()} disabled={cancelShopifyMutation.isPending} data-testid="button-cancel-shopify-yes">
+                  {cancelShopifyMutation.isPending && <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
+                  Yes, Cancel on Shopify
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       <div className="grid lg:grid-cols-3 gap-4">
         {/* Main Content */}
@@ -941,7 +1008,7 @@ export default function OrderDetails() {
                 {isLocked && (
                   <Badge variant="outline" className="text-xs gap-1" data-testid="badge-locked-summary">
                     <Lock className="w-3 h-3" />
-                    Locked - Booked
+                    Locked - {lockedReason}
                   </Badge>
                 )}
               </CardTitle>
