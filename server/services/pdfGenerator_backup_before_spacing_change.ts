@@ -204,7 +204,7 @@ const MARGIN_TOP = 20;
 const MARGIN_BOTTOM = 20;
 const BILL_WIDTH = A4_WIDTH - MARGIN_X * 2;
 const AVAILABLE_H = A4_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM;
-const GAP_Y = 35;
+const GAP_Y = 15;
 const BILL_HEIGHT = Math.floor((AVAILABLE_H - GAP_Y * 2) / 3);
 
 const BLACK = rgb(0.05, 0.05, 0.05);
