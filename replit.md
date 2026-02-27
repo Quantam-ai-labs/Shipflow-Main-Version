@@ -33,6 +33,7 @@ Preferred communication style: Simple, everyday language.
 - **Shopify Write-Back System**: Bi-directional sync for address/phone/email edits, order cancellations, and workflow status updates via Shopify tags. Includes rate limit compliance and webhook echo prevention.
 - **Webhook Resilience**: Immediate 200 responses to prevent timeouts and a webhook health check API.
 - **Ads Profitability Calculator**: Tracks Facebook/Meta campaign profitability, auto-syncs campaign data, and provides detailed financial metrics with a flexible product matching system. Includes Campaign Signal buttons (Scale/Watch/Risk) per campaign for manual decision tracking, and a Campaign Journey section below the table for action tracking, snapshot evaluation, and deterministic insights/next-move recommendations. Journey events are stored in `campaign_journey_events` table with before/after snapshots and lazy evaluation.
+- **AI Marketing Intelligence**: AI-powered analytics page at `/marketing/intelligence` with auto-generated insight cards (campaign performance, return rates, spend efficiency, top cities, order trends, funnel analysis) and a conversational chat interface. Uses Replit AI Integrations (OpenAI GPT-4o) for natural language queries against real database data. All queries are read-only and merchant-scoped. Includes a Weekly Strategy Brief feature. Service: `server/services/aiInsights.ts`, routes in `server/routes/marketing.ts`, frontend: `client/src/pages/marketing/ai-insights.tsx`.
 - **Settings Page**: Organized into a collapsible sidebar with sections for General, Shopify, Couriers, Status Mapping, and Marketing configurations.
 - **Timezone-Aware Date Filtering**: All date-based queries use the merchant's timezone for accurate data representation, particularly for dashboard stats, orders, and financial reporting.
 - **Product & Inventory Management**: Syncs Shopify product data (title, variants, SKU, price, cost, inventory) and displays a searchable/filterable product catalog.
@@ -62,3 +63,4 @@ Preferred communication style: Simple, everyday language.
     - PostEx Courier API
     - TCS Courier API
     - Resend (for email services)
+    - OpenAI via Replit AI Integrations (GPT-4o for AI marketing insights)

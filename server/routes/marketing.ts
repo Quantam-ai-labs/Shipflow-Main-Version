@@ -19,6 +19,7 @@ import {
   testFacebookConnection,
 } from "../services/metaAds";
 import { encryptToken } from "../services/encryption";
+import { generateChatResponse, generateDashboardInsights, generateQuickStrategy } from "../services/aiInsights";
 
 function isAuthenticated(req: any, res: Response, next: Function) {
   if (!req.session?.userId) {
@@ -911,6 +912,50 @@ export function registerMarketingRoutes(app: Express) {
       res.json({ success: true, evaluated });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  const aiChatSchema = z.object({
+    question: z.string().min(1).max(1000),
+    dollarRate: z.number().min(1).max(1000).optional().default(280),
+  });
+
+  app.post("/api/marketing/ai/chat", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const parsed = aiChatSchema.parse(req.body);
+      const result = await generateChatResponse(parsed.question.trim(), merchantId, parsed.dollarRate);
+      res.json(result);
+    } catch (error: any) {
+      if (error.name === "ZodError") {
+        return res.status(400).json({ error: "Invalid request", details: error.errors });
+      }
+      console.error("AI chat error:", error);
+      res.status(500).json({ error: "Failed to generate AI response" });
+    }
+  });
+
+  app.get("/api/marketing/ai/insights", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const dollarRate = parseInt(req.query.dollarRate as string) || 280;
+      const insights = await generateDashboardInsights(merchantId, dollarRate);
+      res.json({ insights });
+    } catch (error: any) {
+      console.error("AI insights error:", error);
+      res.status(500).json({ error: "Failed to generate insights" });
+    }
+  });
+
+  app.get("/api/marketing/ai/strategy", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const dollarRate = parseInt(req.query.dollarRate as string) || 280;
+      const strategy = await generateQuickStrategy(merchantId, dollarRate);
+      res.json({ strategy });
+    } catch (error: any) {
+      console.error("AI strategy error:", error);
+      res.status(500).json({ error: "Failed to generate strategy" });
     }
   });
 }
