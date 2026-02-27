@@ -836,15 +836,22 @@ export async function generateAirwayBillPdfBuffer(
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
   let currentPage = pdfDoc.addPage([A4_WIDTH, A4_HEIGHT]);
+  const INVOICES_PER_PAGE = 3;
 
+  const USABLE_HEIGHT = A4_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM;
+  const SECTION_HEIGHT = USABLE_HEIGHT / INVOICES_PER_PAGE;
+
+  const SECTION_MAP = Array.from(
+    { length: INVOICES_PER_PAGE },
+    (_, i) => A4_HEIGHT - MARGIN_TOP - SECTION_HEIGHT * i
+  );
   for (let i = 0; i < bills.length; i++) {
     if (i !== 0 && i % 3 === 0) {
       currentPage = pdfDoc.addPage([A4_WIDTH, A4_HEIGHT]);
     }
 
     const position = i % 3;
-    const topY =
-      A4_HEIGHT - MARGIN_TOP - position * SECTION_HEIGHT;
+    const topY = SECTION_MAP[position];
     
     await drawSingleAirwayBill(
       currentPage,
@@ -857,7 +864,7 @@ export async function generateAirwayBillPdfBuffer(
     );
 
     if (position < 2 && i < bills.length - 1) {
-      const cutLineY = topY - BILL_HEIGHT - GAP_Y / 2;
+      const cutLineY = topY - SECTION_HEIGHT - 1 / 2;
       drawDashedCutLine(currentPage, cutLineY);
     }
   }
