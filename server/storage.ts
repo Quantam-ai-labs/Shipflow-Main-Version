@@ -502,7 +502,7 @@ export class DatabaseStorage implements IStorage {
     return result.map(r => r.status).filter((s): s is string => s !== null);
   }
 
-  async getWorkflowCounts(merchantId: string, options?: { dateFrom?: string; dateTo?: string; timezone?: string }): Promise<Record<string, number>> {
+  async getWorkflowCounts(merchantId: string, options?: { dateFrom?: string; dateTo?: string; timezone?: string }): Promise<{ counts: Record<string, number>; totalAmounts: Record<string, number> }> {
     let conditions = [eq(orders.merchantId, merchantId)];
     const tz = options?.timezone || DEFAULT_TIMEZONE;
     if (options?.dateFrom) {
@@ -519,16 +519,19 @@ export class DatabaseStorage implements IStorage {
     }
     const result = await db.select({
       status: orders.workflowStatus,
-      count: count()
+      count: count(),
+      totalAmount: sql<string>`COALESCE(SUM(${orders.totalAmount}), 0)`,
     }).from(orders)
       .where(and(...conditions))
       .groupBy(orders.workflowStatus);
     
     const counts: Record<string, number> = { NEW: 0, PENDING: 0, HOLD: 0, READY_TO_SHIP: 0, BOOKED: 0, FULFILLED: 0, DELIVERED: 0, RETURN: 0, CANCELLED: 0 };
+    const totalAmounts: Record<string, number> = { NEW: 0, PENDING: 0, HOLD: 0, READY_TO_SHIP: 0, BOOKED: 0, FULFILLED: 0, DELIVERED: 0, RETURN: 0, CANCELLED: 0 };
     for (const row of result) {
       counts[row.status] = row.count;
+      totalAmounts[row.status] = Number(row.totalAmount) || 0;
     }
-    return counts;
+    return { counts, totalAmounts };
   }
 
   async updateOrderWorkflow(merchantId: string, orderId: string, data: Partial<Order>): Promise<Order | undefined> {

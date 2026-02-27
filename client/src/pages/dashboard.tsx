@@ -52,6 +52,7 @@ function StatCard({
   icon: Icon,
   trend,
   trendLabel,
+  subtitle,
   iconColor = "text-primary",
   isLoading = false,
 }: {
@@ -60,6 +61,7 @@ function StatCard({
   icon: React.ElementType;
   trend?: number;
   trendLabel?: string;
+  subtitle?: string;
   iconColor?: string;
   isLoading?: boolean;
 }) {
@@ -99,6 +101,9 @@ function StatCard({
                 </span>
                 <span className="text-muted-foreground">{trendLabel}</span>
               </div>
+            )}
+            {subtitle && (
+              <p className="text-xs text-muted-foreground">{subtitle}</p>
             )}
           </div>
           <div className={`w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center ${iconColor}`}>
@@ -414,10 +419,12 @@ export default function Dashboard() {
   });
 
   const workflowCountsUrl = `/api/orders/workflow-counts${statsQueryString ? `?${statsQueryString}` : ""}`;
-  const { data: workflowCounts, isLoading: countsLoading } = useQuery<Record<string, number>>({
+  const { data: workflowData, isLoading: countsLoading } = useQuery<Record<string, any>>({
     queryKey: [workflowCountsUrl],
     refetchInterval: 30000,
   });
+  const workflowCounts = workflowData ? Object.fromEntries(Object.entries(workflowData).filter(([k]) => k !== "totalAmounts").map(([k, v]) => [k, Number(v) || 0])) as Record<string, number> : undefined;
+  const workflowAmounts = (workflowData?.totalAmounts ?? {}) as Record<string, number>;
 
   const { data: recentOrders, isLoading: ordersLoading } = useQuery<RecentOrder[]>({
     queryKey: ["/api/orders/recent"],
@@ -455,6 +462,13 @@ export default function Dashboard() {
         const delivered = workflowCounts?.DELIVERED ?? 0;
         const cancelled = workflowCounts?.CANCELLED ?? 0;
 
+        const fmtCod = (amount: number) => `COD: PKR ${Math.round(amount).toLocaleString()}`;
+        const totalCod = Object.values(workflowAmounts).reduce((sum, v) => sum + (v || 0), 0);
+        const dispatchedCod = (workflowAmounts.FULFILLED ?? 0) + (workflowAmounts.DELIVERED ?? 0) + (workflowAmounts.RETURN ?? 0);
+        const deliveredCod = workflowAmounts.DELIVERED ?? 0;
+        const pendingCod = (workflowAmounts.NEW ?? 0) + (workflowAmounts.PENDING ?? 0) + (workflowAmounts.HOLD ?? 0) + (workflowAmounts.READY_TO_SHIP ?? 0) + (workflowAmounts.BOOKED ?? 0);
+        const cancelledCod = workflowAmounts.CANCELLED ?? 0;
+
         return (
           <div className="space-y-3">
             <h2 className="text-lg font-semibold" data-testid="section-order-overview">Order Overview</h2>
@@ -465,6 +479,7 @@ export default function Dashboard() {
                 icon={Package}
                 trend={stats?.ordersTrend}
                 trendLabel="vs last week"
+                subtitle={countsLoading ? undefined : fmtCod(totalCod)}
                 isLoading={countsLoading}
               />
               <StatCard
@@ -472,6 +487,7 @@ export default function Dashboard() {
                 value={countsLoading ? "—" : dispatched.toLocaleString()}
                 icon={Send}
                 iconColor="text-blue-500"
+                subtitle={countsLoading ? undefined : fmtCod(dispatchedCod)}
                 isLoading={countsLoading}
               />
               <StatCard
@@ -479,6 +495,7 @@ export default function Dashboard() {
                 value={countsLoading ? "—" : delivered.toLocaleString()}
                 icon={CheckCircle2}
                 iconColor="text-green-500"
+                subtitle={countsLoading ? undefined : fmtCod(deliveredCod)}
                 isLoading={countsLoading}
               />
               <StatCard
@@ -486,6 +503,7 @@ export default function Dashboard() {
                 value={countsLoading ? "—" : pending.toLocaleString()}
                 icon={Clock}
                 iconColor="text-amber-500"
+                subtitle={countsLoading ? undefined : fmtCod(pendingCod)}
                 isLoading={countsLoading}
               />
               <StatCard
@@ -493,6 +511,7 @@ export default function Dashboard() {
                 value={countsLoading ? "—" : cancelled.toLocaleString()}
                 icon={Ban}
                 iconColor="text-red-500"
+                subtitle={countsLoading ? undefined : fmtCod(cancelledCod)}
                 isLoading={countsLoading}
               />
             </div>
@@ -507,16 +526,18 @@ export default function Dashboard() {
         const delivered = workflowCounts?.DELIVERED ?? 0;
         const returned = workflowCounts?.RETURN ?? 0;
         const cancelled = workflowCounts?.CANCELLED ?? 0;
+        const fulfilled = workflowCounts?.FULFILLED ?? 0;
 
         const fulfillmentRatio = total > 0 ? Math.round((dispatched / total) * 100) : 0;
         const deliveryRatio = dispatched > 0 ? Math.round((delivered / dispatched) * 100) : 0;
         const returnRatio = dispatched > 0 ? Math.round((returned / dispatched) * 100) : 0;
         const cancellationRatio = total > 0 ? Math.round((cancelled / total) * 100) : 0;
+        const pendingRatio = total > 0 ? Math.round((fulfilled / total) * 100) : 0;
 
         return (
           <div className="space-y-3">
             <h2 className="text-lg font-semibold" data-testid="section-performance-metrics">Performance Metrics</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
               <Card data-testid="card-fulfillment-ratio">
                 <CardContent className="p-6">
                   <div className="flex items-start justify-between gap-4">
@@ -569,6 +590,20 @@ export default function Dashboard() {
                     </div>
                     <div className="w-10 h-10 rounded-lg bg-orange-500/10 flex items-center justify-center text-orange-500">
                       <X className="w-5 h-5" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card data-testid="card-pending-ratio">
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-1">
+                      <p className="text-sm text-muted-foreground">Pending Ratio</p>
+                      <p className="text-2xl font-bold">{countsLoading ? "—" : `${pendingRatio}%`}</p>
+                      <p className="text-xs text-muted-foreground">{fulfilled} fulfilled / {total} total</p>
+                    </div>
+                    <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-500">
+                      <Clock className="w-5 h-5" />
                     </div>
                   </div>
                 </CardContent>

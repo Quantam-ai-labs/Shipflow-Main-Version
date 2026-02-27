@@ -696,14 +696,15 @@ export async function registerRoutes(
       }
 
       const timezone = await getMerchantTimezone(merchantId);
-      const counts = await storage.getWorkflowCounts(merchantId, {
+      const { counts, totalAmounts } = await storage.getWorkflowCounts(merchantId, {
         dateFrom,
         dateTo,
         timezone,
       });
-      workflowCountsCache.set(cacheKey, { data: counts, fetchedAt: Date.now() });
+      const data = { ...counts, totalAmounts };
+      workflowCountsCache.set(cacheKey, { data, fetchedAt: Date.now() });
       cleanExpiredCacheEntries(workflowCountsCache);
-      res.json(counts);
+      res.json(data);
     } catch (error) {
       console.error("Error fetching workflow counts:", error);
       res.status(500).json({ message: "Failed to fetch workflow counts" });
