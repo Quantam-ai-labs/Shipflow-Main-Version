@@ -6877,7 +6877,7 @@ export async function registerRoutes(
           weight: Number(order.weight) || 0,
           pieces: 1,
           itemSummary: order.itemSummary || "",
-          remark: order.remark || order.notes || "",
+          remark: [order.remark || order.notes, "Allow Open Parcel - Must Call Before Delivery - Handle With Care"].filter(Boolean).join(" - "),
           products,
           orderDate: order.orderDate,
           bookedAt: order.bookedAt,

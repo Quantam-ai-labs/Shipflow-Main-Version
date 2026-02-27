@@ -101,7 +101,7 @@ export function validateOrderForBooking(order: Order): string[] {
   return missing;
 }
 
-export const COURIER_SPECIAL_INSTRUCTIONS = "Allow Open parcel - Must call before Delivery - Handle With Care";
+export const COURIER_SPECIAL_INSTRUCTIONS = "Allow Open Parcel - Must Call Before Delivery - Handle With Care";
 
 export function orderToPacket(order: Order): BookingPacket {
   const items = order.lineItems as any[];
@@ -129,7 +129,7 @@ export function orderToPacket(order: Order): BookingPacket {
     codAmount: parseFloat(order.codRemaining ?? order.totalAmount) || 0,
     weight: 200,
     pieces,
-    specialInstructions: notesParts.join(" | "),
+    specialInstructions: notesParts.join(" - "),
     itemSummary,
   };
 }
