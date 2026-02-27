@@ -761,8 +761,17 @@ async function drawSingleAirwayBill(
     40,
     productLines.length * prodLineHeight + basePaddingTop + basePaddingBottom,
   );
-  const totalH = headerH + row1H + 25 + remarksH + productsH;
-  const bottomY = topY - totalH;
+  // Reserve fixed vertical zone for this invoice
+  const reservedBottomY = topY - BILL_HEIGHT;
+
+  // Real content height (dynamic)
+  const realHeight =
+    headerH + row1H + 25 + remarksH + productsH;
+
+  // Do NOT allow invoice to exceed its reserved zone
+  const finalHeight = Math.min(realHeight, BILL_HEIGHT);
+
+  const bottomY = topY - finalHeight;
 
   const minLines = 3;
 
@@ -774,7 +783,7 @@ async function drawSingleAirwayBill(
     x: x,
     y: bottomY,
     width: w,
-    height: totalH,
+    height: finalHeight,
     borderColor: BLACK,
     borderWidth: 1,
   });
