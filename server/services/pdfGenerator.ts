@@ -203,9 +203,8 @@ const MARGIN_X = 18;
 const MARGIN_TOP = 20;
 const MARGIN_BOTTOM = 20;
 const BILL_WIDTH = A4_WIDTH - MARGIN_X * 2;
-const AVAILABLE_H = A4_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM;
-const GAP_Y = 35;
-const BILL_HEIGHT = Math.floor((AVAILABLE_H - GAP_Y * 2) / 3);
+const USABLE_HEIGHT = A4_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM;
+const SECTION_HEIGHT = USABLE_HEIGHT / 3;
 
 const BLACK = rgb(0.05, 0.05, 0.05);
 const DARK = rgb(0.15, 0.15, 0.15);
@@ -844,7 +843,9 @@ export async function generateAirwayBillPdfBuffer(
     }
 
     const position = i % 3;
-    const topY = A4_HEIGHT - MARGIN_TOP - position * (BILL_HEIGHT + GAP_Y);
+    const topY =
+      A4_HEIGHT - MARGIN_TOP - position * SECTION_HEIGHT;
+    
     await drawSingleAirwayBill(
       currentPage,
       pdfDoc,
@@ -928,7 +929,8 @@ export async function generateMultiAirwayBillPdf(
     }
 
     const position = i % 3;
-    const topY = A4_HEIGHT - MARGIN_TOP - position * (BILL_HEIGHT + GAP_Y);
+    const topY =
+      A4_HEIGHT - MARGIN_TOP - position * SECTION_HEIGHT;
     await drawSingleAirwayBill(
       currentPage,
       pdfDoc,
