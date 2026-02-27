@@ -95,13 +95,21 @@ export default function PrintLabels() {
             page-break-after: always;
             page-break-inside: avoid;
             margin: 0;
-            padding: 8mm;
+            padding: 5mm 8mm;
             box-sizing: border-box;
+            width: 210mm;
+            height: 297mm;
+            overflow: hidden;
           }
           .print-page:last-child { page-break-after: auto; }
           @page {
             size: A4;
             margin: 0;
+          }
+          .label-slot-3 {
+            height: calc((297mm - 10mm - 6mm) / 3);
+            max-height: calc((297mm - 10mm - 6mm) / 3);
+            overflow: hidden;
           }
         }
         @media screen {
@@ -110,9 +118,14 @@ export default function PrintLabels() {
             width: 210mm;
             min-height: 297mm;
             margin: 0 auto 16px;
-            padding: 8mm;
+            padding: 5mm 8mm;
             box-sizing: border-box;
             box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+          }
+          .label-slot-3 {
+            height: calc((297mm - 10mm - 6mm) / 3);
+            max-height: calc((297mm - 10mm - 6mm) / 3);
+            overflow: hidden;
           }
         }
       `}</style>
@@ -183,12 +196,15 @@ function renderPages(labels: LabelData[], layout: LayoutMode, cols: number, rows
       {layout === 3 ? (
         <div style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "flex-start" }}>
           {pageLabels.map((label, idx) => (
-            <div key={label.orderId}>
-              <AwbLabel data={label} />
+            <div key={label.orderId} className="label-slot-3" style={{ display: "flex", flexDirection: "column" }}>
+              <div style={{ flex: 1, overflow: "hidden" }}>
+                <AwbLabel data={label} />
+              </div>
               {idx < pageLabels.length - 1 && (
                 <div style={{
                   borderTop: "1.5px dashed #999",
-                  margin: "6px 0",
+                  margin: "3px 0",
+                  flexShrink: 0,
                 }} />
               )}
             </div>
