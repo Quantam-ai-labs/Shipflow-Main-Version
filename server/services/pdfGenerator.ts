@@ -757,19 +757,34 @@ async function drawSingleAirwayBill(
     }
   }
 
+  const basePaddingTop = 15;
+  const basePaddingBottom = 10;
+  const productsH = Math.max(
+    40,
+    productLines.length * prodLineHeight + basePaddingTop + basePaddingBottom,
+  );
+  // Reserve fixed vertical zone for this invoice
+  const reservedBottomY = topY - BILL_HEIGHT;
+
+  // Real content height (dynamic)
+  const realHeight = headerH + row1H + 25 + remarksH + productsH;
+
+  // Do NOT allow invoice to exceed its reserved zone
+  const finalHeight = Math.min(realHeight, BILL_HEIGHT);
+
+  const bottomY = topY - finalHeight;
+
   const minLines = 3;
 
   while (productLines.length < minLines) {
     productLines.push("");
   }
-
-  const bottomY = topY - BILL_HEIGHT;
-
+  // Draw Main Box Border
   page.drawRectangle({
     x: x,
     y: bottomY,
     width: w,
-    height: BILL_HEIGHT,
+    height: finalHeight,
     borderColor: BLACK,
     borderWidth: 1,
   });
