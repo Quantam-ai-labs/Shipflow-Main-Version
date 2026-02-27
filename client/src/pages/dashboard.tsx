@@ -20,6 +20,8 @@ import {
   BarChart3,
   Target,
   RotateCcw,
+  Send,
+  Ban,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import type { Order, Shipment } from "@shared/schema";
@@ -445,112 +447,133 @@ export default function Dashboard() {
       {/* Search */}
       <OrderSearchSection />
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="Total Orders"
-          value={stats?.totalOrders?.toLocaleString() ?? 0}
-          icon={Package}
-          trend={stats?.ordersTrend}
-          trendLabel="vs last week"
-          isLoading={statsLoading}
-        />
-        <StatCard
-          title="Delivered"
-          value={stats?.totalDelivered?.toLocaleString() ?? 0}
-          icon={CheckCircle2}
-          trend={stats?.deliveryRate}
-          trendLabel="delivery rate"
-          iconColor="text-green-500"
-          isLoading={statsLoading}
-        />
-        <StatCard
-          title="Pending / Unfulfilled"
-          value={stats?.pendingShipments?.toLocaleString() ?? 0}
-          icon={Clock}
-          iconColor="text-amber-500"
-          isLoading={statsLoading}
-        />
-        <StatCard
-          title="In Transit / Booked"
-          value={((stats?.inTransit ?? 0) + (stats?.booked ?? 0)).toLocaleString()}
-          icon={Truck}
-          iconColor="text-blue-500"
-          isLoading={statsLoading}
-        />
-      </div>
-
-      {/* Ratio Analytics Cards */}
+      {/* Section 1: Order Overview */}
       {(() => {
-        const dispatched = (workflowCounts?.BOOKED ?? 0) + (workflowCounts?.FULFILLED ?? 0) + (workflowCounts?.DELIVERED ?? 0) + (workflowCounts?.RETURN ?? 0);
+        const total = Object.values(workflowCounts ?? {}).reduce((sum, v) => sum + (v || 0), 0);
+        const dispatched = (workflowCounts?.FULFILLED ?? 0) + (workflowCounts?.DELIVERED ?? 0) + (workflowCounts?.RETURN ?? 0);
+        const pending = (workflowCounts?.NEW ?? 0) + (workflowCounts?.PENDING ?? 0) + (workflowCounts?.HOLD ?? 0) + (workflowCounts?.READY_TO_SHIP ?? 0) + (workflowCounts?.BOOKED ?? 0);
+        const delivered = workflowCounts?.DELIVERED ?? 0;
+        const cancelled = workflowCounts?.CANCELLED ?? 0;
+
+        return (
+          <div className="space-y-3">
+            <h2 className="text-lg font-semibold" data-testid="section-order-overview">Order Overview</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+              <StatCard
+                title="Total Orders"
+                value={countsLoading ? "—" : total.toLocaleString()}
+                icon={Package}
+                trend={stats?.ordersTrend}
+                trendLabel="vs last week"
+                isLoading={countsLoading}
+              />
+              <StatCard
+                title="Dispatched"
+                value={countsLoading ? "—" : dispatched.toLocaleString()}
+                icon={Send}
+                iconColor="text-blue-500"
+                isLoading={countsLoading}
+              />
+              <StatCard
+                title="Pending"
+                value={countsLoading ? "—" : pending.toLocaleString()}
+                icon={Clock}
+                iconColor="text-amber-500"
+                isLoading={countsLoading}
+              />
+              <StatCard
+                title="Delivered"
+                value={countsLoading ? "—" : delivered.toLocaleString()}
+                icon={CheckCircle2}
+                iconColor="text-green-500"
+                isLoading={countsLoading}
+              />
+              <StatCard
+                title="Cancelled"
+                value={countsLoading ? "—" : cancelled.toLocaleString()}
+                icon={Ban}
+                iconColor="text-red-500"
+                isLoading={countsLoading}
+              />
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Section 2: Performance Metrics */}
+      {(() => {
+        const total = Object.values(workflowCounts ?? {}).reduce((sum, v) => sum + (v || 0), 0);
+        const dispatched = (workflowCounts?.FULFILLED ?? 0) + (workflowCounts?.DELIVERED ?? 0) + (workflowCounts?.RETURN ?? 0);
         const delivered = workflowCounts?.DELIVERED ?? 0;
         const returned = workflowCounts?.RETURN ?? 0;
         const cancelled = workflowCounts?.CANCELLED ?? 0;
-        const totalOrders = Object.values(workflowCounts ?? {}).reduce((sum, v) => sum + (v || 0), 0);
 
-        const fulfillmentRatio = totalOrders > 0 ? Math.round((dispatched / totalOrders) * 100) : 0;
+        const fulfillmentRatio = total > 0 ? Math.round((dispatched / total) * 100) : 0;
         const deliveryRatio = dispatched > 0 ? Math.round((delivered / dispatched) * 100) : 0;
-        const cancellationRatio = totalOrders > 0 ? Math.round((cancelled / totalOrders) * 100) : 0;
         const returnRatio = dispatched > 0 ? Math.round((returned / dispatched) * 100) : 0;
+        const cancellationRatio = total > 0 ? Math.round((cancelled / total) * 100) : 0;
 
         return (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card data-testid="card-fulfillment-ratio">
-              <CardContent className="p-6">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="space-y-1">
-                    <p className="text-sm text-muted-foreground">Fulfillment Ratio</p>
-                    <p className="text-2xl font-bold">{countsLoading ? "—" : `${fulfillmentRatio}%`}</p>
-                    <p className="text-xs text-muted-foreground">{dispatched} dispatched / {totalOrders} total</p>
+          <div className="space-y-3">
+            <h2 className="text-lg font-semibold" data-testid="section-performance-metrics">Performance Metrics</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <Card data-testid="card-fulfillment-ratio">
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-1">
+                      <p className="text-sm text-muted-foreground">Fulfillment Ratio</p>
+                      <p className="text-2xl font-bold">{countsLoading ? "—" : `${fulfillmentRatio}%`}</p>
+                      <p className="text-xs text-muted-foreground">{dispatched} dispatched / {total} total</p>
+                    </div>
+                    <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500">
+                      <BarChart3 className="w-5 h-5" />
+                    </div>
                   </div>
-                  <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500">
-                    <BarChart3 className="w-5 h-5" />
+                </CardContent>
+              </Card>
+              <Card data-testid="card-delivery-ratio">
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-1">
+                      <p className="text-sm text-muted-foreground">Delivery Ratio</p>
+                      <p className="text-2xl font-bold">{countsLoading ? "—" : `${deliveryRatio}%`}</p>
+                      <p className="text-xs text-muted-foreground">{delivered} delivered / {dispatched} dispatched</p>
+                    </div>
+                    <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center text-green-500">
+                      <Target className="w-5 h-5" />
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card data-testid="card-delivery-ratio">
-              <CardContent className="p-6">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="space-y-1">
-                    <p className="text-sm text-muted-foreground">Delivery Ratio</p>
-                    <p className="text-2xl font-bold">{countsLoading ? "—" : `${deliveryRatio}%`}</p>
-                    <p className="text-xs text-muted-foreground">{delivered} delivered / {dispatched} dispatched</p>
+                </CardContent>
+              </Card>
+              <Card data-testid="card-return-ratio">
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-1">
+                      <p className="text-sm text-muted-foreground">Return Ratio</p>
+                      <p className="text-2xl font-bold">{countsLoading ? "—" : `${returnRatio}%`}</p>
+                      <p className="text-xs text-muted-foreground">{returned} returned / {dispatched} dispatched</p>
+                    </div>
+                    <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center text-red-500">
+                      <RotateCcw className="w-5 h-5" />
+                    </div>
                   </div>
-                  <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center text-green-500">
-                    <Target className="w-5 h-5" />
+                </CardContent>
+              </Card>
+              <Card data-testid="card-cancellation-ratio">
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-1">
+                      <p className="text-sm text-muted-foreground">Cancellation Ratio</p>
+                      <p className="text-2xl font-bold">{countsLoading ? "—" : `${cancellationRatio}%`}</p>
+                      <p className="text-xs text-muted-foreground">{cancelled} cancelled / {total} total</p>
+                    </div>
+                    <div className="w-10 h-10 rounded-lg bg-orange-500/10 flex items-center justify-center text-orange-500">
+                      <X className="w-5 h-5" />
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card data-testid="card-cancellation-ratio">
-              <CardContent className="p-6">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="space-y-1">
-                    <p className="text-sm text-muted-foreground">Cancellation Ratio</p>
-                    <p className="text-2xl font-bold">{countsLoading ? "—" : `${cancellationRatio}%`}</p>
-                    <p className="text-xs text-muted-foreground">{cancelled} cancelled / {totalOrders} total</p>
-                  </div>
-                  <div className="w-10 h-10 rounded-lg bg-orange-500/10 flex items-center justify-center text-orange-500">
-                    <X className="w-5 h-5" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card data-testid="card-return-ratio">
-              <CardContent className="p-6">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="space-y-1">
-                    <p className="text-sm text-muted-foreground">Return Ratio</p>
-                    <p className="text-2xl font-bold">{countsLoading ? "—" : `${returnRatio}%`}</p>
-                    <p className="text-xs text-muted-foreground">{returned} returned / {dispatched} dispatched</p>
-                  </div>
-                  <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center text-red-500">
-                    <RotateCcw className="w-5 h-5" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </div>
           </div>
         );
       })()}
