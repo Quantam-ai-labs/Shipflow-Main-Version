@@ -894,12 +894,10 @@ export default function OrderDetails() {
         <p className="text-sm text-muted-foreground mb-4">
           The order you're looking for doesn't exist or has been deleted.
         </p>
-        <Link href="/orders">
-          <Button variant="outline">
+        <Button variant="outline" onClick={() => window.history.back()} data-testid="button-back-orders-error">
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back to Orders
           </Button>
-        </Link>
       </div>
     );
   }
@@ -912,11 +910,9 @@ export default function OrderDetails() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <Link href="/orders">
-            <Button variant="ghost" size="icon" data-testid="button-back-orders">
+          <Button variant="ghost" size="icon" data-testid="button-back-orders" onClick={() => window.history.back()}>
               <ArrowLeft className="w-5 h-5" />
             </Button>
-          </Link>
           <div>
             <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-2xl font-bold">Order # {String(order.orderNumber).replace(/^#/, '')}</h1>
