@@ -17,6 +17,10 @@ import {
   Search,
   X,
   Loader2,
+  BarChart3,
+  Target,
+  Send,
+  RotateCcw,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import type { Order, Shipment } from "@shared/schema";
@@ -476,6 +480,80 @@ export default function Dashboard() {
           isLoading={statsLoading}
         />
       </div>
+
+      {/* Ratio Analytics Cards */}
+      {(() => {
+        const dispatched = (workflowCounts?.BOOKED ?? 0) + (workflowCounts?.FULFILLED ?? 0) + (workflowCounts?.DELIVERED ?? 0) + (workflowCounts?.RETURN ?? 0);
+        const delivered = workflowCounts?.DELIVERED ?? 0;
+        const returned = workflowCounts?.RETURN ?? 0;
+        const totalOrders = Object.values(workflowCounts ?? {}).reduce((sum, v) => sum + (v || 0), 0);
+
+        const fulfillmentRatio = totalOrders > 0 ? Math.round((dispatched / totalOrders) * 100) : 0;
+        const deliveryRatio = dispatched > 0 ? Math.round((delivered / dispatched) * 100) : 0;
+        const dispatchRatio = delivered > 0 ? Math.round((dispatched / delivered) * 100) : 0;
+        const returnRatio = dispatched > 0 ? Math.round((returned / dispatched) * 100) : 0;
+
+        return (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card data-testid="card-fulfillment-ratio">
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Fulfillment Ratio</p>
+                    <p className="text-2xl font-bold">{countsLoading ? "—" : `${fulfillmentRatio}%`}</p>
+                    <p className="text-xs text-muted-foreground">{dispatched} dispatched / {totalOrders} total</p>
+                  </div>
+                  <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500">
+                    <BarChart3 className="w-5 h-5" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card data-testid="card-delivery-ratio">
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Delivery Ratio</p>
+                    <p className="text-2xl font-bold">{countsLoading ? "—" : `${deliveryRatio}%`}</p>
+                    <p className="text-xs text-muted-foreground">{delivered} delivered / {dispatched} dispatched</p>
+                  </div>
+                  <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center text-green-500">
+                    <Target className="w-5 h-5" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card data-testid="card-dispatch-ratio">
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Dispatch Ratio</p>
+                    <p className="text-2xl font-bold">{countsLoading ? "—" : `${dispatchRatio}%`}</p>
+                    <p className="text-xs text-muted-foreground">{dispatched} dispatched / {delivered} delivered</p>
+                  </div>
+                  <div className="w-10 h-10 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-500">
+                    <Send className="w-5 h-5" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card data-testid="card-return-ratio">
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Return Ratio</p>
+                    <p className="text-2xl font-bold">{countsLoading ? "—" : `${returnRatio}%`}</p>
+                    <p className="text-xs text-muted-foreground">{returned} returned / {dispatched} dispatched</p>
+                  </div>
+                  <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center text-red-500">
+                    <RotateCcw className="w-5 h-5" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        );
+      })()}
 
       {/* Status Breakdown */}
       <Card>
