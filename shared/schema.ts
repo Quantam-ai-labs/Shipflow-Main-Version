@@ -1804,3 +1804,18 @@ export const marketingSyncLogs = pgTable("marketing_sync_logs", {
 }, (table) => [
   index("idx_marketing_sync_merchant").on(table.merchantId),
 ]);
+
+export const aiInsightCache = pgTable("ai_insight_cache", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  section: varchar("section", { length: 50 }).notNull(),
+  insights: jsonb("insights").notNull(),
+  generatedAt: timestamp("generated_at").defaultNow(),
+  expiresAt: timestamp("expires_at").notNull(),
+}, (table) => [
+  uniqueIndex("idx_ai_insight_cache_merchant_section").on(table.merchantId, table.section),
+]);
+
+export const insertAiInsightCacheSchema = createInsertSchema(aiInsightCache).omit({ id: true, generatedAt: true });
+export type InsertAiInsightCache = z.infer<typeof insertAiInsightCacheSchema>;
+export type AiInsightCache = typeof aiInsightCache.$inferSelect;

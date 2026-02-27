@@ -10,62 +10,128 @@ const DB_SCHEMA_CONTEXT = `
 You are ShipFlow AI, an analytics assistant for a logistics & marketing SaaS platform used by Shopify merchants in Pakistan.
 All monetary values are in PKR (Pakistani Rupees) unless noted. The USD-to-PKR exchange rate varies per merchant.
 
-DATABASE TABLES:
+DATABASE TABLES (complete column list for each table):
 
 1. orders (main order table):
-   - id (varchar PK), merchant_id, shopify_order_id, order_number, customer_name, customer_phone
-   - city, province, country (default Pakistan)
-   - total_amount (decimal), subtotal_amount, shipping_amount, discount_amount
-   - payment_method, payment_status, fulfillment_status
-   - order_status (pending/confirmed/cancelled)
-   - courier_name, courier_tracking, shipment_status (pending/booked/picked/in_transit/delivered/returned/failed)
-   - workflow_status (NEW/CONFIRMED/DISPATCHED/DELIVERED/RETURNED/CANCELLED/ON_HOLD/PENDING)
-   - order_date, created_at
+   - id (varchar PK), merchant_id (varchar FK), shopify_order_id (varchar), order_number (varchar)
+   - customer_name (varchar), customer_email (varchar), customer_phone (varchar)
+   - shipping_address (text), city (varchar), province (varchar), postal_code (varchar), country (varchar, default 'Pakistan')
+   - total_amount (decimal), subtotal_amount (decimal), shipping_amount (decimal), discount_amount (decimal)
+   - currency (varchar, default 'PKR'), payment_method (varchar), payment_status (varchar), fulfillment_status (varchar)
+   - order_status (varchar: pending/confirmed/cancelled)
    - line_items (jsonb array of {title, quantity, price, sku, product_id})
-   - landing_site, referring_site (for source tracking)
-   - remark (text)
+   - total_quantity (integer)
+   - tags (text array), notes (text), remark (text), item_summary (text)
+   - courier_name (varchar), courier_tracking (varchar), courier_raw_status (text)
+   - shipment_status (varchar: pending/booked/picked/in_transit/delivered/returned/failed)
+   - workflow_status (varchar: NEW/CONFIRMED/DISPATCHED/DELIVERED/RETURNED/CANCELLED/ON_HOLD/PENDING)
+   - pending_reason (text), pending_reason_type (varchar)
+   - hold_until (timestamp), hold_created_at (timestamp)
+   - cancel_reason (text), cancelled_at (timestamp)
+   - previous_workflow_status (varchar), last_status_changed_at (timestamp)
+   - confirmed_at (timestamp), booked_at (timestamp), fulfilled_at (timestamp)
+   - dispatched_at (timestamp), delivered_at (timestamp), returned_at (timestamp)
+   - booking_status (varchar)
+   - prepaid_amount (decimal, default 0), cod_remaining (decimal), cod_payment_status (varchar: UNPAID/PARTIAL/PAID)
+   - landing_site (text), referring_site (text), order_source (varchar)
+   - order_date (timestamp), created_at (timestamp), updated_at (timestamp)
 
 2. shipments:
-   - id, order_id (FK->orders), merchant_id
-   - courier_name (leopards/postex/trax etc), tracking_number, awb_number
-   - status (booked/picked/in_transit/out_for_delivery/delivered/returned/failed)
-   - cod_amount, shipping_cost
-   - actual_delivery, delivery_attempts, created_at
+   - id (varchar PK), order_id (varchar FK->orders), merchant_id (varchar FK)
+   - courier_name (varchar: leopards/postex/trax), tracking_number (varchar), awb_number (varchar)
+   - status (varchar: booked/picked/in_transit/out_for_delivery/delivered/returned/failed)
+   - status_description (text)
+   - weight (decimal), cod_amount (decimal), cod_sent_to_courier (decimal), prepaid_at_booking (decimal)
+   - shipping_cost (decimal)
+   - estimated_delivery (timestamp), actual_delivery (timestamp)
+   - delivery_attempts (integer, default 0), last_status_update (timestamp)
+   - loadsheet_batch_id (varchar)
+   - created_at (timestamp), updated_at (timestamp)
 
-3. products:
-   - id, merchant_id, shopify_product_id, title, handle, vendor, product_type
-   - status, total_inventory, variants (jsonb)
+3. shipment_events (tracking timeline for shipments):
+   - id (varchar PK), shipment_id (varchar FK->shipments)
+   - status (varchar), description (text), location (varchar)
+   - event_time (timestamp), created_at (timestamp)
 
-4. ad_campaigns (Meta/Facebook campaigns):
-   - id, merchant_id, campaign_id (Facebook ID), name, status, effective_status
-   - objective, daily_budget, lifetime_budget, created_time
+4. products:
+   - id (varchar PK), merchant_id (varchar FK), shopify_product_id (varchar)
+   - title (varchar), handle (varchar), vendor (varchar), product_type (varchar)
+   - status (varchar), total_inventory (integer), variants (jsonb)
+   - created_at (timestamp), updated_at (timestamp)
 
-5. ad_insights (daily performance metrics for campaigns/adsets/ads):
-   - merchant_id, entity_id, entity_type, level (campaign/adset/ad), date (YYYY-MM-DD)
-   - impressions, reach, clicks, spend (USD), frequency
-   - cpc, cpm, ctr
-   - link_clicks, landing_page_views
-   - view_content, add_to_cart, initiate_checkout
-   - purchases, purchase_value, roas
-   - cost_per_purchase, video_views, video_thru_plays
+5. order_payments (prepaid/partial payments on orders):
+   - id (varchar PK), merchant_id (varchar FK), order_id (varchar FK->orders)
+   - amount (decimal), method (varchar: CASH/BANK/EASYPAISA/JAZZCASH)
+   - reference (varchar), notes (text), created_at (timestamp)
 
-6. ad_creatives (individual ads):
-   - id, merchant_id, campaign_id, adset_id, ad_id, name
-   - destination_url, matched_product_id (FK->products)
+6. cod_reconciliation (COD settlement tracking):
+   - id (varchar PK), merchant_id (varchar FK), shipment_id (varchar FK), order_id (varchar FK)
+   - courier_name (varchar), tracking_number (varchar)
+   - cod_amount (decimal), courier_fee (decimal), net_amount (decimal)
+   - status (varchar: pending/received/disputed)
+   - courier_settlement_ref (varchar), courier_settlement_date (timestamp)
+   - transaction_fee (decimal), transaction_tax (decimal)
+   - created_at (timestamp), updated_at (timestamp)
 
-7. campaign_journey_events (strategic decisions log):
-   - merchant_id, campaign_key, signal (Scale/Watch/Risk)
-   - action_taken, rationale, evaluation_window_hours
-   - snapshot_before (jsonb metrics), snapshot_after (jsonb metrics)
+7. ad_campaigns (Meta/Facebook campaigns):
+   - id (varchar PK), merchant_id (varchar FK), campaign_id (varchar, Facebook ID)
+   - name (varchar), status (varchar), effective_status (varchar)
+   - objective (varchar), daily_budget (decimal), lifetime_budget (decimal)
+   - created_time (timestamp)
 
-8. expenses:
-   - merchant_id, title, amount, category, date, payment_status
+8. ad_insights (daily performance metrics for campaigns/adsets/ads):
+   - id (varchar PK), merchant_id (varchar FK), ad_account_id (varchar FK)
+   - level (varchar: campaign/adset/ad), entity_id (varchar), entity_type (varchar)
+   - date (varchar YYYY-MM-DD format, NOT a timestamp)
+   - impressions (integer), reach (integer), clicks (integer)
+   - spend (decimal, in USD — multiply by dollar_rate for PKR), frequency (decimal)
+   - cpc (decimal), cpm (decimal), ctr (decimal)
+   - link_clicks (integer), landing_page_views (integer)
+   - outbound_clicks (integer), unique_outbound_clicks (integer)
+   - view_content (integer), add_to_cart (integer), initiate_checkout (integer)
+   - purchases (integer), purchase_value (decimal), roas (decimal)
+   - cost_per_purchase (decimal), cost_per_checkout (decimal), cost_per_add_to_cart (decimal), cost_per_view_content (decimal)
+   - video_views (integer), video_thru_plays (integer), video_3s_views (integer), video_95p_views (integer)
+
+9. ad_creatives (individual ads):
+   - id (varchar PK), merchant_id (varchar FK), campaign_id (varchar), adset_id (varchar), ad_id (varchar)
+   - name (varchar), destination_url (varchar), matched_product_id (varchar FK->products)
+
+10. campaign_journey_events (strategic decisions log):
+    - merchant_id (varchar FK), campaign_key (varchar), signal (varchar: Scale/Watch/Risk)
+    - action_taken (text), rationale (text), evaluation_window_hours (integer)
+    - snapshot_before (jsonb metrics), snapshot_after (jsonb metrics)
+    - created_at (timestamp)
+
+11. expenses:
+    - id (varchar PK), merchant_id (varchar FK)
+    - title (varchar), description (text), amount (decimal)
+    - paid_amount (decimal, default 0), remaining_due (decimal)
+    - payment_status (varchar: unpaid/partial/paid)
+    - party_id (varchar FK), category (varchar), date (timestamp)
+    - payment_method (varchar), reference (varchar)
+    - is_recurring (boolean), notes (text)
+    - created_at (timestamp), updated_at (timestamp)
+
+12. stock_ledger (inventory movements):
+    - id (varchar PK), merchant_id (varchar FK)
+    - type (varchar: purchase/sale/adjustment), product_name (varchar), sku (varchar)
+    - quantity (integer), unit_price (decimal), total_value (decimal)
+    - supplier (varchar), reference (varchar), date (timestamp)
+    - notes (text), created_at (timestamp)
+
+13. courier_dues (courier payment tracking):
+    - id (varchar PK), merchant_id (varchar FK)
+    - courier_name (varchar), type (varchar), amount (decimal)
+    - description (varchar), reference (varchar)
+    - due_date (timestamp), status (varchar: pending/paid), paid_date (timestamp)
+    - date (timestamp), notes (text), created_at (timestamp)
 
 RULES:
 - ALWAYS filter by merchant_id = $1 (parameterized) in EVERY table referenced. This is mandatory for security.
 - Only generate SELECT queries (read-only). Never use DELETE, UPDATE, INSERT, DROP, ALTER, TRUNCATE, EXECUTE, COPY, LOAD.
 - ALWAYS include LIMIT (max 50 rows). Example: LIMIT 50
-- NEVER reference these tables: users, team_members, merchants, sessions, conversations, messages
+- NEVER reference these tables: users, team_members, merchants, sessions, conversations, messages, ai_insight_cache
 - NEVER reference columns containing: password, secret, token, encrypt
 - NEVER reference pg_ system tables or information_schema
 - Use proper date formatting: dates in orders are timestamps, dates in ad_insights are varchar 'YYYY-MM-DD'
@@ -74,6 +140,8 @@ RULES:
 - Use meaningful aliases for columns
 - When computing percentages, handle division by zero with NULLIF
 - In JOINs, ensure both tables filter by merchant_id = $1
+- For pipeline/workflow analysis, use confirmed_at, dispatched_at, delivered_at, returned_at, cancelled_at timestamps to calculate time between stages
+- For COD analysis, use prepaid_amount, cod_remaining, and cod_payment_status from orders
 `;
 
 interface InsightPrompt {
@@ -238,6 +306,7 @@ const ALLOWED_TABLES = new Set([
   "orders", "shipments", "shipment_events", "products", "expenses",
   "ad_campaigns", "ad_sets", "ad_creatives", "ad_insights", "ad_accounts",
   "campaign_journey_events", "ad_profitability_entries", "meta_sync_runs",
+  "cod_reconciliation", "order_payments", "courier_dues", "stock_ledger",
 ]);
 
 const BLOCKED_PATTERNS = [
@@ -247,6 +316,7 @@ const BLOCKED_PATTERNS = [
   /\busers\b/i,
   /\bmerchants\b/i,
   /\bsessions\b/i,
+  /\bai_insight_cache\b/i,
   /\bpassword/i,
   /\bsecret/i,
   /\btoken/i,

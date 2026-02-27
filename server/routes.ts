@@ -9,6 +9,7 @@ import { registerAccountingRoutes } from "./routes/accounting";
 import { registerTransactionRoutes } from "./routes/transactions";
 import { registerMarketingRoutes } from "./routes/marketing";
 import { generateSectionInsights, VALID_SECTIONS, type InsightSection } from "./services/aiInsights";
+import { aiInsightCache } from "@shared/schema";
 import {
   shipmentPrintRecords,
   users,
@@ -504,9 +505,30 @@ export async function registerRoutes(
       if (!VALID_SECTIONS.includes(section as InsightSection)) {
         return res.status(400).json({ error: `Invalid section. Valid sections: ${VALID_SECTIONS.join(", ")}` });
       }
+      const force = req.query.force === "true";
+
+      if (!force) {
+        const cached = await db.select().from(aiInsightCache)
+          .where(and(eq(aiInsightCache.merchantId, merchantId), eq(aiInsightCache.section, section)))
+          .limit(1);
+        if (cached.length > 0 && cached[0].expiresAt > new Date()) {
+          return res.json({ insights: cached[0].insights, generatedAt: cached[0].generatedAt });
+        }
+      }
+
       const dollarRate = parseInt(req.query.dollarRate as string) || 280;
       const insights = await generateSectionInsights(merchantId, section as InsightSection, Math.min(Math.max(dollarRate, 1), 1000));
-      res.json({ insights });
+
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      await db.insert(aiInsightCache)
+        .values({ merchantId, section, insights: insights as any, generatedAt: now, expiresAt })
+        .onConflictDoUpdate({
+          target: [aiInsightCache.merchantId, aiInsightCache.section],
+          set: { insights: insights as any, generatedAt: now, expiresAt },
+        });
+
+      res.json({ insights, generatedAt: now });
     } catch (error: any) {
       console.error("AI section insights error:", error);
       res.status(500).json({ error: "Failed to generate insights" });
