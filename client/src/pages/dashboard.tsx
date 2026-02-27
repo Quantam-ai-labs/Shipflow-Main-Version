@@ -532,7 +532,7 @@ export default function Dashboard() {
         const deliveryRatio = dispatched > 0 ? Math.round((delivered / dispatched) * 100) : 0;
         const returnRatio = dispatched > 0 ? Math.round((returned / dispatched) * 100) : 0;
         const cancellationRatio = total > 0 ? Math.round((cancelled / total) * 100) : 0;
-        const pendingRatio = total > 0 ? Math.round((fulfilled / total) * 100) : 0;
+        const pendingRatio = dispatched > 0 ? Math.round((fulfilled / dispatched) * 100) : 0;
 
         return (
           <div className="space-y-3">
@@ -600,7 +600,7 @@ export default function Dashboard() {
                     <div className="space-y-1">
                       <p className="text-sm text-muted-foreground">Pending Ratio</p>
                       <p className="text-2xl font-bold">{countsLoading ? "—" : `${pendingRatio}%`}</p>
-                      <p className="text-xs text-muted-foreground">{fulfilled} fulfilled / {total} total</p>
+                      <p className="text-xs text-muted-foreground">{fulfilled} fulfilled / {dispatched} dispatched</p>
                     </div>
                     <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-500">
                       <Clock className="w-5 h-5" />
