@@ -738,28 +738,22 @@ async function drawSingleAirwayBill(
   if (!prodText || !prodText.trim()) {
     prodText = "-";
   }
-  const prodFontSize = 7;
-  const prodLineHeight = 8.5;
-  const maxProductLines = 4;
+  // Wrap products text instead of single line
   const productLines = wrapText(
     prodText,
     font,
-    prodFontSize,
+    8,
     w - (pad + 40) - pad,
-    maxProductLines,
+    1000, // large number = effectively unlimited
   );
-  if (productLines.length === maxProductLines) {
-    const last = productLines[maxProductLines - 1];
-    if (last && !last.endsWith("...")) {
-      productLines[maxProductLines - 1] = last.length > 3 ? last.slice(0, -3) + "..." : last + "...";
-    }
-  }
+  const lineHeight = 9;
+  const basePadding = 15;
 
   const basePaddingTop = 15;
-  const basePaddingBottom = 10;
+  const basePaddingBottom = 10; // Add some bottom padding
   const productsH = Math.max(
     40,
-    productLines.length * prodLineHeight + basePaddingTop + basePaddingBottom,
+    productLines.length * lineHeight + basePaddingTop + basePaddingBottom,
   );
   const totalH = headerH + row1H + 25 + remarksH + productsH;
   const bottomY = topY - totalH;
@@ -781,8 +775,8 @@ async function drawSingleAirwayBill(
   let prodY = productsTopY - 13;
 
   for (const line of productLines) {
-    drawTextSafe(page, font, line, x + pad + 40, prodY, prodFontSize, BLACK);
-    prodY -= prodLineHeight;
+    drawTextSafe(page, font, line, x + pad + 40, prodY, 8, BLACK);
+    prodY -= 9;
   }
 }
 
