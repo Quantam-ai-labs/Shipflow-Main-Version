@@ -475,17 +475,17 @@ export default function Dashboard() {
                 isLoading={countsLoading}
               />
               <StatCard
-                title="Pending"
-                value={countsLoading ? "—" : pending.toLocaleString()}
-                icon={Clock}
-                iconColor="text-amber-500"
-                isLoading={countsLoading}
-              />
-              <StatCard
                 title="Delivered"
                 value={countsLoading ? "—" : delivered.toLocaleString()}
                 icon={CheckCircle2}
                 iconColor="text-green-500"
+                isLoading={countsLoading}
+              />
+              <StatCard
+                title="Pending"
+                value={countsLoading ? "—" : pending.toLocaleString()}
+                icon={Clock}
+                iconColor="text-amber-500"
                 isLoading={countsLoading}
               />
               <StatCard
