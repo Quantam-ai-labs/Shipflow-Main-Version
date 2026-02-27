@@ -76,42 +76,161 @@ RULES:
 - In JOINs, ensure both tables filter by merchant_id = $1
 `;
 
-const INSIGHT_PROMPTS = [
+interface InsightPrompt {
+  key: string;
+  title: string;
+  category: string;
+  prompt: string;
+  section: string;
+}
+
+const INSIGHT_PROMPTS: InsightPrompt[] = [
   {
     key: "campaign_performance",
     title: "Campaign Performance",
     category: "campaigns",
+    section: "marketing",
     prompt: `Analyze the top 10 campaigns by spend in the last 14 days. For each, calculate total spend, purchases, ROAS, and cost per purchase. Identify which are profitable and which are losing money. Provide a brief strategic recommendation.`
   },
   {
     key: "return_rate",
     title: "Return Rate Analysis", 
     category: "operations",
+    section: "marketing",
     prompt: `Compare the return/failed delivery rate for the last 7 days vs the previous 7 days. Break it down by city if possible. Flag any cities with return rates above 20%.`
   },
   {
     key: "spend_efficiency",
     title: "Ad Spend Efficiency",
     category: "campaigns",
+    section: "marketing",
     prompt: `Analyze overall ad spend efficiency for the last 7 days: total spend, total purchases from ads, average CPA, and ROAS. Compare with the previous 7 days. Is efficiency improving or declining?`
   },
   {
     key: "top_cities",
     title: "Top Cities by Orders",
     category: "operations", 
+    section: "marketing",
     prompt: `Show the top 10 cities by order count in the last 14 days, with delivery rate, return rate, and average order value for each city.`
   },
   {
     key: "order_trends",
     title: "Order Trends",
     category: "operations",
+    section: "marketing",
     prompt: `Analyze daily order volume for the last 14 days. Identify the trend (increasing/decreasing/stable), peak days, and any anomalies. Compare weekday vs weekend performance.`
   },
   {
     key: "funnel_analysis",
     title: "Marketing Funnel",
     category: "campaigns",
+    section: "marketing",
     prompt: `Analyze the marketing funnel for the last 7 days: impressions → clicks → landing page views → add to cart → checkout → purchase. Calculate drop-off rates at each stage and identify the biggest bottleneck.`
+  },
+  {
+    key: "dashboard_health",
+    title: "Business Health",
+    category: "overview",
+    section: "dashboard",
+    prompt: `Give an overall business health assessment for the last 7 days: total orders, total revenue (PKR), fulfillment rate (dispatched/total), delivery rate (delivered/dispatched), return rate, and average order value. Compare key metrics with the previous 7 days. Highlight any concerning trends.`
+  },
+  {
+    key: "dashboard_pending",
+    title: "Pending Orders Alert",
+    category: "operations",
+    section: "dashboard",
+    prompt: `Analyze orders currently in pending/hold/new status (workflow_status IN ('NEW','PENDING','ON_HOLD')). How many are there? What's the average age of these orders? Are there any that have been pending for more than 3 days? Recommend actions.`
+  },
+  {
+    key: "dashboard_revenue",
+    title: "Revenue Trend",
+    category: "finance",
+    section: "dashboard",
+    prompt: `Analyze daily revenue (total_amount from orders) for the last 14 days. Identify the trend, peak days, and average daily revenue. Is revenue growing, stable, or declining compared to the previous 14 days?`
+  },
+  {
+    key: "analytics_delivery",
+    title: "Delivery Performance",
+    category: "operations",
+    section: "analytics",
+    prompt: `Analyze delivery performance for the last 14 days: overall delivery rate, average delivery attempts, courier-wise delivery success rates (from shipments table by courier_name). Which courier has the best and worst performance? Any recommendations for courier selection?`
+  },
+  {
+    key: "analytics_cities",
+    title: "City Performance",
+    category: "operations",
+    section: "analytics",
+    prompt: `Show top 10 cities by order volume in the last 14 days. For each city, show order count, delivery rate (delivered/total), return rate, and average order value. Flag cities with return rates above 15% and suggest whether to continue or reduce advertising there.`
+  },
+  {
+    key: "analytics_products",
+    title: "Product Insights",
+    category: "products",
+    section: "analytics",
+    prompt: `Analyze the top 10 products by order count in the last 14 days using line_items jsonb in orders. For each product, show order count, total revenue, and return rate if possible. Which products are performing best?`
+  },
+  {
+    key: "pipeline_bottleneck",
+    title: "Pipeline Bottlenecks",
+    category: "operations",
+    section: "pipeline",
+    prompt: `Analyze the current order pipeline by workflow_status. Count orders in each stage (NEW, CONFIRMED, DISPATCHED, DELIVERED, RETURNED, CANCELLED, ON_HOLD, PENDING). Show the percentage distribution across stages. Identify which non-terminal stage (NEW, PENDING, ON_HOLD, CONFIRMED) has the most orders stuck and recommend actions.`
+  },
+  {
+    key: "pipeline_confirmation",
+    title: "Confirmation Insights",
+    category: "operations",
+    section: "pipeline",
+    prompt: `Analyze orders that were confirmed in the last 7 days. What's the average time from NEW to CONFIRMED? What percentage of new orders get confirmed vs cancelled? Are there specific times of day or days of the week when confirmation is faster?`
+  },
+  {
+    key: "pipeline_cancellation",
+    title: "Cancellation Patterns",
+    category: "risk",
+    section: "pipeline",
+    prompt: `Analyze cancelled orders from the last 14 days. What percentage of total orders are cancelled? What are the most common cancel_reason values? At which pipeline stage do most cancellations happen? Any patterns by city or payment method?`
+  },
+  {
+    key: "shipments_courier",
+    title: "Courier Comparison",
+    category: "operations",
+    section: "shipments",
+    prompt: `Compare all couriers used in the last 14 days from the shipments table. For each courier_name, show: total shipments, delivered count, returned count, delivery success rate, average delivery_attempts, and average shipping_cost. Which courier provides the best value?`
+  },
+  {
+    key: "shipments_returns",
+    title: "Return Analysis",
+    category: "risk",
+    section: "shipments",
+    prompt: `Deep dive into returned/failed shipments from the last 14 days. What's the overall return rate? Break down by courier, city, and payment method. What's the financial impact (sum of cod_amount for returned orders)? Identify patterns and recommend actions to reduce returns.`
+  },
+  {
+    key: "shipments_cod",
+    title: "COD Collection Status",
+    category: "finance",
+    section: "shipments",
+    prompt: `Analyze COD collection status from shipments in the last 30 days. Total COD amount for delivered shipments, total collected vs pending. Group by courier. Flag any couriers with significant pending COD amounts.`
+  },
+  {
+    key: "finance_revenue",
+    title: "Revenue Analysis",
+    category: "finance",
+    section: "finance",
+    prompt: `Analyze revenue for the last 30 days from orders. Daily revenue trend, total revenue, average order value. Compare with previous 30 days. Break down by payment method (COD vs prepaid). What percentage is COD?`
+  },
+  {
+    key: "finance_expenses",
+    title: "Expense Overview",
+    category: "finance",
+    section: "finance",
+    prompt: `Analyze expenses from the last 30 days. Total expense amount, breakdown by category. Which category has the highest spending? Are there any unpaid expenses (payment_status = 'unpaid')? Compare with previous 30 days.`
+  },
+  {
+    key: "finance_profitability",
+    title: "Profitability Estimate",
+    category: "finance",
+    section: "finance",
+    prompt: `Estimate profitability for the last 30 days: total revenue from orders (sum of total_amount for delivered orders), total ad spend from ad_insights (converted to PKR), total expenses, and total shipping costs from shipments. Calculate rough net profit. Is the business profitable?`
   },
 ];
 
@@ -283,25 +402,42 @@ Current USD to PKR rate: ${dollarRate}`
   };
 }
 
-export async function generateDashboardInsights(
-  merchantId: string,
-  dollarRate: number = 280
-): Promise<Array<{
+type InsightResult = {
   key: string;
   title: string;
   category: string;
   summary: string;
   metrics: Array<{ label: string; value: string; trend?: "up" | "down" | "stable" }>;
-}>> {
-  const results: Array<{
-    key: string;
-    title: string;
-    category: string;
-    summary: string;
-    metrics: Array<{ label: string; value: string; trend?: "up" | "down" | "stable" }>;
-  }> = [];
+};
 
-  for (const insight of INSIGHT_PROMPTS) {
+export const VALID_SECTIONS = ["marketing", "dashboard", "analytics", "pipeline", "shipments", "finance"] as const;
+export type InsightSection = typeof VALID_SECTIONS[number];
+
+export async function generateSectionInsights(
+  merchantId: string,
+  section: InsightSection,
+  dollarRate: number = 280
+): Promise<InsightResult[]> {
+  const sectionPrompts = INSIGHT_PROMPTS.filter((p) => p.section === section);
+  return generateInsightsFromPrompts(sectionPrompts, merchantId, dollarRate);
+}
+
+export async function generateDashboardInsights(
+  merchantId: string,
+  dollarRate: number = 280
+): Promise<InsightResult[]> {
+  const marketingPrompts = INSIGHT_PROMPTS.filter((p) => p.section === "marketing");
+  return generateInsightsFromPrompts(marketingPrompts, merchantId, dollarRate);
+}
+
+async function generateInsightsFromPrompts(
+  prompts: InsightPrompt[],
+  merchantId: string,
+  dollarRate: number
+): Promise<InsightResult[]> {
+  const results: InsightResult[] = [];
+
+  for (const insight of prompts) {
     try {
       const sqlGenResponse = await openai.chat.completions.create({
         model: "gpt-4o",

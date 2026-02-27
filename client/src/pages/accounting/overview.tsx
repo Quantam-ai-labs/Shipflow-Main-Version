@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { AIInsightsBanner } from "@/components/ai-insights-banner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -126,6 +127,8 @@ export default function AccountingOverview() {
           Track your business finances at a glance
         </p>
       </div>
+
+      <AIInsightsBanner section="finance" />
 
       <div
         className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"

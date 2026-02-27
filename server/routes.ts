@@ -8,6 +8,7 @@ import { DEFAULT_TIMEZONE, toMerchantStartOfDay, toMerchantEndOfDay } from "./ut
 import { registerAccountingRoutes } from "./routes/accounting";
 import { registerTransactionRoutes } from "./routes/transactions";
 import { registerMarketingRoutes } from "./routes/marketing";
+import { generateSectionInsights, VALID_SECTIONS, type InsightSection } from "./services/aiInsights";
 import {
   shipmentPrintRecords,
   users,
@@ -494,6 +495,23 @@ export async function registerRoutes(
   registerAccountingRoutes(app);
   registerTransactionRoutes(app);
   registerMarketingRoutes(app);
+
+  app.get("/api/ai/insights/:section", isAuthenticated, async (req: any, res: any) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const section = req.params.section as string;
+      if (!VALID_SECTIONS.includes(section as InsightSection)) {
+        return res.status(400).json({ error: `Invalid section. Valid sections: ${VALID_SECTIONS.join(", ")}` });
+      }
+      const dollarRate = parseInt(req.query.dollarRate as string) || 280;
+      const insights = await generateSectionInsights(merchantId, section as InsightSection, Math.min(Math.max(dollarRate, 1), 1000));
+      res.json({ insights });
+    } catch (error: any) {
+      console.error("AI section insights error:", error);
+      res.status(500).json({ error: "Failed to generate insights" });
+    }
+  });
 
   // Seed demo data on startup
   await storage.seedDemoData();

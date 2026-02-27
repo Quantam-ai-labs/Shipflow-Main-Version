@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
+import { AIInsightsBanner } from "@/components/ai-insights-banner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -815,6 +816,9 @@ export default function Pipeline() {
 
   return (
     <div className="h-full flex flex-col -m-4 md:-m-6">
+      <div className="px-4 pt-3">
+        <AIInsightsBanner section="pipeline" />
+      </div>
       {/* Header + Toolbar */}
       <div className="flex items-center justify-between gap-3 px-4 py-3 border-b flex-wrap">
         <div className="flex items-center gap-3 flex-wrap">

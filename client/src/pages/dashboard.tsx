@@ -27,6 +27,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { Order, Shipment } from "@shared/schema";
 import { Link, useLocation } from "wouter";
 import { useDateRange } from "@/contexts/date-range-context";
+import { AIInsightsBanner } from "@/components/ai-insights-banner";
 
 interface DashboardStats {
   totalOrders: number;
@@ -450,6 +451,8 @@ export default function Dashboard() {
           </Button>
         </div>
       </div>
+
+      <AIInsightsBanner section="dashboard" />
 
       {/* Search */}
       <OrderSearchSection />

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { AIInsightsBanner } from "@/components/ai-insights-banner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -443,6 +444,8 @@ export default function Shipments() {
           Refresh
         </Button>
       </div>
+
+      <AIInsightsBanner section="shipments" />
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList data-testid="tabs-shipments" className="flex flex-wrap gap-1">

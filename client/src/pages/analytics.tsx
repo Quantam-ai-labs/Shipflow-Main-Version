@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useDateRange } from "@/contexts/date-range-context";
+import { AIInsightsBanner } from "@/components/ai-insights-banner";
 import {
   BarChart,
   Bar,
@@ -87,6 +88,8 @@ export default function Analytics() {
           <p className="text-muted-foreground">Track performance and insights across your operations.</p>
         </div>
       </div>
+
+      <AIInsightsBanner section="analytics" />
 
       {/* Overview Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
