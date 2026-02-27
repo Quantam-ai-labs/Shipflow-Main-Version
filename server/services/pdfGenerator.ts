@@ -205,6 +205,8 @@ const MARGIN_BOTTOM = 20;
 const BILL_WIDTH = A4_WIDTH - MARGIN_X * 2;
 const USABLE_HEIGHT = A4_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM;
 const SECTION_HEIGHT = USABLE_HEIGHT / 3;
+const BILL_HEIGHT = SECTION_HEIGHT;
+const GAP_Y = 4;
 
 const BLACK = rgb(0.05, 0.05, 0.05);
 const DARK = rgb(0.15, 0.15, 0.15);
@@ -1172,13 +1174,13 @@ export async function generateBatchLoadsheetPdf(
   const colXs = [
     left,
     55, // Booked
-    190, // Name
-    130, // Order #
+    130, // Name
+    190, // Order #
     270, // Amount
     330, // COD
     380, // Weight
     430, // City
-    490, // Tracking (start earlier)
+    490, // Tracking
     pageWidth - 40,
   ];
 
