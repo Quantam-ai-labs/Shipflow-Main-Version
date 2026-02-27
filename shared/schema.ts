@@ -1760,6 +1760,36 @@ export const insertAdProfitabilityEntrySchema = createInsertSchema(adProfitabili
 export type InsertAdProfitabilityEntry = z.infer<typeof insertAdProfitabilityEntrySchema>;
 export type AdProfitabilityEntry = typeof adProfitabilityEntries.$inferSelect;
 
+// ============================================
+// MARKETING: CAMPAIGN JOURNEY EVENTS
+// ============================================
+export const campaignJourneyEvents = pgTable("campaign_journey_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  campaignKey: varchar("campaign_key", { length: 500 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  actionType: varchar("action_type", { length: 100 }).notNull(),
+  selectedSignal: varchar("selected_signal", { length: 20 }),
+  expectedOutcome: varchar("expected_outcome", { length: 255 }).notNull().default(""),
+  evaluationWindowHours: integer("evaluation_window_hours").notNull().default(48),
+  notes: varchar("notes", { length: 120 }),
+  microTag: varchar("micro_tag", { length: 100 }),
+  snapshotBefore: jsonb("snapshot_before"),
+  snapshotAfter: jsonb("snapshot_after"),
+  evaluatedAt: timestamp("evaluated_at"),
+}, (table) => [
+  index("idx_journey_events_campaign").on(table.campaignKey, table.createdAt),
+  index("idx_journey_events_merchant").on(table.merchantId),
+]);
+
+export const insertCampaignJourneyEventSchema = createInsertSchema(campaignJourneyEvents).omit({
+  id: true,
+  createdAt: true,
+  evaluatedAt: true,
+});
+export type InsertCampaignJourneyEvent = z.infer<typeof insertCampaignJourneyEventSchema>;
+export type CampaignJourneyEvent = typeof campaignJourneyEvents.$inferSelect;
+
 export const marketingSyncLogs = pgTable("marketing_sync_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),

@@ -30,6 +30,8 @@ import {
   products,
   type Product, type InsertProduct,
   users,
+  campaignJourneyEvents,
+  type CampaignJourneyEvent, type InsertCampaignJourneyEvent,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, ilike, sql, count, inArray, isNull, isNotNull, gte } from "drizzle-orm";
@@ -192,6 +194,11 @@ export interface IStorage {
 
   // Terminal Order Re-check
   getRecentlyTerminalOrders(merchantId: string, daysSinceTerminal: number, minHoursSinceLastCheck: number): Promise<Order[]>;
+
+  // Campaign Journey Events
+  getJourneyEvents(merchantId: string, campaignKey?: string): Promise<CampaignJourneyEvent[]>;
+  createJourneyEvent(event: InsertCampaignJourneyEvent): Promise<CampaignJourneyEvent>;
+  updateJourneyEventSnapshot(id: string, snapshotAfter: any, evaluatedAt: Date): Promise<CampaignJourneyEvent | undefined>;
 
   // Seed
   seedDemoData(): Promise<void>;
@@ -1769,6 +1776,29 @@ export class DatabaseStorage implements IStorage {
       .where(and(...conditions))
       .orderBy(desc(orders.updatedAt))
       .limit(100);
+  }
+
+  async getJourneyEvents(merchantId: string, campaignKey?: string): Promise<CampaignJourneyEvent[]> {
+    const conditions = [eq(campaignJourneyEvents.merchantId, merchantId)];
+    if (campaignKey) {
+      conditions.push(eq(campaignJourneyEvents.campaignKey, campaignKey));
+    }
+    return db.select().from(campaignJourneyEvents)
+      .where(and(...conditions))
+      .orderBy(desc(campaignJourneyEvents.createdAt));
+  }
+
+  async createJourneyEvent(event: InsertCampaignJourneyEvent): Promise<CampaignJourneyEvent> {
+    const [created] = await db.insert(campaignJourneyEvents).values(event).returning();
+    return created;
+  }
+
+  async updateJourneyEventSnapshot(id: string, snapshotAfter: any, evaluatedAt: Date): Promise<CampaignJourneyEvent | undefined> {
+    const [updated] = await db.update(campaignJourneyEvents)
+      .set({ snapshotAfter, evaluatedAt })
+      .where(eq(campaignJourneyEvents.id, id))
+      .returning();
+    return updated;
   }
 
   async seedDemoData(): Promise<void> {

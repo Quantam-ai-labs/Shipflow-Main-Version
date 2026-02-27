@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -33,6 +33,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
   Calculator,
   TrendingUp,
   TrendingDown,
@@ -56,8 +63,13 @@ import {
   Filter,
   ListOrdered,
   Type,
+  ArrowUpCircle,
+  Eye,
+  AlertTriangle,
 } from "lucide-react";
-import type { Product } from "@shared/schema";
+import type { Product, CampaignJourneyEvent } from "@shared/schema";
+import CampaignJourney, { isEvidenceReady } from "./campaign-journey";
+import type { CampaignMetrics, Signal } from "./campaign-journey";
 
 interface CampaignData {
   campaignId: string;
@@ -159,6 +171,47 @@ export default function AdsProfitability() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [orderTypeForCalc, setOrderTypeForCalc] = useState<OrderTypeForCalc>("total");
+
+  const [signalModal, setSignalModal] = useState<{
+    campaignId: string;
+    campaignName: string;
+    signal: Signal;
+  } | null>(null);
+  const [signalNote, setSignalNote] = useState("");
+  const [signalWindow, setSignalWindow] = useState("48");
+
+  const { data: journeyEventsData } = useQuery<{ events: CampaignJourneyEvent[] }>({
+    queryKey: ["/api/marketing/journey/events"],
+  });
+
+  const currentSignals = useMemo(() => {
+    const map = new Map<string, Signal>();
+    const events = journeyEventsData?.events ?? [];
+    const signalEvents = events.filter(e => e.actionType === "Signal Decision");
+    for (const evt of signalEvents) {
+      if (!map.has(evt.campaignKey) && evt.selectedSignal) {
+        map.set(evt.campaignKey, evt.selectedSignal as Signal);
+      }
+    }
+    return map;
+  }, [journeyEventsData]);
+
+  const signalMutation = useMutation({
+    mutationFn: async (body: any) => {
+      const res = await apiRequest("POST", "/api/marketing/journey/events", body);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/marketing/journey/events"] });
+      toast({ title: "Signal saved", description: "Signal decision recorded." });
+      setSignalModal(null);
+      setSignalNote("");
+      setSignalWindow("48");
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
 
   useEffect(() => {
     try {
@@ -376,6 +429,55 @@ export default function AdsProfitability() {
     }
   };
 
+  function handleSignalClick(campaignId: string, campaignName: string, signal: Signal) {
+    setSignalNote("");
+    setSignalWindow("48");
+    setSignalModal({ campaignId, campaignName, signal });
+  }
+
+  function handleSignalConfirm() {
+    if (!signalModal) return;
+    const row = computedRows.find(r => r.campaignId === signalModal.campaignId);
+    const snapshotBefore = row ? {
+      spend_total: row.adSpend * dRate,
+      net_profit_total: row.netProfit,
+      cpa: row.cpa,
+      margin_percent: row.product ? ((row.profitMargin / row.product.salePrice) * 100) : 0,
+      delivered_count: row.orders.delivered,
+      orders_count: row.orders.total,
+      timestamp: new Date().toISOString(),
+    } : null;
+
+    signalMutation.mutate({
+      campaignKey: signalModal.campaignId,
+      actionType: "Signal Decision",
+      selectedSignal: signalModal.signal,
+      expectedOutcome: "",
+      evaluationWindowHours: parseInt(signalWindow),
+      notes: signalNote || null,
+      snapshotBefore,
+    });
+  }
+
+  const signalSuggestions: Record<Signal, string> = {
+    Scale: "Scale carefully (+10\u201320%) after evaluation window if results confirm.",
+    Watch: "Hold changes. Wait for evidence / evaluation window.",
+    Risk: "Reduce exposure (-30%) or pause after evaluation confirms negative leverage.",
+  };
+
+  const campaignMetricsForJourney: CampaignMetrics[] = useMemo(() => {
+    return computedRows.map(r => ({
+      campaignId: r.campaignId,
+      campaignName: r.campaignName,
+      spend_total: r.adSpend * dRate,
+      net_profit_total: r.netProfit,
+      cpa: r.cpa,
+      margin_percent: r.product ? ((r.profitMargin / (r.product.salePrice || 1)) * 100) : 0,
+      delivered_count: r.orders.delivered,
+      orders_count: r.orders.total,
+    }));
+  }, [computedRows, dRate]);
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -569,9 +671,32 @@ export default function AdsProfitability() {
                       <StatusBadge status={row.status} />
                     </td>
                     <td className="border border-border px-2 py-1 text-xs overflow-hidden truncate">
-                      <span className="font-medium truncate" data-testid={`text-campaign-name-${row.campaignId}`}>
-                        {row.campaignName}
-                      </span>
+                      <div className="flex flex-col gap-0.5 min-w-0">
+                        <span className="font-medium truncate block" data-testid={`text-campaign-name-${row.campaignId}`}>
+                          {row.campaignName}
+                        </span>
+                        <div className="flex gap-1" data-testid={`signal-buttons-${row.campaignId}`}>
+                          {(["Scale", "Watch", "Risk"] as Signal[]).map(sig => {
+                            const active = currentSignals.get(row.campaignId);
+                            const isActive = active === sig;
+                            const colors: Record<Signal, { base: string; active: string }> = {
+                              Scale: { base: "border-green-400 text-green-600 hover:bg-green-50 dark:hover:bg-green-950", active: "bg-green-500 text-white border-green-500" },
+                              Watch: { base: "border-amber-400 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950", active: "bg-amber-500 text-white border-amber-500" },
+                              Risk: { base: "border-red-400 text-red-600 hover:bg-red-50 dark:hover:bg-red-950", active: "bg-red-500 text-white border-red-500" },
+                            };
+                            return (
+                              <button
+                                key={sig}
+                                onClick={(e) => { e.stopPropagation(); handleSignalClick(row.campaignId, row.campaignName, sig); }}
+                                className={`px-1.5 py-0 text-[9px] leading-4 rounded-full border transition-colors ${isActive ? colors[sig].active : colors[sig].base}`}
+                                data-testid={`button-signal-${sig.toLowerCase()}-${row.campaignId}`}
+                              >
+                                {sig}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
                     </td>
                     <td className="border border-border px-2 py-1 text-xs overflow-hidden truncate">
                       <div className="flex items-center gap-1.5 min-w-0">
@@ -777,6 +902,94 @@ export default function AdsProfitability() {
           </Card>
         </div>
       )}
+
+      {campaigns.length > 0 && (
+        <CampaignJourney campaignMetrics={campaignMetricsForJourney} />
+      )}
+
+      <Dialog open={!!signalModal} onOpenChange={(open) => { if (!open) setSignalModal(null); }}>
+        <DialogContent className="max-w-md" data-testid="dialog-signal-confirm">
+          <DialogHeader>
+            <DialogTitle>Confirm Signal Decision</DialogTitle>
+          </DialogHeader>
+          {signalModal && (
+            <div className="space-y-4">
+              <div>
+                <Label className="text-muted-foreground text-xs">Campaign</Label>
+                <p className="text-sm font-medium" data-testid="text-signal-campaign">{signalModal.campaignName}</p>
+              </div>
+              <div>
+                <Label className="text-muted-foreground text-xs">Selected Signal</Label>
+                <div className="mt-1">
+                  <Badge className={`text-xs ${
+                    signalModal.signal === "Scale" ? "bg-green-500/10 text-green-600 border-green-500/20" :
+                    signalModal.signal === "Watch" ? "bg-amber-500/10 text-amber-600 border-amber-500/20" :
+                    "bg-red-500/10 text-red-600 border-red-500/20"
+                  }`} data-testid="badge-signal-selected">
+                    {signalModal.signal}
+                  </Badge>
+                </div>
+              </div>
+              <div className="bg-muted/50 rounded-md p-3">
+                <p className="text-xs text-muted-foreground" data-testid="text-signal-suggestion">
+                  {signalSuggestions[signalModal.signal]}
+                </p>
+              </div>
+              {signalModal.signal === "Risk" && (() => {
+                const metrics = campaignMetricsForJourney.find(m => m.campaignId === signalModal.campaignId);
+                if (metrics && !isEvidenceReady(metrics)) {
+                  return (
+                    <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-md" data-testid="warning-low-evidence">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                      <p className="text-xs text-amber-700 dark:text-amber-400">
+                        Low evidence: new campaigns should usually stay Watch until threshold.
+                      </p>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+              <div className="space-y-1.5">
+                <Label className="text-xs">Evaluation Window</Label>
+                <Select value={signalWindow} onValueChange={setSignalWindow}>
+                  <SelectTrigger data-testid="select-signal-window">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="24">24 hours</SelectItem>
+                    <SelectItem value="48">48 hours (default)</SelectItem>
+                    <SelectItem value="72">72 hours</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Note (optional, max 120 chars)</Label>
+                <Input
+                  value={signalNote}
+                  onChange={(e) => setSignalNote(e.target.value.slice(0, 120))}
+                  placeholder="Brief note..."
+                  maxLength={120}
+                  data-testid="input-signal-note"
+                />
+                <p className="text-[10px] text-muted-foreground text-right">{signalNote.length}/120</p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSignalModal(null)} data-testid="button-signal-cancel">
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSignalConfirm}
+              disabled={signalMutation.isPending}
+              data-testid="button-signal-confirm"
+            >
+              {signalMutation.isPending && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}
+              Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Card data-testid="card-column-guide">
         <CardHeader>

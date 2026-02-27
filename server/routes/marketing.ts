@@ -3,7 +3,8 @@ import { db } from "../db";
 import { eq, and, sql, gte, lte, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { toMerchantStartOfDay, toMerchantEndOfDay, DEFAULT_TIMEZONE } from "../utils/timezone";
-import { adCampaigns, adAccounts, adCreatives, adInsights, teamMembers, merchants, adProfitabilityEntries, orders, products } from "@shared/schema";
+import { adCampaigns, adAccounts, adCreatives, adInsights, teamMembers, merchants, adProfitabilityEntries, orders, products, insertCampaignJourneyEventSchema, campaignJourneyEvents } from "@shared/schema";
+import { storage } from "../storage";
 import {
   fullSync,
   quickSyncToday,
@@ -852,6 +853,62 @@ export function registerMarketingRoutes(app: Express) {
       const merchantId = await getMerchantId(req);
       const matched = await matchProductsForMerchant(merchantId);
       res.json({ success: true, matched });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/marketing/journey/events", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const campaignKey = req.query.campaignKey as string | undefined;
+      const events = await storage.getJourneyEvents(merchantId, campaignKey);
+      res.json({ events });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/marketing/journey/events", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const schema = insertCampaignJourneyEventSchema.extend({
+        notes: z.string().max(120).nullable().optional(),
+        microTag: z.string().max(100).nullable().optional(),
+      });
+      const parsed = schema.parse({ ...req.body, merchantId });
+      const event = await storage.createJourneyEvent(parsed);
+      res.json({ event });
+    } catch (error: any) {
+      if (error.name === "ZodError") {
+        return res.status(400).json({ error: "Validation error", details: error.errors });
+      }
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/marketing/journey/evaluate", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const allEvents = await storage.getJourneyEvents(merchantId);
+      const now = new Date();
+      let evaluated = 0;
+
+      for (const evt of allEvents) {
+        if (evt.snapshotAfter !== null) continue;
+        if (!evt.createdAt) continue;
+        const windowMs = (evt.evaluationWindowHours || 48) * 60 * 60 * 1000;
+        const deadline = new Date(evt.createdAt.getTime() + windowMs);
+        if (now < deadline) continue;
+
+        const snapshotAfter = req.body.currentMetrics?.[evt.campaignKey] || null;
+        if (snapshotAfter) {
+          await storage.updateJourneyEventSnapshot(evt.id, snapshotAfter, now);
+          evaluated++;
+        }
+      }
+
+      res.json({ success: true, evaluated });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

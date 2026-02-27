@@ -32,7 +32,7 @@ Preferred communication style: Simple, everyday language.
 - **Print & Logs System**: Generates native courier airway bills and batch loadsheets.
 - **Shopify Write-Back System**: Bi-directional sync for address/phone/email edits, order cancellations, and workflow status updates via Shopify tags. Includes rate limit compliance and webhook echo prevention.
 - **Webhook Resilience**: Immediate 200 responses to prevent timeouts and a webhook health check API.
-- **Ads Profitability Calculator**: Tracks Facebook/Meta campaign profitability, auto-syncs campaign data, and provides detailed financial metrics with a flexible product matching system.
+- **Ads Profitability Calculator**: Tracks Facebook/Meta campaign profitability, auto-syncs campaign data, and provides detailed financial metrics with a flexible product matching system. Includes Campaign Signal buttons (Scale/Watch/Risk) per campaign for manual decision tracking, and a Campaign Journey section below the table for action tracking, snapshot evaluation, and deterministic insights/next-move recommendations. Journey events are stored in `campaign_journey_events` table with before/after snapshots and lazy evaluation.
 - **Settings Page**: Organized into a collapsible sidebar with sections for General, Shopify, Couriers, Status Mapping, and Marketing configurations.
 - **Timezone-Aware Date Filtering**: All date-based queries use the merchant's timezone for accurate data representation, particularly for dashboard stats, orders, and financial reporting.
 - **Product & Inventory Management**: Syncs Shopify product data (title, variants, SKU, price, cost, inventory) and displays a searchable/filterable product catalog.
