@@ -275,6 +275,10 @@ export default function Pipeline() {
   const [prepaidConfirmOpen, setPrepaidConfirmOpen] = useState(false);
   const [confirmActionModal, setConfirmActionModal] = useState<{ open: boolean; action: string; orderIds: string[]; description: string }>({ open: false, action: "", orderIds: [], description: "" });
 
+  const [remarkDialogOpen, setRemarkDialogOpen] = useState(false);
+  const [selectedRemarkOrder, setSelectedRemarkOrder] = useState<Order | null>(null);
+  const [remarkValue, setRemarkValue] = useState("");
+
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -506,6 +510,27 @@ export default function Pipeline() {
       toast({ title: "Error", description: err.message || "Failed to mark as prepaid", variant: "destructive" });
     },
   });
+
+  const updateRemarkMutation = useMutation({
+    mutationFn: async ({ orderId, value }: { orderId: string; value: string }) => {
+      const response = await apiRequest("PATCH", `/api/orders/${orderId}/remark`, { value });
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Remark Updated" });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      setRemarkDialogOpen(false);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const openRemarkDialog = (order: Order) => {
+    setSelectedRemarkOrder(order);
+    setRemarkValue(order.remark || "");
+    setRemarkDialogOpen(true);
+  };
 
   const [cancelConfirm, setCancelConfirm] = useState<{ open: boolean; orderId: string; type: "courier" | "shopify"; orderNumber?: string } | null>(null);
 
@@ -1085,6 +1110,7 @@ export default function Pipeline() {
                 {activeTab === "CANCELLED" && (
                   <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Reason</th>
                 )}
+                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground" data-testid="header-remark">Remark</th>
                 <th className="px-3 py-2 text-right font-medium text-muted-foreground">Actions</th>
               </tr>
             </thead>
@@ -1296,6 +1322,23 @@ export default function Pipeline() {
                       )}
                     </td>
                   )}
+
+                  {/* Remark column */}
+                  <td className="px-3 py-1.5 max-w-[150px]" data-testid={`cell-remark-${order.id}`}>
+                    <button
+                      className="text-left w-full cursor-pointer hover:opacity-80"
+                      onClick={() => openRemarkDialog(order)}
+                      data-testid={`button-remark-${order.id}`}
+                    >
+                      {order.remark ? (
+                        <span className="text-xs text-muted-foreground truncate block max-w-[140px]" title={order.remark}>
+                          {order.remark.length > 30 ? order.remark.slice(0, 28) + "..." : order.remark}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground/50 italic">Add...</span>
+                      )}
+                    </button>
+                  </td>
 
                   {/* Action buttons */}
                   <td className="px-3 py-1.5 text-right">
@@ -2056,6 +2099,34 @@ export default function Pipeline() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {/* Remark Edit Dialog */}
+      <Dialog open={remarkDialogOpen} onOpenChange={setRemarkDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Remark - {selectedRemarkOrder?.orderNumber}</DialogTitle>
+            <DialogDescription>Add or update the remark for this order.</DialogDescription>
+          </DialogHeader>
+          <Textarea
+            value={remarkValue}
+            onChange={(e) => setRemarkValue(e.target.value)}
+            placeholder="Add a note about this order..."
+            rows={4}
+            data-testid="textarea-remark"
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRemarkDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => selectedRemarkOrder && updateRemarkMutation.mutate({ orderId: selectedRemarkOrder.id, value: remarkValue })}
+              disabled={updateRemarkMutation.isPending}
+              data-testid="button-save-remark"
+            >
+              {updateRemarkMutation.isPending ? "Saving..." : "Save Remark"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {/* Customer Order History Dialog */}
       <Dialog open={!!historyPopup} onOpenChange={open => { if (!open) setHistoryPopup(null); }}>
         <DialogContent className="max-w-lg max-h-[80vh] overflow-hidden flex flex-col">

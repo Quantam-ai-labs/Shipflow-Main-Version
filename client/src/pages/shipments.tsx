@@ -44,10 +44,12 @@ import {
   CheckCircle,
   Clock,
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Link } from "wouter";
 import { format } from "date-fns";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 
@@ -294,6 +296,10 @@ export default function Shipments() {
   const [batchPage, setBatchPage] = useState(1);
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
 
+  const [remarkDialogOpen, setRemarkDialogOpen] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<ShipmentOrder | null>(null);
+  const [remarkValue, setRemarkValue] = useState("");
+
   const dateParams = dateRangeToParams(dateRange);
   const queryParams = new URLSearchParams({
     page: page.toString(),
@@ -403,6 +409,27 @@ export default function Shipments() {
     acc[cn].push(row);
     return acc;
   }, {});
+
+  const updateRemarkMutation = useMutation({
+    mutationFn: async ({ orderId, value }: { orderId: string; value: string }) => {
+      const response = await apiRequest("PATCH", `/api/orders/${orderId}/remark`, { value });
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Remark Updated" });
+      queryClient.invalidateQueries({ queryKey: ["/api/shipments"] });
+      setRemarkDialogOpen(false);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const openRemarkDialog = (order: ShipmentOrder) => {
+    setSelectedOrder(order);
+    setRemarkValue(order.remark || "");
+    setRemarkDialogOpen(true);
+  };
 
   return (
     <div className="space-y-6">
@@ -638,13 +665,17 @@ export default function Shipments() {
                               ) : "-"}
                             </TableCell>
                             <TableCell data-testid={`text-remark-${order.id}`}>
-                              {order.remark ? (
-                                <div className="max-w-[200px]">
+                              <button
+                                className="text-left max-w-[200px] cursor-pointer hover-elevate rounded-md px-1 py-0.5"
+                                onClick={() => openRemarkDialog(order)}
+                                data-testid={`button-remark-${order.id}`}
+                              >
+                                {order.remark ? (
                                   <p className="text-sm text-muted-foreground truncate" title={order.remark}>{order.remark}</p>
-                                </div>
-                              ) : (
-                                <span className="text-muted-foreground/50">-</span>
-                              )}
+                                ) : (
+                                  <span className="text-muted-foreground/50 text-sm">Add...</span>
+                                )}
+                              </button>
                             </TableCell>
                             <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
                               {order.dispatchedAt
@@ -1231,6 +1262,39 @@ export default function Shipments() {
               </div>
             </div>
           ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={remarkDialogOpen} onOpenChange={setRemarkDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle data-testid="text-remark-dialog-title">
+              Edit Remark — {selectedOrder?.orderNumber}
+            </DialogTitle>
+          </DialogHeader>
+          <Textarea
+            value={remarkValue}
+            onChange={(e) => setRemarkValue(e.target.value)}
+            placeholder="Enter remark..."
+            rows={4}
+            data-testid="input-remark-textarea"
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRemarkDialogOpen(false)} data-testid="button-remark-cancel">
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (selectedOrder) {
+                  updateRemarkMutation.mutate({ orderId: selectedOrder.id, value: remarkValue });
+                }
+              }}
+              disabled={updateRemarkMutation.isPending}
+              data-testid="button-remark-save"
+            >
+              {updateRemarkMutation.isPending ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

@@ -1957,7 +1957,7 @@ export async function registerRoutes(
     },
   );
 
-  // Update order remark
+  // Update order remark (saves previous remark as history)
   app.patch(
     "/api/orders/:id/remark",
     isAuthenticated,
@@ -1971,10 +1971,35 @@ export async function registerRoutes(
           return res.status(400).json({ message: "Invalid remark value" });
         }
 
-        // Verify order exists and belongs to merchant
         const order = await storage.getOrderById(merchantId, req.params.id);
         if (!order) {
           return res.status(404).json({ message: "Order not found" });
+        }
+
+        const userId = getSessionUserId(req) || "unknown";
+        const actorName = await getSessionUserName(req);
+        const oldRemark = order.remark || "";
+
+        if (oldRemark && oldRemark !== value) {
+          await storage.createRemark(merchantId, {
+            orderId: req.params.id,
+            userId,
+            content: oldRemark,
+            remarkType: "general",
+            isInternal: true,
+          });
+
+          await storage.createOrderChangeLog({
+            orderId: req.params.id,
+            merchantId,
+            changeType: "REMARK_UPDATED",
+            fieldName: "remark",
+            oldValue: oldRemark,
+            newValue: value,
+            actorUserId: userId,
+            actorName,
+            actorType: "user",
+          });
         }
 
         const updated = await storage.updateOrder(merchantId, req.params.id, {
