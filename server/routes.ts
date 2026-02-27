@@ -608,6 +608,8 @@ export async function registerRoutes(
       } = req.query;
 
       const timezone = await getMerchantTimezone(merchantId);
+      const isLight = light === "1" || light === "true";
+      const isCancelledQuery = workflowStatus === "CANCELLED";
       const result = await storage.getOrders(merchantId, {
         search: search as string,
         searchOrderNumber: searchOrderNumber as string,
@@ -625,11 +627,21 @@ export async function registerRoutes(
         workflowStatus: workflowStatus as string,
         pendingReasonType: pendingReasonType as string,
         shipmentStatus: shipmentStatus as string,
-        excludeHeavyFields: light === "1" || light === "true",
+        excludeHeavyFields: isLight && !isCancelledQuery,
         timezone,
       });
 
-      res.json(result);
+      if (isCancelledQuery && isLight) {
+        const mappedOrders = result.orders.map((o: any) => {
+          const rawShopify = o.rawShopifyData as any;
+          const isShopifyCancelled = !!(rawShopify?.cancelled_at);
+          const { rawShopifyData, rawWebhookData, lineItems, ...lightOrder } = o;
+          return { ...lightOrder, isShopifyCancelled };
+        });
+        res.json({ orders: mappedOrders, total: result.total });
+      } else {
+        res.json(result);
+      }
     } catch (error) {
       console.error("Error fetching orders:", error);
       res.status(500).json({ message: "Failed to fetch orders" });
@@ -1694,9 +1706,14 @@ export async function registerRoutes(
 
         const rawShopify = order.rawShopifyData as any;
         if (rawShopify?.cancelled_at) {
+          if (order.cancelReason !== "Cancelled in Shopify") {
+            await storage.updateOrderWorkflow(merchantId, orderId, {
+              cancelReason: "Cancelled in Shopify",
+            });
+          }
           return res
             .status(400)
-            .json({ message: "Order is already cancelled on Shopify" });
+            .json({ message: "This order is already cancelled on Shopify" });
         }
 
         const store = await storage.getShopifyStore(merchantId);

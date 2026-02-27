@@ -597,6 +597,7 @@ export default function Pipeline() {
       setCancelConfirm(null);
     },
     onError: (err: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       toast({ title: "Cannot cancel", description: err.message || "Failed to cancel on Shopify", variant: "destructive" });
       setCancelConfirm(null);
     },
@@ -1373,7 +1374,7 @@ export default function Pipeline() {
                           <XCircle className="w-3.5 h-3.5 mr-1" />Cancel Shopify
                         </Button>
                       )}
-                      {activeTab === "CANCELLED" && order.shopifyOrderId && order.cancelReason !== "Cancelled in Shopify" && (
+                      {activeTab === "CANCELLED" && order.shopifyOrderId && !(order as any).isShopifyCancelled && (
                         <Button size="sm" variant="ghost" className="text-xs text-orange-600"
                           onClick={() => setCancelConfirm({ open: true, orderId: order.id, type: "shopify", orderNumber: order.orderNumber })}
                           disabled={cancelShopifyMutation.isPending}
