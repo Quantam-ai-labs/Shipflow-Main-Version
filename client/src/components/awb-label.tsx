@@ -95,7 +95,6 @@ export function AwbLabel({ data }: AwbLabelProps) {
   return (
     <div data-testid={`awb-label-${data.orderId}`} style={{
       width: "100%",
-      height: "100%",
       fontFamily: "'Helvetica', 'Arial', sans-serif",
       fontSize: "8px",
       lineHeight: 1.3,
@@ -105,8 +104,6 @@ export function AwbLabel({ data }: AwbLabelProps) {
       boxSizing: "border-box",
       pageBreakInside: "avoid",
       overflow: "hidden",
-      display: "flex",
-      flexDirection: "column",
     }}>
       {/* Header Row */}
       <div style={{ display: "flex", borderBottom: B }}>
@@ -122,7 +119,7 @@ export function AwbLabel({ data }: AwbLabelProps) {
       </div>
 
       {/* Main 3-Column Content */}
-      <div style={{ display: "flex", borderBottom: B, flex: 1, overflow: "hidden" }}>
+      <div style={{ display: "flex", borderBottom: B }}>
         {/* Column 1: Customer Information */}
         <div style={{ flex: "0 0 34%", borderRight: B, display: "flex", flexDirection: "column" }}>
           <div style={{ padding: "4px 5px", flex: 1 }}>
@@ -244,13 +241,13 @@ export function AwbLabel({ data }: AwbLabelProps) {
       </div>
 
       {/* Remarks Row */}
-      <div style={{ borderBottom: B, padding: "3px 5px", flexShrink: 0 }}>
+      <div style={{ borderBottom: B, padding: "3px 5px" }}>
         <span style={{ fontWeight: 700, fontSize: "8px" }}>Remarks: </span>
         <span style={{ fontSize: "8px" }}>- {data.remark || "handle with care"}</span>
       </div>
 
       {/* Products Row */}
-      <div style={{ padding: "3px 5px", flexShrink: 0 }}>
+      <div style={{ padding: "3px 5px" }}>
         <span style={{ fontWeight: 700, fontSize: "8px" }}>Products: </span>
         <span style={{ fontSize: "8px" }}>{prodText.substring(0, 120)}</span>
       </div>
