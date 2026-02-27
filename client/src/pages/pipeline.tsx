@@ -1896,13 +1896,16 @@ export default function Pipeline() {
                               return;
                             }
                             const url = URL.createObjectURL(blob);
-                            window.open(url, "_blank");
-                            setTimeout(() => URL.revokeObjectURL(url), 60000);
+                            const a = document.createElement("a");
+                            a.href = url;
+                            a.download = `courier-awbs-${bookingResultsModal.results.batchId.substring(0, 8)}.pdf`;
+                            a.click();
+                            URL.revokeObjectURL(url);
                           } catch {
-                            toast({ title: "Error", description: "Could not fetch airway bills", variant: "destructive" });
+                            toast({ title: "Error", description: "Could not download airway bills", variant: "destructive" });
                           }
-                        }} data-testid="button-print-awb">
-                          <Printer className="w-3.5 h-3.5 mr-1" />Print Courier AWBs
+                        }} data-testid="button-download-awb">
+                          <Download className="w-3.5 h-3.5 mr-1" />Download AWBs
                         </Button>
                         <Button size="sm" variant="outline" onClick={async () => {
                           try {
@@ -1918,28 +1921,16 @@ export default function Pipeline() {
                               return;
                             }
                             const url = URL.createObjectURL(blob);
-                            const a = document.createElement("a");
-                            a.href = url;
-                            a.download = `courier-awbs-${bookingResultsModal.results.batchId.substring(0, 8)}.pdf`;
-                            a.click();
-                            URL.revokeObjectURL(url);
+                            window.open(url, "_blank");
+                            setTimeout(() => URL.revokeObjectURL(url), 60000);
                           } catch {
-                            toast({ title: "Error", description: "Could not download airway bills", variant: "destructive" });
+                            toast({ title: "Error", description: "Could not fetch airway bills", variant: "destructive" });
                           }
-                        }} data-testid="button-download-awb">
-                          <Download className="w-3.5 h-3.5 mr-1" />Download AWBs
+                        }} data-testid="button-print-awb">
+                          <Printer className="w-3.5 h-3.5 mr-1" />Print Courier AWBs
                         </Button>
                         </>
                       )}
-                      <Button size="sm" variant="outline" onClick={() => {
-                          const successIds = bookingResultsModal.results.results
-                            .filter((r: any) => r.success)
-                            .map((r: any) => r.orderId)
-                            .join(",");
-                          if (successIds) window.open(`/print-labels?ids=${successIds}`, "_blank");
-                        }} data-testid="button-print-labels">
-                          <Printer className="w-3.5 h-3.5 mr-1" />Print Labels
-                        </Button>
                       <Button size="sm" variant="ghost" onClick={copyTrackingNumbers} data-testid="button-copy-tracking">
                         <Copy className="w-3.5 h-3.5 mr-1" />Copy Tracking
                       </Button>
