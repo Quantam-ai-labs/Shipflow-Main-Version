@@ -167,6 +167,14 @@ const allNavGroups: NavGroup[] = [
     ],
   },
   {
+    id: "ai-assistant",
+    title: "AI Assistant",
+    icon: Brain,
+    items: [
+      { id: "ai-hub", title: "AI Hub", url: "/ai", icon: Brain },
+    ],
+  },
+  {
     id: "marketing",
     title: "Marketing",
     icon: Megaphone,

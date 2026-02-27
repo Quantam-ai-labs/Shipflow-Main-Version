@@ -1,23 +1,17 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   Brain,
-  TrendingUp,
-  TrendingDown,
-  Minus,
   RefreshCw,
   ChevronDown,
   ChevronUp,
   Sparkles,
-  Target,
-  Truck,
-  Lightbulb,
-  DollarSign,
-  BarChart3,
   AlertTriangle,
-  ShoppingBag,
+  AlertCircle,
+  Info,
+  TrendingUp,
+  TrendingDown,
   Clock,
   Loader2,
 } from "lucide-react";
@@ -33,6 +27,7 @@ interface InsightCard {
   title: string;
   category: string;
   summary: string;
+  severity?: "critical" | "warning" | "info";
   metrics: InsightMetric[];
 }
 
@@ -46,21 +41,26 @@ interface AIInsightsBannerProps {
   className?: string;
 }
 
-const CATEGORY_ICONS: Record<string, typeof Brain> = {
-  campaigns: Target,
-  operations: Truck,
-  strategy: Lightbulb,
-  finance: DollarSign,
-  overview: BarChart3,
-  risk: AlertTriangle,
-  products: ShoppingBag,
+const SEVERITY_CONFIG = {
+  critical: {
+    icon: AlertTriangle,
+    borderColor: "border-l-red-500",
+    bgColor: "bg-red-50 dark:bg-red-950/20",
+    iconColor: "text-red-500",
+  },
+  warning: {
+    icon: AlertCircle,
+    borderColor: "border-l-amber-500",
+    bgColor: "bg-amber-50 dark:bg-amber-950/20",
+    iconColor: "text-amber-500",
+  },
+  info: {
+    icon: Info,
+    borderColor: "border-l-blue-500",
+    bgColor: "bg-blue-50 dark:bg-blue-950/20",
+    iconColor: "text-blue-500",
+  },
 };
-
-function TrendIcon({ trend }: { trend?: "up" | "down" | "stable" }) {
-  if (trend === "up") return <TrendingUp className="h-3 w-3 text-green-500" />;
-  if (trend === "down") return <TrendingDown className="h-3 w-3 text-red-500" />;
-  return <Minus className="h-3 w-3 text-muted-foreground" />;
-}
 
 function formatTimeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -73,46 +73,34 @@ function formatTimeAgo(dateStr: string): string {
   return `${days}d ago`;
 }
 
-function InsightCardItem({ insight }: { insight: InsightCard }) {
-  const [expanded, setExpanded] = useState(false);
-  const Icon = CATEGORY_ICONS[insight.category] || Brain;
+function InsightAlertRow({ insight }: { insight: InsightCard }) {
+  const severity = insight.severity || "info";
+  const config = SEVERITY_CONFIG[severity];
+  const Icon = config.icon;
 
   return (
-    <Card className="min-w-[280px] max-w-[340px] shrink-0" data-testid={`banner-insight-${insight.key}`}>
-      <CardHeader className="pb-2 pt-3 px-4">
-        <div className="flex items-center gap-2">
-          <Icon className="h-3.5 w-3.5 text-primary shrink-0" />
-          <CardTitle className="text-xs font-semibold truncate">{insight.title}</CardTitle>
+    <div
+      className={`flex items-start gap-3 p-3 rounded-lg border-l-4 ${config.borderColor} ${config.bgColor} transition-all`}
+      data-testid={`banner-insight-${insight.key}`}
+    >
+      <Icon className={`h-4 w-4 shrink-0 mt-0.5 ${config.iconColor}`} />
+      <div className="flex-1 min-w-0">
+        <span className="text-xs font-semibold text-foreground">{insight.title}</span>
+        <p className="text-[11px] text-muted-foreground leading-relaxed mt-0.5">{insight.summary}</p>
+      </div>
+      {insight.metrics.length > 0 && (
+        <div className="flex items-center gap-3 shrink-0">
+          {insight.metrics.slice(0, 2).map((m, i) => (
+            <div key={i} className="flex items-center gap-1 text-[11px]">
+              {m.trend === "up" && <TrendingUp className="h-3 w-3 text-green-500" />}
+              {m.trend === "down" && <TrendingDown className="h-3 w-3 text-red-500" />}
+              <span className="text-muted-foreground">{m.label}:</span>
+              <span className="font-semibold">{m.value}</span>
+            </div>
+          ))}
         </div>
-      </CardHeader>
-      <CardContent className="px-4 pb-3 space-y-2">
-        <p className={`text-[11px] text-muted-foreground leading-relaxed ${expanded ? "" : "line-clamp-2"}`}>
-          {insight.summary}
-        </p>
-        {insight.summary.length > 100 && (
-          <Button
-            variant="link"
-            size="sm"
-            onClick={() => setExpanded(!expanded)}
-            className="text-[10px] p-0 h-auto"
-            data-testid={`toggle-banner-insight-${insight.key}`}
-          >
-            {expanded ? "Less" : "More"}
-          </Button>
-        )}
-        {insight.metrics.length > 0 && (
-          <div className="grid grid-cols-2 gap-x-3 gap-y-1">
-            {insight.metrics.slice(0, 4).map((m, i) => (
-              <div key={i} className="flex items-center gap-1 text-[11px]">
-                <TrendIcon trend={m.trend} />
-                <span className="text-muted-foreground truncate">{m.label}:</span>
-                <span className="font-medium truncate">{m.value}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+      )}
+    </div>
   );
 }
 
@@ -160,6 +148,11 @@ export function AIInsightsBanner({ section, className = "" }: AIInsightsBannerPr
   const generatedAt = insightsQuery.data?.generatedAt;
   const isFirstLoad = insightsQuery.isLoading && !insightsQuery.data;
 
+  const sortedInsights = [...insights].sort((a, b) => {
+    const order = { critical: 0, warning: 1, info: 2 };
+    return (order[a.severity || "info"] || 2) - (order[b.severity || "info"] || 2);
+  });
+
   return (
     <div className={`${className}`} data-testid={`ai-banner-${section}`}>
       <div className="flex items-center justify-between mb-2">
@@ -197,7 +190,7 @@ export function AIInsightsBanner({ section, className = "" }: AIInsightsBannerPr
       </div>
 
       {!collapsed && (
-        <div className="overflow-x-auto pb-2">
+        <div>
           {isFirstLoad ? (
             <div className="flex items-center gap-2 py-3 px-2 text-xs text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -207,14 +200,14 @@ export function AIInsightsBanner({ section, className = "" }: AIInsightsBannerPr
             <p className="text-xs text-muted-foreground py-2">
               Failed to load insights. Click refresh to try again.
             </p>
-          ) : insights.length === 0 ? (
+          ) : sortedInsights.length === 0 ? (
             <p className="text-xs text-muted-foreground py-2">
               No insights available. Ensure you have data in this section.
             </p>
           ) : (
-            <div className="flex gap-3">
-              {insights.map((insight) => (
-                <InsightCardItem key={insight.key} insight={insight} />
+            <div className="space-y-2">
+              {sortedInsights.map((insight) => (
+                <InsightAlertRow key={insight.key} insight={insight} />
               ))}
             </div>
           )}

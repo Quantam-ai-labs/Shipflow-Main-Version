@@ -372,7 +372,8 @@ async function executeReadOnlyQuery(query: string, params: any[]): Promise<any[]
 export async function generateChatResponse(
   userQuestion: string,
   merchantId: string,
-  dollarRate: number = 280
+  dollarRate: number = 280,
+  language: string = "en"
 ): Promise<{ answer: string; sqlQuery?: string; data?: any[] }> {
   const sqlGenResponse = await openai.chat.completions.create({
     model: "gpt-4o",
@@ -446,6 +447,10 @@ Fix the query. Ensure it includes merchant_id = $1 and LIMIT. Respond in JSON: {
     }
   }
 
+  const languageInstruction = language === "ur"
+    ? "\n\nIMPORTANT: Respond entirely in Urdu (اردو) using Urdu script. Use Urdu numerals formatting but keep numbers in Western digits for clarity. Keep technical terms like PKR, COD, ROAS in English."
+    : "";
+
   const formatResponse = await openai.chat.completions.create({
     model: "gpt-4o",
     messages: [
@@ -455,7 +460,7 @@ Fix the query. Ensure it includes merchant_id = $1 and LIMIT. Respond in JSON: {
 Format the query results into a clear, actionable answer. Use PKR for currency. Be specific with numbers.
 Include recommendations where relevant. Use bullet points and bold for key metrics.
 Keep the response concise but informative (max 400 words).
-Current USD to PKR rate: ${dollarRate}`
+Current USD to PKR rate: ${dollarRate}${languageInstruction}`
       },
       {
         role: "user",
@@ -541,13 +546,23 @@ Respond in JSON: { "sql": "SELECT ..." }`
           {
             role: "system",
             content: `You are ShipFlow AI. Summarize these analytics results into a dashboard insight card.
+Focus on CRITICAL issues, anomalies, and actionable findings. Be specific with numbers.
+For example: "12 shipments stuck in transit for 5+ days" or "Return rate in Karachi hit 28% (up from 18%)".
+
 Respond in JSON format:
 {
-  "summary": "2-3 sentence summary with key findings and recommendation",
+  "summary": "1-2 sentence specific finding with exact numbers and recommended action",
+  "severity": "critical|warning|info",
   "metrics": [
     { "label": "Metric Name", "value": "formatted value (e.g. PKR 12,500 or 15.3%)", "trend": "up|down|stable" }
   ]
 }
+
+Severity guide:
+- "critical": Immediate action needed (stuck shipments 5+ days, return rate >25%, large pending COD, orders stuck 3+ days)
+- "warning": Worth attention (declining trends, moderate issues, approaching thresholds)  
+- "info": Positive trends, general performance updates
+
 Max 4 metrics. Use PKR for currency. Dollar rate: ${dollarRate}.`
           },
           {
@@ -565,6 +580,7 @@ Max 4 metrics. Use PKR for currency. Dollar rate: ${dollarRate}.`
         title: insight.title,
         category: insight.category,
         summary: formatted.summary || "No data available for this period.",
+        severity: formatted.severity || "info",
         metrics: formatted.metrics || [],
       });
     } catch (error) {
@@ -574,6 +590,7 @@ Max 4 metrics. Use PKR for currency. Dollar rate: ${dollarRate}.`
         title: insight.title,
         category: insight.category,
         summary: "Unable to generate this insight at the moment.",
+        severity: "info" as const,
         metrics: [],
       });
     }

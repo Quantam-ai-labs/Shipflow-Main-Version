@@ -8,7 +8,7 @@ import { DEFAULT_TIMEZONE, toMerchantStartOfDay, toMerchantEndOfDay } from "./ut
 import { registerAccountingRoutes } from "./routes/accounting";
 import { registerTransactionRoutes } from "./routes/transactions";
 import { registerMarketingRoutes } from "./routes/marketing";
-import { generateSectionInsights, VALID_SECTIONS, type InsightSection } from "./services/aiInsights";
+import { generateSectionInsights, generateChatResponse, VALID_SECTIONS, type InsightSection } from "./services/aiInsights";
 import { aiInsightCache } from "@shared/schema";
 import {
   shipmentPrintRecords,
@@ -532,6 +532,30 @@ export async function registerRoutes(
     } catch (error: any) {
       console.error("AI section insights error:", error);
       res.status(500).json({ error: "Failed to generate insights" });
+    }
+  });
+
+  app.post("/api/ai/chat", isAuthenticated, async (req: any, res: any) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const { question, language } = req.body;
+      if (!question || typeof question !== "string" || question.trim().length === 0) {
+        return res.status(400).json({ error: "Question is required" });
+      }
+
+      const dollarRate = parseInt(req.body.dollarRate as string) || 280;
+      const result = await generateChatResponse(
+        question.trim(),
+        merchantId,
+        Math.min(Math.max(dollarRate, 1), 1000),
+        language || "en"
+      );
+      res.json(result);
+    } catch (error: any) {
+      console.error("AI chat error:", error);
+      res.status(500).json({ error: "Failed to process question" });
     }
   });
 
