@@ -28,7 +28,7 @@ Preferred communication style: Simple, everyday language.
 - **Onboarding Wizard**: Guides initial setup for Shopify connection and courier configuration.
 - **Workflow Transition System**: A strict 9-stage state machine (NEW to DELIVERED/RETURN/CANCELLED) with validation for allowed transitions. Includes bypass actions for specific scenarios.
 - **Batch Import & API-Only Sync**: Asynchronous, resumable background jobs for large Shopify order imports and an incremental sync system with background polling and manual sync options.
-- **Direct Courier Booking**: Allows batch booking with Leopards and PostEx, including preview, overrides, and Shopify fulfillment write-back.
+- **Direct Courier Booking**: Allows batch booking with Leopards and PostEx, including preview, overrides, and Shopify fulfillment write-back. Booking popup overrides (customer name, phone, address, city) are persisted back to the order record after successful booking, with audit trail in orderChangeLog.
 - **Print & Logs System**: Generates native courier airway bills and batch loadsheets.
 - **Shopify Write-Back System**: Bi-directional sync for address/phone/email edits, order cancellations, and workflow status updates via Shopify tags. Includes rate limit compliance and webhook echo prevention.
 - **Webhook Resilience**: Immediate 200 responses to prevent timeouts and a webhook health check API.

@@ -6488,7 +6488,9 @@ export async function registerRoutes(
         }
 
         if (br.success && br.trackingNumber) {
-          await storage.updateOrder(merchantId, br.orderId, {
+          const ovr = overridesMap.get(br.orderId);
+          const originalOrder = fetchedOrders.find((o) => o.id === br.orderId);
+          const orderUpdate: Record<string, any> = {
             courierName: courier === "leopards" ? "Leopards" : "PostEx",
             courierTracking: br.trackingNumber,
             courierSlipUrl: br.slipUrl || null,
@@ -6496,7 +6498,44 @@ export async function registerRoutes(
             bookingError: null,
             bookedAt: new Date(),
             shipmentStatus: "BOOKED",
-          });
+          };
+
+          if (ovr && originalOrder) {
+            const overrideFields: Array<{ field: string; dbField: string; oldVal: string | null; newVal: string | undefined }> = [];
+            if (ovr.customerName && ovr.customerName !== originalOrder.customerName) {
+              orderUpdate.customerName = ovr.customerName;
+              overrideFields.push({ field: "customerName", dbField: "customer_name", oldVal: originalOrder.customerName, newVal: ovr.customerName });
+            }
+            if (ovr.phone && ovr.phone !== originalOrder.customerPhone) {
+              orderUpdate.customerPhone = ovr.phone;
+              overrideFields.push({ field: "customerPhone", dbField: "customer_phone", oldVal: originalOrder.customerPhone, newVal: ovr.phone });
+            }
+            if (ovr.address && ovr.address !== originalOrder.shippingAddress) {
+              orderUpdate.shippingAddress = ovr.address;
+              overrideFields.push({ field: "shippingAddress", dbField: "shipping_address", oldVal: originalOrder.shippingAddress, newVal: ovr.address });
+            }
+            if (ovr.city && ovr.city !== originalOrder.city) {
+              orderUpdate.city = ovr.city;
+              overrideFields.push({ field: "city", dbField: "city", oldVal: originalOrder.city, newVal: ovr.city });
+            }
+
+            for (const changedField of overrideFields) {
+              await storage.createOrderChangeLog({
+                orderId: br.orderId,
+                merchantId,
+                changeType: "booking_override",
+                fieldName: changedField.field,
+                oldValue: changedField.oldVal || null,
+                newValue: changedField.newVal || null,
+                reason: `Updated during booking with ${courier === "leopards" ? "Leopards" : "PostEx"}`,
+                actorUserId: userId,
+                actorName: bookingActorName,
+                actorType: "user",
+              });
+            }
+          }
+
+          await storage.updateOrder(merchantId, br.orderId, orderUpdate);
 
           await transitionOrder({
             merchantId,
