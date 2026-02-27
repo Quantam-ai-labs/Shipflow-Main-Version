@@ -1,0 +1,261 @@
+TASK (COMPLETE IMPLEMENTATION PROMPT)
+1) Keep the existing performance table EXACTLY the same (no column/order/calculation/totals/filter changes).
+2) Add “Signal” in the existing table by showing THREE buttons/labels for each campaign:
+   - Scale
+   - Watch
+   - Risk
+3) Add a NEW section BELOW the existing table called:
+   “Campaign Journey (Actions → Results → Next Move)”
+   with structured action inputs + evaluation + smart insights.
+
+CRITICAL CONSTRAINTS (DO NOT BREAK EXISTING TABLE)
+- DO NOT change existing table structure, columns, ordering, calculations, totals row, or filters.
+- DO NOT add new columns to the existing table.
+- Only add UI elements INSIDE the existing Campaign cell (or the cell where campaign name is rendered).
+- Existing click/row behavior must remain unchanged.
+
+========================================================
+PART 1 — THREE SIGNAL BUTTONS IN MAIN TABLE (Scale / Watch / Risk)
+========================================================
+
+GOAL
+For every campaign row in the existing table, show 3 small pill buttons (or segmented control) at the start of the Campaign cell:
+[Scale] [Watch] [Risk]
+
+IMPORTANT BEHAVIOR
+A) These are Mode-1 manual controls (no silent auto-execution).
+B) Clicking a button opens a confirmation modal/drawer showing:
+   - campaign name
+   - selected signal (Scale/Watch/Risk)
+   - suggested action text (based on rules below)
+   - optional short note input (max 120 chars)
+   - required evaluation window (24/48/72; default 48)
+   - buttons: [Confirm] [Cancel]
+C) On Confirm:
+   - Save a Journey Event (defined in Part 2) with change_type = "Signal Decision"
+   - Save selected_signal = "Scale"|"Watch"|"Risk"
+   - Capture snapshot_before immediately
+   - DO NOT change Meta budgets automatically in this phase (Mode 1).
+     (Later we can add optional Meta API execution; NOT now.)
+
+VISUAL DESIGN (keep clean, not messy)
+- Use small pills, subtle colors:
+  - Scale: green outline pill
+  - Watch: yellow/amber outline pill
+  - Risk: red outline pill
+- The currently selected signal for that campaign should be highlighted (filled) if one exists.
+- If no signal exists yet, default highlight Watch (but still let user choose).
+- Do NOT color the whole row background.
+
+SIGNAL SUGGESTED ACTION TEXT (shown in modal, NOT executed)
+When user clicks:
+- Scale → suggestion: “Scale carefully (+10–20%) after evaluation window if results confirm.”
+- Watch → suggestion: “Hold changes. Wait for evidence / evaluation window.”
+- Risk → suggestion: “Reduce exposure (-30%) or pause after evaluation confirms negative leverage.”
+
+EVIDENCE WARNING
+If campaign is NOT evidence-ready (see rules below), and user clicks Risk:
+Show a warning in modal: “Low evidence: new campaigns should usually stay Watch until threshold.”
+Still allow user to confirm (operator control).
+
+========================================================
+PART 2 — NEW SECTION BELOW TABLE: CAMPAIGN JOURNEY (Actions → Results → Next Move)
+========================================================
+
+GOAL
+Add a new section BELOW the existing table:
+“Campaign Journey”
+This is NOT a duplicate performance table. It’s an evolution/history + insight table.
+
+SECTION LAYOUT
+Header:
+- Title: Campaign Journey
+- Subtitle: Track actions, measure results, and get next-move insights.
+Buttons: [Add Action] [Refresh Evaluations]
+Filter chips: [All] [Needs Review] [Evaluation Pending] [Scale Candidates] [Risk Only]
+
+JOURNEY OVERVIEW TABLE (minimal columns)
+Columns:
+1) Campaign
+2) Current Signal (Scale/Watch/Risk)  <-- derived from latest Signal Decision event
+3) Stage (Exploration / Validation / Scaling / Decline)
+4) Last Action (or “None”)
+5) Spend Δ
+6) Net Profit Δ
+7) Trend (Improving / Flat / Worsening)
+8) Insight (1 short sentence)
+9) Next Move (1 short sentence)
+
+CAMPAIGN DETAIL TIMELINE
+Click a campaign row to open timeline (accordion under row or right drawer).
+Timeline shows events chronologically.
+Each event shows:
+- Date/time
+- Action type (including Signal Decision)
+- Selected signal if present
+- Evaluation window (24/48/72)
+- Spend BEFORE → AFTER and Δ
+- Net Profit BEFORE → AFTER and Δ
+- Insight + Next Move
+- “More metrics” toggle to show CPA/Margin/Delivered/Orders deltas if available
+
+========================================================
+PART 3 — ADD ACTION FLOW (STRUCTURED INPUTS)
+========================================================
+
+Add Action modal/drawer fields:
+
+REQUIRED:
+1) Campaign (dropdown list from current table data)
+2) Change Type:
+   - Budget change
+   - Creative change
+   - Offer change (price/bundle)
+   - Targeting change
+   - Landing/checkout change
+   - Pause / Resume
+   - Signal Decision (used by the 3 buttons; not shown here as default option unless needed)
+3) Expected Outcome:
+   - Lower CPA
+   - Higher volume
+   - Higher margin
+   - Reduce returns
+   - Fix funnel drop (ATC→Purchase)
+   - Test viability (new)
+4) Evaluation Window: 24h / 48h(default) / 72h
+
+OPTIONAL:
+5) Notes (max 120 chars)
+6) Micro-Tag (conditional):
+   - Creative change: Hook / Thumbnail / Angle / CTA / Format / Length
+   - Offer change: Price / Bundle / Shipping message / Guarantee / Trust
+
+On save:
+- Create Journey Event record
+- Capture snapshot_before immediately
+
+========================================================
+PART 4 — SNAPSHOT + EVALUATION (LAZY EVAL)
+========================================================
+
+SNAPSHOT FIELDS (from existing performance table computed data; DO NOT invent new profit logic)
+snapshot_before and snapshot_after JSON contain:
+- spend_total
+- net_profit_total
+- cpa (if exists)
+- margin_percent (if exists)
+- delivered_count (if exists)
+- orders_count (if exists)
+- timestamp
+
+LAZY EVALUATION
+When Journey section loads OR user clicks [Refresh Evaluations]:
+For each event where now > created_at + evaluation_window_hours AND snapshot_after is null:
+- compute snapshot_after using CURRENT table metrics for that campaign
+- persist snapshot_after and evaluated_at
+
+DELTAS
+Compute:
+- spend_delta
+- net_profit_delta
+- cpa_delta, margin_delta, delivered_delta, orders_delta (if present)
+
+========================================================
+PART 5 — EVIDENCE, STAGE, INSIGHTS (SMART BUT DETERMINISTIC)
+========================================================
+
+CONFIG CONSTANTS
+- MIN_SPEND_FOR_EVIDENCE_PKR = 2000
+- MIN_DELIVERED_FOR_EVIDENCE = 10
+- DEFAULT_EVAL_WINDOW_HOURS = 48
+
+EVIDENCE-READY RULE
+evidence_ready if:
+- delivered_count >= 10
+OR
+- spend_total >= 2000 PKR
+If delivered missing, rely on spend.
+
+STAGE LOGIC
+- Exploration: no actions yet OR not evidence_ready
+- Validation: evidence_ready and not proven scaler
+- Scaling: evidence_ready and latest evaluated event shows positive leverage (below)
+- Decline: evidence_ready and latest evaluated event shows negative leverage
+
+LEVERAGE INDEX (LI)
+LI = net_profit_delta / max(spend_delta, 1)
+Interpretation:
+- Strong: net_profit_delta > 0 AND LI >= 1.0
+- Neutral: net_profit_delta > 0 AND LI between 0 and 1.0
+- Weak: net_profit_delta ~ 0 while spend increased
+- Negative: net_profit_delta < 0
+
+TREND
+- Improving if net_profit_delta > 0 AND (cpa_delta <= 0 if cpa exists)
+- Worsening if net_profit_delta < 0
+- Flat otherwise
+
+INSIGHT + NEXT MOVE (1 sentence each; short)
+If evaluation pending:
+Insight: “Collecting data—evaluation pending.”
+Next Move: “Hold changes until window completes.”
+
+If strong leverage:
+Insight: “Positive leverage—profit rose faster than spend.”
+Next Move: “Scale +10–20% and keep variables stable for next window.”
+
+If neutral leverage:
+Insight: “Profit improved but scaling efficiency is moderate.”
+Next Move: “Hold budget; refine creative/offer before scaling again.”
+
+If weak leverage:
+Insight: “Spend increased without meaningful profit lift.”
+Next Move: “Stop scaling; fix bottleneck then retest.”
+
+If negative leverage:
+Insight: “Change reacted negatively—loss increased after modification.”
+Next Move: “Reduce -30% or revert; test one focused change next.”
+
+For campaigns with no actions:
+Insight: “New campaign—gathering evidence.”
+Next Move: “Wait until evidence threshold, then review.”
+
+========================================================
+PART 6 — DATA STORAGE (DB)
+========================================================
+
+Create DB table/collection: campaign_journey_events
+Fields:
+- id (uuid)
+- campaign_key (stable id; use campaign_id else campaign_name)
+- created_at
+- action_type (string)              // e.g., "Signal Decision", "Budget change", etc.
+- selected_signal (nullable)        // "Scale"|"Watch"|"Risk" for signal decisions
+- expected_outcome (string)
+- evaluation_window_hours (int)
+- notes (nullable, max 120)
+- micro_tag (nullable)
+- snapshot_before (json)
+- snapshot_after (json, nullable)
+- evaluated_at (nullable)
+
+Index: campaign_key, created_at.
+
+Current Signal per campaign = latest event with action_type="Signal Decision".
+
+========================================================
+ACCEPTANCE CHECKLIST
+========================================================
+
+1) Existing performance table unchanged.
+2) In each campaign cell, user sees 3 small buttons: Scale / Watch / Risk.
+3) Clicking a button opens confirmation modal (Mode 1) and saves a "Signal Decision" event.
+4) New Journey section appears below the table.
+5) Add Action flow works and saves events + snapshot_before.
+6) After evaluation window passes, snapshot_after is computed via Refresh/Eager load and deltas show.
+7) Journey overview shows Spend Δ and Net Profit Δ clearly.
+8) Insight + Next Move are short and deterministic.
+9) UI remains clean (no duplicate performance table, no heavy colors, minimal columns).
+
+DELIVERABLE
+Implement the 3 buttons in the main table (inside campaign cell) + the full Campaign Journey section below, with storage, snapshots, evaluation, and insight generation, while preserving the existing table unchanged.
