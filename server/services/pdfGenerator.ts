@@ -843,18 +843,18 @@ export async function generateAirwayBillPdfBuffer(
   const USABLE_HEIGHT = A4_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM;
   const SECTION_HEIGHT = USABLE_HEIGHT / INVOICES_PER_PAGE;
 
-  const SECTION_MAP = Array.from(
-    { length: INVOICES_PER_PAGE },
-    (_, i) => A4_HEIGHT - MARGIN_TOP - SECTION_HEIGHT * i
-  );
+  let currentPage = pdfDoc.addPage([A4_WIDTH, A4_HEIGHT]);
+
   for (let i = 0; i < bills.length; i++) {
-    if (i !== 0 && i % 3 === 0) {
+    if (i !== 0 && i % INVOICES_PER_PAGE === 0) {
       currentPage = pdfDoc.addPage([A4_WIDTH, A4_HEIGHT]);
     }
 
-    const position = i % 3;
-    const topY = SECTION_MAP[position];
-    
+    const position = i % INVOICES_PER_PAGE;
+
+    const topY =
+      A4_HEIGHT - MARGIN_TOP - SECTION_HEIGHT * position;
+
     await drawSingleAirwayBill(
       currentPage,
       pdfDoc,
@@ -862,15 +862,18 @@ export async function generateAirwayBillPdfBuffer(
       boldFont,
       bills[i],
       MARGIN_X,
-      topY,
+      topY
     );
 
-    if (position < 2 && i < bills.length - 1) {
-      const cutLineY = topY - SECTION_HEIGHT - 1 / 2;
+    // draw cut line between sections
+    if (
+      position < INVOICES_PER_PAGE - 1 &&
+      i < bills.length - 1
+    ) {
+      const cutLineY = topY - SECTION_HEIGHT;
       drawDashedCutLine(currentPage, cutLineY);
     }
   }
-
   const pdfBytes = await pdfDoc.save();
   return Buffer.from(pdfBytes);
 }
