@@ -552,34 +552,6 @@ export default function Dashboard() {
                   </div>
                 </CardContent>
               </Card>
-              <Card data-testid="card-delivery-ratio">
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-1">
-                      <p className="text-sm text-muted-foreground">Delivery Ratio</p>
-                      <p className="text-2xl font-bold">{countsLoading ? "—" : `${deliveryRatio}%`}</p>
-                      <p className="text-xs text-muted-foreground">{delivered} delivered / {dispatched} dispatched</p>
-                    </div>
-                    <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center text-green-500">
-                      <Target className="w-5 h-5" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card data-testid="card-return-ratio">
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-1">
-                      <p className="text-sm text-muted-foreground">Return Ratio</p>
-                      <p className="text-2xl font-bold">{countsLoading ? "—" : `${returnRatio}%`}</p>
-                      <p className="text-xs text-muted-foreground">{returned} returned / {dispatched} dispatched</p>
-                    </div>
-                    <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center text-red-500">
-                      <RotateCcw className="w-5 h-5" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
               <Card data-testid="card-cancellation-ratio">
                 <CardContent className="p-6">
                   <div className="flex items-start justify-between gap-4">
@@ -594,6 +566,20 @@ export default function Dashboard() {
                   </div>
                 </CardContent>
               </Card>
+              <Card data-testid="card-delivery-ratio">
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-1">
+                      <p className="text-sm text-muted-foreground">Delivery Ratio</p>
+                      <p className="text-2xl font-bold">{countsLoading ? "—" : `${deliveryRatio}%`}</p>
+                      <p className="text-xs text-muted-foreground">{delivered} delivered / {dispatched} dispatched</p>
+                    </div>
+                    <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center text-green-500">
+                      <Target className="w-5 h-5" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
               <Card data-testid="card-pending-ratio">
                 <CardContent className="p-6">
                   <div className="flex items-start justify-between gap-4">
@@ -604,6 +590,20 @@ export default function Dashboard() {
                     </div>
                     <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-500">
                       <Clock className="w-5 h-5" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card data-testid="card-return-ratio">
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-1">
+                      <p className="text-sm text-muted-foreground">Return Ratio</p>
+                      <p className="text-2xl font-bold">{countsLoading ? "—" : `${returnRatio}%`}</p>
+                      <p className="text-xs text-muted-foreground">{returned} returned / {dispatched} dispatched</p>
+                    </div>
+                    <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center text-red-500">
+                      <RotateCcw className="w-5 h-5" />
                     </div>
                   </div>
                 </CardContent>
