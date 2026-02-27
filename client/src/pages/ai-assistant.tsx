@@ -10,7 +10,6 @@ import {
   Send,
   Mic,
   MicOff,
-  RefreshCw,
   Sparkles,
   Loader2,
   AlertTriangle,
@@ -20,6 +19,7 @@ import {
   Globe,
 } from "lucide-react";
 import { AIChatMessage, TypingIndicator } from "@/components/ai-chat-message";
+import { VoiceChatOverlay } from "@/components/voice-chat-overlay";
 import {
   Select,
   SelectContent,
@@ -133,6 +133,7 @@ export default function AIAssistant() {
   const [language, setLanguage] = useState<"en" | "ur">("en");
   const [isListening, setIsListening] = useState(false);
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
+  const [voiceModeOpen, setVoiceModeOpen] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<any>(null);
@@ -231,6 +232,33 @@ export default function AIAssistant() {
     window.speechSynthesis.cancel();
     setSpeakingMessageId(null);
   }, []);
+
+  const handleVoiceSend = useCallback(async (question: string): Promise<string> => {
+    setMessages((prev) => [
+      ...prev,
+      { id: crypto.randomUUID(), role: "user", content: question, timestamp: new Date() },
+    ]);
+
+    try {
+      const res = await apiRequest("POST", "/api/ai/chat", { question, language });
+      const data = await res.json();
+      const answer = data.answer || "No response generated.";
+      setMessages((prev) => [
+        ...prev,
+        { id: crypto.randomUUID(), role: "assistant", content: answer, timestamp: new Date() },
+      ]);
+      return answer;
+    } catch {
+      const errorMsg = language === "ur"
+        ? "معذرت، آپ کے سوال پر عمل کرنے میں خرابی ہوئی۔"
+        : "Sorry, I encountered an error processing your question.";
+      setMessages((prev) => [
+        ...prev,
+        { id: crypto.randomUUID(), role: "assistant", content: errorMsg, timestamp: new Date() },
+      ]);
+      return errorMsg;
+    }
+  }, [language]);
 
   function handleSend() {
     const question = input.trim();
@@ -408,6 +436,23 @@ export default function AIAssistant() {
           </div>
         </CardContent>
       </Card>
+
+      {hasSpeechRecognition && (
+        <Button
+          onClick={() => setVoiceModeOpen(true)}
+          className="fixed bottom-8 right-8 w-14 h-14 rounded-full shadow-lg bg-primary hover:bg-primary/90 text-primary-foreground z-40 animate-pulse"
+          data-testid="btn-voice-mode"
+        >
+          <Mic className="h-6 w-6" />
+        </Button>
+      )}
+
+      <VoiceChatOverlay
+        isOpen={voiceModeOpen}
+        onClose={() => setVoiceModeOpen(false)}
+        onSendMessage={handleVoiceSend}
+        language={language}
+      />
     </div>
   );
 }
