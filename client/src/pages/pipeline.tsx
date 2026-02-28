@@ -65,7 +65,8 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Order } from "@shared/schema";
 import { Link, useParams } from "wouter";
-import { format, formatDistanceToNow, isPast } from "date-fns";
+import { formatDistanceToNow, isPast } from "date-fns";
+import { formatPkDateTime } from "@/lib/dateFormat";
 import { useDateRange } from "@/contexts/date-range-context";
 import { useRef } from "react";
 import { exportCsvWithDate } from "@/lib/exportCsv";
@@ -1231,7 +1232,7 @@ export default function Pipeline() {
                       )}
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {order.orderDate ? format(new Date(order.orderDate), "MMM d, h:mm a") : ""}
+                      {order.orderDate ? formatPkDateTime(order.orderDate) : ""}
                     </div>
                     {activeTab === "PENDING" && order.lastStatusChangedAt && (
                       <div className="text-xs text-amber-600 dark:text-amber-400" data-testid={`text-pending-duration-${order.id}`}>
@@ -1367,7 +1368,7 @@ export default function Pipeline() {
                     <td className="px-3 py-1.5">
                       {order.holdUntil ? (
                         <div>
-                          <div className="text-xs">{format(new Date(order.holdUntil), "MMM d, h:mm a")}</div>
+                          <div className="text-xs">{formatPkDateTime(order.holdUntil)}</div>
                           <HoldCountdown holdUntil={order.holdUntil} />
                         </div>
                       ) : "-"}
@@ -1396,7 +1397,7 @@ export default function Pipeline() {
                     <td className="px-3 py-1.5">
                       <div className="text-xs text-muted-foreground">{order.cancelReason || "No reason given"}</div>
                       {order.cancelledAt && (
-                        <div className="text-xs text-muted-foreground/70">{format(new Date(order.cancelledAt), "MMM d, h:mm a")}</div>
+                        <div className="text-xs text-muted-foreground/70">{formatPkDateTime(order.cancelledAt)}</div>
                       )}
                     </td>
                   )}
@@ -2264,7 +2265,7 @@ export default function Pipeline() {
                         </Badge>
                       </div>
                       <div className="text-xs text-muted-foreground mt-0.5">
-                        {o.orderDate ? format(new Date(o.orderDate), "MMM d, yyyy h:mm a") : "No date"}
+                        {o.orderDate ? formatPkDateTime(o.orderDate) : "No date"}
                         {o.city ? ` · ${o.city}` : ""}
                       </div>
                       {o.itemSummary && (

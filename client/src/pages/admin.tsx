@@ -37,17 +37,18 @@ import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
+import { formatPkShortDate, formatPkDateTime } from "@/lib/dateFormat";
 
 const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#f97316", "#ec4899"];
 
 function formatDate(d: string | Date | null) {
   if (!d) return "—";
-  return new Date(d).toLocaleDateString("en-PK", { year: "numeric", month: "short", day: "numeric" });
+  return formatPkShortDate(d);
 }
 
 function formatDateTime(d: string | Date | null) {
   if (!d) return "—";
-  return new Date(d).toLocaleString("en-PK", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return formatPkDateTime(d);
 }
 
 function formatBytes(bytes: number) {
@@ -635,9 +636,9 @@ function AnalyticsTab() {
               <ResponsiveContainer width="100%" height={250}>
                 <BarChart data={trends.dailySignups}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(v: string) => new Date(v).toLocaleDateString("en", { month: "short", day: "numeric" })} />
+                  <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(v: string) => formatPkShortDate(v)} />
                   <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
-                  <Tooltip labelFormatter={(v: string) => new Date(v).toLocaleDateString()} />
+                  <Tooltip labelFormatter={(v: string) => formatPkShortDate(v)} />
                   <Bar dataKey="count" fill="#3b82f6" name="Signups" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -652,9 +653,9 @@ function AnalyticsTab() {
               <ResponsiveContainer width="100%" height={250}>
                 <LineChart data={trends.dailyOrders}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(v: string) => new Date(v).toLocaleDateString("en", { month: "short", day: "numeric" })} />
+                  <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(v: string) => formatPkShortDate(v)} />
                   <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
-                  <Tooltip labelFormatter={(v: string) => new Date(v).toLocaleDateString()} />
+                  <Tooltip labelFormatter={(v: string) => formatPkShortDate(v)} />
                   <Line type="monotone" dataKey="count" stroke="#10b981" name="Orders" strokeWidth={2} dot={false} />
                 </LineChart>
               </ResponsiveContainer>

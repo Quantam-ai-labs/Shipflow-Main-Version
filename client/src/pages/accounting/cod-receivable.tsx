@@ -10,7 +10,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { format, differenceInDays } from "date-fns";
+import { differenceInDays } from "date-fns";
+import { formatPkDate } from "@/lib/dateFormat";
 import { Banknote } from "lucide-react";
 
 interface CodReceivableItem {
@@ -145,7 +146,7 @@ export default function AccountingCodReceivable() {
                         </TableCell>
                         <TableCell data-testid={`text-delivery-date-${item.id}`}>
                           {item.deliveredAt
-                            ? format(new Date(item.deliveredAt), "dd MMM yyyy")
+                            ? formatPkDate(item.deliveredAt)
                             : "-"}
                         </TableCell>
                         <TableCell className="text-right" data-testid={`text-days-pending-${item.id}`}>

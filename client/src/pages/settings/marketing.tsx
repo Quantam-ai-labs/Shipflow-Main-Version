@@ -11,7 +11,7 @@ import { SiFacebook } from "react-icons/si";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { format } from "date-fns";
+import { formatPkDateTime } from "@/lib/dateFormat";
 
 interface CredentialsData {
   facebookAppId: string;
@@ -349,7 +349,7 @@ export default function MarketingSettings() {
                   <p className="text-xs text-muted-foreground font-medium">Last Sync</p>
                   <p className="text-sm" data-testid="text-last-sync">
                     {lastSync?.completedAt
-                      ? format(new Date(lastSync.completedAt), "MMM d, yyyy 'at' h:mm a")
+                      ? formatPkDateTime(lastSync.completedAt)
                       : "Never synced"}
                   </p>
                 </div>

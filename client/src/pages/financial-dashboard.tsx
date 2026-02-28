@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { useDateRange } from "@/contexts/date-range-context";
-import { format } from "date-fns";
 import { Link } from "wouter";
+import { formatPkMonthYear, formatPkShortDate } from "@/lib/dateFormat";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -96,7 +96,7 @@ function formatMonth(month: string): string {
   try {
     const [year, m] = month.split("-");
     const date = new Date(parseInt(year), parseInt(m) - 1);
-    return format(date, "MMM yyyy");
+    return formatPkMonthYear(date);
   } catch {
     return month;
   }
@@ -505,7 +505,7 @@ export default function FinancialDashboard() {
                       <p className="font-medium text-sm truncate">{expense.description || "Expense"}</p>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <Badge variant="outline" className="text-xs">{expense.category}</Badge>
-                        {expense.date && <span>{format(new Date(expense.date), "dd MMM yyyy")}</span>}
+                        {expense.date && <span>{formatPkShortDate(expense.date)}</span>}
                       </div>
                     </div>
                   </div>

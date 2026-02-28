@@ -35,6 +35,7 @@ import {
   Zap,
 } from "lucide-react";
 import type { CampaignJourneyEvent } from "@shared/schema";
+import { formatPkDate } from "@/lib/dateFormat";
 
 const MIN_SPEND_FOR_EVIDENCE_PKR = 2000;
 const MIN_DELIVERED_FOR_EVIDENCE = 10;
@@ -690,7 +691,7 @@ function EventTimeline({ events, showMoreMetrics, onToggleMore }: { events: Camp
               </div>
               <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
                 <Clock className="w-3 h-3" />
-                {evt.createdAt ? new Date(evt.createdAt).toLocaleDateString() : ""}
+                {evt.createdAt ? formatPkDate(evt.createdAt) : ""}
                 <span className="text-muted-foreground/60">|</span>
                 <span>{evt.evaluationWindowHours}h window</span>
                 {isEvaluated ? (

@@ -40,6 +40,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Label } from "@/components/ui/label";
+import { formatPkDate } from "@/lib/dateFormat";
 
 // ============================================================
 // Constants
@@ -1137,7 +1138,7 @@ export default function StatusMappingPage() {
             <div className="space-y-4 py-2">
               <div className="rounded-md border p-3 space-y-1 text-sm">
                 <p><span className="font-medium">File source:</span> {importFile.courier === "all" ? "All Couriers" : courierLabel(importFile.courier)}</p>
-                <p><span className="font-medium">Exported:</span> {importFile.exportedAt ? new Date(importFile.exportedAt).toLocaleDateString() : "Unknown"}</p>
+                <p><span className="font-medium">Exported:</span> {importFile.exportedAt ? formatPkDate(importFile.exportedAt) : "Unknown"}</p>
                 <p><span className="font-medium">Status mappings:</span> {importFile.statusMappings?.length || 0}</p>
                 <p><span className="font-medium">Keyword rules:</span> {importFile.keywordMappings?.length || 0}</p>
               </div>

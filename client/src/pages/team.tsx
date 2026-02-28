@@ -62,6 +62,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Label } from "@/components/ui/label";
 import { exportCsvWithDate } from "@/lib/exportCsv";
+import { formatPkDate } from "@/lib/dateFormat";
 import type { User as UserType } from "@shared/models/auth";
 
 interface TeamMemberWithUser {
@@ -134,7 +135,7 @@ function timeAgo(dateStr: string): string {
   if (diffHours < 24) return `${diffHours}h ago`;
   const diffDays = Math.floor(diffHours / 24);
   if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString();
+  return formatPkDate(date);
 }
 
 export default function Team() {
@@ -305,7 +306,7 @@ export default function Team() {
                 m.user?.email || "",
                 m.role,
                 m.isActive ? "Active" : "Inactive",
-                m.joinedAt ? new Date(m.joinedAt).toLocaleDateString() : "",
+                m.joinedAt ? formatPkDate(m.joinedAt) : "",
               ]);
               exportCsvWithDate("team-members", headers, rows);
               toast({ title: "Export complete", description: `Exported ${members.length} team members.` });
@@ -574,7 +575,7 @@ export default function Team() {
                     <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
                       <span>Invited as {invite.role}</span>
                       <span>·</span>
-                      <span>Expires {new Date(invite.expiresAt).toLocaleDateString()}</span>
+                      <span>Expires {formatPkDate(invite.expiresAt)}</span>
                       {invite.sendCount && invite.sendCount > 0 && (
                         <>
                           <span>·</span>

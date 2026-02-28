@@ -41,7 +41,7 @@ import {
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { format } from "date-fns";
+import { formatPkDate, formatPkDateTime24 } from "@/lib/dateFormat";
 import { useToast } from "@/hooks/use-toast";
 import { useDateRange } from "@/contexts/date-range-context";
 import { exportCsvWithDate } from "@/lib/exportCsv";
@@ -218,13 +218,13 @@ export default function PaymentLedgerPage() {
       r.courierPaymentMethod || "",
       r.courierBillingMethod || "",
       r.courierPaymentRef || "",
-      r.courierSettlementDate ? format(new Date(r.courierSettlementDate), "yyyy-MM-dd") : "",
+      r.courierSettlementDate ? formatPkDate(r.courierSettlementDate) : "",
       r.courierMessage || "",
       r.courierSlipLink || "",
       r.upfrontPayment || "",
       r.reservePayment || "",
       r.balancePayment || "",
-      r.lastSyncedAt ? format(new Date(r.lastSyncedAt), "yyyy-MM-dd HH:mm") : "",
+      r.lastSyncedAt ? formatPkDateTime24(r.lastSyncedAt) : "",
     ]);
     exportCsvWithDate("payment-ledger", headers, rows);
     toast({ title: "Export complete", description: `Exported ${records.length} records.` });
@@ -524,7 +524,7 @@ export default function PaymentLedgerPage() {
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground whitespace-nowrap" data-testid={`text-settlement-date-${record.id}`}>
                             {record.courierSettlementDate
-                              ? format(new Date(record.courierSettlementDate), "MMM dd, yyyy")
+                              ? formatPkDate(record.courierSettlementDate)
                               : "--"
                             }
                           </TableCell>

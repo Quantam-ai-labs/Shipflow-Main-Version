@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { format } from "date-fns";
+import { formatPkDate } from "@/lib/dateFormat";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -282,12 +283,12 @@ export default function CourierDuesPage() {
             onClick={() => {
               const headers = ["Date", "Courier", "Type", "Description", "Amount", "Due Date", "Status", "Reference", "Notes"];
               const rows = filteredDues.map((due) => [
-                due.date ? format(new Date(due.date), "dd MMM yyyy") : "",
+                formatPkDate(due.date),
                 due.courierName,
                 due.type,
                 due.description || "",
                 String(due.amount),
-                due.dueDate ? format(new Date(due.dueDate), "dd MMM yyyy") : "",
+                formatPkDate(due.dueDate),
                 due.status,
                 due.reference || "",
                 due.notes || "",
@@ -436,7 +437,7 @@ export default function CourierDuesPage() {
                 {filteredDues.map((due) => (
                   <TableRow key={due.id} data-testid={`row-due-${due.id}`}>
                     <TableCell className="text-sm" data-testid={`text-date-${due.id}`}>
-                      {due.date ? format(new Date(due.date), "dd MMM yyyy") : "-"}
+                      {formatPkDate(due.date)}
                     </TableCell>
                     <TableCell className="text-sm font-medium" data-testid={`text-courier-${due.id}`}>
                       {due.courierName}
@@ -456,7 +457,7 @@ export default function CourierDuesPage() {
                       {formatPKR(due.amount)}
                     </TableCell>
                     <TableCell className="text-sm" data-testid={`text-due-date-${due.id}`}>
-                      {due.dueDate ? format(new Date(due.dueDate), "dd MMM yyyy") : "-"}
+                      {formatPkDate(due.dueDate)}
                     </TableCell>
                     <TableCell>
                       <Badge

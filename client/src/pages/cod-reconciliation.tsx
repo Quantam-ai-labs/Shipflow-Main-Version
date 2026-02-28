@@ -52,7 +52,7 @@ import {
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { CodReconciliation } from "@shared/schema";
-import { format } from "date-fns";
+import { formatPkDate, formatPkDateTime24 } from "@/lib/dateFormat";
 import { useToast } from "@/hooks/use-toast";
 import { Label } from "@/components/ui/label";
 import { useDateRange } from "@/contexts/date-range-context";
@@ -297,7 +297,7 @@ export default function CodReconciliationPage() {
           record.status || "",
           record.courierPaymentStatus || "",
           record.courierPaymentRef || "",
-          record.courierSettlementDate ? format(new Date(record.courierSettlementDate), "yyyy-MM-dd") : "",
+          record.courierSettlementDate ? formatPkDate(record.courierSettlementDate) : "",
           record.transactionFee || "",
           record.transactionTax || "",
           record.upfrontPayment || "",
@@ -583,7 +583,7 @@ export default function CodReconciliationPage() {
                             </TableCell>
                             <TableCell className="text-muted-foreground text-xs">
                               {record.lastSyncedAt
-                                ? format(new Date(record.lastSyncedAt), "MMM dd, HH:mm")
+                                ? formatPkDateTime24(record.lastSyncedAt)
                                 : "-"}
                             </TableCell>
                             <TableCell>
@@ -635,7 +635,7 @@ export default function CodReconciliationPage() {
                                     <div>
                                       <span className="text-muted-foreground block text-xs">Settlement Date</span>
                                       <span className="font-medium">
-                                        {format(new Date(record.courierSettlementDate), "MMM dd, yyyy")}
+                                        {formatPkDate(record.courierSettlementDate)}
                                       </span>
                                     </div>
                                   )}

@@ -30,7 +30,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { format } from "date-fns";
+import { formatPkDate } from "@/lib/dateFormat";
 import { Plus } from "lucide-react";
 
 interface Settlement {
@@ -311,7 +311,7 @@ export default function AccountingSettlements() {
                   {items.map((s) => (
                     <TableRow key={s.id} data-testid={`row-settlement-${s.id}`}>
                       <TableCell data-testid={`text-date-${s.id}`}>
-                        {s.date ? format(new Date(s.date), "dd MMM yyyy") : "-"}
+                        {formatPkDate(s.date)}
                       </TableCell>
                       <TableCell className="font-medium" data-testid={`text-courier-${s.id}`}>
                         {s.courierName || "-"}

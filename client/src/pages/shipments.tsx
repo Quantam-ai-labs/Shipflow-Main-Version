@@ -51,7 +51,7 @@ import {
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Link } from "wouter";
-import { format } from "date-fns";
+import { formatPkDate, formatPkDateTime } from "@/lib/dateFormat";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -509,7 +509,7 @@ export default function Shipments() {
                   order.courierName || order.courierProvider || "",
                   order.courierTracking || order.trackingNumber || "",
                   order.shipmentStatus || order.workflowStatus || "",
-                  order.dispatchedAt ? format(new Date(order.dispatchedAt), "yyyy-MM-dd") : "",
+                  order.dispatchedAt ? formatPkDate(order.dispatchedAt) : "",
                 ]);
                 exportCsvWithDate("shipments", headers, rows);
               } finally {
@@ -794,9 +794,9 @@ export default function Shipments() {
                             </TableCell>
                             <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
                               {order.dispatchedAt
-                                ? format(new Date(order.dispatchedAt), "MMM dd, h:mm a")
+                                ? formatPkDateTime(order.dispatchedAt)
                                 : order.orderDate
-                                ? format(new Date(order.orderDate), "MMM dd, yyyy")
+                                ? formatPkDate(order.orderDate)
                                 : "-"}
                             </TableCell>
                           </TableRow>
@@ -945,7 +945,7 @@ export default function Shipments() {
                             </TableCell>
                             <TableCell>{getWorkflowBadge(row.workflowStatus)}</TableCell>
                             <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
-                              {row.orderDate ? format(new Date(row.orderDate), "MMM dd, yyyy") : "-"}
+                              {row.orderDate ? formatPkDate(row.orderDate) : "-"}
                             </TableCell>
                           </TableRow>
                         ))}
@@ -1073,7 +1073,7 @@ export default function Shipments() {
                               )}
                             </TableCell>
                             <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
-                              {log.createdAt ? format(new Date(log.createdAt), "MMM dd, h:mm a") : "-"}
+                              {log.createdAt ? formatPkDateTime(log.createdAt) : "-"}
                             </TableCell>
                           </TableRow>
                         ))}
@@ -1170,7 +1170,7 @@ export default function Shipments() {
                             <TableCell className="text-center text-red-600">{batch.failedCount ?? "-"}</TableCell>
                             <TableCell>{getBatchStatusBadge(batch.status)}</TableCell>
                             <TableCell className="text-muted-foreground text-sm">
-                              {batch.createdAt ? format(new Date(batch.createdAt), "MMM dd, h:mm a") : "-"}
+                              {batch.createdAt ? formatPkDateTime(batch.createdAt) : "-"}
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-1">
@@ -1294,7 +1294,7 @@ export default function Shipments() {
                   <p className="text-muted-foreground">Created</p>
                   <p className="font-medium">
                     {batchDetailData.batch.createdAt
-                      ? format(new Date(batchDetailData.batch.createdAt), "MMM dd, h:mm a")
+                      ? formatPkDateTime(batchDetailData.batch.createdAt)
                       : "-"}
                   </p>
                 </div>

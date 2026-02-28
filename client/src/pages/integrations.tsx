@@ -40,6 +40,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Label } from "@/components/ui/label";
 import { SiShopify } from "react-icons/si";
 import { useLocation, useSearch } from "wouter";
+import { formatPkDate, formatPkDateTime } from "@/lib/dateFormat";
 
 interface IntegrationsData {
   shopify: {
@@ -698,7 +699,7 @@ export default function Integrations() {
                   <div>
                     <span className="text-muted-foreground">Last sync:</span>{" "}
                     <span className="font-medium">
-                      {new Date(data.shopify.lastSyncAt).toLocaleString()}
+                      {formatPkDateTime(data.shopify.lastSyncAt)}
                     </span>
                   </div>
                 )}
@@ -741,8 +742,8 @@ export default function Integrations() {
                   <>
                     <span className="font-medium" data-testid="text-sync-from-date">
                       {syncFromDateData?.shopifySyncFromDate
-                        ? new Date(syncFromDateData.shopifySyncFromDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
-                        : `January 1, ${new Date().getFullYear()} (default)`}
+                        ? formatPkDate(syncFromDateData.shopifySyncFromDate)
+                        : `01-01-${new Date().getFullYear()} (default)`}
                     </span>
                     <Button
                       size="sm"
@@ -1125,7 +1126,7 @@ export default function Integrations() {
                   </div>
                   {dataHealth.lastApiSyncAt && (
                     <p className="text-xs text-muted-foreground">
-                      Last sync: {new Date(dataHealth.lastApiSyncAt).toLocaleString()}
+                      Last sync: {formatPkDateTime(dataHealth.lastApiSyncAt)}
                     </p>
                   )}
                 </div>

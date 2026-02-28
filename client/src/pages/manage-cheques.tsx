@@ -34,9 +34,9 @@ import {
   ArrowDownRight,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { format } from "date-fns";
 import { Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { formatPkDate } from "@/lib/dateFormat";
 import { exportCsvWithDate } from "@/lib/exportCsv";
 
 interface ChequeRecord {
@@ -104,14 +104,7 @@ export default function ManageCheques() {
     return `Rs. ${num.toLocaleString("en-PK", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
   };
 
-  const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return "-";
-    try {
-      return format(new Date(dateStr), "dd MMM yyyy");
-    } catch {
-      return "-";
-    }
-  };
+  const formatDate = (dateStr: string | null) => formatPkDate(dateStr);
 
   const isSettled = (status: string) => {
     const s = status.toLowerCase();

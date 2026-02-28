@@ -48,7 +48,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
-import { format } from "date-fns";
+import { formatPkShortDate, formatPkDateTime } from "@/lib/dateFormat";
 
 const DATE_PRESETS = [
   { value: "today", label: "Today" },
@@ -137,7 +137,7 @@ export default function MarketingDashboard() {
   ];
 
   const chartData = dailyData?.map((d: any) => ({
-    date: format(new Date(d.date), "MMM d"),
+    date: formatPkShortDate(d.date),
     spend: parseFloat(d.totalSpend),
     revenue: parseFloat(d.totalRevenue),
     purchases: d.totalPurchases,
@@ -163,7 +163,7 @@ export default function MarketingDashboard() {
             Facebook Ads performance overview
             {syncStatus?.lastSync && (
               <span className="ml-2">
-                · Last synced {syncStatus.lastSync.completedAt ? format(new Date(syncStatus.lastSync.completedAt), "MMM d, h:mm a") : "never"}
+                · Last synced {syncStatus.lastSync.completedAt ? formatPkDateTime(syncStatus.lastSync.completedAt) : "never"}
               </span>
             )}
           </p>

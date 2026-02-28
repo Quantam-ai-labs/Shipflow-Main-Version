@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { format } from "date-fns";
+import { formatPkDate, formatPkDateTime24 } from "@/lib/dateFormat";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -517,7 +517,7 @@ export default function OpeningBalancesPage() {
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-sm text-muted-foreground">
-                              {batch.openingDate ? format(new Date(batch.openingDate), "dd MMM yyyy") : ""}
+                              {batch.openingDate ? formatPkDate(batch.openingDate) : ""}
                             </span>
                             {batch.status === "POSTED" && !batch.reversalOf && (
                               <Button
@@ -562,7 +562,7 @@ export default function OpeningBalancesPage() {
                         </Table>
 
                         <div className="text-xs text-muted-foreground">
-                          Posted: {batch.createdAt ? format(new Date(batch.createdAt), "dd MMM yyyy, HH:mm") : ""}
+                          Posted: {batch.createdAt ? formatPkDateTime24(batch.createdAt) : ""}
                           {" · "}{batch.lines.length} line(s)
                         </div>
                       </CardContent>

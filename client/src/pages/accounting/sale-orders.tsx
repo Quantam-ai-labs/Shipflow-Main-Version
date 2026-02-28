@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useLocation } from "wouter";
-import { format } from "date-fns";
+import { formatPkDate } from "@/lib/dateFormat";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -146,7 +146,7 @@ export default function SaleOrdersPage() {
                 {salesList.map((sale) => (
                   <TableRow key={sale.id} data-testid={`row-order-${sale.id}`}>
                     <TableCell data-testid={`text-order-date-${sale.id}`}>
-                      {sale.date ? format(new Date(sale.date), "dd MMM yyyy") : "-"}
+                      {formatPkDate(sale.date)}
                     </TableCell>
                     <TableCell data-testid={`text-order-customer-${sale.id}`}>
                       {sale.customerName || "Walk-in"}

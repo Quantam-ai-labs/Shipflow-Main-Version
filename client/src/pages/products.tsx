@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { formatPkDateTime } from "@/lib/dateFormat";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -583,7 +584,7 @@ export default function ProductsPage() {
 
               {selectedProduct.shopifySyncedAt && (
                 <p className="text-xs text-muted-foreground text-right">
-                  Last synced: {new Date(selectedProduct.shopifySyncedAt).toLocaleString()}
+                  Last synced: {formatPkDateTime(selectedProduct.shopifySyncedAt)}
                 </p>
               )}
             </div>

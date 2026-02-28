@@ -26,6 +26,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
+import { formatPkDate } from "@/lib/dateFormat";
 
 const ONBOARDING_STEPS = [
   { key: "ACCOUNT_CREATED", label: "Account Created", stepIndex: 0 },
@@ -520,7 +521,7 @@ export default function Onboarding() {
                         data-testid="input-sync-from-date"
                       />
                       <p className="text-xs text-muted-foreground mt-2">
-                        Orders created on or after {new Date(syncFromDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })} will be imported.
+                        Orders created on or after {formatPkDate(syncFromDate)} will be imported.
                       </p>
                     </div>
 
@@ -564,7 +565,7 @@ export default function Onboarding() {
                     </div>
 
                     <p className="text-xs text-center text-muted-foreground">
-                      Importing from {importJob.startDate ? new Date(importJob.startDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : `Jan 1, ${new Date().getFullYear()}`} &middot; Page {importJob.currentPage || 0}
+                      Importing from {importJob.startDate ? formatPkDate(importJob.startDate) : `01-01-${new Date().getFullYear()}`} &middot; Page {importJob.currentPage || 0}
                     </p>
 
                     <div className="flex justify-center">

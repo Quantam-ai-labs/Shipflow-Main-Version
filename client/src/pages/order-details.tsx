@@ -55,7 +55,8 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Order, Shipment, ShipmentEvent, Remark } from "@shared/schema";
 import { Link, useParams } from "wouter";
-import { format, formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
+import { formatPkDateTime, formatPkDate, formatPkShortDate } from "@/lib/dateFormat";
 import { useToast } from "@/hooks/use-toast";
 
 interface OrderDetails extends Order {
@@ -506,7 +507,7 @@ function CourierTrackingJourney({ orderId, order }: { orderId: string; order: Or
               <p className={`text-sm font-medium ${currentStage.color}`}>{tracking.rawStatus}</p>
               {tracking.lastUpdate && (
                 <p className="text-[11px] text-muted-foreground mt-0.5">
-                  {format(new Date(tracking.lastUpdate), "MMM dd, yyyy 'at' h:mm a")}
+                  {formatPkDateTime(tracking.lastUpdate)}
                 </p>
               )}
             </div>
@@ -610,7 +611,7 @@ function formatEventDate(dateStr: string): string {
     if (isNaN(d.getTime())) {
       return dateStr;
     }
-    return format(d, "MMM dd, yyyy 'at' h:mm a");
+    return formatPkDateTime(d);
   } catch {
     return dateStr;
   }
@@ -965,7 +966,7 @@ export default function OrderDetails() {
               )}
             </div>
             <p className="text-muted-foreground text-sm">
-              {order.orderDate ? format(new Date(order.orderDate), "MMMM dd, yyyy 'at' h:mm a") : ""}
+              {order.orderDate ? formatPkDateTime(order.orderDate) : ""}
             </p>
           </div>
         </div>
@@ -1250,7 +1251,7 @@ export default function OrderDetails() {
                             {remark.remarkType?.replace(/_/g, " ")}
                           </Badge>
                           <span className="text-xs text-muted-foreground">
-                            {remark.createdAt ? format(new Date(remark.createdAt), "MMM dd, h:mm a") : ""}
+                            {remark.createdAt ? formatPkDateTime(remark.createdAt) : ""}
                           </span>
                         </div>
                         <p className="text-sm">{remark.content}</p>
@@ -1406,7 +1407,7 @@ export default function OrderDetails() {
                           </Badge>
                         </div>
                         <span className="text-[10px] text-muted-foreground">
-                          {o.orderDate ? format(new Date(o.orderDate), "MMM d, yyyy") : "No date"}
+                          {o.orderDate ? formatPkDate(o.orderDate) : "No date"}
                         </span>
                       </div>
                       <span className="text-xs font-medium shrink-0 ml-2">{Number(o.totalAmount).toLocaleString()}</span>
@@ -1540,7 +1541,7 @@ export default function OrderDetails() {
                           </div>
                           {p.reference && <p className="text-xs text-muted-foreground truncate">{p.reference}</p>}
                           <p className="text-xs text-muted-foreground/70">
-                            {p.createdAt ? format(new Date(p.createdAt), "MMM dd, h:mm a") : ""}
+                            {p.createdAt ? formatPkDateTime(p.createdAt) : ""}
                           </p>
                         </div>
                         {!paymentData.isBooked && (
@@ -1628,7 +1629,7 @@ export default function OrderDetails() {
                     <div className="flex justify-between gap-2">
                       <span className="text-muted-foreground">Booked</span>
                       <span className="font-medium" data-testid="text-print-booked-date">
-                        {format(new Date(order.bookedAt), "MMM dd, yyyy")}
+                        {formatPkShortDate(order.bookedAt)}
                       </span>
                     </div>
                   )}

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { formatPkDate, formatPkDateTime24 } from "@/lib/dateFormat";
 import {
   ArrowDownLeft, ArrowUpRight, ArrowLeftRight, RotateCcw,
   Plus, Eye, Clock, Lock, Search, Filter, ChevronDown, Download,
@@ -298,7 +298,7 @@ export default function TransactionsPage() {
               "transactions",
               ["Date", "Type", "Flow", "Description", "Amount", "Status"],
               txns.map((txn) => [
-                format(new Date(txn.date), "dd MMM yyyy"),
+                formatPkDate(txn.date),
                 TXN_TYPE_CONFIG[txn.txnType]?.label || txn.txnType,
                 getFlowLabel(txn),
                 txn.description || txn.category || "",
@@ -352,7 +352,7 @@ export default function TransactionsPage() {
                       className={txn.reversedAt ? "opacity-50" : ""}
                     >
                       <TableCell className="text-xs">
-                        {format(new Date(txn.date), "dd MMM yy")}
+                        {formatPkDate(txn.date)}
                       </TableCell>
                       <TableCell>
                         <Badge variant="secondary" className={`text-xs ${config.color}`}>
@@ -726,7 +726,7 @@ function TransactionDetailDialog({ txnId, open, onClose }: { txnId: string | nul
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div>
                 <span className="text-muted-foreground">Date:</span>
-                <span className="ml-2">{format(new Date(data.date), "dd MMM yyyy")}</span>
+                <span className="ml-2">{formatPkDate(data.date)}</span>
               </div>
               <div>
                 <span className="text-muted-foreground">Status:</span>
@@ -806,7 +806,7 @@ function TransactionDetailDialog({ txnId, open, onClose }: { txnId: string | nul
                 <div>
                   <span className="text-sm font-medium text-yellow-600">Reversal Entry</span>
                   <div className="mt-2 text-sm space-y-1">
-                    <p>Reversed at: {format(new Date(data.reversal.createdAt), "dd MMM yyyy HH:mm")}</p>
+                    <p>Reversed at: {formatPkDateTime24(data.reversal.createdAt)}</p>
                     <p>Reversal amount: {formatPKR(data.reversal.amount)}</p>
                   </div>
                 </div>
@@ -823,7 +823,7 @@ function TransactionDetailDialog({ txnId, open, onClose }: { txnId: string | nul
                       <div key={entry.id} className="text-xs border rounded p-2 bg-muted/50">
                         <div className="flex items-center justify-between">
                           <Badge variant="outline" className="text-xs">{entry.eventType}</Badge>
-                          <span className="text-muted-foreground">{format(new Date(entry.createdAt), "dd MMM yy HH:mm")}</span>
+                          <span className="text-muted-foreground">{formatPkDateTime24(entry.createdAt)}</span>
                         </div>
                         {entry.description && <p className="mt-1 text-muted-foreground">{entry.description}</p>}
                       </div>

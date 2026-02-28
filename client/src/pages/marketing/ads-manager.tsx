@@ -50,6 +50,7 @@ import {
   ChevronRight,
   Calendar,
 } from "lucide-react";
+import { formatPkShortDate, formatPkDateTime } from "@/lib/dateFormat";
 
 const DATE_PRESETS = [
   { value: "today", label: "Today" },
@@ -171,8 +172,7 @@ function getDateRangeFromPreset(preset: string): { dateFrom: string; dateTo: str
 
 function formatDateLabel(dateFrom: string, dateTo: string): string {
   const fmt = (d: string) => {
-    const date = new Date(d + "T00:00:00");
-    return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    return formatPkShortDate(new Date(d + "T00:00:00"));
   };
   if (dateFrom === dateTo) return fmt(dateFrom);
   return `${fmt(dateFrom)} – ${fmt(dateTo)}`;
@@ -352,7 +352,7 @@ export default function AdsManager() {
   };
 
   const lastSyncTime = metaStatus?.lastSync?.completedAt
-    ? new Date(metaStatus.lastSync.completedAt).toLocaleString("en-PK", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+    ? formatPkDateTime(metaStatus.lastSync.completedAt)
     : null;
 
   const handlePresetChange = (val: string) => {

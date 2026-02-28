@@ -12,7 +12,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { format } from "date-fns";
+import { formatPkDate } from "@/lib/dateFormat";
 import { exportCsvWithDate } from "@/lib/exportCsv";
 
 interface LedgerEntry {
@@ -95,7 +95,7 @@ export default function AccountingLedger() {
               entriesWithBalance.map((entry) => {
                 const amt = parseFloat(entry.amount);
                 return [
-                  entry.date ? format(new Date(entry.date), "dd MMM yyyy") : "",
+                  formatPkDate(entry.date),
                   entry.referenceType || "",
                   entry.description || "",
                   String(amt),
@@ -176,7 +176,7 @@ export default function AccountingLedger() {
                     return (
                       <TableRow key={entry.id} data-testid={`row-ledger-${entry.id}`}>
                         <TableCell className="whitespace-nowrap text-sm">
-                          {entry.date ? format(new Date(entry.date), "dd MMM yyyy") : "-"}
+                          {formatPkDate(entry.date)}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
                           {entry.referenceType || "-"}

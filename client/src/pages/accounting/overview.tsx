@@ -3,7 +3,7 @@ import { AIInsightsBanner } from "@/components/ai-insights-banner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { format } from "date-fns";
+import { formatPkDate } from "@/lib/dateFormat";
 import {
   Wallet,
   TrendingDown,
@@ -273,7 +273,7 @@ export default function AccountingOverview() {
                             </Badge>
                           )}
                           {movement.date && (
-                            <span>{format(new Date(movement.date), "dd MMM yyyy")}</span>
+                            <span>{formatPkDate(movement.date)}</span>
                           )}
                         </div>
                       </div>

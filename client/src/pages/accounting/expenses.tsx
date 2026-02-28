@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { formatPkDate } from "@/lib/dateFormat";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -109,7 +109,7 @@ export default function AccountingExpenses() {
                       data-testid={`row-expense-${expense.id}`}
                     >
                       <TableCell data-testid={`text-expense-date-${expense.id}`}>
-                        {expense.date ? format(new Date(expense.date), "dd MMM yyyy") : "-"}
+                        {formatPkDate(expense.date)}
                       </TableCell>
                       <TableCell className="font-medium" data-testid={`text-expense-desc-${expense.id}`}>
                         {expense.title || expense.description || "-"}
@@ -169,7 +169,7 @@ export default function AccountingExpenses() {
                     return (
                       <TableRow key={payment.id} data-testid={`row-payment-${payment.id}`}>
                         <TableCell data-testid={`text-payment-date-${payment.id}`}>
-                          {payment.date ? format(new Date(payment.date), "dd MMM yyyy") : "-"}
+                          {formatPkDate(payment.date)}
                         </TableCell>
                         <TableCell className="text-right" data-testid={`text-payment-amount-${payment.id}`}>
                           {formatPKR(amt)}

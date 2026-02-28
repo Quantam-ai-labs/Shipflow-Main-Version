@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 import type { CancellationJob } from "@shared/schema";
+import { formatPkDateTime } from "@/lib/dateFormat";
 
 type PreviewResult = {
   matched: Array<{
@@ -206,7 +207,7 @@ export default function BulkCancel() {
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Created</p>
-                    <p className="font-medium">{jobDetail.createdAt ? new Date(jobDetail.createdAt).toLocaleString() : "-"}</p>
+                    <p className="font-medium">{formatPkDateTime(jobDetail.createdAt)}</p>
                   </div>
                 </div>
                 <Separator className="my-4" />
@@ -458,7 +459,7 @@ export default function BulkCancel() {
                         {(job.failedCount || 0) > 0 && <span className="text-destructive">{job.failedCount} fail</span>}
                       </div>
                       <p className="text-xs text-muted-foreground mt-1">
-                        {job.createdAt ? new Date(job.createdAt).toLocaleString() : ""}
+                        {formatPkDateTime(job.createdAt)}
                       </p>
                     </div>
                   ))}

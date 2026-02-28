@@ -5,7 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { format } from "date-fns";
+import { formatPkDate } from "@/lib/dateFormat";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -292,7 +292,7 @@ export default function ExpenseTracker() {
               if (!expenses || expenses.length === 0) return;
               const headers = ["Date", "Category", "Description", "Amount", "Payment Method"];
               const rows = expenses.map((e) => [
-                e.date ? format(new Date(e.date), "dd MMM yyyy") : "",
+                formatPkDate(e.date),
                 e.category || "",
                 e.description || e.title || "",
                 String(e.amount ?? ""),
@@ -435,7 +435,7 @@ export default function ExpenseTracker() {
                 {expenses.map((expense) => (
                   <TableRow key={expense.id} data-testid={`row-expense-${expense.id}`}>
                     <TableCell className="text-sm" data-testid={`text-expense-date-${expense.id}`}>
-                      {expense.date ? format(new Date(expense.date), "dd MMM yyyy") : "-"}
+                      {formatPkDate(expense.date)}
                     </TableCell>
                     <TableCell>
                       <div>

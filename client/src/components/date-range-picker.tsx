@@ -148,8 +148,8 @@ export function DateRangePicker({
 
   const triggerLabel = dateRange?.from
     ? dateRange.to
-      ? `${format(dateRange.from, "MM/dd/yyyy")} - ${format(dateRange.to, "MM/dd/yyyy")}`
-      : format(dateRange.from, "MM/dd/yyyy")
+      ? `${format(dateRange.from, "dd-MM-yyyy")} - ${format(dateRange.to, "dd-MM-yyyy")}`
+      : format(dateRange.from, "dd-MM-yyyy")
     : "All dates";
 
   return (
@@ -228,7 +228,7 @@ export function DateRangePicker({
             <div className="flex items-center justify-between border-t pt-3 mt-1">
               <span className="text-xs text-muted-foreground">
                 {pendingRange?.from
-                  ? `${format(pendingRange.from, "MM/dd/yyyy")} - ${format(pendingRange.to || pendingRange.from, "MM/dd/yyyy")}`
+                  ? `${format(pendingRange.from, "dd-MM-yyyy")} - ${format(pendingRange.to || pendingRange.from, "dd-MM-yyyy")}`
                   : "Select dates"}
               </span>
               <div className="flex gap-2">

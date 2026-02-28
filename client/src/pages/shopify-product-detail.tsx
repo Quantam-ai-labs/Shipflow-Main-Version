@@ -28,6 +28,7 @@ import {
   Layers,
 } from "lucide-react";
 import type { Product } from "@shared/schema";
+import { formatPkDate, formatPkDateTime } from "@/lib/dateFormat";
 
 const WORKFLOW_STATUS_COLORS: Record<string, string> = {
   NEW: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
@@ -143,7 +144,7 @@ function PurchaseSummary({ productId }: { productId: string }) {
                   </TableCell>
                   <TableCell className="text-sm font-mono">{String(p.orderNumber || '').replace(/^#/, '')}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {p.orderDate ? new Date(p.orderDate).toLocaleDateString() : "-"}
+                    {formatPkDate(p.orderDate)}
                   </TableCell>
                   <TableCell className="text-sm font-medium">{p.quantity}</TableCell>
                   <TableCell className="text-sm">
@@ -435,7 +436,7 @@ export default function ShopifyProductDetailPage() {
 
           {product.shopifySyncedAt && (
             <p className="text-xs text-muted-foreground" data-testid="text-product-sync-time">
-              Last synced: {new Date(product.shopifySyncedAt).toLocaleString()}
+              Last synced: {formatPkDateTime(product.shopifySyncedAt)}
             </p>
           )}
         </div>

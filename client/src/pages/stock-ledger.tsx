@@ -5,7 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { format } from "date-fns";
+import { formatPkDate } from "@/lib/dateFormat";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -287,7 +287,7 @@ export default function StockLedgerPage() {
               if (!entries || entries.length === 0) return;
               const headers = ["Date", "Product", "SKU", "Type", "Quantity", "Unit Price", "Total Value", "Supplier"];
               const rows = entries.map((entry) => [
-                entry.date ? format(new Date(entry.date), "dd MMM yyyy") : "",
+                formatPkDate(entry.date),
                 entry.productName,
                 entry.sku || "",
                 TYPE_LABELS[entry.type] || entry.type,
@@ -448,7 +448,7 @@ export default function StockLedgerPage() {
                 {entries.map((entry) => (
                   <TableRow key={entry.id} data-testid={`row-entry-${entry.id}`}>
                     <TableCell className="text-sm" data-testid={`text-entry-date-${entry.id}`}>
-                      {entry.date ? format(new Date(entry.date), "dd MMM yyyy") : "-"}
+                      {formatPkDate(entry.date)}
                     </TableCell>
                     <TableCell>
                       <p className="font-medium" data-testid={`text-entry-product-${entry.id}`}>{entry.productName}</p>

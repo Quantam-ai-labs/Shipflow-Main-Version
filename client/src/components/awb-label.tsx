@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import JsBarcode from "jsbarcode";
 import QRCode from "qrcode";
 import leopardsLogoUrl from "@assets/imgi_1_LCS-Main-Logo-300x128_1771073319000.png";
+import { formatPkDate } from "@/lib/dateFormat";
 
 export interface LabelData {
   orderId: string;
@@ -78,9 +79,9 @@ const BT = "0.5px solid #222";
 
 export function AwbLabel({ data }: AwbLabelProps) {
   const formattedDate = data.bookedAt
-    ? new Date(data.bookedAt).toLocaleDateString("en-GB")
+    ? formatPkDate(data.bookedAt)
     : data.orderDate
-      ? new Date(data.orderDate).toLocaleDateString("en-GB")
+      ? formatPkDate(data.orderDate)
       : "";
 
   const isLeopards = data.courierName?.toLowerCase().includes("leopard");

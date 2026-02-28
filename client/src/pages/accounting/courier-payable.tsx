@@ -10,7 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Truck } from "lucide-react";
-import { format } from "date-fns";
+import { formatPkDate } from "@/lib/dateFormat";
 
 interface CourierPayableItem {
   id: string;
@@ -147,9 +147,7 @@ export default function AccountingCourierPayable() {
                         Rs. {summary.totalDue.toLocaleString()}
                       </TableCell>
                       <TableCell data-testid={`text-last-settlement-${courier}`}>
-                        {summary.lastDate
-                          ? format(new Date(summary.lastDate), "dd MMM yyyy")
-                          : "-"}
+                        {formatPkDate(summary.lastDate)}
                       </TableCell>
                     </TableRow>
                   ))}
