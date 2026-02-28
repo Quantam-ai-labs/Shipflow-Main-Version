@@ -11,6 +11,8 @@ interface LeopardsPacket {
   track_number: string;
   booked_packet_status: string;
   booked_packet_collect_amount: string;
+  booked_packet_weight?: string;
+  arival_dispatch_weight?: string;
   destination_city_name: string;
   consignment_name_eng: string;
   activity_date: string;
@@ -32,6 +34,7 @@ export interface TrackingResult {
   statusDescription: string;
   courierStatus: string;
   lastUpdate: string | null;
+  courierWeight?: string | null;
   events: Array<{
     status: string;
     date: string;
@@ -115,6 +118,7 @@ export class LeopardsService {
         statusDescription: packet.status_remarks || rawStatus,
         courierStatus: rawStatus,
         lastUpdate: latestEvent?.date || packet.activity_date || null,
+        courierWeight: packet.arival_dispatch_weight || null,
         events,
       };
     } catch (error) {
@@ -126,6 +130,7 @@ export class LeopardsService {
         statusDescription: error instanceof Error ? error.message : 'Unknown error',
         courierStatus: '',
         lastUpdate: null,
+        courierWeight: null,
         events: [],
       };
     }
@@ -250,6 +255,7 @@ export class LeopardsService {
               statusDescription: packet.status_remarks || rawStatus,
               courierStatus: rawStatus,
               lastUpdate: latestEvent?.date || packet.activity_date || null,
+              courierWeight: packet.arival_dispatch_weight || null,
               events,
             });
           }

@@ -2412,6 +2412,7 @@ export async function registerRoutes(
             returnedAt: orders.returnedAt,
             shipmentStatus: orders.shipmentStatus,
             courierRawStatus: orders.courierRawStatus,
+            courierWeight: orders.courierWeight,
             lastTrackingUpdate: orders.lastTrackingUpdate,
             prepaidAmount: orders.prepaidAmount,
             paymentMethod: orders.paymentMethod,
@@ -9051,6 +9052,70 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Setup password error:", error);
       res.status(500).json({ message: "Failed to set password" });
+    }
+  });
+
+  // ============================================
+  // BACKFILL: COURIER WEIGHT
+  // ============================================
+
+  app.post("/api/admin/backfill-courier-weight", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const leopardsCreds = await storage.getCourierCredentials(merchantId, 'leopards');
+      if (!leopardsCreds?.apiKey) {
+        return res.status(400).json({ message: 'Leopards credentials not configured' });
+      }
+
+      const ordersToBackfill = await db
+        .select({ id: orders.id, courierTracking: orders.courierTracking })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.merchantId, merchantId),
+            ilike(orders.courierName, '%leopard%'),
+            isNull(orders.courierWeight),
+            isNotNull(orders.courierTracking),
+          )
+        )
+        .limit(500);
+
+      if (ordersToBackfill.length === 0) {
+        return res.json({ message: 'No orders need backfilling', updated: 0 });
+      }
+
+      const { leopardsService } = await import('./services/couriers/index');
+      const trackingNumbers = ordersToBackfill.map(o => o.courierTracking!);
+
+      const batchSize = 10;
+      let updated = 0;
+
+      for (let i = 0; i < trackingNumbers.length; i += batchSize) {
+        const batch = trackingNumbers.slice(i, i + batchSize);
+        const results = await leopardsService.trackMultiple(batch, {
+          apiKey: leopardsCreds.apiKey || undefined,
+          apiPassword: leopardsCreds.apiSecret || undefined,
+        });
+
+        for (const order of ordersToBackfill.slice(i, i + batchSize)) {
+          const result = results.get(order.courierTracking!);
+          if (result?.success && result.courierWeight) {
+            await storage.updateOrder(merchantId, order.id, { courierWeight: result.courierWeight });
+            updated++;
+          }
+        }
+
+        if (i + batchSize < trackingNumbers.length) {
+          await new Promise(r => setTimeout(r, 300));
+        }
+      }
+
+      res.json({ message: `Backfill complete`, total: ordersToBackfill.length, updated });
+    } catch (error: any) {
+      console.error('[Backfill] Courier weight error:', error);
+      res.status(500).json({ message: error.message || 'Backfill failed' });
     }
   });
 

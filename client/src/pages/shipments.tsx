@@ -124,6 +124,7 @@ interface ShipmentOrder {
   returnedAt: string | null;
   shipmentStatus: string | null;
   courierRawStatus: string | null;
+  courierWeight: string | null;
   lastTrackingUpdate: string | null;
   prepaidAmount: string | null;
   paymentMethod: string | null;
@@ -633,6 +634,7 @@ export default function Shipments() {
                           <TableHead>Courier</TableHead>
                           <TableHead>Tracking #</TableHead>
                           <TableHead className="text-right">Amount</TableHead>
+                          <TableHead className="text-right">Courier Wt.</TableHead>
                           <TableHead>Stage</TableHead>
                           <TableHead>Courier Status</TableHead>
                           <TableHead>Remarks</TableHead>
@@ -658,6 +660,9 @@ export default function Shipments() {
                             <TableCell className="font-mono text-sm">{order.courierTracking || "-"}</TableCell>
                             <TableCell className="text-right font-medium">
                               {order.totalAmount ? `PKR ${Number(order.totalAmount).toLocaleString()}` : "-"}
+                            </TableCell>
+                            <TableCell className="text-right text-sm text-muted-foreground" data-testid={`text-courier-weight-${order.id}`}>
+                              {order.courierWeight ? `${Number(order.courierWeight).toFixed(0)}g` : "—"}
                             </TableCell>
                             <TableCell data-testid={`badge-status-${order.id}`}>
                               {getWorkflowBadge(order.workflowStatus)}

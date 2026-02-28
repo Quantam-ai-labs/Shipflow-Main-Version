@@ -370,11 +370,15 @@ async function syncMerchantCourierStatuses(merchantId: string, options?: { force
           continue;
         }
 
-        await storage.updateOrder(merchantId, order.id, {
+        const weightUpdate: Record<string, any> = {
           shipmentStatus: normalizedStatus,
           courierRawStatus: rawCourierStatus,
           lastTrackingUpdate: new Date(),
-        });
+        };
+        if (trackResult.courierWeight) {
+          weightUpdate.courierWeight = trackResult.courierWeight;
+        }
+        await storage.updateOrder(merchantId, order.id, weightUpdate);
 
         const newWorkflow = await autoTransitionOrder(merchantId, order, normalizedStatus, rawCourierStatus);
         if (newWorkflow) lTransitioned++;
@@ -745,16 +749,24 @@ async function sweepTerminalOrders(merchantId: string): Promise<{ rechecked: num
           }
 
           if (normalizedStatus !== order.shipmentStatus) {
-            await storage.updateOrder(merchantId, order.id, {
+            const recheckUpdate: Record<string, any> = {
               shipmentStatus: normalizedStatus,
               courierRawStatus: rawCourierStatus,
               lastTrackingUpdate: new Date(),
-            });
+            };
+            if (trackResult.courierWeight) {
+              recheckUpdate.courierWeight = trackResult.courierWeight;
+            }
+            await storage.updateOrder(merchantId, order.id, recheckUpdate);
             const newWorkflow = await autoTransitionOrder(merchantId, order, normalizedStatus, rawCourierStatus);
             if (newWorkflow) reverted++;
             updated++;
           } else {
-            await storage.updateOrder(merchantId, order.id, { lastTrackingUpdate: new Date() });
+            const recheckWeightOnly: Record<string, any> = { lastTrackingUpdate: new Date() };
+            if (trackResult.courierWeight) {
+              recheckWeightOnly.courierWeight = trackResult.courierWeight;
+            }
+            await storage.updateOrder(merchantId, order.id, recheckWeightOnly);
           }
         } catch {
           failed++;
