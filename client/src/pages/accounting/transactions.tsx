@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
   ArrowDownLeft, ArrowUpRight, ArrowLeftRight, RotateCcw,
-  Plus, Eye, Clock, Lock, Search, Filter, ChevronDown,
+  Plus, Eye, Clock, Lock, Search, Filter, ChevronDown, Download,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -30,6 +30,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
+import { exportCsvWithDate } from "@/lib/exportCsv";
 
 interface TransactionRow {
   id: string;
@@ -287,6 +288,28 @@ export default function TransactionsPage() {
         >
           <RotateCcw className="h-4 w-4 mr-1" />
           {showReversals ? "Hide Reversed" : "Show Reversed"}
+        </Button>
+        <Button
+          variant="outline"
+          data-testid="button-export-transactions"
+          disabled={txns.length === 0}
+          onClick={() => {
+            exportCsvWithDate(
+              "transactions",
+              ["Date", "Type", "Flow", "Description", "Amount", "Status"],
+              txns.map((txn) => [
+                format(new Date(txn.date), "dd MMM yyyy"),
+                TXN_TYPE_CONFIG[txn.txnType]?.label || txn.txnType,
+                getFlowLabel(txn),
+                txn.description || txn.category || "",
+                String(txn.amount),
+                txn.reversedAt ? "Reversed" : txn.isLocked ? "Locked" : "Active",
+              ]),
+            );
+          }}
+        >
+          <Download className="h-4 w-4 mr-2" />
+          Export
         </Button>
         <span className="text-sm text-muted-foreground ml-auto">
           {txnData?.total || 0} transactions

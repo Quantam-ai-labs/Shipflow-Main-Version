@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Download } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -11,6 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { format } from "date-fns";
+import { exportCsvWithDate } from "@/lib/exportCsv";
 
 interface LedgerEntry {
   id: string;
@@ -74,11 +77,38 @@ export default function AccountingLedger() {
 
   return (
     <div className="space-y-6" data-testid="accounting-ledger">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight" data-testid="text-page-title">
-          Ledger
-        </h1>
-        <p className="text-muted-foreground mt-2">All accounting entries</p>
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight" data-testid="text-page-title">
+            Ledger
+          </h1>
+          <p className="text-muted-foreground mt-2">All accounting entries</p>
+        </div>
+        <Button
+          variant="outline"
+          data-testid="button-export-ledger"
+          disabled={entriesWithBalance.length === 0}
+          onClick={() => {
+            exportCsvWithDate(
+              "ledger",
+              ["Date", "Type", "Description", "Debit", "Credit", "Running Balance"],
+              entriesWithBalance.map((entry) => {
+                const amt = parseFloat(entry.amount);
+                return [
+                  entry.date ? format(new Date(entry.date), "dd MMM yyyy") : "",
+                  entry.referenceType || "",
+                  entry.description || "",
+                  String(amt),
+                  String(amt),
+                  String(entry.runningBalance),
+                ];
+              }),
+            );
+          }}
+        >
+          <Download className="h-4 w-4 mr-2" />
+          Export
+        </Button>
       </div>
 
       <Card data-testid="card-filters">

@@ -1,9 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
+import { Download } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import { exportCsvWithDate } from "@/lib/exportCsv";
 
 interface TrialBalanceEntry {
   account: string;
@@ -52,16 +55,40 @@ export default function AccountingTrialBalance() {
 
   return (
     <div className="space-y-6" data-testid="accounting-trial-balance">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight" data-testid="text-page-title">
-          Trial Balance
-        </h1>
-        <p className="text-muted-foreground mt-2">
-          Debit and credit totals by account
-          {isBalanced && entries.length > 0 && (
-            <span className="ml-2 text-green-600 dark:text-green-400 font-medium">- Balanced</span>
-          )}
-        </p>
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight" data-testid="text-page-title">
+            Trial Balance
+          </h1>
+          <p className="text-muted-foreground mt-2">
+            Debit and credit totals by account
+            {isBalanced && entries.length > 0 && (
+              <span className="ml-2 text-green-600 dark:text-green-400 font-medium">- Balanced</span>
+            )}
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          data-testid="button-export-trial-balance"
+          disabled={entries.length === 0}
+          onClick={() => {
+            exportCsvWithDate(
+              "trial-balance",
+              ["Account", "Debit Total", "Credit Total"],
+              [
+                ...entries.map((entry) => [
+                  entry.account,
+                  String(entry.debit),
+                  String(entry.credit),
+                ]),
+                ["Totals", String(totalDebits), String(totalCredits)],
+              ],
+            );
+          }}
+        >
+          <Download className="h-4 w-4 mr-2" />
+          Export
+        </Button>
       </div>
 
       <Card data-testid="card-trial-balance-table">

@@ -68,6 +68,7 @@ import { Link, useParams } from "wouter";
 import { format, formatDistanceToNow, isPast } from "date-fns";
 import { useDateRange } from "@/contexts/date-range-context";
 import { useRef } from "react";
+import { exportCsvWithDate } from "@/lib/exportCsv";
 
 function CityAutocomplete({ value, onChange, cities, hasWarning, testId }: {
   value: string;
@@ -812,6 +813,26 @@ export default function Pipeline() {
     return orders.filter(o => o.holdUntil && isPast(new Date(o.holdUntil))).length;
   }, [orders, activeTab]);
 
+  const handleExportCsv = useCallback(() => {
+    if (!orders.length) return;
+    const headers = ["Order #", "Customer Name", "Phone", "City", "Address", "Amount", "Items", "Status", "Courier", "Tracking", "Remark"];
+    const rows = orders.map(o => [
+      o.orderNumber || "",
+      o.customerName || "",
+      o.customerPhone || "",
+      o.city || "",
+      o.shippingAddress || "",
+      String(o.totalAmount || "0"),
+      (o.items as any[])?.map((i: any) => `${i.title || i.name || ""}${i.quantity ? ` x${i.quantity}` : ""}`).join("; ") || "",
+      o.workflowStatus || o.status || "",
+      o.courierProvider || "",
+      o.trackingNumber || "",
+      o.remark || "",
+    ]);
+    const tabName = (STAGE_TITLES[activeTab] || "pipeline").replace(/\s+/g, "-").toLowerCase();
+    exportCsvWithDate(`pipeline-${tabName}`, headers, rows);
+  }, [orders, activeTab]);
+
   const isPending = workflowMutation.isPending || bulkWorkflowMutation.isPending;
 
   return (
@@ -854,9 +875,17 @@ export default function Pipeline() {
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           {total > 0 && <span className="font-extrabold text-[#ffffff] bg-[#00000000]">{total.toLocaleString()} orders</span>}
           <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportCsv}
+            disabled={orders.length === 0}
+            data-testid="button-export-pipeline"
+          >
+            <Download className="w-3.5 h-3.5 mr-1.5" />Export
+          </Button>
+          <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
             onClick={() => {
               queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
               queryClient.invalidateQueries({ queryKey: ["/api/orders/workflow-counts"] });

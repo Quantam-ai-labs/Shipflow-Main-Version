@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   BarChart3,
@@ -8,10 +9,12 @@ import {
   Truck,
   CheckCircle2,
   MapPin,
+  Download,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useDateRange } from "@/contexts/date-range-context";
 import { AIInsightsBanner } from "@/components/ai-insights-banner";
+import { exportCsvWithDate } from "@/lib/exportCsv";
 import {
   BarChart,
   Bar,
@@ -79,6 +82,38 @@ export default function Analytics() {
   const cityBreakdown = data?.cityBreakdown ?? [];
   const dailyOrders = data?.dailyOrders ?? [];
 
+  function handleExport() {
+    const headers = [
+      "Section", "Date", "Courier", "City", "Orders", "Delivered", "Returned",
+      "Delivery Rate (%)", "Revenue",
+    ];
+    const rows: string[][] = [];
+
+    for (const row of courierPerformance) {
+      rows.push([
+        "Courier Performance", "", row.courier, "", String(row.orders),
+        String(row.delivered), String(row.returned),
+        String(row.deliveryRate), "",
+      ]);
+    }
+
+    for (const row of cityBreakdown) {
+      rows.push([
+        "City Breakdown", "", "", row.city, String(row.orders),
+        String(row.delivered), "", "", row.revenue,
+      ]);
+    }
+
+    for (const row of dailyOrders) {
+      rows.push([
+        "Daily Orders", row.date, "", "", String(row.orders),
+        String(row.delivered), "", "", "",
+      ]);
+    }
+
+    exportCsvWithDate("analytics", headers, rows);
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -87,6 +122,15 @@ export default function Analytics() {
           <h1 className="text-2xl font-bold">Analytics</h1>
           <p className="text-muted-foreground">Track performance and insights across your operations.</p>
         </div>
+        <Button
+          variant="outline"
+          onClick={handleExport}
+          disabled={isLoading || (!courierPerformance.length && !cityBreakdown.length && !dailyOrders.length)}
+          data-testid="button-export-analytics"
+        >
+          <Download className="w-4 h-4 mr-2" />
+          Export
+        </Button>
       </div>
 
       <AIInsightsBanner section="analytics" />

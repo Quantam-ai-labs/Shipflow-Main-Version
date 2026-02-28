@@ -42,9 +42,11 @@ import {
   TrendingUp,
   ShoppingCart,
   Loader2,
+  Download,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import type { Product } from "@shared/schema";
+import { exportCsvWithDate } from "@/lib/exportCsv";
 
 const WORKFLOW_STATUS_COLORS: Record<string, string> = {
   'NEW': "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
@@ -282,6 +284,28 @@ export default function ProductsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            onClick={() => {
+              if (!products.length) return;
+              const headers = ["Product Name", "SKU", "Price", "Cost", "Stock", "Variants"];
+              const rows = products.map((product) => {
+                const variants = getVariants(product);
+                const skus = variants.map(v => v.sku).filter(Boolean).join("; ") || "-";
+                const prices = variants.map(v => v.price).filter(Boolean).join("; ") || "-";
+                const costs = variants.map(v => v.compareAtPrice).filter(Boolean).join("; ") || "-";
+                const stock = String(product.totalInventory || 0);
+                const variantCount = String(variants.length);
+                return [product.title, skus, prices, costs, stock, variantCount];
+              });
+              exportCsvWithDate("products", headers, rows);
+            }}
+            disabled={!products.length}
+            data-testid="button-export-products"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Export
+          </Button>
           <Link href="/product-analytics">
             <Button variant="outline" data-testid="button-product-analytics">
               <TrendingUp className="w-4 h-4 mr-2" />

@@ -44,6 +44,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { useDateRange } from "@/contexts/date-range-context";
+import { exportCsvWithDate } from "@/lib/exportCsv";
 
 interface LedgerRecord {
   id: string;
@@ -199,37 +200,25 @@ export default function PaymentLedgerPage() {
       "Payment Status", "Settlement Ref", "Settlement Date",
       "Upfront Payment", "Reserve Payment", "Balance Payment", "Last Synced",
     ];
-    const csvContent = [
-      headers.join(","),
-      ...records.map(r => [
-        r.trackingNumber || "",
-        r.courierName || "",
-        r.codAmount,
-        r.transactionFee || "",
-        r.transactionTax || "",
-        r.reversalFee || "",
-        r.reversalTax || "",
-        r.totalDeduction,
-        r.calculatedNetPaid,
-        r.courierPaymentStatus || "",
-        r.courierPaymentRef || "",
-        r.courierSettlementDate ? format(new Date(r.courierSettlementDate), "yyyy-MM-dd") : "",
-        r.upfrontPayment || "",
-        r.reservePayment || "",
-        r.balancePayment || "",
-        r.lastSyncedAt ? format(new Date(r.lastSyncedAt), "yyyy-MM-dd HH:mm") : "",
-      ].join(","))
-    ].join("\n");
-
-    const blob = new Blob([csvContent], { type: "text/csv" });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `payment-ledger-${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
+    const rows = records.map(r => [
+      r.trackingNumber || "",
+      r.courierName || "",
+      r.codAmount,
+      r.transactionFee || "",
+      r.transactionTax || "",
+      r.reversalFee || "",
+      r.reversalTax || "",
+      r.totalDeduction,
+      r.calculatedNetPaid,
+      r.courierPaymentStatus || "",
+      r.courierPaymentRef || "",
+      r.courierSettlementDate ? format(new Date(r.courierSettlementDate), "yyyy-MM-dd") : "",
+      r.upfrontPayment || "",
+      r.reservePayment || "",
+      r.balancePayment || "",
+      r.lastSyncedAt ? format(new Date(r.lastSyncedAt), "yyyy-MM-dd HH:mm") : "",
+    ]);
+    exportCsvWithDate("payment-ledger", headers, rows);
     toast({ title: "Export complete", description: `Exported ${records.length} records.` });
   };
 
@@ -252,7 +241,7 @@ export default function PaymentLedgerPage() {
               <CloudDownload className={`w-4 h-4 mr-2 ${syncPaymentsMutation.isPending ? 'animate-pulse' : ''}`} />
               {syncPaymentsMutation.isPending ? 'Importing...' : 'Import Ledger'}
             </Button>
-            <Button variant="outline" size="sm" onClick={handleExport} data-testid="button-export-ledger">
+            <Button variant="outline" size="sm" onClick={handleExport} data-testid="button-export-payment-ledger">
               <Download className="w-4 h-4 mr-2" />
               Export CSV
             </Button>

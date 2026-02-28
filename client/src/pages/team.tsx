@@ -55,11 +55,13 @@ import {
   Clock,
   Loader2,
   Link as LinkIcon,
+  Download,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Label } from "@/components/ui/label";
+import { exportCsvWithDate } from "@/lib/exportCsv";
 import type { User as UserType } from "@shared/models/auth";
 
 interface TeamMemberWithUser {
@@ -289,7 +291,31 @@ export default function Team() {
           <h1 className="text-2xl font-bold" data-testid="text-team-title">Team Management</h1>
           <p className="text-muted-foreground">Manage your team members and their access levels.</p>
         </div>
-        <Dialog open={isInviteDialogOpen} onOpenChange={(open) => { setIsInviteDialogOpen(open); if (!open) { setLastInviteUrl(null); setInviteEmail(""); setInviteRole("agent"); } }}>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            onClick={() => {
+              if (members.length === 0) {
+                toast({ title: "No data", description: "No team members to export.", variant: "destructive" });
+                return;
+              }
+              const headers = ["Name", "Email", "Role", "Status", "Joined"];
+              const rows = members.map(m => [
+                getUserDisplayName(m),
+                m.user?.email || "",
+                m.role,
+                m.isActive ? "Active" : "Inactive",
+                m.joinedAt ? new Date(m.joinedAt).toLocaleDateString() : "",
+              ]);
+              exportCsvWithDate("team-members", headers, rows);
+              toast({ title: "Export complete", description: `Exported ${members.length} team members.` });
+            }}
+            data-testid="button-export-team"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Export CSV
+          </Button>
+          <Dialog open={isInviteDialogOpen} onOpenChange={(open) => { setIsInviteDialogOpen(open); if (!open) { setLastInviteUrl(null); setInviteEmail(""); setInviteRole("agent"); } }}>
           <DialogTrigger asChild>
             <Button data-testid="button-invite-member">
               <UserPlus className="w-4 h-4 mr-2" />
@@ -394,6 +420,7 @@ export default function Team() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

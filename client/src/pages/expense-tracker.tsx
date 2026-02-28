@@ -65,7 +65,9 @@ import {
   Loader2,
   Filter,
   BarChart3,
+  Download,
 } from "lucide-react";
+import { exportCsvWithDate } from "@/lib/exportCsv";
 import type { Expense } from "@shared/schema";
 
 const CATEGORIES = [
@@ -283,10 +285,32 @@ export default function ExpenseTracker() {
             Track and manage your business expenses
           </p>
         </div>
-        <Button onClick={openAddDialog} data-testid="button-add-expense">
-          <Plus className="w-4 h-4 mr-2" />
-          Add Expense
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            onClick={() => {
+              if (!expenses || expenses.length === 0) return;
+              const headers = ["Date", "Category", "Description", "Amount", "Payment Method"];
+              const rows = expenses.map((e) => [
+                e.date ? format(new Date(e.date), "dd MMM yyyy") : "",
+                e.category || "",
+                e.description || e.title || "",
+                String(e.amount ?? ""),
+                e.paymentMethod || "",
+              ]);
+              exportCsvWithDate("expenses", headers, rows);
+            }}
+            disabled={!expenses || expenses.length === 0}
+            data-testid="button-export-expenses"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Export
+          </Button>
+          <Button onClick={openAddDialog} data-testid="button-add-expense">
+            <Plus className="w-4 h-4 mr-2" />
+            Add Expense
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

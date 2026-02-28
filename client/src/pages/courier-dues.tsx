@@ -63,7 +63,9 @@ import {
   Pencil,
   Trash2,
   Loader2,
+  Download,
 } from "lucide-react";
+import { exportCsvWithDate } from "@/lib/exportCsv";
 import type { CourierDue } from "@shared/schema";
 
 const COURIERS = ["Leopards", "PostEx", "TCS", "Other"] as const;
@@ -274,10 +276,35 @@ export default function CourierDuesPage() {
             Track payables and receivables with courier partners
           </p>
         </div>
-        <Button onClick={openAddDialog} data-testid="button-add-due">
-          <Plus className="w-4 h-4 mr-2" />
-          Add Due
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            onClick={() => {
+              const headers = ["Date", "Courier", "Type", "Description", "Amount", "Due Date", "Status", "Reference", "Notes"];
+              const rows = filteredDues.map((due) => [
+                due.date ? format(new Date(due.date), "dd MMM yyyy") : "",
+                due.courierName,
+                due.type,
+                due.description || "",
+                String(due.amount),
+                due.dueDate ? format(new Date(due.dueDate), "dd MMM yyyy") : "",
+                due.status,
+                due.reference || "",
+                due.notes || "",
+              ]);
+              exportCsvWithDate("courier-dues", headers, rows);
+            }}
+            disabled={!filteredDues.length}
+            data-testid="button-export-courier-dues"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Export
+          </Button>
+          <Button onClick={openAddDialog} data-testid="button-add-due">
+            <Plus className="w-4 h-4 mr-2" />
+            Add Due
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

@@ -63,7 +63,9 @@ import {
   Loader2,
   Calendar,
   Filter,
+  Download,
 } from "lucide-react";
+import { exportCsvWithDate } from "@/lib/exportCsv";
 import type { StockLedgerEntry } from "@shared/schema";
 
 const TYPE_BADGE_STYLES: Record<string, string> = {
@@ -278,10 +280,35 @@ export default function StockLedgerPage() {
             Track incoming, outgoing, and returned stock
           </p>
         </div>
-        <Button onClick={openAddDialog} data-testid="button-add-entry">
-          <Plus className="w-4 h-4 mr-2" />
-          Add Entry
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            onClick={() => {
+              if (!entries || entries.length === 0) return;
+              const headers = ["Date", "Product", "SKU", "Type", "Quantity", "Unit Price", "Total Value", "Supplier"];
+              const rows = entries.map((entry) => [
+                entry.date ? format(new Date(entry.date), "dd MMM yyyy") : "",
+                entry.productName,
+                entry.sku || "",
+                TYPE_LABELS[entry.type] || entry.type,
+                String(entry.quantity),
+                String(entry.unitPrice),
+                String(entry.totalValue),
+                entry.supplier || "",
+              ]);
+              exportCsvWithDate("stock-ledger", headers, rows);
+            }}
+            disabled={!entries || entries.length === 0}
+            data-testid="button-export-stock-ledger"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Export
+          </Button>
+          <Button onClick={openAddDialog} data-testid="button-add-entry">
+            <Plus className="w-4 h-4 mr-2" />
+            Add Entry
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

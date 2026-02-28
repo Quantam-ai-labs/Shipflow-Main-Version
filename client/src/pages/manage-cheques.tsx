@@ -36,6 +36,8 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Download } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { exportCsvWithDate } from "@/lib/exportCsv";
 
 interface ChequeRecord {
   settlementKey: string;
@@ -69,6 +71,7 @@ interface ChequesResponse {
 }
 
 export default function ManageCheques() {
+  const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [courierFilter, setCourierFilter] = useState("all");
@@ -131,6 +134,33 @@ export default function ManageCheques() {
               Track courier payment settlements - cheques (Leopards) and digital transfers (PostEx)
             </p>
           </div>
+          <Button
+            variant="outline"
+            onClick={() => {
+              if (cheques.length === 0) {
+                toast({ title: "No data", description: "No settlements to export.", variant: "destructive" });
+                return;
+              }
+              const headers = ["Reference", "Courier", "Status", "Method", "Shipments", "Total COD", "Deductions", "Settlement Amount", "Settlement Date"];
+              const rows = cheques.map(c => [
+                getDisplayRef(c),
+                c.courierName || "",
+                c.paymentStatus,
+                c.paymentMethod !== "N/A" ? c.paymentMethod : (c.courierName === "PostEx" ? "Digital" : ""),
+                String(c.shipmentCount),
+                c.totalCod,
+                c.totalDeductions,
+                c.totalNet,
+                formatDate(c.settlementDate),
+              ]);
+              exportCsvWithDate("settlements", headers, rows);
+              toast({ title: "Export complete", description: `Exported ${cheques.length} settlements.` });
+            }}
+            data-testid="button-export-cheques"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Export CSV
+          </Button>
         </div>
 
         {summary && (

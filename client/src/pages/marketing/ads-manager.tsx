@@ -407,7 +407,7 @@ export default function AdsManager() {
               {syncMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <RefreshCw className="w-4 h-4 mr-1" />}
               Sync Now
             </Button>
-            <Button variant="outline" size="sm" onClick={handleExportCSV} data-testid="button-export-csv">
+            <Button variant="outline" size="sm" onClick={handleExportCSV} data-testid="button-export-ads">
               <Download className="w-4 h-4 mr-1" />
               CSV
             </Button>

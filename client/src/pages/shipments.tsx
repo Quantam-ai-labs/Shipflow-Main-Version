@@ -53,6 +53,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import { exportCsvWithDate } from "@/lib/exportCsv";
 
 const workflowStatusOptions = [
   { value: "all", label: "All Stages" },
@@ -439,10 +440,36 @@ export default function Shipments() {
           <h1 className="text-2xl font-bold" data-testid="text-shipments-title">Shipments</h1>
           <p className="text-muted-foreground">All dispatched orders handed over to couriers.</p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => refetch()} data-testid="button-sync-shipments">
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              const headers = ["Order #", "Customer Name", "Phone", "City", "Amount", "Courier", "Tracking", "Status", "Booked Date"];
+              const rows = shipmentOrders.map((order) => [
+                order.orderNumber || "",
+                order.customerName || "",
+                order.customerPhone || "",
+                order.city || "",
+                order.totalAmount || "",
+                order.courierName || "",
+                order.courierTracking || "",
+                order.shipmentStatus || order.workflowStatus || "",
+                order.dispatchedAt ? format(new Date(order.dispatchedAt), "yyyy-MM-dd") : "",
+              ]);
+              exportCsvWithDate("shipments", headers, rows);
+            }}
+            disabled={shipmentOrders.length === 0}
+            data-testid="button-export-shipments"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Export
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => refetch()} data-testid="button-sync-shipments">
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       <AIInsightsBanner section="shipments" />
