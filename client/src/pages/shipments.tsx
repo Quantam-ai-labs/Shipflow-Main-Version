@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DateRange } from "react-day-picker";
 import { DateRangePicker, dateRangeToParams } from "@/components/date-range-picker";
 import {
@@ -44,6 +45,8 @@ import {
   XCircle,
   CheckCircle,
   Clock,
+  X,
+  Loader2,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -303,6 +306,35 @@ export default function Shipments() {
   const [selectedOrder, setSelectedOrder] = useState<ShipmentOrder | null>(null);
   const [remarkValue, setRemarkValue] = useState("");
 
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isExporting, setIsExporting] = useState(false);
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    const currentPageIds = shipmentOrders.map((o) => o.id);
+    const allSelected = currentPageIds.length > 0 && currentPageIds.every((id) => selectedIds.has(id));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) {
+        currentPageIds.forEach((id) => next.delete(id));
+      } else {
+        currentPageIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  };
+
   const dateParams = dateRangeToParams(dateRange);
   const queryParams = new URLSearchParams({
     page: page.toString(),
@@ -326,6 +358,8 @@ export default function Shipments() {
   });
 
   const shipmentOrders = data?.orders ?? [];
+  const allCurrentPageSelected = shipmentOrders.length > 0 && shipmentOrders.every((o) => selectedIds.has(o.id));
+  const someCurrentPageSelected = shipmentOrders.some((o) => selectedIds.has(o.id));
   const totalPages = Math.ceil((data?.total ?? 0) / pageSize);
   const counts = data?.counts ?? {};
   const fulfilledCount = counts["FULFILLED"] ?? 0;
@@ -445,26 +479,48 @@ export default function Shipments() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => {
-              const headers = ["Order", "Customer Name", "Phone", "City", "Amount", "Courier", "Tracking", "Status", "Booked Date"];
-              const rows = shipmentOrders.map((order) => [
-                String(order.orderNumber || '').replace(/^#/, ''),
-                order.customerName || "",
-                order.customerPhone || "",
-                order.city || "",
-                order.totalAmount || "",
-                order.courierName || "",
-                order.courierTracking || "",
-                order.shipmentStatus || order.workflowStatus || "",
-                order.dispatchedAt ? format(new Date(order.dispatchedAt), "yyyy-MM-dd") : "",
-              ]);
-              exportCsvWithDate("shipments", headers, rows);
+            onClick={async () => {
+              setIsExporting(true);
+              try {
+                const headers = ["Order", "Customer Name", "Phone", "City", "Amount", "Courier", "Tracking", "Status", "Booked Date"];
+                let ordersToExport: ShipmentOrder[];
+                if (selectedIds.size > 0) {
+                  const allOnCurrentPage = Array.from(selectedIds).every(id => shipmentOrders.find(o => o.id === id));
+                  if (allOnCurrentPage) {
+                    ordersToExport = shipmentOrders.filter((o) => selectedIds.has(o.id));
+                  } else {
+                    const res = await apiRequest("POST", "/api/orders/by-ids", { ids: Array.from(selectedIds) });
+                    const data = await res.json();
+                    ordersToExport = (data.orders || []).map((o: any) => ({
+                      ...o,
+                      courierName: o.courierProvider || o.courierName || "",
+                      courierTracking: o.trackingNumber || o.courierTracking || "",
+                    }));
+                  }
+                } else {
+                  ordersToExport = shipmentOrders;
+                }
+                const rows = ordersToExport.map((order: any) => [
+                  String(order.orderNumber || '').replace(/^#/, ''),
+                  order.customerName || "",
+                  order.customerPhone || "",
+                  order.city || "",
+                  order.totalAmount || "",
+                  order.courierName || order.courierProvider || "",
+                  order.courierTracking || order.trackingNumber || "",
+                  order.shipmentStatus || order.workflowStatus || "",
+                  order.dispatchedAt ? format(new Date(order.dispatchedAt), "yyyy-MM-dd") : "",
+                ]);
+                exportCsvWithDate("shipments", headers, rows);
+              } finally {
+                setIsExporting(false);
+              }
             }}
-            disabled={shipmentOrders.length === 0}
+            disabled={(shipmentOrders.length === 0 && selectedIds.size === 0) || isExporting}
             data-testid="button-export-shipments"
           >
-            <Download className="w-4 h-4 mr-2" />
-            Export
+            {isExporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+            {selectedIds.size > 0 ? `Export Selected (${selectedIds.size})` : "Export"}
           </Button>
           <Button variant="outline" size="sm" onClick={() => refetch()} data-testid="button-sync-shipments">
             <RefreshCw className="w-4 h-4 mr-2" />
@@ -600,6 +656,16 @@ export default function Shipments() {
             </CardContent>
           </Card>
 
+          {selectedIds.size > 0 && (
+            <div className="flex items-center justify-between gap-4 rounded-md border bg-muted/50 px-4 py-2" data-testid="selection-indicator-shipments">
+              <span className="text-sm font-medium" data-testid="text-selection-count">{selectedIds.size} order{selectedIds.size !== 1 ? "s" : ""} selected</span>
+              <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())} data-testid="button-clear-selection">
+                <X className="w-4 h-4 mr-1" />
+                Clear selection
+              </Button>
+            </div>
+          )}
+
           <Card>
             <CardHeader className="pb-4">
               <CardTitle className="text-lg font-semibold flex items-center gap-2">
@@ -628,6 +694,13 @@ export default function Shipments() {
                     <Table>
                       <TableHeader>
                         <TableRow>
+                          <TableHead className="w-10">
+                            <Checkbox
+                              checked={allCurrentPageSelected ? true : someCurrentPageSelected ? "indeterminate" : false}
+                              onCheckedChange={toggleSelectAll}
+                              data-testid="checkbox-select-all-shipments"
+                            />
+                          </TableHead>
                           <TableHead>Order</TableHead>
                           <TableHead>Customer</TableHead>
                           <TableHead>City</TableHead>
@@ -644,6 +717,13 @@ export default function Shipments() {
                       <TableBody>
                         {shipmentOrders.map((order) => (
                           <TableRow key={order.id} data-testid={`shipment-row-${order.id}`}>
+                            <TableCell>
+                              <Checkbox
+                                checked={selectedIds.has(order.id)}
+                                onCheckedChange={() => toggleSelect(order.id)}
+                                data-testid={`checkbox-select-${order.id}`}
+                              />
+                            </TableCell>
                             <TableCell>
                               <Link href={`/orders/detail/${order.id}`} className="text-primary hover:underline font-medium" data-testid={`link-order-${order.id}`}>
                                 {String(order.orderNumber || '').replace(/^#/, '')}

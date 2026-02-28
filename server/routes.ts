@@ -775,6 +775,26 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/orders/by-ids", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { ids } = req.body as { ids: string[] };
+      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return res.json({ orders: [] });
+      }
+      const limitedIds = ids.slice(0, 5000);
+      const result = await db
+        .select()
+        .from(orders)
+        .where(and(eq(orders.merchantId, merchantId), inArray(orders.id, limitedIds)));
+      res.json({ orders: result });
+    } catch (error) {
+      console.error("Error fetching orders by IDs:", error);
+      res.status(500).json({ message: "Failed to fetch orders by IDs" });
+    }
+  });
+
   app.post("/api/orders/customer-history-batch", isAuthenticated, async (req, res) => {
     try {
       const merchantId = await requireMerchant(req, res);

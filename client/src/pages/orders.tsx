@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -127,6 +128,7 @@ export default function Orders() {
   const [page, setPage] = useState(1);
   const [pageSize] = useState(200);
   
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const courierSyncPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -169,7 +171,30 @@ export default function Orders() {
   });
 
   const orders = data?.orders || [];
-  
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const allCurrentPageSelected = orders.length > 0 && orders.every(o => selectedIds.has(o.id));
+
+  const toggleSelectAll = useCallback(() => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (allCurrentPageSelected) {
+        orders.forEach(o => next.delete(o.id));
+      } else {
+        orders.forEach(o => next.add(o.id));
+      }
+      return next;
+    });
+  }, [orders, allCurrentPageSelected]);
+
   // Fetch unique cities from the backend for filter dropdown
   const { data: citiesData } = useQuery<{ cities: string[] }>({
     queryKey: ["/api/orders/cities"],
@@ -292,18 +317,39 @@ export default function Orders() {
   ).length;
   const showMissingDataWarning = orders.length >= 5 && missingCustomerCount > orders.length * 0.5;
 
-  const handleExport = () => {
-    const csv = orders.map((o) => 
-      `"${String(o.orderNumber || '').replace(/^#/, '')}","${o.customerName}","${o.customerPhone || ""}","${o.city || ""}","${(o.shippingAddress || "").replace(/"/g, '""')}","${o.totalQuantity || 1}","${o.totalAmount}","${(o.tags || []).join(";")}","${o.courierTracking ? getStatusLabel(o.shipmentStatus || "BOOKED") : (['BOOKED','FULFILLED','DELIVERED','RETURN'].includes(o.workflowStatus) ? "—" : "Unfulfilled")}","${(o.remark || "").replace(/"/g, '""')}"`
-    ).join("\n");
-    const header = "Order ID,Customer Name,Phone,City,Address,Qty,Amount,Tags,Status,Remark\n";
-    const blob = new Blob([header + csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `orders-${format(new Date(), "yyyy-MM-dd")}.csv`;
-    a.click();
-    toast({ title: "Export Complete", description: `Exported ${orders.length} orders.` });
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      let exportOrders: Order[];
+      if (selectedIds.size > 0) {
+        const allOnCurrentPage = Array.from(selectedIds).every(id => orders.find(o => o.id === id));
+        if (allOnCurrentPage) {
+          exportOrders = orders.filter(o => selectedIds.has(o.id));
+        } else {
+          const res = await apiRequest("POST", "/api/orders/by-ids", { ids: Array.from(selectedIds) });
+          const data = await res.json();
+          exportOrders = data.orders || [];
+        }
+      } else {
+        exportOrders = orders;
+      }
+      if (!exportOrders.length) return;
+      const csv = exportOrders.map((o: any) => 
+        `"${String(o.orderNumber || '').replace(/^#/, '')}","${o.customerName}","${o.customerPhone || ""}","${o.city || ""}","${(o.shippingAddress || "").replace(/"/g, '""')}","${o.totalQuantity || 1}","${o.totalAmount}","${(o.tags || []).join(";")}","${o.courierTracking ? getStatusLabel(o.shipmentStatus || "BOOKED") : (['BOOKED','FULFILLED','DELIVERED','RETURN'].includes(o.workflowStatus) ? "—" : "Unfulfilled")}","${(o.remark || "").replace(/"/g, '""')}"`
+      ).join("\n");
+      const header = "Order ID,Customer Name,Phone,City,Address,Qty,Amount,Tags,Status,Remark\n";
+      const blob = new Blob([header + csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `orders-${format(new Date(), "yyyy-MM-dd")}.csv`;
+      a.click();
+      toast({ title: "Export Complete", description: `Exported ${exportOrders.length} orders.` });
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const openRemarkDialog = (order: Order) => {
@@ -448,9 +494,9 @@ export default function Orders() {
             </div>
           )}
           
-          <Button variant="outline" size="sm" onClick={handleExport} className="h-9" data-testid="button-export-orders">
-            <Download className="w-4 h-4 mr-2" />
-            Export
+          <Button variant="outline" size="sm" onClick={handleExport} className="h-9" disabled={isExporting} data-testid="button-export-orders">
+            {isExporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+            {selectedIds.size > 0 ? `Export Selected (${selectedIds.size})` : "Export"}
           </Button>
         </div>
       </div>
@@ -461,6 +507,23 @@ export default function Orders() {
           onDateRangeChange={(range) => { setDateRange(range); setPage(1); }}
         />
       </div>
+
+      {selectedIds.size > 0 && (
+        <div className="px-4 py-2 border-b bg-primary/10 flex items-center justify-between gap-2" data-testid="selection-indicator">
+          <span className="text-sm font-medium" data-testid="text-selection-count">
+            {selectedIds.size} order{selectedIds.size !== 1 ? "s" : ""} selected
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setSelectedIds(new Set())}
+            data-testid="button-clear-selection"
+          >
+            <X className="w-4 h-4 mr-1" />
+            Clear selection
+          </Button>
+        </div>
+      )}
 
       <div className="flex-1 overflow-auto">
         {isLoading ? (
@@ -479,7 +542,15 @@ export default function Orders() {
           <table className="w-full text-sm border-collapse" data-testid="table-orders">
             <thead className="sticky top-0 bg-muted/90 backdrop-blur-sm z-10">
               <tr className="border-b">
-                <th className="text-left p-2 pl-4 w-[120px]">
+                <th className="p-2 pl-4 w-[40px]">
+                  <Checkbox
+                    checked={allCurrentPageSelected}
+                    onCheckedChange={toggleSelectAll}
+                    aria-label="Select all orders on this page"
+                    data-testid="checkbox-select-all"
+                  />
+                </th>
+                <th className="text-left p-2 w-[120px]">
                   <div className="flex items-center gap-1">
                     <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status</span>
                     <DropdownMenu>
@@ -562,7 +633,7 @@ export default function Orders() {
             <tbody>
               {orders.length === 0 ? (
                 <tr key="empty-row">
-                  <td colSpan={11} className="text-center py-12">
+                  <td colSpan={12} className="text-center py-12">
                     <Package className="w-10 h-10 mx-auto text-muted-foreground opacity-40 mb-3" />
                     <p className="text-muted-foreground">No orders found</p>
                     {hasActiveFilters && (
@@ -580,6 +651,14 @@ export default function Orders() {
                     data-testid={`table-row-order-${order.id}`}
                   >
                     <td className="p-2 pl-4">
+                      <Checkbox
+                        checked={selectedIds.has(order.id)}
+                        onCheckedChange={() => toggleSelect(order.id)}
+                        aria-label={`Select order ${order.orderNumber}`}
+                        data-testid={`checkbox-order-${order.id}`}
+                      />
+                    </td>
+                    <td className="p-2">
                       {getStatusBadge(order.shipmentStatus, !!order.courierTracking, (order as any).courierRawStatus, order.workflowStatus)}
                     </td>
                     <td className="p-2">

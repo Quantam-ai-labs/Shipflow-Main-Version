@@ -638,13 +638,20 @@ export default function Pipeline() {
     });
   }, []);
 
+  const allCurrentPageSelected = orders.length > 0 && orders.every(o => selectedIds.has(o.id));
+
   const toggleSelectAll = useCallback(() => {
-    if (selectedIds.size === orders.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(orders.map(o => o.id)));
-    }
-  }, [orders, selectedIds.size]);
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      const currentPageIds = orders.map(o => o.id);
+      if (allCurrentPageSelected) {
+        currentPageIds.forEach(id => next.delete(id));
+      } else {
+        currentPageIds.forEach(id => next.add(id));
+      }
+      return next;
+    });
+  }, [orders, allCurrentPageSelected]);
 
   const handleSingleAction = useCallback((orderId: string, action: string) => {
     if (action === "cancel") {
@@ -813,25 +820,46 @@ export default function Pipeline() {
     return orders.filter(o => o.holdUntil && isPast(new Date(o.holdUntil))).length;
   }, [orders, activeTab]);
 
-  const handleExportCsv = useCallback(() => {
-    if (!orders.length) return;
-    const headers = ["Order", "Customer Name", "Phone", "City", "Address", "Amount", "Items", "Status", "Courier", "Tracking", "Remark"];
-    const rows = orders.map(o => [
-      String(o.orderNumber || '').replace(/^#/, ''),
-      o.customerName || "",
-      o.customerPhone || "",
-      o.city || "",
-      o.shippingAddress || "",
-      String(o.totalAmount || "0"),
-      (o.items as any[])?.map((i: any) => `${i.title || i.name || ""}${i.quantity ? ` x${i.quantity}` : ""}`).join("; ") || "",
-      o.workflowStatus || o.status || "",
-      o.courierProvider || "",
-      o.trackingNumber || "",
-      o.remark || "",
-    ]);
-    const tabName = (STAGE_TITLES[activeTab] || "pipeline").replace(/\s+/g, "-").toLowerCase();
-    exportCsvWithDate(`pipeline-${tabName}`, headers, rows);
-  }, [orders, activeTab]);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportCsv = useCallback(async () => {
+    if (!orders.length && selectedIds.size === 0) return;
+    setIsExporting(true);
+    try {
+      let exportOrders: Order[];
+      if (selectedIds.size > 0) {
+        const allOnCurrentPage = Array.from(selectedIds).every(id => orders.find(o => o.id === id));
+        if (allOnCurrentPage) {
+          exportOrders = orders.filter(o => selectedIds.has(o.id));
+        } else {
+          const res = await apiRequest("POST", "/api/orders/by-ids", { ids: Array.from(selectedIds) });
+          const data = await res.json();
+          exportOrders = data.orders || [];
+        }
+      } else {
+        exportOrders = orders;
+      }
+      if (!exportOrders.length) return;
+      const headers = ["Order", "Customer Name", "Phone", "City", "Address", "Amount", "Items", "Status", "Courier", "Tracking", "Remark"];
+      const rows = exportOrders.map((o: any) => [
+        String(o.orderNumber || '').replace(/^#/, ''),
+        o.customerName || "",
+        o.customerPhone || "",
+        o.city || "",
+        o.shippingAddress || "",
+        String(o.totalAmount || "0"),
+        (o.items as any[])?.map((i: any) => `${i.title || i.name || ""}${i.quantity ? ` x${i.quantity}` : ""}`).join("; ") || "",
+        o.workflowStatus || o.status || "",
+        o.courierProvider || "",
+        o.trackingNumber || "",
+        o.remark || "",
+      ]);
+      const tabName = (STAGE_TITLES[activeTab] || "pipeline").replace(/\s+/g, "-").toLowerCase();
+      exportCsvWithDate(`pipeline-${tabName}`, headers, rows);
+    } finally {
+      setIsExporting(false);
+    }
+  }, [orders, activeTab, selectedIds]);
 
   const isPending = workflowMutation.isPending || bulkWorkflowMutation.isPending;
 
@@ -878,10 +906,11 @@ export default function Pipeline() {
             variant="outline"
             size="sm"
             onClick={handleExportCsv}
-            disabled={orders.length === 0}
+            disabled={(orders.length === 0 && selectedIds.size === 0) || isExporting}
             data-testid="button-export-pipeline"
           >
-            <Download className="w-3.5 h-3.5 mr-1.5" />Export
+            {isExporting ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Download className="w-3.5 h-3.5 mr-1.5" />}
+            {selectedIds.size > 0 ? `Export Selected (${selectedIds.size})` : "Export"}
           </Button>
           <Button
             variant="ghost"
@@ -897,6 +926,23 @@ export default function Pipeline() {
           </Button>
         </div>
       </div>
+      {/* Selection Indicator */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 px-4 py-2 bg-blue-50 dark:bg-blue-950 border-b border-blue-200 dark:border-blue-800" data-testid="selection-indicator-bar">
+          <span className="text-sm font-medium text-blue-700 dark:text-blue-300" data-testid="text-selection-count">
+            {selectedIds.size} order{selectedIds.size !== 1 ? "s" : ""} selected
+          </span>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="text-xs text-blue-600 dark:text-blue-400"
+            onClick={() => setSelectedIds(new Set())}
+            data-testid="button-clear-selection"
+          >
+            Clear selection
+          </Button>
+        </div>
+      )}
       {/* Bulk Actions Bar */}
       {selectedIds.size > 0 && (
         <div className="flex items-center gap-3 px-4 py-2.5 bg-primary/5 border-b" data-testid="bulk-actions-bar">
@@ -1063,7 +1109,6 @@ export default function Pipeline() {
                 onClick={() => {
                   setShipmentSubFilter(tab.value);
                   setPage(1);
-                  setSelectedIds(new Set());
                 }}
                 data-testid={`shipment-filter-${tab.value}`}
               >
@@ -1109,7 +1154,7 @@ export default function Pipeline() {
                 {activeTab !== "CANCELLED" && activeTab !== "DELIVERED" && activeTab !== "RETURN" && (
                   <th className="w-10 px-3 py-2 text-left">
                     <Checkbox
-                      checked={selectedIds.size === orders.length && orders.length > 0}
+                      checked={allCurrentPageSelected}
                       onCheckedChange={toggleSelectAll}
                       data-testid="checkbox-select-all"
                     />
