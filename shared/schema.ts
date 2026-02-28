@@ -451,6 +451,8 @@ export const codReconciliation = pgTable("cod_reconciliation", {
   courierPaymentRef: varchar("courier_payment_ref", { length: 100 }),
   courierPaymentMethod: varchar("courier_payment_method", { length: 50 }),
   courierSlipLink: varchar("courier_slip_link", { length: 500 }),
+  courierBillingMethod: varchar("courier_billing_method", { length: 100 }),
+  courierMessage: text("courier_message"),
   transactionFee: decimal("transaction_fee", { precision: 10, scale: 2 }),
   transactionTax: decimal("transaction_tax", { precision: 10, scale: 2 }),
   reversalFee: decimal("reversal_fee", { precision: 10, scale: 2 }),

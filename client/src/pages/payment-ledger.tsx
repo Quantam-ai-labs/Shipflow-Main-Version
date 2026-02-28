@@ -56,8 +56,11 @@ interface LedgerRecord {
   status: string | null;
   courierPaymentStatus: string | null;
   courierPaymentRef: string | null;
+  courierPaymentMethod: string | null;
   courierSettlementDate: string | null;
   courierSlipLink: string | null;
+  courierBillingMethod: string | null;
+  courierMessage: string | null;
   transactionFee: string | null;
   transactionTax: string | null;
   reversalFee: string | null;
@@ -197,7 +200,8 @@ export default function PaymentLedgerPage() {
     const headers = [
       "Tracking #", "Courier", "COD Amount", "Service Fee", "Service Tax",
       "Reversal Fee", "Reversal Tax", "Total Deductions", "Net Paid",
-      "Payment Status", "Settlement Ref", "Settlement Date",
+      "Payment Status", "Payment Method", "Billing Method",
+      "Invoice/Cheque #", "Settlement Date", "Message", "Slip Link",
       "Upfront Payment", "Reserve Payment", "Balance Payment", "Last Synced",
     ];
     const rows = records.map(r => [
@@ -211,8 +215,12 @@ export default function PaymentLedgerPage() {
       r.totalDeduction,
       r.calculatedNetPaid,
       r.courierPaymentStatus || "",
+      r.courierPaymentMethod || "",
+      r.courierBillingMethod || "",
       r.courierPaymentRef || "",
       r.courierSettlementDate ? format(new Date(r.courierSettlementDate), "yyyy-MM-dd") : "",
+      r.courierMessage || "",
+      r.courierSlipLink || "",
       r.upfrontPayment || "",
       r.reservePayment || "",
       r.balancePayment || "",
@@ -417,7 +425,45 @@ export default function PaymentLedgerPage() {
                       <TableHead className="text-right font-semibold">Total Deducted</TableHead>
                       <TableHead className="text-right font-semibold">Net Paid</TableHead>
                       <TableHead>Payment Status</TableHead>
-                      <TableHead>Settlement</TableHead>
+                      <TableHead>Payment Method</TableHead>
+                      <TableHead>Billing Method</TableHead>
+                      <TableHead>Invoice/Cheque #</TableHead>
+                      <TableHead>Settlement Date</TableHead>
+                      <TableHead>Message</TableHead>
+                      <TableHead>Slip</TableHead>
+                      <TableHead className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          Upfront
+                          <Tooltip>
+                            <TooltipTrigger>
+                              <Info className="w-3 h-3 text-muted-foreground" />
+                            </TooltipTrigger>
+                            <TooltipContent>PostEx upfront payment amount</TooltipContent>
+                          </Tooltip>
+                        </div>
+                      </TableHead>
+                      <TableHead className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          Reserve
+                          <Tooltip>
+                            <TooltipTrigger>
+                              <Info className="w-3 h-3 text-muted-foreground" />
+                            </TooltipTrigger>
+                            <TooltipContent>PostEx reserve payment amount</TooltipContent>
+                          </Tooltip>
+                        </div>
+                      </TableHead>
+                      <TableHead className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          Balance
+                          <Tooltip>
+                            <TooltipTrigger>
+                              <Info className="w-3 h-3 text-muted-foreground" />
+                            </TooltipTrigger>
+                            <TooltipContent>PostEx final balance payment</TooltipContent>
+                          </Tooltip>
+                        </div>
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -467,33 +513,48 @@ export default function PaymentLedgerPage() {
                               <span className="text-muted-foreground text-xs">--</span>
                             )}
                           </TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
-                            <div className="flex items-center gap-1">
-                              <span>
-                                {record.courierPaymentRef
-                                  ? record.courierPaymentRef
-                                  : record.courierSettlementDate
-                                    ? format(new Date(record.courierSettlementDate), "MMM dd")
-                                    : "-"
-                                }
-                              </span>
-                              {record.courierSlipLink && (
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <a
-                                      href={record.courierSlipLink}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-muted-foreground"
-                                      data-testid={`link-slip-${record.id}`}
-                                    >
-                                      <ExternalLink className="w-3.5 h-3.5" />
-                                    </a>
-                                  </TooltipTrigger>
-                                  <TooltipContent>View payment slip</TooltipContent>
-                                </Tooltip>
-                              )}
-                            </div>
+                          <TableCell className="text-sm" data-testid={`text-payment-method-${record.id}`}>
+                            {record.courierPaymentMethod || <span className="text-muted-foreground">--</span>}
+                          </TableCell>
+                          <TableCell className="text-sm" data-testid={`text-billing-method-${record.id}`}>
+                            {record.courierBillingMethod || <span className="text-muted-foreground">--</span>}
+                          </TableCell>
+                          <TableCell className="text-sm font-mono" data-testid={`text-invoice-cheque-${record.id}`}>
+                            {record.courierPaymentRef || <span className="text-muted-foreground">--</span>}
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground whitespace-nowrap" data-testid={`text-settlement-date-${record.id}`}>
+                            {record.courierSettlementDate
+                              ? format(new Date(record.courierSettlementDate), "MMM dd, yyyy")
+                              : "--"
+                            }
+                          </TableCell>
+                          <TableCell className="text-sm max-w-[200px] truncate" title={record.courierMessage || undefined} data-testid={`text-message-${record.id}`}>
+                            {record.courierMessage || <span className="text-muted-foreground">--</span>}
+                          </TableCell>
+                          <TableCell>
+                            {record.courierSlipLink ? (
+                              <a
+                                href={record.courierSlipLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                                data-testid={`link-slip-${record.id}`}
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                                View
+                              </a>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">--</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right text-muted-foreground">
+                            {formatPKR(record.upfrontPayment)}
+                          </TableCell>
+                          <TableCell className="text-right text-muted-foreground">
+                            {formatPKR(record.reservePayment)}
+                          </TableCell>
+                          <TableCell className="text-right text-muted-foreground">
+                            {formatPKR(record.balancePayment)}
                           </TableCell>
                         </TableRow>
                       );

@@ -3080,6 +3080,8 @@ export async function registerRoutes(
                       courierPaymentRef: payment.invoiceChequeNo || null,
                       courierPaymentMethod: payment.paymentMethod || null,
                       courierSlipLink: payment.slipLink || null,
+                      courierBillingMethod: payment.billingMethod || null,
+                      courierMessage: payment.message || null,
                       lastSyncedAt: new Date(),
                     };
 
