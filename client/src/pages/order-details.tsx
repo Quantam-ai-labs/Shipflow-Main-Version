@@ -939,7 +939,7 @@ export default function OrderDetails() {
             </Button>
           <div>
             <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-2xl font-bold">Order # {String(order.orderNumber).replace(/^#/, '')}</h1>
+              <h1 className="text-2xl font-bold">Order {String(order.orderNumber).replace(/^#/, '')}</h1>
               {(order as any).orderSource === "shopify_draft_order" && (
                 <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-green-100 dark:bg-green-900 border border-green-300 dark:border-green-700" title="Custom Order" data-testid="badge-draft-order">
                   <PenLine className="w-3 h-3 text-green-700 dark:text-green-300" />
@@ -982,7 +982,7 @@ export default function OrderDetails() {
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Are you sure you want to cancel order <strong>{order.orderNumber}</strong> on Shopify? This action cannot be undone.
+                Are you sure you want to cancel order <strong>{String(order.orderNumber || '').replace(/^#/, '')}</strong> on Shopify? This action cannot be undone.
               </p>
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setShowCancelShopifyConfirm(false)} disabled={cancelShopifyMutation.isPending} data-testid="button-cancel-shopify-no">
@@ -1395,7 +1395,7 @@ export default function OrderDetails() {
                     >
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-medium text-primary">{o.orderNumber}</span>
+                          <span className="text-xs font-medium text-primary">{String(o.orderNumber || '').replace(/^#/, '')}</span>
                           <Badge className={`text-[9px] px-1 py-0 ${
                             o.workflowStatus === "DELIVERED" ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" :
                             o.workflowStatus === "CANCELLED" ? "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300" :

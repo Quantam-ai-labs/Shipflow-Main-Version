@@ -25,7 +25,7 @@ export interface PostExOrderContext {
 export function generatePostExCustomSlip(orders: PostExOrderContext[]): Promise<Buffer> {
   const bills: AirwayBillData[] = orders.map((o) => ({
     trackingNumber: o.trackingNumber || "",
-    orderNumber: (o.orderNumber || "").replace(/^#/, ""),
+    orderNumber: o.orderNumber || "",
     courierName: "PostEx",
     bookedAt: o.bookedAt || new Date().toLocaleDateString("en-GB"),
     merchantName: o.merchantName || "",
@@ -99,7 +99,7 @@ export async function fetchLeopardsSlip(
 
           return {
             trackingNumber: pkt.track_number || credentials.trackingNumber,
-            orderNumber: (pkt.booked_packet_order_id || "").replace(/^#/, ""),
+            orderNumber: pkt.booked_packet_order_id || "",
             courierName: "Leopards",
             bookedAt: pkt.booking_date || new Date().toLocaleDateString("en-GB"),
             merchantName: pkt.shipment_name_eng || "",
@@ -192,7 +192,7 @@ export async function fetchLeopardsSlipData(
       if (trackJson?.status === 1 && trackJson.packet_list?.length > 0) {
         const bills: AirwayBillData[] = trackJson.packet_list.map((pkt: any) => ({
           trackingNumber: pkt.track_number || credentials.trackingNumber,
-          orderNumber: (pkt.booked_packet_order_id || "").replace(/^#/, ""),
+          orderNumber: pkt.booked_packet_order_id || "",
           courierName: "Leopards",
           bookedAt: pkt.booking_date || new Date().toLocaleDateString("en-GB"),
           merchantName: pkt.shipment_name_eng || "",

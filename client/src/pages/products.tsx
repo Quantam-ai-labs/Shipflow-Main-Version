@@ -164,7 +164,7 @@ function PurchaseSummary({ productId }: { productId: string }) {
                     )}
                   </div>
                 </TableCell>
-                <TableCell className="text-sm">#{p.orderNumber}</TableCell>
+                <TableCell className="text-sm">{String(p.orderNumber || '').replace(/^#/, '')}</TableCell>
                 <TableCell className="text-sm">{p.quantity}</TableCell>
                 <TableCell>
                   <Badge className={`${colorClass} text-xs font-medium`} data-testid={`badge-purchase-status-${p.orderId}`}>

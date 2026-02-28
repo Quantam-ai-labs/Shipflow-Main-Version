@@ -446,9 +446,9 @@ export default function Shipments() {
             variant="outline"
             size="sm"
             onClick={() => {
-              const headers = ["Order #", "Customer Name", "Phone", "City", "Amount", "Courier", "Tracking", "Status", "Booked Date"];
+              const headers = ["Order", "Customer Name", "Phone", "City", "Amount", "Courier", "Tracking", "Status", "Booked Date"];
               const rows = shipmentOrders.map((order) => [
-                order.orderNumber || "",
+                String(order.orderNumber || '').replace(/^#/, ''),
                 order.customerName || "",
                 order.customerPhone || "",
                 order.city || "",
@@ -646,7 +646,7 @@ export default function Shipments() {
                           <TableRow key={order.id} data-testid={`shipment-row-${order.id}`}>
                             <TableCell>
                               <Link href={`/orders/detail/${order.id}`} className="text-primary hover:underline font-medium" data-testid={`link-order-${order.id}`}>
-                                {order.orderNumber}
+                                {String(order.orderNumber || '').replace(/^#/, '')}
                               </Link>
                             </TableCell>
                             <TableCell>
@@ -840,7 +840,7 @@ export default function Shipments() {
                           <TableRow key={row.id} data-testid={`sa-row-${row.id}`}>
                             <TableCell>
                               <Link href={`/orders/detail/${row.id}`} className="text-primary hover:underline font-medium" data-testid={`sa-link-${row.id}`}>
-                                {row.orderNumber}
+                                {String(row.orderNumber || '').replace(/^#/, '')}
                               </Link>
                             </TableCell>
                             <TableCell>
@@ -1304,7 +1304,7 @@ export default function Shipments() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle data-testid="text-remark-dialog-title">
-              Edit Remark — {selectedOrder?.orderNumber}
+              Edit Remark — {String(selectedOrder?.orderNumber || '').replace(/^#/, '')}
             </DialogTitle>
           </DialogHeader>
           <Textarea

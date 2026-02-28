@@ -1251,11 +1251,7 @@ export async function generateBatchLoadsheetPdf(
       y - 14,
       8,
     );
-    const cleanOrderNumber = item.orderNumber?.startsWith("#")
-      ? item.orderNumber.slice(1)
-      : item.orderNumber;
-
-    drawTextSafe(page, font, cleanOrderNumber, colXs[3] + 4, y - 14, 8);
+    drawTextSafe(page, font, item.orderNumber || "", colXs[3] + 4, y - 14, 8);
     drawTextSafe(page, font, `Rs ${item.codAmount}`, colXs[4] + 4, y - 14, 8);
     drawTextSafe(page, font, `Rs ${item.codAmount}`, colXs[5] + 4, y - 14, 8);
     drawTextSafe(page, font, "100", colXs[6] + 4, y - 14, 8);

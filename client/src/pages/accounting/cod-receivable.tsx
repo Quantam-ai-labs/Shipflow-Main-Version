@@ -116,9 +116,9 @@ export default function AccountingCodReceivable() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Order #</TableHead>
+                    <TableHead>Order</TableHead>
                     <TableHead>Courier</TableHead>
-                    <TableHead>Tracking #</TableHead>
+                    <TableHead>Tracking</TableHead>
                     <TableHead className="text-right">COD Amount</TableHead>
                     <TableHead>Delivery Date</TableHead>
                     <TableHead className="text-right">Days Pending</TableHead>
@@ -132,7 +132,7 @@ export default function AccountingCodReceivable() {
                     return (
                       <TableRow key={item.id} data-testid={`row-order-${item.id}`}>
                         <TableCell className="font-medium" data-testid={`text-order-number-${item.id}`}>
-                          {item.orderNumber}
+                          {String(item.orderNumber || '').replace(/^#/, '')}
                         </TableCell>
                         <TableCell data-testid={`text-courier-${item.id}`}>
                           {item.courierName}

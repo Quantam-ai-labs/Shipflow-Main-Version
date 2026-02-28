@@ -141,7 +141,7 @@ function PurchaseSummary({ productId }: { productId: string }) {
                       )}
                     </div>
                   </TableCell>
-                  <TableCell className="text-sm font-mono">#{p.orderNumber}</TableCell>
+                  <TableCell className="text-sm font-mono">{String(p.orderNumber || '').replace(/^#/, '')}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {p.orderDate ? new Date(p.orderDate).toLocaleDateString() : "-"}
                   </TableCell>

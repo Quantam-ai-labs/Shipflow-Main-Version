@@ -294,7 +294,7 @@ export default function Orders() {
 
   const handleExport = () => {
     const csv = orders.map((o) => 
-      `"${o.orderNumber}","${o.customerName}","${o.customerPhone || ""}","${o.city || ""}","${(o.shippingAddress || "").replace(/"/g, '""')}","${o.totalQuantity || 1}","${o.totalAmount}","${(o.tags || []).join(";")}","${o.courierTracking ? getStatusLabel(o.shipmentStatus || "BOOKED") : (['BOOKED','FULFILLED','DELIVERED','RETURN'].includes(o.workflowStatus) ? "—" : "Unfulfilled")}","${(o.remark || "").replace(/"/g, '""')}"`
+      `"${String(o.orderNumber || '').replace(/^#/, '')}","${o.customerName}","${o.customerPhone || ""}","${o.city || ""}","${(o.shippingAddress || "").replace(/"/g, '""')}","${o.totalQuantity || 1}","${o.totalAmount}","${(o.tags || []).join(";")}","${o.courierTracking ? getStatusLabel(o.shipmentStatus || "BOOKED") : (['BOOKED','FULFILLED','DELIVERED','RETURN'].includes(o.workflowStatus) ? "—" : "Unfulfilled")}","${(o.remark || "").replace(/"/g, '""')}"`
     ).join("\n");
     const header = "Order ID,Customer Name,Phone,City,Address,Qty,Amount,Tags,Status,Remark\n";
     const blob = new Blob([header + csv], { type: "text/csv" });
@@ -588,7 +588,7 @@ export default function Orders() {
                         className="font-medium text-primary hover:underline"
                         data-testid={`link-order-${order.id}`}
                       >
-                        {order.orderNumber}
+                        {String(order.orderNumber || '').replace(/^#/, '')}
                       </Link>
                     </td>
                     <td className="p-2 text-muted-foreground">
@@ -706,7 +706,7 @@ export default function Orders() {
       <Dialog open={remarkDialogOpen} onOpenChange={setRemarkDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit Remark - {selectedOrder?.orderNumber}</DialogTitle>
+            <DialogTitle>Edit Remark - {String(selectedOrder?.orderNumber || '').replace(/^#/, '')}</DialogTitle>
           </DialogHeader>
           <Textarea
             value={remarkValue}

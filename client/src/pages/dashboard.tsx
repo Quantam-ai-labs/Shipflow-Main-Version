@@ -340,7 +340,7 @@ function OrderSearchSection() {
             ) : (
               <>
                 <div className="hidden sm:grid grid-cols-[100px_1fr_140px_1fr_100px_1fr] gap-2 px-4 py-2 border-b text-xs font-medium text-muted-foreground">
-                  <span>Order #</span>
+                  <span>Order</span>
                   <span>Customer</span>
                   <span>Contact</span>
                   <span>Address</span>
@@ -360,7 +360,7 @@ function OrderSearchSection() {
                       >
                         <div className="sm:grid sm:grid-cols-[100px_1fr_140px_1fr_100px_1fr] gap-2 items-center">
                           <span className="font-medium text-sm" data-testid={`text-order-number-${order.id}`}>
-                            #{order.orderNumber}
+                            {String(order.orderNumber || '').replace(/^#/, '')}
                           </span>
                           <span className="text-sm truncate" data-testid={`text-customer-name-${order.id}`}>
                             {order.customerName}
@@ -715,7 +715,7 @@ export default function Dashboard() {
                         <Package className="w-5 h-5 text-muted-foreground" />
                       </div>
                       <div>
-                        <p className="font-medium text-sm">#{order.orderNumber}</p>
+                        <p className="font-medium text-sm">{String(order.orderNumber || '').replace(/^#/, '')}</p>
                         <p className="text-xs text-muted-foreground">
                           {order.customerName} • {order.city}
                         </p>

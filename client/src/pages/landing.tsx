@@ -102,7 +102,7 @@ export default function Landing() {
                             <Package className="w-5 h-5 text-primary" />
                           </div>
                           <div>
-                            <p className="font-medium text-sm">Order #1247</p>
+                            <p className="font-medium text-sm">Order 1247</p>
                             <p className="text-xs text-muted-foreground">Karachi → Lahore</p>
                           </div>
                         </div>
@@ -116,7 +116,7 @@ export default function Landing() {
                             <Truck className="w-5 h-5 text-amber-500" />
                           </div>
                           <div>
-                            <p className="font-medium text-sm">Order #1248</p>
+                            <p className="font-medium text-sm">Order 1248</p>
                             <p className="text-xs text-muted-foreground">Islamabad → Peshawar</p>
                           </div>
                         </div>
@@ -130,7 +130,7 @@ export default function Landing() {
                             <Package className="w-5 h-5 text-blue-500" />
                           </div>
                           <div>
-                            <p className="font-medium text-sm">Order #1249</p>
+                            <p className="font-medium text-sm">Order 1249</p>
                             <p className="text-xs text-muted-foreground">Faisalabad → Multan</p>
                           </div>
                         </div>

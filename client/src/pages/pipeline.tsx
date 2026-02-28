@@ -815,9 +815,9 @@ export default function Pipeline() {
 
   const handleExportCsv = useCallback(() => {
     if (!orders.length) return;
-    const headers = ["Order #", "Customer Name", "Phone", "City", "Address", "Amount", "Items", "Status", "Courier", "Tracking", "Remark"];
+    const headers = ["Order", "Customer Name", "Phone", "City", "Address", "Amount", "Items", "Status", "Courier", "Tracking", "Remark"];
     const rows = orders.map(o => [
-      o.orderNumber || "",
+      String(o.orderNumber || '').replace(/^#/, ''),
       o.customerName || "",
       o.customerPhone || "",
       o.city || "",
@@ -1177,7 +1177,7 @@ export default function Pipeline() {
                   <td className="px-3 py-1.5">
                     <div className="flex items-center gap-1.5">
                       <Link href={`/orders/detail/${order.id}`} className="font-medium text-sm hover:underline" data-testid={`link-order-${order.id}`}>
-                        {order.orderNumber}
+                        {String(order.orderNumber || '').replace(/^#/, '')}
                       </Link>
                       {order.orderSource === "shopify_draft_order" && (
                         <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-green-100 dark:bg-green-900 border border-green-300 dark:border-green-700" title="Custom Order" data-testid={`badge-draft-${order.id}`}>
@@ -1690,7 +1690,7 @@ export default function Pipeline() {
                           const ovr = previewOverrides[order.orderId];
                           const hasError = !isValid && order.missingFields?.length > 0;
                           const cityMatched = isCityMatchedForOrder(order);
-                          const orderNum = String(order.orderNumber || "").replace(/^#/, "");
+                          const orderNum = String(order.orderNumber || "");
                           return (
                             <tr
                               key={order.orderId}
@@ -1837,7 +1837,7 @@ export default function Pipeline() {
                     <div className="space-y-0.5">
                       {bookingConfirmModal.preview.alreadyBooked.map((ab: any) => (
                         <div key={ab.orderId} className="flex items-center justify-between gap-2 text-[11px] px-2 py-1 rounded bg-blue-50 dark:bg-blue-950/30" data-testid={`preview-booked-${ab.orderId}`}>
-                          <span className="font-medium">{ab.orderNumber}</span>
+                          <span className="font-medium">{String(ab.orderNumber || '').replace(/^#/, '')}</span>
                           <span className="font-mono text-blue-700 dark:text-blue-400">{ab.trackingNumber}</span>
                         </div>
                       ))}
@@ -1968,7 +1968,7 @@ export default function Pipeline() {
                   <div className="space-y-1">
                     {bookingResultsModal.results.results.filter((r: any) => r.success).map((r: any) => (
                       <div key={r.orderId} className="flex items-center justify-between gap-2 text-xs px-2 py-1.5 rounded bg-green-50 dark:bg-green-950/30" data-testid={`result-success-${r.orderId}`}>
-                        <span className="font-medium">{r.orderNumber}</span>
+                        <span className="font-medium">{String(r.orderNumber || '').replace(/^#/, '')}</span>
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-green-700 dark:text-green-400">{r.trackingNumber}</span>
                           {r.orderId && (
@@ -1991,7 +1991,7 @@ export default function Pipeline() {
                   <div className="space-y-1.5">
                     {bookingResultsModal.results.results.filter((r: any) => !r.success).map((r: any) => (
                       <div key={r.orderId} className="text-xs px-3 py-2 rounded bg-red-50 dark:bg-red-950/30" data-testid={`result-failed-${r.orderId}`}>
-                        <div className="font-medium mb-1">{r.orderNumber}</div>
+                        <div className="font-medium mb-1">{String(r.orderNumber || '').replace(/^#/, '')}</div>
                         <div className="text-red-600 dark:text-red-400 whitespace-pre-wrap break-words leading-relaxed">{r.error}</div>
                       </div>
                     ))}
@@ -2011,7 +2011,7 @@ export default function Pipeline() {
       <Dialog open={paymentModal.open} onOpenChange={(open) => !open && setPaymentModal({ open: false, orderId: "", orderNumber: "", totalAmount: 0, prepaidAmount: 0 })}>
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
-            <DialogTitle>Add Payment - {paymentModal.orderNumber}</DialogTitle>
+            <DialogTitle>Add Payment - {String(paymentModal.orderNumber || '').replace(/^#/, '')}</DialogTitle>
             <DialogDescription>
               Total: PKR {paymentModal.totalAmount.toLocaleString()} | Paid: PKR {paymentModal.prepaidAmount.toLocaleString()} | Remaining: PKR {Math.max(paymentModal.totalAmount - paymentModal.prepaidAmount, 0).toLocaleString()}
             </DialogDescription>
@@ -2121,9 +2121,9 @@ export default function Pipeline() {
             </AlertDialogTitle>
             <AlertDialogDescription>
               {cancelConfirm?.type === "courier" ? (
-                <>This will cancel the AWB/tracking number with the courier (Leopards/PostEx) and move order <span className="font-medium">{cancelConfirm?.orderNumber}</span> back to Pending. The courier will be notified via their API.</>
+                <>This will cancel the AWB/tracking number with the courier (Leopards/PostEx) and move order <span className="font-medium">{String(cancelConfirm?.orderNumber || '').replace(/^#/, '')}</span> back to Pending. The courier will be notified via their API.</>
               ) : (
-                <>This will cancel order <span className="font-medium">{cancelConfirm?.orderNumber}</span> on Shopify. This action cannot be easily undone. The order will be marked as cancelled both on Shopify and in ShipFlow.</>
+                <>This will cancel order <span className="font-medium">{String(cancelConfirm?.orderNumber || '').replace(/^#/, '')}</span> on Shopify. This action cannot be easily undone. The order will be marked as cancelled both on Shopify and in ShipFlow.</>
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -2154,7 +2154,7 @@ export default function Pipeline() {
       <Dialog open={remarkDialogOpen} onOpenChange={setRemarkDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit Remark - {selectedRemarkOrder?.orderNumber}</DialogTitle>
+            <DialogTitle>Edit Remark - {String(selectedRemarkOrder?.orderNumber || '').replace(/^#/, '')}</DialogTitle>
             <DialogDescription>Add or update the remark for this order.</DialogDescription>
           </DialogHeader>
           <Textarea
@@ -2207,7 +2207,7 @@ export default function Pipeline() {
                           onClick={() => setHistoryPopup(null)}
                           data-testid={`history-link-${o.id}`}
                         >
-                          {o.orderNumber}
+                          {String(o.orderNumber || '').replace(/^#/, '')}
                         </Link>
                         <Badge className={`text-[10px] px-1.5 py-0 ${
                           o.workflowStatus === "DELIVERED" ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" :
