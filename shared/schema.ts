@@ -861,6 +861,29 @@ export type InsertUnmappedCourierStatus = z.infer<typeof insertUnmappedCourierSt
 export type UnmappedCourierStatus = typeof unmappedCourierStatuses.$inferSelect;
 
 // ============================================
+// COURIER KEYWORD MAPPINGS (Keyword-based normalization rules)
+// ============================================
+export const courierKeywordMappings = pgTable("courier_keyword_mappings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  courierName: varchar("courier_name", { length: 50 }),
+  keyword: varchar("keyword", { length: 255 }).notNull(),
+  normalizedStatus: varchar("normalized_status", { length: 50 }).notNull(),
+  workflowStage: varchar("workflow_stage", { length: 50 }),
+  priority: integer("priority").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_ckm_merchant").on(table.merchantId),
+]);
+
+export const insertCourierKeywordMappingSchema = createInsertSchema(courierKeywordMappings).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertCourierKeywordMapping = z.infer<typeof insertCourierKeywordMappingSchema>;
+export type CourierKeywordMapping = typeof courierKeywordMappings.$inferSelect;
+
+// ============================================
 // PRODUCTS (Shopify product sync & inventory)
 // ============================================
 export const products = pgTable("products", {

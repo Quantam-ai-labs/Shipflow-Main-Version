@@ -7972,6 +7972,77 @@ export async function registerRoutes(
   );
 
   app.get(
+    "/api/courier-status-mappings/raw-statuses",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+
+        const { normalizeStatus, detectCourierType } = await import(
+          "./services/statusNormalization"
+        );
+
+        const rawStatusRows = await db
+          .select({
+            courierName: orders.courierName,
+            rawStatus: orders.courierRawStatus,
+            orderCount: count(orders.id),
+          })
+          .from(orders)
+          .where(
+            and(
+              eq(orders.merchantId, merchantId),
+              isNotNull(orders.courierRawStatus),
+              isNotNull(orders.courierName),
+            ),
+          )
+          .groupBy(orders.courierName, orders.courierRawStatus)
+          .orderBy(orders.courierName, orders.courierRawStatus);
+
+        const customMappings = await storage.getCourierStatusMappings(merchantId);
+        const customMap = new Map(
+          customMappings.map((m) => [
+            `${m.courierName}::${m.courierStatus.toLowerCase().trim()}`,
+            m,
+          ]),
+        );
+
+        const result = rawStatusRows
+          .filter((r) => r.rawStatus && r.courierName)
+          .map((r) => {
+            const rawKey = r.rawStatus!.toLowerCase().trim();
+            const mapKey = `${r.courierName}::${rawKey}`;
+            const customMapping = customMap.get(mapKey);
+
+            const courierType = detectCourierType(r.courierName || "");
+            let systemNormalizedStatus: string | null = null;
+            if (courierType) {
+              const { normalizedStatus } = normalizeStatus(r.rawStatus!, courierType);
+              systemNormalizedStatus = normalizedStatus;
+            }
+
+            return {
+              courierName: r.courierName,
+              rawStatus: r.rawStatus,
+              orderCount: Number(r.orderCount),
+              customMappingId: customMapping?.id || null,
+              normalizedStatus: customMapping?.normalizedStatus || null,
+              workflowStage: customMapping?.workflowStage || null,
+              isCustom: !!customMapping,
+              systemNormalizedStatus,
+            };
+          });
+
+        res.json({ rawStatuses: result });
+      } catch (error) {
+        console.error("Error fetching raw courier statuses:", error);
+        res.status(500).json({ message: "Failed to fetch raw courier statuses" });
+      }
+    },
+  );
+
+  app.get(
     "/api/unmapped-courier-statuses",
     isAuthenticated,
     async (req: any, res) => {
@@ -8042,6 +8113,122 @@ export async function registerRoutes(
       } catch (error) {
         console.error("Error dismissing unmapped status:", error);
         res.status(500).json({ message: "Failed to dismiss unmapped status" });
+      }
+    },
+  );
+
+  // ============================================
+  // COURIER KEYWORD MAPPINGS
+  // ============================================
+
+  app.get(
+    "/api/courier-keyword-mappings",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+        const mappings = await storage.getCourierKeywordMappings(merchantId);
+        res.json({ mappings });
+      } catch (error) {
+        console.error("Error fetching courier keyword mappings:", error);
+        res.status(500).json({ message: "Failed to fetch courier keyword mappings" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/courier-keyword-mappings",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+
+        const schema = z.object({
+          courierName: z.string().nullable().optional(),
+          keyword: z.string().min(1),
+          normalizedStatus: z.string().min(1),
+          workflowStage: z.string().nullable().optional(),
+          priority: z.number().int().default(0),
+        });
+
+        const parsed = schema.parse(req.body);
+        const { clearMappingsCache } = await import("./services/couriers/index");
+        clearMappingsCache(merchantId);
+
+        const mapping = await storage.createCourierKeywordMapping({
+          merchantId,
+          courierName: parsed.courierName || null,
+          keyword: parsed.keyword.trim(),
+          normalizedStatus: parsed.normalizedStatus,
+          workflowStage: parsed.workflowStage || null,
+          priority: parsed.priority,
+        });
+        res.json({ mapping });
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          return res.status(400).json({ message: "Invalid data", errors: error.errors });
+        }
+        console.error("Error creating courier keyword mapping:", error);
+        res.status(500).json({ message: "Failed to create courier keyword mapping" });
+      }
+    },
+  );
+
+  app.put(
+    "/api/courier-keyword-mappings/:id",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+
+        const schema = z.object({
+          courierName: z.string().nullable().optional(),
+          keyword: z.string().min(1).optional(),
+          normalizedStatus: z.string().optional(),
+          workflowStage: z.string().nullable().optional(),
+          priority: z.number().int().optional(),
+        });
+
+        const parsed = schema.parse(req.body);
+        const { clearMappingsCache } = await import("./services/couriers/index");
+        clearMappingsCache(merchantId);
+
+        const updated = await storage.updateCourierKeywordMapping(merchantId, req.params.id, {
+          ...(parsed.courierName !== undefined && { courierName: parsed.courierName || null }),
+          ...(parsed.keyword && { keyword: parsed.keyword.trim() }),
+          ...(parsed.normalizedStatus && { normalizedStatus: parsed.normalizedStatus }),
+          ...(parsed.workflowStage !== undefined && { workflowStage: parsed.workflowStage || null }),
+          ...(parsed.priority !== undefined && { priority: parsed.priority }),
+        });
+        if (!updated) return res.status(404).json({ message: "Keyword mapping not found" });
+        res.json({ mapping: updated });
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          return res.status(400).json({ message: "Invalid data", errors: error.errors });
+        }
+        console.error("Error updating courier keyword mapping:", error);
+        res.status(500).json({ message: "Failed to update courier keyword mapping" });
+      }
+    },
+  );
+
+  app.delete(
+    "/api/courier-keyword-mappings/:id",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+        const { clearMappingsCache } = await import("./services/couriers/index");
+        clearMappingsCache(merchantId);
+        await storage.deleteCourierKeywordMapping(merchantId, req.params.id);
+        res.json({ success: true });
+      } catch (error) {
+        console.error("Error deleting courier keyword mapping:", error);
+        res.status(500).json({ message: "Failed to delete courier keyword mapping" });
       }
     },
   );

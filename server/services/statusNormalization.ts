@@ -177,6 +177,13 @@ function hasPassedThroughTransit(currentStatus?: string | null, workflowStatus?:
   });
 }
 
+export interface KeywordMappingRule {
+  keyword: string;
+  normalizedStatus: string;
+  courierName?: string | null;
+  priority?: number | null;
+}
+
 export function normalizeStatus(
   rawStatus: string,
   courier: CourierType,
@@ -184,6 +191,7 @@ export function normalizeStatus(
   events?: Array<{ status: string; date?: string; description?: string }>,
   workflowStatus?: string | null,
   customMappings?: Record<string, string>,
+  keywordMappings?: KeywordMappingRule[],
 ): { normalizedStatus: UniversalStatus; mapped: boolean } {
   if (currentStatus && FINAL_STATUSES.includes(currentStatus as UniversalStatus)) {
     return { normalizedStatus: currentStatus as UniversalStatus, mapped: true };
@@ -195,6 +203,19 @@ export function normalizeStatus(
     const customResult = customMappings[key] as UniversalStatus;
     if (UNIVERSAL_STATUSES.includes(customResult)) {
       return { normalizedStatus: customResult, mapped: true };
+    }
+  }
+
+  if (keywordMappings && keywordMappings.length > 0) {
+    const sorted = [...keywordMappings].sort((a, b) => (b.priority || 0) - (a.priority || 0));
+    for (const rule of sorted) {
+      const matchesCourier = !rule.courierName || rule.courierName.toLowerCase() === courier.toLowerCase();
+      if (matchesCourier && key.includes(rule.keyword.toLowerCase())) {
+        const mapped = rule.normalizedStatus as UniversalStatus;
+        if (UNIVERSAL_STATUSES.includes(mapped)) {
+          return { normalizedStatus: mapped, mapped: true };
+        }
+      }
     }
   }
 

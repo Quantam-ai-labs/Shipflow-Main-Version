@@ -27,6 +27,8 @@ import {
   type CourierStatusMapping, type InsertCourierStatusMapping,
   unmappedCourierStatuses,
   type UnmappedCourierStatus,
+  courierKeywordMappings,
+  type CourierKeywordMapping, type InsertCourierKeywordMapping,
   products,
   type Product, type InsertProduct,
   users,
@@ -184,6 +186,12 @@ export interface IStorage {
   getUnmappedStatusCount(merchantId: string): Promise<number>;
   resolveUnmappedStatus(merchantId: string, id: string): Promise<void>;
   dismissUnmappedStatus(merchantId: string, id: string): Promise<void>;
+
+  // Courier Keyword Mappings
+  getCourierKeywordMappings(merchantId: string): Promise<CourierKeywordMapping[]>;
+  createCourierKeywordMapping(mapping: InsertCourierKeywordMapping): Promise<CourierKeywordMapping>;
+  updateCourierKeywordMapping(merchantId: string, id: string, data: Partial<InsertCourierKeywordMapping>): Promise<CourierKeywordMapping | undefined>;
+  deleteCourierKeywordMapping(merchantId: string, id: string): Promise<void>;
 
   // Products
   getProducts(merchantId: string, options?: { search?: string; status?: string; page?: number; pageSize?: number }): Promise<{ products: Product[]; total: number }>;
@@ -1695,6 +1703,30 @@ export class DatabaseStorage implements IStorage {
   async dismissUnmappedStatus(merchantId: string, id: string): Promise<void> {
     await db.delete(unmappedCourierStatuses)
       .where(and(eq(unmappedCourierStatuses.id, id), eq(unmappedCourierStatuses.merchantId, merchantId)));
+  }
+
+  async getCourierKeywordMappings(merchantId: string): Promise<CourierKeywordMapping[]> {
+    return db.select().from(courierKeywordMappings)
+      .where(eq(courierKeywordMappings.merchantId, merchantId))
+      .orderBy(desc(courierKeywordMappings.priority), courierKeywordMappings.createdAt);
+  }
+
+  async createCourierKeywordMapping(mapping: InsertCourierKeywordMapping): Promise<CourierKeywordMapping> {
+    const [created] = await db.insert(courierKeywordMappings).values(mapping).returning();
+    return created;
+  }
+
+  async updateCourierKeywordMapping(merchantId: string, id: string, data: Partial<InsertCourierKeywordMapping>): Promise<CourierKeywordMapping | undefined> {
+    const [updated] = await db.update(courierKeywordMappings)
+      .set(data)
+      .where(and(eq(courierKeywordMappings.id, id), eq(courierKeywordMappings.merchantId, merchantId)))
+      .returning();
+    return updated;
+  }
+
+  async deleteCourierKeywordMapping(merchantId: string, id: string): Promise<void> {
+    await db.delete(courierKeywordMappings)
+      .where(and(eq(courierKeywordMappings.id, id), eq(courierKeywordMappings.merchantId, merchantId)));
   }
 
   async getProducts(merchantId: string, options?: { search?: string; status?: string; page?: number; pageSize?: number }): Promise<{ products: Product[]; total: number }> {
