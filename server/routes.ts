@@ -3079,7 +3079,7 @@ export async function registerRoutes(
                       courierPaymentStatus: payment.paymentStatus || null,
                       courierPaymentRef: payment.invoiceChequeNo || null,
                       courierPaymentMethod: payment.paymentMethod || null,
-                      courierSlipLink: payment.slipLink || null,
+                      courierSlipLink: payment.slipLink && !payment.slipLink.includes('getInvoiceSlip') ? payment.slipLink : null,
                       courierBillingMethod: payment.billingMethod || null,
                       courierMessage: payment.message || null,
                       lastSyncedAt: new Date(),
