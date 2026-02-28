@@ -23,16 +23,17 @@ DATABASE TABLES (complete column list for each table):
    - total_quantity (integer)
    - tags (text array), notes (text), remark (text), item_summary (text)
    - courier_name (varchar), courier_tracking (varchar), courier_raw_status (text)
-   - shipment_status (varchar: pending/booked/picked/in_transit/delivered/returned/failed)
+   - shipment_status (varchar: pending/booked/picked/in_transit/delivered/returned/failed — legacy field, prefer workflow_status for all analytics)
    - workflow_status (varchar: NEW/PENDING/READY_TO_SHIP/HOLD/BOOKED/FULFILLED/DELIVERED/RETURN/CANCELLED)
+     IMPORTANT: Always use workflow_status (not shipment_status) for order analytics, delivery rates, return rates, and pipeline analysis.
      Flow: NEW → PENDING/READY_TO_SHIP/HOLD (pre-booking) → BOOKED (courier booked) → FULFILLED (picked up / in transit / out for delivery) → DELIVERED or RETURN or CANCELLED
      Terminal stages: DELIVERED, RETURN, CANCELLED. Active/non-terminal: NEW, PENDING, READY_TO_SHIP, HOLD, BOOKED, FULFILLED
    - pending_reason (text), pending_reason_type (varchar)
    - hold_until (timestamp), hold_created_at (timestamp)
    - cancel_reason (text), cancelled_at (timestamp)
    - previous_workflow_status (varchar), last_status_changed_at (timestamp)
-   - confirmed_at (timestamp), booked_at (timestamp), fulfilled_at (timestamp)
-   - dispatched_at (timestamp), delivered_at (timestamp), returned_at (timestamp)
+   - booked_at (timestamp — when courier was booked), fulfilled_at (timestamp — when picked up / dispatched)
+   - delivered_at (timestamp), returned_at (timestamp), cancelled_at (timestamp)
    - booking_status (varchar)
    - prepaid_amount (decimal, default 0), cod_remaining (decimal), cod_payment_status (varchar: UNPAID/PARTIAL/PAID)
    - landing_site (text), referring_site (text), order_source (varchar)
@@ -142,7 +143,9 @@ RULES:
 - Use meaningful aliases for columns
 - When computing percentages, handle division by zero with NULLIF
 - In JOINs, ensure both tables filter by merchant_id = $1
-- For pipeline/workflow analysis, use confirmed_at, dispatched_at, delivered_at, returned_at, cancelled_at timestamps to calculate time between stages
+- Order lifecycle timestamps: created_at (order placed) → booked_at (courier booked) → fulfilled_at (picked up/in transit) → delivered_at (delivered) or returned_at (returned) or cancelled_at (cancelled). Use these to calculate time between stages.
+- For delivery rate calculations on orders, use workflow_status = 'DELIVERED'. For return rate, use workflow_status = 'RETURN'. For fulfilled (in-transit), use workflow_status = 'FULFILLED'.
+- Always use order_date for date-range filtering on the orders table (NOT created_at).
 - For COD analysis, use prepaid_amount, cod_remaining, and cod_payment_status from orders
 `;
 
@@ -167,7 +170,7 @@ const INSIGHT_PROMPTS: InsightPrompt[] = [
     title: "Return Rate Analysis", 
     category: "operations",
     section: "marketing",
-    prompt: `Compare the return/failed delivery rate for the last 7 days vs the previous 7 days. Break it down by city if possible. Flag any cities with return rates above 20%.`
+    prompt: `Compare the return rate for the last 7 days vs the previous 7 days. Return rate = COUNT(workflow_status = 'RETURN') / COUNT(workflow_status IN ('FULFILLED','DELIVERED','RETURN')) from orders table, filtered by order_date. Break it down by city. Flag any cities with return rates above 20%.`
   },
   {
     key: "spend_efficiency",
@@ -202,7 +205,13 @@ const INSIGHT_PROMPTS: InsightPrompt[] = [
     title: "Business Health",
     category: "overview",
     section: "dashboard",
-    prompt: `Give an overall business health assessment for the last 7 days: total orders, total revenue (PKR), fulfillment rate (dispatched/total), delivery rate (delivered/dispatched), return rate, and average order value. Compare key metrics with the previous 7 days. Highlight any concerning trends.`
+    prompt: `Give an overall business health assessment for the last 7 days (use order_date for filtering). Calculate:
+- Total orders and total revenue (SUM of total_amount) in PKR
+- Fulfillment rate = orders with workflow_status IN ('FULFILLED','DELIVERED','RETURN') / total orders (i.e. orders that reached courier pickup or beyond)
+- Delivery rate = orders with workflow_status = 'DELIVERED' / orders with workflow_status IN ('FULFILLED','DELIVERED','RETURN')
+- Return rate = orders with workflow_status = 'RETURN' / orders with workflow_status IN ('FULFILLED','DELIVERED','RETURN')
+- Average order value (AVG of total_amount)
+Compare each metric with the previous 7 days. Highlight any concerning trends.`
   },
   {
     key: "dashboard_pending",
@@ -216,21 +225,21 @@ const INSIGHT_PROMPTS: InsightPrompt[] = [
     title: "Revenue Trend",
     category: "finance",
     section: "dashboard",
-    prompt: `Analyze daily revenue (total_amount from orders) for the last 14 days. Identify the trend, peak days, and average daily revenue. Is revenue growing, stable, or declining compared to the previous 14 days?`
+    prompt: `Analyze daily revenue from orders for the last 14 days. Use order_date for date filtering and SUM(total_amount) as daily revenue — include ALL orders regardless of workflow_status (revenue is recognized at order placement, not delivery). Group by DATE(order_date). Identify the trend, peak days, and average daily revenue. Compare total revenue with the previous 14 days to determine if revenue is growing, stable, or declining.`
   },
   {
     key: "analytics_delivery",
     title: "Delivery Performance",
     category: "operations",
     section: "analytics",
-    prompt: `Analyze delivery performance for the last 14 days: overall delivery rate, average delivery attempts, courier-wise delivery success rates (from shipments table by courier_name). Which courier has the best and worst performance? Any recommendations for courier selection?`
+    prompt: `Analyze delivery performance for the last 14 days. From the orders table (filtered by order_date): overall delivery rate = COUNT(workflow_status='DELIVERED') / COUNT(workflow_status IN ('FULFILLED','DELIVERED','RETURN')). From the shipments table (filtered by created_at): courier-wise breakdown by courier_name showing total shipments, delivered (status='delivered'), returned (status='returned'), delivery success rate, and average delivery_attempts. Which courier has the best and worst performance?`
   },
   {
     key: "analytics_cities",
     title: "City Performance",
     category: "operations",
     section: "analytics",
-    prompt: `Show top 10 cities by order volume in the last 14 days. For each city, show order count, delivery rate (delivered/total), return rate, and average order value. Flag cities with return rates above 15% and suggest whether to continue or reduce advertising there.`
+    prompt: `Show top 10 cities by order volume in the last 14 days (use order_date for filtering). For each city, show order count, delivery rate = COUNT(workflow_status='DELIVERED')/total, return rate = COUNT(workflow_status='RETURN')/total, and average order value (AVG total_amount). Flag cities with return rates above 15% and suggest whether to continue or reduce advertising there.`
   },
   {
     key: "analytics_products",
@@ -611,8 +620,8 @@ export async function generateQuickStrategy(
                   COALESCE(SUM(CAST(purchase_value AS numeric)), 0) as total_revenue
                   FROM ad_insights WHERE merchant_id = $1 AND date >= (CURRENT_DATE - INTERVAL '7 days')::text LIMIT 1`,
     orderStats: `SELECT COUNT(*) as total_orders,
-                 COUNT(*) FILTER (WHERE shipment_status = 'delivered') as delivered,
-                 COUNT(*) FILTER (WHERE shipment_status IN ('returned','failed')) as returned,
+                 COUNT(*) FILTER (WHERE workflow_status = 'DELIVERED') as delivered,
+                 COUNT(*) FILTER (WHERE workflow_status = 'RETURN') as returned,
                  COALESCE(AVG(CAST(total_amount AS numeric)), 0) as avg_order_value
                  FROM orders WHERE merchant_id = $1 AND order_date >= CURRENT_DATE - INTERVAL '7 days' LIMIT 1`,
     topCampaigns: `SELECT c.name, COALESCE(SUM(CAST(i.spend AS numeric)), 0) as spend,
