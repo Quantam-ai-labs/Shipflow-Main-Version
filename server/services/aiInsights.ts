@@ -19,9 +19,10 @@ DATABASE TABLES (complete column list for each table):
    - total_amount (decimal), subtotal_amount (decimal), shipping_amount (decimal), discount_amount (decimal)
    - currency (varchar, default 'PKR'), payment_method (varchar), payment_status (varchar), fulfillment_status (varchar)
    - order_status (varchar: pending/confirmed/cancelled)
-   - line_items (jsonb array of {title, quantity, price, sku, product_id})
+   - line_items (jsonb array of {name, quantity, price, sku, productId, variantId, variantTitle, image}). Use item->>'name' for product name, item->>'productId' for Shopify product ID. Parse with jsonb_array_elements(line_items).
    - total_quantity (integer)
-   - tags (text array), notes (text), remark (text), item_summary (text)
+   - tags (text array), notes (text), remark (text)
+   - item_summary (text — denormalized product name + quantity, e.g. "Mini Shaver – Powerful Battery x 1". PREFER this for product-level analysis: GROUP BY item_summary is simpler and more reliable than parsing line_items JSONB.)
    - courier_name (varchar), courier_tracking (varchar), courier_raw_status (text)
    - shipment_status (varchar: pending/booked/picked/in_transit/delivered/returned/failed — legacy field, prefer workflow_status for all analytics)
    - workflow_status (varchar: NEW/PENDING/READY_TO_SHIP/HOLD/BOOKED/FULFILLED/DELIVERED/RETURN/CANCELLED)
@@ -147,6 +148,57 @@ RULES:
 - For delivery rate calculations on orders, use workflow_status = 'DELIVERED'. For return rate, use workflow_status = 'RETURN'. For fulfilled (in-transit), use workflow_status = 'FULFILLED'.
 - Always use order_date for date-range filtering on the orders table (NOT created_at).
 - For COD analysis, use prepaid_amount, cod_remaining, and cod_payment_status from orders
+
+DATA RELATIONSHIPS:
+- orders.id = shipments.order_id (one order can have 0 or more shipments)
+- orders line_items JSONB: each element has productId which matches products.shopify_product_id
+- orders.courier_name corresponds to shipments.courier_name
+- ad_insights.entity_id = ad_campaigns.campaign_id (when ad_insights.level = 'campaign')
+- cod_reconciliation.order_id = orders.id, cod_reconciliation.shipment_id = shipments.id
+- order_payments.order_id = orders.id
+- For product-level order analysis: USE item_summary from orders table (preferred) OR jsonb_array_elements(line_items)
+
+EXAMPLE QUERY PATTERNS (use these as templates for common questions):
+1. Product performance by orders:
+   SELECT item_summary, COUNT(*) as total_orders, SUM(total_amount) as revenue,
+     COUNT(CASE WHEN workflow_status='DELIVERED' THEN 1 END) as delivered,
+     COUNT(CASE WHEN workflow_status='RETURN' THEN 1 END) as returns,
+     ROUND(100.0*COUNT(CASE WHEN workflow_status='RETURN' THEN 1 END)/NULLIF(COUNT(*),0),1) as return_pct
+   FROM orders WHERE merchant_id=$1 AND item_summary IS NOT NULL
+   GROUP BY item_summary ORDER BY total_orders DESC LIMIT 10
+
+2. Customer analysis:
+   SELECT customer_name, customer_phone, COUNT(*) as order_count, SUM(total_amount) as total_spent,
+     COUNT(CASE WHEN workflow_status='DELIVERED' THEN 1 END) as delivered
+   FROM orders WHERE merchant_id=$1
+   GROUP BY customer_name, customer_phone ORDER BY order_count DESC LIMIT 10
+
+3. Time between stages (uses lifecycle timestamps, NOT order_date — these measure processing time):
+   SELECT AVG(EXTRACT(EPOCH FROM (delivered_at - booked_at))/3600) as avg_hours_to_deliver,
+     AVG(EXTRACT(EPOCH FROM (booked_at - created_at))/3600) as avg_hours_to_book
+   FROM orders WHERE merchant_id=$1 AND delivered_at IS NOT NULL AND booked_at IS NOT NULL AND order_date >= NOW() - INTERVAL '30 days' LIMIT 1
+
+4. COD pending:
+   SELECT SUM(cod_remaining) as total_cod_pending, COUNT(*) as pending_orders
+   FROM orders WHERE merchant_id=$1 AND cod_payment_status IN ('UNPAID','PARTIAL') AND workflow_status='DELIVERED' LIMIT 1
+
+5. Revenue by city:
+   SELECT city, COUNT(*) as orders, SUM(total_amount) as revenue, AVG(total_amount) as avg_order_value
+   FROM orders WHERE merchant_id=$1 AND order_date>=NOW()-INTERVAL '30 days'
+   GROUP BY city ORDER BY revenue DESC LIMIT 10
+
+6. Daily order/revenue trend:
+   SELECT DATE(order_date) as day, COUNT(*) as orders, SUM(total_amount) as revenue
+   FROM orders WHERE merchant_id=$1 AND order_date>=NOW()-INTERVAL '14 days'
+   GROUP BY DATE(order_date) ORDER BY day LIMIT 14
+
+7. Courier performance from orders:
+   SELECT courier_name, COUNT(*) as total,
+     COUNT(CASE WHEN workflow_status='DELIVERED' THEN 1 END) as delivered,
+     COUNT(CASE WHEN workflow_status='RETURN' THEN 1 END) as returned,
+     ROUND(100.0*COUNT(CASE WHEN workflow_status='DELIVERED' THEN 1 END)/NULLIF(COUNT(*),0),1) as delivery_rate
+   FROM orders WHERE merchant_id=$1 AND courier_name IS NOT NULL
+   GROUP BY courier_name LIMIT 10
 `;
 
 interface InsightPrompt {
@@ -184,7 +236,7 @@ const INSIGHT_PROMPTS: InsightPrompt[] = [
     title: "Top Cities by Orders",
     category: "operations", 
     section: "marketing",
-    prompt: `Show the top 10 cities by order count in the last 14 days, with delivery rate, return rate, and average order value for each city.`
+    prompt: `Show the top 10 cities by order count in the last 14 days (use order_date for filtering). For each city show: order count, delivery rate = COUNT(workflow_status='DELIVERED')/total, return rate = COUNT(workflow_status='RETURN')/total, and average order value (AVG total_amount). Flag cities with return rates above 15%.`
   },
   {
     key: "order_trends",
@@ -246,7 +298,7 @@ Compare each metric with the previous 7 days. Highlight any concerning trends.`
     title: "Product Insights",
     category: "products",
     section: "analytics",
-    prompt: `Analyze the top 10 products by order count in the last 14 days using line_items jsonb in orders. For each product, show order count, total revenue, and return rate if possible. Which products are performing best?`
+    prompt: `Analyze the top 10 products by order count in the last 14 days using item_summary column from orders (NOT line_items JSONB). Filter by order_date, group by item_summary. For each product show: order count, total revenue (SUM total_amount), delivered count (workflow_status='DELIVERED'), return count (workflow_status='RETURN'), return rate percentage. Order by order count DESC. Which products perform best and which have concerning return rates?`
   },
   {
     key: "pipeline_bottleneck",
@@ -281,21 +333,21 @@ Compare each metric with the previous 7 days. Highlight any concerning trends.`
     title: "Return Analysis",
     category: "risk",
     section: "shipments",
-    prompt: `Deep dive into returned/failed shipments from the last 14 days. What's the overall return rate? Break down by courier, city, and payment method. What's the financial impact (sum of cod_amount for returned orders)? Identify patterns and recommend actions to reduce returns.`
+    prompt: `Deep dive into returned orders from the last 14 days (use order_date for filtering, workflow_status = 'RETURN' from orders table). What's the overall return rate = COUNT(workflow_status='RETURN') / COUNT(workflow_status IN ('FULFILLED','DELIVERED','RETURN'))? Break down by courier_name, city, and payment_method. What's the financial impact (SUM of total_amount for returned orders)? Identify patterns and recommend actions to reduce returns.`
   },
   {
     key: "shipments_cod",
     title: "COD Collection Status",
     category: "finance",
     section: "shipments",
-    prompt: `Analyze COD collection status from shipments in the last 30 days. Total COD amount for delivered shipments, total collected vs pending. Group by courier. Flag any couriers with significant pending COD amounts.`
+    prompt: `Analyze COD collection status from orders table in the last 30 days (use order_date for filtering). For delivered orders (workflow_status = 'DELIVERED') with payment_method = 'cod': show total cod_remaining as pending COD, count of orders by cod_payment_status (UNPAID/PARTIAL/PAID). Group by courier_name. Flag any couriers with large unpaid COD amounts.`
   },
   {
     key: "finance_revenue",
     title: "Revenue Analysis",
     category: "finance",
     section: "finance",
-    prompt: `Analyze revenue for the last 30 days from orders. Daily revenue trend, total revenue, average order value. Compare with previous 30 days. Break down by payment method (COD vs prepaid). What percentage is COD?`
+    prompt: `Analyze revenue for the last 30 days from orders (use order_date for date filtering, SUM(total_amount) as revenue — include ALL orders regardless of workflow_status). Show: total revenue, average order value, daily revenue trend. Compare total with previous 30 days. Break down by payment_method (COD vs prepaid) showing count and revenue for each. What percentage of orders and revenue is COD?`
   },
   {
     key: "finance_expenses",
@@ -380,23 +432,66 @@ async function executeReadOnlyQuery(query: string, params: any[]): Promise<any[]
   }
 }
 
+async function getMerchantDataSummary(merchantId: string): Promise<string> {
+  try {
+    const summaryQuery = `
+      SELECT COUNT(*) as total_orders,
+        MIN(order_date)::text as earliest_order,
+        MAX(order_date)::text as latest_order,
+        COUNT(DISTINCT item_summary) as unique_products,
+        COUNT(DISTINCT city) as unique_cities,
+        COUNT(DISTINCT courier_name) FILTER (WHERE courier_name IS NOT NULL) as unique_couriers,
+        SUM(total_amount) as total_revenue,
+        COUNT(CASE WHEN workflow_status='DELIVERED' THEN 1 END) as delivered_count,
+        COUNT(CASE WHEN workflow_status='RETURN' THEN 1 END) as return_count,
+        COUNT(CASE WHEN workflow_status='CANCELLED' THEN 1 END) as cancelled_count,
+        COUNT(CASE WHEN order_date >= NOW() - INTERVAL '7 days' THEN 1 END) as orders_last_7d,
+        COUNT(CASE WHEN order_date >= NOW() - INTERVAL '30 days' THEN 1 END) as orders_last_30d
+      FROM orders WHERE merchant_id = $1 LIMIT 1`;
+    const rows = await executeReadOnlyQuery(summaryQuery, [merchantId]);
+    if (rows.length > 0) {
+      const s = rows[0];
+      return `\nMERCHANT DATA SUMMARY (real-time):
+- Total orders: ${s.total_orders} (${s.orders_last_7d} in last 7 days, ${s.orders_last_30d} in last 30 days)
+- Date range: ${s.earliest_order?.split('T')[0] || 'N/A'} to ${s.latest_order?.split('T')[0] || 'N/A'}
+- Total revenue: PKR ${Number(s.total_revenue || 0).toLocaleString()}
+- Delivered: ${s.delivered_count}, Returns: ${s.return_count}, Cancelled: ${s.cancelled_count}
+- Unique products: ${s.unique_products}, Cities: ${s.unique_cities}, Couriers: ${s.unique_couriers}
+Use this context to generate accurate queries. Data exists — if your query returns 0 rows, your query is likely wrong.`;
+    }
+    return "";
+  } catch {
+    return "";
+  }
+}
+
 export async function generateChatResponse(
   userQuestion: string,
   merchantId: string,
   dollarRate: number = 280,
   language: string = "en"
 ): Promise<{ answer: string; sqlQuery?: string; data?: any[] }> {
+  const merchantSummary = await getMerchantDataSummary(merchantId);
+
   const sqlGenResponse = await openai.chat.completions.create({
     model: "gpt-4o",
     messages: [
       {
         role: "system",
         content: `${DB_SCHEMA_CONTEXT}
+${merchantSummary}
 
 You are given a user's question about their business data. Generate a PostgreSQL query to answer it.
 The merchant_id parameter will be passed as $1. Use $1 in WHERE clauses.
 The current USD to PKR rate is ${dollarRate}.
 Current date: ${new Date().toISOString().split('T')[0]}
+
+IMPORTANT GUIDELINES:
+- Use the EXAMPLE QUERY PATTERNS above as templates when applicable.
+- For product-related questions, use item_summary column (NOT line_items JSONB parsing).
+- For delivery/return rates, use workflow_status column with values: DELIVERED, RETURN, FULFILLED, CANCELLED.
+- For date filtering on orders, always use order_date column.
+- Ensure queries return meaningful data — check the merchant data summary above to confirm data exists.
 
 Respond in JSON format ONLY:
 {
@@ -426,6 +521,7 @@ If the question cannot be answered with a SQL query, respond:
   }
 
   let data: any[];
+  let usedSql = sqlResult.sql;
   try {
     data = await executeReadOnlyQuery(sqlResult.sql, [merchantId]);
   } catch (error: any) {
@@ -438,8 +534,10 @@ If the question cannot be answered with a SQL query, respond:
         {
           role: "system",
           content: `${DB_SCHEMA_CONTEXT}
+${merchantSummary}
 The previous SQL query failed with error: ${safeError}
-Fix the query. Ensure it includes merchant_id = $1 and LIMIT. Respond in JSON: { "sql": "fixed query" }`
+Original query: ${sqlResult.sql}
+Fix the query. Ensure it includes merchant_id = $1 and LIMIT. Use the EXAMPLE QUERY PATTERNS as reference. Respond in JSON: { "sql": "fixed query" }`
         },
         { role: "user", content: userQuestion }
       ],
@@ -453,8 +551,47 @@ Fix the query. Ensure it includes merchant_id = $1 and LIMIT. Respond in JSON: {
     }
     try {
       data = await executeReadOnlyQuery(retryResult.sql, [merchantId]);
+      usedSql = retryResult.sql;
     } catch (retryError: any) {
       return { answer: `I couldn't retrieve the data after retrying. Error: ${retryError.message}` };
+    }
+  }
+
+  if (data.length === 0) {
+    try {
+      const retryResponse = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "system",
+            content: `${DB_SCHEMA_CONTEXT}
+${merchantSummary}
+The previous SQL query returned 0 rows, but the merchant has data (see summary above).
+Original question: "${userQuestion}"
+Failed query: ${usedSql}
+
+The query likely has too-restrictive filters, wrong column names, or wrong values. Generate a BROADER query:
+- Remove or widen date filters
+- Check if you used the right column names (e.g. item_summary not title, workflow_status not shipment_status)
+- For products, use item_summary column
+- For status filtering, use workflow_status with values: NEW/PENDING/READY_TO_SHIP/HOLD/BOOKED/FULFILLED/DELIVERED/RETURN/CANCELLED
+Respond in JSON: { "sql": "broader query", "explanation": "what was wrong and what changed" }`
+          },
+          { role: "user", content: userQuestion }
+        ],
+        response_format: { type: "json_object" },
+        max_completion_tokens: 8192,
+      });
+
+      const retryResult = JSON.parse(retryResponse.choices[0]?.message?.content || "{}");
+      if (retryResult.sql) {
+        const retryData = await executeReadOnlyQuery(retryResult.sql, [merchantId]);
+        if (retryData.length > 0) {
+          data = retryData;
+          usedSql = retryResult.sql;
+        }
+      }
+    } catch {
     }
   }
 
@@ -471,6 +608,7 @@ Fix the query. Ensure it includes merchant_id = $1 and LIMIT. Respond in JSON: {
 Format the query results into a clear, actionable answer. Use PKR for currency. Be specific with numbers.
 Include recommendations where relevant. Use bullet points and bold for key metrics.
 Keep the response concise but informative (max 400 words).
+${data.length === 0 ? "The query returned no results. Explain what was searched and suggest the user rephrase their question or check if the relevant data exists." : ""}
 Current USD to PKR rate: ${dollarRate}${languageInstruction}`
       },
       {
@@ -483,7 +621,7 @@ Current USD to PKR rate: ${dollarRate}${languageInstruction}`
 
   return {
     answer: formatResponse.choices[0]?.message?.content || "No response generated.",
-    sqlQuery: sqlResult.sql,
+    sqlQuery: usedSql,
     data: data.slice(0, 20),
   };
 }
@@ -522,6 +660,7 @@ async function generateInsightsFromPrompts(
   dollarRate: number
 ): Promise<InsightResult[]> {
   const results: InsightResult[] = [];
+  const merchantSummary = await getMerchantDataSummary(merchantId);
 
   for (const insight of prompts) {
     try {
@@ -531,8 +670,10 @@ async function generateInsightsFromPrompts(
           {
             role: "system",
             content: `${DB_SCHEMA_CONTEXT}
+${merchantSummary}
 Generate a PostgreSQL query to: ${insight.prompt}
 Use $1 for merchant_id. Current date: ${new Date().toISOString().split('T')[0]}. Dollar rate: ${dollarRate}.
+Use the EXAMPLE QUERY PATTERNS as templates. For product analysis, use item_summary. For status analysis, use workflow_status.
 Respond in JSON: { "sql": "SELECT ..." }`
           },
           { role: "user", content: insight.prompt }
@@ -549,6 +690,35 @@ Respond in JSON: { "sql": "SELECT ..." }`
         data = await executeReadOnlyQuery(sqlResult.sql, [merchantId]);
       } catch {
         continue;
+      }
+
+      if (data.length === 0) {
+        try {
+          const retryResponse = await openai.chat.completions.create({
+            model: "gpt-4o",
+            messages: [
+              {
+                role: "system",
+                content: `${DB_SCHEMA_CONTEXT}
+${merchantSummary}
+The previous query for "${insight.title}" returned 0 rows. The merchant has data (see summary).
+Failed query: ${sqlResult.sql}
+Generate a BROADER query — remove/widen date filters, check column names (use item_summary not title, workflow_status not shipment_status).
+Respond in JSON: { "sql": "SELECT ..." }`
+              },
+              { role: "user", content: insight.prompt }
+            ],
+            response_format: { type: "json_object" },
+            max_completion_tokens: 8192,
+          });
+          const retryResult = JSON.parse(retryResponse.choices[0]?.message?.content || "{}");
+          if (retryResult.sql) {
+            try {
+              const retryData = await executeReadOnlyQuery(retryResult.sql, [merchantId]);
+              if (retryData.length > 0) data = retryData;
+            } catch {}
+          }
+        } catch {}
       }
 
       const formatResponse = await openai.chat.completions.create({
