@@ -33,6 +33,8 @@ import {
   Pencil,
   Trash2,
   RotateCcw,
+  Download,
+  Upload,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -940,6 +942,11 @@ function normalizeCourierName(name: string): string {
 
 export default function StatusMappingPage() {
   const { toast } = useToast();
+  const [exportCourier, setExportCourier] = useState<string | null>(null);
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [showImportDialog, setShowImportDialog] = useState(false);
+  const [importFile, setImportFile] = useState<any>(null);
+  const [importCourierFilter, setImportCourierFilter] = useState("all");
 
   const { data: unmappedStatuses } = useQuery<UnmappedStatus[]>({
     queryKey: ["/api/unmapped-courier-statuses?resolved=false"],
@@ -956,14 +963,218 @@ export default function StatusMappingPage() {
     },
   });
 
+  const exportMutation = useMutation({
+    mutationFn: async (courier: string) => {
+      const url = courier === "all"
+        ? "/api/courier-status-mappings/export"
+        : `/api/courier-status-mappings/export?courier=${courier}`;
+      const res = await apiRequest("GET", url);
+      return res.json();
+    },
+    onSuccess: (data, courier) => {
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const date = new Date().toISOString().split("T")[0];
+      a.href = url;
+      a.download = `shipflow-mappings-${courier}-${date}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setShowExportDialog(false);
+      toast({
+        title: "Exported",
+        description: `${data.statusMappings.length} status mappings and ${data.keywordMappings.length} keyword rules exported.`,
+      });
+    },
+    onError: () => {
+      toast({ title: "Export failed", description: "Could not export mappings.", variant: "destructive" });
+    },
+  });
+
+  const importMutation = useMutation({
+    mutationFn: async ({ fileData, courierFilter }: { fileData: any; courierFilter: string }) => {
+      const body = { ...fileData, courierFilter: courierFilter === "all" ? null : courierFilter };
+      const res = await apiRequest("POST", "/api/courier-status-mappings/import", body);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setShowImportDialog(false);
+      setImportFile(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/courier-status-mappings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/courier-keyword-mappings"] });
+      toast({
+        title: "Import complete",
+        description: `${data.importedStatusMappings} status mappings, ${data.importedKeywordMappings} keyword rules imported. ${data.skippedDuplicates} duplicates skipped.`,
+      });
+    },
+    onError: () => {
+      toast({ title: "Import failed", description: "Invalid file or server error.", variant: "destructive" });
+    },
+  });
+
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const parsed = JSON.parse(ev.target?.result as string);
+        if (!parsed.version || (!parsed.statusMappings && !parsed.keywordMappings)) {
+          toast({ title: "Invalid file", description: "This doesn't look like a ShipFlow mappings file.", variant: "destructive" });
+          return;
+        }
+        setImportFile(parsed);
+        setImportCourierFilter("all");
+        setShowImportDialog(true);
+      } catch {
+        toast({ title: "Invalid file", description: "Could not parse JSON file.", variant: "destructive" });
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  }
+
+  const importCouriers = importFile
+    ? [...new Set([
+        ...(importFile.statusMappings || []).map((m: any) => m.courierName?.toLowerCase()),
+        ...(importFile.keywordMappings || []).filter((m: any) => m.courierName).map((m: any) => m.courierName.toLowerCase()),
+      ])].filter(Boolean) as string[]
+    : [];
+
+  const filteredImportStatusCount = importFile
+    ? (importCourierFilter === "all"
+        ? importFile.statusMappings?.length || 0
+        : (importFile.statusMappings || []).filter((m: any) => m.courierName?.toLowerCase() === importCourierFilter).length)
+    : 0;
+
+  const filteredImportKeywordCount = importFile
+    ? (importCourierFilter === "all"
+        ? importFile.keywordMappings?.length || 0
+        : (importFile.keywordMappings || []).filter((m: any) => !m.courierName || m.courierName.toLowerCase() === importCourierFilter).length)
+    : 0;
+
   return (
     <div className="space-y-6" data-testid="status-mapping-page">
-      <div>
-        <h1 className="text-2xl font-bold" data-testid="text-page-title">Status Mapping</h1>
-        <p className="text-muted-foreground" data-testid="text-page-description">
-          Map courier status codes to ShipFlow workflow stages.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold" data-testid="text-page-title">Status Mapping</h1>
+          <p className="text-muted-foreground" data-testid="text-page-description">
+            Map courier status codes to ShipFlow workflow stages.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowExportDialog(true)}
+            data-testid="button-export-mappings"
+          >
+            <Download className="w-4 h-4 mr-1.5" />
+            Export
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => document.getElementById("mapping-file-input")?.click()}
+            data-testid="button-import-mappings"
+          >
+            <Upload className="w-4 h-4 mr-1.5" />
+            Import
+          </Button>
+          <input
+            id="mapping-file-input"
+            type="file"
+            accept=".json"
+            className="hidden"
+            onChange={handleFileSelect}
+          />
+        </div>
       </div>
+
+      <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Export Mappings</DialogTitle>
+            <DialogDescription>
+              Choose which courier mappings to export. This includes custom status overrides and keyword rules.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <Label>Courier</Label>
+            <Select value={exportCourier || "all"} onValueChange={setExportCourier}>
+              <SelectTrigger data-testid="select-export-courier">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Couriers</SelectItem>
+                <SelectItem value="leopards">Leopards Only</SelectItem>
+                <SelectItem value="postex">PostEx Only</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowExportDialog(false)}>Cancel</Button>
+            <Button
+              onClick={() => exportMutation.mutate(exportCourier || "all")}
+              disabled={exportMutation.isPending}
+              data-testid="button-confirm-export"
+            >
+              {exportMutation.isPending ? "Exporting..." : "Download File"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showImportDialog} onOpenChange={(open) => { setShowImportDialog(open); if (!open) setImportFile(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Import Mappings</DialogTitle>
+            <DialogDescription>
+              Review the file contents before importing. Existing mappings with the same courier status will be updated.
+            </DialogDescription>
+          </DialogHeader>
+          {importFile && (
+            <div className="space-y-4 py-2">
+              <div className="rounded-md border p-3 space-y-1 text-sm">
+                <p><span className="font-medium">File source:</span> {importFile.courier === "all" ? "All Couriers" : courierLabel(importFile.courier)}</p>
+                <p><span className="font-medium">Exported:</span> {importFile.exportedAt ? new Date(importFile.exportedAt).toLocaleDateString() : "Unknown"}</p>
+                <p><span className="font-medium">Status mappings:</span> {importFile.statusMappings?.length || 0}</p>
+                <p><span className="font-medium">Keyword rules:</span> {importFile.keywordMappings?.length || 0}</p>
+              </div>
+              {importCouriers.length > 1 && (
+                <div className="space-y-2">
+                  <Label>Import for courier</Label>
+                  <Select value={importCourierFilter} onValueChange={setImportCourierFilter}>
+                    <SelectTrigger data-testid="select-import-courier">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Couriers ({importFile.statusMappings?.length || 0} mappings, {importFile.keywordMappings?.length || 0} rules)</SelectItem>
+                      {importCouriers.map((c: string) => (
+                        <SelectItem key={c} value={c}>{courierLabel(c)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <div className="rounded-md bg-muted/50 p-3 text-sm">
+                <p className="font-medium">Will import:</p>
+                <p>{filteredImportStatusCount} status mapping{filteredImportStatusCount !== 1 ? "s" : ""}, {filteredImportKeywordCount} keyword rule{filteredImportKeywordCount !== 1 ? "s" : ""}</p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowImportDialog(false); setImportFile(null); }}>Cancel</Button>
+            <Button
+              onClick={() => importFile && importMutation.mutate({ fileData: importFile, courierFilter: importCourierFilter })}
+              disabled={importMutation.isPending || !importFile || (filteredImportStatusCount === 0 && filteredImportKeywordCount === 0)}
+              data-testid="button-confirm-import"
+            >
+              {importMutation.isPending ? "Importing..." : "Import Mappings"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <RawStatusMappingSection />
 

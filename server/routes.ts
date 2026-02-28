@@ -8154,6 +8154,152 @@ export async function registerRoutes(
   );
 
   // ============================================
+  // COURIER MAPPING IMPORT / EXPORT
+  // ============================================
+
+  app.get(
+    "/api/courier-status-mappings/export",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+
+        const courierParam = (req.query.courier as string | undefined)?.toLowerCase().trim();
+
+        const allStatusMappings = await storage.getCourierStatusMappings(merchantId, courierParam || undefined);
+        const allKeywordMappings = await storage.getCourierKeywordMappings(merchantId);
+
+        const statusMappings = allStatusMappings
+          .filter((m: any) => m.isCustom)
+          .map((m: any) => ({
+            courierName: m.courierName,
+            courierStatus: m.courierStatus,
+            normalizedStatus: m.normalizedStatus,
+            workflowStage: m.workflowStage || null,
+          }));
+
+        const keywordMappings = allKeywordMappings
+          .filter((m: any) => !courierParam || !m.courierName || m.courierName.toLowerCase() === courierParam)
+          .map((m: any) => ({
+            courierName: m.courierName || null,
+            keyword: m.keyword,
+            normalizedStatus: m.normalizedStatus,
+            workflowStage: m.workflowStage || null,
+            priority: m.priority ?? 0,
+          }));
+
+        res.json({
+          version: 1,
+          exportedAt: new Date().toISOString(),
+          courier: courierParam || "all",
+          statusMappings,
+          keywordMappings,
+        });
+      } catch (error) {
+        console.error("Error exporting mappings:", error);
+        res.status(500).json({ message: "Failed to export mappings" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/courier-status-mappings/import",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+
+        const schema = z.object({
+          version: z.number(),
+          statusMappings: z.array(z.object({
+            courierName: z.string(),
+            courierStatus: z.string(),
+            normalizedStatus: z.string(),
+            workflowStage: z.string().nullable().optional(),
+          })).default([]),
+          keywordMappings: z.array(z.object({
+            courierName: z.string().nullable().optional(),
+            keyword: z.string(),
+            normalizedStatus: z.string(),
+            workflowStage: z.string().nullable().optional(),
+            priority: z.number().default(0),
+          })).default([]),
+          courierFilter: z.string().nullable().optional(),
+        });
+
+        const parsed = schema.parse(req.body);
+        const courierFilter = parsed.courierFilter?.toLowerCase().trim() || null;
+
+        let importedStatusMappings = 0;
+        let importedKeywordMappings = 0;
+        let skippedDuplicates = 0;
+
+        const filteredStatusMappings = courierFilter
+          ? parsed.statusMappings.filter(m => m.courierName.toLowerCase() === courierFilter)
+          : parsed.statusMappings;
+
+        for (const m of filteredStatusMappings) {
+          try {
+            await storage.upsertCourierStatusMapping({
+              merchantId,
+              courierName: m.courierName,
+              courierStatus: m.courierStatus.toLowerCase().trim(),
+              normalizedStatus: m.normalizedStatus,
+              workflowStage: m.workflowStage || null,
+              isCustom: true,
+            });
+            importedStatusMappings++;
+          } catch {
+            skippedDuplicates++;
+          }
+        }
+
+        const filteredKeywordMappings = courierFilter
+          ? parsed.keywordMappings.filter(m => !m.courierName || m.courierName.toLowerCase() === courierFilter)
+          : parsed.keywordMappings;
+
+        const existingKeywords = await storage.getCourierKeywordMappings(merchantId);
+        for (const m of filteredKeywordMappings) {
+          const exists = existingKeywords.some(
+            (e: any) => e.keyword.toLowerCase() === m.keyword.toLowerCase() &&
+              (e.courierName || "").toLowerCase() === (m.courierName || "").toLowerCase()
+          );
+          if (exists) {
+            skippedDuplicates++;
+            continue;
+          }
+          try {
+            await storage.createCourierKeywordMapping({
+              merchantId,
+              courierName: m.courierName || null,
+              keyword: m.keyword.trim(),
+              normalizedStatus: m.normalizedStatus,
+              workflowStage: m.workflowStage || null,
+              priority: m.priority ?? 0,
+            });
+            importedKeywordMappings++;
+          } catch {
+            skippedDuplicates++;
+          }
+        }
+
+        const { clearMappingsCache } = await import("./services/couriers/index");
+        clearMappingsCache(merchantId);
+
+        res.json({ importedStatusMappings, importedKeywordMappings, skippedDuplicates });
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          return res.status(400).json({ message: "Invalid file format", errors: error.errors });
+        }
+        console.error("Error importing mappings:", error);
+        res.status(500).json({ message: "Failed to import mappings" });
+      }
+    },
+  );
+
+  // ============================================
   // COURIER KEYWORD MAPPINGS
   // ============================================
 
