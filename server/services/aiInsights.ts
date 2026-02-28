@@ -24,7 +24,9 @@ DATABASE TABLES (complete column list for each table):
    - tags (text array), notes (text), remark (text), item_summary (text)
    - courier_name (varchar), courier_tracking (varchar), courier_raw_status (text)
    - shipment_status (varchar: pending/booked/picked/in_transit/delivered/returned/failed)
-   - workflow_status (varchar: NEW/CONFIRMED/DISPATCHED/DELIVERED/RETURNED/CANCELLED/ON_HOLD/PENDING)
+   - workflow_status (varchar: NEW/PENDING/READY_TO_SHIP/HOLD/BOOKED/FULFILLED/DELIVERED/RETURN/CANCELLED)
+     Flow: NEW → PENDING/READY_TO_SHIP/HOLD (pre-booking) → BOOKED (courier booked) → FULFILLED (picked up / in transit / out for delivery) → DELIVERED or RETURN or CANCELLED
+     Terminal stages: DELIVERED, RETURN, CANCELLED. Active/non-terminal: NEW, PENDING, READY_TO_SHIP, HOLD, BOOKED, FULFILLED
    - pending_reason (text), pending_reason_type (varchar)
    - hold_until (timestamp), hold_created_at (timestamp)
    - cancel_reason (text), cancelled_at (timestamp)
@@ -207,7 +209,7 @@ const INSIGHT_PROMPTS: InsightPrompt[] = [
     title: "Pending Orders Alert",
     category: "operations",
     section: "dashboard",
-    prompt: `Analyze orders currently in pending/hold/new status (workflow_status IN ('NEW','PENDING','ON_HOLD')). How many are there? What's the average age of these orders? Are there any that have been pending for more than 3 days? Recommend actions.`
+    prompt: `Analyze orders currently in pending/hold/new status (workflow_status IN ('NEW','PENDING','HOLD','READY_TO_SHIP')). How many are there? What's the average age of these orders? Are there any that have been pending for more than 3 days? Recommend actions.`
   },
   {
     key: "dashboard_revenue",
@@ -242,21 +244,21 @@ const INSIGHT_PROMPTS: InsightPrompt[] = [
     title: "Pipeline Bottlenecks",
     category: "operations",
     section: "pipeline",
-    prompt: `Analyze the current order pipeline by workflow_status. Count orders in each stage (NEW, CONFIRMED, DISPATCHED, DELIVERED, RETURNED, CANCELLED, ON_HOLD, PENDING). Show the percentage distribution across stages. Identify which non-terminal stage (NEW, PENDING, ON_HOLD, CONFIRMED) has the most orders stuck and recommend actions.`
+    prompt: `Analyze the current order pipeline by workflow_status. Count orders in each stage (NEW, PENDING, READY_TO_SHIP, HOLD, BOOKED, FULFILLED, DELIVERED, RETURN, CANCELLED). Show the percentage distribution across stages. Identify which non-terminal stage (NEW, PENDING, READY_TO_SHIP, HOLD, BOOKED, FULFILLED) has the most orders stuck and recommend actions.`
   },
   {
     key: "pipeline_confirmation",
     title: "Confirmation Insights",
     category: "operations",
     section: "pipeline",
-    prompt: `Analyze orders that were confirmed in the last 7 days. What's the average time from NEW to CONFIRMED? What percentage of new orders get confirmed vs cancelled? Are there specific times of day or days of the week when confirmation is faster?`
+    prompt: `Analyze orders that were booked with a courier in the last 7 days (workflow_status changed to BOOKED or beyond, using booked_at timestamp). What's the average time from order creation (created_at) to booked_at? What percentage of orders get booked vs cancelled? Are there specific days of the week when booking is faster? Use booked_at IS NOT NULL to find booked orders.`
   },
   {
     key: "pipeline_cancellation",
     title: "Cancellation Patterns",
     category: "risk",
     section: "pipeline",
-    prompt: `Analyze cancelled orders from the last 14 days. What percentage of total orders are cancelled? What are the most common cancel_reason values? At which pipeline stage do most cancellations happen? Any patterns by city or payment method?`
+    prompt: `Analyze cancelled orders from the last 14 days using workflow_status = 'CANCELLED' and cancelled_at >= NOW() - INTERVAL '14 days'. What percentage of total orders (created in the same period) are cancelled? What are the most common cancel_reason values? What was the previous_workflow_status when cancellation happened (this shows at which stage orders get cancelled)? Any patterns by city or payment method?`
   },
   {
     key: "shipments_courier",
