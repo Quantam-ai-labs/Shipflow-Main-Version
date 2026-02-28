@@ -194,7 +194,6 @@ function RawStatusMappingSection() {
   const [courierFilter, setCourierFilter] = useState("all");
   const [expandedCouriers, setExpandedCouriers] = useState<Record<string, boolean>>({
     leopards: true,
-    "leopards courier": true,
     postex: true,
   });
   const [drafts, setDrafts] = useState<Record<string, { normalizedStatus: string; workflowStage: string }>>({});

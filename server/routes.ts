@@ -7979,7 +7979,7 @@ export async function registerRoutes(
         const merchantId = await requireMerchant(req, res);
         if (!merchantId) return;
 
-        const { normalizeStatus, detectCourierType } = await import(
+        const { normalizeStatus, detectCourierType, LEOPARDS_STATUS_MAP, POSTEX_STATUS_MAP, DEFAULT_WORKFLOW_STAGE_MAP } = await import(
           "./services/statusNormalization"
         );
 
@@ -8008,31 +8008,67 @@ export async function registerRoutes(
           ]),
         );
 
-        const result = rawStatusRows
-          .filter((r) => r.rawStatus && r.courierName)
-          .map((r) => {
-            const rawKey = r.rawStatus!.toLowerCase().trim();
-            const mapKey = `${r.courierName}::${rawKey}`;
-            const customMapping = customMap.get(mapKey);
+        const merged = new Map<string, { courierName: string; rawStatus: string; orderCount: number }>();
 
-            const courierType = detectCourierType(r.courierName || "");
-            let systemNormalizedStatus: string | null = null;
-            if (courierType) {
-              const { normalizedStatus } = normalizeStatus(r.rawStatus!, courierType);
-              systemNormalizedStatus = normalizedStatus;
-            }
-
-            return {
-              courierName: r.courierName,
+        for (const r of rawStatusRows) {
+          if (!r.rawStatus || !r.courierName) continue;
+          const normalizedCourier = detectCourierType(r.courierName) || r.courierName.toLowerCase();
+          const key = `${normalizedCourier}::${r.rawStatus.toLowerCase().trim()}`;
+          const existing = merged.get(key);
+          if (existing) {
+            existing.orderCount += Number(r.orderCount);
+          } else {
+            merged.set(key, {
+              courierName: normalizedCourier,
               rawStatus: r.rawStatus,
               orderCount: Number(r.orderCount),
-              customMappingId: customMapping?.id || null,
-              normalizedStatus: customMapping?.normalizedStatus || null,
-              workflowStage: customMapping?.workflowStage || null,
-              isCustom: !!customMapping,
-              systemNormalizedStatus,
-            };
-          });
+            });
+          }
+        }
+
+        const systemMaps: Record<string, Record<string, string>> = {
+          leopards: LEOPARDS_STATUS_MAP,
+          postex: POSTEX_STATUS_MAP,
+        };
+
+        for (const [courier, statusMap] of Object.entries(systemMaps)) {
+          for (const rawStatus of Object.keys(statusMap)) {
+            const key = `${courier}::${rawStatus.toLowerCase().trim()}`;
+            if (!merged.has(key)) {
+              merged.set(key, { courierName: courier, rawStatus, orderCount: 0 });
+            }
+          }
+        }
+
+        const result = Array.from(merged.values()).map((r) => {
+          const rawKey = r.rawStatus.toLowerCase().trim();
+          const mapKey = `${r.courierName}::${rawKey}`;
+          const customMapping = customMap.get(mapKey);
+
+          const courierType = detectCourierType(r.courierName);
+          let systemNormalizedStatus: string | null = null;
+          if (courierType) {
+            const { normalizedStatus: sysNorm } = normalizeStatus(r.rawStatus, courierType);
+            systemNormalizedStatus = sysNorm;
+          }
+
+          return {
+            courierName: r.courierName,
+            rawStatus: r.rawStatus,
+            orderCount: r.orderCount,
+            customMappingId: customMapping?.id || null,
+            normalizedStatus: customMapping?.normalizedStatus || null,
+            workflowStage: customMapping?.workflowStage || null,
+            isCustom: !!customMapping,
+            systemNormalizedStatus,
+          };
+        });
+
+        result.sort((a, b) => {
+          if (a.courierName !== b.courierName) return a.courierName.localeCompare(b.courierName);
+          if (b.orderCount !== a.orderCount) return b.orderCount - a.orderCount;
+          return a.rawStatus.localeCompare(b.rawStatus);
+        });
 
         res.json({ rawStatuses: result });
       } catch (error) {
