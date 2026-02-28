@@ -107,7 +107,7 @@ function InsightAlertRow({ insight }: { insight: InsightCard }) {
 export function AIInsightsBanner({ section, className = "" }: AIInsightsBannerProps) {
   const storageKey = `ai-insights-collapsed-${section}`;
   const [collapsed, setCollapsed] = useState(() => {
-    try { return localStorage.getItem(storageKey) === "true"; } catch { return false; }
+    try { const v = localStorage.getItem(storageKey); return v === null ? true : v === "true"; } catch { return true; }
   });
   const [isRefreshing, setIsRefreshing] = useState(false);
   const queryClient = useQueryClient();
