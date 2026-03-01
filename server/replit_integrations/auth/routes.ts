@@ -11,6 +11,21 @@ import { sendAdminOtpEmail } from "../../services/email";
 
 const adminOtpStore = new Map<string, { code: string; expiresAt: number; attempts: number; sentAt: number }>();
 
+async function findSuperAdmin(email: string) {
+  const [exact] = await db.select().from(users).where(ilike(users.email, email));
+  if (exact?.role === "SUPER_ADMIN") return exact;
+  const baseEmail = email.replace(/\+[^@]*@/, "@");
+  if (baseEmail !== email) {
+    const [base] = await db.select().from(users).where(ilike(users.email, baseEmail));
+    if (base?.role === "SUPER_ADMIN") return base;
+  }
+  const allAdmins = await db.select().from(users).where(eq(users.role, "SUPER_ADMIN"));
+  return allAdmins.find(u => {
+    const adminBase = (u.email || "").toLowerCase().replace(/\+[^@]*@/, "@");
+    return adminBase === baseEmail;
+  }) || null;
+}
+
 const registerSchema = z.object({
   email: z.string().email("Valid email is required"),
   password: z.string().min(6, "Password must be at least 6 characters"),
@@ -178,28 +193,29 @@ export function registerAuthRoutes(app: Express): void {
       const { email } = z.object({ email: z.string().email() }).parse(req.body);
       const normalizedEmail = email.toLowerCase().trim();
 
-      const [user] = await db.select().from(users).where(ilike(users.email, normalizedEmail));
-      if (!user || user.role !== "SUPER_ADMIN") {
+      const user = await findSuperAdmin(normalizedEmail);
+      if (!user) {
         return res.json({ message: "If an administrator account exists, a verification code has been sent." });
       }
 
-      const existing = adminOtpStore.get(normalizedEmail);
+      const otpKey = (user.email || normalizedEmail).toLowerCase();
+      const existing = adminOtpStore.get(otpKey);
       if (existing && Date.now() - existing.sentAt < 60000) {
         const wait = Math.ceil((60000 - (Date.now() - existing.sentAt)) / 1000);
         return res.status(429).json({ message: `Please wait ${wait} seconds before requesting a new code.` });
       }
 
       const code = String(Math.floor(100000 + Math.random() * 900000));
-      adminOtpStore.set(normalizedEmail, { code, expiresAt: Date.now() + 5 * 60 * 1000, attempts: 0, sentAt: Date.now() });
+      adminOtpStore.set(otpKey, { code, expiresAt: Date.now() + 5 * 60 * 1000, attempts: 0, sentAt: Date.now() });
 
-      const deliveryEmail = normalizedEmail.replace(/\+[^@]*@/, "@");
+      const deliveryEmail = (user.email || normalizedEmail).toLowerCase().replace(/\+[^@]*@/, "@");
       const result = await sendAdminOtpEmail({ toEmail: deliveryEmail, code });
       if (!result.success) {
         console.error("[AdminOTP] Failed to send:", result.error);
         return res.status(500).json({ message: "Failed to send verification code. Please try again." });
       }
 
-      console.log(`[AdminOTP] OTP sent to ${normalizedEmail}`);
+      console.log(`[AdminOTP] OTP sent to ${deliveryEmail}`);
       res.json({ message: "Verification code sent to your email." });
     } catch (error: any) {
       if (error instanceof z.ZodError) {
@@ -215,18 +231,21 @@ export function registerAuthRoutes(app: Express): void {
       const { email, otp } = z.object({ email: z.string().email(), otp: z.string().length(6) }).parse(req.body);
       const normalizedEmail = email.toLowerCase().trim();
 
-      const stored = adminOtpStore.get(normalizedEmail);
+      const user = await findSuperAdmin(normalizedEmail);
+      const otpKey = user ? (user.email || normalizedEmail).toLowerCase() : normalizedEmail;
+
+      const stored = adminOtpStore.get(otpKey);
       if (!stored) {
         return res.status(401).json({ message: "No verification code found. Please request a new one." });
       }
 
       if (Date.now() > stored.expiresAt) {
-        adminOtpStore.delete(normalizedEmail);
+        adminOtpStore.delete(otpKey);
         return res.status(401).json({ message: "Verification code has expired. Please request a new one." });
       }
 
       if (stored.attempts >= 5) {
-        adminOtpStore.delete(normalizedEmail);
+        adminOtpStore.delete(otpKey);
         return res.status(401).json({ message: "Too many failed attempts. Please request a new code." });
       }
 
@@ -235,10 +254,9 @@ export function registerAuthRoutes(app: Express): void {
         return res.status(401).json({ message: `Invalid code. ${5 - stored.attempts} attempts remaining.` });
       }
 
-      adminOtpStore.delete(normalizedEmail);
+      adminOtpStore.delete(otpKey);
 
-      const [user] = await db.select().from(users).where(ilike(users.email, normalizedEmail));
-      if (!user || user.role !== "SUPER_ADMIN") {
+      if (!user) {
         return res.status(401).json({ message: "Access denied." });
       }
 
