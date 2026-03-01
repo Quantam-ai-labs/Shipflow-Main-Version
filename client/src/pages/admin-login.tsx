@@ -1,39 +1,62 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
-import { Shield, Loader2, Eye, EyeOff } from "lucide-react";
+import { Shield, Loader2, ArrowLeft, Mail } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
+import { useQueryClient } from "@tanstack/react-query";
 
 export default function AdminLoginPage() {
-  const { login, isLoggingIn } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [step, setStep] = useState<"email" | "otp">("email");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [isSending, setIsSending] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setTimeout(() => setCooldown(cooldown - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [cooldown]);
+
+  const handleSendOtp = useCallback(async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setIsSending(true);
     try {
-      const result = await login({ email, password });
+      const res = await apiRequest("POST", "/api/admin-auth/send-otp", { email });
+      const data = await res.json();
+      toast({ title: "Code Sent", description: data.message });
+      setStep("otp");
+      setOtp("");
+      setCooldown(60);
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message || "Failed to send code", variant: "destructive" });
+    } finally {
+      setIsSending(false);
+    }
+  }, [email, toast]);
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsVerifying(true);
+    try {
+      const res = await apiRequest("POST", "/api/admin-auth/verify-otp", { email, otp });
+      const result = await res.json();
       if (result.role !== "SUPER_ADMIN") {
-        try { await fetch("/api/auth/logout", { method: "POST", credentials: "include" }); } catch {}
-        toast({
-          title: "Access Denied",
-          description: "This login is for platform administrators only.",
-          variant: "destructive",
-        });
+        toast({ title: "Access Denied", description: "This login is for platform administrators only.", variant: "destructive" });
         return;
       }
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       window.location.href = "/admin";
     } catch (err: any) {
-      toast({
-        title: "Login failed",
-        description: err.message || "Invalid credentials",
-        variant: "destructive",
-      });
+      toast({ title: "Verification Failed", description: err.message || "Invalid code", variant: "destructive" });
+    } finally {
+      setIsVerifying(false);
     }
   };
 
@@ -50,52 +73,82 @@ export default function AdminLoginPage() {
 
         <Card>
           <CardHeader className="pb-4">
-            <CardTitle className="text-base text-center">Administrator Login</CardTitle>
+            <CardTitle className="text-base text-center">
+              {step === "email" ? "Administrator Login" : "Enter Verification Code"}
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="admin-email">Email</Label>
-                <Input
-                  id="admin-email"
-                  data-testid="input-admin-email"
-                  type="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  placeholder="admin@shipflow.pk"
-                  required
-                  autoComplete="email"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="admin-password">Password</Label>
-                <div className="relative">
+            {step === "email" ? (
+              <form onSubmit={handleSendOtp} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="admin-email">Email</Label>
                   <Input
-                    id="admin-password"
-                    data-testid="input-admin-password"
-                    type={showPassword ? "text" : "password"}
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    placeholder="Enter your password"
+                    id="admin-email"
+                    data-testid="input-admin-email"
+                    type="email"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    placeholder="admin@shipflow.pk"
                     required
-                    autoComplete="current-password"
-                    className="pr-10"
+                    autoComplete="email"
                   />
+                </div>
+                <Button type="submit" className="w-full" disabled={isSending} data-testid="button-send-otp">
+                  {isSending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Mail className="w-4 h-4 mr-2" />}
+                  Send Verification Code
+                </Button>
+              </form>
+            ) : (
+              <form onSubmit={handleVerifyOtp} className="space-y-4">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50 text-sm text-muted-foreground">
+                    <Mail className="w-4 h-4 shrink-0" />
+                    <span className="truncate">{email}</span>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="admin-otp">6-Digit Code</Label>
+                  <Input
+                    id="admin-otp"
+                    data-testid="input-admin-otp"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]{6}"
+                    maxLength={6}
+                    value={otp}
+                    onChange={e => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="000000"
+                    required
+                    autoComplete="one-time-code"
+                    className="text-center text-2xl tracking-[0.5em] font-mono"
+                    autoFocus
+                  />
+                </div>
+                <Button type="submit" className="w-full" disabled={isVerifying || otp.length !== 6} data-testid="button-verify-otp">
+                  {isVerifying && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  Verify & Login
+                </Button>
+                <div className="flex items-center justify-between text-sm">
                   <button
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    data-testid="button-toggle-password"
+                    onClick={() => { setStep("email"); setOtp(""); }}
+                    className="text-muted-foreground hover:text-foreground flex items-center gap-1"
+                    data-testid="button-back-to-email"
                   >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    <ArrowLeft className="w-3 h-3" /> Change email
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSendOtp()}
+                    disabled={cooldown > 0 || isSending}
+                    className="text-primary hover:underline disabled:text-muted-foreground disabled:no-underline"
+                    data-testid="button-resend-otp"
+                  >
+                    {cooldown > 0 ? `Resend in ${cooldown}s` : "Resend code"}
                   </button>
                 </div>
-              </div>
-              <Button type="submit" className="w-full" disabled={isLoggingIn} data-testid="button-admin-login">
-                {isLoggingIn && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Sign In
-              </Button>
-            </form>
+              </form>
+            )}
           </CardContent>
         </Card>
 

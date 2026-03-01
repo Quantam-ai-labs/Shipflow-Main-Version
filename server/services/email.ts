@@ -1,8 +1,8 @@
 import { Resend } from 'resend';
 
 async function getCredentials(): Promise<{ apiKey: string; fromEmail: string }> {
-  let apiKey: string | undefined;
-  let fromEmail: string | undefined;
+  let connectorKey: string | undefined;
+  let connectorFromEmail: string | undefined;
 
   try {
     const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
@@ -24,26 +24,29 @@ async function getCredentials(): Promise<{ apiKey: string; fromEmail: string }> 
       ).then(res => res.json()).then(data => data.items?.[0]);
 
       if (freshSettings?.settings?.api_key && freshSettings.settings.api_key.startsWith('re_')) {
-        apiKey = freshSettings.settings.api_key;
-        fromEmail = freshSettings.settings.from_email;
+        connectorKey = freshSettings.settings.api_key;
+        connectorFromEmail = freshSettings.settings.from_email;
       }
     }
   } catch (e) {
     console.warn('[Email] Connector fetch failed, falling back to env secret');
   }
 
-  if (!apiKey && process.env.RESEND_API_KEY) {
-    apiKey = process.env.RESEND_API_KEY;
+  if (process.env.RESEND_API_KEY) {
+    return {
+      apiKey: process.env.RESEND_API_KEY,
+      fromEmail: connectorFromEmail || 'ShipFlow <onboarding@resend.dev>',
+    };
   }
 
-  if (!apiKey) {
-    throw new Error('No valid Resend API key found. Set RESEND_API_KEY secret or configure the Resend integration.');
+  if (connectorKey) {
+    return {
+      apiKey: connectorKey,
+      fromEmail: connectorFromEmail || 'ShipFlow <onboarding@resend.dev>',
+    };
   }
 
-  return {
-    apiKey,
-    fromEmail: fromEmail || 'ShipFlow <onboarding@resend.dev>',
-  };
+  throw new Error('No valid Resend API key found. Set RESEND_API_KEY secret or configure the Resend integration.');
 }
 
 async function getResendClient() {
@@ -161,6 +164,58 @@ export async function sendMerchantSetupEmail(params: MerchantSetupEmailParams): 
   } catch (err: any) {
     console.error('[Email] Failed to send invite:', err.message);
     return { success: false, error: err.message || 'Unknown email error' };
+  }
+}
+
+interface AdminOtpEmailParams {
+  toEmail: string;
+  code: string;
+}
+
+export async function sendAdminOtpEmail(params: AdminOtpEmailParams): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { client, fromEmail } = await getResendClient();
+    const { toEmail, code } = params;
+
+    const htmlBody = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;padding:40px 20px;">
+    <tr><td align="center">
+      <table width="100%" cellpadding="0" cellspacing="0" style="max-width:420px;background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <tr><td style="background-color:#18181b;padding:20px 32px;text-align:center;">
+          <h1 style="color:#ffffff;margin:0;font-size:18px;font-weight:700;letter-spacing:-0.5px;">ShipFlow Admin</h1>
+        </td></tr>
+        <tr><td style="padding:32px;text-align:center;">
+          <p style="margin:0 0 8px;color:#71717a;font-size:13px;">Your verification code is</p>
+          <div style="font-size:36px;font-weight:700;letter-spacing:8px;color:#18181b;padding:16px 0;font-family:monospace;">${code}</div>
+          <p style="margin:16px 0 0;color:#a1a1aa;font-size:12px;">This code expires in 5 minutes. Do not share it with anyone.</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+    const result = await client.emails.send({
+      from: fromEmail,
+      to: [toEmail],
+      subject: `${code} — ShipFlow Admin Login Code`,
+      html: htmlBody,
+      text: `Your ShipFlow Admin verification code is: ${code}. This code expires in 5 minutes.`,
+    });
+
+    if (result.error) {
+      console.error('[Email] OTP send error:', result.error);
+      return { success: false, error: result.error.message || 'Email send failed' };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('[Email] Failed to send OTP:', err.message);
+    return { success: false, error: err.message };
   }
 }
 
