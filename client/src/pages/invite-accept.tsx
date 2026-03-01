@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { useRoute, useLocation } from "wouter";
-import { Loader2, Users, CheckCircle, XCircle, AlertTriangle, Eye, EyeOff } from "lucide-react";
+import { Loader2, Users, CheckCircle, XCircle, Mail } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 
 export default function InviteAccept() {
@@ -24,11 +24,11 @@ export default function InviteAccept() {
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  const [otpStep, setOtpStep] = useState<"form" | "otp">("form");
+  const [otp, setOtp] = useState("");
+  const [sendingOtp, setSendingOtp] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -66,33 +66,41 @@ export default function InviteAccept() {
     }
   };
 
-  const handleSignupAndAccept = async () => {
-    if (!token) return;
-    setFormError(null);
-
+  const handleSendOtp = async () => {
     if (!firstName.trim()) {
       setFormError("First name is required");
       return;
     }
-    if (!password) {
-      setFormError("Password is required");
-      return;
+    setFormError(null);
+    setSendingOtp(true);
+    try {
+      const res = await apiRequest("POST", `/api/team/invite/${token}/send-otp`, {});
+      const data = await res.json();
+      if (data.success) {
+        setOtpStep("otp");
+        toast({ title: "Code sent", description: `A verification code has been sent to ${inviteData?.email}.` });
+      }
+    } catch (err: any) {
+      setFormError(err.message || "Failed to send verification code");
+      toast({ title: "Error", description: err.message || "Failed to send verification code", variant: "destructive" });
+    } finally {
+      setSendingOtp(false);
     }
-    if (password.length < 6) {
-      setFormError("Password must be at least 6 characters");
-      return;
-    }
-    if (password !== confirmPassword) {
-      setFormError("Passwords do not match");
-      return;
-    }
+  };
 
+  const handleVerifyAndAccept = async () => {
+    if (!token) return;
+    if (otp.length !== 6) {
+      setFormError("Please enter the 6-digit code");
+      return;
+    }
+    setFormError(null);
     setAccepting(true);
     try {
       const res = await apiRequest("POST", `/api/team/invite/${token}/accept-with-signup`, {
         firstName: firstName.trim(),
         lastName: lastName.trim(),
-        password,
+        otp,
       });
       const data = await res.json();
       setAccepted(true);
@@ -164,9 +172,6 @@ export default function InviteAccept() {
                 {inviteData?.role?.charAt(0).toUpperCase() + inviteData?.role?.slice(1)}
               </Badge>
             </p>
-            <p className="text-sm text-muted-foreground text-center">
-              Create your account to get started.
-            </p>
 
             {formError && (
               <div className="p-3 rounded-md bg-destructive/10 text-sm text-destructive" data-testid="text-signup-error">
@@ -174,95 +179,99 @@ export default function InviteAccept() {
               </div>
             )}
 
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="firstName">First Name *</Label>
+            {otpStep === "form" ? (
+              <>
+                <p className="text-sm text-muted-foreground text-center">
+                  Enter your name to create your account. We'll send a verification code to your email.
+                </p>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="firstName">First Name *</Label>
+                      <Input
+                        id="firstName"
+                        value={firstName}
+                        onChange={(e) => setFirstName(e.target.value)}
+                        placeholder="First name"
+                        data-testid="input-first-name"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="lastName">Last Name</Label>
+                      <Input
+                        id="lastName"
+                        value={lastName}
+                        onChange={(e) => setLastName(e.target.value)}
+                        placeholder="Last name"
+                        data-testid="input-last-name"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      value={inviteData?.email || ""}
+                      disabled
+                      className="bg-muted"
+                      data-testid="input-email-readonly"
+                    />
+                  </div>
+                </div>
+
+                <Button
+                  className="w-full"
+                  onClick={handleSendOtp}
+                  disabled={sendingOtp}
+                  data-testid="button-send-otp"
+                >
+                  {sendingOtp ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Sending Code...</>
+                  ) : (
+                    <><Mail className="w-4 h-4 mr-2" />Send Verification Code</>
+                  )}
+                </Button>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-muted-foreground text-center">
+                  Enter the 6-digit code sent to <strong>{inviteData?.email}</strong>
+                </p>
+                <div className="flex justify-center">
                   <Input
-                    id="firstName"
-                    value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                    placeholder="First name"
-                    data-testid="input-first-name"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="000000"
+                    maxLength={6}
+                    className="text-center text-2xl tracking-[0.5em] font-mono w-48"
+                    data-testid="input-otp"
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="lastName">Last Name</Label>
-                  <Input
-                    id="lastName"
-                    value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
-                    placeholder="Last name"
-                    data-testid="input-last-name"
-                  />
-                </div>
-              </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  value={inviteData?.email || ""}
-                  disabled
-                  className="bg-muted"
-                  data-testid="input-email-readonly"
-                />
-              </div>
+                <Button
+                  className="w-full"
+                  onClick={handleVerifyAndAccept}
+                  disabled={accepting || otp.length !== 6}
+                  data-testid="button-verify-accept"
+                >
+                  {accepting ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Verifying...</>
+                  ) : (
+                    "Verify & Join Team"
+                  )}
+                </Button>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="password">Password *</Label>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Minimum 6 characters"
-                    data-testid="input-password"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    data-testid="button-toggle-password"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="confirmPassword">Confirm Password *</Label>
-                <div className="relative">
-                  <Input
-                    id="confirmPassword"
-                    type={showConfirmPassword ? "text" : "password"}
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Re-enter your password"
-                    data-testid="input-confirm-password"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    data-testid="button-toggle-confirm-password"
-                  >
-                    {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <Button
-              className="w-full"
-              onClick={handleSignupAndAccept}
-              disabled={accepting}
-              data-testid="button-create-account"
-            >
-              {accepting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Create Account & Join Team
-            </Button>
+                <Button
+                  variant="ghost"
+                  className="w-full"
+                  onClick={() => { setOtpStep("form"); setOtp(""); setFormError(null); }}
+                  data-testid="button-back-to-form"
+                >
+                  Back
+                </Button>
+              </>
+            )}
 
             <p className="text-xs text-muted-foreground text-center">
               Already have an account?{" "}

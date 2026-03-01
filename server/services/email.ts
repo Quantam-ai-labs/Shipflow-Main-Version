@@ -34,20 +34,12 @@ async function getCredentials(): Promise<{ apiKey: string; fromEmail: string }> 
 
   if (process.env.RESEND_API_KEY) {
     const from = connectorFromEmail || 'ShipFlow <noreply@1sol.ai>';
-    console.log(`[Email] Using RESEND_API_KEY env secret, from: ${from}`);
-    return {
-      apiKey: process.env.RESEND_API_KEY,
-      fromEmail: from,
-    };
+    return { apiKey: process.env.RESEND_API_KEY, fromEmail: from };
   }
 
   if (connectorKey) {
     const from = connectorFromEmail || 'ShipFlow <noreply@1sol.ai>';
-    console.log(`[Email] Using Resend connector key, from: ${from}`);
-    return {
-      apiKey: connectorKey,
-      fromEmail: from,
-    };
+    return { apiKey: connectorKey, fromEmail: from };
   }
 
   throw new Error('No valid Resend API key found. Set RESEND_API_KEY secret or configure the Resend integration.');
@@ -56,6 +48,61 @@ async function getCredentials(): Promise<{ apiKey: string; fromEmail: string }> 
 async function getResendClient() {
   const { apiKey, fromEmail } = await getCredentials();
   return { client: new Resend(apiKey), fromEmail };
+}
+
+interface OtpEmailParams {
+  toEmail: string;
+  code: string;
+  name?: string;
+}
+
+export async function sendOtpEmail(params: OtpEmailParams): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { client, fromEmail } = await getResendClient();
+    const { toEmail, code, name } = params;
+
+    const htmlBody = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;padding:40px 20px;">
+    <tr><td align="center">
+      <table width="100%" cellpadding="0" cellspacing="0" style="max-width:420px;background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <tr><td style="background-color:#18181b;padding:20px 32px;text-align:center;">
+          <h1 style="color:#ffffff;margin:0;font-size:18px;font-weight:700;letter-spacing:-0.5px;">ShipFlow</h1>
+        </td></tr>
+        <tr><td style="padding:32px;text-align:center;">
+          <p style="margin:0 0 4px;color:#3f3f46;font-size:14px;">Hi ${name || 'there'},</p>
+          <p style="margin:0 0 16px;color:#71717a;font-size:13px;">Your login verification code is</p>
+          <div style="font-size:36px;font-weight:700;letter-spacing:8px;color:#18181b;padding:16px 0;font-family:monospace;">${code}</div>
+          <p style="margin:16px 0 0;color:#a1a1aa;font-size:12px;">This code expires in 5 minutes. Do not share it with anyone.</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+    const result = await client.emails.send({
+      from: fromEmail,
+      to: [toEmail],
+      subject: `${code} — Your ShipFlow Login Code`,
+      html: htmlBody,
+      text: `Hi ${name || 'there'}, your ShipFlow verification code is: ${code}. This code expires in 5 minutes.`,
+    });
+
+    if (result.error) {
+      console.error('[Email] OTP send error:', result.error);
+      return { success: false, error: result.error.message || 'Email send failed' };
+    }
+
+    console.log(`[Email] OTP sent to ${toEmail} (id: ${result.data?.id})`);
+    return { success: true };
+  } catch (err: any) {
+    console.error('[Email] Failed to send OTP:', err.message);
+    return { success: false, error: err.message };
+  }
 }
 
 interface InviteEmailParams {
@@ -99,10 +146,6 @@ export async function sendInviteEmail(params: InviteEmailParams): Promise<{ succ
               Accept Invitation
             </a>
           </td></tr></table>
-          <p style="margin:24px 0 0;color:#a1a1aa;font-size:12px;line-height:1.5;text-align:center;">
-            Or copy this link: <br/>
-            <a href="${inviteUrl}" style="color:#3b82f6;word-break:break-all;">${inviteUrl}</a>
-          </p>
           <hr style="border:none;border-top:1px solid #e4e4e7;margin:24px 0;"/>
           <p style="margin:0;color:#a1a1aa;font-size:11px;text-align:center;">
             This invitation expires on ${expiryStr}. If you didn't expect this, you can safely ignore it.
@@ -137,97 +180,11 @@ export async function sendInviteEmail(params: InviteEmailParams): Promise<{ succ
   }
 }
 
-interface MerchantSetupEmailParams {
-  toEmail: string;
-  merchantName: string;
-  firstName: string;
-  setupUrl: string;
-  expiresAt: Date;
-}
-
-export async function sendMerchantSetupEmail(params: MerchantSetupEmailParams): Promise<{ success: boolean; error?: string }> {
-  try {
-    const { client, fromEmail } = await getResendClient();
-    const { toEmail, merchantName, firstName, setupUrl } = params;
-
-    const result = await client.emails.send({
-      from: fromEmail,
-      to: [toEmail],
-      subject: `You're invited to ${merchantName} on ShipFlow`,
-      html: `<p>Hi ${firstName},</p><p>You've been invited to join <strong>${merchantName}</strong> on ShipFlow.</p><p><a href="${setupUrl}">Accept Invitation</a></p>`,
-      text: `Hi ${firstName}, you've been invited to join ${merchantName} on ShipFlow. Accept your invitation: ${setupUrl}`,
-    });
-
-    if (result.error) {
-      console.error('[Email] Resend error:', JSON.stringify(result.error));
-      return { success: false, error: result.error.message || JSON.stringify(result.error) };
-    }
-
-    console.log(`[Email] Invite sent to ${toEmail} (id: ${result.data?.id})`);
-    return { success: true };
-  } catch (err: any) {
-    console.error('[Email] Failed to send invite:', err.message);
-    return { success: false, error: err.message || 'Unknown email error' };
-  }
-}
-
-interface AdminOtpEmailParams {
-  toEmail: string;
-  code: string;
-}
-
-export async function sendAdminOtpEmail(params: AdminOtpEmailParams): Promise<{ success: boolean; error?: string }> {
-  try {
-    const { client, fromEmail } = await getResendClient();
-    const { toEmail, code } = params;
-
-    const htmlBody = `
-<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;padding:40px 20px;">
-    <tr><td align="center">
-      <table width="100%" cellpadding="0" cellspacing="0" style="max-width:420px;background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-        <tr><td style="background-color:#18181b;padding:20px 32px;text-align:center;">
-          <h1 style="color:#ffffff;margin:0;font-size:18px;font-weight:700;letter-spacing:-0.5px;">ShipFlow Admin</h1>
-        </td></tr>
-        <tr><td style="padding:32px;text-align:center;">
-          <p style="margin:0 0 8px;color:#71717a;font-size:13px;">Your verification code is</p>
-          <div style="font-size:36px;font-weight:700;letter-spacing:8px;color:#18181b;padding:16px 0;font-family:monospace;">${code}</div>
-          <p style="margin:16px 0 0;color:#a1a1aa;font-size:12px;">This code expires in 5 minutes. Do not share it with anyone.</p>
-        </td></tr>
-      </table>
-    </td></tr>
-  </table>
-</body>
-</html>`;
-
-    const result = await client.emails.send({
-      from: fromEmail,
-      to: [toEmail],
-      subject: `${code} — ShipFlow Admin Login Code`,
-      html: htmlBody,
-      text: `Your ShipFlow Admin verification code is: ${code}. This code expires in 5 minutes.`,
-    });
-
-    if (result.error) {
-      console.error('[Email] OTP send error:', result.error);
-      return { success: false, error: result.error.message || 'Email send failed' };
-    }
-
-    return { success: true };
-  } catch (err: any) {
-    console.error('[Email] Failed to send OTP:', err.message);
-    return { success: false, error: err.message };
-  }
-}
-
 export async function sendTestEmail(toEmail: string): Promise<{ success: boolean; error?: string; provider?: string }> {
   try {
     const { client, fromEmail } = await getResendClient();
     const result = await client.emails.send({
-      from: "onboarding@resend.dev",
+      from: fromEmail,
       to: [toEmail],
       subject: 'ShipFlow Test Email',
       html: '<h2>Test Email</h2><p>If you received this, email sending is working correctly.</p>',

@@ -49,10 +49,11 @@ export type Merchant = typeof merchants.$inferSelect;
 // ============================================
 export const teamMembers = pgTable("team_members", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull(), // References auth users
+  userId: varchar("user_id").notNull(),
   merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
-  role: varchar("role", { length: 20 }).notNull().default("agent"), // admin, manager, agent
+  role: varchar("role", { length: 20 }).notNull().default("agent"),
   isActive: boolean("is_active").default(true),
+  allowedPages: text("allowed_pages").array(),
   invitedAt: timestamp("invited_at").defaultNow(),
   joinedAt: timestamp("joined_at"),
 }, (table) => [

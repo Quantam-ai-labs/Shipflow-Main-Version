@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -47,15 +48,14 @@ import {
   User,
   Mail,
   Trash2,
-  Copy,
   RotateCw,
   XCircle,
   CheckCircle,
   AlertTriangle,
   Clock,
   Loader2,
-  Link as LinkIcon,
   Download,
+  KeyRound,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -70,6 +70,7 @@ interface TeamMemberWithUser {
   userId: string;
   role: string;
   isActive: boolean;
+  allowedPages: string[] | null;
   invitedAt: string | null;
   joinedAt: string | null;
   user: UserType;
@@ -92,6 +93,106 @@ interface Invite {
   lastEmailError: string | null;
   acceptedAt: string | null;
 }
+
+interface PageSection {
+  id: string;
+  title: string;
+  pages: { id: string; title: string }[];
+}
+
+const PAGE_SECTIONS: PageSection[] = [
+  {
+    id: "pipeline",
+    title: "Pipeline",
+    pages: [
+      { id: "orders-new", title: "New Orders" },
+      { id: "orders-pending", title: "Confirmation Pending" },
+      { id: "orders-hold", title: "Hold" },
+      { id: "orders-ready", title: "Ready to Ship" },
+      { id: "orders-booked", title: "Booked" },
+      { id: "orders-fulfilled", title: "Fulfilled" },
+      { id: "orders-delivered", title: "Delivered" },
+      { id: "orders-return", title: "Return" },
+      { id: "orders-cancelled", title: "Cancelled" },
+    ],
+  },
+  {
+    id: "sales",
+    title: "Sales",
+    pages: [
+      { id: "sale-invoices", title: "Sale Invoices" },
+      { id: "sale-orders", title: "Sale Orders" },
+      { id: "shipments", title: "Shipments" },
+    ],
+  },
+  {
+    id: "inventory",
+    title: "Inventory",
+    pages: [
+      { id: "products", title: "Products" },
+      { id: "shopify-products", title: "Shopify Products" },
+      { id: "add-stock", title: "Add Stock" },
+    ],
+  },
+  {
+    id: "finance",
+    title: "Finance",
+    pages: [
+      { id: "money", title: "Money In/Out" },
+      { id: "cod-reconciliation", title: "COD Reconciliation" },
+      { id: "payment-ledger", title: "Payment Ledger" },
+      { id: "manage-cheques", title: "Manage Cheques" },
+      { id: "customers", title: "Parties" },
+      { id: "expense-history", title: "Expense History" },
+      { id: "needs-payment", title: "Needs Payment" },
+      { id: "cod-receivable", title: "COD Receivable" },
+      { id: "courier-payable", title: "Courier Payable" },
+      { id: "settlements", title: "Settlements" },
+    ],
+  },
+  {
+    id: "analytics",
+    title: "Analytics",
+    pages: [
+      { id: "overview", title: "Overview" },
+      { id: "profit-loss", title: "Profit & Loss" },
+      { id: "balance-snapshot", title: "Balance Snapshot" },
+      { id: "cash-flow", title: "Cash Flow" },
+      { id: "stock-report", title: "Stock Report" },
+      { id: "party-balances", title: "Party Balances" },
+      { id: "product-analytics", title: "Product Analytics" },
+      { id: "analytics-dashboard", title: "Analytics" },
+    ],
+  },
+  {
+    id: "ai-assistant",
+    title: "AI",
+    pages: [
+      { id: "ai-hub", title: "AI Hub" },
+    ],
+  },
+  {
+    id: "marketing",
+    title: "Marketing",
+    pages: [
+      { id: "ads-dashboard", title: "Ads Dashboard" },
+      { id: "ads-manager", title: "Ads Manager" },
+      { id: "ads-profitability", title: "Ads Profitability" },
+      { id: "ai-intelligence", title: "AI Intelligence" },
+      { id: "live-campaigns", title: "Live Campaigns" },
+    ],
+  },
+  {
+    id: "accounting-advanced",
+    title: "Accounting",
+    pages: [
+      { id: "ledger", title: "Ledger" },
+      { id: "trial-balance", title: "Trial Balance" },
+      { id: "cash-accounts", title: "Cash Accounts" },
+      { id: "opening-balances", title: "Opening Balances" },
+    ],
+  },
+];
 
 function getRoleBadge(role: string) {
   const roleConfig: Record<string, { color: string; icon: React.ElementType }> = {
@@ -138,6 +239,158 @@ function timeAgo(dateStr: string): string {
   return formatPkDate(date);
 }
 
+function ManageAccessDialog({
+  member,
+  open,
+  onClose,
+}: {
+  member: TeamMemberWithUser;
+  open: boolean;
+  onClose: () => void;
+}) {
+  const { toast } = useToast();
+  const currentPages = member.allowedPages || [];
+  const [selected, setSelected] = useState<Set<string>>(new Set(currentPages));
+
+  const allPageIds = PAGE_SECTIONS.flatMap(s => s.pages.map(p => p.id));
+  const isAllSelected = allPageIds.every(id => selected.has(id));
+
+  const toggle = (id: string) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSection = (section: PageSection) => {
+    const sectionIds = section.pages.map(p => p.id);
+    const allChecked = sectionIds.every(id => selected.has(id));
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (allChecked) {
+        sectionIds.forEach(id => next.delete(id));
+      } else {
+        sectionIds.forEach(id => next.add(id));
+      }
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (isAllSelected) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(allPageIds));
+    }
+  };
+
+  const updatePermsMutation = useMutation({
+    mutationFn: async (allowedPages: string[] | null) => {
+      const res = await apiRequest("PATCH", `/api/team/${member.id}/permissions`, { allowedPages });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/team"] });
+      toast({ title: "Permissions updated", description: `Page access updated for ${member.user?.firstName || member.user?.email || "this member"}.` });
+      onClose();
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to update permissions.", variant: "destructive" });
+    },
+  });
+
+  const handleSave = () => {
+    if (selected.size === 0 || isAllSelected) {
+      updatePermsMutation.mutate(null);
+    } else {
+      updatePermsMutation.mutate(Array.from(selected));
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto" data-testid="dialog-manage-access">
+        <DialogHeader>
+          <DialogTitle>Manage Page Access</DialogTitle>
+          <DialogDescription>
+            Choose which pages <strong>{member.user?.firstName || member.user?.email}</strong> can access. Unchecked pages will be hidden from their sidebar.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="flex items-center gap-2 pb-2 border-b">
+            <Checkbox
+              id="select-all-pages"
+              checked={isAllSelected}
+              onCheckedChange={toggleAll}
+              data-testid="checkbox-select-all-pages"
+            />
+            <Label htmlFor="select-all-pages" className="text-sm font-medium cursor-pointer">
+              All Pages (Full Access)
+            </Label>
+          </div>
+          {PAGE_SECTIONS.map((section) => {
+            const sectionIds = section.pages.map(p => p.id);
+            const checkedCount = sectionIds.filter(id => selected.has(id)).length;
+            const allChecked = checkedCount === sectionIds.length;
+            const someChecked = checkedCount > 0 && !allChecked;
+            return (
+              <div key={section.id}>
+                <div className="flex items-center gap-2 mb-2">
+                  <Checkbox
+                    id={`section-${section.id}`}
+                    checked={allChecked}
+                    ref={(el) => {
+                      if (el) {
+                        const input = el as unknown as HTMLButtonElement;
+                        input.dataset.indeterminate = someChecked ? "true" : "false";
+                      }
+                    }}
+                    onCheckedChange={() => toggleSection(section)}
+                    data-testid={`checkbox-section-${section.id}`}
+                  />
+                  <Label htmlFor={`section-${section.id}`} className="text-sm font-semibold cursor-pointer">
+                    {section.title}
+                  </Label>
+                  <span className="text-xs text-muted-foreground">({checkedCount}/{sectionIds.length})</span>
+                </div>
+                <div className="grid grid-cols-2 gap-1 pl-6">
+                  {section.pages.map((page) => (
+                    <div key={page.id} className="flex items-center gap-2">
+                      <Checkbox
+                        id={`page-${page.id}`}
+                        checked={selected.has(page.id)}
+                        onCheckedChange={() => toggle(page.id)}
+                        data-testid={`checkbox-page-${page.id}`}
+                      />
+                      <Label htmlFor={`page-${page.id}`} className="text-sm cursor-pointer">
+                        {page.title}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={updatePermsMutation.isPending} data-testid="button-save-permissions">
+            {updatePermsMutation.isPending ? (
+              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving...</>
+            ) : (
+              "Save Permissions"
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function Team() {
   const { toast } = useToast();
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
@@ -145,7 +398,7 @@ export default function Team() {
   const [inviteRole, setInviteRole] = useState("agent");
   const [revokeTarget, setRevokeTarget] = useState<Invite | null>(null);
   const [removeTarget, setRemoveTarget] = useState<TeamMemberWithUser | null>(null);
-  const [lastInviteUrl, setLastInviteUrl] = useState<string | null>(null);
+  const [accessTarget, setAccessTarget] = useState<TeamMemberWithUser | null>(null);
 
   const { data, isLoading } = useQuery<TeamResponse>({
     queryKey: ["/api/team"],
@@ -169,18 +422,14 @@ export default function Team() {
       queryClient.invalidateQueries({ queryKey: ["/api/team/invites"] });
       setInviteEmail("");
       setInviteRole("agent");
+      setIsInviteDialogOpen(false);
 
       if (data.autoJoined) {
-        setIsInviteDialogOpen(false);
-        setLastInviteUrl(null);
         toast({ title: "Member added", description: "The user already had an account and has been added to your team." });
+      } else if (data.emailSent) {
+        toast({ title: "Invitation sent", description: `An invitation email has been sent to ${data.invite?.email || 'the invitee'}.` });
       } else {
-        setLastInviteUrl(data.inviteUrl);
-        if (data.emailSent) {
-          toast({ title: "Invitation sent", description: `An email has been sent to ${data.invite?.email || 'the invitee'}.` });
-        } else {
-          toast({ title: "Invitation created", description: data.emailError ? `Email couldn't be sent (${data.emailError}). You can share the link manually.` : "Copy and share the invite link below." });
-        }
+        toast({ title: "Invitation created", description: data.emailError ? `Email couldn't be sent: ${data.emailError}` : "Invitation created but email could not be sent.", variant: "destructive" });
       }
     },
     onError: (error: any) => {
@@ -249,23 +498,7 @@ export default function Team() {
 
   const handleInvite = () => {
     if (!inviteEmail.trim()) return;
-    setLastInviteUrl(null);
     inviteMutation.mutate({ email: inviteEmail, role: inviteRole });
-  };
-
-  const handleCopyLink = async (invite: Invite) => {
-    try {
-      const res = await fetch(`/api/team/invite/${invite.id}/link`, { credentials: "include" });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.message || "Failed to get link");
-      }
-      const { inviteUrl } = await res.json();
-      await navigator.clipboard.writeText(inviteUrl);
-      toast({ title: "Link copied", description: "Invite link copied to clipboard." });
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message || "Failed to copy link.", variant: "destructive" });
-    }
   };
 
   const getUserDisplayName = (member: TeamMemberWithUser) => {
@@ -316,7 +549,7 @@ export default function Team() {
             <Download className="w-4 h-4 mr-2" />
             Export CSV
           </Button>
-          <Dialog open={isInviteDialogOpen} onOpenChange={(open) => { setIsInviteDialogOpen(open); if (!open) { setLastInviteUrl(null); setInviteEmail(""); setInviteRole("agent"); } }}>
+          <Dialog open={isInviteDialogOpen} onOpenChange={(open) => { setIsInviteDialogOpen(open); if (!open) { setInviteEmail(""); setInviteRole("agent"); } }}>
           <DialogTrigger asChild>
             <Button data-testid="button-invite-member">
               <UserPlus className="w-4 h-4 mr-2" />
@@ -330,94 +563,59 @@ export default function Team() {
                 Send an invitation email to join your team. They'll need to log in with the same email to accept.
               </DialogDescription>
             </DialogHeader>
-            {lastInviteUrl ? (
-              <div className="space-y-4 py-4">
-                <div className="flex items-center gap-2 p-3 rounded-md bg-green-500/10 text-sm text-green-700 dark:text-green-400">
-                  <CheckCircle className="w-4 h-4 flex-shrink-0" />
-                  <span>Invitation created successfully!</span>
-                </div>
-                <div className="space-y-2">
-                  <Label>Invite Link</Label>
-                  <div className="flex gap-2">
-                    <Input value={lastInviteUrl} readOnly className="text-xs" data-testid="input-invite-url" />
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => {
-                        navigator.clipboard.writeText(lastInviteUrl);
-                        toast({ title: "Copied", description: "Invite link copied to clipboard." });
-                      }}
-                      data-testid="button-copy-new-invite"
-                    >
-                      <Copy className="w-4 h-4" />
-                    </Button>
-                  </div>
-                  <p className="text-xs text-muted-foreground">Share this link with the invitee. It expires in 7 days.</p>
-                </div>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="email">Email Address</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="colleague@company.com"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleInvite(); }}
+                  data-testid="input-invite-email"
+                />
               </div>
-            ) : (
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email Address</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="colleague@company.com"
-                    value={inviteEmail}
-                    onChange={(e) => setInviteEmail(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") handleInvite(); }}
-                    data-testid="input-invite-email"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="role">Role</Label>
-                  <Select value={inviteRole} onValueChange={setInviteRole}>
-                    <SelectTrigger data-testid="select-invite-role">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="agent">
-                        <div className="flex items-center gap-2">
-                          <User className="w-4 h-4" />
-                          Agent - View orders, add remarks
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="manager">
-                        <div className="flex items-center gap-2">
-                          <Shield className="w-4 h-4" />
-                          Manager - View analytics, manage operations
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="admin">
-                        <div className="flex items-center gap-2">
-                          <ShieldCheck className="w-4 h-4" />
-                          Admin - Full access, manage team
-                        </div>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="role">Role</Label>
+                <Select value={inviteRole} onValueChange={setInviteRole}>
+                  <SelectTrigger data-testid="select-invite-role">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="agent">
+                      <div className="flex items-center gap-2">
+                        <User className="w-4 h-4" />
+                        Agent - View orders, add remarks
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="manager">
+                      <div className="flex items-center gap-2">
+                        <Shield className="w-4 h-4" />
+                        Manager - View analytics, manage operations
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="admin">
+                      <div className="flex items-center gap-2">
+                        <ShieldCheck className="w-4 h-4" />
+                        Admin - Full access, manage team
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-            )}
+            </div>
             <DialogFooter>
-              {lastInviteUrl ? (
-                <Button onClick={() => { setIsInviteDialogOpen(false); setLastInviteUrl(null); }}>
-                  Done
-                </Button>
-              ) : (
-                <>
-                  <Button variant="outline" onClick={() => setIsInviteDialogOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button onClick={handleInvite} disabled={inviteMutation.isPending || !inviteEmail.trim()} data-testid="button-send-invite">
-                    {inviteMutation.isPending ? (
-                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Sending...</>
-                    ) : (
-                      <><Mail className="w-4 h-4 mr-2" />Send Invitation</>
-                    )}
-                  </Button>
-                </>
-              )}
+              <Button variant="outline" onClick={() => setIsInviteDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleInvite} disabled={inviteMutation.isPending || !inviteEmail.trim()} data-testid="button-send-invite">
+                {inviteMutation.isPending ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Sending...</>
+                ) : (
+                  <><Mail className="w-4 h-4 mr-2" />Send Invitation</>
+                )}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -505,6 +703,12 @@ export default function Team() {
                   </div>
                   <div className="flex items-center gap-3 flex-wrap">
                     {getRoleBadge(member.role)}
+                    {member.role !== "admin" && member.allowedPages && member.allowedPages.length > 0 && (
+                      <Badge variant="secondary" className="text-xs">
+                        <KeyRound className="w-3 h-3 mr-1" />
+                        {member.allowedPages.length} pages
+                      </Badge>
+                    )}
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon" data-testid={`button-member-menu-${member.id}`}>
@@ -512,6 +716,15 @@ export default function Team() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        {member.role !== "admin" && (
+                          <DropdownMenuItem
+                            onClick={() => setAccessTarget(member)}
+                            data-testid={`button-manage-access-${member.id}`}
+                          >
+                            <KeyRound className="w-4 h-4 mr-2" />
+                            Manage Access
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuItem onClick={() => updateRoleMutation.mutate({ memberId: member.id, role: "admin" })}>
                           <ShieldCheck className="w-4 h-4 mr-2" />
                           Make Admin
@@ -609,15 +822,6 @@ export default function Team() {
                       Resend
                     </Button>
                     <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleCopyLink(invite)}
-                      data-testid={`button-copy-invite-${invite.id}`}
-                    >
-                      <LinkIcon className="w-3 h-3 mr-1" />
-                      Copy Link
-                    </Button>
-                    <Button
                       variant="ghost"
                       size="icon"
                       onClick={() => setRevokeTarget(invite)}
@@ -674,6 +878,14 @@ export default function Team() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {accessTarget && (
+        <ManageAccessDialog
+          member={accessTarget}
+          open={!!accessTarget}
+          onClose={() => setAccessTarget(null)}
+        />
+      )}
     </div>
   );
 }

@@ -76,8 +76,8 @@ import {
   checkWebhookHealth,
 } from "./services/webhookRegistration";
 import { webhookHandler } from "./services/webhookHandler";
-import { sendInviteEmail, sendMerchantSetupEmail } from "./services/email";
-import { sendInviteEmailSES } from "./services/sesEmail";
+import { sendInviteEmail, sendOtpEmail } from "./services/email";
+import { otpStore, generateOtp, getOtpKey } from "./replit_integrations/auth/routes";
 import {
   writeBackAddress,
   writeBackCancel,
@@ -3384,11 +3384,10 @@ export async function registerRoutes(
           .where(eq(teamInvites.id, invite.id));
       }
 
-      const inviteUrl = `${req.protocol}://${req.get("host")}/invite/${token}`;
-
       let emailSent = false;
       let emailError: string | undefined;
       if (!existingUser) {
+        const inviteUrl = `${req.protocol}://${req.get("host")}/invite/${token}`;
         const [merchant] = await db
           .select()
           .from(merchants)
@@ -3403,7 +3402,7 @@ export async function registerRoutes(
             "A team admin"
           : "A team admin";
 
-        const emailResult = await sendInviteEmailSES({
+        const emailResult = await sendInviteEmail({
           toEmail: email,
           merchantName: merchant?.name || "ShipFlow Team",
           role: role || "agent",
@@ -3427,7 +3426,6 @@ export async function registerRoutes(
 
       res.json({
         invite: { ...invite, token: undefined },
-        inviteUrl,
         autoJoined: !!existingUser,
         emailSent,
         emailError,
@@ -3494,7 +3492,7 @@ export async function registerRoutes(
             "A team admin"
           : "A team admin";
 
-        const emailResult = await sendInviteEmailSES({
+        const emailResult = await sendInviteEmail({
           toEmail: invite.email,
           merchantName: merchant?.name || "ShipFlow Team",
           role: invite.role,
@@ -3595,39 +3593,44 @@ export async function registerRoutes(
     }
   });
 
-  app.get(
-    "/api/team/invite/:inviteId/link",
+  app.patch(
+    "/api/team/:id/permissions",
     isAuthenticated,
     async (req, res) => {
       try {
         const merchantId = await requireMerchant(req, res);
         if (!merchantId) return;
 
-        const { inviteId } = req.params;
-        const [invite] = await db
+        const { id } = req.params;
+        const { allowedPages } = req.body;
+
+        const [member] = await db
           .select()
-          .from(teamInvites)
+          .from(teamMembers)
           .where(
             and(
-              eq(teamInvites.id, inviteId),
-              eq(teamInvites.merchantId, merchantId),
+              eq(teamMembers.id, id),
+              eq(teamMembers.merchantId, merchantId),
             ),
           );
 
-        if (!invite) {
-          return res.status(404).json({ message: "Invite not found" });
-        }
-        if (invite.status !== "pending") {
-          return res
-            .status(400)
-            .json({ message: "This invitation is no longer active" });
+        if (!member) {
+          return res.status(404).json({ message: "Team member not found" });
         }
 
-        const inviteUrl = `${req.protocol}://${req.get("host")}/invite/${invite.token}`;
-        res.json({ inviteUrl });
+        if (member.role === "admin") {
+          return res.status(400).json({ message: "Admin users always have full access and cannot be restricted." });
+        }
+
+        await db
+          .update(teamMembers)
+          .set({ allowedPages: allowedPages || null })
+          .where(eq(teamMembers.id, id));
+
+        res.json({ message: "Permissions updated successfully" });
       } catch (error) {
-        console.error("Error getting invite link:", error);
-        res.status(500).json({ message: "Failed to get invite link" });
+        console.error("Error updating permissions:", error);
+        res.status(500).json({ message: "Failed to update permissions" });
       }
     },
   );
@@ -3811,18 +3814,61 @@ export async function registerRoutes(
   );
 
   app.post(
+    "/api/team/invite/:token/send-otp",
+    async (req, res) => {
+      try {
+        const { token } = req.params;
+
+        const [invite] = await db
+          .select()
+          .from(teamInvites)
+          .where(eq(teamInvites.token, token));
+
+        if (!invite || invite.status !== "pending") {
+          return res.status(400).json({ message: "Invalid or expired invitation." });
+        }
+
+        if (invite.expiresAt && new Date() > invite.expiresAt) {
+          return res.status(400).json({ message: "This invitation has expired." });
+        }
+
+        const otpKey = getOtpKey(invite.email);
+        const existing = otpStore.get(otpKey);
+        if (existing && Date.now() - existing.sentAt < 60000) {
+          const wait = Math.ceil((60000 - (Date.now() - existing.sentAt)) / 1000);
+          return res.status(429).json({ message: `Please wait ${wait} seconds before requesting a new code.` });
+        }
+
+        const code = generateOtp();
+        otpStore.set(otpKey, { code, expiresAt: Date.now() + 5 * 60 * 1000, attempts: 0, sentAt: Date.now() });
+
+        const result = await sendOtpEmail({ toEmail: invite.email, code, name: "there" });
+        if (!result.success) {
+          otpStore.delete(otpKey);
+          return res.status(500).json({ message: "Failed to send verification code. Please try again." });
+        }
+
+        res.json({ success: true, message: "Verification code sent to your email." });
+      } catch (error) {
+        console.error("Error sending invite OTP:", error);
+        res.status(500).json({ message: "Failed to send verification code." });
+      }
+    },
+  );
+
+  app.post(
     "/api/team/invite/:token/accept-with-signup",
     async (req, res) => {
       try {
         const { token } = req.params;
-        const { firstName, lastName, password } = req.body;
+        const { firstName, lastName, otp } = req.body;
 
-        if (!firstName || !password) {
-          return res.status(400).json({ message: "First name and password are required" });
+        if (!firstName) {
+          return res.status(400).json({ message: "First name is required" });
         }
 
-        if (password.length < 6) {
-          return res.status(400).json({ message: "Password must be at least 6 characters" });
+        if (!otp || otp.length !== 6) {
+          return res.status(400).json({ message: "Please enter the 6-digit verification code." });
         }
 
         const [invite] = await db
@@ -3861,8 +3907,24 @@ export async function registerRoutes(
           });
         }
 
-        const bcrypt = await import("bcrypt");
-        const passwordHash = await bcrypt.hash(password, 12);
+        const otpKey = getOtpKey(invite.email);
+        const stored = otpStore.get(otpKey);
+        if (!stored) {
+          return res.status(401).json({ message: "No verification code found. Please request a new one." });
+        }
+        if (Date.now() > stored.expiresAt) {
+          otpStore.delete(otpKey);
+          return res.status(401).json({ message: "Verification code has expired. Please request a new one." });
+        }
+        if (stored.attempts >= 5) {
+          otpStore.delete(otpKey);
+          return res.status(401).json({ message: "Too many failed attempts. Please request a new code." });
+        }
+        if (stored.code !== otp) {
+          stored.attempts++;
+          return res.status(401).json({ message: `Invalid code. ${5 - stored.attempts} attempts remaining.` });
+        }
+        otpStore.delete(otpKey);
 
         const newUser = await db.transaction(async (tx) => {
           const updated = await tx
@@ -3884,7 +3946,6 @@ export async function registerRoutes(
               email: invite.email,
               firstName: firstName.trim(),
               lastName: lastName?.trim() || null,
-              passwordHash,
               role: "USER",
               isActive: true,
               merchantId: invite.merchantId,
@@ -9346,12 +9407,13 @@ export async function registerRoutes(
       let emailSent = false;
       let emailError: string | undefined;
       try {
-        const emailResult = await sendMerchantSetupEmail({
+        const emailResult = await sendInviteEmail({
           toEmail: body.email,
           merchantName: body.merchantName,
-          firstName: body.firstName,
-          setupUrl,
+          role: "admin",
+          inviteUrl: setupUrl,
           expiresAt: setupTokenExpiresAt,
+          invitedByName: "ShipFlow Platform",
         });
         emailSent = emailResult.success;
         if (!emailResult.success) emailError = emailResult.error;

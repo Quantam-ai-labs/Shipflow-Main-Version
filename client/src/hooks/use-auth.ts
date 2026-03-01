@@ -16,6 +16,7 @@ export interface AuthUser {
   } | null;
   sidebarMode: string;
   sidebarPinnedPages: string[];
+  allowedPages: string[] | null;
 }
 
 export function useAuth() {
@@ -39,9 +40,16 @@ export function useAuth() {
 
   const isSuspended = error?.message === "SUSPENDED";
 
-  const loginMutation = useMutation({
-    mutationFn: async (data: { email: string; password: string }) => {
-      const res = await apiRequest("POST", "/api/auth/login", data);
+  const sendOtpMutation = useMutation({
+    mutationFn: async (data: { email: string }) => {
+      const res = await apiRequest("POST", "/api/auth/send-otp", data);
+      return res.json();
+    },
+  });
+
+  const verifyOtpMutation = useMutation({
+    mutationFn: async (data: { email: string; otp: string }) => {
+      const res = await apiRequest("POST", "/api/auth/verify-otp", data);
       return res.json();
     },
     onSuccess: () => {
@@ -50,7 +58,7 @@ export function useAuth() {
   });
 
   const registerMutation = useMutation({
-    mutationFn: async (data: { email: string; password: string; firstName: string; lastName?: string; merchantName: string }) => {
+    mutationFn: async (data: { email: string; firstName: string; lastName?: string; merchantName: string }) => {
       const res = await apiRequest("POST", "/api/auth/register", data);
       return res.json();
     },
@@ -74,9 +82,10 @@ export function useAuth() {
     isLoading,
     isAuthenticated: !!user,
     isSuspended,
-    login: loginMutation.mutateAsync,
-    loginError: loginMutation.error,
-    isLoggingIn: loginMutation.isPending,
+    sendOtp: sendOtpMutation.mutateAsync,
+    isSendingOtp: sendOtpMutation.isPending,
+    verifyOtp: verifyOtpMutation.mutateAsync,
+    isVerifyingOtp: verifyOtpMutation.isPending,
     register: registerMutation.mutateAsync,
     registerError: registerMutation.error,
     isRegistering: registerMutation.isPending,

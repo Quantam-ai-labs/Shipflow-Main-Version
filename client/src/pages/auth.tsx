@@ -1,64 +1,59 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
-import { Package, Loader2, Eye, EyeOff, ArrowLeft, CheckCircle } from "lucide-react";
+import { Package, Loader2, ArrowLeft, Mail } from "lucide-react";
 
 export default function AuthPage() {
-  const [mode, setMode] = useState<"login" | "register" | "forgot">("login");
-  const { login, register, isLoggingIn, isRegistering } = useAuth();
+  const [mode, setMode] = useState<"login" | "register">("login");
+  const [loginStep, setLoginStep] = useState<"email" | "otp">("email");
+  const { sendOtp, isSendingOtp, verifyOtp, isVerifyingOtp, register, isRegistering } = useAuth();
   const { toast } = useToast();
 
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [otp, setOtp] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [merchantName, setMerchantName] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [showRegPassword, setShowRegPassword] = useState(false);
-  const [forgotEmail, setForgotEmail] = useState("");
-  const [forgotLoading, setForgotLoading] = useState(false);
-  const [forgotSent, setForgotSent] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setTimeout(() => setCooldown(cooldown - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [cooldown]);
+
+  const handleSendOtp = useCallback(async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    try {
+      const data = await sendOtp({ email });
+      toast({ title: "Code Sent", description: data.message || "Verification code sent to your email." });
+      setLoginStep("otp");
+      setOtp("");
+      setCooldown(60);
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message || "Failed to send verification code.", variant: "destructive" });
+    }
+  }, [email, sendOtp, toast]);
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await login({ email, password });
+      await verifyOtp({ email, otp });
     } catch (err: any) {
-      toast({ title: "Login failed", description: err.message || "Invalid credentials", variant: "destructive" });
+      toast({ title: "Verification Failed", description: err.message || "Invalid verification code.", variant: "destructive" });
     }
   };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await register({ email, password, firstName, lastName, merchantName });
+      await register({ email, firstName, lastName, merchantName });
     } catch (err: any) {
-      toast({ title: "Registration failed", description: err.message || "Could not create account", variant: "destructive" });
-    }
-  };
-
-  const handleForgotPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setForgotLoading(true);
-    try {
-      const res = await fetch("/api/auth/forgot-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: forgotEmail }),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.message || "Failed to send reset email");
-      }
-      setForgotSent(true);
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    } finally {
-      setForgotLoading(false);
+      toast({ title: "Registration Failed", description: err.message || "Could not create account.", variant: "destructive" });
     }
   };
 
@@ -76,70 +71,93 @@ export default function AuthPage() {
         <Card>
           <CardHeader className="pb-4">
             <CardTitle className="text-lg text-center">
-              {mode === "login" ? "Sign in to your account" : mode === "register" ? "Create your account" : "Reset your password"}
+              {mode === "login"
+                ? loginStep === "email"
+                  ? "Sign in to your account"
+                  : "Enter Verification Code"
+                : "Create your account"}
             </CardTitle>
           </CardHeader>
           <CardContent>
             {mode === "login" ? (
-              <form onSubmit={handleLogin} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="login-email">Email</Label>
-                  <Input
-                    id="login-email"
-                    data-testid="input-email"
-                    type="email"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    placeholder="you@example.com"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="login-password">Password</Label>
-                    <button
-                      type="button"
-                      className="text-xs text-primary hover:underline"
-                      onClick={() => { setForgotEmail(email); setForgotSent(false); setMode("forgot"); }}
-                      data-testid="link-forgot-password"
-                    >
-                      Forgot password?
-                    </button>
-                  </div>
-                  <div className="relative">
+              loginStep === "email" ? (
+                <form onSubmit={handleSendOtp} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="login-email">Email</Label>
                     <Input
-                      id="login-password"
-                      data-testid="input-password"
-                      type={showPassword ? "text" : "password"}
-                      value={password}
-                      onChange={e => setPassword(e.target.value)}
-                      placeholder="Your password"
+                      id="login-email"
+                      data-testid="input-email"
+                      type="email"
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                      placeholder="you@example.com"
                       required
-                      className="pr-10"
+                      autoComplete="email"
                     />
+                  </div>
+                  <Button type="submit" className="w-full" disabled={isSendingOtp} data-testid="button-send-otp">
+                    {isSendingOtp ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Mail className="w-4 h-4 mr-2" />}
+                    Send Verification Code
+                  </Button>
+                  <p className="text-center text-sm text-muted-foreground">
+                    Don't have an account?{" "}
+                    <button type="button" className="text-primary underline" onClick={() => setMode("register")} data-testid="link-register">
+                      Sign up free
+                    </button>
+                  </p>
+                </form>
+              ) : (
+                <form onSubmit={handleVerifyOtp} className="space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50 text-sm text-muted-foreground">
+                      <Mail className="w-4 h-4 shrink-0" />
+                      <span className="truncate">{email}</span>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="login-otp">6-Digit Code</Label>
+                    <Input
+                      id="login-otp"
+                      data-testid="input-otp"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]{6}"
+                      maxLength={6}
+                      value={otp}
+                      onChange={e => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                      placeholder="000000"
+                      required
+                      autoComplete="one-time-code"
+                      className="text-center text-2xl tracking-[0.5em] font-mono"
+                      autoFocus
+                    />
+                  </div>
+                  <Button type="submit" className="w-full" disabled={isVerifyingOtp || otp.length !== 6} data-testid="button-verify-otp">
+                    {isVerifyingOtp && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                    Verify & Sign In
+                  </Button>
+                  <div className="flex items-center justify-between gap-2 text-sm">
                     <button
                       type="button"
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                      onClick={() => setShowPassword(!showPassword)}
-                      data-testid="button-toggle-password"
-                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      onClick={() => { setLoginStep("email"); setOtp(""); }}
+                      className="text-muted-foreground hover:text-foreground flex items-center gap-1"
+                      data-testid="button-back-to-email"
                     >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      <ArrowLeft className="w-3 h-3" /> Change email
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSendOtp()}
+                      disabled={cooldown > 0 || isSendingOtp}
+                      className="text-primary hover:underline disabled:text-muted-foreground disabled:no-underline"
+                      data-testid="button-resend-otp"
+                    >
+                      {cooldown > 0 ? `Resend in ${cooldown}s` : "Resend code"}
                     </button>
                   </div>
-                </div>
-                <Button type="submit" className="w-full" disabled={isLoggingIn} data-testid="button-login">
-                  {isLoggingIn && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                  Sign In
-                </Button>
-                <p className="text-center text-sm text-muted-foreground">
-                  Don't have an account?{" "}
-                  <button type="button" className="text-primary underline" onClick={() => setMode("register")} data-testid="link-register">
-                    Sign up free
-                  </button>
-                </p>
-              </form>
-            ) : mode === "register" ? (
+                </form>
+              )
+            ) : (
               <form onSubmit={handleRegister} className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-2">
@@ -187,94 +205,17 @@ export default function AuthPage() {
                     required
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="reg-password">Password</Label>
-                  <div className="relative">
-                    <Input
-                      id="reg-password"
-                      data-testid="input-register-password"
-                      type={showRegPassword ? "text" : "password"}
-                      value={password}
-                      onChange={e => setPassword(e.target.value)}
-                      placeholder="At least 6 characters"
-                      required
-                      minLength={6}
-                      className="pr-10"
-                    />
-                    <button
-                      type="button"
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                      onClick={() => setShowRegPassword(!showRegPassword)}
-                      data-testid="button-toggle-register-password"
-                      aria-label={showRegPassword ? "Hide password" : "Show password"}
-                    >
-                      {showRegPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
                 <Button type="submit" className="w-full" disabled={isRegistering} data-testid="button-register">
                   {isRegistering && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                   Create Account
                 </Button>
                 <p className="text-center text-sm text-muted-foreground">
                   Already have an account?{" "}
-                  <button type="button" className="text-primary underline" onClick={() => setMode("login")} data-testid="link-login">
+                  <button type="button" className="text-primary underline" onClick={() => { setMode("login"); setLoginStep("email"); }} data-testid="link-login">
                     Sign in
                   </button>
                 </p>
               </form>
-            ) : (
-              <div className="space-y-4">
-                {forgotSent ? (
-                  <div className="text-center space-y-3">
-                    <CheckCircle className="w-12 h-12 text-green-500 mx-auto" />
-                    <p className="text-sm text-foreground font-medium">Check your email</p>
-                    <p className="text-sm text-muted-foreground">
-                      If an account exists for <strong>{forgotEmail}</strong>, we've sent a password reset link. Check your inbox and spam folder.
-                    </p>
-                    <Button
-                      variant="outline"
-                      className="w-full mt-4"
-                      onClick={() => { setMode("login"); setForgotSent(false); }}
-                      data-testid="button-back-to-login"
-                    >
-                      <ArrowLeft className="w-4 h-4 mr-2" />
-                      Back to Sign In
-                    </Button>
-                  </div>
-                ) : (
-                  <form onSubmit={handleForgotPassword} className="space-y-4">
-                    <p className="text-sm text-muted-foreground">
-                      Enter your email address and we'll send you a link to reset your password.
-                    </p>
-                    <div className="space-y-2">
-                      <Label htmlFor="forgot-email">Email</Label>
-                      <Input
-                        id="forgot-email"
-                        data-testid="input-forgot-email"
-                        type="email"
-                        value={forgotEmail}
-                        onChange={e => setForgotEmail(e.target.value)}
-                        placeholder="you@example.com"
-                        required
-                      />
-                    </div>
-                    <Button type="submit" className="w-full" disabled={forgotLoading} data-testid="button-send-reset">
-                      {forgotLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                      Send Reset Link
-                    </Button>
-                    <button
-                      type="button"
-                      className="flex items-center justify-center w-full text-sm text-muted-foreground hover:text-foreground"
-                      onClick={() => setMode("login")}
-                      data-testid="link-back-to-login"
-                    >
-                      <ArrowLeft className="w-3 h-3 mr-1" />
-                      Back to Sign In
-                    </button>
-                  </form>
-                )}
-              </div>
             )}
           </CardContent>
         </Card>
