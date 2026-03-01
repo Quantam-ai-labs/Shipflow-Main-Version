@@ -4048,6 +4048,46 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/team/:id/toggle-active", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const { isActive } = req.body;
+      if (typeof isActive !== "boolean") {
+        return res.status(400).json({ message: "isActive must be a boolean" });
+      }
+
+      const memberId = req.params.id as string;
+      const existingMember = await storage.getTeamMemberById(merchantId, memberId);
+      if (!existingMember) {
+        return res.status(404).json({ message: "Team member not found" });
+      }
+
+      const currentUserId = getSessionUserId(req);
+      if (existingMember.userId === currentUserId) {
+        return res.status(400).json({ message: "You cannot deactivate your own account." });
+      }
+
+      const merchant = await storage.getMerchant(merchantId);
+      if (merchant) {
+        const [memberUser] = await db.select({ email: users.email }).from(users).where(eq(users.id, existingMember.userId));
+        if (memberUser?.email?.toLowerCase() === merchant.email?.toLowerCase()) {
+          return res.status(400).json({ message: "The merchant owner's account cannot be deactivated." });
+        }
+      }
+
+      await db.update(teamMembers).set({ isActive }).where(
+        and(eq(teamMembers.id, memberId), eq(teamMembers.merchantId, merchantId))
+      );
+
+      res.json({ success: true, isActive });
+    } catch (error) {
+      console.error("Error toggling member active status:", error);
+      res.status(500).json({ message: "Failed to update member status" });
+    }
+  });
+
   app.delete("/api/team/:id", isAuthenticated, async (req, res) => {
     try {
       const merchantId = await requireMerchant(req, res);

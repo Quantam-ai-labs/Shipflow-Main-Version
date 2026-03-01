@@ -61,6 +61,8 @@ import {
   Headphones,
   Calculator,
   Truck,
+  UserX,
+  UserCheck,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -522,6 +524,27 @@ export default function Team() {
     },
   });
 
+  const [deactivateTarget, setDeactivateTarget] = useState<TeamMemberWithUser | null>(null);
+
+  const toggleActiveMutation = useMutation({
+    mutationFn: async ({ memberId, isActive }: { memberId: string; isActive: boolean }) => {
+      return apiRequest("PATCH", `/api/team/${memberId}/toggle-active`, { isActive });
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/team"] });
+      setDeactivateTarget(null);
+      toast({
+        title: variables.isActive ? "Account activated" : "Account deactivated",
+        description: variables.isActive
+          ? "The team member can now access the platform."
+          : "The team member has been locked out of the platform.",
+      });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to update status.", variant: "destructive" });
+    },
+  });
+
   const handleInvite = () => {
     if (!inviteEmail.trim()) return;
     inviteMutation.mutate({ email: inviteEmail, role: inviteRole });
@@ -733,7 +756,7 @@ export default function Team() {
           ) : members.length > 0 ? (
             <div className="space-y-3">
               {members.map((member) => (
-                <div key={member.id} className="flex items-center gap-4 p-4 border rounded-lg hover-elevate" data-testid={`team-member-${member.id}`}>
+                <div key={member.id} className={`flex items-center gap-4 p-4 border rounded-lg hover-elevate ${!member.isActive ? "opacity-50 bg-muted/30" : ""}`} data-testid={`team-member-${member.id}`}>
                   <Avatar className="h-12 w-12">
                     <AvatarImage src={member.user?.profileImageUrl || undefined} />
                     <AvatarFallback className="bg-primary/10 text-primary">
@@ -746,6 +769,12 @@ export default function Team() {
                       {member.isMerchantOwner && (
                         <Badge variant="outline" className="text-xs border-primary/40 text-primary" data-testid={`badge-merchant-self-${member.id}`}>
                           Merchant-Self
+                        </Badge>
+                      )}
+                      {!member.isActive && (
+                        <Badge variant="destructive" className="text-xs" data-testid={`badge-inactive-${member.id}`}>
+                          <UserX className="w-3 h-3 mr-1" />
+                          Inactive
                         </Badge>
                       )}
                     </div>
@@ -801,6 +830,25 @@ export default function Team() {
                             Make Logistics Manager
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
+                          {member.isActive ? (
+                            <DropdownMenuItem
+                              onClick={() => setDeactivateTarget(member)}
+                              className="text-orange-600 focus:text-orange-600"
+                              data-testid={`button-deactivate-${member.id}`}
+                            >
+                              <UserX className="w-4 h-4 mr-2" />
+                              Deactivate Account
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem
+                              onClick={() => toggleActiveMutation.mutate({ memberId: member.id, isActive: true })}
+                              className="text-green-600 focus:text-green-600"
+                              data-testid={`button-activate-${member.id}`}
+                            >
+                              <UserCheck className="w-4 h-4 mr-2" />
+                              Activate Account
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuItem
                             onClick={() => setRemoveTarget(member)}
                             className="text-destructive focus:text-destructive"
@@ -938,6 +986,27 @@ export default function Team() {
               data-testid="button-confirm-remove"
             >
               Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!deactivateTarget} onOpenChange={(open) => { if (!open) setDeactivateTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Deactivate Account</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to deactivate <strong>{deactivateTarget ? getUserDisplayName(deactivateTarget) : ''}</strong>? They will be locked out and unable to access the platform until reactivated.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deactivateTarget && toggleActiveMutation.mutate({ memberId: deactivateTarget.id, isActive: false })}
+              className="bg-orange-600 text-white hover:bg-orange-700"
+              data-testid="button-confirm-deactivate"
+            >
+              Deactivate
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
