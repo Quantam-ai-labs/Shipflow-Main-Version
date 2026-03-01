@@ -264,6 +264,8 @@ export function AppSidebar() {
 
   const sidebarMode = user?.sidebarMode || "advanced";
   const pinnedPages: string[] = user?.sidebarPinnedPages?.length ? user.sidebarPinnedPages : defaultPinnedPages;
+  const allowedPages: string[] | null = user?.allowedPages || null;
+  const hasPageRestrictions = allowedPages !== null && allowedPages.length > 0;
 
   const updatePrefsMutation = useMutation({
     mutationFn: async (data: { sidebarMode?: string; sidebarPinnedPages?: string[] }) => {
@@ -287,18 +289,40 @@ export function AppSidebar() {
     ? Object.values(counts).reduce((sum, c) => sum + (c || 0), 0)
     : 0;
 
-  const filteredGroups = isSimple
-    ? allNavGroups
-        .map(g => ({
-          ...g,
-          items: g.items.filter(i => pinnedPages.includes(i.id)),
-        }))
-        .filter(g => g.items.length > 0)
-    : allNavGroups;
+  const applyPageRestrictions = (groups: NavGroup[]) => {
+    if (!hasPageRestrictions) return groups;
+    return groups
+      .map(g => ({
+        ...g,
+        items: g.items.filter(i => allowedPages!.includes(i.id)),
+      }))
+      .filter(g => g.items.length > 0);
+  };
 
-  const filteredSettings = isSimple
-    ? settingsItems.filter(i => pinnedPages.includes(i.id))
-    : settingsItems;
+  const filteredGroups = applyPageRestrictions(
+    isSimple
+      ? allNavGroups
+          .map(g => ({
+            ...g,
+            items: g.items.filter(i => pinnedPages.includes(i.id)),
+          }))
+          .filter(g => g.items.length > 0)
+      : allNavGroups
+  );
+
+  const filteredSettings = (() => {
+    let items = isSimple
+      ? settingsItems.filter(i => pinnedPages.includes(i.id))
+      : settingsItems;
+    if (hasPageRestrictions) {
+      items = items.filter(i => allowedPages!.includes(i.id));
+    }
+    return items;
+  })();
+
+  const filteredPipelineItems = hasPageRestrictions
+    ? pipelineItems.filter(i => allowedPages!.includes(i.id))
+    : pipelineItems;
 
   return (
     <Sidebar>
@@ -328,7 +352,7 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup>
+        {filteredPipelineItems.length > 0 && (<SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
               <Collapsible defaultOpen={isOrdersRouteActive} asChild className="group/collapsible">
@@ -347,7 +371,7 @@ export function AppSidebar() {
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <SidebarMenuSub>
-                      {pipelineItems.map((item) => {
+                      {filteredPipelineItems.map((item) => {
                         const count = counts?.[item.key!] || 0;
                         return (
                           <SidebarMenuSubItem key={item.key}>
@@ -372,6 +396,7 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        )}
 
         {filteredGroups.map((group) => {
           const isGroupActive = group.items.some(i => location === i.url || location.startsWith(i.url + "/"));

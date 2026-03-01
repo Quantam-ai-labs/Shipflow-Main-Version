@@ -3,7 +3,6 @@ import { db } from "../../db";
 import { users, merchants, teamMembers } from "@shared/schema";
 import { eq, ilike } from "drizzle-orm";
 import { isAuthenticated } from "./replitAuth";
-import bcrypt from "bcrypt";
 import { z } from "zod";
 import { sendOtpEmail } from "../../services/email";
 

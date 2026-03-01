@@ -35,7 +35,14 @@ export default function AdminLoginPage() {
       setOtp("");
       setCooldown(60);
     } catch (err: any) {
-      toast({ title: "Error", description: err.message || "Failed to send code", variant: "destructive" });
+      const msg = err.message || "";
+      if (msg.includes("not found") || msg.includes("No account")) {
+        toast({ title: "Account Not Found", description: "No administrator account found with this email address.", variant: "destructive" });
+      } else if (msg.includes("rate") || msg.includes("wait") || msg.includes("recently")) {
+        toast({ title: "Too Many Requests", description: "A code was sent recently. Please wait before requesting another.", variant: "destructive" });
+      } else {
+        toast({ title: "Failed to Send Code", description: msg || "Something went wrong. Please try again.", variant: "destructive" });
+      }
     } finally {
       setIsSending(false);
     }
@@ -54,7 +61,16 @@ export default function AdminLoginPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       window.location.href = "/admin";
     } catch (err: any) {
-      toast({ title: "Verification Failed", description: err.message || "Invalid code", variant: "destructive" });
+      const msg = err.message || "";
+      if (msg.includes("expired")) {
+        toast({ title: "Code Expired", description: "Your verification code has expired. Please request a new one.", variant: "destructive" });
+      } else if (msg.includes("attempts") || msg.includes("Too many")) {
+        toast({ title: "Too Many Attempts", description: "Too many incorrect attempts. Please request a new code.", variant: "destructive" });
+      } else if (msg.includes("Invalid") || msg.includes("incorrect")) {
+        toast({ title: "Invalid Code", description: "The code you entered is incorrect. Please check and try again.", variant: "destructive" });
+      } else {
+        toast({ title: "Verification Failed", description: msg || "Something went wrong. Please try again.", variant: "destructive" });
+      }
     } finally {
       setIsVerifying(false);
     }

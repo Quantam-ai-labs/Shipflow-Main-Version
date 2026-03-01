@@ -12,11 +12,12 @@ Preferred communication style: Simple, everyday language.
 - **Frontend**: React 18 with TypeScript, Wouter for routing, TanStack React Query for state management, shadcn/ui (Radix UI) for UI components, Tailwind CSS for styling, and Vite for building.
 - **Backend**: Node.js with Express.js, TypeScript (ESM), RESTful JSON APIs with Zod validation.
 - **Database**: PostgreSQL with Drizzle ORM and Drizzle Kit for migrations.
-- **Authentication**: Email/password with bcrypt, PostgreSQL-backed sessions. Super Admin login at `/admin-login` uses email OTP (6-digit code sent via Resend, 5-min expiry, rate-limited to 1 per 60s, max 5 verification attempts). OTP endpoints: `POST /api/admin-auth/send-otp`, `POST /api/admin-auth/verify-otp`. OTPs stored in-memory (server-side Map). Gmail `+alias` addresses are stripped for email delivery.
+- **Authentication**: OTP-based login for all users (no passwords). PostgreSQL-backed sessions. All OTPs: 6-digit code sent via Resend from `ShipFlow <noreply@1sol.ai>`, 5-min expiry, rate-limited to 1 per 60s, max 5 verification attempts. OTPs stored in-memory (server-side Map). Gmail `+alias` addresses are stripped for email delivery. Merchant OTP endpoints: `POST /api/auth/send-otp`, `POST /api/auth/verify-otp`. Admin OTP endpoints: `POST /api/admin-auth/send-otp`, `POST /api/admin-auth/verify-otp`. Team invite OTP: `POST /api/team/invite/:token/send-otp`.
 
 ### Multi-Tenancy & Access Control
 - Merchant-based data isolation with all data scoped by `merchantId`.
 - Team structure with `teamMembers` and roles (Admin, Manager, Agent) for tiered permissions.
+- **Page-level permissions**: `allowedPages` array on `teamMembers` table. When `null`/empty = full access (admin default). When populated, user can only access those page IDs. Enforced in sidebar filtering (`app-sidebar.tsx`) and route protection (`App.tsx`). Admin role always has full access and cannot be restricted. Managed via `PATCH /api/team/:id/permissions` endpoint and "Manage Access" dialog in the Team page.
 
 ### Key Features
 - **Merchant Management**: Core tenant entity with subscription and profile.

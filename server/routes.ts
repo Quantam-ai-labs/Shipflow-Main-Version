@@ -8961,35 +8961,6 @@ export async function registerRoutes(
     },
   );
 
-  app.post(
-    "/api/admin/users/:id/reset-password",
-    isAuthenticated,
-    async (req, res) => {
-      try {
-        const adminId = await requireSuperAdmin(req, res);
-        if (!adminId) return;
-
-        const bcrypt = await import("bcrypt");
-        const tempPassword = crypto.randomBytes(8).toString("hex");
-        const passwordHash = await bcrypt.default.hash(tempPassword, 12);
-
-        await db
-          .update(users)
-          .set({ passwordHash })
-          .where(eq(users.id, req.params.id));
-        await db.insert(adminActionLogs).values({
-          adminUserId: adminId,
-          actionType: "RESET_PASSWORD",
-          targetUserId: req.params.id,
-          details: "Password reset by admin",
-        });
-
-        res.json({ message: "Password reset", tempPassword });
-      } catch (error) {
-        res.status(500).json({ message: "Failed to reset password" });
-      }
-    },
-  );
 
   // ============================================
   // SUPER ADMIN: PLATFORM DASHBOARD ANALYTICS

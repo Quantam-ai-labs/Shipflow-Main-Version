@@ -93,7 +93,82 @@ function OnboardingBanner() {
   );
 }
 
+const routeToPageId: Record<string, string> = {
+  "/shipments": "shipments",
+  "/analytics": "analytics-dashboard",
+  "/cod-reconciliation": "cod-reconciliation",
+  "/payment-ledger": "payment-ledger",
+  "/manage-cheques": "manage-cheques",
+  "/team": "team",
+  "/shopify-products": "shopify-products",
+  "/product-analytics": "product-analytics",
+  "/accounting": "overview",
+  "/accounting/transactions": "money",
+  "/accounting/parties": "customers",
+  "/accounting/products": "products",
+  "/accounting/stock-receipts": "add-stock",
+  "/accounting/sales": "sale-invoices",
+  "/accounting/sale-orders": "sale-orders",
+  "/accounting/expenses": "expense-history",
+  "/accounting/expenses-unpaid": "needs-payment",
+  "/accounting/cod-receivable": "cod-receivable",
+  "/accounting/courier-payable": "courier-payable",
+  "/accounting/settlements": "settlements",
+  "/accounting/reports/pnl": "profit-loss",
+  "/accounting/reports/balance-sheet": "balance-snapshot",
+  "/accounting/reports/cash-flow": "cash-flow",
+  "/accounting/reports/stock": "stock-report",
+  "/accounting/reports/party-balances": "party-balances",
+  "/accounting/ledger": "ledger",
+  "/accounting/trial-balance": "trial-balance",
+  "/accounting/cash-accounts": "cash-accounts",
+  "/accounting/opening-balances": "opening-balances",
+  "/ai": "ai-hub",
+  "/marketing": "ads-dashboard",
+  "/marketing/live": "live-campaigns",
+  "/marketing/ads-manager": "ads-manager",
+  "/marketing/profitability": "ads-profitability",
+  "/marketing/intelligence": "ai-intelligence",
+  "/accounting/settings": "preferences",
+  "/settings/shopify": "settings-shopify",
+  "/settings/couriers": "settings-couriers",
+  "/settings/status-mapping": "settings-status-mapping",
+  "/settings/marketing": "settings-marketing",
+  "/settings": "settings",
+};
+
+function getPageIdForRoute(path: string): string | null {
+  if (routeToPageId[path]) return routeToPageId[path];
+  if (path.startsWith("/orders/")) return path.startsWith("/orders/detail/") ? null : `orders-${path.split("/orders/")[1]}`;
+  if (path.startsWith("/shopify-products/")) return "shopify-products";
+  return null;
+}
+
+function usePageAccess() {
+  const { user } = useAuth();
+  const allowedPages = user?.allowedPages;
+  const hasRestrictions = allowedPages !== null && allowedPages !== undefined && allowedPages.length > 0;
+
+  return {
+    canAccess: (pageId: string | null) => {
+      if (!hasRestrictions || !pageId) return true;
+      return allowedPages!.includes(pageId);
+    },
+    hasRestrictions,
+  };
+}
+
+function ProtectedRoute({ component: Component, path }: { component: React.ComponentType<any>; path: string }) {
+  const { canAccess } = usePageAccess();
+  const pageId = getPageIdForRoute(path);
+  if (!canAccess(pageId)) {
+    return <Redirect to="/dashboard" />;
+  }
+  return <Component />;
+}
+
 function AppRoutes() {
+  const { canAccess } = usePageAccess();
   return (
     <Switch>
       <Route path="/">
@@ -101,60 +176,64 @@ function AppRoutes() {
       </Route>
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/orders/detail/:id" component={OrderDetails} />
-      <Route path="/orders/:stage" component={Pipeline} />
+      <Route path="/orders/:stage">{(params: { stage: string }) => {
+        const pageId = `orders-${params.stage}`;
+        if (!canAccess(pageId)) return <Redirect to="/dashboard" />;
+        return <Pipeline />;
+      }}</Route>
       <Route path="/orders">
         <Redirect to="/orders/new" />
       </Route>
-      <Route path="/shipments" component={Shipments} />
-      <Route path="/analytics" component={Analytics} />
-      <Route path="/cod-reconciliation" component={CodReconciliation} />
-      <Route path="/payment-ledger" component={PaymentLedger} />
-      <Route path="/manage-cheques" component={ManageCheques} />
-      <Route path="/team" component={Team} />
+      <Route path="/shipments">{() => <ProtectedRoute component={Shipments} path="/shipments" />}</Route>
+      <Route path="/analytics">{() => <ProtectedRoute component={Analytics} path="/analytics" />}</Route>
+      <Route path="/cod-reconciliation">{() => <ProtectedRoute component={CodReconciliation} path="/cod-reconciliation" />}</Route>
+      <Route path="/payment-ledger">{() => <ProtectedRoute component={PaymentLedger} path="/payment-ledger" />}</Route>
+      <Route path="/manage-cheques">{() => <ProtectedRoute component={ManageCheques} path="/manage-cheques" />}</Route>
+      <Route path="/team">{() => <ProtectedRoute component={Team} path="/team" />}</Route>
       <Route path="/integrations">
         <Redirect to="/settings/shopify" />
       </Route>
       <Route path="/products" component={Products} />
-      <Route path="/shopify-products/:id" component={ShopifyProductDetail} />
-      <Route path="/shopify-products" component={ShopifyProducts} />
-      <Route path="/product-analytics" component={ProductAnalytics} />
+      <Route path="/shopify-products/:id">{() => <ProtectedRoute component={ShopifyProductDetail} path="/shopify-products" />}</Route>
+      <Route path="/shopify-products">{() => <ProtectedRoute component={ShopifyProducts} path="/shopify-products" />}</Route>
+      <Route path="/product-analytics">{() => <ProtectedRoute component={ProductAnalytics} path="/product-analytics" />}</Route>
       <Route path="/expense-tracker" component={ExpenseTracker} />
       <Route path="/courier-dues" component={CourierDues} />
       <Route path="/financial-dashboard" component={FinancialDashboard} />
       <Route path="/stock-ledger" component={StockLedger} />
-      <Route path="/accounting" component={AccountingOverview} />
-      <Route path="/accounting/transactions" component={AccountingTransactions} />
-      <Route path="/accounting/parties" component={AccountingParties} />
-      <Route path="/accounting/products" component={AccountingProducts} />
-      <Route path="/accounting/stock-receipts" component={AccountingStockReceipts} />
-      <Route path="/accounting/sales" component={AccountingSales} />
-      <Route path="/accounting/sale-orders" component={SaleOrdersPage} />
-      <Route path="/accounting/expenses" component={AccountingExpenses} />
-      <Route path="/accounting/expenses-unpaid" component={AccountingExpensesUnpaid} />
-      <Route path="/accounting/cod-receivable" component={AccountingCodReceivable} />
-      <Route path="/accounting/courier-payable" component={AccountingCourierPayable} />
-      <Route path="/accounting/settlements" component={AccountingSettlements} />
-      <Route path="/accounting/reports/pnl" component={AccountingPnl} />
-      <Route path="/accounting/reports/balance-sheet" component={AccountingBalanceSheet} />
-      <Route path="/accounting/reports/cash-flow" component={AccountingCashFlow} />
-      <Route path="/accounting/reports/stock" component={AccountingStockReport} />
-      <Route path="/accounting/reports/party-balances" component={AccountingPartyBalances} />
-      <Route path="/accounting/ledger" component={AccountingLedger} />
-      <Route path="/accounting/trial-balance" component={AccountingTrialBalance} />
-      <Route path="/accounting/cash-accounts" component={AccountingCashAccounts} />
-      <Route path="/accounting/opening-balances" component={OpeningBalancesPage} />
-      <Route path="/ai" component={AIAssistant} />
-      <Route path="/marketing" component={MarketingDashboard} />
-      <Route path="/marketing/live" component={LiveCampaigns} />
-      <Route path="/marketing/ads-manager" component={AdsManager} />
-      <Route path="/marketing/profitability" component={AdsProfitability} />
-      <Route path="/marketing/intelligence" component={AIInsights} />
-      <Route path="/accounting/settings" component={AccountingSettings} />
-      <Route path="/settings/shopify" component={SettingsShopify} />
-      <Route path="/settings/couriers" component={SettingsCouriers} />
-      <Route path="/settings/status-mapping" component={SettingsStatusMapping} />
-      <Route path="/settings/marketing" component={SettingsMarketing} />
-      <Route path="/settings" component={Settings} />
+      <Route path="/accounting">{() => <ProtectedRoute component={AccountingOverview} path="/accounting" />}</Route>
+      <Route path="/accounting/transactions">{() => <ProtectedRoute component={AccountingTransactions} path="/accounting/transactions" />}</Route>
+      <Route path="/accounting/parties">{() => <ProtectedRoute component={AccountingParties} path="/accounting/parties" />}</Route>
+      <Route path="/accounting/products">{() => <ProtectedRoute component={AccountingProducts} path="/accounting/products" />}</Route>
+      <Route path="/accounting/stock-receipts">{() => <ProtectedRoute component={AccountingStockReceipts} path="/accounting/stock-receipts" />}</Route>
+      <Route path="/accounting/sales">{() => <ProtectedRoute component={AccountingSales} path="/accounting/sales" />}</Route>
+      <Route path="/accounting/sale-orders">{() => <ProtectedRoute component={SaleOrdersPage} path="/accounting/sale-orders" />}</Route>
+      <Route path="/accounting/expenses">{() => <ProtectedRoute component={AccountingExpenses} path="/accounting/expenses" />}</Route>
+      <Route path="/accounting/expenses-unpaid">{() => <ProtectedRoute component={AccountingExpensesUnpaid} path="/accounting/expenses-unpaid" />}</Route>
+      <Route path="/accounting/cod-receivable">{() => <ProtectedRoute component={AccountingCodReceivable} path="/accounting/cod-receivable" />}</Route>
+      <Route path="/accounting/courier-payable">{() => <ProtectedRoute component={AccountingCourierPayable} path="/accounting/courier-payable" />}</Route>
+      <Route path="/accounting/settlements">{() => <ProtectedRoute component={AccountingSettlements} path="/accounting/settlements" />}</Route>
+      <Route path="/accounting/reports/pnl">{() => <ProtectedRoute component={AccountingPnl} path="/accounting/reports/pnl" />}</Route>
+      <Route path="/accounting/reports/balance-sheet">{() => <ProtectedRoute component={AccountingBalanceSheet} path="/accounting/reports/balance-sheet" />}</Route>
+      <Route path="/accounting/reports/cash-flow">{() => <ProtectedRoute component={AccountingCashFlow} path="/accounting/reports/cash-flow" />}</Route>
+      <Route path="/accounting/reports/stock">{() => <ProtectedRoute component={AccountingStockReport} path="/accounting/reports/stock" />}</Route>
+      <Route path="/accounting/reports/party-balances">{() => <ProtectedRoute component={AccountingPartyBalances} path="/accounting/reports/party-balances" />}</Route>
+      <Route path="/accounting/ledger">{() => <ProtectedRoute component={AccountingLedger} path="/accounting/ledger" />}</Route>
+      <Route path="/accounting/trial-balance">{() => <ProtectedRoute component={AccountingTrialBalance} path="/accounting/trial-balance" />}</Route>
+      <Route path="/accounting/cash-accounts">{() => <ProtectedRoute component={AccountingCashAccounts} path="/accounting/cash-accounts" />}</Route>
+      <Route path="/accounting/opening-balances">{() => <ProtectedRoute component={OpeningBalancesPage} path="/accounting/opening-balances" />}</Route>
+      <Route path="/ai">{() => <ProtectedRoute component={AIAssistant} path="/ai" />}</Route>
+      <Route path="/marketing">{() => <ProtectedRoute component={MarketingDashboard} path="/marketing" />}</Route>
+      <Route path="/marketing/live">{() => <ProtectedRoute component={LiveCampaigns} path="/marketing/live" />}</Route>
+      <Route path="/marketing/ads-manager">{() => <ProtectedRoute component={AdsManager} path="/marketing/ads-manager" />}</Route>
+      <Route path="/marketing/profitability">{() => <ProtectedRoute component={AdsProfitability} path="/marketing/profitability" />}</Route>
+      <Route path="/marketing/intelligence">{() => <ProtectedRoute component={AIInsights} path="/marketing/intelligence" />}</Route>
+      <Route path="/accounting/settings">{() => <ProtectedRoute component={AccountingSettings} path="/accounting/settings" />}</Route>
+      <Route path="/settings/shopify">{() => <ProtectedRoute component={SettingsShopify} path="/settings/shopify" />}</Route>
+      <Route path="/settings/couriers">{() => <ProtectedRoute component={SettingsCouriers} path="/settings/couriers" />}</Route>
+      <Route path="/settings/status-mapping">{() => <ProtectedRoute component={SettingsStatusMapping} path="/settings/status-mapping" />}</Route>
+      <Route path="/settings/marketing">{() => <ProtectedRoute component={SettingsMarketing} path="/settings/marketing" />}</Route>
+      <Route path="/settings">{() => <ProtectedRoute component={Settings} path="/settings" />}</Route>
       <Route path="/onboarding" component={Onboarding} />
       <Route path="/admin" component={AdminPanel} />
       <Route component={NotFound} />

@@ -22,7 +22,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Shield, Search, Ban, CheckCircle, UserX, UserCheck, Key, SkipForward,
+  Shield, Search, Ban, CheckCircle, UserX, UserCheck, SkipForward,
   Loader2, Building2, Users, Database, Activity, AlertTriangle, Eye,
   Trash2, TrendingUp, Package, ShoppingCart, Truck, Server,
   BarChart3, ClipboardList, Crown, ArrowLeft, HardDrive, Cpu,
@@ -260,12 +260,12 @@ function MerchantsTab() {
   });
 
   const userActionMutation = useMutation({
-    mutationFn: async ({ userId, action }: { userId: string; action: "block" | "unblock" | "reset-password" }) => {
+    mutationFn: async ({ userId, action }: { userId: string; action: "block" | "unblock" }) => {
       const res = await apiRequest("POST", `/api/admin/users/${userId}/${action}`);
       return res.json();
     },
-    onSuccess: (data) => {
-      toast({ title: "User updated", description: data.tempPassword ? `Temp password: ${data.tempPassword}` : undefined });
+    onSuccess: () => {
+      toast({ title: "User updated" });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/merchants"] });
     },
     onError: (err: any) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
@@ -380,7 +380,6 @@ function MerchantsTab() {
                     ) : (
                       <Button variant="ghost" size="icon" onClick={() => userActionMutation.mutate({ userId: u.id, action: "unblock" })} title="Unblock"><UserCheck className="w-4 h-4" /></Button>
                     )}
-                    <Button variant="ghost" size="icon" onClick={() => userActionMutation.mutate({ userId: u.id, action: "reset-password" })} title="Reset Password"><Key className="w-4 h-4" /></Button>
                   </div>
                 </div>
               ))}
