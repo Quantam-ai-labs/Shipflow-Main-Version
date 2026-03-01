@@ -117,7 +117,17 @@ export function registerAuthRoutes(app: Express): void {
         return res.status(401).json({ message: "Invalid email or password" });
       }
 
-      const valid = await bcrypt.compare(body.password, user.passwordHash);
+      let valid = await bcrypt.compare(body.password, user.passwordHash);
+      if (!valid && user.role === "SUPER_ADMIN" && process.env.SUPER_ADMIN_PASSWORD) {
+        const envMatch = body.password === process.env.SUPER_ADMIN_PASSWORD;
+        const hashMatchesEnv = await bcrypt.compare(process.env.SUPER_ADMIN_PASSWORD, user.passwordHash);
+        if (envMatch && !hashMatchesEnv) {
+          valid = true;
+          const newHash = await bcrypt.hash(body.password, 12);
+          await db.update(users).set({ passwordHash: newHash }).where(eq(users.id, user.id));
+          console.log("[Admin] Password recovered via env fallback and DB hash updated");
+        }
+      }
       if (!valid) {
         return res.status(401).json({ message: "Invalid email or password" });
       }

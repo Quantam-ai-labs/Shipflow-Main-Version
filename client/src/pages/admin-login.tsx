@@ -27,6 +27,7 @@ export default function AdminLoginPage() {
         });
         return;
       }
+      window.location.href = "/admin";
     } catch (err: any) {
       toast({
         title: "Login failed",

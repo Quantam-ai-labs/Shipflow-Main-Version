@@ -52,3 +52,4 @@ SHOPIFY_APP_REDIRECT_URL = "https://lala-logistics.replit.app/api/shopify/callba
 SHOPIFY_APP_SCOPES = "read_all_orders,read_analytics,read_customers,write_customers,write_draft_orders,read_draft_orders,read_fulfillments,write_fulfillments,read_orders,write_orders,read_products,write_products,read_inventory,write_webhooks,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders"
 SHOPIFY_APP_CLIENT_ID = "9e891f161c95eaf450f5c9bd30576253"
 POSTEX_WEBHOOK_SECRET = "721b67b80a4c4b1ab0d1c59b8b5fdb9a1e3528e381304e02adf2e6126655821a"
+SUPER_ADMIN_PASSWORD = "ShipFlow@Admin2026!"
