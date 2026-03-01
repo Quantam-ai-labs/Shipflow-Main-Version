@@ -4045,7 +4045,6 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
 
-      // Verify team member exists and belongs to this merchant
       const memberId = req.params.id as string;
       const existingMember = await storage.getTeamMemberById(
         merchantId,
@@ -4055,7 +4054,19 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Team member not found" });
       }
 
-      // Delete (scoped by merchantId)
+      const currentUserId = getSessionUserId(req);
+      if (existingMember.userId === currentUserId) {
+        return res.status(400).json({ message: "You cannot remove yourself from the team." });
+      }
+
+      if (existingMember.role === "admin") {
+        const allMembers = await storage.getTeamMembers(merchantId);
+        const adminCount = allMembers.filter(m => m.role === "admin" && m.isActive).length;
+        if (adminCount <= 1) {
+          return res.status(400).json({ message: "Cannot remove the last admin. Promote another member to admin first." });
+        }
+      }
+
       await storage.deleteTeamMember(merchantId, memberId);
       res.json({ success: true });
     } catch (error) {
