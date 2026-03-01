@@ -153,15 +153,15 @@ export default function Orders() {
   const dateParams = dateRangeToParams(dateRange);
 
   const { data, isLoading, isFetching } = useQuery<OrdersResponse>({
-    queryKey: ["/api/orders", { search: debouncedSearch, status: statusFilter, courier: courierFilter, city: cityFilter, dateFrom: dateParams.dateFrom, dateTo: dateParams.dateTo, page, pageSize }],
+    queryKey: ["/api/orders", { search: debouncedSearch, status: statusFilter, courier: courierFilter, city: cityFilter, dateFrom: debouncedSearch ? undefined : dateParams.dateFrom, dateTo: debouncedSearch ? undefined : dateParams.dateTo, page, pageSize }],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (debouncedSearch) params.set("search", debouncedSearch);
       if (statusFilter && statusFilter !== "all") params.set("status", statusFilter);
       if (courierFilter && courierFilter !== "all") params.set("courier", courierFilter);
       if (cityFilter) params.set("city", cityFilter);
-      if (dateParams.dateFrom) params.set("dateFrom", dateParams.dateFrom);
-      if (dateParams.dateTo) params.set("dateTo", dateParams.dateTo);
+      if (!debouncedSearch && dateParams.dateFrom) params.set("dateFrom", dateParams.dateFrom);
+      if (!debouncedSearch && dateParams.dateTo) params.set("dateTo", dateParams.dateTo);
       params.set("page", String(page));
       params.set("pageSize", String(pageSize));
       const res = await fetch(`/api/orders?${params.toString()}`, { credentials: "include" });

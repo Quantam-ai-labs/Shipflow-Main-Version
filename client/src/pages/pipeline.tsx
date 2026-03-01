@@ -294,7 +294,7 @@ export default function Pipeline() {
   }, [activeTab]);
 
   const { data, isLoading, isFetching } = useQuery<{ orders: Order[]; total: number }>({
-    queryKey: ["/api/orders", { workflowStatus: activeTab, search: debouncedSearch, page, pageSize, pendingReasonType: activeTab === "PENDING" ? pendingReasonFilter : undefined, shipmentStatus: shipmentSubFilter !== "all" ? shipmentSubFilter : undefined, dateFrom: dateParams.dateFrom, dateTo: dateParams.dateTo }],
+    queryKey: ["/api/orders", { workflowStatus: activeTab, search: debouncedSearch, page, pageSize, pendingReasonType: activeTab === "PENDING" ? pendingReasonFilter : undefined, shipmentStatus: shipmentSubFilter !== "all" ? shipmentSubFilter : undefined, dateFrom: debouncedSearch ? undefined : dateParams.dateFrom, dateTo: debouncedSearch ? undefined : dateParams.dateTo }],
     queryFn: async () => {
       const params = new URLSearchParams();
       params.set("workflowStatus", activeTab);
@@ -304,8 +304,8 @@ export default function Pipeline() {
       if (debouncedSearch) params.set("search", debouncedSearch);
       if (activeTab === "PENDING" && pendingReasonFilter !== "all") params.set("pendingReasonType", pendingReasonFilter);
       if (shipmentSubFilter !== "all") params.set("shipmentStatus", shipmentSubFilter);
-      if (dateParams.dateFrom) params.set("dateFrom", dateParams.dateFrom);
-      if (dateParams.dateTo) params.set("dateTo", dateParams.dateTo);
+      if (!debouncedSearch && dateParams.dateFrom) params.set("dateFrom", dateParams.dateFrom);
+      if (!debouncedSearch && dateParams.dateTo) params.set("dateTo", dateParams.dateTo);
       const res = await fetch(`/api/orders?${params.toString()}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();

@@ -343,8 +343,8 @@ export default function Shipments() {
     ...(statusFilter !== "all" && { workflowStatus: statusFilter }),
     ...(shipmentStatusFilter !== "all" && { shipmentStatus: shipmentStatusFilter }),
     ...(courierFilter !== "all" && { courier: courierFilter }),
-    ...(dateParams.dateFrom && { dateFrom: dateParams.dateFrom }),
-    ...(dateParams.dateTo && { dateTo: dateParams.dateTo }),
+    ...(!search && dateParams.dateFrom && { dateFrom: dateParams.dateFrom }),
+    ...(!search && dateParams.dateTo && { dateTo: dateParams.dateTo }),
   });
 
   const { data, isLoading, refetch } = useQuery<ShipmentsResponse>({
