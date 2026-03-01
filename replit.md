@@ -12,7 +12,7 @@ Preferred communication style: Simple, everyday language.
 - **Frontend**: React 18 with TypeScript, Wouter for routing, TanStack React Query for state management, shadcn/ui (Radix UI) for UI components, Tailwind CSS for styling, and Vite for building.
 - **Backend**: Node.js with Express.js, TypeScript (ESM), RESTful JSON APIs with Zod validation.
 - **Database**: PostgreSQL with Drizzle ORM and Drizzle Kit for migrations.
-- **Authentication**: Email/password with bcrypt, PostgreSQL-backed sessions. Super Admin login at `/admin-login` with env-based password recovery via `SUPER_ADMIN_PASSWORD` (one-time fallback that re-hashes on use).
+- **Authentication**: Email/password with bcrypt, PostgreSQL-backed sessions. Super Admin login at `/admin-login` uses email OTP (6-digit code sent via Resend, 5-min expiry, rate-limited to 1 per 60s, max 5 verification attempts). OTP endpoints: `POST /api/admin-auth/send-otp`, `POST /api/admin-auth/verify-otp`. OTPs stored in-memory (server-side Map). Gmail `+alias` addresses are stripped for email delivery.
 
 ### Multi-Tenancy & Access Control
 - Merchant-based data isolation with all data scoped by `merchantId`.

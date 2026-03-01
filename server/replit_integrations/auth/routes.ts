@@ -192,7 +192,8 @@ export function registerAuthRoutes(app: Express): void {
       const code = String(Math.floor(100000 + Math.random() * 900000));
       adminOtpStore.set(normalizedEmail, { code, expiresAt: Date.now() + 5 * 60 * 1000, attempts: 0, sentAt: Date.now() });
 
-      const result = await sendAdminOtpEmail({ toEmail: normalizedEmail, code });
+      const deliveryEmail = normalizedEmail.replace(/\+[^@]*@/, "@");
+      const result = await sendAdminOtpEmail({ toEmail: deliveryEmail, code });
       if (!result.success) {
         console.error("[AdminOTP] Failed to send:", result.error);
         return res.status(500).json({ message: "Failed to send verification code. Please try again." });
