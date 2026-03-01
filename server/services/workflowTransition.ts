@@ -3,6 +3,9 @@ import { orders, workflowAuditLog } from "@shared/schema";
 import { eq, and, inArray, lt, sql } from "drizzle-orm";
 import type { Order } from "@shared/schema";
 import { writeBackCancel, writeBackTags } from './shopifyWriteBack';
+import { getMerchantRoboTags, type RoboTagConfig } from './roboTags';
+
+export { getMerchantRoboTags, type RoboTagConfig };
 
 const VALID_STATUSES = ["NEW", "PENDING", "HOLD", "READY_TO_SHIP", "BOOKED", "FULFILLED", "DELIVERED", "RETURN", "CANCELLED"] as const;
 type WorkflowStatus = typeof VALID_STATUSES[number];
@@ -358,19 +361,21 @@ export async function autoMoveStalePending(merchantId: string): Promise<number> 
   return staleOrders.length;
 }
 
-export function parseRoboTags(tags: string[] | null): { roboConfirm: boolean; roboCancel: boolean; roboPending: boolean } {
+export function parseRoboTags(tags: string[] | null, config?: RoboTagConfig): { roboConfirm: boolean; roboCancel: boolean; roboPending: boolean } {
   if (!tags || tags.length === 0) return { roboConfirm: false, roboCancel: false, roboPending: false };
+  const c = config || DEFAULT_ROBO_TAGS;
 
   const tagSet = new Set(tags.map(t => t.trim().toLowerCase()));
   return {
-    roboConfirm: tagSet.has("robo-confirm"),
-    roboCancel: tagSet.has("robo-cancel"),
-    roboPending: tagSet.has("robo-pending"),
+    roboConfirm: tagSet.has(c.confirm.toLowerCase()),
+    roboCancel: tagSet.has(c.cancel.toLowerCase()),
+    roboPending: tagSet.has(c.pending.toLowerCase()),
   };
 }
 
 export async function applyRoboTags(merchantId: string, orderId: string, tags: string[] | null): Promise<TransitionResult | null> {
-  const robo = parseRoboTags(tags);
+  const config = await getMerchantRoboTags(merchantId);
+  const robo = parseRoboTags(tags, config);
 
   if (!robo.roboConfirm && !robo.roboCancel && !robo.roboPending) {
     return null;
@@ -392,8 +397,8 @@ export async function applyRoboTags(merchantId: string, orderId: string, tags: s
       toStatus: "CANCELLED",
       action: "robo_cancel",
       actorType: "system",
-      reason: "Robo-Cancel tag",
-      extraData: { cancelledAt: new Date(), cancelReason: "Robo-Cancel tag" },
+      reason: `${config.cancel} tag`,
+      extraData: { cancelledAt: new Date(), cancelReason: `${config.cancel} tag` },
     });
   }
 
@@ -404,7 +409,7 @@ export async function applyRoboTags(merchantId: string, orderId: string, tags: s
       toStatus: "READY_TO_SHIP",
       action: "robo_confirm",
       actorType: "system",
-      reason: "Robo-Confirm tag",
+      reason: `${config.confirm} tag`,
       extraData: { confirmedAt: new Date() },
     });
   }

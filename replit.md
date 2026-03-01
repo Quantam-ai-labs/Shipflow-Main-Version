@@ -28,7 +28,7 @@ Preferred communication style: Simple, everyday language.
 
 ### Key Features
 - **Merchant & Team Management**: Core tenant entity with subscription and profile; team invite system with role-based access. Merchant owner (Merchant-Self) cannot be removed from team. Admin panel can only suspend/unsuspend merchants, not delete them.
-- **Shopify Integration**: OAuth-based access, encrypted tokens, webhook processing for orders and fulfillments, configurable historical data import, and bi-directional write-back for order edits and status updates.
+- **Shopify Integration**: OAuth-based access, encrypted tokens, webhook processing for orders and fulfillments, configurable historical data import, and bi-directional write-back for order edits and status updates. Configurable per-merchant "Robo-Tags" (`roboTags` jsonb on merchants table) for order automation — tags like Confirm/Pending/Cancel are customizable via Settings > Shopify > Order Automation Tags. Defaults: `Robo-Confirm`, `Robo-Pending`, `Robo-Cancel`.
 - **Courier Management**: API credentials per courier, specific handling for PostEx booking, universal status normalization, optimized courier sync scheduler with batching and parallel processing, and display of courier logged weight.
 - **Order & Shipment Management**: Syncs from Shopify, tracks status, allows remarks with history tracking, and a strict 9-stage workflow transition system. Supports batch booking with Leopards and PostEx, including preview and overrides.
 - **COD Reconciliation**: Tracks payment settlements, `prepaidAmount`, `codRemaining`, `codPaymentStatus`, and supports payment detail fetching from couriers and automatic settlement marking. Includes a detailed Payment Ledger.

@@ -30,6 +30,8 @@ import {
   AlertTriangle,
   Calendar,
   Check,
+  Tags,
+  Save,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -726,6 +728,8 @@ export default function ShopifySettings() {
         </CardContent>
       </Card>
 
+      {data?.shopify?.isConnected && <OrderTagsConfig />}
+
       <div>
         <h2 className="text-lg font-semibold mb-4">Sync Health & Data Quality</h2>
         <div className="grid md:grid-cols-2 gap-4">
@@ -968,6 +972,131 @@ export default function ShopifySettings() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function OrderTagsConfig() {
+  const { toast } = useToast();
+  const { data: tagConfig, isLoading } = useQuery<{ confirm: string; pending: string; cancel: string }>({
+    queryKey: ["/api/settings/robo-tags"],
+  });
+
+  const [confirm, setConfirm] = useState("");
+  const [pending, setPending] = useState("");
+  const [cancel, setCancel] = useState("");
+
+  useEffect(() => {
+    if (tagConfig) {
+      setConfirm(tagConfig.confirm);
+      setPending(tagConfig.pending);
+      setCancel(tagConfig.cancel);
+    }
+  }, [tagConfig]);
+
+  const saveMutation = useMutation({
+    mutationFn: async (data: { confirm: string; pending: string; cancel: string }) => {
+      const res = await apiRequest("PATCH", "/api/settings/robo-tags", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/robo-tags"] });
+      toast({ title: "Tags saved", description: "Order automation tags have been updated." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to save tags.", variant: "destructive" });
+    },
+  });
+
+  const hasChanges = tagConfig && (confirm !== tagConfig.confirm || pending !== tagConfig.pending || cancel !== tagConfig.cancel);
+  const allFilled = confirm.trim() && pending.trim() && cancel.trim();
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="p-6">
+          <Skeleton className="h-4 w-48 mb-4" />
+          <div className="space-y-3">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Tags className="w-5 h-5" />
+              Order Automation Tags
+            </CardTitle>
+            <CardDescription>
+              Configure which Shopify tags automatically sort incoming orders into Confirmed, Pending, or Cancelled.
+            </CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="grid sm:grid-cols-3 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="tag-confirm" className="text-sm font-medium flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-green-500" />
+              Confirm Tag
+            </Label>
+            <Input
+              id="tag-confirm"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              placeholder="e.g. Robo-Confirm"
+              data-testid="input-tag-confirm"
+            />
+            <p className="text-xs text-muted-foreground">Moves order to Ready to Ship</p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="tag-pending" className="text-sm font-medium flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-amber-500" />
+              Pending Tag
+            </Label>
+            <Input
+              id="tag-pending"
+              value={pending}
+              onChange={(e) => setPending(e.target.value)}
+              placeholder="e.g. Robo-Pending"
+              data-testid="input-tag-pending"
+            />
+            <p className="text-xs text-muted-foreground">Keeps order for manual review</p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="tag-cancel" className="text-sm font-medium flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-red-500" />
+              Cancel Tag
+            </Label>
+            <Input
+              id="tag-cancel"
+              value={cancel}
+              onChange={(e) => setCancel(e.target.value)}
+              placeholder="e.g. Robo-Cancel"
+              data-testid="input-tag-cancel"
+            />
+            <p className="text-xs text-muted-foreground">Automatically cancels the order</p>
+          </div>
+        </div>
+        <div className="flex justify-end mt-4">
+          <Button
+            onClick={() => saveMutation.mutate({ confirm: confirm.trim(), pending: pending.trim(), cancel: cancel.trim() })}
+            disabled={!hasChanges || !allFilled || saveMutation.isPending}
+            data-testid="button-save-tags"
+          >
+            {saveMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+            Save Tags
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

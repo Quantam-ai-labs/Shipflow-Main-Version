@@ -32,6 +32,7 @@ export const merchants = pgTable("merchants", {
   facebookAccessToken: text("facebook_access_token"),
   facebookAdAccountId: varchar("facebook_ad_account_id", { length: 255 }),
   timezone: varchar("timezone", { length: 100 }).default("Asia/Karachi"),
+  roboTags: jsonb("robo_tags").default({ confirm: "Robo-Confirm", pending: "Robo-Pending", cancel: "Robo-Cancel" }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

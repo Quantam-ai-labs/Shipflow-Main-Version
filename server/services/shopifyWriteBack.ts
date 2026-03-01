@@ -167,20 +167,30 @@ export async function writeBackCancel(
   });
 }
 
-const STATUS_TAG_MAP: Record<string, string> = {
-  'READY_TO_SHIP': 'Robo-Confirm',
-  'PENDING': 'Robo-Pending',
-  'CANCELLED': 'Robo-Cancel',
-};
+import { getMerchantRoboTags, type RoboTagConfig } from './roboTags';
 
-const ALL_ROBO_TAGS = ['Robo-Confirm', 'Robo-Pending', 'Robo-Cancel'];
+function buildStatusTagMap(config: RoboTagConfig): Record<string, string> {
+  return {
+    'READY_TO_SHIP': config.confirm,
+    'PENDING': config.pending,
+    'CANCELLED': config.cancel,
+  };
+}
+
+function buildAllRoboTags(config: RoboTagConfig): string[] {
+  return [config.confirm, config.pending, config.cancel];
+}
 
 export async function writeBackTags(
   merchantId: string,
   shopifyOrderId: string,
   newStatus: string,
 ): Promise<{ success: boolean; error?: string }> {
-  const newTag = STATUS_TAG_MAP[newStatus];
+  const config = await getMerchantRoboTags(merchantId);
+  const statusTagMap = buildStatusTagMap(config);
+  const allRoboTags = buildAllRoboTags(config);
+
+  const newTag = statusTagMap[newStatus];
   if (!newTag) {
     return { success: true };
   }
@@ -212,7 +222,9 @@ export async function writeBackTags(
         .map((t: string) => t.trim())
         .filter((t: string) => t.length > 0);
 
-      const filteredTags = existingTags.filter((t: string) => !ALL_ROBO_TAGS.includes(t));
+      const filteredTags = existingTags.filter((t: string) =>
+        !allRoboTags.some(rt => rt.toLowerCase() === t.toLowerCase())
+      );
       filteredTags.push(newTag);
       const updatedTags = filteredTags.join(', ');
 

@@ -627,6 +627,10 @@ export default function OrderDetails() {
     queryKey: ["/api/orders", id],
   });
 
+  const { data: tagConfig } = useQuery<{ confirm: string; pending: string; cancel: string }>({
+    queryKey: ["/api/settings/robo-tags"],
+  });
+
   const [isEditingCustomer, setIsEditingCustomer] = useState(false);
   const [editCustomerName, setEditCustomerName] = useState("");
   const [editCustomerPhone, setEditCustomerPhone] = useState("");
@@ -1587,21 +1591,25 @@ export default function OrderDetails() {
               </CardHeader>
               <CardContent>
                 <div className="flex flex-wrap gap-2" data-testid="tags-list">
-                  {(order.tags as string[]).map((tag, index) => (
-                    <Badge
-                      key={index}
-                      variant="secondary"
-                      className={
-                        tag === 'Robo-Confirm' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' :
-                        tag === 'Robo-Pending' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300' :
-                        tag === 'Robo-Cancel' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
-                        ''
-                      }
-                      data-testid={`badge-tag-${index}`}
-                    >
-                      {tag}
-                    </Badge>
-                  ))}
+                  {(order.tags as string[]).map((tag, index) => {
+                    const lowerTag = tag.toLowerCase();
+                    const tc = tagConfig || { confirm: "Robo-Confirm", pending: "Robo-Pending", cancel: "Robo-Cancel" };
+                    const roboStyle =
+                      lowerTag === tc.confirm.toLowerCase() ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' :
+                      lowerTag === tc.pending.toLowerCase() ? 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300' :
+                      lowerTag === tc.cancel.toLowerCase() ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
+                      '';
+                    return (
+                      <Badge
+                        key={index}
+                        variant="secondary"
+                        className={roboStyle}
+                        data-testid={`badge-tag-${index}`}
+                      >
+                        {tag}
+                      </Badge>
+                    );
+                  })}
                 </div>
               </CardContent>
             </Card>

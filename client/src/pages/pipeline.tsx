@@ -182,15 +182,22 @@ const UNIVERSAL_STATUS_COLORS: Record<string, string> = {
   'Unfulfilled': "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
 };
 
-const ROBO_TAG_CONFIG: Record<string, { label: string; className: string }> = {
-  'Robo-Confirm': { label: 'Robo-Confirm', className: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' },
-  'Robo-Pending': { label: 'Robo-Pending', className: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300' },
-  'Robo-Cancel': { label: 'Robo-Cancel', className: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' },
-};
+const DEFAULT_TAG_CONFIG = { confirm: "Robo-Confirm", pending: "Robo-Pending", cancel: "Robo-Cancel" };
 
-function getRoboTags(tags: string[] | null | undefined): string[] {
+function getRoboTagStyle(tag: string, tagConfig?: { confirm: string; pending: string; cancel: string } | null): string | null {
+  const config = tagConfig || DEFAULT_TAG_CONFIG;
+  const lowerTag = tag.toLowerCase();
+  if (lowerTag === config.confirm.toLowerCase()) return 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300';
+  if (lowerTag === config.pending.toLowerCase()) return 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300';
+  if (lowerTag === config.cancel.toLowerCase()) return 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300';
+  return null;
+}
+
+function getRoboTags(tags: string[] | null | undefined, tagConfig?: { confirm: string; pending: string; cancel: string } | null): string[] {
   if (!tags || !Array.isArray(tags)) return [];
-  return tags.filter(t => ROBO_TAG_CONFIG[t]);
+  const config = tagConfig || DEFAULT_TAG_CONFIG;
+  const roboSet = new Set([config.confirm.toLowerCase(), config.pending.toLowerCase(), config.cancel.toLowerCase()]);
+  return tags.filter(t => roboSet.has(t.toLowerCase()));
 }
 
 const UNIVERSAL_STATUS_LABELS: Record<string, string> = {
@@ -284,6 +291,10 @@ export default function Pipeline() {
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  const { data: tagConfig } = useQuery<{ confirm: string; pending: string; cancel: string }>({
+    queryKey: ["/api/settings/robo-tags"],
+  });
 
   useEffect(() => {
     setPage(1);
@@ -1346,9 +1357,9 @@ export default function Pipeline() {
                   </td>
                   <td className="px-3 py-1.5 hidden md:table-cell max-w-[100px]" data-testid={`cell-tags-${order.id}`}>
                     <div className="flex flex-wrap gap-0.5">
-                      {getRoboTags(order.tags as string[]).map(tag => (
-                        <Badge key={tag} className={`text-[10px] px-1.5 py-0 leading-4 ${ROBO_TAG_CONFIG[tag]?.className}`} data-testid={`badge-tag-${tag}-${order.id}`}>
-                          {ROBO_TAG_CONFIG[tag]?.label}
+                      {getRoboTags(order.tags as string[], tagConfig).map(tag => (
+                        <Badge key={tag} className={`text-[10px] px-1.5 py-0 leading-4 ${getRoboTagStyle(tag, tagConfig) || ''}`} data-testid={`badge-tag-${tag}-${order.id}`}>
+                          {tag}
                         </Badge>
                       ))}
                     </div>

@@ -5848,6 +5848,51 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/settings/robo-tags", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const merchant = await storage.getMerchant(merchantId);
+      if (!merchant) {
+        return res.status(404).json({ message: "Merchant not found" });
+      }
+
+      const defaults = { confirm: "Robo-Confirm", pending: "Robo-Pending", cancel: "Robo-Cancel" };
+      const roboTags = (merchant.roboTags as any) || defaults;
+      res.json({
+        confirm: roboTags.confirm || defaults.confirm,
+        pending: roboTags.pending || defaults.pending,
+        cancel: roboTags.cancel || defaults.cancel,
+      });
+    } catch (error) {
+      console.error("Error fetching robo-tags:", error);
+      res.status(500).json({ message: "Failed to fetch tag configuration" });
+    }
+  });
+
+  app.patch("/api/settings/robo-tags", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const { confirm, pending, cancel } = req.body;
+      if (!confirm || typeof confirm !== "string" || !pending || typeof pending !== "string" || !cancel || typeof cancel !== "string") {
+        return res.status(400).json({ message: "All three tag fields (confirm, pending, cancel) are required and must be non-empty strings." });
+      }
+
+      await db.update(merchants).set({
+        roboTags: { confirm: confirm.trim(), pending: pending.trim(), cancel: cancel.trim() },
+        updatedAt: new Date(),
+      }).where(eq(merchants.id, merchantId));
+
+      res.json({ success: true, confirm: confirm.trim(), pending: pending.trim(), cancel: cancel.trim() });
+    } catch (error) {
+      console.error("Error updating robo-tags:", error);
+      res.status(500).json({ message: "Failed to update tag configuration" });
+    }
+  });
+
   // Settings
   app.get("/api/settings", isAuthenticated, async (req, res) => {
     try {
