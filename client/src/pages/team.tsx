@@ -426,9 +426,7 @@ export default function Team() {
       setInviteRole("agent");
       setIsInviteDialogOpen(false);
 
-      if (data.autoJoined) {
-        toast({ title: "Member added", description: "The user already had an account and has been added to your team." });
-      } else if (data.emailSent) {
+      if (data.emailSent) {
         toast({ title: "Invitation sent", description: `An invitation email has been sent to ${data.invite?.email || 'the invitee'}.` });
       } else {
         toast({ title: "Invitation created", description: data.emailError ? `Email couldn't be sent: ${data.emailError}` : "Invitation created but email could not be sent.", variant: "destructive" });

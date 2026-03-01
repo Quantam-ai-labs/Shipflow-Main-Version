@@ -3382,75 +3382,48 @@ export async function registerRoutes(
         })
         .returning();
 
-      if (existingUser) {
-        await db.insert(teamMembers).values({
-          userId: existingUser.id,
-          merchantId,
-          role: role || "agent",
-          isActive: true,
-          joinedAt: new Date(),
-        });
-
-        if (!existingUser.merchantId) {
-          await db
-            .update(users)
-            .set({ merchantId })
-            .where(eq(users.id, existingUser.id));
-        }
-
-        await db
-          .update(teamInvites)
-          .set({
-            status: "accepted",
-            acceptedAt: new Date(),
-            acceptedByUserId: existingUser.id,
-          })
-          .where(eq(teamInvites.id, invite.id));
-      }
-
       let emailSent = false;
       let emailError: string | undefined;
-      if (!existingUser) {
-        const inviteUrl = `${req.protocol}://${req.get("host")}/invite/${token}`;
-        const [merchant] = await db
-          .select()
-          .from(merchants)
-          .where(eq(merchants.id, merchantId));
-        const [inviter] = await db
-          .select()
-          .from(users)
-          .where(eq(users.id, userId));
-        const inviterName = inviter
-          ? `${inviter.firstName || ""} ${inviter.lastName || ""}`.trim() ||
-            inviter.email ||
-            "A team admin"
-          : "A team admin";
 
-        const emailResult = await sendInviteEmail({
-          toEmail: email,
-          merchantName: merchant?.name || "1SOL.AI Team",
-          role: role || "agent",
-          inviteUrl,
-          expiresAt,
-          invitedByName: inviterName,
-        });
+      const inviteUrl = `${req.protocol}://${req.get("host")}/invite/${token}`;
+      const [merchant] = await db
+        .select()
+        .from(merchants)
+        .where(eq(merchants.id, merchantId));
+      const [inviter] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, userId));
+      const inviterName = inviter
+        ? `${inviter.firstName || ""} ${inviter.lastName || ""}`.trim() ||
+          inviter.email ||
+          "A team admin"
+        : "A team admin";
 
-        emailSent = emailResult.success;
-        emailError = emailResult.error;
+      const emailResult = await sendInviteEmail({
+        toEmail: email,
+        merchantName: merchant?.name || "1SOL.AI Team",
+        role: role || "agent",
+        inviteUrl,
+        expiresAt,
+        invitedByName: inviterName,
+      });
 
-        await db
-          .update(teamInvites)
-          .set({
-            sendCount: 1,
-            lastSentAt: new Date(),
-            lastEmailError: emailError || null,
-          })
-          .where(eq(teamInvites.id, invite.id));
-      }
+      emailSent = emailResult.success;
+      emailError = emailResult.error;
+
+      await db
+        .update(teamInvites)
+        .set({
+          sendCount: 1,
+          lastSentAt: new Date(),
+          lastEmailError: emailError || null,
+        })
+        .where(eq(teamInvites.id, invite.id));
 
       res.json({
         invite: { ...invite, token: undefined },
-        autoJoined: !!existingUser,
+        autoJoined: false,
         emailSent,
         emailError,
       });
