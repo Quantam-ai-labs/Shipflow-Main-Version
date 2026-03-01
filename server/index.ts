@@ -6,8 +6,9 @@ import { startAutoSync } from "./services/autoSync";
 import { startCourierSyncScheduler } from "./services/courierSyncScheduler";
 import { startMarketingSyncScheduler } from "./services/metaAds";
 import { db } from "./db";
-import { shopifyStores } from "../shared/schema";
+import { shopifyStores, users } from "../shared/schema";
 import { eq } from "drizzle-orm";
+import bcrypt from "bcrypt";
 
 const app = express();
 const httpServer = createServer(app);
@@ -65,7 +66,38 @@ app.use((req, res, next) => {
   next();
 });
 
-async function scheduleStartupRecovery() {
+async function seedSuperAdmin() {
+  try {
+    const admins = await db.select().from(users).where(eq(users.role, "SUPER_ADMIN"));
+    if (admins.length > 0) {
+      console.log(`[Seed] SUPER_ADMIN already exists: ${admins.map(a => a.email).join(", ")}`);
+      return;
+    }
+
+    const adminEmail = "usamax.mail+admin@gmail.com";
+    const [existing] = await db.select().from(users).where(eq(users.email, adminEmail));
+
+    if (existing) {
+      await db.update(users).set({ role: "SUPER_ADMIN" }).where(eq(users.id, existing.id));
+      console.log(`[Seed] Promoted existing user ${adminEmail} to SUPER_ADMIN`);
+    } else {
+      const passwordHash = await bcrypt.hash("ShipFlow@Admin2026!", 12);
+      await db.insert(users).values({
+        email: adminEmail,
+        passwordHash,
+        firstName: "Super",
+        lastName: "Admin",
+        role: "SUPER_ADMIN",
+        isActive: true,
+      });
+      console.log(`[Seed] Created SUPER_ADMIN user: ${adminEmail}`);
+    }
+  } catch (err: any) {
+    console.error("[Seed] Failed to seed SUPER_ADMIN:", err.message);
+  }
+}
+
+function scheduleStartupRecovery() {
   // One-time full sync for all connected merchants after server start.
   // Recovers orders missed due to the UTC-vs-PKT timezone bug in created_at_min.
   // Runs after a 15s delay to avoid slowing server startup.
@@ -135,6 +167,7 @@ async function scheduleStartupRecovery() {
     },
     () => {
       log(`serving on port ${port}`);
+      seedSuperAdmin();
       startAutoSync();
       startCourierSyncScheduler();
       startMarketingSyncScheduler();
