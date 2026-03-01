@@ -92,6 +92,7 @@ export function registerAuthRoutes(app: Express): void {
       });
 
       const { merchant, user } = result;
+      req.session.cookie.maxAge = 12 * 60 * 60 * 1000;
       (req.session as any).userId = user.id;
       (req.session as any).sessionDisplayName = `${body.firstName} ${body.lastName || ""}`.trim();
 
@@ -181,10 +182,11 @@ export function registerAuthRoutes(app: Express): void {
 
   app.post("/api/auth/verify-otp", async (req, res) => {
     try {
-      const { email, otp, displayName } = z.object({
+      const { email, otp, displayName, rememberDevice } = z.object({
         email: z.string().email(),
         otp: z.string().length(6, "Please enter the 6-digit code."),
         displayName: z.string().min(1, "Please enter your name."),
+        rememberDevice: z.boolean().optional().default(false),
       }).parse(req.body);
       const normalizedEmail = email.toLowerCase().trim();
       const otpKey = getOtpKey(normalizedEmail);
@@ -226,6 +228,9 @@ export function registerAuthRoutes(app: Express): void {
           return res.status(403).json({ message: "Your business account has been suspended. Contact support." });
         }
       }
+
+      const sessionMaxAge = rememberDevice ? 7 * 24 * 60 * 60 * 1000 : 12 * 60 * 60 * 1000;
+      req.session.cookie.maxAge = sessionMaxAge;
 
       await db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, user.id));
       (req.session as any).userId = user.id;
@@ -345,6 +350,8 @@ export function registerAuthRoutes(app: Express): void {
       if (!user.isActive) {
         return res.status(403).json({ message: "Your account has been deactivated." });
       }
+
+      req.session.cookie.maxAge = 24 * 60 * 60 * 1000;
 
       await db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, user.id));
       (req.session as any).userId = user.id;

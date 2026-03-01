@@ -3983,6 +3983,7 @@ export async function registerRoutes(
             else resolve();
           });
         });
+        req.session.cookie.maxAge = 12 * 60 * 60 * 1000;
         (req.session as any).userId = newUser.id;
         (req.session as any).sessionDisplayName = `${firstName.trim()} ${(lastName || "").trim()}`.trim();
         await new Promise<void>((resolve, reject) => {

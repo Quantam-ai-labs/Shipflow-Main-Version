@@ -49,7 +49,7 @@ export function useAuth() {
   });
 
   const verifyOtpMutation = useMutation({
-    mutationFn: async (data: { email: string; otp: string; displayName: string }) => {
+    mutationFn: async (data: { email: string; otp: string; displayName: string; rememberDevice?: boolean }) => {
       const res = await apiRequest("POST", "/api/auth/verify-otp", data);
       return res.json();
     },

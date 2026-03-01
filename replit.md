@@ -12,7 +12,7 @@ Preferred communication style: Simple, everyday language.
 - **Frontend**: React 18 with TypeScript, Wouter, TanStack React Query, shadcn/ui (Radix UI), Tailwind CSS, and Vite.
 - **Backend**: Node.js with Express.js, TypeScript (ESM), and RESTful JSON APIs with Zod validation.
 - **Database**: PostgreSQL with Drizzle ORM and Drizzle Kit for migrations.
-- **Authentication**: Two-factor authentication for merchants/teams (email+password then email OTP), and OTP-only for admin. All sessions require a display name for audit trails and expire after 24 hours. OTPs are sent via Resend, are 6-digit, 5-min expiry, and rate-limited. Forgot password flow: email OTP verification → new password set (endpoints: `/api/auth/forgot-password/send-otp` and `/api/auth/forgot-password/reset`).
+- **Authentication**: Two-factor authentication for merchants/teams (email+password then email OTP), and OTP-only for admin. All sessions require a display name for audit trails and expire after 24 hours. OTPs are sent via Resend, are 6-digit, 5-min expiry, and rate-limited. Forgot password flow: email OTP verification → new password set (endpoints: `/api/auth/forgot-password/send-otp` and `/api/auth/forgot-password/reset`). "Remember this device" checkbox: checked = 7-day session, unchecked = 12-hour session. Admin sessions are always 24 hours. Registration and invite-accept default to 12 hours.
 
 ### Multi-Tenancy & Access Control
 - Merchant-based data isolation with all data scoped by `merchantId`.

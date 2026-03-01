@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Package, Loader2, ArrowLeft, Mail, Lock, KeyRound } from "lucide-react";
 
 export default function AuthPage() {
@@ -25,6 +26,7 @@ export default function AuthPage() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [merchantName, setMerchantName] = useState("");
+  const [rememberDevice, setRememberDevice] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const [isSendingReset, setIsSendingReset] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
@@ -55,7 +57,7 @@ export default function AuthPage() {
       return;
     }
     try {
-      await verifyOtp({ email, otp, displayName: displayName.trim() });
+      await verifyOtp({ email, otp, displayName: displayName.trim(), rememberDevice });
     } catch (err: any) {
       toast({ title: "Verification Failed", description: err.message || "Invalid verification code.", variant: "destructive" });
     }
@@ -188,6 +190,17 @@ export default function AuthPage() {
                       required
                       autoComplete="current-password"
                     />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="remember-device"
+                      data-testid="checkbox-remember-device"
+                      checked={rememberDevice}
+                      onCheckedChange={(checked) => setRememberDevice(checked === true)}
+                    />
+                    <Label htmlFor="remember-device" className="text-sm font-normal text-muted-foreground cursor-pointer">
+                      Remember this device for 7 days
+                    </Label>
                   </div>
                   <Button type="submit" className="w-full" disabled={isSendingOtp} data-testid="button-send-otp">
                     {isSendingOtp ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Lock className="w-4 h-4 mr-2" />}
