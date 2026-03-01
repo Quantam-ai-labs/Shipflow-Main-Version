@@ -1,7 +1,7 @@
 # ShipFlow - Logistics Operations Platform
 
 ## Overview
-ShipFlow is a production-grade, multi-tenant logistics operations platform designed for Shopify merchants in Pakistan. It provides an all-in-one dashboard for syncing Shopify orders, tracking courier shipments (Leopards, PostEx, TCS), managing COD reconciliation, and facilitating team collaboration. The platform aims to streamline logistics operations for e-commerce businesses as a scalable SaaS product with robust role-based access control and merchant isolation.
+ShipFlow is a production-grade, multi-tenant logistics operations platform for Shopify merchants in Pakistan. It offers an all-in-one dashboard to sync Shopify orders, track courier shipments (Leopards, PostEx, TCS), manage COD reconciliation, and facilitate team collaboration. The platform aims to streamline e-commerce logistics as a scalable SaaS product with robust role-based access control and merchant isolation, enhancing operational efficiency and profitability.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
@@ -9,55 +9,38 @@ Preferred communication style: Simple, everyday language.
 ## System Architecture
 
 ### Core Technologies
-- **Frontend**: React 18 with TypeScript, Wouter for routing, TanStack React Query for state management, shadcn/ui (Radix UI) for UI components, Tailwind CSS for styling, and Vite for building.
-- **Backend**: Node.js with Express.js, TypeScript (ESM), RESTful JSON APIs with Zod validation.
+- **Frontend**: React 18 with TypeScript, Wouter, TanStack React Query, shadcn/ui (Radix UI), Tailwind CSS, and Vite.
+- **Backend**: Node.js with Express.js, TypeScript (ESM), and RESTful JSON APIs with Zod validation.
 - **Database**: PostgreSQL with Drizzle ORM and Drizzle Kit for migrations.
-- **Authentication**: OTP-based login for all users (no passwords). PostgreSQL-backed sessions. All OTPs: 6-digit code sent via Resend from `ShipFlow <noreply@1sol.ai>`, 5-min expiry, rate-limited to 1 per 60s, max 5 verification attempts. OTPs stored in-memory (server-side Map). Gmail `+alias` addresses are stripped for email delivery. Merchant OTP endpoints: `POST /api/auth/send-otp`, `POST /api/auth/verify-otp`. Admin OTP endpoints: `POST /api/admin-auth/send-otp`, `POST /api/admin-auth/verify-otp`. Team invite OTP: `POST /api/team/invite/:token/send-otp`.
+- **Authentication**: Two-factor authentication for merchants/teams (email+password then email OTP), and OTP-only for admin. All sessions require a display name for audit trails and expire after 24 hours. OTPs are sent via Resend, are 6-digit, 5-min expiry, and rate-limited.
 
 ### Multi-Tenancy & Access Control
 - Merchant-based data isolation with all data scoped by `merchantId`.
 - Team structure with `teamMembers` and roles (Admin, Manager, Agent) for tiered permissions.
-- **Page-level permissions**: `allowedPages` array on `teamMembers` table. When `null`/empty = full access (admin default). When populated, user can only access those page IDs. Enforced in sidebar filtering (`app-sidebar.tsx`) and route protection (`App.tsx`). Admin role always has full access and cannot be restricted. Managed via `PATCH /api/team/:id/permissions` endpoint and "Manage Access" dialog in the Team page.
+- Page-level permissions are enforced via `allowedPages` arrays, with Admins having full access.
+
+### UI/UX Decisions
+- All user-facing dates use Pakistani format `dd-MM-yyyy` (e.g., "28-02-2026") via centralized helpers.
+- Settings pages are organized into a collapsible sidebar.
+- Shopify-style layout for order details.
 
 ### Key Features
-- **Merchant Management**: Core tenant entity with subscription and profile.
-- **Team Collaboration**: Invite system via email, supporting new user sign-up and existing user team joining.
-- **Shopify Integration**: OAuth-based, encrypted access tokens, webhook processing for orders and fulfillments, and configurable historical data import (`shopifySyncFromDate`).
-- **Courier Management**: API credentials per courier (Leopards, PostEx, TCS), specific handling for PostEx booking, and normalization of courier statuses.
-- **Order & Shipment Management**: Syncs from Shopify, tracks status, allows remarks, and includes a universal status normalization for tracking events. The Pipeline page (all stages) and Shipments page have an editable Remark column — clicking opens a dialog to edit. When a remark is updated, the previous value is automatically saved as a history entry in the `remarks` table and logged in `order_change_log`, visible on the Order Detail page remarks timeline. Features an optimized courier sync scheduler with batching and parallel processing. Per-courier sync buttons on Settings > Couriers page (Leopards, PostEx, Sync All) each with their own progress bars. Shopify orders sync now runs as background job with real-time progress bar (polls `GET /api/integrations/shopify/sync-progress`). PostEx webhook receiver at `POST /webhooks/postex/status-update` requires `x-webhook-secret` header matching `POSTEX_WEBHOOK_SECRET` env var; full copy-paste config (URL + Header Key + Header Value) shown in Couriers settings. Terminal order re-check sweep runs hourly for recently-finalized orders (last 7 days). Frontend displays universal status labels with raw courier status as tooltip only. **Courier Logged Weight**: Shipments page now shows a "Courier Wt." column displaying the weight Leopards records at dispatch (`arival_dispatch_weight` from Leopards API). Stored in `courier_weight` column on the `orders` table. Populated automatically on every tracking sync. Backfill endpoint available at `POST /api/admin/backfill-courier-weight`.
-- **COD Reconciliation**: Tracks payment settlements, `prepaidAmount`, `codRemaining`, and `codPaymentStatus`. Supports payment detail fetching from couriers and automatic marking of received settlements. **Payment Ledger** (`/payment-ledger`): Per-shipment financial breakdown with 18 columns — Tracking #, Courier, COD Amount, Service Fee, Tax, Reversal, Total Deducted, Net Paid, Payment Status, Payment Method, Billing Method, Invoice/Cheque #, Settlement Date, Message, Slip Link, Upfront Payment (PostEx), Reserve Payment (PostEx), Balance Payment (PostEx). All Leopards fields (billingMethod, paymentStatus, invoiceChequeNo, invoiceChequeDate, paymentMethod, message, slipLink) and PostEx fields (transactionFee, transactionTax, reversalFee, reversalTax, upfrontPayment, reservePayment, balancePayment, cprNumbers, settlementDate) displayed in dedicated columns. DB columns: `courier_billing_method`, `courier_message` on `cod_reconciliation` table.
-- **Onboarding Wizard**: Guides initial setup for Shopify connection and courier configuration.
-- **Workflow Transition System**: A strict 9-stage state machine (NEW to DELIVERED/RETURN/CANCELLED) with validation for allowed transitions. Includes bypass actions for specific scenarios.
-- **Batch Import & API-Only Sync**: Asynchronous, resumable background jobs for large Shopify order imports and an incremental sync system with background polling and manual sync options.
-- **Direct Courier Booking**: Allows batch booking with Leopards and PostEx, including preview, overrides, and Shopify fulfillment write-back. Booking popup overrides (customer name, phone, address, city) are persisted back to the order record after successful booking, with audit trail in orderChangeLog.
+- **Merchant & Team Management**: Core tenant entity with subscription and profile; team invite system with role-based access.
+- **Shopify Integration**: OAuth-based access, encrypted tokens, webhook processing for orders and fulfillments, configurable historical data import, and bi-directional write-back for order edits and status updates.
+- **Courier Management**: API credentials per courier, specific handling for PostEx booking, universal status normalization, optimized courier sync scheduler with batching and parallel processing, and display of courier logged weight.
+- **Order & Shipment Management**: Syncs from Shopify, tracks status, allows remarks with history tracking, and a strict 9-stage workflow transition system. Supports batch booking with Leopards and PostEx, including preview and overrides.
+- **COD Reconciliation**: Tracks payment settlements, `prepaidAmount`, `codRemaining`, `codPaymentStatus`, and supports payment detail fetching from couriers and automatic settlement marking. Includes a detailed Payment Ledger.
+- **Onboarding Wizard**: Guides initial setup for Shopify and courier configuration.
+- **Batch Import & API-Only Sync**: Asynchronous, resumable background jobs for large Shopify order imports and incremental sync.
 - **Print & Logs System**: Generates native courier airway bills and batch loadsheets.
-- **CSV Export**: Client-side CSV export on all major data pages (Pipeline, Shipments, Courier Dues, Products, Expense Tracker, Stock Ledger, Accounting Ledger/Transactions/Trial Balance, Team, Payment Ledger, Manage Cheques, Analytics). Shared utility at `client/src/lib/exportCsv.ts`.
-- **Date Formatting**: All user-facing dates use Pakistani format `dd-MM-yyyy` (e.g. "28-02-2026") via centralized helpers in `client/src/lib/dateFormat.ts`. Available helpers: `formatPkDate` (dd-MM-yyyy), `formatPkDateTime` (dd-MM-yyyy h:mm a), `formatPkDateTime24` (dd-MM-yyyy HH:mm), `formatPkShortDate` (dd MMM yyyy), `formatPkMonthYear` (MMM yyyy). Internal/API/form date values remain `yyyy-MM-dd`. Date range picker displays dd-MM-yyyy.
-- **Shopify Write-Back System**: Bi-directional sync for address/phone/email edits, order cancellations, and workflow status updates via Shopify tags. Includes rate limit compliance and webhook echo prevention.
-- **Webhook Resilience**: Immediate 200 responses to prevent timeouts and a webhook health check API.
-- **Ads Profitability Calculator**: Tracks Facebook/Meta campaign profitability, auto-syncs campaign data, and provides detailed financial metrics with a flexible product matching system. Includes Campaign Signal buttons (Scale/Watch/Risk) per campaign for manual decision tracking, and a Campaign Journey section below the table for action tracking, snapshot evaluation, and deterministic insights/next-move recommendations. Journey events are stored in `campaign_journey_events` table with before/after snapshots and lazy evaluation.
-- **AI Marketing Intelligence**: AI-powered analytics page at `/marketing/intelligence` with auto-generated insight cards (campaign performance, return rates, spend efficiency, top cities, order trends, funnel analysis) and a conversational chat interface. Uses Replit AI Integrations (OpenAI GPT-4o) for natural language queries against real database data. All queries are read-only and merchant-scoped. Includes a Weekly Strategy Brief feature. Service: `server/services/aiInsights.ts`, routes in `server/routes/marketing.ts`, frontend: `client/src/pages/marketing/ai-insights.tsx`.
-- **Universal AI Assistant**: Dedicated `/ai` page (`client/src/pages/ai-assistant.tsx`) with its own sidebar section "AI Assistant". Features: (1) Critical Alerts section showing severity-coded insight cards (critical/warning/info) from all business areas, (2) Full chat interface with `react-markdown` rendering for proper formatting, (3) Voice input via Web Speech API (`SpeechRecognition`), (4) Voice output via `SpeechSynthesis` with per-message speaker buttons, (5) Multi-language support (English/Urdu) with language selector that sets speech recognition language and adds Urdu instructions to AI system prompt. Universal chat endpoint: `POST /api/ai/chat` accepts `{ question, language }`. Chat message component: `client/src/components/ai-chat-message.tsx`.
-- **Cross-Section AI Insights Banner**: Reusable `AIInsightsBanner` component (`client/src/components/ai-insights-banner.tsx`) added to Dashboard, Analytics, Pipeline, Shipments, and Accounting Overview pages. Each section has 2-3 tailored AI prompts. Endpoint: `GET /api/ai/insights/:section` (sections: dashboard, analytics, pipeline, shipments, finance). Server-side caching in `ai_insight_cache` table with 24-hour TTL — insights generate once/day, subsequent loads are instant from cache. Refresh button passes `?force=true` to bypass cache. Frontend uses `staleTime: Infinity` so no re-fetching on navigation. Collapse state persisted per section in localStorage. Full-width stacked cards with severity color coding (red=critical, amber=warning, blue=info) and trend indicators. **AI Insights Accuracy**: All prompts in `server/services/aiInsights.ts` use `workflow_status` (not `shipment_status`) with correct values: NEW/PENDING/READY_TO_SHIP/HOLD/BOOKED/FULFILLED/DELIVERED/RETURN/CANCELLED. Date filtering uses `order_date`. Delivery rate = DELIVERED/(FULFILLED+DELIVERED+RETURN). Return rate = RETURN/(FULFILLED+DELIVERED+RETURN). `DB_SCHEMA_CONTEXT` marks `shipment_status` as legacy and guides toward `workflow_status` and correct lifecycle timestamps (booked_at, fulfilled_at, delivered_at, returned_at, cancelled_at). **AI Intelligence Features**: (1) Correct JSONB field names: line_items uses `name` not `title`, `productId` not `product_id`. (2) `item_summary` column preferred for product analysis over JSONB parsing. (3) DATA RELATIONSHIPS section explains table connections. (4) 7 EXAMPLE QUERY PATTERNS with tested SQL templates (product performance, customer analysis, time-between-stages, COD pending, revenue by city, daily trends, courier performance). (5) `getMerchantDataSummary()` injects real-time merchant context (order count, date range, revenue, products, cities) into both chat and insight generation prompts. (6) Smart retry: when SQL returns 0 rows, AI regenerates a broader query automatically.
-- **Status Mapping Import/Export**: Export and Import buttons on the Status Mapping settings page (`/settings/status-mapping`). Export downloads a JSON file with all custom status mappings and keyword rules — filterable by courier (All, Leopards, PostEx). Import reads a JSON file, shows a preview dialog with counts, and lets the merchant filter by courier before importing. Upserts status mappings (updates existing, inserts new) and skips duplicate keyword rules. API: `GET /api/courier-status-mappings/export?courier=leopards`, `POST /api/courier-status-mappings/import`. File format: `{ version: 1, exportedAt, courier, statusMappings: [...], keywordMappings: [...] }`.
-- **Settings Page**: Organized into a collapsible sidebar with sections for General, Shopify, Couriers, Status Mapping, and Marketing configurations.
-- **Timezone-Aware Date Filtering**: All date-based queries use the merchant's timezone for accurate data representation, particularly for dashboard stats, orders, and financial reporting.
-- **Product & Inventory Management**: Syncs Shopify product data (title, variants, SKU, price, cost, inventory) and displays a searchable/filterable product catalog.
-- **Order Detail Layout**: Shopify-style layout with order summary and customer details.
-- **Accounting & Finance Module**: A comprehensive double-entry accounting system with 19 dedicated pages for:
-    - **Overview**: Dashboard with financial summaries.
-    - **Money In/Out**: Cash flow management and transaction history.
-    - **Parties**: Customer/Supplier/Courier management.
-    - **Products**: Full product catalog with inventory tracking, bulk import, and soft-delete.
-    - **Stock Management**: Stock receipt recording with landed cost.
-    - **Sales**: Sales recording with automatic COGS calculation.
-    - **Expenses**: Expense history, tracking unpaid expenses.
-    - **Receivables/Payables**: COD receivables and courier payables.
-    - **Settlements**: Courier settlement recording.
-    - **Reports**: Profit & Loss, Balance Snapshot, Cash Flow, Stock Report, Party Balances.
-    - **Advanced**: Ledger view, Trial Balance, Cash Accounts management.
-    - **Settings**: Simple/Advanced mode toggle, financial year, currency.
-    - Backend includes 40+ API endpoints with atomic transactions and immutable ledger entries.
+- **CSV Export**: Client-side CSV export on all major data pages.
+- **Webhook Resilience**: Immediate 200 responses and webhook health check API.
+- **Ads Profitability Calculator**: Tracks Facebook/Meta campaign profitability, auto-syncs campaign data, and provides detailed financial metrics with a product matching system and campaign journey tracking.
+- **AI Marketing Intelligence**: AI-powered analytics page with auto-generated insight cards (performance, return rates, spend efficiency, trends) and a conversational chat interface using OpenAI via Replit AI Integrations. Includes a Weekly Strategy Brief.
+- **Universal AI Assistant**: Dedicated `/ai` page with critical alerts, full chat interface, voice input/output, and multi-language support (English/Urdu). Insights are cached server-side with a 24-hour TTL and displayed in a cross-section banner across various pages.
+- **Status Mapping Import/Export**: Functionality to export and import custom status mappings and keyword rules for couriers via JSON files.
+- **Product & Inventory Management**: Syncs Shopify product data (title, variants, SKU, price, cost, inventory) and displays a searchable catalog.
+- **Accounting & Finance Module**: A comprehensive double-entry accounting system across 19 dedicated pages, covering overview, money in/out, parties, products, stock management, sales, expenses, receivables/payables, settlements, and various reports (P&L, Balance Snapshot, Cash Flow).
 
 ## External Dependencies
 
@@ -69,4 +52,4 @@ Preferred communication style: Simple, everyday language.
     - PostEx Courier API
     - TCS Courier API
     - Resend (for email services)
-    - OpenAI via Replit AI Integrations (GPT-4o for AI marketing insights)
+    - OpenAI via Replit AI Integrations (GPT-4o)

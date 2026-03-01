@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { useRoute, useLocation } from "wouter";
-import { Loader2, Users, CheckCircle, XCircle, Mail } from "lucide-react";
+import { Loader2, Users, CheckCircle, XCircle, Mail, Lock } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 
 export default function InviteAccept() {
@@ -24,6 +24,8 @@ export default function InviteAccept() {
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
 
   const [otpStep, setOtpStep] = useState<"form" | "otp">("form");
@@ -71,6 +73,14 @@ export default function InviteAccept() {
       setFormError("First name is required");
       return;
     }
+    if (!password || password.length < 8) {
+      setFormError("Password must be at least 8 characters");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setFormError("Passwords do not match");
+      return;
+    }
     setFormError(null);
     setSendingOtp(true);
     try {
@@ -100,6 +110,7 @@ export default function InviteAccept() {
       const res = await apiRequest("POST", `/api/team/invite/${token}/accept-with-signup`, {
         firstName: firstName.trim(),
         lastName: lastName.trim(),
+        password,
         otp,
       });
       const data = await res.json();
@@ -182,7 +193,7 @@ export default function InviteAccept() {
             {otpStep === "form" ? (
               <>
                 <p className="text-sm text-muted-foreground text-center">
-                  Enter your name to create your account. We'll send a verification code to your email.
+                  Set up your account with a name and password. We'll send a verification code to your email.
                 </p>
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-3">
@@ -216,6 +227,32 @@ export default function InviteAccept() {
                       disabled
                       className="bg-muted"
                       data-testid="input-email-readonly"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="invite-password">Password *</Label>
+                    <Input
+                      id="invite-password"
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Min. 8 characters"
+                      autoComplete="new-password"
+                      data-testid="input-password"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="invite-confirm">Confirm Password *</Label>
+                    <Input
+                      id="invite-confirm"
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Re-enter password"
+                      autoComplete="new-password"
+                      data-testid="input-confirm-password"
                     />
                   </div>
                 </div>

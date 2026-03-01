@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Shield, Loader2, ArrowLeft, Mail } from "lucide-react";
+import { Shield, Loader2, ArrowLeft, Mail, User } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -14,6 +14,7 @@ export default function AdminLoginPage() {
   const [step, setStep] = useState<"email" | "otp">("email");
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [cooldown, setCooldown] = useState(0);
@@ -50,9 +51,13 @@ export default function AdminLoginPage() {
 
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!displayName.trim()) {
+      toast({ title: "Name Required", description: "Please enter your name for session tracking.", variant: "destructive" });
+      return;
+    }
     setIsVerifying(true);
     try {
-      const res = await apiRequest("POST", "/api/admin-auth/verify-otp", { email, otp });
+      const res = await apiRequest("POST", "/api/admin-auth/verify-otp", { email, otp, displayName: displayName.trim() });
       const result = await res.json();
       if (result.role !== "SUPER_ADMIN") {
         toast({ title: "Access Denied", description: "This login is for platform administrators only.", variant: "destructive" });
@@ -68,6 +73,8 @@ export default function AdminLoginPage() {
         toast({ title: "Too Many Attempts", description: "Too many incorrect attempts. Please request a new code.", variant: "destructive" });
       } else if (msg.includes("Invalid") || msg.includes("incorrect")) {
         toast({ title: "Invalid Code", description: "The code you entered is incorrect. Please check and try again.", variant: "destructive" });
+      } else if (msg.includes("name")) {
+        toast({ title: "Name Required", description: "Please enter your name.", variant: "destructive" });
       } else {
         toast({ title: "Verification Failed", description: msg || "Something went wrong. Please try again.", variant: "destructive" });
       }
@@ -90,7 +97,7 @@ export default function AdminLoginPage() {
         <Card>
           <CardHeader className="pb-4">
             <CardTitle className="text-base text-center">
-              {step === "email" ? "Administrator Login" : "Enter Verification Code"}
+              {step === "email" ? "Administrator Login" : "Verify & Identify"}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -140,14 +147,29 @@ export default function AdminLoginPage() {
                     autoFocus
                   />
                 </div>
-                <Button type="submit" className="w-full" disabled={isVerifying || otp.length !== 6} data-testid="button-verify-otp">
+                <div className="space-y-2">
+                  <Label htmlFor="admin-display-name">Your Name (for activity tracking)</Label>
+                  <Input
+                    id="admin-display-name"
+                    data-testid="input-admin-display-name"
+                    type="text"
+                    value={displayName}
+                    onChange={e => setDisplayName(e.target.value)}
+                    placeholder="Enter your full name"
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    This name will be recorded with all your actions during this session.
+                  </p>
+                </div>
+                <Button type="submit" className="w-full" disabled={isVerifying || otp.length !== 6 || !displayName.trim()} data-testid="button-verify-otp">
                   {isVerifying && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                   Verify & Login
                 </Button>
                 <div className="flex items-center justify-between text-sm">
                   <button
                     type="button"
-                    onClick={() => { setStep("email"); setOtp(""); }}
+                    onClick={() => { setStep("email"); setOtp(""); setDisplayName(""); }}
                     className="text-muted-foreground hover:text-foreground flex items-center gap-1"
                     data-testid="button-back-to-email"
                   >

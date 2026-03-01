@@ -17,6 +17,7 @@ export interface AuthUser {
   sidebarMode: string;
   sidebarPinnedPages: string[];
   allowedPages: string[] | null;
+  sessionDisplayName: string | null;
 }
 
 export function useAuth() {
@@ -41,14 +42,14 @@ export function useAuth() {
   const isSuspended = error?.message === "SUSPENDED";
 
   const sendOtpMutation = useMutation({
-    mutationFn: async (data: { email: string }) => {
+    mutationFn: async (data: { email: string; password: string }) => {
       const res = await apiRequest("POST", "/api/auth/send-otp", data);
       return res.json();
     },
   });
 
   const verifyOtpMutation = useMutation({
-    mutationFn: async (data: { email: string; otp: string }) => {
+    mutationFn: async (data: { email: string; otp: string; displayName: string }) => {
       const res = await apiRequest("POST", "/api/auth/verify-otp", data);
       return res.json();
     },
@@ -58,7 +59,7 @@ export function useAuth() {
   });
 
   const registerMutation = useMutation({
-    mutationFn: async (data: { email: string; firstName: string; lastName?: string; merchantName: string }) => {
+    mutationFn: async (data: { email: string; password: string; firstName: string; lastName?: string; merchantName: string }) => {
       const res = await apiRequest("POST", "/api/auth/register", data);
       return res.json();
     },

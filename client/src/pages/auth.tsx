@@ -5,16 +5,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
-import { Package, Loader2, ArrowLeft, Mail } from "lucide-react";
+import { Package, Loader2, ArrowLeft, Mail, Lock, User } from "lucide-react";
 
 export default function AuthPage() {
   const [mode, setMode] = useState<"login" | "register">("login");
-  const [loginStep, setLoginStep] = useState<"email" | "otp">("email");
+  const [loginStep, setLoginStep] = useState<"credentials" | "otp">("credentials");
   const { sendOtp, isSendingOtp, verifyOtp, isVerifyingOtp, register, isRegistering } = useAuth();
   const { toast } = useToast();
 
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [otp, setOtp] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [merchantName, setMerchantName] = useState("");
@@ -29,7 +32,7 @@ export default function AuthPage() {
   const handleSendOtp = useCallback(async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     try {
-      const data = await sendOtp({ email });
+      const data = await sendOtp({ email, password });
       toast({ title: "Code Sent", description: data.message || "Verification code sent to your email." });
       setLoginStep("otp");
       setOtp("");
@@ -37,12 +40,16 @@ export default function AuthPage() {
     } catch (err: any) {
       toast({ title: "Error", description: err.message || "Failed to send verification code.", variant: "destructive" });
     }
-  }, [email, sendOtp, toast]);
+  }, [email, password, sendOtp, toast]);
 
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!displayName.trim()) {
+      toast({ title: "Name Required", description: "Please enter your name for session tracking.", variant: "destructive" });
+      return;
+    }
     try {
-      await verifyOtp({ email, otp });
+      await verifyOtp({ email, otp, displayName: displayName.trim() });
     } catch (err: any) {
       toast({ title: "Verification Failed", description: err.message || "Invalid verification code.", variant: "destructive" });
     }
@@ -50,8 +57,16 @@ export default function AuthPage() {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (password.length < 8) {
+      toast({ title: "Weak Password", description: "Password must be at least 8 characters.", variant: "destructive" });
+      return;
+    }
+    if (password !== confirmPassword) {
+      toast({ title: "Password Mismatch", description: "Passwords do not match.", variant: "destructive" });
+      return;
+    }
     try {
-      await register({ email, firstName, lastName, merchantName });
+      await register({ email, password, firstName, lastName, merchantName });
     } catch (err: any) {
       toast({ title: "Registration Failed", description: err.message || "Could not create account.", variant: "destructive" });
     }
@@ -72,15 +87,15 @@ export default function AuthPage() {
           <CardHeader className="pb-4">
             <CardTitle className="text-lg text-center">
               {mode === "login"
-                ? loginStep === "email"
+                ? loginStep === "credentials"
                   ? "Sign in to your account"
-                  : "Enter Verification Code"
+                  : "Verify & Identify"
                 : "Create your account"}
             </CardTitle>
           </CardHeader>
           <CardContent>
             {mode === "login" ? (
-              loginStep === "email" ? (
+              loginStep === "credentials" ? (
                 <form onSubmit={handleSendOtp} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="login-email">Email</Label>
@@ -95,9 +110,22 @@ export default function AuthPage() {
                       autoComplete="email"
                     />
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="login-password">Password</Label>
+                    <Input
+                      id="login-password"
+                      data-testid="input-password"
+                      type="password"
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
+                      placeholder="Enter your password"
+                      required
+                      autoComplete="current-password"
+                    />
+                  </div>
                   <Button type="submit" className="w-full" disabled={isSendingOtp} data-testid="button-send-otp">
-                    {isSendingOtp ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Mail className="w-4 h-4 mr-2" />}
-                    Send Verification Code
+                    {isSendingOtp ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Lock className="w-4 h-4 mr-2" />}
+                    Continue
                   </Button>
                   <p className="text-center text-sm text-muted-foreground">
                     Don't have an account?{" "}
@@ -132,18 +160,33 @@ export default function AuthPage() {
                       autoFocus
                     />
                   </div>
-                  <Button type="submit" className="w-full" disabled={isVerifyingOtp || otp.length !== 6} data-testid="button-verify-otp">
+                  <div className="space-y-2">
+                    <Label htmlFor="login-display-name">Your Name (for activity tracking)</Label>
+                    <Input
+                      id="login-display-name"
+                      data-testid="input-display-name"
+                      type="text"
+                      value={displayName}
+                      onChange={e => setDisplayName(e.target.value)}
+                      placeholder="Enter your full name"
+                      required
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      This name will be recorded with all your actions during this session.
+                    </p>
+                  </div>
+                  <Button type="submit" className="w-full" disabled={isVerifyingOtp || otp.length !== 6 || !displayName.trim()} data-testid="button-verify-otp">
                     {isVerifyingOtp && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                     Verify & Sign In
                   </Button>
                   <div className="flex items-center justify-between gap-2 text-sm">
                     <button
                       type="button"
-                      onClick={() => { setLoginStep("email"); setOtp(""); }}
+                      onClick={() => { setLoginStep("credentials"); setOtp(""); setDisplayName(""); }}
                       className="text-muted-foreground hover:text-foreground flex items-center gap-1"
                       data-testid="button-back-to-email"
                     >
-                      <ArrowLeft className="w-3 h-3" /> Change email
+                      <ArrowLeft className="w-3 h-3" /> Back
                     </button>
                     <button
                       type="button"
@@ -205,13 +248,41 @@ export default function AuthPage() {
                     required
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="reg-password">Password</Label>
+                  <Input
+                    id="reg-password"
+                    data-testid="input-register-password"
+                    type="password"
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    placeholder="Min. 8 characters"
+                    required
+                    minLength={8}
+                    autoComplete="new-password"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="reg-confirm">Confirm Password</Label>
+                  <Input
+                    id="reg-confirm"
+                    data-testid="input-confirm-password"
+                    type="password"
+                    value={confirmPassword}
+                    onChange={e => setConfirmPassword(e.target.value)}
+                    placeholder="Re-enter password"
+                    required
+                    minLength={8}
+                    autoComplete="new-password"
+                  />
+                </div>
                 <Button type="submit" className="w-full" disabled={isRegistering} data-testid="button-register">
                   {isRegistering && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                   Create Account
                 </Button>
                 <p className="text-center text-sm text-muted-foreground">
                   Already have an account?{" "}
-                  <button type="button" className="text-primary underline" onClick={() => { setMode("login"); setLoginStep("email"); }} data-testid="link-login">
+                  <button type="button" className="text-primary underline" onClick={() => { setMode("login"); setLoginStep("credentials"); }} data-testid="link-login">
                     Sign in
                   </button>
                 </p>

@@ -5,6 +5,7 @@ import { eq, ilike } from "drizzle-orm";
 import { isAuthenticated } from "./replitAuth";
 import { z } from "zod";
 import { sendOtpEmail } from "../../services/email";
+import bcrypt from "bcrypt";
 
 export const otpStore = new Map<string, { code: string; expiresAt: number; attempts: number; sentAt: number }>();
 
@@ -33,6 +34,7 @@ export function getOtpKey(email: string): string {
 
 const registerSchema = z.object({
   email: z.string().email("Valid email is required"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().optional(),
   merchantName: z.string().min(1, "Business name is required"),
@@ -56,6 +58,7 @@ export function registerAuthRoutes(app: Express): void {
         return res.status(400).json({ message: "An account with this email already exists." });
       }
 
+      const passwordHash = await bcrypt.hash(body.password, 12);
       const slug = generateSlug(body.merchantName);
 
       const result = await db.transaction(async (tx) => {
@@ -71,6 +74,7 @@ export function registerAuthRoutes(app: Express): void {
           email: normalizedEmail,
           firstName: body.firstName,
           lastName: body.lastName || null,
+          passwordHash,
           role: "USER",
           isActive: true,
           merchantId: merchant.id,
@@ -89,6 +93,7 @@ export function registerAuthRoutes(app: Express): void {
 
       const { merchant, user } = result;
       (req.session as any).userId = user.id;
+      (req.session as any).sessionDisplayName = `${body.firstName} ${body.lastName || ""}`.trim();
 
       res.json({
         id: user.id,
@@ -115,12 +120,24 @@ export function registerAuthRoutes(app: Express): void {
 
   app.post("/api/auth/send-otp", async (req, res) => {
     try {
-      const { email } = z.object({ email: z.string().email("Please enter a valid email address.") }).parse(req.body);
+      const { email, password } = z.object({
+        email: z.string().email("Please enter a valid email address."),
+        password: z.string().min(1, "Password is required."),
+      }).parse(req.body);
       const normalizedEmail = email.toLowerCase().trim();
 
       const [user] = await db.select().from(users).where(ilike(users.email, normalizedEmail));
       if (!user) {
-        return res.status(404).json({ message: "No account found with this email. Please sign up first." });
+        return res.status(401).json({ message: "Invalid email or password." });
+      }
+
+      if (!user.passwordHash) {
+        return res.status(401).json({ message: "Invalid email or password." });
+      }
+
+      const passwordValid = await bcrypt.compare(password, user.passwordHash);
+      if (!passwordValid) {
+        return res.status(401).json({ message: "Invalid email or password." });
       }
 
       if (!user.isActive) {
@@ -164,9 +181,10 @@ export function registerAuthRoutes(app: Express): void {
 
   app.post("/api/auth/verify-otp", async (req, res) => {
     try {
-      const { email, otp } = z.object({
+      const { email, otp, displayName } = z.object({
         email: z.string().email(),
         otp: z.string().length(6, "Please enter the 6-digit code."),
+        displayName: z.string().min(1, "Please enter your name."),
       }).parse(req.body);
       const normalizedEmail = email.toLowerCase().trim();
       const otpKey = getOtpKey(normalizedEmail);
@@ -211,6 +229,7 @@ export function registerAuthRoutes(app: Express): void {
 
       await db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, user.id));
       (req.session as any).userId = user.id;
+      (req.session as any).sessionDisplayName = displayName.trim();
 
       let merchantData = null;
       if (user.merchantId) {
@@ -235,6 +254,7 @@ export function registerAuthRoutes(app: Express): void {
         merchant: merchantData,
         sidebarMode: user.sidebarMode || "advanced",
         sidebarPinnedPages: user.sidebarPinnedPages || [],
+        sessionDisplayName: displayName.trim(),
       });
     } catch (error: any) {
       if (error instanceof z.ZodError) {
@@ -286,9 +306,10 @@ export function registerAuthRoutes(app: Express): void {
 
   app.post("/api/admin-auth/verify-otp", async (req, res) => {
     try {
-      const { email, otp } = z.object({
+      const { email, otp, displayName } = z.object({
         email: z.string().email(),
         otp: z.string().length(6, "Please enter the 6-digit code."),
+        displayName: z.string().min(1, "Please enter your name."),
       }).parse(req.body);
       const normalizedEmail = email.toLowerCase().trim();
 
@@ -327,6 +348,7 @@ export function registerAuthRoutes(app: Express): void {
 
       await db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, user.id));
       (req.session as any).userId = user.id;
+      (req.session as any).sessionDisplayName = displayName.trim();
 
       res.json({
         id: user.id,
@@ -338,6 +360,7 @@ export function registerAuthRoutes(app: Express): void {
         merchant: null,
         sidebarMode: user.sidebarMode || "advanced",
         sidebarPinnedPages: user.sidebarPinnedPages || [],
+        sessionDisplayName: displayName.trim(),
       });
     } catch (error: any) {
       if (error instanceof z.ZodError) {
@@ -361,6 +384,7 @@ export function registerAuthRoutes(app: Express): void {
   app.get("/api/auth/me", isAuthenticated, async (req, res) => {
     try {
       const userId = (req.session as any).userId;
+      const sessionDisplayName = (req.session as any).sessionDisplayName || null;
       const [user] = await db.select().from(users).where(eq(users.id, userId));
       if (!user) {
         return res.status(401).json({ message: "User not found" });
@@ -405,6 +429,7 @@ export function registerAuthRoutes(app: Express): void {
         sidebarMode: user.sidebarMode || "advanced",
         sidebarPinnedPages: user.sidebarPinnedPages || [],
         allowedPages,
+        sessionDisplayName,
       });
     } catch (error) {
       console.error("Error fetching user:", error);

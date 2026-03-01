@@ -1,5 +1,6 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import express from "express";
+import bcrypt from "bcrypt";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
@@ -413,8 +414,9 @@ function getSessionUserId(req: any): string | null {
   return req.session?.userId || null;
 }
 
-// Helper to get user name from DB for audit logging
 async function getSessionUserName(req: any): Promise<string> {
+  const sessionName = (req.session as any)?.sessionDisplayName;
+  if (sessionName) return sessionName;
   const userId = getSessionUserId(req);
   if (!userId) return "Unknown";
   try {
@@ -3861,10 +3863,14 @@ export async function registerRoutes(
     async (req, res) => {
       try {
         const { token } = req.params;
-        const { firstName, lastName, otp } = req.body;
+        const { firstName, lastName, password, otp } = req.body;
 
         if (!firstName) {
           return res.status(400).json({ message: "First name is required" });
+        }
+
+        if (!password || password.length < 8) {
+          return res.status(400).json({ message: "Password must be at least 8 characters." });
         }
 
         if (!otp || otp.length !== 6) {
@@ -3926,6 +3932,8 @@ export async function registerRoutes(
         }
         otpStore.delete(otpKey);
 
+        const passwordHash = await bcrypt.hash(password, 12);
+
         const newUser = await db.transaction(async (tx) => {
           const updated = await tx
             .update(teamInvites)
@@ -3946,6 +3954,7 @@ export async function registerRoutes(
               email: invite.email,
               firstName: firstName.trim(),
               lastName: lastName?.trim() || null,
+              passwordHash,
               role: "USER",
               isActive: true,
               merchantId: invite.merchantId,
@@ -3975,6 +3984,7 @@ export async function registerRoutes(
           });
         });
         (req.session as any).userId = newUser.id;
+        (req.session as any).sessionDisplayName = `${firstName.trim()} ${(lastName || "").trim()}`.trim();
         await new Promise<void>((resolve, reject) => {
           req.session.save((err) => {
             if (err) reject(err);
@@ -9463,7 +9473,6 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Account already set up. Please log in instead." });
       }
 
-      const bcrypt = await import("bcrypt");
       const passwordHash = await bcrypt.hash(password, 12);
 
       await db.update(users).set({

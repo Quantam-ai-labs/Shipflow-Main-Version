@@ -3,12 +3,13 @@ import type { Express, RequestHandler } from "express";
 import connectPg from "connect-pg-simple";
 
 export function getSession() {
-  const sessionTtl = 30 * 24 * 60 * 60 * 1000; // 30 days
+  const sessionTtlMs = 24 * 60 * 60 * 1000; // 24 hours in milliseconds (for cookie maxAge)
+  const sessionTtlSec = 24 * 60 * 60; // 24 hours in seconds (for pg store ttl)
   const pgStore = connectPg(session);
   const sessionStore = new pgStore({
     conString: process.env.DATABASE_URL,
     createTableIfMissing: false,
-    ttl: sessionTtl,
+    ttl: sessionTtlSec,
     tableName: "sessions",
   });
   return session({
@@ -19,7 +20,7 @@ export function getSession() {
     cookie: {
       httpOnly: true,
       secure: true,
-      maxAge: sessionTtl,
+      maxAge: sessionTtlMs,
       sameSite: "lax",
     },
   });

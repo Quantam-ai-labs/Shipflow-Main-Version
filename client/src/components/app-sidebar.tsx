@@ -229,6 +229,12 @@ export function AppSidebar() {
   const [showPagePicker, setShowPagePicker] = useState(false);
 
   const getUserInitials = () => {
+    const name = user?.sessionDisplayName;
+    if (name) {
+      const parts = name.trim().split(/\s+/);
+      if (parts.length >= 2) return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+      return name[0].toUpperCase();
+    }
     if (user?.firstName && user?.lastName) {
       return `${user.firstName[0]}${user.lastName[0]}`.toUpperCase();
     }
@@ -239,6 +245,7 @@ export function AppSidebar() {
   };
 
   const getUserDisplayName = () => {
+    if (user?.sessionDisplayName) return user.sessionDisplayName;
     if (user?.firstName && user?.lastName) {
       return `${user.firstName} ${user.lastName}`;
     }
