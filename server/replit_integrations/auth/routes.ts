@@ -12,18 +12,28 @@ import { sendAdminOtpEmail } from "../../services/email";
 const adminOtpStore = new Map<string, { code: string; expiresAt: number; attempts: number; sentAt: number }>();
 
 async function findSuperAdmin(email: string) {
+  console.log(`[AdminOTP] findSuperAdmin called with: "${email}"`);
+
   const [exact] = await db.select().from(users).where(ilike(users.email, email));
+  console.log(`[AdminOTP] Exact match: ${exact ? `found user id=${exact.id}, role=${exact.role}, email=${exact.email}` : "not found"}`);
   if (exact?.role === "SUPER_ADMIN") return exact;
+
   const baseEmail = email.replace(/\+[^@]*@/, "@");
+  console.log(`[AdminOTP] Base email (no alias): "${baseEmail}"`);
   if (baseEmail !== email) {
     const [base] = await db.select().from(users).where(ilike(users.email, baseEmail));
+    console.log(`[AdminOTP] Base email match: ${base ? `found user id=${base.id}, role=${base.role}, email=${base.email}` : "not found"}`);
     if (base?.role === "SUPER_ADMIN") return base;
   }
+
   const allAdmins = await db.select().from(users).where(eq(users.role, "SUPER_ADMIN"));
-  return allAdmins.find(u => {
+  console.log(`[AdminOTP] All SUPER_ADMIN users: ${allAdmins.length} found — ${allAdmins.map(u => u.email).join(", ")}`);
+  const match = allAdmins.find(u => {
     const adminBase = (u.email || "").toLowerCase().replace(/\+[^@]*@/, "@");
     return adminBase === baseEmail;
   }) || null;
+  console.log(`[AdminOTP] Alias scan result: ${match ? `matched user id=${match.id}, email=${match.email}` : "no match"}`);
+  return match;
 }
 
 const registerSchema = z.object({

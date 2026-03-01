@@ -33,16 +33,20 @@ async function getCredentials(): Promise<{ apiKey: string; fromEmail: string }> 
   }
 
   if (process.env.RESEND_API_KEY) {
+    const from = connectorFromEmail || 'ShipFlow <noreply@1sol.ai>';
+    console.log(`[Email] Using RESEND_API_KEY env secret, from: ${from}`);
     return {
       apiKey: process.env.RESEND_API_KEY,
-      fromEmail: connectorFromEmail || 'ShipFlow <onboarding@resend.dev>',
+      fromEmail: from,
     };
   }
 
   if (connectorKey) {
+    const from = connectorFromEmail || 'ShipFlow <noreply@1sol.ai>';
+    console.log(`[Email] Using Resend connector key, from: ${from}`);
     return {
       apiKey: connectorKey,
-      fromEmail: connectorFromEmail || 'ShipFlow <onboarding@resend.dev>',
+      fromEmail: from,
     };
   }
 
