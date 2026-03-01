@@ -7914,6 +7914,7 @@ export async function registerRoutes(
   const ONBOARDING_ORDER = [
     "ACCOUNT_CREATED",
     "SHOPIFY_CONNECTED",
+    "TAGS_CONFIGURED",
     "ORDERS_SYNCED",
     "LEOPARDS_CONNECTED",
     "POSTEX_CONNECTED",

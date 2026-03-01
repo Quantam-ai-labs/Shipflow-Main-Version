@@ -20,6 +20,8 @@ import {
   ExternalLink,
   KeyRound,
   Calendar,
+  Tags,
+  Save,
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -31,10 +33,11 @@ import { formatPkDate } from "@/lib/dateFormat";
 const ONBOARDING_STEPS = [
   { key: "ACCOUNT_CREATED", label: "Account Created", stepIndex: 0 },
   { key: "SHOPIFY_CONNECTED", label: "Connect Shopify", stepIndex: 1, icon: Store },
-  { key: "ORDERS_SYNCED", label: "Sync Orders", stepIndex: 2, icon: Package },
-  { key: "LEOPARDS_CONNECTED", label: "Connect Leopards", stepIndex: 3, icon: Truck },
-  { key: "POSTEX_CONNECTED", label: "Connect PostEx", stepIndex: 4, icon: Truck },
-  { key: "COMPLETED", label: "Complete", stepIndex: 5, icon: CheckCircle },
+  { key: "TAGS_CONFIGURED", label: "Order Tags", stepIndex: 2, icon: Tags },
+  { key: "ORDERS_SYNCED", label: "Sync Orders", stepIndex: 3, icon: Package },
+  { key: "LEOPARDS_CONNECTED", label: "Connect Leopards", stepIndex: 4, icon: Truck },
+  { key: "POSTEX_CONNECTED", label: "Connect PostEx", stepIndex: 5, icon: Truck },
+  { key: "COMPLETED", label: "Complete", stepIndex: 6, icon: CheckCircle },
 ];
 
 function getStepIndex(step: string): number {
@@ -42,7 +45,7 @@ function getStepIndex(step: string): number {
   return found ? found.stepIndex : 0;
 }
 
-const visibleSteps = ONBOARDING_STEPS.filter(s => s.stepIndex >= 1 && s.stepIndex <= 5);
+const visibleSteps = ONBOARDING_STEPS.filter(s => s.stepIndex >= 1 && s.stepIndex <= 6);
 
 export default function Onboarding() {
   const { toast } = useToast();
@@ -203,7 +206,7 @@ export default function Onboarding() {
       if (!res.ok) throw new Error("Failed to fetch status");
       return res.json();
     },
-    enabled: currentStepIndex === 2,
+    enabled: currentStepIndex === 3,
     refetchInterval: (query) => {
       const job = query.state.data?.job;
       if (job && (job.status === 'RUNNING' || job.status === 'QUEUED')) return 1500;
@@ -275,7 +278,7 @@ export default function Onboarding() {
     );
   }
 
-  const progress = (currentStepIndex / 5) * 100;
+  const progress = (currentStepIndex / 6) * 100;
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
@@ -494,6 +497,15 @@ export default function Onboarding() {
           )}
 
           {currentStepIndex === 2 && (
+            <OnboardingTagsStep
+              onSaveAndContinue={() => advanceStepMutation.mutate()}
+              onSkip={() => advanceStepMutation.mutate()}
+              isSuperAdmin={isSuperAdmin}
+              isAdvancing={advanceStepMutation.isPending}
+            />
+          )}
+
+          {currentStepIndex === 3 && (
             <>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2"><Package className="w-5 h-5" />Sync Orders</CardTitle>
@@ -643,7 +655,7 @@ export default function Onboarding() {
             </>
           )}
 
-          {currentStepIndex === 3 && (
+          {currentStepIndex === 4 && (
             <>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2"><Truck className="w-5 h-5" />Connect Leopards Courier</CardTitle>
@@ -678,7 +690,7 @@ export default function Onboarding() {
             </>
           )}
 
-          {currentStepIndex === 4 && (
+          {currentStepIndex === 5 && (
             <>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2"><Truck className="w-5 h-5" />Connect PostEx</CardTitle>
@@ -709,5 +721,144 @@ export default function Onboarding() {
         </Card>
       </div>
     </div>
+  );
+}
+
+function OnboardingTagsStep({ onSaveAndContinue, onSkip, isSuperAdmin, isAdvancing }: {
+  onSaveAndContinue: () => void;
+  onSkip: () => void;
+  isSuperAdmin: boolean;
+  isAdvancing: boolean;
+}) {
+  const { toast } = useToast();
+  const [confirm, setConfirm] = useState("Robo-Confirm");
+  const [pending, setPending] = useState("Robo-Pending");
+  const [cancel, setCancel] = useState("Robo-Cancel");
+  const [loaded, setLoaded] = useState(false);
+
+  const { data: tagConfig, isLoading: isTagsLoading } = useQuery<{ confirm: string; pending: string; cancel: string }>({
+    queryKey: ["/api/settings/robo-tags"],
+  });
+
+  useEffect(() => {
+    if (tagConfig && !loaded) {
+      setConfirm(tagConfig.confirm);
+      setPending(tagConfig.pending);
+      setCancel(tagConfig.cancel);
+      setLoaded(true);
+    }
+  }, [tagConfig, loaded]);
+
+  const saveMutation = useMutation({
+    mutationFn: async (data: { confirm: string; pending: string; cancel: string }) => {
+      const res = await apiRequest("PATCH", "/api/settings/robo-tags", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Tags saved", description: "Order automation tags configured." });
+      onSaveAndContinue();
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to save tags.", variant: "destructive" });
+    },
+  });
+
+  const handleSkip = async () => {
+    try {
+      await apiRequest("PATCH", "/api/settings/robo-tags", {
+        confirm: "Robo-Confirm", pending: "Robo-Pending", cancel: "Robo-Cancel"
+      });
+    } catch {}
+    onSkip();
+  };
+
+  const allFilled = confirm.trim() && pending.trim() && cancel.trim();
+
+  return (
+    <>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2"><Tags className="w-5 h-5" />Configure Order Tags</CardTitle>
+        <CardDescription>Set up which Shopify tags automatically sort your incoming orders. These tags will be used during the order sync to classify orders as Confirmed, Pending, or Cancelled.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="p-4 bg-muted/50 rounded-lg">
+          <p className="text-sm text-muted-foreground">
+            When orders are synced from Shopify, tags on each order determine how they're routed. Configure the exact tag names your store uses below. If you're unsure, keep the defaults.
+          </p>
+        </div>
+
+        {isTagsLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <div className="grid sm:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="onboard-tag-confirm" className="text-sm font-medium flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full bg-green-500" />
+                Confirm Tag
+              </Label>
+              <Input
+                id="onboard-tag-confirm"
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+                placeholder="e.g. Robo-Confirm"
+                data-testid="input-onboard-tag-confirm"
+              />
+              <p className="text-xs text-muted-foreground">Moves order to Ready to Ship</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="onboard-tag-pending" className="text-sm font-medium flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                Pending Tag
+              </Label>
+              <Input
+                id="onboard-tag-pending"
+                value={pending}
+                onChange={(e) => setPending(e.target.value)}
+                placeholder="e.g. Robo-Pending"
+                data-testid="input-onboard-tag-pending"
+              />
+              <p className="text-xs text-muted-foreground">Keeps order for manual review</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="onboard-tag-cancel" className="text-sm font-medium flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
+                Cancel Tag
+              </Label>
+              <Input
+                id="onboard-tag-cancel"
+                value={cancel}
+                onChange={(e) => setCancel(e.target.value)}
+                placeholder="e.g. Robo-Cancel"
+                data-testid="input-onboard-tag-cancel"
+              />
+              <p className="text-xs text-muted-foreground">Automatically cancels the order</p>
+            </div>
+          </div>
+        )}
+      </CardContent>
+      <CardFooter className="flex justify-between gap-2">
+        <div />
+        <div className="flex gap-2">
+          {isSuperAdmin && (
+            <Button variant="ghost" size="sm" onClick={handleSkip} disabled={isAdvancing} data-testid="button-advance-step">
+              <SkipForward className="w-4 h-4 mr-1" />Skip (Admin)
+            </Button>
+          )}
+          <Button variant="ghost" onClick={handleSkip} disabled={isAdvancing} data-testid="button-skip-tags">
+            Use Defaults
+          </Button>
+          <Button
+            onClick={() => saveMutation.mutate({ confirm: confirm.trim(), pending: pending.trim(), cancel: cancel.trim() })}
+            disabled={!allFilled || saveMutation.isPending || isAdvancing}
+            data-testid="button-save-tags-continue"
+          >
+            {saveMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+            Save & Continue
+          </Button>
+        </div>
+      </CardFooter>
+    </>
   );
 }

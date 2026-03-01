@@ -32,7 +32,7 @@ Preferred communication style: Simple, everyday language.
 - **Courier Management**: API credentials per courier, specific handling for PostEx booking, universal status normalization, optimized courier sync scheduler with batching and parallel processing, and display of courier logged weight.
 - **Order & Shipment Management**: Syncs from Shopify, tracks status, allows remarks with history tracking, and a strict 9-stage workflow transition system. Supports batch booking with Leopards and PostEx, including preview and overrides.
 - **COD Reconciliation**: Tracks payment settlements, `prepaidAmount`, `codRemaining`, `codPaymentStatus`, and supports payment detail fetching from couriers and automatic settlement marking. Includes a detailed Payment Ledger.
-- **Onboarding Wizard**: Guides initial setup for Shopify and courier configuration.
+- **Onboarding Wizard**: Guides initial setup for Shopify and courier configuration. Includes a "Configure Order Tags" step (TAGS_CONFIGURED) between Shopify connect and orders sync, so merchants set their robo-tag names before the first import. Steps: ACCOUNT_CREATED → SHOPIFY_CONNECTED → TAGS_CONFIGURED → ORDERS_SYNCED → LEOPARDS_CONNECTED → POSTEX_CONNECTED → COMPLETED.
 - **Batch Import & API-Only Sync**: Asynchronous, resumable background jobs for large Shopify order imports and incremental sync.
 - **Print & Logs System**: Generates native courier airway bills and batch loadsheets.
 - **CSV Export**: Client-side CSV export on all major data pages.
