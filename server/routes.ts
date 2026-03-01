@@ -4084,6 +4084,14 @@ export async function registerRoutes(
         return res.status(400).json({ message: "You cannot remove yourself from the team." });
       }
 
+      const merchant = await storage.getMerchant(merchantId);
+      if (merchant) {
+        const [memberUser] = await db.select({ email: users.email }).from(users).where(eq(users.id, existingMember.userId));
+        if (memberUser?.email?.toLowerCase() === merchant.email?.toLowerCase()) {
+          return res.status(400).json({ message: "The merchant owner cannot be removed from the team." });
+        }
+      }
+
       if (existingMember.role === "admin") {
         const allMembers = await storage.getTeamMembers(merchantId);
         const adminCount = allMembers.filter(m => m.role === "admin" && m.isActive).length;
@@ -9232,32 +9240,7 @@ export async function registerRoutes(
   });
 
   // ============================================
-  // SUPER ADMIN: DELETE MERCHANT
-  // ============================================
-
-  app.delete("/api/admin/merchants/:id", isAuthenticated, async (req, res) => {
-    try {
-      const adminId = await requireSuperAdmin(req, res);
-      if (!adminId) return;
-
-      const mid = req.params.id;
-      const [merchant] = await db.select().from(merchants).where(eq(merchants.id, mid));
-      if (!merchant) return res.status(404).json({ message: "Merchant not found" });
-
-      await db.insert(adminActionLogs).values({
-        adminUserId: adminId,
-        actionType: "DELETE_MERCHANT",
-        targetMerchantId: mid,
-        details: `Deleted merchant: ${merchant.name} (${merchant.email})`,
-      });
-
-      await db.delete(merchants).where(eq(merchants.id, mid));
-      res.json({ message: `Merchant "${merchant.name}" deleted successfully.` });
-    } catch (error) {
-      console.error("Delete merchant error:", error);
-      res.status(500).json({ message: "Failed to delete merchant" });
-    }
-  });
+  // NOTE: Merchant deletion is intentionally disabled. Merchants can only be suspended/unsuspended.
 
   // ============================================
   // SUPER ADMIN: ALL USERS (cross-tenant)

@@ -236,9 +236,18 @@ export function registerAuthRoutes(app: Express): void {
       req.session.cookie.maxAge = sessionMaxAge;
 
       const deviceName = parseUserAgent(req.headers["user-agent"]);
-      await db.update(users).set({ lastLoginAt: new Date(), lastLoginDevice: deviceName }).where(eq(users.id, user.id));
+      const trimmedName = displayName.trim();
+      const spaceIdx = trimmedName.indexOf(" ");
+      const newFirst = spaceIdx > 0 ? trimmedName.slice(0, spaceIdx) : trimmedName;
+      const newLast = spaceIdx > 0 ? trimmedName.slice(spaceIdx + 1) : "";
+      await db.update(users).set({
+        lastLoginAt: new Date(),
+        lastLoginDevice: deviceName,
+        firstName: newFirst,
+        lastName: newLast || null,
+      }).where(eq(users.id, user.id));
       (req.session as any).userId = user.id;
-      (req.session as any).sessionDisplayName = displayName.trim();
+      (req.session as any).sessionDisplayName = trimmedName;
 
       let merchantData = null;
       if (user.merchantId) {
@@ -256,14 +265,14 @@ export function registerAuthRoutes(app: Express): void {
       res.json({
         id: user.id,
         email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
+        firstName: newFirst,
+        lastName: newLast || null,
         role: user.role,
         merchantId: user.merchantId,
         merchant: merchantData,
         sidebarMode: user.sidebarMode || "advanced",
         sidebarPinnedPages: user.sidebarPinnedPages || [],
-        sessionDisplayName: displayName.trim(),
+        sessionDisplayName: trimmedName,
       });
     } catch (error: any) {
       if (error instanceof z.ZodError) {
@@ -358,21 +367,30 @@ export function registerAuthRoutes(app: Express): void {
       req.session.cookie.maxAge = 24 * 60 * 60 * 1000;
 
       const deviceName = parseUserAgent(req.headers["user-agent"]);
-      await db.update(users).set({ lastLoginAt: new Date(), lastLoginDevice: deviceName }).where(eq(users.id, user.id));
+      const trimmedAdminName = displayName.trim();
+      const adminSpaceIdx = trimmedAdminName.indexOf(" ");
+      const adminFirst = adminSpaceIdx > 0 ? trimmedAdminName.slice(0, adminSpaceIdx) : trimmedAdminName;
+      const adminLast = adminSpaceIdx > 0 ? trimmedAdminName.slice(adminSpaceIdx + 1) : "";
+      await db.update(users).set({
+        lastLoginAt: new Date(),
+        lastLoginDevice: deviceName,
+        firstName: adminFirst,
+        lastName: adminLast || null,
+      }).where(eq(users.id, user.id));
       (req.session as any).userId = user.id;
-      (req.session as any).sessionDisplayName = displayName.trim();
+      (req.session as any).sessionDisplayName = trimmedAdminName;
 
       res.json({
         id: user.id,
         email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
+        firstName: adminFirst,
+        lastName: adminLast || null,
         role: user.role,
         merchantId: user.merchantId,
         merchant: null,
         sidebarMode: user.sidebarMode || "advanced",
         sidebarPinnedPages: user.sidebarPinnedPages || [],
-        sessionDisplayName: displayName.trim(),
+        sessionDisplayName: trimmedAdminName,
       });
     } catch (error: any) {
       if (error instanceof z.ZodError) {

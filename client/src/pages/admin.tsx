@@ -24,7 +24,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Shield, Search, Ban, CheckCircle, UserX, UserCheck, SkipForward,
   Loader2, Building2, Users, Database, Activity, AlertTriangle, Eye,
-  Trash2, TrendingUp, Package, ShoppingCart, Truck, Server,
+  TrendingUp, Package, ShoppingCart, Truck, Server,
   BarChart3, ClipboardList, Crown, ArrowLeft, HardDrive, Cpu,
   Clock, Zap, Globe, ChevronRight, LogOut, Plus,
 } from "lucide-react";
@@ -185,7 +185,6 @@ function MerchantsTab() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [peekId, setPeekId] = useState<string | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<any>(null);
   const [subDialog, setSubDialog] = useState<{ merchant: any; plan: string } | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState({
@@ -221,20 +220,6 @@ function MerchantsTab() {
     onError: (err: any) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await apiRequest("DELETE", `/api/admin/merchants/${id}`);
-      return res.json();
-    },
-    onSuccess: (data: any) => {
-      toast({ title: data.message });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/merchants"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/platform-stats"] });
-      setDeleteTarget(null);
-      setPeekId(null);
-    },
-    onError: (err: any) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
-  });
 
   const advanceOnboardingMutation = useMutation({
     mutationFn: async (merchantId: string) => {
@@ -428,25 +413,8 @@ function MerchantsTab() {
           {m.onboardingStep !== "COMPLETED" && (
             <Button variant="outline" size="sm" onClick={() => advanceOnboardingMutation.mutate(m.id)}><SkipForward className="w-4 h-4 mr-1" />Advance Onboarding</Button>
           )}
-          <Button variant="destructive" size="sm" onClick={() => setDeleteTarget(m)}><Trash2 className="w-4 h-4 mr-1" />Delete Account</Button>
         </div>
 
-        <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete Merchant Account</AlertDialogTitle>
-              <AlertDialogDescription>
-                This will permanently delete "{deleteTarget?.name}" and ALL their data (orders, products, accounting, team members). This cannot be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                {deleteMutation.isPending ? "Deleting..." : "Delete Permanently"}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
 
         <Dialog open={!!subDialog} onOpenChange={(open) => !open && setSubDialog(null)}>
           <DialogContent>
@@ -521,7 +489,6 @@ function MerchantsTab() {
                         ) : (
                           <Button size="sm" variant="ghost" onClick={() => suspendMutation.mutate({ merchantId: m.id, action: "unsuspend" })}><CheckCircle className="w-4 h-4 text-green-600" /></Button>
                         )}
-                        <Button size="sm" variant="ghost" onClick={() => setDeleteTarget(m)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -535,22 +502,6 @@ function MerchantsTab() {
         </Card>
       )}
 
-      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Merchant Account</AlertDialogTitle>
-            <AlertDialogDescription>
-              Permanently delete "{deleteTarget?.name}" and ALL their data? This cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              {deleteMutation.isPending ? "Deleting..." : "Delete Permanently"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       <Dialog open={createOpen} onOpenChange={(open) => { if (!open) setCreateOpen(false); }}>
         <DialogContent className="max-w-lg">

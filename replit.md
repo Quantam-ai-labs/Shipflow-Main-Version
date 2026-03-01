@@ -12,7 +12,7 @@ Preferred communication style: Simple, everyday language.
 - **Frontend**: React 18 with TypeScript, Wouter, TanStack React Query, shadcn/ui (Radix UI), Tailwind CSS, and Vite.
 - **Backend**: Node.js with Express.js, TypeScript (ESM), and RESTful JSON APIs with Zod validation.
 - **Database**: PostgreSQL with Drizzle ORM and Drizzle Kit for migrations.
-- **Authentication**: Two-factor authentication for merchants/teams (email+password then email OTP), and OTP-only for admin. All sessions require a display name for audit trails. OTPs are sent via Resend, are 6-digit, 5-min expiry, and rate-limited. Forgot password flow: email OTP verification → new password set. "Remember this device" checkbox: checked = 7-day session, unchecked = 12-hour session. Admin sessions are always 24 hours. Registration and invite-accept default to 12 hours. Device tracking: `lastLoginDevice` (parsed from User-Agent) stored on each login and displayed on team page.
+- **Authentication**: Two-factor authentication for merchants/teams (email+password then email OTP), and OTP-only for admin. All sessions require a display name for audit trails. OTPs are sent via Resend, are 6-digit, 5-min expiry, and rate-limited. Forgot password flow: email OTP verification → new password set. "Remember this device" checkbox: checked = 7-day session, unchecked = 12-hour session. Admin sessions are always 24 hours. Registration and invite-accept default to 12 hours. Device tracking: `lastLoginDevice` (parsed from User-Agent) stored on each login and displayed on team page. Login displayName is parsed into firstName/lastName and saved to the users table on each login.
 
 ### Multi-Tenancy & Access Control
 - Merchant-based data isolation with all data scoped by `merchantId`.
@@ -25,7 +25,7 @@ Preferred communication style: Simple, everyday language.
 - Shopify-style layout for order details.
 
 ### Key Features
-- **Merchant & Team Management**: Core tenant entity with subscription and profile; team invite system with role-based access.
+- **Merchant & Team Management**: Core tenant entity with subscription and profile; team invite system with role-based access. Merchant owner (Merchant-Self) cannot be removed from team. Admin panel can only suspend/unsuspend merchants, not delete them.
 - **Shopify Integration**: OAuth-based access, encrypted tokens, webhook processing for orders and fulfillments, configurable historical data import, and bi-directional write-back for order edits and status updates.
 - **Courier Management**: API credentials per courier, specific handling for PostEx booking, universal status normalization, optimized courier sync scheduler with batching and parallel processing, and display of courier logged weight.
 - **Order & Shipment Management**: Syncs from Shopify, tracks status, allows remarks with history tracking, and a strict 9-stage workflow transition system. Supports batch booking with Leopards and PostEx, including preview and overrides.
