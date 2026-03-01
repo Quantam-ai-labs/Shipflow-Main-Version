@@ -7,7 +7,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Package, Loader2, ArrowLeft, Mail, Lock, KeyRound } from "lucide-react";
+import { Package, Loader2, ArrowLeft, Mail, Lock, KeyRound, Eye, EyeOff } from "lucide-react";
 
 export default function AuthPage() {
   const [mode, setMode] = useState<"login" | "register" | "forgot">("login");
@@ -30,6 +30,9 @@ export default function AuthPage() {
   const [cooldown, setCooldown] = useState(0);
   const [isSendingReset, setIsSendingReset] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showRegPassword, setShowRegPassword] = useState(false);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -180,16 +183,28 @@ export default function AuthPage() {
                         Forgot password?
                       </button>
                     </div>
-                    <Input
-                      id="login-password"
-                      data-testid="input-password"
-                      type="password"
-                      value={password}
-                      onChange={e => setPassword(e.target.value)}
-                      placeholder="Enter your password"
-                      required
-                      autoComplete="current-password"
-                    />
+                    <div className="relative">
+                      <Input
+                        id="login-password"
+                        data-testid="input-password"
+                        type={showPassword ? "text" : "password"}
+                        value={password}
+                        onChange={e => setPassword(e.target.value)}
+                        placeholder="Enter your password"
+                        required
+                        autoComplete="current-password"
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        data-testid="button-toggle-password"
+                        tabIndex={-1}
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <Checkbox
@@ -341,31 +356,55 @@ export default function AuthPage() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="reset-new-password">New Password</Label>
-                    <Input
-                      id="reset-new-password"
-                      data-testid="input-new-password"
-                      type="password"
-                      value={newPassword}
-                      onChange={e => setNewPassword(e.target.value)}
-                      placeholder="Min. 8 characters"
-                      required
-                      minLength={8}
-                      autoComplete="new-password"
-                    />
+                    <div className="relative">
+                      <Input
+                        id="reset-new-password"
+                        data-testid="input-new-password"
+                        type={showNewPassword ? "text" : "password"}
+                        value={newPassword}
+                        onChange={e => setNewPassword(e.target.value)}
+                        placeholder="Min. 8 characters"
+                        required
+                        minLength={8}
+                        autoComplete="new-password"
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        data-testid="button-toggle-new-password"
+                        tabIndex={-1}
+                      >
+                        {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="reset-confirm-password">Confirm New Password</Label>
-                    <Input
-                      id="reset-confirm-password"
-                      data-testid="input-confirm-new-password"
-                      type="password"
-                      value={confirmNewPassword}
-                      onChange={e => setConfirmNewPassword(e.target.value)}
-                      placeholder="Re-enter new password"
-                      required
-                      minLength={8}
-                      autoComplete="new-password"
-                    />
+                    <div className="relative">
+                      <Input
+                        id="reset-confirm-password"
+                        data-testid="input-confirm-new-password"
+                        type={showNewPassword ? "text" : "password"}
+                        value={confirmNewPassword}
+                        onChange={e => setConfirmNewPassword(e.target.value)}
+                        placeholder="Re-enter new password"
+                        required
+                        minLength={8}
+                        autoComplete="new-password"
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        data-testid="button-toggle-confirm-new-password"
+                        tabIndex={-1}
+                      >
+                        {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
                   </div>
                   <Button type="submit" className="w-full" disabled={isResetting || otp.length !== 6} data-testid="button-reset-password">
                     {isResetting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <KeyRound className="w-4 h-4 mr-2" />}
@@ -442,31 +481,55 @@ export default function AuthPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="reg-password">Password</Label>
-                  <Input
-                    id="reg-password"
-                    data-testid="input-register-password"
-                    type="password"
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    placeholder="Min. 8 characters"
-                    required
-                    minLength={8}
-                    autoComplete="new-password"
-                  />
+                  <div className="relative">
+                    <Input
+                      id="reg-password"
+                      data-testid="input-register-password"
+                      type={showRegPassword ? "text" : "password"}
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
+                      placeholder="Min. 8 characters"
+                      required
+                      minLength={8}
+                      autoComplete="new-password"
+                      className="pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowRegPassword(!showRegPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      data-testid="button-toggle-register-password"
+                      tabIndex={-1}
+                    >
+                      {showRegPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="reg-confirm">Confirm Password</Label>
-                  <Input
-                    id="reg-confirm"
-                    data-testid="input-confirm-password"
-                    type="password"
-                    value={confirmPassword}
-                    onChange={e => setConfirmPassword(e.target.value)}
-                    placeholder="Re-enter password"
-                    required
-                    minLength={8}
-                    autoComplete="new-password"
-                  />
+                  <div className="relative">
+                    <Input
+                      id="reg-confirm"
+                      data-testid="input-confirm-password"
+                      type={showRegPassword ? "text" : "password"}
+                      value={confirmPassword}
+                      onChange={e => setConfirmPassword(e.target.value)}
+                      placeholder="Re-enter password"
+                      required
+                      minLength={8}
+                      autoComplete="new-password"
+                      className="pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowRegPassword(!showRegPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      data-testid="button-toggle-confirm-register-password"
+                      tabIndex={-1}
+                    >
+                      {showRegPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
                 <Button type="submit" className="w-full" disabled={isRegistering} data-testid="button-register">
                   {isRegistering && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
