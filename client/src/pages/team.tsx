@@ -56,6 +56,7 @@ import {
   Loader2,
   Download,
   KeyRound,
+  Monitor,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -711,6 +712,12 @@ export default function Team() {
                       <Mail className="w-3 h-3" />
                       <span className="truncate">{member.user?.email || "No email"}</span>
                     </div>
+                    {member.user?.lastLoginDevice && (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground/70">
+                        <Monitor className="w-3 h-3" />
+                        <span>{member.user.lastLoginDevice}</span>
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-3 flex-wrap">
                     {getRoleBadge(member.role)}

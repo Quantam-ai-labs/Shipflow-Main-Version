@@ -3287,6 +3287,8 @@ export async function registerRoutes(
           firstName: users.firstName,
           lastName: users.lastName,
           email: users.email,
+          lastLoginAt: users.lastLoginAt,
+          lastLoginDevice: users.lastLoginDevice,
         }).from(users).where(eq(users.id, member.userId));
 
         const userEmail = (user?.email || "").toLowerCase();
@@ -4004,6 +4006,9 @@ export async function registerRoutes(
           });
         });
         req.session.cookie.maxAge = 12 * 60 * 60 * 1000;
+        const { parseUserAgent } = await import("./utils/userAgent");
+        const deviceName = parseUserAgent(req.headers["user-agent"]);
+        await db.update(users).set({ lastLoginAt: new Date(), lastLoginDevice: deviceName }).where(eq(users.id, newUser.id));
         (req.session as any).userId = newUser.id;
         (req.session as any).sessionDisplayName = `${firstName.trim()} ${(lastName || "").trim()}`.trim();
         await new Promise<void>((resolve, reject) => {

@@ -28,6 +28,7 @@ export const users = pgTable("users", {
   passwordResetToken: varchar("password_reset_token", { length: 255 }),
   passwordResetExpiresAt: timestamp("password_reset_expires_at"),
   lastLoginAt: timestamp("last_login_at"),
+  lastLoginDevice: varchar("last_login_device", { length: 255 }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

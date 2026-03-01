@@ -6,6 +6,7 @@ import { isAuthenticated } from "./replitAuth";
 import { z } from "zod";
 import { sendOtpEmail } from "../../services/email";
 import bcrypt from "bcrypt";
+import { parseUserAgent } from "../../utils/userAgent";
 
 export const otpStore = new Map<string, { code: string; expiresAt: number; attempts: number; sentAt: number }>();
 
@@ -93,6 +94,8 @@ export function registerAuthRoutes(app: Express): void {
 
       const { merchant, user } = result;
       req.session.cookie.maxAge = 12 * 60 * 60 * 1000;
+      const deviceName = parseUserAgent(req.headers["user-agent"]);
+      await db.update(users).set({ lastLoginAt: new Date(), lastLoginDevice: deviceName }).where(eq(users.id, user.id));
       (req.session as any).userId = user.id;
       (req.session as any).sessionDisplayName = `${body.firstName} ${body.lastName || ""}`.trim();
 
@@ -232,7 +235,8 @@ export function registerAuthRoutes(app: Express): void {
       const sessionMaxAge = rememberDevice ? 7 * 24 * 60 * 60 * 1000 : 12 * 60 * 60 * 1000;
       req.session.cookie.maxAge = sessionMaxAge;
 
-      await db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, user.id));
+      const deviceName = parseUserAgent(req.headers["user-agent"]);
+      await db.update(users).set({ lastLoginAt: new Date(), lastLoginDevice: deviceName }).where(eq(users.id, user.id));
       (req.session as any).userId = user.id;
       (req.session as any).sessionDisplayName = displayName.trim();
 
@@ -353,7 +357,8 @@ export function registerAuthRoutes(app: Express): void {
 
       req.session.cookie.maxAge = 24 * 60 * 60 * 1000;
 
-      await db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, user.id));
+      const deviceName = parseUserAgent(req.headers["user-agent"]);
+      await db.update(users).set({ lastLoginAt: new Date(), lastLoginDevice: deviceName }).where(eq(users.id, user.id));
       (req.session as any).userId = user.id;
       (req.session as any).sessionDisplayName = displayName.trim();
 
