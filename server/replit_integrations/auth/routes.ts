@@ -371,6 +371,98 @@ export function registerAuthRoutes(app: Express): void {
     }
   });
 
+  app.post("/api/auth/forgot-password/send-otp", async (req, res) => {
+    try {
+      const { email } = z.object({ email: z.string().email("Please enter a valid email address.") }).parse(req.body);
+      const normalizedEmail = email.toLowerCase().trim();
+
+      const [user] = await db.select().from(users).where(ilike(users.email, normalizedEmail));
+      if (!user) {
+        return res.json({ message: "If an account exists with this email, a reset code has been sent." });
+      }
+
+      if (!user.isActive) {
+        return res.json({ message: "If an account exists with this email, a reset code has been sent." });
+      }
+
+      const otpKey = "reset:" + getOtpKey(normalizedEmail);
+      const existing = otpStore.get(otpKey);
+      if (existing && Date.now() - existing.sentAt < 60000) {
+        const wait = Math.ceil((60000 - (Date.now() - existing.sentAt)) / 1000);
+        return res.status(429).json({ message: `Please wait ${wait} seconds before requesting a new code.` });
+      }
+
+      const code = generateOtp();
+      otpStore.set(otpKey, { code, expiresAt: Date.now() + 5 * 60 * 1000, attempts: 0, sentAt: Date.now() });
+
+      const deliveryEmail = normalizedEmail.replace(/\+[^@]*@/, "@");
+      const result = await sendOtpEmail({ toEmail: deliveryEmail, code, name: user.firstName || "there" });
+      if (!result.success) {
+        console.error("[Auth] Password reset OTP send failed:", result.error);
+        otpStore.delete(otpKey);
+        return res.status(500).json({ message: "Failed to send reset code. Please try again." });
+      }
+
+      res.json({ message: "If an account exists with this email, a reset code has been sent." });
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors[0].message });
+      }
+      console.error("[Auth] forgot-password send-otp error:", error);
+      res.status(500).json({ message: "Something went wrong. Please try again." });
+    }
+  });
+
+  app.post("/api/auth/forgot-password/reset", async (req, res) => {
+    try {
+      const { email, otp, newPassword } = z.object({
+        email: z.string().email(),
+        otp: z.string().length(6, "Please enter the 6-digit code."),
+        newPassword: z.string().min(8, "Password must be at least 8 characters."),
+      }).parse(req.body);
+      const normalizedEmail = email.toLowerCase().trim();
+      const otpKey = "reset:" + getOtpKey(normalizedEmail);
+
+      const stored = otpStore.get(otpKey);
+      if (!stored) {
+        return res.status(401).json({ message: "No reset code found. Please request a new one." });
+      }
+
+      if (Date.now() > stored.expiresAt) {
+        otpStore.delete(otpKey);
+        return res.status(401).json({ message: "Reset code has expired. Please request a new one." });
+      }
+
+      if (stored.attempts >= 5) {
+        otpStore.delete(otpKey);
+        return res.status(401).json({ message: "Too many failed attempts. Please request a new code." });
+      }
+
+      if (stored.code !== otp) {
+        stored.attempts++;
+        return res.status(401).json({ message: `Invalid code. ${5 - stored.attempts} attempts remaining.` });
+      }
+
+      otpStore.delete(otpKey);
+
+      const [user] = await db.select().from(users).where(ilike(users.email, normalizedEmail));
+      if (!user || !user.isActive) {
+        return res.status(401).json({ message: "Unable to reset password for this account." });
+      }
+
+      const passwordHash = await bcrypt.hash(newPassword, 12);
+      await db.update(users).set({ passwordHash }).where(eq(users.id, user.id));
+
+      res.json({ message: "Password has been reset successfully. You can now sign in with your new password." });
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors[0].message });
+      }
+      console.error("[Auth] forgot-password reset error:", error);
+      res.status(500).json({ message: "Password reset failed. Please try again." });
+    }
+  });
+
   app.post("/api/auth/logout", (req, res) => {
     req.session.destroy((err) => {
       if (err) {
