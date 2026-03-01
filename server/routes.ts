@@ -3279,7 +3279,27 @@ export async function registerRoutes(
       if (!merchantId) return;
 
       const members = await storage.getTeamMembers(merchantId);
-      res.json({ members, total: members.length });
+      const merchant = await storage.getMerchant(merchantId);
+      const merchantEmail = merchant?.email?.toLowerCase() || "";
+
+      const enriched = await Promise.all(members.map(async (member) => {
+        const [user] = await db.select({
+          firstName: users.firstName,
+          lastName: users.lastName,
+          email: users.email,
+        }).from(users).where(eq(users.id, member.userId));
+
+        const userEmail = (user?.email || "").toLowerCase();
+        const isMerchantOwner = !!merchantEmail && userEmail === merchantEmail;
+
+        return {
+          ...member,
+          user: user || null,
+          isMerchantOwner,
+        };
+      }));
+
+      res.json({ members: enriched, total: enriched.length });
     } catch (error) {
       console.error("Error fetching team:", error);
       res.status(500).json({ message: "Failed to fetch team" });

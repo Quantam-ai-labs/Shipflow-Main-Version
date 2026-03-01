@@ -73,6 +73,7 @@ interface TeamMemberWithUser {
   allowedPages: string[] | null;
   invitedAt: string | null;
   joinedAt: string | null;
+  isMerchantOwner?: boolean;
   user: UserType;
 }
 
@@ -502,16 +503,19 @@ export default function Team() {
   };
 
   const getUserDisplayName = (member: TeamMemberWithUser) => {
-    if (member.user?.firstName && member.user?.lastName) {
-      return `${member.user.firstName} ${member.user.lastName}`;
-    }
-    return member.user?.email || "Unknown User";
+    const first = member.user?.firstName || "";
+    const last = member.user?.lastName || "";
+    const fullName = `${first} ${last}`.trim();
+    return fullName || member.user?.email || "Unknown User";
   };
 
   const getUserInitials = (member: TeamMemberWithUser) => {
-    if (member.user?.firstName && member.user?.lastName) {
-      return `${member.user.firstName[0]}${member.user.lastName[0]}`.toUpperCase();
+    const first = member.user?.firstName;
+    const last = member.user?.lastName;
+    if (first && last) {
+      return `${first[0]}${last[0]}`.toUpperCase();
     }
+    if (first) return first[0].toUpperCase();
     if (member.user?.email) {
       return member.user.email[0].toUpperCase();
     }
@@ -695,10 +699,17 @@ export default function Team() {
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium">{getUserDisplayName(member)}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium">{getUserDisplayName(member)}</p>
+                      {member.isMerchantOwner && (
+                        <Badge variant="outline" className="text-xs border-primary/40 text-primary" data-testid={`badge-merchant-self-${member.id}`}>
+                          Merchant-Self
+                        </Badge>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Mail className="w-3 h-3" />
-                      <span className="truncate">{member.user?.email}</span>
+                      <span className="truncate">{member.user?.email || "No email"}</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 flex-wrap">
