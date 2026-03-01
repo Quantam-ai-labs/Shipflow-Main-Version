@@ -1,6 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 
+async function safeJson(res: Response) {
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error("Something went wrong. Please try again.");
+  }
+}
+
 export interface AuthUser {
   id: string;
   email: string | null;
@@ -29,11 +38,11 @@ export function useAuth() {
       const res = await fetch("/api/auth/me", { credentials: "include" });
       if (!res.ok) {
         if (res.status === 401) return null;
-        const data = await res.json().catch(() => ({}));
+        const data = await safeJson(res).catch(() => ({}));
         if (data.suspended) throw new Error("SUSPENDED");
         throw new Error(data.message || "Auth check failed");
       }
-      return res.json();
+      return safeJson(res);
     },
     retry: false,
     staleTime: 5 * 60 * 1000,
@@ -44,14 +53,14 @@ export function useAuth() {
   const sendOtpMutation = useMutation({
     mutationFn: async (data: { email: string; password: string }) => {
       const res = await apiRequest("POST", "/api/auth/send-otp", data);
-      return res.json();
+      return safeJson(res);
     },
   });
 
   const verifyOtpMutation = useMutation({
     mutationFn: async (data: { email: string; otp: string; displayName: string; rememberDevice?: boolean }) => {
       const res = await apiRequest("POST", "/api/auth/verify-otp", data);
-      return res.json();
+      return safeJson(res);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
@@ -61,7 +70,7 @@ export function useAuth() {
   const registerMutation = useMutation({
     mutationFn: async (data: { email: string; password: string; firstName: string; lastName?: string; merchantName: string }) => {
       const res = await apiRequest("POST", "/api/auth/register", data);
-      return res.json();
+      return safeJson(res);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });

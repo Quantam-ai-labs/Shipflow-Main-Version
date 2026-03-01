@@ -7,8 +7,16 @@ async function throwIfResNotOk(res: Response) {
     try {
       const parsed = JSON.parse(text);
       if (parsed.message) message = parsed.message;
-    } catch {}
+    } catch {
+      if (text.includes("<!DOCTYPE") || text.includes("<html")) {
+        message = "Something went wrong. Please try again.";
+      }
+    }
     throw new Error(message);
+  }
+  const contentType = res.headers.get("content-type") || "";
+  if (contentType.includes("text/html")) {
+    throw new Error("Something went wrong. Please try again.");
   }
 }
 
@@ -43,7 +51,12 @@ export const getQueryFn: <T>(options: {
     }
 
     await throwIfResNotOk(res);
-    return await res.json();
+    const text = await res.text();
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new Error("Something went wrong. Please try again.");
+    }
   };
 
 export const queryClient = new QueryClient({
