@@ -57,6 +57,10 @@ import {
   Download,
   KeyRound,
   Monitor,
+  Crown,
+  Headphones,
+  Calculator,
+  Truck,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -196,20 +200,42 @@ const PAGE_SECTIONS: PageSection[] = [
   },
 ];
 
-function getRoleBadge(role: string) {
+const roleLabels: Record<string, string> = {
+  manager: "Manager",
+  customer_support: "Customer Support",
+  accountant: "Accountant",
+  logistics_manager: "Logistics Manager",
+  admin: "Manager",
+  agent: "Customer Support",
+};
+
+function getRoleBadge(role: string, isMerchantOwner?: boolean) {
+  if (isMerchantOwner) {
+    return (
+      <Badge className="bg-amber-500/10 text-amber-600 border-amber-500/20">
+        <Crown className="w-3 h-3 mr-1" />
+        Owner
+      </Badge>
+    );
+  }
+
   const roleConfig: Record<string, { color: string; icon: React.ElementType }> = {
-    admin: { color: "bg-purple-500/10 text-purple-600 border-purple-500/20", icon: ShieldCheck },
     manager: { color: "bg-blue-500/10 text-blue-600 border-blue-500/20", icon: Shield },
-    agent: { color: "bg-gray-500/10 text-gray-600 border-gray-500/20", icon: User },
+    customer_support: { color: "bg-green-500/10 text-green-600 border-green-500/20", icon: Headphones },
+    accountant: { color: "bg-amber-500/10 text-amber-600 border-amber-500/20", icon: Calculator },
+    logistics_manager: { color: "bg-teal-500/10 text-teal-600 border-teal-500/20", icon: Truck },
+    admin: { color: "bg-blue-500/10 text-blue-600 border-blue-500/20", icon: Shield },
+    agent: { color: "bg-green-500/10 text-green-600 border-green-500/20", icon: Headphones },
   };
 
-  const config = roleConfig[role] || roleConfig.agent;
+  const config = roleConfig[role] || roleConfig.customer_support;
   const Icon = config.icon;
+  const label = roleLabels[role] || role;
 
   return (
     <Badge className={config.color}>
       <Icon className="w-3 h-3 mr-1" />
-      {role.charAt(0).toUpperCase() + role.slice(1)}
+      {label}
     </Badge>
   );
 }
@@ -397,7 +423,7 @@ export default function Team() {
   const { toast } = useToast();
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState("agent");
+  const [inviteRole, setInviteRole] = useState("customer_support");
   const [revokeTarget, setRevokeTarget] = useState<Invite | null>(null);
   const [removeTarget, setRemoveTarget] = useState<TeamMemberWithUser | null>(null);
   const [accessTarget, setAccessTarget] = useState<TeamMemberWithUser | null>(null);
@@ -423,7 +449,7 @@ export default function Team() {
       queryClient.invalidateQueries({ queryKey: ["/api/team"] });
       queryClient.invalidateQueries({ queryKey: ["/api/team/invites"] });
       setInviteEmail("");
-      setInviteRole("agent");
+      setInviteRole("customer_support");
       setIsInviteDialogOpen(false);
 
       if (data.emailSent) {
@@ -552,7 +578,7 @@ export default function Team() {
             <Download className="w-4 h-4 mr-2" />
             Export CSV
           </Button>
-          <Dialog open={isInviteDialogOpen} onOpenChange={(open) => { setIsInviteDialogOpen(open); if (!open) { setInviteEmail(""); setInviteRole("agent"); } }}>
+          <Dialog open={isInviteDialogOpen} onOpenChange={(open) => { setIsInviteDialogOpen(open); if (!open) { setInviteEmail(""); setInviteRole("customer_support"); } }}>
           <DialogTrigger asChild>
             <Button data-testid="button-invite-member">
               <UserPlus className="w-4 h-4 mr-2" />
@@ -586,22 +612,28 @@ export default function Team() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="agent">
-                      <div className="flex items-center gap-2">
-                        <User className="w-4 h-4" />
-                        Agent - View orders, add remarks
-                      </div>
-                    </SelectItem>
                     <SelectItem value="manager">
                       <div className="flex items-center gap-2">
                         <Shield className="w-4 h-4" />
-                        Manager - View analytics, manage operations
+                        Manager - Full operations & settings
                       </div>
                     </SelectItem>
-                    <SelectItem value="admin">
+                    <SelectItem value="customer_support">
                       <div className="flex items-center gap-2">
-                        <ShieldCheck className="w-4 h-4" />
-                        Admin - Full access, manage team
+                        <Headphones className="w-4 h-4" />
+                        Customer Support - Orders & remarks
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="accountant">
+                      <div className="flex items-center gap-2">
+                        <Calculator className="w-4 h-4" />
+                        Accountant - Finance & reconciliation
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="logistics_manager">
+                      <div className="flex items-center gap-2">
+                        <Truck className="w-4 h-4" />
+                        Logistics Manager - Shipments & tracking
                       </div>
                     </SelectItem>
                   </SelectContent>
@@ -625,37 +657,48 @@ export default function Team() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="p-6 flex items-center gap-4">
-            <div className="w-12 h-12 rounded-lg bg-purple-500/10 flex items-center justify-center">
-              <ShieldCheck className="w-6 h-6 text-purple-500" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold" data-testid="text-admin-count">{members.filter((m) => m.role === "admin").length}</p>
-              <p className="text-sm text-muted-foreground">Admins</p>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-6 flex items-center gap-4">
             <div className="w-12 h-12 rounded-lg bg-blue-500/10 flex items-center justify-center">
               <Shield className="w-6 h-6 text-blue-500" />
             </div>
             <div>
-              <p className="text-2xl font-bold" data-testid="text-manager-count">{members.filter((m) => m.role === "manager").length}</p>
+              <p className="text-2xl font-bold" data-testid="text-manager-count">{members.filter((m) => m.role === "manager" || m.role === "admin").length}</p>
               <p className="text-sm text-muted-foreground">Managers</p>
             </div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-6 flex items-center gap-4">
-            <div className="w-12 h-12 rounded-lg bg-gray-500/10 flex items-center justify-center">
-              <User className="w-6 h-6 text-gray-500" />
+            <div className="w-12 h-12 rounded-lg bg-green-500/10 flex items-center justify-center">
+              <Headphones className="w-6 h-6 text-green-500" />
             </div>
             <div>
-              <p className="text-2xl font-bold" data-testid="text-agent-count">{members.filter((m) => m.role === "agent").length}</p>
-              <p className="text-sm text-muted-foreground">Agents</p>
+              <p className="text-2xl font-bold" data-testid="text-support-count">{members.filter((m) => m.role === "customer_support" || m.role === "agent").length}</p>
+              <p className="text-sm text-muted-foreground">Support</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-6 flex items-center gap-4">
+            <div className="w-12 h-12 rounded-lg bg-amber-500/10 flex items-center justify-center">
+              <Calculator className="w-6 h-6 text-amber-500" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold" data-testid="text-accountant-count">{members.filter((m) => m.role === "accountant").length}</p>
+              <p className="text-sm text-muted-foreground">Accountants</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-6 flex items-center gap-4">
+            <div className="w-12 h-12 rounded-lg bg-teal-500/10 flex items-center justify-center">
+              <Truck className="w-6 h-6 text-teal-500" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold" data-testid="text-logistics-count">{members.filter((m) => m.role === "logistics_manager").length}</p>
+              <p className="text-sm text-muted-foreground">Logistics</p>
             </div>
           </CardContent>
         </Card>
@@ -718,21 +761,21 @@ export default function Team() {
                     )}
                   </div>
                   <div className="flex items-center gap-3 flex-wrap">
-                    {getRoleBadge(member.role)}
-                    {member.role !== "admin" && member.allowedPages && member.allowedPages.length > 0 && (
+                    {getRoleBadge(member.role, member.isMerchantOwner)}
+                    {!member.isMerchantOwner && member.allowedPages && member.allowedPages.length > 0 && (
                       <Badge variant="secondary" className="text-xs">
                         <KeyRound className="w-3 h-3 mr-1" />
                         {member.allowedPages.length} pages
                       </Badge>
                     )}
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" data-testid={`button-member-menu-${member.id}`}>
-                          <MoreVertical className="w-4 h-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        {member.role !== "admin" && (
+                    {!member.isMerchantOwner && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" data-testid={`button-member-menu-${member.id}`}>
+                            <MoreVertical className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
                           <DropdownMenuItem
                             onClick={() => setAccessTarget(member)}
                             data-testid={`button-manage-access-${member.id}`}
@@ -740,33 +783,34 @@ export default function Team() {
                             <KeyRound className="w-4 h-4 mr-2" />
                             Manage Access
                           </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem onClick={() => updateRoleMutation.mutate({ memberId: member.id, role: "admin" })}>
-                          <ShieldCheck className="w-4 h-4 mr-2" />
-                          Make Admin
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => updateRoleMutation.mutate({ memberId: member.id, role: "manager" })}>
-                          <Shield className="w-4 h-4 mr-2" />
-                          Make Manager
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => updateRoleMutation.mutate({ memberId: member.id, role: "agent" })}>
-                          <User className="w-4 h-4 mr-2" />
-                          Make Agent
-                        </DropdownMenuItem>
-                        {!member.isMerchantOwner && (
-                          <>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() => setRemoveTarget(member)}
-                              className="text-destructive focus:text-destructive"
-                            >
-                              <Trash2 className="w-4 h-4 mr-2" />
-                              Remove Member
-                            </DropdownMenuItem>
-                          </>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => updateRoleMutation.mutate({ memberId: member.id, role: "manager" })}>
+                            <Shield className="w-4 h-4 mr-2" />
+                            Make Manager
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => updateRoleMutation.mutate({ memberId: member.id, role: "customer_support" })}>
+                            <Headphones className="w-4 h-4 mr-2" />
+                            Make Customer Support
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => updateRoleMutation.mutate({ memberId: member.id, role: "accountant" })}>
+                            <Calculator className="w-4 h-4 mr-2" />
+                            Make Accountant
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => updateRoleMutation.mutate({ memberId: member.id, role: "logistics_manager" })}>
+                            <Truck className="w-4 h-4 mr-2" />
+                            Make Logistics Manager
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => setRemoveTarget(member)}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Remove Member
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
                   </div>
                 </div>
               ))}

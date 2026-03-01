@@ -26,6 +26,8 @@ export interface AuthUser {
   sidebarMode: string;
   sidebarPinnedPages: string[];
   allowedPages: string[] | null;
+  teamRole: string | null;
+  isMerchantOwner: boolean;
   sessionDisplayName: string | null;
 }
 

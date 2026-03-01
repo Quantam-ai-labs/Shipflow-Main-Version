@@ -85,7 +85,7 @@ export function registerAuthRoutes(app: Express): void {
         await tx.insert(teamMembers).values({
           userId: user.id,
           merchantId: merchant.id,
-          role: "admin",
+          role: "manager",
           joinedAt: new Date(),
         });
 
@@ -519,6 +519,8 @@ export function registerAuthRoutes(app: Express): void {
 
       let merchantData = null;
       let allowedPages: string[] | null = null;
+      let teamRole: string | null = null;
+      let isMerchantOwner = false;
       if (user.merchantId) {
         const [m] = await db.select().from(merchants).where(eq(merchants.id, user.merchantId));
         if (m) {
@@ -531,12 +533,14 @@ export function registerAuthRoutes(app: Express): void {
             status: m.status,
             onboardingStep: m.onboardingStep,
           };
+          isMerchantOwner = !!m.email && user.email?.toLowerCase() === m.email.toLowerCase();
         }
 
         const [teamMember] = await db.select().from(teamMembers)
           .where(eq(teamMembers.userId, user.id));
         if (teamMember) {
-          allowedPages = teamMember.allowedPages || null;
+          allowedPages = isMerchantOwner ? null : (teamMember.allowedPages || null);
+          teamRole = teamMember.role;
         }
       }
 
@@ -551,6 +555,8 @@ export function registerAuthRoutes(app: Express): void {
         sidebarMode: user.sidebarMode || "advanced",
         sidebarPinnedPages: user.sidebarPinnedPages || [],
         allowedPages,
+        teamRole,
+        isMerchantOwner,
         sessionDisplayName,
       });
     } catch (error) {

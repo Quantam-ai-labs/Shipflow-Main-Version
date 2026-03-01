@@ -16,8 +16,10 @@ Preferred communication style: Simple, everyday language.
 
 ### Multi-Tenancy & Access Control
 - Merchant-based data isolation with all data scoped by `merchantId`.
-- Team structure with `teamMembers` and roles (Admin, Manager, Agent) for tiered permissions.
-- Page-level permissions are enforced via `allowedPages` arrays, with Admins having full access.
+- Team roles: **Manager**, **Customer Support**, **Accountant**, **Logistics Manager**. Legacy `admin`/`agent` roles are mapped to Manager/Customer Support for display.
+- Merchant owner is identified by matching user email to merchant email — they always have full access, cannot be role-changed, removed, or access-restricted.
+- Page-level permissions enforced via `allowedPages` arrays; only the merchant owner bypasses restrictions.
+- Settings pages (`/settings/*`) are restricted to merchant owner and Manager role only (sidebar + ProtectedRoute + backend).
 
 ### UI/UX Decisions
 - All user-facing dates use Pakistani format `dd-MM-yyyy` (e.g., "28-02-2026") via centralized helpers.

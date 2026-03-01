@@ -215,11 +215,11 @@ const reconcileSchema = z.object({
 
 const teamInviteSchema = z.object({
   email: z.string().email("Valid email is required"),
-  role: z.enum(["admin", "manager", "agent"]).optional().default("agent"),
+  role: z.enum(["manager", "customer_support", "accountant", "logistics_manager"]).optional().default("customer_support"),
 });
 
 const teamRoleUpdateSchema = z.object({
-  role: z.enum(["admin", "manager", "agent"]),
+  role: z.enum(["manager", "customer_support", "accountant", "logistics_manager"]),
 });
 
 const courierAccountSchema = z.object({
@@ -3615,8 +3615,12 @@ export async function registerRoutes(
           return res.status(404).json({ message: "Team member not found" });
         }
 
-        if (member.role === "admin") {
-          return res.status(400).json({ message: "Admin users always have full access and cannot be restricted." });
+        const merchant = await storage.getMerchant(merchantId);
+        if (merchant) {
+          const [memberUser] = await db.select({ email: users.email }).from(users).where(eq(users.id, member.userId));
+          if (memberUser?.email?.toLowerCase() === merchant.email?.toLowerCase()) {
+            return res.status(400).json({ message: "The merchant owner's access cannot be restricted." });
+          }
         }
 
         await db
@@ -4015,7 +4019,6 @@ export async function registerRoutes(
           .json({ message: validated.error.errors[0].message });
       }
 
-      // Verify team member exists and belongs to this merchant
       const memberId = req.params.id as string;
       const existingMember = await storage.getTeamMemberById(
         merchantId,
@@ -4025,7 +4028,14 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Team member not found" });
       }
 
-      // Update role (scoped by merchantId)
+      const merchant = await storage.getMerchant(merchantId);
+      if (merchant) {
+        const [memberUser] = await db.select({ email: users.email }).from(users).where(eq(users.id, existingMember.userId));
+        if (memberUser?.email?.toLowerCase() === merchant.email?.toLowerCase()) {
+          return res.status(400).json({ message: "The merchant owner's role cannot be changed." });
+        }
+      }
+
       const member = await storage.updateTeamMemberRole(
         merchantId,
         memberId,
@@ -4062,14 +4072,6 @@ export async function registerRoutes(
         const [memberUser] = await db.select({ email: users.email }).from(users).where(eq(users.id, existingMember.userId));
         if (memberUser?.email?.toLowerCase() === merchant.email?.toLowerCase()) {
           return res.status(400).json({ message: "The merchant owner cannot be removed from the team." });
-        }
-      }
-
-      if (existingMember.role === "admin") {
-        const allMembers = await storage.getTeamMembers(merchantId);
-        const adminCount = allMembers.filter(m => m.role === "admin" && m.isActive).length;
-        if (adminCount <= 1) {
-          return res.status(400).json({ message: "Cannot remove the last admin. Promote another member to admin first." });
         }
       }
 

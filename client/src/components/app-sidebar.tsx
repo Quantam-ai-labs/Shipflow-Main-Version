@@ -273,6 +273,7 @@ export function AppSidebar() {
   const pinnedPages: string[] = user?.sidebarPinnedPages?.length ? user.sidebarPinnedPages : defaultPinnedPages;
   const allowedPages: string[] | null = user?.allowedPages || null;
   const hasPageRestrictions = allowedPages !== null && allowedPages.length > 0;
+  const canAccessSettings = user?.isMerchantOwner || user?.teamRole === "manager" || user?.teamRole === "admin";
 
   const updatePrefsMutation = useMutation({
     mutationFn: async (data: { sidebarMode?: string; sidebarPinnedPages?: string[] }) => {
@@ -318,6 +319,7 @@ export function AppSidebar() {
   );
 
   const filteredSettings = (() => {
+    if (!canAccessSettings) return [];
     let items = isSimple
       ? settingsItems.filter(i => pinnedPages.includes(i.id))
       : settingsItems;
