@@ -822,7 +822,7 @@ export default function OrderDetails() {
       queryClient.invalidateQueries({ queryKey: ["/api/orders/workflow-counts"] });
       setShowCancelShopifyConfirm(false);
       if (data.shopifyWarning) {
-        toast({ title: "Order cancelled locally", description: "Shopify sync failed but order is cancelled in ShipFlow.", variant: "destructive" });
+        toast({ title: "Order cancelled locally", description: "Shopify sync failed but order is cancelled in 1SOL.AI.", variant: "destructive" });
       } else {
         toast({ title: "Cancelled on Shopify", description: "Order has been cancelled on Shopify successfully." });
       }

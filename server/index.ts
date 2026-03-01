@@ -81,7 +81,7 @@ async function seedSuperAdmin() {
       await db.update(users).set({ role: "SUPER_ADMIN" }).where(eq(users.id, existing.id));
       console.log(`[Seed] Promoted existing user ${adminEmail} to SUPER_ADMIN`);
     } else {
-      const passwordHash = await bcrypt.hash("ShipFlow@Admin2026!", 12);
+      const passwordHash = await bcrypt.hash("1SOL.AI@Admin2026!", 12);
       await db.insert(users).values({
         email: adminEmail,
         passwordHash,

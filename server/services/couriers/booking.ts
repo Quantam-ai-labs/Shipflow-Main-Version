@@ -282,7 +282,7 @@ export async function bookLeopardsPacket(
     ...(shipperInfo.shipperId ? {
       shipment_id: shipperInfo.shipperId,
     } : {
-      shipment_name_eng: shipperInfo.name || "ShipFlow Merchant",
+      shipment_name_eng: shipperInfo.name || "1SOL.AI Merchant",
       shipment_phone: normalizePhone(shipperInfo.phone) || "0000000000",
       shipment_address: shipperInfo.address || "Default Address",
     }),

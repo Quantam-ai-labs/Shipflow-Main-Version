@@ -1178,7 +1178,7 @@ export default function Integrations() {
           <DialogHeader>
             <DialogTitle>Connect Shopify Store</DialogTitle>
             <DialogDescription>
-              Enter your store name and authorize ShipFlow to access your Shopify data.
+              Enter your store name and authorize 1SOL.AI to access your Shopify data.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -1202,7 +1202,7 @@ export default function Integrations() {
             {!useManualAuth && (
               <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-md border border-blue-200 dark:border-blue-800">
                 <p className="text-sm text-blue-800 dark:text-blue-200">
-                  You'll be redirected to Shopify to authorize ShipFlow. This uses the standard Shopify app install flow.
+                  You'll be redirected to Shopify to authorize 1SOL.AI. This uses the standard Shopify app install flow.
                 </p>
               </div>
             )}

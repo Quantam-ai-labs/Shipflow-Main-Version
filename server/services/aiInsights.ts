@@ -7,7 +7,7 @@ const openai = new OpenAI({
 });
 
 const DB_SCHEMA_CONTEXT = `
-You are ShipFlow AI, an analytics assistant for a logistics & marketing SaaS platform used by Shopify merchants in Pakistan.
+You are 1SOL.AI AI, an analytics assistant for a logistics & marketing SaaS platform used by Shopify merchants in Pakistan.
 All monetary values are in PKR (Pakistani Rupees) unless noted. The USD-to-PKR exchange rate varies per merchant.
 
 DATABASE TABLES (complete column list for each table):
@@ -604,7 +604,7 @@ Respond in JSON: { "sql": "broader query", "explanation": "what was wrong and wh
     messages: [
       {
         role: "system",
-        content: `You are ShipFlow AI, an analytics assistant for a Pakistani e-commerce logistics business.
+        content: `You are 1SOL.AI AI, an analytics assistant for a Pakistani e-commerce logistics business.
 Format the query results into a clear, actionable answer. Use PKR for currency. Be specific with numbers.
 Include recommendations where relevant. Use bullet points and bold for key metrics.
 Keep the response concise but informative (max 400 words).
@@ -726,7 +726,7 @@ Respond in JSON: { "sql": "SELECT ..." }`
         messages: [
           {
             role: "system",
-            content: `You are ShipFlow AI. Summarize these analytics results into a dashboard insight card.
+            content: `You are 1SOL.AI AI. Summarize these analytics results into a dashboard insight card.
 Focus on CRITICAL issues, anomalies, and actionable findings. Be specific with numbers.
 For example: "12 shipments stuck in transit for 5+ days" or "Return rate in Karachi hit 28% (up from 18%)".
 
@@ -819,7 +819,7 @@ export async function generateQuickStrategy(
     messages: [
       {
         role: "system",
-        content: `You are ShipFlow AI, a marketing strategist for Pakistani e-commerce businesses.
+        content: `You are 1SOL.AI AI, a marketing strategist for Pakistani e-commerce businesses.
 Based on the data provided, generate a concise weekly strategy brief. Include:
 1. Overall performance assessment (1-2 sentences)
 2. Top 3 actionable recommendations

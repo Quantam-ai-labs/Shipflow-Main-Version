@@ -90,7 +90,7 @@ export default function AdminLoginPage() {
           <div className="w-12 h-12 rounded-md bg-primary flex items-center justify-center mx-auto">
             <Shield className="w-7 h-7 text-primary-foreground" />
           </div>
-          <h1 className="text-xl font-bold" data-testid="text-admin-login-title">ShipFlow Admin</h1>
+          <h1 className="text-xl font-bold" data-testid="text-admin-login-title">1SOL.AI Admin</h1>
           <p className="text-muted-foreground text-sm">Platform Control Room</p>
         </div>
 

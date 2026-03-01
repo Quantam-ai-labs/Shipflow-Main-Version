@@ -33,12 +33,12 @@ async function getCredentials(): Promise<{ apiKey: string; fromEmail: string }> 
   }
 
   if (process.env.RESEND_API_KEY) {
-    const from = connectorFromEmail || 'ShipFlow <noreply@1sol.ai>';
+    const from = connectorFromEmail || '1SOL.AI <noreply@1sol.ai>';
     return { apiKey: process.env.RESEND_API_KEY, fromEmail: from };
   }
 
   if (connectorKey) {
-    const from = connectorFromEmail || 'ShipFlow <noreply@1sol.ai>';
+    const from = connectorFromEmail || '1SOL.AI <noreply@1sol.ai>';
     return { apiKey: connectorKey, fromEmail: from };
   }
 
@@ -70,7 +70,7 @@ export async function sendOtpEmail(params: OtpEmailParams): Promise<{ success: b
     <tr><td align="center">
       <table width="100%" cellpadding="0" cellspacing="0" style="max-width:420px;background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
         <tr><td style="background-color:#18181b;padding:20px 32px;text-align:center;">
-          <h1 style="color:#ffffff;margin:0;font-size:18px;font-weight:700;letter-spacing:-0.5px;">ShipFlow</h1>
+          <h1 style="color:#ffffff;margin:0;font-size:18px;font-weight:700;letter-spacing:-0.5px;">1SOL.AI</h1>
         </td></tr>
         <tr><td style="padding:32px;text-align:center;">
           <p style="margin:0 0 4px;color:#3f3f46;font-size:14px;">Hi ${name || 'there'},</p>
@@ -87,9 +87,9 @@ export async function sendOtpEmail(params: OtpEmailParams): Promise<{ success: b
     const result = await client.emails.send({
       from: fromEmail,
       to: [toEmail],
-      subject: `${code} — Your ShipFlow Login Code`,
+      subject: `${code} — Your 1SOL.AI Login Code`,
       html: htmlBody,
-      text: `Hi ${name || 'there'}, your ShipFlow verification code is: ${code}. This code expires in 5 minutes.`,
+      text: `Hi ${name || 'there'}, your 1SOL.AI verification code is: ${code}. This code expires in 5 minutes.`,
     });
 
     if (result.error) {
@@ -131,15 +131,15 @@ export async function sendInviteEmail(params: InviteEmailParams): Promise<{ succ
     <tr><td align="center">
       <table width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
         <tr><td style="background-color:#18181b;padding:24px 32px;text-align:center;">
-          <h1 style="color:#ffffff;margin:0;font-size:20px;font-weight:700;letter-spacing:-0.5px;">ShipFlow</h1>
+          <h1 style="color:#ffffff;margin:0;font-size:20px;font-weight:700;letter-spacing:-0.5px;">1SOL.AI</h1>
         </td></tr>
         <tr><td style="padding:32px;">
           <h2 style="margin:0 0 16px;font-size:18px;font-weight:600;color:#18181b;">You're Invited!</h2>
           <p style="margin:0 0 8px;color:#3f3f46;font-size:14px;line-height:1.6;">
-            ${invitedByName ? `<strong>${invitedByName}</strong> has invited you` : 'You have been invited'} to join <strong>${merchantName}</strong> on ShipFlow as a <strong>${roleName}</strong>.
+            ${invitedByName ? `<strong>${invitedByName}</strong> has invited you` : 'You have been invited'} to join <strong>${merchantName}</strong> on 1SOL.AI as a <strong>${roleName}</strong>.
           </p>
           <p style="margin:0 0 24px;color:#71717a;font-size:13px;line-height:1.5;">
-            ShipFlow is a logistics operations platform for managing Shopify orders, courier shipments, and COD reconciliation.
+            1SOL.AI is a logistics operations platform for managing Shopify orders, courier shipments, and COD reconciliation.
           </p>
           <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
             <a href="${inviteUrl}" style="display:inline-block;background-color:#18181b;color:#ffffff;text-decoration:none;padding:12px 32px;border-radius:6px;font-size:14px;font-weight:600;">
@@ -157,12 +157,12 @@ export async function sendInviteEmail(params: InviteEmailParams): Promise<{ succ
 </body>
 </html>`;
 
-    const textBody = `You're invited to join ${merchantName} on ShipFlow as a ${roleName}.\n\nAccept your invitation: ${inviteUrl}\n\nThis invitation expires on ${expiryStr}.`;
+    const textBody = `You're invited to join ${merchantName} on 1SOL.AI as a ${roleName}.\n\nAccept your invitation: ${inviteUrl}\n\nThis invitation expires on ${expiryStr}.`;
 
     const result = await client.emails.send({
       from: fromEmail,
       to: [toEmail],
-      subject: `You've been invited to ${merchantName} on ShipFlow`,
+      subject: `You've been invited to ${merchantName} on 1SOL.AI`,
       html: htmlBody,
       text: textBody,
     });
@@ -186,7 +186,7 @@ export async function sendTestEmail(toEmail: string): Promise<{ success: boolean
     const result = await client.emails.send({
       from: fromEmail,
       to: [toEmail],
-      subject: 'ShipFlow Test Email',
+      subject: '1SOL.AI Test Email',
       html: '<h2>Test Email</h2><p>If you received this, email sending is working correctly.</p>',
       text: 'Test Email - If you received this, email sending is working correctly.',
     });

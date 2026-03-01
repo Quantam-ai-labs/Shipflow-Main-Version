@@ -618,7 +618,7 @@ export default function Pipeline() {
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       queryClient.invalidateQueries({ queryKey: ["/api/orders/workflow-counts"] });
       if (data.shopifyWarning) {
-        toast({ title: "Order cancelled locally", description: "Shopify sync failed but order is cancelled in ShipFlow. You may need to reconnect your Shopify store.", variant: "destructive" });
+        toast({ title: "Order cancelled locally", description: "Shopify sync failed but order is cancelled in 1SOL.AI. You may need to reconnect your Shopify store.", variant: "destructive" });
       } else {
         toast({ title: "Shopify order cancelled", description: "Order cancelled on Shopify and moved to Cancelled" });
       }
@@ -2169,7 +2169,7 @@ export default function Pipeline() {
               {cancelConfirm?.type === "courier" ? (
                 <>This will cancel the AWB/tracking number with the courier (Leopards/PostEx) and move order <span className="font-medium">{String(cancelConfirm?.orderNumber || '').replace(/^#/, '')}</span> back to Pending. The courier will be notified via their API.</>
               ) : (
-                <>This will cancel order <span className="font-medium">{String(cancelConfirm?.orderNumber || '').replace(/^#/, '')}</span> on Shopify. This action cannot be easily undone. The order will be marked as cancelled both on Shopify and in ShipFlow.</>
+                <>This will cancel order <span className="font-medium">{String(cancelConfirm?.orderNumber || '').replace(/^#/, '')}</span> on Shopify. This action cannot be easily undone. The order will be marked as cancelled both on Shopify and in 1SOL.AI.</>
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>

@@ -339,7 +339,7 @@ export function AppSidebar() {
             <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
               <Package className="w-5 h-5 text-primary-foreground" />
             </div>
-            <span className="font-bold text-lg">ShipFlow</span>
+            <span className="font-bold text-lg">1SOL.AI</span>
           </div>
         </Link>
       </SidebarHeader>

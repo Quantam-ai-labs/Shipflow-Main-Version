@@ -268,7 +268,7 @@ export default function Onboarding() {
         <div className="text-center space-y-4">
           <CheckCircle className="w-16 h-16 mx-auto text-green-500" />
           <h2 className="text-2xl font-bold">Setup Complete</h2>
-          <p className="text-muted-foreground">Your ShipFlow account is fully set up.</p>
+          <p className="text-muted-foreground">Your 1SOL.AI account is fully set up.</p>
           <Button onClick={() => setLocation("/dashboard")} data-testid="button-go-dashboard">Go to Dashboard</Button>
         </div>
       </div>
@@ -292,7 +292,7 @@ export default function Onboarding() {
           </div>
         )}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-center mb-2" data-testid="text-onboarding-title">Welcome to ShipFlow</h1>
+          <h1 className="text-3xl font-bold text-center mb-2" data-testid="text-onboarding-title">Welcome to 1SOL.AI</h1>
           <p className="text-muted-foreground text-center mb-6">Let's set up your logistics platform</p>
 
           <div className="flex items-center justify-between mb-4">
@@ -410,7 +410,7 @@ export default function Onboarding() {
                     {connectMode === "oauth" && (
                       <div className="p-4 bg-muted/50 rounded-lg space-y-3">
                         <p className="text-sm text-muted-foreground">
-                          Connect securely via Shopify OAuth. You'll be redirected to Shopify to authorize ShipFlow, then sent back here automatically.
+                          Connect securely via Shopify OAuth. You'll be redirected to Shopify to authorize 1SOL.AI, then sent back here automatically.
                         </p>
                         <Button
                           className="w-full"

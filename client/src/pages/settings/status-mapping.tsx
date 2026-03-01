@@ -1021,7 +1021,7 @@ export default function StatusMappingPage() {
       try {
         const parsed = JSON.parse(ev.target?.result as string);
         if (!parsed.version || (!parsed.statusMappings && !parsed.keywordMappings)) {
-          toast({ title: "Invalid file", description: "This doesn't look like a ShipFlow mappings file.", variant: "destructive" });
+          toast({ title: "Invalid file", description: "This doesn't look like a 1SOL.AI mappings file.", variant: "destructive" });
           return;
         }
         setImportFile(parsed);
@@ -1060,7 +1060,7 @@ export default function StatusMappingPage() {
         <div>
           <h1 className="text-2xl font-bold" data-testid="text-page-title">Status Mapping</h1>
           <p className="text-muted-foreground" data-testid="text-page-description">
-            Map courier status codes to ShipFlow workflow stages.
+            Map courier status codes to 1SOL.AI workflow stages.
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">

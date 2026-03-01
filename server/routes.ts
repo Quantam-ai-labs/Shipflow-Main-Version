@@ -3406,7 +3406,7 @@ export async function registerRoutes(
 
         const emailResult = await sendInviteEmail({
           toEmail: email,
-          merchantName: merchant?.name || "ShipFlow Team",
+          merchantName: merchant?.name || "1SOL.AI Team",
           role: role || "agent",
           inviteUrl,
           expiresAt,
@@ -3496,7 +3496,7 @@ export async function registerRoutes(
 
         const emailResult = await sendInviteEmail({
           toEmail: invite.email,
-          merchantName: merchant?.name || "ShipFlow Team",
+          merchantName: merchant?.name || "1SOL.AI Team",
           role: invite.role,
           inviteUrl,
           expiresAt:
@@ -6468,7 +6468,7 @@ export async function registerRoutes(
       );
 
       const shipperInfo = {
-        name: merchant.name || "ShipFlow Merchant",
+        name: merchant.name || "1SOL.AI Merchant",
         phone: merchant.phone || "",
         address: courierSettings?.shipperAddress || merchant.address || "",
         city: courierSettings?.shipperCity || merchant.city || "Lahore",
@@ -9394,7 +9394,7 @@ export async function registerRoutes(
           role: "admin",
           inviteUrl: setupUrl,
           expiresAt: setupTokenExpiresAt,
-          invitedByName: "ShipFlow Platform",
+          invitedByName: "1SOL.AI Platform",
         });
         emailSent = emailResult.success;
         if (!emailResult.success) emailError = emailResult.error;

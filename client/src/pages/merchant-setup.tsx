@@ -99,7 +99,7 @@ export default function MerchantSetup() {
           <CardContent className="pt-6 text-center space-y-4">
             <CheckCircle className="w-12 h-12 text-green-600 mx-auto" />
             <h2 className="text-lg font-bold" data-testid="text-setup-success">Account Ready!</h2>
-            <p className="text-muted-foreground">Your password has been set. You can now log in to ShipFlow.</p>
+            <p className="text-muted-foreground">Your password has been set. You can now log in to 1SOL.AI.</p>
             <Button onClick={() => setLocation("/login")} data-testid="button-login-now">
               Log In Now
             </Button>
@@ -116,7 +116,7 @@ export default function MerchantSetup() {
           <div className="w-12 h-12 rounded-md bg-primary flex items-center justify-center mx-auto">
             <Shield className="w-7 h-7 text-primary-foreground" />
           </div>
-          <h1 className="text-xl font-bold" data-testid="text-setup-title">Welcome to ShipFlow</h1>
+          <h1 className="text-xl font-bold" data-testid="text-setup-title">Welcome to 1SOL.AI</h1>
           {setupData?.merchantName && (
             <p className="text-muted-foreground text-sm">Setting up <strong>{setupData.merchantName}</strong></p>
           )}

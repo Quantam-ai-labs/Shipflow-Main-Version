@@ -79,7 +79,7 @@ export default function AuthPage() {
           <div className="w-12 h-12 rounded-md bg-primary flex items-center justify-center mx-auto">
             <Package className="w-7 h-7 text-primary-foreground" />
           </div>
-          <h1 className="text-2xl font-bold" data-testid="text-app-title">ShipFlow</h1>
+          <h1 className="text-2xl font-bold" data-testid="text-app-title">1SOL.AI</h1>
           <p className="text-muted-foreground text-sm">Logistics operations for Shopify merchants</p>
         </div>
 

@@ -24,7 +24,7 @@ export default function Landing() {
               <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
                 <Package className="w-5 h-5 text-primary-foreground" />
               </div>
-              <span className="font-bold text-xl">ShipFlow</span>
+              <span className="font-bold text-xl">1SOL.AI</span>
             </div>
             <div className="hidden md:flex items-center gap-8">
               <a href="#features" className="text-muted-foreground hover:text-foreground transition-colors text-sm font-medium">
@@ -281,7 +281,7 @@ export default function Landing() {
             Ready to Streamline Your Logistics?
           </h2>
           <p className="text-primary-foreground/80 mb-8 max-w-2xl mx-auto">
-            Join hundreds of Pakistani merchants who trust ShipFlow for their e-commerce operations.
+            Join hundreds of Pakistani merchants who trust 1SOL.AI for their e-commerce operations.
           </p>
           <a href="/api/login">
             <Button size="lg" variant="secondary" data-testid="button-cta-bottom">
@@ -300,10 +300,10 @@ export default function Landing() {
               <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
                 <Package className="w-5 h-5 text-primary-foreground" />
               </div>
-              <span className="font-bold text-xl">ShipFlow</span>
+              <span className="font-bold text-xl">1SOL.AI</span>
             </div>
             <p className="text-sm text-muted-foreground">
-              © {new Date().getFullYear()} ShipFlow. All rights reserved.
+              © {new Date().getFullYear()} 1SOL.AI. All rights reserved.
             </p>
           </div>
         </div>

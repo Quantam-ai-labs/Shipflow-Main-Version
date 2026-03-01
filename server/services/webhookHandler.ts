@@ -83,7 +83,7 @@ export class WebhookHandler {
       const shopifyOrderId = String(payload.id);
 
       if (topic === 'orders/updated' && isRecentWriteBack(shopifyOrderId)) {
-        console.log(`[Webhook] Skipping orders/updated for ${shopifyOrderId} - recent ShipFlow write-back`);
+        console.log(`[Webhook] Skipping orders/updated for ${shopifyOrderId} - recent 1SOL.AI write-back`);
         await storage.updateWebhookEventStatus(webhookEvent.id, 'processed');
         return { success: true, action: 'skipped_duplicate' };
       }

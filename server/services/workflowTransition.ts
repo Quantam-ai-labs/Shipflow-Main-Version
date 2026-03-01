@@ -132,7 +132,7 @@ export async function transitionOrder(params: TransitionParams): Promise<Transit
 
   if (order.shopifyOrderId && action !== 'courier_status_sync') {
     if (toStatus === "CANCELLED" && action !== 'robo_cancel') {
-      writeBackCancel(merchantId, order.shopifyOrderId, reason || "Cancelled in ShipFlow")
+      writeBackCancel(merchantId, order.shopifyOrderId, reason || "Cancelled in 1SOL.AI")
         .then(r => { if (!r.success) console.warn(`[ShopifyWriteBack] Cancel failed for ${orderId}: ${r.error}`); })
         .catch(e => console.error(`[ShopifyWriteBack] Cancel error:`, e));
     }
@@ -240,7 +240,7 @@ export async function bulkTransitionOrders(params: {
         const o = shopifyOrders[i];
         try {
           if (toStatus === "CANCELLED" && action !== 'robo_cancel') {
-            const r = await writeBackCancel(merchantId, o.shopifyOrderId!, reason || "Cancelled in ShipFlow");
+            const r = await writeBackCancel(merchantId, o.shopifyOrderId!, reason || "Cancelled in 1SOL.AI");
             if (!r.success) console.warn(`[ShopifyWriteBack] Bulk cancel failed for ${o.id}: ${r.error}`);
           }
           const ROBO_BULK_STATUSES = ['READY_TO_SHIP', 'PENDING', 'CANCELLED'];

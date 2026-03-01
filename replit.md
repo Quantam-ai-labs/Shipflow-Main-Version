@@ -1,7 +1,7 @@
-# ShipFlow - Logistics Operations Platform
+# 1SOL.AI - Logistics Operations Platform
 
 ## Overview
-ShipFlow is a production-grade, multi-tenant logistics operations platform for Shopify merchants in Pakistan. It offers an all-in-one dashboard to sync Shopify orders, track courier shipments (Leopards, PostEx, TCS), manage COD reconciliation, and facilitate team collaboration. The platform aims to streamline e-commerce logistics as a scalable SaaS product with robust role-based access control and merchant isolation, enhancing operational efficiency and profitability.
+1SOL.AI is a production-grade, multi-tenant logistics operations platform for Shopify merchants in Pakistan. It offers an all-in-one dashboard to sync Shopify orders, track courier shipments (Leopards, PostEx, TCS), manage COD reconciliation, and facilitate team collaboration. The platform aims to streamline e-commerce logistics as a scalable SaaS product with robust role-based access control and merchant isolation, enhancing operational efficiency and profitability.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.

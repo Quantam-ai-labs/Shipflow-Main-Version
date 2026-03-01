@@ -721,7 +721,7 @@ export class ShopifyService {
                   toStatus: 'BOOKED',
                   action: 'shopify_sync',
                   actorType: 'system',
-                  reason: `Fulfilled in Shopify - moved to BOOKED (was ${existingOrder.workflowStatus} in ShipFlow)`,
+                  reason: `Fulfilled in Shopify - moved to BOOKED (was ${existingOrder.workflowStatus} in 1SOL.AI)`,
                 });
               }
             }
