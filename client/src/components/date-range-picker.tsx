@@ -1,9 +1,10 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import {
   format,
   subDays,
-  startOfWeek,
+  subMonths,
   startOfMonth,
+  endOfMonth,
   startOfQuarter,
   startOfYear,
 } from "date-fns";
@@ -29,6 +30,10 @@ type ViewMode = "presets" | "calendar";
 
 const presets = [
   {
+    label: "Today",
+    getValue: () => ({ from: new Date(), to: new Date() }),
+  },
+  {
     label: "Yesterday",
     getValue: () => ({ from: subDays(new Date(), 1), to: subDays(new Date(), 1) }),
   },
@@ -41,22 +46,17 @@ const presets = [
     getValue: () => ({ from: subDays(new Date(), 30), to: new Date() }),
   },
   {
-    label: "Last 90 days",
-    getValue: () => ({ from: subDays(new Date(), 90), to: new Date() }),
-  },
-  { divider: true, label: "divider-1", getValue: () => ({ from: new Date(), to: new Date() }) },
-  {
-    label: "Week to date",
-    getValue: () => ({
-      from: startOfWeek(new Date(), { weekStartsOn: 1 }),
-      to: new Date(),
-    }),
-  },
-  {
     label: "Month to date",
     getValue: () => ({
       from: startOfMonth(new Date()),
       to: new Date(),
+    }),
+  },
+  {
+    label: "Last month",
+    getValue: () => ({
+      from: startOfMonth(subMonths(new Date(), 1)),
+      to: endOfMonth(subMonths(new Date(), 1)),
     }),
   },
   {
@@ -80,7 +80,6 @@ function getPresetLabel(dateRange: DateRange | undefined): string | null {
   const from = dateRange.from;
   const to = dateRange.to;
   for (const preset of presets) {
-    if ('divider' in preset && preset.divider) continue;
     const val = preset.getValue();
     if (
       format(val.from, "yyyy-MM-dd") === format(from, "yyyy-MM-dd") &&
@@ -113,7 +112,6 @@ export function DateRangePicker({
   };
 
   const handlePreset = (preset: (typeof presets)[number]) => {
-    if ('divider' in preset && preset.divider) return;
     const val = preset.getValue();
     onDateRangeChange(val);
     setActivePreset(preset.label);
@@ -188,24 +186,19 @@ export function DateRangePicker({
               >
                 All dates
               </button>
-              {presets.map((preset) => {
-                if ('divider' in preset && preset.divider) {
-                  return <div key={preset.label} className="my-1 border-t" />;
-                }
-                return (
-                  <button
-                    key={preset.label}
-                    className={cn(
-                      "w-full text-left px-3 py-1.5 text-sm hover-elevate transition-colors",
-                      activePreset === preset.label && "font-medium bg-accent/50"
-                    )}
-                    onClick={() => handlePreset(preset)}
-                    data-testid={`button-date-preset-${preset.label.toLowerCase().replace(/\s+/g, "-")}`}
-                  >
-                    {preset.label}
-                  </button>
-                );
-              })}
+              {presets.map((preset) => (
+                <button
+                  key={preset.label}
+                  className={cn(
+                    "w-full text-left px-3 py-1.5 text-sm hover-elevate transition-colors",
+                    activePreset === preset.label && "font-medium bg-accent/50"
+                  )}
+                  onClick={() => handlePreset(preset)}
+                  data-testid={`button-date-preset-${preset.label.toLowerCase().replace(/\s+/g, "-")}`}
+                >
+                  {preset.label}
+                </button>
+              ))}
               <div className="my-1 border-t" />
               <button
                 className="w-full text-left px-3 py-1.5 text-sm hover-elevate transition-colors"
