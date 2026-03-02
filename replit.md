@@ -44,6 +44,12 @@ Preferred communication style: Simple, everyday language.
 - **Product & Inventory Management**: Syncs Shopify product data (title, variants, SKU, price, cost, inventory) and displays a searchable catalog.
 - **Accounting & Finance Module**: A comprehensive double-entry accounting system across 19 dedicated pages, covering overview, money in/out, parties, products, stock management, sales, expenses, receivables/payables, settlements, and various reports (P&L, Balance Snapshot, Cash Flow).
 
+### Database Reliability
+- **Connection Pool**: PostgreSQL pool configured in `server/db.ts` with `max: 20`, `idleTimeoutMillis: 30000`, `connectionTimeoutMillis: 10000` to prevent connection exhaustion from background syncs.
+- **Pool Error Handling**: `pool.on('error')` listener catches unexpected disconnections on idle clients.
+- **Retry Logic**: `withRetry()` utility in `server/db.ts` automatically retries database operations on transient connection errors (ECONNRESET, timeouts, pool exhaustion). Applied to `transitionOrder` and `revertOrder` in `server/services/workflowTransition.ts`.
+- **Startup Recovery**: Delayed to 30s with 3s pauses between merchant syncs to avoid pool exhaustion during server startup.
+
 ## External Dependencies
 
 - **Database**: PostgreSQL

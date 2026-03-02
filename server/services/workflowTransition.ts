@@ -1,4 +1,4 @@
-import { db } from "../db";
+import { db, withRetry } from "../db";
 import { orders, workflowAuditLog } from "@shared/schema";
 import { eq, and, inArray, lt, sql } from "drizzle-orm";
 import type { Order } from "@shared/schema";
@@ -76,6 +76,10 @@ interface TransitionResult {
 }
 
 export async function transitionOrder(params: TransitionParams): Promise<TransitionResult> {
+  return withRetry(() => _transitionOrderInner(params), `transitionOrder:${params.orderId}`);
+}
+
+async function _transitionOrderInner(params: TransitionParams): Promise<TransitionResult> {
   const { merchantId, orderId, toStatus, action, actorUserId, actorName, actorType = "user", reason, extraData } = params;
 
   if (!VALID_STATUSES.includes(toStatus as WorkflowStatus)) {
@@ -265,6 +269,7 @@ export async function bulkTransitionOrders(params: {
 }
 
 export async function revertOrder(merchantId: string, orderId: string, actorUserId?: string, reason?: string, actorName?: string): Promise<TransitionResult> {
+  return withRetry(async () => {
   const [order] = await db.select().from(orders)
     .where(and(eq(orders.id, orderId), eq(orders.merchantId, merchantId)));
 
@@ -308,6 +313,7 @@ export async function revertOrder(merchantId: string, orderId: string, actorUser
   }
 
   return { success: true, order: updated };
+  }, `revertOrder:${orderId}`);
 }
 
 export async function autoMoveStalePending(merchantId: string): Promise<number> {

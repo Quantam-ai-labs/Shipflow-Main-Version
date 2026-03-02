@@ -98,9 +98,6 @@ async function seedSuperAdmin() {
 }
 
 function scheduleStartupRecovery() {
-  // One-time full sync for all connected merchants after server start.
-  // Recovers orders missed due to the UTC-vs-PKT timezone bug in created_at_min.
-  // Runs after a 15s delay to avoid slowing server startup.
   setTimeout(async () => {
     try {
       const connectedStores = await db
@@ -121,11 +118,12 @@ function scheduleStartupRecovery() {
         } catch (err: any) {
           console.error(`[StartupRecovery] Failed for merchant ${store.merchantId}:`, err.message);
         }
+        await new Promise(resolve => setTimeout(resolve, 3000));
       }
     } catch (err: any) {
       console.error('[StartupRecovery] Error:', err.message);
     }
-  }, 15000);
+  }, 30000);
 }
 
 (async () => {
