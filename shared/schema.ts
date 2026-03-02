@@ -434,8 +434,8 @@ export type Remark = typeof remarks.$inferSelect;
 export const codReconciliation = pgTable("cod_reconciliation", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
-  shipmentId: varchar("shipment_id").references(() => shipments.id),
-  orderId: varchar("order_id").references(() => orders.id),
+  shipmentId: varchar("shipment_id").references(() => shipments.id, { onDelete: "cascade" }),
+  orderId: varchar("order_id").references(() => orders.id, { onDelete: "cascade" }),
   courierName: varchar("courier_name", { length: 50 }),
   trackingNumber: varchar("tracking_number", { length: 100 }),
   codAmount: decimal("cod_amount", { precision: 12, scale: 2 }).notNull(),
@@ -1238,7 +1238,7 @@ export const stockReceipts = pgTable("stock_receipts", {
 export const stockReceiptItems = pgTable("stock_receipt_items", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   stockReceiptId: varchar("stock_receipt_id").notNull().references(() => stockReceipts.id, { onDelete: "cascade" }),
-  productId: varchar("product_id").notNull().references(() => accountingProducts.id),
+  productId: varchar("product_id").notNull().references(() => accountingProducts.id, { onDelete: "cascade" }),
   quantity: integer("quantity").notNull(),
   unitCost: decimal("unit_cost", { precision: 12, scale: 2 }).notNull(),
   lineTotal: decimal("line_total", { precision: 14, scale: 2 }).notNull(),
