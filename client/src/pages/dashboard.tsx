@@ -4,6 +4,24 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Package,
   Truck,
@@ -36,6 +54,24 @@ import { Link, useLocation } from "wouter";
 import { useDateRange } from "@/contexts/date-range-context";
 import { AIInsightsBanner } from "@/components/ai-insights-banner";
 import { formatPkDateTime } from "@/lib/dateFormat";
+
+const DEFAULT_TAG_CONFIG = { confirm: "Robo-Confirm", pending: "Robo-Pending", cancel: "Robo-Cancel" };
+
+function getRoboTagStyle(tag: string, tagConfig?: { confirm: string; pending: string; cancel: string } | null): string | null {
+  const config = tagConfig || DEFAULT_TAG_CONFIG;
+  const lowerTag = tag.toLowerCase();
+  if (lowerTag === config.confirm.toLowerCase()) return 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300';
+  if (lowerTag === config.pending.toLowerCase()) return 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300';
+  if (lowerTag === config.cancel.toLowerCase()) return 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300';
+  return null;
+}
+
+function getRoboTags(tags: string[] | null | undefined, tagConfig?: { confirm: string; pending: string; cancel: string } | null): string[] {
+  if (!tags || !Array.isArray(tags)) return [];
+  const config = tagConfig || DEFAULT_TAG_CONFIG;
+  const roboSet = new Set([config.confirm.toLowerCase(), config.pending.toLowerCase(), config.cancel.toLowerCase()]);
+  return tags.filter(t => roboSet.has(t.toLowerCase()));
+}
 
 interface DashboardStats {
   totalOrders: number;
@@ -227,9 +263,25 @@ function OrderSearchSection() {
   const [editPhone, setEditPhone] = useState("");
   const [editAddress, setEditAddress] = useState("");
   const [editCity, setEditCity] = useState("");
+  const [remarkDialogOpen, setRemarkDialogOpen] = useState(false);
+  const [selectedRemarkOrder, setSelectedRemarkOrder] = useState<Order | null>(null);
+  const [remarkValue, setRemarkValue] = useState("");
+  const [cancelConfirm, setCancelConfirm] = useState<{ open: boolean; orderId: string; type: "courier" | "shopify"; orderNumber?: string } | null>(null);
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  const invalidateOrderQueries = () => {
+    queryClient.invalidateQueries({ predicate: (query) => {
+      const key = query.queryKey[0];
+      return typeof key === "string" && key.startsWith("/api/orders");
+    }});
+    queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+  };
+
+  const { data: tagConfig } = useQuery<{ confirm: string; pending: string; cancel: string }>({
+    queryKey: ["/api/settings/robo-tags"],
+  });
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -250,7 +302,6 @@ function OrderSearchSection() {
   if (debouncedParams.searchTracking) queryParams.set("searchTracking", debouncedParams.searchTracking);
   if (debouncedParams.searchName) queryParams.set("searchName", debouncedParams.searchName);
   if (debouncedParams.searchPhone) queryParams.set("searchPhone", debouncedParams.searchPhone);
-  queryParams.set("light", "1");
   queryParams.set("pageSize", "50");
 
   const { data, isLoading } = useQuery<{ orders: Order[]; total: number }>({
@@ -266,11 +317,7 @@ function OrderSearchSection() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ predicate: (query) => {
-        const key = query.queryKey[0];
-        return typeof key === "string" && key.startsWith("/api/orders");
-      }});
-      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      invalidateOrderQueries();
       toast({ title: "Order updated" });
     },
   });
@@ -281,18 +328,91 @@ function OrderSearchSection() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ predicate: (query) => {
-        const key = query.queryKey[0];
-        return typeof key === "string" && key.startsWith("/api/orders");
-      }});
+      invalidateOrderQueries();
       setEditingOrder(null);
       toast({ title: "Customer info updated" });
+    },
+  });
+
+  const updateRemarkMutation = useMutation({
+    mutationFn: async ({ orderId, value }: { orderId: string; value: string }) => {
+      const response = await apiRequest("PATCH", `/api/orders/${orderId}/remark`, { value });
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Remark Updated" });
+      invalidateOrderQueries();
+      setRemarkDialogOpen(false);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const cancelBookingMutation = useMutation({
+    mutationFn: async (orderId: string) => {
+      const res = await apiRequest("POST", `/api/orders/${orderId}/cancel-booking`);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      invalidateOrderQueries();
+      if (data.fulfillmentWarning) {
+        toast({ title: "Booking cancelled", description: "Courier AWB cancelled and order moved to Ready to Ship, but Shopify fulfillment could not be reversed.", variant: "destructive" });
+      } else {
+        toast({ title: "Booking cancelled", description: "Courier AWB cancelled and order moved back to Ready to Ship" });
+      }
+      setCancelConfirm(null);
+    },
+    onError: (err: any) => {
+      let description = "Failed to cancel booking";
+      try {
+        const raw = err.message || "";
+        const jsonPart = raw.includes(": {") ? raw.substring(raw.indexOf(": {") + 2) : raw.includes(":{") ? raw.substring(raw.indexOf(":{") + 1) : "";
+        if (jsonPart) {
+          const parsed = JSON.parse(jsonPart);
+          description = parsed.message || description;
+        } else if (raw) {
+          description = raw.replace(/^\d+:\s*/, "");
+        }
+      } catch {
+        const raw = err.message || "";
+        description = raw.replace(/^\d+:\s*/, "") || description;
+      }
+      toast({ title: "Cannot cancel", description, variant: "destructive" });
+      setCancelConfirm(null);
+    },
+  });
+
+  const cancelShopifyMutation = useMutation({
+    mutationFn: async (orderId: string) => {
+      const res = await apiRequest("POST", `/api/orders/${orderId}/cancel-shopify`, { reason: "other" });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      invalidateOrderQueries();
+      if (data.shopifyWarning) {
+        toast({ title: "Order cancelled locally", description: "Shopify sync failed but order is cancelled in 1SOL.AI.", variant: "destructive" });
+      } else {
+        toast({ title: "Shopify order cancelled", description: "Order cancelled on Shopify and moved to Cancelled" });
+      }
+      setCancelConfirm(null);
+    },
+    onError: (err: any) => {
+      invalidateOrderQueries();
+      toast({ title: "Cannot cancel", description: err.message || "Failed to cancel on Shopify", variant: "destructive" });
+      setCancelConfirm(null);
     },
   });
 
   const handleSingleAction = useCallback((orderId: string, action: string) => {
     workflowMutation.mutate({ orderId, action });
   }, [workflowMutation]);
+
+  const openRemarkDialog = (order: Order) => {
+    setSelectedRemarkOrder(order);
+    setRemarkValue(order.remark || "");
+    setRemarkDialogOpen(true);
+  };
 
   const isPending = workflowMutation.isPending;
 
@@ -383,6 +503,30 @@ function OrderSearchSection() {
             </Button>
           </>
         )}
+        {stage === "BOOKED" && (
+          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-red-600"
+            onClick={() => setCancelConfirm({ open: true, orderId: order.id, type: "courier", orderNumber: order.orderNumber })}
+            disabled={cancelBookingMutation.isPending}
+            data-testid={`button-search-cancel-awb-${order.id}`}>
+            <Undo2 className="w-3.5 h-3.5 mr-1" />Cancel AWB
+          </Button>
+        )}
+        {order.shopifyOrderId && !order.cancelledAt && stage === "BOOKED" && (
+          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-orange-600"
+            onClick={() => setCancelConfirm({ open: true, orderId: order.id, type: "shopify", orderNumber: order.orderNumber })}
+            disabled={cancelShopifyMutation.isPending}
+            data-testid={`button-search-cancel-shopify-${order.id}`}>
+            <XCircle className="w-3.5 h-3.5 mr-1" />Cancel Shopify
+          </Button>
+        )}
+        {stage === "CANCELLED" && order.shopifyOrderId && !(order as any).isShopifyCancelled && (
+          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-orange-600"
+            onClick={() => setCancelConfirm({ open: true, orderId: order.id, type: "shopify", orderNumber: order.orderNumber })}
+            disabled={cancelShopifyMutation.isPending}
+            data-testid={`button-search-cancel-shopify-cancelled-${order.id}`}>
+            <XCircle className="w-3.5 h-3.5 mr-1" />Cancel on Shopify
+          </Button>
+        )}
         {stage !== "NEW" && stage !== "BOOKED" && stage !== "FULFILLED" && stage !== "DELIVERED" && stage !== "RETURN" && order.previousWorkflowStatus && (
           <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground"
             onClick={() => workflowMutation.mutate({ orderId: order.id, action: "revert" })}
@@ -405,6 +549,7 @@ function OrderSearchSection() {
   };
 
   return (
+    <>
     <Card>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between gap-2">
@@ -507,11 +652,19 @@ function OrderSearchSection() {
                             <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs hidden md:table-cell">City</th>
                             {hasAddressProducts(stage) && (
                               <>
-                                <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs hidden lg:table-cell">Address</th>
-                                <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs hidden lg:table-cell">Products</th>
+                                <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Address</th>
+                                <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Products</th>
                               </>
                             )}
-                            <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Amount</th>
+                            <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Amount (PKR)</th>
+                            <th className="px-3 py-2 text-center font-medium text-muted-foreground text-xs hidden lg:table-cell w-[40px]">Items</th>
+                            <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs hidden md:table-cell max-w-[100px]">Tags</th>
+                            {stage === "PENDING" && (
+                              <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Reason</th>
+                            )}
+                            {stage === "HOLD" && (
+                              <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Hold Until</th>
+                            )}
                             {hasShipmentColumns(stage) && (
                               <>
                                 <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Courier</th>
@@ -521,6 +674,7 @@ function OrderSearchSection() {
                             {stage === "CANCELLED" && (
                               <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Reason</th>
                             )}
+                            <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Remark</th>
                             <th className="px-3 py-2 text-right font-medium text-muted-foreground text-xs">Actions</th>
                           </tr>
                         </thead>
@@ -569,10 +723,10 @@ function OrderSearchSection() {
                               <td className="px-3 py-1.5 hidden md:table-cell text-sm truncate max-w-[100px]" title={order.city || ""}>{order.city && order.city.length > 15 ? order.city.slice(0, 13) + ".." : (order.city || "-")}</td>
                               {hasAddressProducts(stage) && (
                                 <>
-                                  <td className="px-3 py-1.5 max-w-[200px] hidden lg:table-cell">
+                                  <td className="px-3 py-1.5 max-w-[220px]">
                                     <div className="text-xs text-muted-foreground whitespace-normal leading-tight">{order.shippingAddress || "-"}</div>
                                   </td>
-                                  <td className="px-3 py-1.5 max-w-[160px] hidden lg:table-cell">
+                                  <td className="px-3 py-1.5 max-w-[180px]">
                                     <div className="text-xs text-muted-foreground leading-tight">
                                       {order.itemSummary ? order.itemSummary.split(' || ').map((item, i) => (
                                         <div key={i} className="truncate">{item}</div>
@@ -591,6 +745,32 @@ function OrderSearchSection() {
                                   <div className="text-xs text-muted-foreground capitalize">{order.paymentMethod}</div>
                                 )}
                               </td>
+                              <td className="px-3 py-1.5 hidden lg:table-cell text-center w-[40px]">
+                                <span className="text-sm font-medium">{order.totalQuantity || 1}</span>
+                              </td>
+                              <td className="px-3 py-1.5 hidden md:table-cell max-w-[100px]">
+                                <div className="flex flex-wrap gap-0.5">
+                                  {getRoboTags(order.tags as string[], tagConfig).map(tag => (
+                                    <Badge key={tag} className={`text-[10px] px-1.5 py-0 leading-4 ${getRoboTagStyle(tag, tagConfig) || ''}`}>
+                                      {tag}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </td>
+                              {stage === "PENDING" && (
+                                <td className="px-3 py-1.5">
+                                  <Badge variant="secondary" className="text-xs">
+                                    {order.pendingReasonType || "Unknown"}
+                                  </Badge>
+                                </td>
+                              )}
+                              {stage === "HOLD" && (
+                                <td className="px-3 py-1.5">
+                                  {order.holdUntil ? (
+                                    <div className="text-xs">{formatPkDateTime(order.holdUntil)}</div>
+                                  ) : "-"}
+                                </td>
+                              )}
                               {hasShipmentColumns(stage) && (
                                 <>
                                   <td className="px-3 py-1.5">
@@ -609,8 +789,26 @@ function OrderSearchSection() {
                               {stage === "CANCELLED" && (
                                 <td className="px-3 py-1.5">
                                   <div className="text-xs text-muted-foreground">{order.cancelReason || "No reason given"}</div>
+                                  {order.cancelledAt && (
+                                    <div className="text-xs text-muted-foreground/70">{formatPkDateTime(order.cancelledAt)}</div>
+                                  )}
                                 </td>
                               )}
+                              <td className="px-3 py-1.5 max-w-[150px]">
+                                <button
+                                  className="text-left w-full cursor-pointer hover:opacity-80"
+                                  onClick={() => openRemarkDialog(order)}
+                                  data-testid={`button-search-remark-${order.id}`}
+                                >
+                                  {order.remark ? (
+                                    <span className="text-xs text-muted-foreground truncate block max-w-[140px]" title={order.remark}>
+                                      {order.remark.length > 30 ? order.remark.slice(0, 28) + "..." : order.remark}
+                                    </span>
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground/50 italic">Add...</span>
+                                  )}
+                                </button>
+                              </td>
                               <td className="px-3 py-1.5 text-right">
                                 {renderActionButtons(order, stage)}
                               </td>
@@ -632,6 +830,74 @@ function OrderSearchSection() {
         )}
       </CardContent>
     </Card>
+    <Dialog open={remarkDialogOpen} onOpenChange={setRemarkDialogOpen}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Edit Remark - {String(selectedRemarkOrder?.orderNumber || '').replace(/^#/, '')}</DialogTitle>
+          <DialogDescription>Add or update the remark for this order.</DialogDescription>
+        </DialogHeader>
+        <Textarea
+          value={remarkValue}
+          onChange={(e) => setRemarkValue(e.target.value)}
+          placeholder="Enter remark..."
+          rows={4}
+          data-testid="textarea-search-remark"
+        />
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={() => setRemarkDialogOpen(false)}>Cancel</Button>
+          <Button
+            onClick={() => {
+              if (selectedRemarkOrder) {
+                updateRemarkMutation.mutate({ orderId: selectedRemarkOrder.id, value: remarkValue });
+              }
+            }}
+            disabled={updateRemarkMutation.isPending}
+            data-testid="button-search-save-remark"
+          >
+            {updateRemarkMutation.isPending && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
+            Save
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+    <AlertDialog open={!!cancelConfirm?.open} onOpenChange={(open) => !open && setCancelConfirm(null)}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            {cancelConfirm?.type === "courier" ? "Cancel Courier Booking?" : "Cancel Shopify Order?"}
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            {cancelConfirm?.type === "courier" ? (
+              <>This will cancel the AWB/tracking number with the courier and move order <span className="font-medium">{String(cancelConfirm?.orderNumber || '').replace(/^#/, '')}</span> back to Ready to Ship.</>
+            ) : (
+              <>This will cancel order <span className="font-medium">{String(cancelConfirm?.orderNumber || '').replace(/^#/, '')}</span> on Shopify. This action cannot be easily undone.</>
+            )}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel data-testid="button-search-cancel-confirm-dismiss">Go Back</AlertDialogCancel>
+          <AlertDialogAction
+            data-testid="button-search-cancel-confirm-proceed"
+            className="bg-destructive text-destructive-foreground"
+            disabled={cancelBookingMutation.isPending || cancelShopifyMutation.isPending}
+            onClick={() => {
+              if (!cancelConfirm) return;
+              if (cancelConfirm.type === "courier") {
+                cancelBookingMutation.mutate(cancelConfirm.orderId);
+              } else {
+                cancelShopifyMutation.mutate(cancelConfirm.orderId);
+              }
+            }}
+          >
+            {(cancelBookingMutation.isPending || cancelShopifyMutation.isPending) && (
+              <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+            )}
+            {cancelConfirm?.type === "courier" ? "Cancel AWB" : "Cancel on Shopify"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
 
