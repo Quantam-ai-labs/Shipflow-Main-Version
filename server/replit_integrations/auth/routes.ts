@@ -235,14 +235,8 @@ export function registerAuthRoutes(app: Express): void {
         return res.status(401).json({ message: "Verification code has expired. Please request a new one." });
       }
 
-      if (stored.attempts >= 5) {
-        otpStore.delete(otpKey);
-        return res.status(401).json({ message: "Too many failed attempts. Please request a new code." });
-      }
-
       if (stored.code !== otp) {
-        stored.attempts++;
-        return res.status(401).json({ message: `Invalid code. ${5 - stored.attempts} attempts remaining.` });
+        return res.status(401).json({ message: "Invalid code. Please check and try again." });
       }
 
       otpStore.delete(otpKey);
@@ -375,14 +369,8 @@ export function registerAuthRoutes(app: Express): void {
         return res.status(401).json({ message: "Verification code has expired. Please request a new one." });
       }
 
-      if (stored.attempts >= 5) {
-        otpStore.delete(otpKey);
-        return res.status(401).json({ message: "Too many failed attempts. Please request a new code." });
-      }
-
       if (stored.code !== otp) {
-        stored.attempts++;
-        return res.status(401).json({ message: `Invalid code. ${5 - stored.attempts} attempts remaining.` });
+        return res.status(401).json({ message: "Invalid code. Please check and try again." });
       }
 
       otpStore.delete(otpKey);
@@ -494,14 +482,8 @@ export function registerAuthRoutes(app: Express): void {
         return res.status(401).json({ message: "Reset code has expired. Please request a new one." });
       }
 
-      if (stored.attempts >= 5) {
-        otpStore.delete(otpKey);
-        return res.status(401).json({ message: "Too many failed attempts. Please request a new code." });
-      }
-
       if (stored.code !== otp) {
-        stored.attempts++;
-        return res.status(401).json({ message: `Invalid code. ${5 - stored.attempts} attempts remaining.` });
+        return res.status(401).json({ message: "Invalid code. Please check and try again." });
       }
 
       otpStore.delete(otpKey);
