@@ -180,6 +180,79 @@ export async function sendInviteEmail(params: InviteEmailParams): Promise<{ succ
   }
 }
 
+interface AdminInviteEmailParams {
+  toEmail: string;
+  name: string;
+  loginUrl: string;
+  invitedByName?: string;
+}
+
+export async function sendAdminInviteEmail(params: AdminInviteEmailParams): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { client, fromEmail } = await getResendClient();
+    const { toEmail, name, loginUrl, invitedByName } = params;
+
+    const htmlBody = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;padding:40px 20px;">
+    <tr><td align="center">
+      <table width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <tr><td style="background-color:#18181b;padding:24px 32px;text-align:center;">
+          <h1 style="color:#ffffff;margin:0;font-size:20px;font-weight:700;letter-spacing:-0.5px;">1SOL.AI</h1>
+        </td></tr>
+        <tr><td style="padding:32px;">
+          <h2 style="margin:0 0 16px;font-size:18px;font-weight:600;color:#18181b;">Super Admin Access Granted</h2>
+          <p style="margin:0 0 8px;color:#3f3f46;font-size:14px;line-height:1.6;">
+            Hi <strong>${name}</strong>,
+          </p>
+          <p style="margin:0 0 8px;color:#3f3f46;font-size:14px;line-height:1.6;">
+            ${invitedByName ? `<strong>${invitedByName}</strong> has granted you` : 'You have been granted'} <strong>Super Admin</strong> access to the 1SOL.AI platform.
+          </p>
+          <p style="margin:0 0 24px;color:#71717a;font-size:13px;line-height:1.5;">
+            You can log in using your email at the admin login page. A one-time verification code will be sent to your email each time you sign in.
+          </p>
+          <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
+            <a href="${loginUrl}" style="display:inline-block;background-color:#18181b;color:#ffffff;text-decoration:none;padding:12px 32px;border-radius:6px;font-size:14px;font-weight:600;">
+              Go to Admin Login
+            </a>
+          </td></tr></table>
+          <hr style="border:none;border-top:1px solid #e4e4e7;margin:24px 0;"/>
+          <p style="margin:0;color:#a1a1aa;font-size:11px;text-align:center;">
+            If you didn't expect this, please contact your platform administrator.
+          </p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+    const textBody = `Hi ${name}, you have been granted Super Admin access to the 1SOL.AI platform. Log in at: ${loginUrl}`;
+
+    const result = await client.emails.send({
+      from: fromEmail,
+      to: [toEmail],
+      subject: `You've been granted Super Admin access on 1SOL.AI`,
+      html: htmlBody,
+      text: textBody,
+    });
+
+    if (result.error) {
+      console.error('[Email] Admin invite error:', result.error);
+      return { success: false, error: result.error.message || 'Email send failed' };
+    }
+
+    console.log(`[Email] Admin invite sent to ${toEmail} (id: ${result.data?.id})`);
+    return { success: true };
+  } catch (err: any) {
+    console.error('[Email] Failed to send admin invite:', err.message);
+    return { success: false, error: err.message };
+  }
+}
+
 export async function sendTestEmail(toEmail: string): Promise<{ success: boolean; error?: string; provider?: string }> {
   try {
     const { client, fromEmail } = await getResendClient();

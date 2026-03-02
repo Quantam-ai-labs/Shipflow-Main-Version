@@ -77,7 +77,7 @@ import {
   checkWebhookHealth,
 } from "./services/webhookRegistration";
 import { webhookHandler } from "./services/webhookHandler";
-import { sendInviteEmail, sendOtpEmail } from "./services/email";
+import { sendInviteEmail, sendOtpEmail, sendAdminInviteEmail } from "./services/email";
 import { otpStore, generateOtp, getOtpKey } from "./replit_integrations/auth/routes";
 import {
   writeBackAddress,
@@ -9797,6 +9797,144 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Admin delete user error:", error);
       res.status(500).json({ message: "Failed to delete user" });
+    }
+  });
+
+  // ============================================
+  // SUPER ADMIN: MANAGE SUPER ADMINS
+  // ============================================
+
+  app.get("/api/admin/super-admins", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+
+      const admins = await db.select({
+        id: users.id,
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        isActive: users.isActive,
+        lastLoginAt: users.lastLoginAt,
+        createdAt: users.createdAt,
+      }).from(users).where(eq(users.role, "SUPER_ADMIN"));
+
+      res.json(admins);
+    } catch (error) {
+      console.error("List super admins error:", error);
+      res.status(500).json({ message: "Failed to fetch super admins" });
+    }
+  });
+
+  app.post("/api/admin/invite-super-admin", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+
+      const schema = z.object({
+        email: z.string().email("Valid email is required"),
+        firstName: z.string().min(1, "First name is required"),
+        lastName: z.string().optional(),
+      });
+      const body = schema.parse(req.body);
+      const normalizedEmail = body.email.toLowerCase().trim();
+
+      const [existingUser] = await db.select().from(users).where(ilike(users.email, normalizedEmail));
+
+      let targetUserId: string;
+
+      if (existingUser) {
+        if (existingUser.role === "SUPER_ADMIN") {
+          return res.status(400).json({ message: "This user is already a super admin." });
+        }
+        await db.update(users).set({
+          role: "SUPER_ADMIN",
+          merchantId: null,
+          firstName: body.firstName,
+          lastName: body.lastName || existingUser.lastName,
+        }).where(eq(users.id, existingUser.id));
+        targetUserId = existingUser.id;
+      } else {
+        const [newUser] = await db.insert(users).values({
+          email: normalizedEmail,
+          firstName: body.firstName,
+          lastName: body.lastName || null,
+          role: "SUPER_ADMIN",
+          isActive: true,
+          merchantId: null,
+        }).returning();
+        targetUserId = newUser.id;
+      }
+
+      const [inviter] = await db.select({ firstName: users.firstName }).from(users).where(eq(users.id, adminId));
+      const loginUrl = `${req.protocol}://${req.get("host")}/admin-login`;
+
+      let emailSent = false;
+      let emailError: string | undefined;
+      try {
+        const result = await sendAdminInviteEmail({
+          toEmail: normalizedEmail,
+          name: body.firstName,
+          loginUrl,
+          invitedByName: inviter?.firstName || "Platform Admin",
+        });
+        emailSent = result.success;
+        if (!result.success) emailError = result.error;
+      } catch (err: any) {
+        emailError = err.message;
+      }
+
+      await db.insert(adminActionLogs).values({
+        adminUserId: adminId,
+        actionType: "INVITE_SUPER_ADMIN",
+        targetUserId,
+        details: `Granted super admin access to ${normalizedEmail}`,
+      });
+
+      res.json({
+        message: `Super admin access granted to ${normalizedEmail}. ${emailSent ? "Invite email sent." : "Account created but email failed to send."}`,
+        emailSent,
+        emailError,
+      });
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors[0].message });
+      }
+      console.error("Invite super admin error:", error);
+      res.status(500).json({ message: "Failed to invite super admin" });
+    }
+  });
+
+  app.delete("/api/admin/super-admins/:id", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+
+      const targetId = req.params.id;
+
+      if (targetId === adminId) {
+        return res.status(400).json({ message: "You cannot revoke your own super admin access." });
+      }
+
+      const [targetUser] = await db.select().from(users).where(eq(users.id, targetId));
+      if (!targetUser) return res.status(404).json({ message: "User not found" });
+      if (targetUser.role !== "SUPER_ADMIN") {
+        return res.status(400).json({ message: "This user is not a super admin." });
+      }
+
+      await db.update(users).set({ role: "USER" }).where(eq(users.id, targetId));
+
+      await db.insert(adminActionLogs).values({
+        adminUserId: adminId,
+        actionType: "REVOKE_SUPER_ADMIN",
+        targetUserId: targetId,
+        details: `Revoked super admin access from ${targetUser.email}`,
+      });
+
+      res.json({ message: `Super admin access revoked from ${targetUser.email}` });
+    } catch (error) {
+      console.error("Revoke super admin error:", error);
+      res.status(500).json({ message: "Failed to revoke super admin access" });
     }
   });
 

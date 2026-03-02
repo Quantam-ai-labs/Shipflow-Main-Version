@@ -1135,7 +1135,8 @@ function AuditLogTab() {
 
   const actionTypes = ["SUSPEND_MERCHANT", "UNSUSPEND_MERCHANT", "DELETE_MERCHANT", "BLOCK_USER", "UNBLOCK_USER",
     "RESET_PASSWORD", "ADVANCE_ONBOARDING", "UPDATE_SUBSCRIPTION", "PEEK_MERCHANT",
-    "IMPERSONATE_USER", "STOP_IMPERSONATION", "ADD_TEAM_MEMBER", "REMOVE_TEAM_MEMBER", "CHANGE_TEAM_ROLE", "CHANGE_PERMISSIONS", "DELETE_USER"];
+    "IMPERSONATE_USER", "STOP_IMPERSONATION", "ADD_TEAM_MEMBER", "REMOVE_TEAM_MEMBER", "CHANGE_TEAM_ROLE", "CHANGE_PERMISSIONS", "DELETE_USER",
+    "INVITE_SUPER_ADMIN", "REVOKE_SUPER_ADMIN"];
 
   return (
     <div className="space-y-4">
@@ -1187,6 +1188,166 @@ function AuditLogTab() {
   );
 }
 
+// ─── SUPER ADMINS TAB ───
+function SuperAdminsTab() {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteForm, setInviteForm] = useState({ email: "", firstName: "", lastName: "" });
+  const [revokeConfirm, setRevokeConfirm] = useState<any>(null);
+
+  const { data: adminList = [], isLoading } = useQuery<any[]>({
+    queryKey: ["/api/admin/super-admins"],
+  });
+
+  const inviteMutation = useMutation({
+    mutationFn: async (data: typeof inviteForm) => {
+      const res = await apiRequest("POST", "/api/admin/invite-super-admin", data);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Admin Invited", description: data.message, duration: 8000 });
+      if (!data.emailSent && data.emailError) {
+        toast({ title: "Email Failed", description: data.emailError, variant: "destructive", duration: 10000 });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/super-admins"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/platform-stats"] });
+      setInviteOpen(false);
+      setInviteForm({ email: "", firstName: "", lastName: "" });
+    },
+    onError: (err: any) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+  });
+
+  const revokeMutation = useMutation({
+    mutationFn: async (adminId: string) => {
+      const res = await apiRequest("DELETE", `/api/admin/super-admins/${adminId}`);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Access Revoked", description: data.message });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/super-admins"] });
+      setRevokeConfirm(null);
+    },
+    onError: (err: any) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-semibold">Platform Administrators</h3>
+          <p className="text-sm text-muted-foreground">Manage who has super admin access to the Control Room.</p>
+        </div>
+        <Button onClick={() => setInviteOpen(true)} data-testid="button-invite-admin">
+          <Plus className="w-4 h-4 mr-2" />Invite Admin
+        </Button>
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-14 w-full" />)}</div>
+      ) : (
+        <Card>
+          <CardContent className="p-0">
+            <Table data-testid="table-super-admins">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Last Login</TableHead>
+                  <TableHead>Added</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {adminList.map((a: any) => (
+                  <TableRow key={a.id} data-testid={`row-admin-${a.id}`}>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        {a.firstName} {a.lastName || ""}
+                        {a.id === user?.id && <Badge className="text-[10px]">You</Badge>}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-sm">{a.email}</TableCell>
+                    <TableCell>
+                      <Badge variant={a.isActive ? "secondary" : "destructive"} className="text-xs">{a.isActive ? "Active" : "Blocked"}</Badge>
+                    </TableCell>
+                    <TableCell className="text-xs">{formatDateTime(a.lastLoginAt)}</TableCell>
+                    <TableCell className="text-xs">{formatDate(a.createdAt)}</TableCell>
+                    <TableCell className="text-right">
+                      {a.id !== user?.id ? (
+                        <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setRevokeConfirm(a)} data-testid={`button-revoke-${a.id}`}>
+                          <Ban className="w-3.5 h-3.5 mr-1" />Revoke
+                        </Button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Current session</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {adminList.length === 0 && (
+                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No super admins found</TableCell></TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      <Dialog open={inviteOpen} onOpenChange={(open) => { if (!open) setInviteOpen(false); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Shield className="w-5 h-5" />Invite Super Admin</DialogTitle>
+            <DialogDescription>Grant super admin access to a new user. They will receive an email with login instructions.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={(e) => { e.preventDefault(); inviteMutation.mutate(inviteForm); }} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="sa-email">Email Address *</Label>
+              <Input id="sa-email" data-testid="input-invite-email" type="email" placeholder="admin@example.com" value={inviteForm.email} onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })} required />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="sa-first">First Name *</Label>
+                <Input id="sa-first" data-testid="input-invite-first" placeholder="First name" value={inviteForm.firstName} onChange={(e) => setInviteForm({ ...inviteForm, firstName: e.target.value })} required />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="sa-last">Last Name</Label>
+                <Input id="sa-last" data-testid="input-invite-last" placeholder="Last name" value={inviteForm.lastName} onChange={(e) => setInviteForm({ ...inviteForm, lastName: e.target.value })} />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground bg-muted/50 rounded px-3 py-2">
+              The invited user will be able to log in at the admin login page using their email and a one-time verification code.
+            </p>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setInviteOpen(false)}>Cancel</Button>
+              <Button type="submit" disabled={inviteMutation.isPending} data-testid="button-submit-invite">
+                {inviteMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Send Invite
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!revokeConfirm} onOpenChange={(open) => { if (!open) setRevokeConfirm(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Revoke Super Admin Access</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove super admin access from <strong>{revokeConfirm?.firstName} {revokeConfirm?.lastName}</strong> ({revokeConfirm?.email}). They will no longer be able to access the Control Room.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => revokeConfirm && revokeMutation.mutate(revokeConfirm.id)} className="bg-destructive hover:bg-destructive/90">Revoke Access</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
 // ─── MAIN ADMIN PANEL ───
 export default function AdminPanel() {
   const { user } = useAuth();
@@ -1233,7 +1394,7 @@ export default function AdminPanel() {
       </div>
 
       <Tabs defaultValue="dashboard" className="w-full">
-        <TabsList className="grid w-full grid-cols-6" data-testid="admin-tabs">
+        <TabsList className="grid w-full grid-cols-7" data-testid="admin-tabs">
           <TabsTrigger value="dashboard" data-testid="tab-dashboard" className="text-xs sm:text-sm">
             <Activity className="w-4 h-4 mr-1 hidden sm:inline" />Dashboard
           </TabsTrigger>
@@ -1252,6 +1413,9 @@ export default function AdminPanel() {
           <TabsTrigger value="audit" data-testid="tab-audit" className="text-xs sm:text-sm">
             <ClipboardList className="w-4 h-4 mr-1 hidden sm:inline" />Audit Log
           </TabsTrigger>
+          <TabsTrigger value="admins" data-testid="tab-admins" className="text-xs sm:text-sm">
+            <Shield className="w-4 h-4 mr-1 hidden sm:inline" />Admins
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="dashboard" className="mt-6"><DashboardTab /></TabsContent>
@@ -1260,6 +1424,7 @@ export default function AdminPanel() {
         <TabsContent value="analytics" className="mt-6"><AnalyticsTab /></TabsContent>
         <TabsContent value="health" className="mt-6"><HealthTab /></TabsContent>
         <TabsContent value="audit" className="mt-6"><AuditLogTab /></TabsContent>
+        <TabsContent value="admins" className="mt-6"><SuperAdminsTab /></TabsContent>
       </Tabs>
     </div>
   );
