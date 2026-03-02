@@ -1,7 +1,7 @@
 import { useState, Component, ErrorInfo, ReactNode } from "react";
 import { Switch, Route, Redirect, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -13,8 +13,8 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { useAuth } from "@/hooks/use-auth";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, ArrowRight, RefreshCw, ShieldAlert } from "lucide-react";
-import { refreshAllData, syncAndRefreshAllData } from "./lib/queryClient";
+import { AlertTriangle, ArrowRight, RefreshCw, ShieldAlert, Shield } from "lucide-react";
+import { refreshAllData, syncAndRefreshAllData, apiRequest } from "./lib/queryClient";
 import { Link } from "wouter";
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
@@ -325,6 +325,38 @@ function GlobalRefreshButton() {
   );
 }
 
+function ImpersonationBanner() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const [, setLocation] = useLocation();
+
+  const stopMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/stop-impersonation");
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.clear();
+      qc.invalidateQueries();
+      setLocation("/admin");
+    },
+  });
+
+  if (!user?.isImpersonating) return null;
+
+  return (
+    <div className="bg-amber-500 text-amber-950 px-4 py-2 flex items-center justify-between text-sm font-medium" data-testid="impersonation-banner">
+      <div className="flex items-center gap-2">
+        <Shield className="w-4 h-4" />
+        <span>Viewing as <strong>{user.email}</strong> (impersonation mode)</span>
+      </div>
+      <Button size="sm" variant="secondary" onClick={() => stopMutation.mutate()} disabled={stopMutation.isPending} data-testid="button-stop-impersonation">
+        {stopMutation.isPending ? "Returning..." : "Return to Admin"}
+      </Button>
+    </div>
+  );
+}
+
 function AuthenticatedLayout() {
   const { user } = useAuth();
   const onboardingIncomplete = user?.merchant?.onboardingStep !== "COMPLETED";
@@ -340,6 +372,7 @@ function AuthenticatedLayout() {
         <div className="flex h-screen w-full">
           <AppSidebar />
           <div className="flex flex-col flex-1 overflow-hidden">
+            <ImpersonationBanner />
             <header className="flex items-center justify-between gap-4 p-3 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
               <SidebarTrigger data-testid="button-sidebar-toggle" />
               <div className="flex items-center gap-2">

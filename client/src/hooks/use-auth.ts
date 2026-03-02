@@ -29,6 +29,8 @@ export interface AuthUser {
   teamRole: string | null;
   isMerchantOwner: boolean;
   sessionDisplayName: string | null;
+  isImpersonating?: boolean;
+  originalAdminId?: string | null;
 }
 
 export function useAuth() {

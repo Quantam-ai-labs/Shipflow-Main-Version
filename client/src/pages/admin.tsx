@@ -26,10 +26,11 @@ import {
   Loader2, Building2, Users, Database, Activity, AlertTriangle, Eye,
   TrendingUp, Package, ShoppingCart, Truck, Server,
   BarChart3, ClipboardList, Crown, ArrowLeft, HardDrive, Cpu,
-  Clock, Zap, Globe, ChevronRight, LogOut, Plus,
+  Clock, Zap, Globe, ChevronRight, LogOut, Plus, Trash2, ExternalLink,
+  PenLine, KeyRound,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient as globalQueryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { Link, useLocation } from "wouter";
@@ -345,33 +346,7 @@ function MerchantsTab() {
           </Card>
         </div>
 
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Users className="w-4 h-4" />Team Members</CardTitle></CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {peekData.users?.map((u: any) => (
-                <div key={u.id} className="flex items-center justify-between gap-3 p-3 border rounded-md">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium truncate">{u.firstName} {u.lastName}</p>
-                      <Badge variant="outline" className="text-xs">{u.role}</Badge>
-                      {!u.isActive && <Badge variant="destructive" className="text-xs">Blocked</Badge>}
-                    </div>
-                    <p className="text-xs text-muted-foreground">{u.email} &middot; Last login: {formatDateTime(u.lastLoginAt)}</p>
-                  </div>
-                  <div className="flex gap-1 shrink-0">
-                    {u.isActive ? (
-                      <Button variant="ghost" size="icon" onClick={() => userActionMutation.mutate({ userId: u.id, action: "block" })} title="Block"><UserX className="w-4 h-4" /></Button>
-                    ) : (
-                      <Button variant="ghost" size="icon" onClick={() => userActionMutation.mutate({ userId: u.id, action: "unblock" })} title="Unblock"><UserCheck className="w-4 h-4" /></Button>
-                    )}
-                  </div>
-                </div>
-              ))}
-              {(!peekData.users || peekData.users.length === 0) && <p className="text-sm text-muted-foreground text-center py-4">No users found</p>}
-            </div>
-          </CardContent>
-        </Card>
+        <PeekTeamSection merchantId={peekId!} users={peekData.users || []} />
 
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><ShoppingCart className="w-4 h-4" />Recent Orders</CardTitle></CardHeader>
@@ -668,6 +643,410 @@ function AnalyticsTab() {
   );
 }
 
+// ─── PEEK TEAM SECTION ───
+function PeekTeamSection({ merchantId, users: initialUsers }: { merchantId: string; users: any[] }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [, setLocation] = useLocation();
+  const [addOpen, setAddOpen] = useState(false);
+  const [addForm, setAddForm] = useState({ email: "", firstName: "", lastName: "", role: "agent" });
+  const [deleteConfirm, setDeleteConfirm] = useState<any>(null);
+  const [removeConfirm, setRemoveConfirm] = useState<any>(null);
+
+  const { data: teamData } = useQuery<any>({
+    queryKey: ["/api/admin/merchants", merchantId, "team"],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/merchants/${merchantId}/team`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch team");
+      return res.json();
+    },
+  });
+
+  const members = teamData?.members || initialUsers.map((u: any) => ({
+    id: u.teamMemberId || u.id,
+    userId: u.id,
+    role: u.teamRole || "agent",
+    email: u.email,
+    firstName: u.firstName,
+    lastName: u.lastName,
+    userIsActive: u.isActive,
+    lastLoginAt: u.lastLoginAt,
+    isMerchantOwner: u.isMerchantOwner || false,
+  }));
+
+  const impersonateMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const res = await apiRequest("POST", `/api/admin/impersonate/${userId}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      globalQueryClient.clear();
+      globalQueryClient.invalidateQueries();
+      setLocation("/dashboard");
+    },
+    onError: (err: any) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+  });
+
+  const changeRoleMutation = useMutation({
+    mutationFn: async ({ memberId, role }: { memberId: string; role: string }) => {
+      const res = await apiRequest("PATCH", `/api/admin/team-members/${memberId}/role`, { role });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Role updated" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/merchants", merchantId, "team"] });
+    },
+    onError: (err: any) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+  });
+
+  const removeMemberMutation = useMutation({
+    mutationFn: async (memberId: string) => {
+      const res = await apiRequest("DELETE", `/api/admin/team-members/${memberId}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Member removed" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/merchants", merchantId, "team"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/merchants"] });
+      setRemoveConfirm(null);
+    },
+    onError: (err: any) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+  });
+
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const res = await apiRequest("DELETE", `/api/admin/users/${userId}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "User account deleted" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/merchants", merchantId, "team"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/merchants"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      setDeleteConfirm(null);
+    },
+    onError: (err: any) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+  });
+
+  const addMemberMutation = useMutation({
+    mutationFn: async (data: typeof addForm) => {
+      const res = await apiRequest("POST", `/api/admin/merchants/${merchantId}/team/add`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Member added" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/merchants", merchantId, "team"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/merchants"] });
+      setAddOpen(false);
+      setAddForm({ email: "", firstName: "", lastName: "", role: "agent" });
+    },
+    onError: (err: any) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+  });
+
+  const userActionMutation = useMutation({
+    mutationFn: async ({ userId, action }: { userId: string; action: "block" | "unblock" }) => {
+      const res = await apiRequest("POST", `/api/admin/users/${userId}/${action}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "User updated" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/merchants", merchantId, "team"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/merchants"] });
+    },
+    onError: (err: any) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+  });
+
+  return (
+    <>
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm flex items-center gap-2"><Users className="w-4 h-4" />Team Members</CardTitle>
+            <Button size="sm" variant="outline" onClick={() => setAddOpen(true)} data-testid="button-add-team-member">
+              <Plus className="w-3 h-3 mr-1" />Add Member
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            {members.map((m: any) => (
+              <div key={m.id || m.userId} className="flex items-center justify-between gap-3 p-3 border rounded-md" data-testid={`row-team-member-${m.userId}`}>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium truncate">{m.firstName} {m.lastName}</p>
+                    {m.isMerchantOwner && <Badge className="text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300">Owner</Badge>}
+                    <Badge variant="outline" className="text-xs capitalize">{m.role}</Badge>
+                    {m.userIsActive === false && <Badge variant="destructive" className="text-xs">Blocked</Badge>}
+                  </div>
+                  <p className="text-xs text-muted-foreground">{m.email} · Last login: {formatDateTime(m.lastLoginAt)}</p>
+                </div>
+                <div className="flex gap-1 shrink-0 items-center">
+                  <Select value={m.role} onValueChange={(role) => changeRoleMutation.mutate({ memberId: m.id, role })}>
+                    <SelectTrigger className="h-7 w-[100px] text-xs" data-testid={`select-role-${m.userId}`}><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="manager">Manager</SelectItem>
+                      <SelectItem value="agent">Agent</SelectItem>
+                      <SelectItem value="accountant">Accountant</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => impersonateMutation.mutate(m.userId)} title="Open Account" data-testid={`button-impersonate-${m.userId}`}>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </Button>
+                  {m.userIsActive !== false ? (
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => userActionMutation.mutate({ userId: m.userId, action: "block" })} title="Block">
+                      <UserX className="w-3.5 h-3.5" />
+                    </Button>
+                  ) : (
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => userActionMutation.mutate({ userId: m.userId, action: "unblock" })} title="Unblock">
+                      <UserCheck className="w-3.5 h-3.5 text-green-600" />
+                    </Button>
+                  )}
+                  {!m.isMerchantOwner && (
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setRemoveConfirm(m)} title="Remove from team">
+                      <UserX className="w-3.5 h-3.5 text-orange-500" />
+                    </Button>
+                  )}
+                  {!m.isMerchantOwner && (
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setDeleteConfirm(m)} title="Delete account permanently">
+                      <Trash2 className="w-3.5 h-3.5 text-destructive" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
+            {members.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">No team members found</p>}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Dialog open={addOpen} onOpenChange={(open) => { if (!open) setAddOpen(false); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Team Member</DialogTitle>
+            <DialogDescription>Add a new member to this merchant's team.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={(e) => { e.preventDefault(); addMemberMutation.mutate(addForm); }} className="space-y-4">
+            <div className="space-y-2">
+              <Label>Email *</Label>
+              <Input data-testid="input-add-member-email" type="email" placeholder="user@example.com" value={addForm.email} onChange={(e) => setAddForm({ ...addForm, email: e.target.value })} required />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>First Name *</Label>
+                <Input data-testid="input-add-member-first" placeholder="First" value={addForm.firstName} onChange={(e) => setAddForm({ ...addForm, firstName: e.target.value })} required />
+              </div>
+              <div className="space-y-2">
+                <Label>Last Name</Label>
+                <Input data-testid="input-add-member-last" placeholder="Last" value={addForm.lastName} onChange={(e) => setAddForm({ ...addForm, lastName: e.target.value })} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Role</Label>
+              <Select value={addForm.role} onValueChange={(v) => setAddForm({ ...addForm, role: v })}>
+                <SelectTrigger data-testid="select-add-member-role"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="manager">Manager</SelectItem>
+                  <SelectItem value="agent">Agent</SelectItem>
+                  <SelectItem value="accountant">Accountant</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
+              <Button type="submit" disabled={addMemberMutation.isPending} data-testid="button-submit-add-member">
+                {addMemberMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Add Member
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!removeConfirm} onOpenChange={(open) => { if (!open) setRemoveConfirm(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Team Member</AlertDialogTitle>
+            <AlertDialogDescription>
+              Remove <strong>{removeConfirm?.firstName} {removeConfirm?.lastName}</strong> ({removeConfirm?.email}) from this merchant's team? Their user account will not be deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => removeConfirm && removeMemberMutation.mutate(removeConfirm.id)} className="bg-orange-600 hover:bg-orange-700">Remove</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!deleteConfirm} onOpenChange={(open) => { if (!open) setDeleteConfirm(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Permanently Delete User Account</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete <strong>{deleteConfirm?.firstName} {deleteConfirm?.lastName}</strong> ({deleteConfirm?.email}) and remove them from all teams. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => deleteConfirm && deleteUserMutation.mutate(deleteConfirm.userId)} className="bg-destructive hover:bg-destructive/90">Delete Permanently</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}
+
+// ─── USERS TAB ───
+function UsersTab() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [, setLocation] = useLocation();
+  const [search, setSearch] = useState("");
+  const [deleteConfirm, setDeleteConfirm] = useState<any>(null);
+
+  const { data: userList = [], isLoading } = useQuery<any[]>({
+    queryKey: ["/api/admin/users", search],
+    queryFn: async () => {
+      const params = search ? `?search=${encodeURIComponent(search)}` : "";
+      const res = await fetch(`/api/admin/users${params}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
+  });
+
+  const userActionMutation = useMutation({
+    mutationFn: async ({ userId, action }: { userId: string; action: "block" | "unblock" }) => {
+      const res = await apiRequest("POST", `/api/admin/users/${userId}/${action}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "User updated" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+    },
+    onError: (err: any) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+  });
+
+  const impersonateMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const res = await apiRequest("POST", `/api/admin/impersonate/${userId}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      globalQueryClient.clear();
+      globalQueryClient.invalidateQueries();
+      setLocation("/dashboard");
+    },
+    onError: (err: any) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+  });
+
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const res = await apiRequest("DELETE", `/api/admin/users/${userId}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "User account deleted" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      setDeleteConfirm(null);
+    },
+    onError: (err: any) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="relative max-w-md">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input placeholder="Search users by name or email..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" data-testid="input-users-search" />
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
+      ) : (
+        <Card>
+          <CardContent className="p-0">
+            <Table data-testid="table-users">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Merchant</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Last Login</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {userList.map((u: any) => (
+                  <TableRow key={u.id} data-testid={`row-user-${u.id}`}>
+                    <TableCell className="font-medium">{u.firstName} {u.lastName || ""}</TableCell>
+                    <TableCell className="text-sm">{u.email}</TableCell>
+                    <TableCell className="text-sm">
+                      {u.merchantName ? (
+                        <div className="flex items-center gap-1">
+                          <span className="truncate max-w-[120px]">{u.merchantName}</span>
+                          {u.merchantStatus === "SUSPENDED" && <Badge variant="destructive" className="text-[10px]">Suspended</Badge>}
+                        </div>
+                      ) : <span className="text-muted-foreground">—</span>}
+                    </TableCell>
+                    <TableCell><Badge variant={u.role === "SUPER_ADMIN" ? "default" : "outline"} className="text-xs">{u.role}</Badge></TableCell>
+                    <TableCell>
+                      <Badge variant={u.isActive ? "secondary" : "destructive"} className="text-xs">{u.isActive ? "Active" : "Blocked"}</Badge>
+                    </TableCell>
+                    <TableCell className="text-xs">{formatDateTime(u.lastLoginAt)}</TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        {u.role !== "SUPER_ADMIN" && (
+                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => impersonateMutation.mutate(u.id)} title="Open Account" data-testid={`button-impersonate-user-${u.id}`}>
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
+                        {u.isActive ? (
+                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => userActionMutation.mutate({ userId: u.id, action: "block" })} title="Block">
+                            <UserX className="w-3.5 h-3.5" />
+                          </Button>
+                        ) : (
+                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => userActionMutation.mutate({ userId: u.id, action: "unblock" })} title="Unblock">
+                            <UserCheck className="w-3.5 h-3.5 text-green-600" />
+                          </Button>
+                        )}
+                        {u.role !== "SUPER_ADMIN" && (
+                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setDeleteConfirm(u)} title="Delete account" data-testid={`button-delete-user-${u.id}`}>
+                            <Trash2 className="w-3.5 h-3.5 text-destructive" />
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {userList.length === 0 && (
+                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No users found</TableCell></TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      <AlertDialog open={!!deleteConfirm} onOpenChange={(open) => { if (!open) setDeleteConfirm(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Permanently Delete User Account</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete <strong>{deleteConfirm?.firstName} {deleteConfirm?.lastName}</strong> ({deleteConfirm?.email}) and remove them from all teams. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => deleteConfirm && deleteUserMutation.mutate(deleteConfirm.id)} className="bg-destructive hover:bg-destructive/90">Delete Permanently</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
 // ─── HEALTH TAB ───
 function HealthTab() {
   const { data: health, isLoading } = useQuery<any>({ queryKey: ["/api/admin/health"], refetchInterval: 15000 });
@@ -755,7 +1134,8 @@ function AuditLogTab() {
   });
 
   const actionTypes = ["SUSPEND_MERCHANT", "UNSUSPEND_MERCHANT", "DELETE_MERCHANT", "BLOCK_USER", "UNBLOCK_USER",
-    "RESET_PASSWORD", "ADVANCE_ONBOARDING", "UPDATE_SUBSCRIPTION", "PEEK_MERCHANT"];
+    "RESET_PASSWORD", "ADVANCE_ONBOARDING", "UPDATE_SUBSCRIPTION", "PEEK_MERCHANT",
+    "IMPERSONATE_USER", "STOP_IMPERSONATION", "ADD_TEAM_MEMBER", "REMOVE_TEAM_MEMBER", "CHANGE_TEAM_ROLE", "CHANGE_PERMISSIONS", "DELETE_USER"];
 
   return (
     <div className="space-y-4">
@@ -853,12 +1233,15 @@ export default function AdminPanel() {
       </div>
 
       <Tabs defaultValue="dashboard" className="w-full">
-        <TabsList className="grid w-full grid-cols-5" data-testid="admin-tabs">
+        <TabsList className="grid w-full grid-cols-6" data-testid="admin-tabs">
           <TabsTrigger value="dashboard" data-testid="tab-dashboard" className="text-xs sm:text-sm">
             <Activity className="w-4 h-4 mr-1 hidden sm:inline" />Dashboard
           </TabsTrigger>
           <TabsTrigger value="merchants" data-testid="tab-merchants" className="text-xs sm:text-sm">
             <Building2 className="w-4 h-4 mr-1 hidden sm:inline" />Merchants
+          </TabsTrigger>
+          <TabsTrigger value="users" data-testid="tab-users" className="text-xs sm:text-sm">
+            <Users className="w-4 h-4 mr-1 hidden sm:inline" />Users
           </TabsTrigger>
           <TabsTrigger value="analytics" data-testid="tab-analytics" className="text-xs sm:text-sm">
             <BarChart3 className="w-4 h-4 mr-1 hidden sm:inline" />Analytics
@@ -873,6 +1256,7 @@ export default function AdminPanel() {
 
         <TabsContent value="dashboard" className="mt-6"><DashboardTab /></TabsContent>
         <TabsContent value="merchants" className="mt-6"><MerchantsTab /></TabsContent>
+        <TabsContent value="users" className="mt-6"><UsersTab /></TabsContent>
         <TabsContent value="analytics" className="mt-6"><AnalyticsTab /></TabsContent>
         <TabsContent value="health" className="mt-6"><HealthTab /></TabsContent>
         <TabsContent value="audit" className="mt-6"><AuditLogTab /></TabsContent>

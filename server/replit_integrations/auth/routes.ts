@@ -507,6 +507,8 @@ export function registerAuthRoutes(app: Express): void {
     try {
       const userId = (req.session as any).userId;
       const sessionDisplayName = (req.session as any).sessionDisplayName || null;
+      const originalAdminId = (req.session as any).originalAdminId || null;
+      const isImpersonating = !!originalAdminId;
       const [user] = await db.select().from(users).where(eq(users.id, userId));
       if (!user) {
         return res.status(401).json({ message: "User not found" });
@@ -558,6 +560,8 @@ export function registerAuthRoutes(app: Express): void {
         teamRole,
         isMerchantOwner,
         sessionDisplayName,
+        isImpersonating,
+        originalAdminId,
       });
     } catch (error) {
       console.error("Error fetching user:", error);

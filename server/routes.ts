@@ -9500,6 +9500,307 @@ export async function registerRoutes(
   });
 
   // ============================================
+  // SUPER ADMIN: IMPERSONATE USER
+  // ============================================
+
+  app.post("/api/admin/impersonate/:userId", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+
+      const targetUserId = req.params.userId;
+      const [targetUser] = await db.select().from(users).where(eq(users.id, targetUserId));
+      if (!targetUser) return res.status(404).json({ message: "User not found" });
+
+      (req.session as any).originalAdminId = adminId;
+      (req.session as any).userId = targetUserId;
+
+      await db.insert(adminActionLogs).values({
+        adminUserId: adminId,
+        actionType: "IMPERSONATE_USER",
+        targetUserId,
+        targetMerchantId: targetUser.merchantId,
+        details: `Impersonating user: ${targetUser.email}`,
+      });
+
+      res.json({ message: "Impersonating user", user: { id: targetUser.id, email: targetUser.email, firstName: targetUser.firstName } });
+    } catch (error) {
+      console.error("Impersonate error:", error);
+      res.status(500).json({ message: "Failed to impersonate user" });
+    }
+  });
+
+  app.post("/api/admin/stop-impersonation", isAuthenticated, async (req, res) => {
+    try {
+      const originalAdminId = (req.session as any).originalAdminId;
+      if (!originalAdminId) return res.status(400).json({ message: "Not currently impersonating" });
+
+      const [adminUser] = await db.select().from(users).where(eq(users.id, originalAdminId));
+      if (!adminUser || adminUser.role !== "SUPER_ADMIN") {
+        return res.status(403).json({ message: "Invalid impersonation session" });
+      }
+
+      const currentUserId = (req.session as any).userId;
+      (req.session as any).userId = originalAdminId;
+      delete (req.session as any).originalAdminId;
+
+      await db.insert(adminActionLogs).values({
+        adminUserId: originalAdminId,
+        actionType: "STOP_IMPERSONATION",
+        targetUserId: currentUserId,
+        details: "Stopped impersonating user",
+      });
+
+      res.json({ message: "Returned to admin session" });
+    } catch (error) {
+      console.error("Stop impersonation error:", error);
+      res.status(500).json({ message: "Failed to stop impersonation" });
+    }
+  });
+
+  // ============================================
+  // SUPER ADMIN: CROSS-TENANT TEAM MANAGEMENT
+  // ============================================
+
+  app.get("/api/admin/merchants/:id/team", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+
+      const mid = req.params.id;
+      const members = await db.select({
+        id: teamMembers.id,
+        userId: teamMembers.userId,
+        role: teamMembers.role,
+        isActive: teamMembers.isActive,
+        allowedPages: teamMembers.allowedPages,
+        joinedAt: teamMembers.joinedAt,
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        userIsActive: users.isActive,
+        lastLoginAt: users.lastLoginAt,
+        createdAt: users.createdAt,
+      }).from(teamMembers)
+        .innerJoin(users, eq(teamMembers.userId, users.id))
+        .where(eq(teamMembers.merchantId, mid));
+
+      const invites = await db.select().from(teamInvites)
+        .where(and(eq(teamInvites.merchantId, mid), eq(teamInvites.status, "pending")));
+
+      const [merchant] = await db.select({ email: merchants.email }).from(merchants).where(eq(merchants.id, mid));
+      const ownerEmail = merchant?.email?.toLowerCase() || "";
+
+      res.json({
+        members: members.map(m => ({
+          ...m,
+          isMerchantOwner: m.email?.toLowerCase() === ownerEmail,
+        })),
+        invites,
+      });
+    } catch (error) {
+      console.error("Admin team fetch error:", error);
+      res.status(500).json({ message: "Failed to fetch team" });
+    }
+  });
+
+  app.post("/api/admin/merchants/:id/team/add", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+
+      const mid = req.params.id;
+      const addSchema = z.object({
+        email: z.string().email(),
+        firstName: z.string().min(1),
+        lastName: z.string().optional(),
+        role: z.enum(["admin", "manager", "agent", "accountant"]).default("agent"),
+      });
+      const body = addSchema.parse(req.body);
+
+      const [existingUser] = await db.select().from(users).where(eq(users.email, body.email));
+
+      let userId: string;
+      if (existingUser) {
+        const [existingMember] = await db.select().from(teamMembers)
+          .where(and(eq(teamMembers.userId, existingUser.id), eq(teamMembers.merchantId, mid)));
+        if (existingMember) {
+          return res.status(400).json({ message: "User is already a member of this merchant" });
+        }
+        userId = existingUser.id;
+        if (!existingUser.merchantId) {
+          await db.update(users).set({ merchantId: mid }).where(eq(users.id, existingUser.id));
+        }
+      } else {
+        const [newUser] = await db.insert(users).values({
+          email: body.email,
+          firstName: body.firstName,
+          lastName: body.lastName || null,
+          role: "USER",
+          isActive: true,
+          merchantId: mid,
+        }).returning();
+        userId = newUser.id;
+      }
+
+      await db.insert(teamMembers).values({
+        userId,
+        merchantId: mid,
+        role: body.role,
+        joinedAt: new Date(),
+      });
+
+      await db.insert(adminActionLogs).values({
+        adminUserId: adminId,
+        actionType: "ADD_TEAM_MEMBER",
+        targetMerchantId: mid,
+        targetUserId: userId,
+        details: `Added ${body.email} as ${body.role} by admin`,
+      });
+
+      res.json({ message: `${body.email} added as ${body.role}` });
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors[0].message });
+      }
+      console.error("Admin add member error:", error);
+      res.status(500).json({ message: "Failed to add team member" });
+    }
+  });
+
+  app.delete("/api/admin/team-members/:id", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+
+      const memberId = req.params.id;
+      const [member] = await db.select().from(teamMembers).where(eq(teamMembers.id, memberId));
+      if (!member) return res.status(404).json({ message: "Team member not found" });
+
+      const [merchant] = await db.select({ email: merchants.email }).from(merchants).where(eq(merchants.id, member.merchantId));
+      const [memberUser] = await db.select({ email: users.email }).from(users).where(eq(users.id, member.userId));
+      if (merchant?.email && memberUser?.email && merchant.email.toLowerCase() === memberUser.email.toLowerCase()) {
+        return res.status(403).json({ message: "Cannot remove the merchant owner from the team" });
+      }
+
+      await db.delete(teamMembers).where(eq(teamMembers.id, memberId));
+
+      await db.insert(adminActionLogs).values({
+        adminUserId: adminId,
+        actionType: "REMOVE_TEAM_MEMBER",
+        targetMerchantId: member.merchantId,
+        targetUserId: member.userId,
+        details: `Removed team member by admin`,
+      });
+
+      res.json({ message: "Team member removed" });
+    } catch (error) {
+      console.error("Admin remove member error:", error);
+      res.status(500).json({ message: "Failed to remove team member" });
+    }
+  });
+
+  app.patch("/api/admin/team-members/:id/role", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+
+      const memberId = req.params.id;
+      const { role } = req.body;
+      const validRoles = ["admin", "manager", "agent", "accountant"];
+      if (!role || !validRoles.includes(role)) {
+        return res.status(400).json({ message: `Role must be one of: ${validRoles.join(", ")}` });
+      }
+
+      const [member] = await db.select().from(teamMembers).where(eq(teamMembers.id, memberId));
+      if (!member) return res.status(404).json({ message: "Team member not found" });
+
+      await db.update(teamMembers).set({ role }).where(eq(teamMembers.id, memberId));
+
+      await db.insert(adminActionLogs).values({
+        adminUserId: adminId,
+        actionType: "CHANGE_TEAM_ROLE",
+        targetMerchantId: member.merchantId,
+        targetUserId: member.userId,
+        details: `Changed role to ${role} by admin`,
+      });
+
+      res.json({ message: "Role updated" });
+    } catch (error) {
+      console.error("Admin change role error:", error);
+      res.status(500).json({ message: "Failed to change role" });
+    }
+  });
+
+  app.patch("/api/admin/team-members/:id/permissions", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+
+      const memberId = req.params.id;
+      const { allowedPages } = req.body;
+
+      const [member] = await db.select().from(teamMembers).where(eq(teamMembers.id, memberId));
+      if (!member) return res.status(404).json({ message: "Team member not found" });
+
+      await db.update(teamMembers).set({
+        allowedPages: allowedPages === null ? null : (allowedPages || []),
+      }).where(eq(teamMembers.id, memberId));
+
+      await db.insert(adminActionLogs).values({
+        adminUserId: adminId,
+        actionType: "CHANGE_PERMISSIONS",
+        targetMerchantId: member.merchantId,
+        targetUserId: member.userId,
+        details: `Updated page permissions by admin`,
+      });
+
+      res.json({ message: "Permissions updated" });
+    } catch (error) {
+      console.error("Admin change permissions error:", error);
+      res.status(500).json({ message: "Failed to change permissions" });
+    }
+  });
+
+  app.delete("/api/admin/users/:id", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+
+      const targetId = req.params.id;
+      const [targetUser] = await db.select().from(users).where(eq(users.id, targetId));
+      if (!targetUser) return res.status(404).json({ message: "User not found" });
+
+      if (targetUser.role === "SUPER_ADMIN") {
+        return res.status(403).json({ message: "Cannot delete a super admin account" });
+      }
+
+      if (targetUser.merchantId) {
+        const [ownerMerchant] = await db.select({ email: merchants.email }).from(merchants).where(eq(merchants.id, targetUser.merchantId));
+        if (ownerMerchant?.email && targetUser.email && ownerMerchant.email.toLowerCase() === targetUser.email.toLowerCase()) {
+          return res.status(403).json({ message: "Cannot delete a merchant owner account. Suspend the merchant instead." });
+        }
+      }
+
+      await db.delete(teamMembers).where(eq(teamMembers.userId, targetId));
+      await db.delete(users).where(eq(users.id, targetId));
+
+      await db.insert(adminActionLogs).values({
+        adminUserId: adminId,
+        actionType: "DELETE_USER",
+        targetUserId: targetId,
+        targetMerchantId: targetUser.merchantId,
+        details: `Permanently deleted user: ${targetUser.email}`,
+      });
+
+      res.json({ message: "User account deleted permanently" });
+    } catch (error) {
+      console.error("Admin delete user error:", error);
+      res.status(500).json({ message: "Failed to delete user" });
+    }
+  });
+
+  // ============================================
   // MERCHANT SETUP (Set password via invite link)
   // ============================================
 
