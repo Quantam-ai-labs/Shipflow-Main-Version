@@ -701,6 +701,7 @@ function PeekTeamSection({ merchantId, users: initialUsers }: { merchantId: stri
   const [addOpen, setAddOpen] = useState(false);
   const [addForm, setAddForm] = useState({ email: "", firstName: "", lastName: "", role: "agent" });
   const [deleteConfirm, setDeleteConfirm] = useState<any>(null);
+  const [deleteText, setDeleteText] = useState("");
   const [removeConfirm, setRemoveConfirm] = useState<any>(null);
 
   const { data: teamData } = useQuery<any>({
@@ -774,6 +775,7 @@ function PeekTeamSection({ merchantId, users: initialUsers }: { merchantId: stri
       queryClient.invalidateQueries({ queryKey: ["/api/admin/merchants"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
       setDeleteConfirm(null);
+      setDeleteText("");
     },
     onError: (err: any) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
   });
@@ -858,7 +860,7 @@ function PeekTeamSection({ merchantId, users: initialUsers }: { merchantId: stri
                     </Button>
                   )}
                   {!m.isMerchantOwner && (
-                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setDeleteConfirm(m)} title="Delete account permanently">
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { setDeleteConfirm(m); setDeleteText(""); }} title="Delete account permanently">
                       <Trash2 className="w-3.5 h-3.5 text-destructive" />
                     </Button>
                   )}
@@ -929,20 +931,38 @@ function PeekTeamSection({ merchantId, users: initialUsers }: { merchantId: stri
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={!!deleteConfirm} onOpenChange={(open) => { if (!open) setDeleteConfirm(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Permanently Delete User Account</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete <strong>{deleteConfirm?.firstName} {deleteConfirm?.lastName}</strong> ({deleteConfirm?.email}) and remove them from all teams. This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => deleteConfirm && deleteUserMutation.mutate(deleteConfirm.userId)} className="bg-destructive hover:bg-destructive/90">Delete Permanently</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <Dialog open={!!deleteConfirm} onOpenChange={(open) => { if (!open) { setDeleteConfirm(null); setDeleteText(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive"><Trash2 className="w-5 h-5" />Delete User Account</DialogTitle>
+            <DialogDescription>
+              This action is <strong>permanent and cannot be undone</strong>. Deleting <strong>{deleteConfirm?.firstName} {deleteConfirm?.lastName}</strong> ({deleteConfirm?.email}) will permanently remove their account and all team memberships.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm font-medium">Type <span className="font-mono bg-muted px-1.5 py-0.5 rounded text-destructive">DELETE</span> to confirm:</p>
+            <Input
+              data-testid="input-delete-peek-user-confirmation"
+              value={deleteText}
+              onChange={(e) => setDeleteText(e.target.value)}
+              placeholder="Type DELETE here"
+              className="font-mono"
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => { setDeleteConfirm(null); setDeleteText(""); }}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={deleteText !== "DELETE" || deleteUserMutation.isPending}
+              onClick={() => deleteConfirm && deleteUserMutation.mutate(deleteConfirm.userId)}
+              data-testid="button-confirm-delete-peek-user"
+            >
+              {deleteUserMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Delete Permanently
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
@@ -954,6 +974,7 @@ function UsersTab() {
   const [, setLocation] = useLocation();
   const [search, setSearch] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<any>(null);
+  const [deleteText, setDeleteText] = useState("");
 
   const { data: userList = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/admin/users", search],
@@ -999,6 +1020,7 @@ function UsersTab() {
       toast({ title: "User account deleted" });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
       setDeleteConfirm(null);
+      setDeleteText("");
     },
     onError: (err: any) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
   });
@@ -1062,7 +1084,7 @@ function UsersTab() {
                           </Button>
                         )}
                         {u.role !== "SUPER_ADMIN" && (
-                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setDeleteConfirm(u)} title="Delete account" data-testid={`button-delete-user-${u.id}`}>
+                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { setDeleteConfirm(u); setDeleteText(""); }} title="Delete account" data-testid={`button-delete-user-${u.id}`}>
                             <Trash2 className="w-3.5 h-3.5 text-destructive" />
                           </Button>
                         )}
@@ -1079,20 +1101,38 @@ function UsersTab() {
         </Card>
       )}
 
-      <AlertDialog open={!!deleteConfirm} onOpenChange={(open) => { if (!open) setDeleteConfirm(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Permanently Delete User Account</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete <strong>{deleteConfirm?.firstName} {deleteConfirm?.lastName}</strong> ({deleteConfirm?.email}) and remove them from all teams. This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => deleteConfirm && deleteUserMutation.mutate(deleteConfirm.id)} className="bg-destructive hover:bg-destructive/90">Delete Permanently</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <Dialog open={!!deleteConfirm} onOpenChange={(open) => { if (!open) { setDeleteConfirm(null); setDeleteText(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive"><Trash2 className="w-5 h-5" />Delete User Account</DialogTitle>
+            <DialogDescription>
+              This action is <strong>permanent and cannot be undone</strong>. Deleting <strong>{deleteConfirm?.firstName} {deleteConfirm?.lastName}</strong> ({deleteConfirm?.email}) will permanently remove their account and all team memberships.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm font-medium">Type <span className="font-mono bg-muted px-1.5 py-0.5 rounded text-destructive">DELETE</span> to confirm:</p>
+            <Input
+              data-testid="input-delete-user-confirmation"
+              value={deleteText}
+              onChange={(e) => setDeleteText(e.target.value)}
+              placeholder="Type DELETE here"
+              className="font-mono"
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => { setDeleteConfirm(null); setDeleteText(""); }}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={deleteText !== "DELETE" || deleteUserMutation.isPending}
+              onClick={() => deleteConfirm && deleteUserMutation.mutate(deleteConfirm.id)}
+              data-testid="button-confirm-delete-user"
+            >
+              {deleteUserMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Delete Permanently
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
