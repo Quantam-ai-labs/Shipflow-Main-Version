@@ -9301,7 +9301,42 @@ export async function registerRoutes(
   });
 
   // ============================================
-  // NOTE: Merchant deletion is intentionally disabled. Merchants can only be suspended/unsuspended.
+  // SUPER ADMIN: DELETE MERCHANT (permanent)
+  // ============================================
+
+  app.delete("/api/admin/merchants/:id", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+
+      const { confirmation } = req.body || {};
+      if (confirmation !== "DELETE") {
+        return res.status(400).json({ message: "You must confirm deletion by sending confirmation: \"DELETE\"" });
+      }
+
+      const merchantId = req.params.id;
+      const [merchant] = await db.select().from(merchants).where(eq(merchants.id, merchantId));
+      if (!merchant) return res.status(404).json({ message: "Merchant not found" });
+
+      const merchantUsers = await db.select({ id: users.id }).from(users).where(eq(users.merchantId, merchantId));
+
+      await db.update(users).set({ merchantId: null, role: "USER" }).where(eq(users.merchantId, merchantId));
+
+      await db.delete(merchants).where(eq(merchants.id, merchantId));
+
+      await db.insert(adminActionLogs).values({
+        adminUserId: adminId,
+        actionType: "DELETE_MERCHANT",
+        targetMerchantId: merchantId,
+        details: `Permanently deleted merchant "${merchant.name}" (${merchant.email}). ${merchantUsers.length} user(s) unlinked.`,
+      });
+
+      res.json({ message: `Merchant "${merchant.name}" and all associated data have been permanently deleted.` });
+    } catch (error) {
+      console.error("Admin delete merchant error:", error);
+      res.status(500).json({ message: "Failed to delete merchant" });
+    }
+  });
 
   // ============================================
   // SUPER ADMIN: ALL USERS (cross-tenant)

@@ -191,6 +191,8 @@ function MerchantsTab() {
   const [createForm, setCreateForm] = useState({
     merchantName: "", email: "", firstName: "", lastName: "", phone: "", city: "", subscriptionPlan: "free", skipOnboarding: false,
   });
+  const [deleteConfirm, setDeleteConfirm] = useState<any>(null);
+  const [deleteText, setDeleteText] = useState("");
 
   const { data: merchantList = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/admin/merchants", search],
@@ -221,6 +223,20 @@ function MerchantsTab() {
     onError: (err: any) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
   });
 
+  const deleteMerchantMutation = useMutation({
+    mutationFn: async (merchantId: string) => {
+      const res = await apiRequest("DELETE", `/api/admin/merchants/${merchantId}`, { confirmation: "DELETE" });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Merchant Deleted", description: data.message });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/merchants"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/platform-stats"] });
+      setDeleteConfirm(null);
+      setDeleteText("");
+    },
+    onError: (err: any) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+  });
 
   const advanceOnboardingMutation = useMutation({
     mutationFn: async (merchantId: string) => {
@@ -464,6 +480,7 @@ function MerchantsTab() {
                         ) : (
                           <Button size="sm" variant="ghost" onClick={() => suspendMutation.mutate({ merchantId: m.id, action: "unsuspend" })}><CheckCircle className="w-4 h-4 text-green-600" /></Button>
                         )}
+                        <Button size="sm" variant="ghost" onClick={() => { setDeleteConfirm(m); setDeleteText(""); }} data-testid={`button-delete-merchant-${m.id}`}><Trash2 className="w-4 h-4 text-destructive" /></Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -538,6 +555,39 @@ function MerchantsTab() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deleteConfirm} onOpenChange={(open) => { if (!open) { setDeleteConfirm(null); setDeleteText(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive"><Trash2 className="w-5 h-5" />Delete Merchant</DialogTitle>
+            <DialogDescription>
+              This action is <strong>permanent and cannot be undone</strong>. Deleting <strong>{deleteConfirm?.name}</strong> will permanently remove all associated data including orders, shipments, courier accounts, payment records, and accounting data.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm font-medium">Type <span className="font-mono bg-muted px-1.5 py-0.5 rounded text-destructive">DELETE</span> to confirm:</p>
+            <Input
+              data-testid="input-delete-confirmation"
+              value={deleteText}
+              onChange={(e) => setDeleteText(e.target.value)}
+              placeholder="Type DELETE here"
+              className="font-mono"
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => { setDeleteConfirm(null); setDeleteText(""); }}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={deleteText !== "DELETE" || deleteMerchantMutation.isPending}
+              onClick={() => deleteConfirm && deleteMerchantMutation.mutate(deleteConfirm.id)}
+              data-testid="button-confirm-delete-merchant"
+            >
+              {deleteMerchantMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Delete Permanently
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
