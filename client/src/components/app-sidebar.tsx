@@ -115,13 +115,23 @@ const pipelineItems: NavItem[] = [
 
 const allNavGroups: NavGroup[] = [
   {
+    id: "logistics",
+    title: "Logistics",
+    icon: Truck,
+    items: [
+      { id: "shipments", title: "Shipments", url: "/shipments", icon: Truck },
+      { id: "cod-reconciliation", title: "COD Reconciliation", url: "/cod-reconciliation", icon: DollarSign },
+      { id: "payment-ledger", title: "Payment Ledger", url: "/payment-ledger", icon: Receipt },
+      { id: "manage-cheques", title: "Manage Cheques", url: "/manage-cheques", icon: FileCheck },
+    ],
+  },
+  {
     id: "sales",
     title: "Sales",
     icon: ShoppingCart,
     items: [
       { id: "sale-invoices", title: "Sale Invoices", url: "/accounting/sales", icon: Receipt },
       { id: "sale-orders", title: "Sale Orders", url: "/accounting/sale-orders", icon: BookOpen },
-      { id: "shipments", title: "Shipments", url: "/shipments", icon: Truck },
     ],
   },
   {
@@ -140,9 +150,6 @@ const allNavGroups: NavGroup[] = [
     icon: Wallet,
     items: [
       { id: "money", title: "Money In/Out", url: "/accounting/transactions", icon: ArrowLeftRight },
-      { id: "cod-reconciliation", title: "COD Reconciliation", url: "/cod-reconciliation", icon: DollarSign },
-      { id: "payment-ledger", title: "Payment Ledger", url: "/payment-ledger", icon: Receipt },
-      { id: "manage-cheques", title: "Manage Cheques", url: "/manage-cheques", icon: FileCheck },
       { id: "customers", title: "Parties", url: "/accounting/parties", icon: UserCircle },
       { id: "expense-history", title: "Expense History", url: "/accounting/expenses", icon: Receipt },
       { id: "needs-payment", title: "Needs Payment", url: "/accounting/expenses-unpaid", icon: Clock },
