@@ -34,6 +34,8 @@ import {
   users,
   campaignJourneyEvents,
   type CampaignJourneyEvent, type InsertCampaignJourneyEvent,
+  platformSettings,
+  type PlatformSettings,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, ilike, sql, count, inArray, isNull, isNotNull, gte } from "drizzle-orm";
@@ -1856,6 +1858,37 @@ export class DatabaseStorage implements IStorage {
       .where(eq(campaignJourneyEvents.id, id))
       .returning();
     return updated;
+  }
+
+  async getPlatformSettings(): Promise<PlatformSettings> {
+    const [settings] = await db.select().from(platformSettings).limit(1);
+    if (!settings) {
+      const [created] = await db.insert(platformSettings).values({ id: "default", globalOtpRequired: true }).returning();
+      return created;
+    }
+    return settings;
+  }
+
+  async updatePlatformSettings(data: { globalOtpRequired: boolean }): Promise<PlatformSettings> {
+    const existing = await this.getPlatformSettings();
+    const [updated] = await db.update(platformSettings)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(platformSettings.id, existing.id))
+      .returning();
+    return updated;
+  }
+
+  async isOtpRequiredForUser(userId: string): Promise<boolean> {
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    if (!user) return true;
+
+    if (user.merchantId) {
+      const [merchant] = await db.select().from(merchants).where(eq(merchants.id, user.merchantId));
+      if (merchant && merchant.otpRequired === false) return false;
+    }
+
+    const settings = await this.getPlatformSettings();
+    return settings.globalOtpRequired;
   }
 
   async seedDemoData(): Promise<void> {

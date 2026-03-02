@@ -59,6 +59,11 @@ export function useAuth() {
       const res = await apiRequest("POST", "/api/auth/send-otp", data);
       return safeJson(res);
     },
+    onSuccess: (data) => {
+      if (data?.otpSkipped) {
+        queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      }
+    },
   });
 
   const verifyOtpMutation = useMutation({

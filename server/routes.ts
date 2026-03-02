@@ -9418,6 +9418,83 @@ export async function registerRoutes(
   });
 
   // ============================================
+  // SUPER ADMIN: PLATFORM SETTINGS (OTP etc.)
+  // ============================================
+
+  app.get("/api/admin/platform-settings", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+      const settings = await storage.getPlatformSettings();
+      res.json(settings);
+    } catch (error) {
+      console.error("Error fetching platform settings:", error);
+      res.status(500).json({ message: "Failed to fetch platform settings" });
+    }
+  });
+
+  app.put("/api/admin/platform-settings", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+
+      const { globalOtpRequired } = z.object({
+        globalOtpRequired: z.boolean(),
+      }).parse(req.body);
+
+      const updated = await storage.updatePlatformSettings({ globalOtpRequired });
+
+      await db.insert(adminActionLogs).values({
+        adminUserId: adminId,
+        actionType: "UPDATE_PLATFORM_SETTINGS",
+        details: `Set global OTP requirement to ${globalOtpRequired ? "ON" : "OFF"}`,
+      });
+
+      res.json(updated);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors[0].message });
+      }
+      console.error("Error updating platform settings:", error);
+      res.status(500).json({ message: "Failed to update platform settings" });
+    }
+  });
+
+  app.put("/api/admin/merchants/:id/otp-setting", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+
+      const merchantId = req.params.id;
+      const { otpRequired } = z.object({
+        otpRequired: z.boolean(),
+      }).parse(req.body);
+
+      const merchant = await storage.getMerchant(merchantId);
+      if (!merchant) {
+        return res.status(404).json({ message: "Merchant not found" });
+      }
+
+      await storage.updateMerchant(merchantId, { otpRequired } as any);
+
+      await db.insert(adminActionLogs).values({
+        adminUserId: adminId,
+        actionType: "UPDATE_MERCHANT_OTP",
+        targetMerchantId: merchantId,
+        details: `Set OTP requirement for "${merchant.name}" to ${otpRequired ? "ON" : "OFF"}`,
+      });
+
+      res.json({ success: true, otpRequired });
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors[0].message });
+      }
+      console.error("Error updating merchant OTP setting:", error);
+      res.status(500).json({ message: "Failed to update merchant OTP setting" });
+    }
+  });
+
+  // ============================================
   // SUPER ADMIN: AUDIT LOG
   // ============================================
 

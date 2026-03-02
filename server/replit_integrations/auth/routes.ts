@@ -7,6 +7,7 @@ import { z } from "zod";
 import { sendOtpEmail } from "../../services/email";
 import bcrypt from "bcrypt";
 import { parseUserAgent } from "../../utils/userAgent";
+import { storage } from "../../storage";
 
 export const otpStore = new Map<string, { code: string; expiresAt: number; attempts: number; sentAt: number }>();
 
@@ -155,6 +156,36 @@ export function registerAuthRoutes(app: Express): void {
         }
       }
 
+      const otpNeeded = user.role === "SUPER_ADMIN" ? true : await storage.isOtpRequiredForUser(user.id);
+
+      if (!otpNeeded) {
+        const deviceName = parseUserAgent(req.headers["user-agent"]);
+        req.session.cookie.maxAge = 12 * 60 * 60 * 1000;
+        await db.update(users).set({
+          lastLoginAt: new Date(),
+          lastLoginDevice: deviceName,
+        }).where(eq(users.id, user.id));
+        (req.session as any).userId = user.id;
+        (req.session as any).sessionDisplayName = `${user.firstName || ""} ${user.lastName || ""}`.trim() || normalizedEmail;
+
+        let merchantData = null;
+        if (user.merchantId) {
+          const [m] = await db.select().from(merchants).where(eq(merchants.id, user.merchantId));
+          if (m) merchantData = { id: m.id, name: m.name, status: m.status, onboardingStep: m.onboardingStep };
+        }
+
+        return res.json({
+          otpSkipped: true,
+          id: user.id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          role: user.role,
+          merchantId: user.merchantId,
+          merchant: merchantData,
+        });
+      }
+
       const otpKey = getOtpKey(normalizedEmail);
       const existing = otpStore.get(otpKey);
       if (existing && Date.now() - existing.sentAt < 60000) {
@@ -173,7 +204,7 @@ export function registerAuthRoutes(app: Express): void {
         return res.status(500).json({ message: "Failed to send verification code. Please try again." });
       }
 
-      res.json({ message: "Verification code sent to your email." });
+      res.json({ otpSkipped: false, message: "Verification code sent to your email." });
     } catch (error: any) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: error.errors[0].message });

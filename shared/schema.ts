@@ -33,6 +33,7 @@ export const merchants = pgTable("merchants", {
   facebookAdAccountId: varchar("facebook_ad_account_id", { length: 255 }),
   timezone: varchar("timezone", { length: 100 }).default("Asia/Karachi"),
   roboTags: jsonb("robo_tags").default({ confirm: "Robo-Confirm", pending: "Robo-Pending", cancel: "Robo-Cancel" }),
+  otpRequired: boolean("otp_required").default(true),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -662,6 +663,17 @@ export const adminActionLogs = pgTable("admin_action_logs", {
 });
 
 export type AdminActionLog = typeof adminActionLogs.$inferSelect;
+
+// ============================================
+// PLATFORM SETTINGS (global config, single-row)
+// ============================================
+export const platformSettings = pgTable("platform_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  globalOtpRequired: boolean("global_otp_required").notNull().default(true),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type PlatformSettings = typeof platformSettings.$inferSelect;
 
 // ============================================
 // RELATIONS

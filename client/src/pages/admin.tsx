@@ -273,6 +273,18 @@ function MerchantsTab() {
     onError: (err: any) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
   });
 
+  const toggleOtpMutation = useMutation({
+    mutationFn: async ({ merchantId, otpRequired }: { merchantId: string; otpRequired: boolean }) => {
+      const res = await apiRequest("PUT", `/api/admin/merchants/${merchantId}/otp-setting`, { otpRequired });
+      return res.json();
+    },
+    onSuccess: (_, vars) => {
+      toast({ title: "OTP Updated", description: `OTP ${vars.otpRequired ? "enabled" : "disabled"} for merchant` });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/merchants"] });
+    },
+    onError: (err: any) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+  });
+
   const createMerchantMutation = useMutation({
     mutationFn: async (data: typeof createForm) => {
       const res = await apiRequest("POST", "/api/admin/merchants/create", data);
@@ -459,6 +471,7 @@ function MerchantsTab() {
                   <TableHead>Plan</TableHead>
                   <TableHead>Onboarding</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>OTP</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -471,6 +484,22 @@ function MerchantsTab() {
                     <TableCell><Badge variant="outline" className="text-xs capitalize">{m.subscriptionPlan || "free"}</Badge></TableCell>
                     <TableCell><Badge variant="outline" className="text-[10px]">{m.onboardingStep}</Badge></TableCell>
                     <TableCell><Badge variant={m.status === "ACTIVE" ? "secondary" : "destructive"} className="text-xs">{m.status}</Badge></TableCell>
+                    <TableCell>
+                      <Button
+                        size="sm"
+                        variant={m.otpRequired === false ? "outline" : "secondary"}
+                        className="text-xs h-7 px-2"
+                        onClick={() => toggleOtpMutation.mutate({ merchantId: m.id, otpRequired: m.otpRequired === false })}
+                        disabled={toggleOtpMutation.isPending}
+                        data-testid={`button-otp-toggle-${m.id}`}
+                      >
+                        {m.otpRequired === false ? (
+                          <><Ban className="w-3 h-3 mr-1" />Off</>
+                        ) : (
+                          <><CheckCircle className="w-3 h-3 mr-1" />On</>
+                        )}
+                      </Button>
+                    </TableCell>
                     <TableCell className="text-xs">{formatDate(m.createdAt)}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
@@ -486,7 +515,7 @@ function MerchantsTab() {
                   </TableRow>
                 ))}
                 {merchantList.length === 0 && (
-                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No merchants found</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No merchants found</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
@@ -1438,6 +1467,97 @@ function SuperAdminsTab() {
   );
 }
 
+// ─── SETTINGS TAB ───
+function SettingsTab() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: platformSettings, isLoading } = useQuery<any>({
+    queryKey: ["/api/admin/platform-settings"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/platform-settings", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch settings");
+      return res.json();
+    },
+  });
+
+  const updateSettingsMutation = useMutation({
+    mutationFn: async (data: { globalOtpRequired: boolean }) => {
+      const res = await apiRequest("PUT", "/api/admin/platform-settings", data);
+      return res.json();
+    },
+    onSuccess: (_, vars) => {
+      toast({ title: "Settings Updated", description: `Global OTP verification ${vars.globalOtpRequired ? "enabled" : "disabled"}` });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/platform-settings"] });
+    },
+    onError: (err: any) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+  });
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <KeyRound className="w-5 h-5" />
+            OTP Verification Settings
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {isLoading ? (
+            <div className="space-y-3">
+              <Skeleton className="h-6 w-48" />
+              <Skeleton className="h-10 w-32" />
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div className="space-y-1">
+                  <p className="font-medium" data-testid="text-global-otp-label">Global OTP Verification</p>
+                  <p className="text-sm text-muted-foreground">
+                    When enabled, all merchants and their team members must verify with a one-time password after entering their credentials.
+                    When disabled, users can log in with just email and password.
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Note: Forgot password always requires OTP regardless of this setting. Super Admin login always requires OTP.
+                  </p>
+                </div>
+                <Button
+                  variant={platformSettings?.globalOtpRequired ? "default" : "outline"}
+                  size="lg"
+                  className="ml-4 min-w-[120px]"
+                  onClick={() => updateSettingsMutation.mutate({ globalOtpRequired: !platformSettings?.globalOtpRequired })}
+                  disabled={updateSettingsMutation.isPending}
+                  data-testid="button-toggle-global-otp"
+                >
+                  {updateSettingsMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : platformSettings?.globalOtpRequired ? (
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                  ) : (
+                    <Ban className="w-4 h-4 mr-2" />
+                  )}
+                  {platformSettings?.globalOtpRequired ? "Enabled" : "Disabled"}
+                </Button>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-2">
+                <p className="font-medium">How OTP Settings Work</p>
+                <div className="text-sm text-muted-foreground space-y-2">
+                  <p><strong>Per-Merchant Override:</strong> You can override the global setting for individual merchants from the Merchants tab. If a merchant has OTP set to "Off", their users can log in without OTP even if the global setting is "On".</p>
+                  <p><strong>Priority Order:</strong> Per-merchant setting takes priority over the global setting. If a merchant explicitly has OTP disabled, the global setting is ignored for that merchant.</p>
+                  <p><strong>Always-OTP Cases:</strong> Super Admin login and password reset (forgot password) always require OTP verification regardless of any setting.</p>
+                </div>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 // ─── MAIN ADMIN PANEL ───
 export default function AdminPanel() {
   const { user } = useAuth();
@@ -1484,7 +1604,7 @@ export default function AdminPanel() {
       </div>
 
       <Tabs defaultValue="dashboard" className="w-full">
-        <TabsList className="grid w-full grid-cols-7" data-testid="admin-tabs">
+        <TabsList className="grid w-full grid-cols-8" data-testid="admin-tabs">
           <TabsTrigger value="dashboard" data-testid="tab-dashboard" className="text-xs sm:text-sm">
             <Activity className="w-4 h-4 mr-1 hidden sm:inline" />Dashboard
           </TabsTrigger>
@@ -1506,6 +1626,9 @@ export default function AdminPanel() {
           <TabsTrigger value="admins" data-testid="tab-admins" className="text-xs sm:text-sm">
             <Shield className="w-4 h-4 mr-1 hidden sm:inline" />Admins
           </TabsTrigger>
+          <TabsTrigger value="settings" data-testid="tab-settings" className="text-xs sm:text-sm">
+            <KeyRound className="w-4 h-4 mr-1 hidden sm:inline" />Settings
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="dashboard" className="mt-6"><DashboardTab /></TabsContent>
@@ -1515,6 +1638,7 @@ export default function AdminPanel() {
         <TabsContent value="health" className="mt-6"><HealthTab /></TabsContent>
         <TabsContent value="audit" className="mt-6"><AuditLogTab /></TabsContent>
         <TabsContent value="admins" className="mt-6"><SuperAdminsTab /></TabsContent>
+        <TabsContent value="settings" className="mt-6"><SettingsTab /></TabsContent>
       </Tabs>
     </div>
   );

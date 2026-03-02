@@ -44,6 +44,10 @@ export default function AuthPage() {
     if (e) e.preventDefault();
     try {
       const data = await sendOtp({ email, password });
+      if (data?.otpSkipped) {
+        toast({ title: "Logged In", description: "Welcome back!" });
+        return;
+      }
       toast({ title: "Code Sent", description: data.message || "Verification code sent to your email." });
       setLoginStep("otp");
       setOtp("");
