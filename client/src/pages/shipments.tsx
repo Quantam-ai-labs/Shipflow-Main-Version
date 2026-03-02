@@ -41,9 +41,6 @@ import {
   ClipboardList,
   BookOpen,
   FileSpreadsheet,
-  AlertTriangle,
-  XCircle,
-  CheckCircle,
   Clock,
   X,
   Loader2,
@@ -89,13 +86,6 @@ const courierOptions = [
   { value: "tcs", label: "TCS" },
 ];
 
-const bookingStatusOptions = [
-  { value: "all", label: "All Statuses" },
-  { value: "success", label: "Success" },
-  { value: "failed", label: "Failed" },
-  { value: "processing", label: "Processing" },
-  { value: "queued", label: "Queued" },
-];
 
 const WORKFLOW_STATUS_CONFIG: Record<string, { color: string; icon: React.ElementType; label: string }> = {
   'FULFILLED': { color: "bg-blue-500/10 text-blue-600 border-blue-500/20", icon: Truck, label: "Fulfilled" },
@@ -141,27 +131,6 @@ interface ShipmentsResponse {
   counts: Record<string, number>;
 }
 
-interface BookingLog {
-  id: string;
-  orderId: string;
-  courierName: string;
-  status: string;
-  trackingNumber: string | null;
-  slipUrl: string | null;
-  errorMessage: string | null;
-  createdAt: string | null;
-  orderNumber: string | null;
-  customerName: string | null;
-  city: string | null;
-  totalAmount: string | null;
-}
-
-interface BookingLogsResponse {
-  logs: BookingLog[];
-  total: number;
-  page: number;
-  pageSize: number;
-}
 
 interface ShipperAdviceRow {
   id: string;
@@ -201,16 +170,6 @@ function getBatchStatusBadge(status: string) {
   return <Badge className={color}>{label}</Badge>;
 }
 
-function getBookingStatusBadge(status: string) {
-  const config: Record<string, { color: string; icon: React.ElementType }> = {
-    success: { color: "bg-green-500/10 text-green-600 border-green-500/20", icon: CheckCircle },
-    failed: { color: "bg-red-500/10 text-red-600 border-red-500/20", icon: XCircle },
-    processing: { color: "bg-blue-500/10 text-blue-600 border-blue-500/20", icon: Clock },
-    queued: { color: "bg-amber-500/10 text-amber-600 border-amber-500/20", icon: Clock },
-  };
-  const c = config[status] || { color: "bg-muted text-muted-foreground", icon: Package };
-  return <Badge className={c.color}>{status.charAt(0).toUpperCase() + status.slice(1)}</Badge>;
-}
 
 interface BatchType {
   id: string;
@@ -291,7 +250,6 @@ export default function Shipments() {
   const pageSize = 100;
 
   const [bkCourierFilter, setBkCourierFilter] = useState("all");
-  const [bkStatusFilter, setBkStatusFilter] = useState("all");
   const [bkDateRange, setBkDateRange] = useState<DateRange | undefined>(undefined);
   const [bkPage, setBkPage] = useState(1);
 
@@ -310,7 +268,6 @@ export default function Shipments() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isExporting, setIsExporting] = useState(false);
 
-  const [downloadingAwb, setDownloadingAwb] = useState<Set<string>>(new Set());
   const [downloadingBatchAwb, setDownloadingBatchAwb] = useState<Set<string>>(new Set());
   const [downloadingBatchPdf, setDownloadingBatchPdf] = useState<Set<string>>(new Set());
 
@@ -377,23 +334,23 @@ export default function Shipments() {
   const bkQueryParams = new URLSearchParams({
     page: bkPage.toString(),
     pageSize: "100",
+    batchType: "BOOKING",
     ...(bkCourierFilter !== "all" && { courier: bkCourierFilter }),
-    ...(bkStatusFilter !== "all" && { status: bkStatusFilter }),
     ...(bkDateParams.dateFrom && { dateFrom: bkDateParams.dateFrom }),
     ...(bkDateParams.dateTo && { dateTo: bkDateParams.dateTo }),
   });
 
-  const { data: bkData, isLoading: bkLoading } = useQuery<BookingLogsResponse>({
-    queryKey: ["/api/booking-logs", bkQueryParams.toString()],
+  const { data: bkData, isLoading: bkLoading } = useQuery<BatchesResponse>({
+    queryKey: ["/api/shipment-batches", "booking", bkQueryParams.toString()],
     queryFn: async () => {
-      const res = await fetch(`/api/booking-logs?${bkQueryParams.toString()}`, { credentials: "include" });
+      const res = await fetch(`/api/shipment-batches?${bkQueryParams.toString()}`, { credentials: "include" });
       if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
       return res.json();
     },
     enabled: activeTab === "booking-logs",
   });
 
-  const bookingLogs = bkData?.logs ?? [];
+  const bookingBatches = bkData?.batches ?? [];
   const bkTotalPages = Math.ceil((bkData?.total ?? 0) / 100);
 
   const saDateParams = dateRangeToParams(saDateRange);
@@ -420,13 +377,14 @@ export default function Shipments() {
   const batchQueryParams = new URLSearchParams({
     page: batchPage.toString(),
     pageSize: "100",
+    batchType: "LOADSHEET",
     ...(batchCourierFilter !== "all" && { courier: batchCourierFilter }),
     ...(batchDateParams.dateFrom && { dateFrom: batchDateParams.dateFrom }),
     ...(batchDateParams.dateTo && { dateTo: batchDateParams.dateTo }),
   });
 
   const { data: batchesData, isLoading: batchesLoading } = useQuery<BatchesResponse>({
-    queryKey: ["/api/shipment-batches", batchQueryParams.toString()],
+    queryKey: ["/api/shipment-batches", "loadsheet", batchQueryParams.toString()],
     queryFn: async () => {
       const res = await fetch(`/api/shipment-batches?${batchQueryParams.toString()}`, { credentials: "include" });
       if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
@@ -474,28 +432,6 @@ export default function Shipments() {
     setSelectedOrder(order);
     setRemarkValue(order.remark || "");
     setRemarkDialogOpen(true);
-  };
-
-  const handleDownloadAwb = async (logId: string, orderId: string, orderNumber: string | null) => {
-    setDownloadingAwb(prev => new Set(prev).add(logId));
-    try {
-      const resp = await fetch(`/api/print/native-slip/${orderId}.pdf`, { credentials: "include" });
-      if (!resp.ok) {
-        toast({ title: "AWB Error", description: "Failed to fetch airway bill", variant: "destructive" });
-        return;
-      }
-      const blob = await resp.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `awb-${(orderNumber || orderId).replace(/^#/, '')}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      toast({ title: "Error", description: "Could not download airway bill", variant: "destructive" });
-    } finally {
-      setDownloadingAwb(prev => { const n = new Set(prev); n.delete(logId); return n; });
-    }
   };
 
   const handleBatchAwbAction = async (batchId: string, action: "download" | "print") => {
@@ -1066,17 +1002,6 @@ export default function Shipments() {
                     ))}
                   </SelectContent>
                 </Select>
-                <Select value={bkStatusFilter} onValueChange={(v) => { setBkStatusFilter(v); setBkPage(1); }}>
-                  <SelectTrigger className="w-[160px]" data-testid="select-bk-status">
-                    <Filter className="w-4 h-4 mr-2" />
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {bookingStatusOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
                 <DateRangePicker
                   dateRange={bkDateRange}
                   onDateRangeChange={(range) => { setBkDateRange(range); setBkPage(1); }}
@@ -1089,9 +1014,9 @@ export default function Shipments() {
             <CardHeader className="pb-4">
               <CardTitle className="text-lg font-semibold flex items-center gap-2">
                 <BookOpen className="w-5 h-5" />
-                Booking Logs
+                Booking Sessions
                 {bkData?.total !== undefined && (
-                  <Badge variant="secondary" className="ml-2">{bkData.total} entries</Badge>
+                  <Badge variant="secondary" className="ml-2">{bkData.total} sessions</Badge>
                 )}
               </CardTitle>
             </CardHeader>
@@ -1107,81 +1032,69 @@ export default function Shipments() {
                     </div>
                   ))}
                 </div>
-              ) : bookingLogs.length > 0 ? (
+              ) : bookingBatches.length > 0 ? (
                 <>
                   <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Order</TableHead>
-                          <TableHead>Customer</TableHead>
-                          <TableHead>City</TableHead>
+                          <TableHead>Batch ID</TableHead>
                           <TableHead>Courier</TableHead>
+                          <TableHead className="text-center">Total</TableHead>
+                          <TableHead className="text-center">Success</TableHead>
+                          <TableHead className="text-center">Failed</TableHead>
                           <TableHead>Status</TableHead>
-                          <TableHead>Tracking #</TableHead>
-                          <TableHead className="text-right">Amount</TableHead>
-                          <TableHead>Error</TableHead>
-                          <TableHead>Time</TableHead>
+                          <TableHead>Booked At</TableHead>
                           <TableHead>Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {bookingLogs.map((log) => (
-                          <TableRow key={log.id} data-testid={`bk-row-${log.id}`}>
-                            <TableCell>
-                              <Link href={`/orders/detail/${log.orderId}`} className="text-primary hover:underline font-medium" data-testid={`bk-link-${log.id}`}>
-                                {log.orderNumber || "-"}
-                              </Link>
-                            </TableCell>
-                            <TableCell className="text-sm">{log.customerName || "-"}</TableCell>
-                            <TableCell className="text-muted-foreground text-sm">{log.city || "-"}</TableCell>
-                            <TableCell className="capitalize text-sm">{log.courierName}</TableCell>
-                            <TableCell data-testid={`bk-status-${log.id}`}>
-                              {getBookingStatusBadge(log.status)}
-                            </TableCell>
-                            <TableCell className="font-mono text-sm" data-testid={`bk-tracking-${log.id}`}>
-                              {log.trackingNumber || "-"}
-                            </TableCell>
-                            <TableCell className="text-right font-medium text-sm">
-                              {log.totalAmount ? `PKR ${Number(log.totalAmount).toLocaleString()}` : "-"}
-                            </TableCell>
-                            <TableCell data-testid={`bk-error-${log.id}`}>
-                              {log.errorMessage ? (
-                                <div className="max-w-[250px] flex items-start gap-1">
-                                  <AlertTriangle className="w-3.5 h-3.5 text-red-500 mt-0.5 shrink-0" />
-                                  <p className="text-sm text-red-600 truncate" title={log.errorMessage}>{log.errorMessage}</p>
-                                </div>
-                              ) : (
-                                <span className="text-muted-foreground/50">-</span>
-                              )}
-                            </TableCell>
+                        {bookingBatches.map((batch) => (
+                          <TableRow key={batch.id} data-testid={`bk-row-${batch.id}`}>
+                            <TableCell className="font-mono text-sm" data-testid={`bk-batch-id-${batch.id}`}>{batch.id.substring(0, 8)}</TableCell>
+                            <TableCell className="capitalize" data-testid={`bk-courier-${batch.id}`}>{batch.courierName}</TableCell>
+                            <TableCell className="text-center" data-testid={`bk-total-${batch.id}`}>{batch.totalSelectedCount ?? "-"}</TableCell>
+                            <TableCell className="text-center text-green-600" data-testid={`bk-success-${batch.id}`}>{batch.successCount ?? "-"}</TableCell>
+                            <TableCell className="text-center text-red-600" data-testid={`bk-failed-${batch.id}`}>{batch.failedCount ?? "-"}</TableCell>
+                            <TableCell data-testid={`bk-status-${batch.id}`}>{getBatchStatusBadge(batch.status)}</TableCell>
                             <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
-                              {log.createdAt ? formatPkDateTime(log.createdAt) : "-"}
+                              {batch.createdAt ? formatPkDateTime(batch.createdAt) : "-"}
                             </TableCell>
                             <TableCell>
-                              {log.status === "success" && log.trackingNumber && (
-                                <div className="flex items-center gap-1">
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => window.open(`/api/print/native-slip/${log.orderId}.pdf`, "_blank")}
-                                    title="Print AWB"
-                                    data-testid={`button-bk-print-${log.id}`}
-                                  >
-                                    <Printer className="w-4 h-4" />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    disabled={downloadingAwb.has(log.id)}
-                                    onClick={() => handleDownloadAwb(log.id, log.orderId, log.orderNumber)}
-                                    title="Download AWB"
-                                    data-testid={`button-bk-download-${log.id}`}
-                                  >
-                                    {downloadingAwb.has(log.id) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                                  </Button>
-                                </div>
-                              )}
+                              <div className="flex items-center gap-1 flex-wrap">
+                                {(batch.successCount ?? 0) > 0 && (
+                                  <>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      disabled={downloadingBatchAwb.has(batch.id)}
+                                      onClick={() => handleBatchAwbAction(batch.id, "print")}
+                                      data-testid={`button-bk-print-awbs-${batch.id}`}
+                                    >
+                                      {downloadingBatchAwb.has(batch.id) ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Printer className="w-3.5 h-3.5 mr-1" />}
+                                      Print AWBs
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      disabled={downloadingBatchAwb.has(batch.id)}
+                                      onClick={() => handleBatchAwbAction(batch.id, "download")}
+                                      data-testid={`button-bk-download-awbs-${batch.id}`}
+                                    >
+                                      {downloadingBatchAwb.has(batch.id) ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Download className="w-3.5 h-3.5 mr-1" />}
+                                      AWBs
+                                    </Button>
+                                  </>
+                                )}
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => setSelectedBatchId(batch.id)}
+                                  data-testid={`button-bk-details-${batch.id}`}
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </Button>
+                              </div>
                             </TableCell>
                           </TableRow>
                         ))}
@@ -1195,9 +1108,9 @@ export default function Shipments() {
               ) : (
                 <div className="text-center py-16">
                   <BookOpen className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
-                  <h3 className="font-medium mb-1">No booking logs found</h3>
+                  <h3 className="font-medium mb-1" data-testid="text-no-booking-logs">No booking sessions found</h3>
                   <p className="text-sm text-muted-foreground">
-                    Booking attempts will appear here when orders are booked with couriers
+                    Booking sessions will appear here when orders are booked with couriers
                   </p>
                 </div>
               )}
@@ -1260,7 +1173,6 @@ export default function Shipments() {
                         <TableRow>
                           <TableHead>Batch ID</TableHead>
                           <TableHead>Courier</TableHead>
-                          <TableHead>Type</TableHead>
                           <TableHead className="text-center">Total</TableHead>
                           <TableHead className="text-center">Success</TableHead>
                           <TableHead className="text-center">Failed</TableHead>
@@ -1274,9 +1186,6 @@ export default function Shipments() {
                           <TableRow key={batch.id} data-testid={`batch-row-${batch.id}`}>
                             <TableCell className="font-mono text-sm">{batch.id.substring(0, 8)}</TableCell>
                             <TableCell className="capitalize">{batch.courierName}</TableCell>
-                            <TableCell>
-                              <Badge variant="secondary" className="text-xs">{batch.batchType}</Badge>
-                            </TableCell>
                             <TableCell className="text-center">{batch.totalSelectedCount ?? "-"}</TableCell>
                             <TableCell className="text-center text-green-600">{batch.successCount ?? "-"}</TableCell>
                             <TableCell className="text-center text-red-600">{batch.failedCount ?? "-"}</TableCell>

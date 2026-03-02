@@ -7007,6 +7007,7 @@ export async function registerRoutes(
       const courier = req.query.courier as string;
       const dateFrom = req.query.dateFrom as string;
       const dateTo = req.query.dateTo as string;
+      const batchType = req.query.batchType as string;
 
       const result = await storage.getShipmentBatches(merchantId, {
         page,
@@ -7014,6 +7015,7 @@ export async function registerRoutes(
         courier,
         dateFrom,
         dateTo,
+        batchType,
       });
       res.json(result);
     } catch (error) {

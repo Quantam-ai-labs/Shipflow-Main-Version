@@ -1410,12 +1410,19 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async getShipmentBatches(merchantId: string, options?: { page?: number; pageSize?: number; courier?: string; dateFrom?: string; dateTo?: string }): Promise<{ batches: ShipmentBatch[]; total: number }> {
+  async getShipmentBatches(merchantId: string, options?: { page?: number; pageSize?: number; courier?: string; dateFrom?: string; dateTo?: string; batchType?: string }): Promise<{ batches: ShipmentBatch[]; total: number }> {
     const page = options?.page || 1;
     const pageSize = options?.pageSize || 20;
     const offset = (page - 1) * pageSize;
 
     const conditions: any[] = [eq(shipmentBatches.merchantId, merchantId)];
+    if (options?.batchType) {
+      if (options.batchType === "BOOKING") {
+        conditions.push(sql`${shipmentBatches.batchType} IN ('BULK', 'SINGLE')`);
+      } else {
+        conditions.push(eq(shipmentBatches.batchType, options.batchType));
+      }
+    }
     if (options?.courier && options.courier !== 'all') {
       conditions.push(eq(shipmentBatches.courierName, options.courier));
     }
