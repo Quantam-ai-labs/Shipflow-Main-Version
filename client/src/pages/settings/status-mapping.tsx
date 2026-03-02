@@ -948,6 +948,13 @@ export default function StatusMappingPage() {
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [importFile, setImportFile] = useState<any>(null);
   const [importCourierFilter, setImportCourierFilter] = useState("all");
+  const [showAddMappingDialog, setShowAddMappingDialog] = useState(false);
+  const [addMappingForm, setAddMappingForm] = useState({
+    courierName: "leopards" as string,
+    courierStatus: "",
+    normalizedStatus: "BOOKED" as string,
+    workflowStage: "BOOKED" as string,
+  });
 
   const { data: unmappedStatuses } = useQuery<UnmappedStatus[]>({
     queryKey: ["/api/unmapped-courier-statuses?resolved=false"],
@@ -961,6 +968,24 @@ export default function StatusMappingPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/unmapped-courier-statuses"] });
       queryClient.invalidateQueries({ queryKey: ["/api/unmapped-courier-statuses/count"] });
       toast({ title: "Dismissed", description: "Unmapped status has been dismissed." });
+    },
+  });
+
+  const addMappingMutation = useMutation({
+    mutationFn: async (body: object) => {
+      const res = await apiRequest("POST", "/api/courier-status-mappings", body);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/courier-status-mappings/raw-statuses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/unmapped-courier-statuses?resolved=false"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/unmapped-courier-statuses/count"] });
+      setShowAddMappingDialog(false);
+      setAddMappingForm({ courierName: "leopards", courierStatus: "", normalizedStatus: "BOOKED", workflowStage: "BOOKED" });
+      toast({ title: "Mapping added", description: "Custom status mapping has been created." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to add mapping.", variant: "destructive" });
     },
   });
 
@@ -1089,6 +1114,14 @@ export default function StatusMappingPage() {
             className="hidden"
             onChange={handleFileSelect}
           />
+          <Button
+            size="sm"
+            onClick={() => setShowAddMappingDialog(true)}
+            data-testid="button-add-mapping"
+          >
+            <Plus className="w-4 h-4 mr-1.5" />
+            Add Mapping
+          </Button>
         </div>
       </div>
 
@@ -1172,6 +1205,105 @@ export default function StatusMappingPage() {
               data-testid="button-confirm-import"
             >
               {importMutation.isPending ? "Importing..." : "Import Mappings"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showAddMappingDialog} onOpenChange={setShowAddMappingDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Custom Status Mapping</DialogTitle>
+            <DialogDescription>
+              Manually add a mapping for a courier status string. This creates a custom override that takes priority over system defaults.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Courier</Label>
+              <Select
+                value={addMappingForm.courierName}
+                onValueChange={(v) => setAddMappingForm((f) => ({ ...f, courierName: v }))}
+              >
+                <SelectTrigger data-testid="select-add-mapping-courier">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="leopards">Leopards Courier</SelectItem>
+                  <SelectItem value="postex">PostEx</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Courier Status</Label>
+              <Input
+                placeholder="e.g. Shipment Delivered"
+                value={addMappingForm.courierStatus}
+                onChange={(e) => setAddMappingForm((f) => ({ ...f, courierStatus: e.target.value }))}
+                data-testid="input-add-mapping-status"
+              />
+              <p className="text-xs text-muted-foreground">The exact status string as it appears from the courier.</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Normalized Status</Label>
+              <Select
+                value={addMappingForm.normalizedStatus}
+                onValueChange={(v) => setAddMappingForm((f) => ({
+                  ...f,
+                  normalizedStatus: v,
+                  workflowStage: WORKFLOW_STAGE_MAP[v] || f.workflowStage,
+                }))}
+              >
+                <SelectTrigger data-testid="select-add-mapping-normalized">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {NORMALIZED_STATUSES.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      <span className="flex items-center gap-2">
+                        <span className={`inline-block w-2 h-2 rounded-full ${STATUS_CATEGORY_COLORS[s]?.split(" ")[0] || "bg-gray-200"}`} />
+                        {STATUS_LABELS[s]}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Workflow Stage</Label>
+              <Select
+                value={addMappingForm.workflowStage}
+                onValueChange={(v) => setAddMappingForm((f) => ({ ...f, workflowStage: v }))}
+              >
+                <SelectTrigger data-testid="select-add-mapping-stage">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {WORKFLOW_STAGES.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      <span className="flex items-center gap-2">
+                        <span className={`inline-block w-2 h-2 rounded-full ${WORKFLOW_STAGE_COLORS[s]?.split(" ")[0] || "bg-gray-200"}`} />
+                        {WORKFLOW_STAGE_LABELS[s]}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddMappingDialog(false)} data-testid="button-cancel-add-mapping">Cancel</Button>
+            <Button
+              onClick={() => addMappingMutation.mutate({
+                courierName: addMappingForm.courierName,
+                courierStatus: addMappingForm.courierStatus.toLowerCase().trim(),
+                normalizedStatus: addMappingForm.normalizedStatus,
+                workflowStage: addMappingForm.workflowStage,
+              })}
+              disabled={!addMappingForm.courierStatus.trim() || addMappingMutation.isPending}
+              data-testid="button-confirm-add-mapping"
+            >
+              {addMappingMutation.isPending ? "Adding..." : "Add Mapping"}
             </Button>
           </DialogFooter>
         </DialogContent>
