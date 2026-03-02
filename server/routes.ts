@@ -7005,11 +7005,15 @@ export async function registerRoutes(
       const page = parseInt(req.query.page as string) || 1;
       const pageSize = parseInt(req.query.pageSize as string) || 20;
       const courier = req.query.courier as string;
+      const dateFrom = req.query.dateFrom as string;
+      const dateTo = req.query.dateTo as string;
 
       const result = await storage.getShipmentBatches(merchantId, {
         page,
         pageSize,
         courier,
+        dateFrom,
+        dateTo,
       });
       res.json(result);
     } catch (error) {
@@ -7509,6 +7513,18 @@ export async function registerRoutes(
           return res.status(404).json({ message: "Batch not found" });
         }
 
+        const cachedAwbFilename = (batch as any).pdfBatchMeta?.cachedAwbPath;
+        if (cachedAwbFilename && typeof cachedAwbFilename === "string" && !cachedAwbFilename.includes("..") && !cachedAwbFilename.includes("/")) {
+          const fs = await import("fs");
+          const path = await import("path");
+          const diskPath = path.join(process.cwd(), "generated_pdfs", cachedAwbFilename);
+          if (fs.existsSync(diskPath)) {
+            res.setHeader("Content-Type", "application/pdf");
+            res.setHeader("Content-Disposition", `inline; filename="batch_awb_${batch.id.substring(0, 8)}.pdf"`);
+            return fs.createReadStream(diskPath).pipe(res);
+          }
+        }
+
         const items = await storage.getShipmentBatchItems(batch.id);
         const bookedItems = items.filter(
           (item) => item.bookingStatus === "BOOKED" && item.trackingNumber,
@@ -7522,16 +7538,26 @@ export async function registerRoutes(
 
         const courierNorm = normalizeCourierName(batch.courierName || "");
 
+        const CONCURRENCY = 5;
+        async function runInBatches<T, R>(items: T[], fn: (item: T) => Promise<R>): Promise<R[]> {
+          const results: R[] = [];
+          for (let i = 0; i < items.length; i += CONCURRENCY) {
+            const chunk = items.slice(i, i + CONCURRENCY);
+            const chunkResults = await Promise.all(chunk.map(fn));
+            results.push(...chunkResults);
+          }
+          return results;
+        }
+
         if (courierNorm === "postex") {
           const { generatePostExCustomSlip } = await import("./services/courierSlips");
           const merchant = await storage.getMerchant(merchantId);
-          const postExContexts: Array<import("./services/courierSlips").PostExOrderContext> = [];
-          for (const item of bookedItems) {
+          const orderResults = await runInBatches(bookedItems, async (item) => {
             const order = await storage.getOrderById(merchantId, item.orderId);
-            if (!order) continue;
+            if (!order) return null;
             const lineItems = Array.isArray(order.lineItems) ? order.lineItems : [];
             const itemsSummary = order.itemSummary || lineItems.map((li: any) => `${li.title || li.name || "Item"} x${li.quantity || 1}`).join(", ");
-            postExContexts.push({
+            return {
               trackingNumber: item.trackingNumber || order.courierTracking || "",
               orderNumber: item.orderNumber || order.orderNumber,
               customerName: item.consigneeName || order.customerName,
@@ -7545,12 +7571,23 @@ export async function registerRoutes(
               totalQuantity: order.totalQuantity || 1,
               remarks: order.notes || "",
               bookedAt: order.createdAt ? new Date(order.createdAt).toLocaleDateString("en-GB") : new Date().toLocaleDateString("en-GB"),
-            });
-          }
+            } as import("./services/courierSlips").PostExOrderContext;
+          });
+          const postExContexts = orderResults.filter((r): r is import("./services/courierSlips").PostExOrderContext => r !== null);
           if (postExContexts.length === 0) {
             return res.status(404).json({ message: "No valid PostEx orders found in batch" });
           }
           const pdfBuffer = await generatePostExCustomSlip(postExContexts);
+
+          try {
+            const { savePdf } = await import("./services/pdfGenerator");
+            const awbPath = await savePdf(pdfBuffer, `batch_awb_${batch.id.substring(0, 8)}`);
+            const existingMeta = (batch.pdfBatchMeta as any) || {};
+            await storage.updateShipmentBatch(batch.id, { pdfBatchMeta: { ...existingMeta, cachedAwbPath: awbPath } });
+          } catch (cacheErr) {
+            console.warn("[BatchAWB] Failed to cache AWB PDF:", cacheErr);
+          }
+
           res.setHeader("Content-Type", "application/pdf");
           res.setHeader(
             "Content-Disposition",
@@ -7569,7 +7606,7 @@ export async function registerRoutes(
           const allBills: import("./services/pdfGenerator").AirwayBillData[] = [];
           const fallbackPdfBuffers: Buffer[] = [];
 
-          for (const item of bookedItems) {
+          const itemResults = await runInBatches(bookedItems, async (item) => {
             const trackingNum = item.trackingNumber;
             const slipUrl = item.slipUrl;
             const order = await storage.getOrderById(merchantId, item.orderId);
@@ -7584,8 +7621,7 @@ export async function registerRoutes(
                 trackingNumber: trackingNum,
               }, bulkOrderCtx);
               if (dataResult.success && dataResult.bills) {
-                allBills.push(...dataResult.bills);
-                continue;
+                return { type: "bills" as const, bills: dataResult.bills };
               }
             }
 
@@ -7599,13 +7635,18 @@ export async function registerRoutes(
                 bulkOrderCtx,
               );
               if (result?.success && result.pdfBuffer) {
-                fallbackPdfBuffers.push(result.pdfBuffer);
+                return { type: "pdf" as const, pdfBuffer: result.pdfBuffer };
               } else {
-                errors.push(`${item.orderNumber}: ${result?.error || "Failed"}`);
+                return { type: "error" as const, error: `${item.orderNumber}: ${result?.error || "Failed"}` };
               }
-            } else {
-              errors.push(`${item.orderNumber}: No slip URL or credentials`);
             }
+            return { type: "error" as const, error: `${item.orderNumber}: No slip URL or credentials` };
+          });
+
+          for (const r of itemResults) {
+            if (r.type === "bills") allBills.push(...r.bills);
+            else if (r.type === "pdf") fallbackPdfBuffers.push(r.pdfBuffer);
+            else if (r.type === "error") errors.push(r.error);
           }
 
           if (allBills.length === 0 && fallbackPdfBuffers.length === 0) {
@@ -7628,6 +7669,15 @@ export async function registerRoutes(
           } else {
             const billsPdf = await generateAirwayBillPdfBuffer(allBills);
             finalPdf = await combinePdfs([billsPdf, ...fallbackPdfBuffers]);
+          }
+
+          try {
+            const { savePdf } = await import("./services/pdfGenerator");
+            const awbPath = await savePdf(finalPdf, `batch_awb_${batch.id.substring(0, 8)}`);
+            const existingMeta = (batch.pdfBatchMeta as any) || {};
+            await storage.updateShipmentBatch(batch.id, { pdfBatchMeta: { ...existingMeta, cachedAwbPath: awbPath } });
+          } catch (cacheErr) {
+            console.warn("[BatchAWB] Failed to cache AWB PDF:", cacheErr);
           }
 
           res.setHeader("Content-Type", "application/pdf");

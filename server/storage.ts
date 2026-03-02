@@ -135,7 +135,7 @@ export interface IStorage {
   // Shipment Batches
   createShipmentBatch(batch: InsertShipmentBatch): Promise<ShipmentBatch>;
   updateShipmentBatch(id: string, data: Partial<InsertShipmentBatch>): Promise<ShipmentBatch | undefined>;
-  getShipmentBatches(merchantId: string, options?: { page?: number; pageSize?: number; courier?: string }): Promise<{ batches: ShipmentBatch[]; total: number }>;
+  getShipmentBatches(merchantId: string, options?: { page?: number; pageSize?: number; courier?: string; dateFrom?: string; dateTo?: string }): Promise<{ batches: ShipmentBatch[]; total: number }>;
   getShipmentBatchById(merchantId: string, id: string): Promise<ShipmentBatch | undefined>;
 
   // Shipment Batch Items
@@ -1410,14 +1410,22 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async getShipmentBatches(merchantId: string, options?: { page?: number; pageSize?: number; courier?: string }): Promise<{ batches: ShipmentBatch[]; total: number }> {
+  async getShipmentBatches(merchantId: string, options?: { page?: number; pageSize?: number; courier?: string; dateFrom?: string; dateTo?: string }): Promise<{ batches: ShipmentBatch[]; total: number }> {
     const page = options?.page || 1;
     const pageSize = options?.pageSize || 20;
     const offset = (page - 1) * pageSize;
 
-    const conditions = [eq(shipmentBatches.merchantId, merchantId)];
+    const conditions: any[] = [eq(shipmentBatches.merchantId, merchantId)];
     if (options?.courier && options.courier !== 'all') {
       conditions.push(eq(shipmentBatches.courierName, options.courier));
+    }
+    if (options?.dateFrom) {
+      const tz = DEFAULT_TIMEZONE;
+      conditions.push(sql`${shipmentBatches.createdAt} >= ${toMerchantStartOfDay(options.dateFrom, tz)}`);
+    }
+    if (options?.dateTo) {
+      const tz = DEFAULT_TIMEZONE;
+      conditions.push(sql`${shipmentBatches.createdAt} <= ${toMerchantEndOfDay(options.dateTo, tz)}`);
     }
 
     const whereClause = and(...conditions);

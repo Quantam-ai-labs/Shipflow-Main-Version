@@ -1286,3 +1286,14 @@ export function getPdfPath(filepath: string): string | null {
   if (fs.existsSync(filepath)) return filepath;
   return null;
 }
+
+export async function savePdf(buffer: Buffer, namePrefix: string): Promise<string> {
+  if (!fs.existsSync(PDF_DIR)) {
+    fs.mkdirSync(PDF_DIR, { recursive: true });
+  }
+  const safeName = namePrefix.replace(/[^a-zA-Z0-9_-]/g, "_");
+  const filename = `${safeName}_${Date.now()}.pdf`;
+  const filepath = path.join(PDF_DIR, filename);
+  fs.writeFileSync(filepath, buffer);
+  return filename;
+}

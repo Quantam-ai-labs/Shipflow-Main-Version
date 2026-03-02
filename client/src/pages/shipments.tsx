@@ -299,6 +299,7 @@ export default function Shipments() {
   const [saDateRange, setSaDateRange] = useState<DateRange | undefined>(undefined);
 
   const [batchCourierFilter, setBatchCourierFilter] = useState("all");
+  const [batchDateRange, setBatchDateRange] = useState<DateRange | undefined>(undefined);
   const [batchPage, setBatchPage] = useState(1);
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
 
@@ -308,6 +309,10 @@ export default function Shipments() {
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isExporting, setIsExporting] = useState(false);
+
+  const [downloadingAwb, setDownloadingAwb] = useState<Set<string>>(new Set());
+  const [downloadingBatchAwb, setDownloadingBatchAwb] = useState<Set<string>>(new Set());
+  const [downloadingBatchPdf, setDownloadingBatchPdf] = useState<Set<string>>(new Set());
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
@@ -411,10 +416,13 @@ export default function Shipments() {
   const saRows = saData?.rows ?? [];
   const saTotals = saData?.totalsByCourier ?? {};
 
+  const batchDateParams = dateRangeToParams(batchDateRange);
   const batchQueryParams = new URLSearchParams({
     page: batchPage.toString(),
     pageSize: "100",
     ...(batchCourierFilter !== "all" && { courier: batchCourierFilter }),
+    ...(batchDateParams.dateFrom && { dateFrom: batchDateParams.dateFrom }),
+    ...(batchDateParams.dateTo && { dateTo: batchDateParams.dateTo }),
   });
 
   const { data: batchesData, isLoading: batchesLoading } = useQuery<BatchesResponse>({
@@ -466,6 +474,80 @@ export default function Shipments() {
     setSelectedOrder(order);
     setRemarkValue(order.remark || "");
     setRemarkDialogOpen(true);
+  };
+
+  const handleDownloadAwb = async (logId: string, orderId: string, orderNumber: string | null) => {
+    setDownloadingAwb(prev => new Set(prev).add(logId));
+    try {
+      const resp = await fetch(`/api/print/native-slip/${orderId}.pdf`, { credentials: "include" });
+      if (!resp.ok) {
+        toast({ title: "AWB Error", description: "Failed to fetch airway bill", variant: "destructive" });
+        return;
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `awb-${(orderNumber || orderId).replace(/^#/, '')}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast({ title: "Error", description: "Could not download airway bill", variant: "destructive" });
+    } finally {
+      setDownloadingAwb(prev => { const n = new Set(prev); n.delete(logId); return n; });
+    }
+  };
+
+  const handleBatchAwbAction = async (batchId: string, action: "download" | "print") => {
+    const setter = setDownloadingBatchAwb;
+    setter(prev => new Set(prev).add(batchId));
+    try {
+      const resp = await fetch(`/api/print/batch-awb/${batchId}.pdf`, { credentials: "include" });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ message: "Failed to fetch airway bills" }));
+        toast({ title: "AWB Error", description: err.message, variant: "destructive" });
+        return;
+      }
+      const blob = await resp.blob();
+      if (blob.size === 0 || blob.type.includes("json")) {
+        toast({ title: "AWB Error", description: "Invoices not available for this batch", variant: "destructive" });
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      if (action === "download") {
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `batch-awbs-${batchId.substring(0, 8)}.pdf`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } else {
+        window.open(url, "_blank");
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+      }
+    } catch {
+      toast({ title: "Error", description: "Could not fetch airway bills", variant: "destructive" });
+    } finally {
+      setter(prev => { const n = new Set(prev); n.delete(batchId); return n; });
+    }
+  };
+
+  const handleBatchPdfDownload = async (batchId: string) => {
+    setDownloadingBatchPdf(prev => new Set(prev).add(batchId));
+    try {
+      const resp = await fetch(`/api/print/batch/${batchId}.pdf`, { credentials: "include" });
+      if (!resp.ok) {
+        toast({ title: "Error", description: "Failed to fetch loadsheet", variant: "destructive" });
+        return;
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank");
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch {
+      toast({ title: "Error", description: "Could not fetch loadsheet", variant: "destructive" });
+    } finally {
+      setDownloadingBatchPdf(prev => { const n = new Set(prev); n.delete(batchId); return n; });
+    }
   };
 
   return (
@@ -1040,6 +1122,7 @@ export default function Shipments() {
                           <TableHead className="text-right">Amount</TableHead>
                           <TableHead>Error</TableHead>
                           <TableHead>Time</TableHead>
+                          <TableHead>Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -1075,6 +1158,31 @@ export default function Shipments() {
                             <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
                               {log.createdAt ? formatPkDateTime(log.createdAt) : "-"}
                             </TableCell>
+                            <TableCell>
+                              {log.status === "success" && log.trackingNumber && (
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => window.open(`/api/print/native-slip/${log.orderId}.pdf`, "_blank")}
+                                    title="Print AWB"
+                                    data-testid={`button-bk-print-${log.id}`}
+                                  >
+                                    <Printer className="w-4 h-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    disabled={downloadingAwb.has(log.id)}
+                                    onClick={() => handleDownloadAwb(log.id, log.orderId, log.orderNumber)}
+                                    title="Download AWB"
+                                    data-testid={`button-bk-download-${log.id}`}
+                                  >
+                                    {downloadingAwb.has(log.id) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                                  </Button>
+                                </div>
+                              )}
+                            </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -1101,7 +1209,7 @@ export default function Shipments() {
         <TabsContent value="loadsheets" className="space-y-6 mt-6">
           <Card>
             <CardContent className="p-4">
-              <div className="flex gap-2 flex-wrap">
+              <div className="flex flex-col sm:flex-row gap-4 flex-wrap">
                 <Select value={batchCourierFilter} onValueChange={(v) => { setBatchCourierFilter(v); setBatchPage(1); }}>
                   <SelectTrigger className="w-[160px]" data-testid="select-batch-courier">
                     <Truck className="w-4 h-4 mr-2" />
@@ -1113,6 +1221,10 @@ export default function Shipments() {
                     ))}
                   </SelectContent>
                 </Select>
+                <DateRangePicker
+                  dateRange={batchDateRange}
+                  onDateRangeChange={(range) => { setBatchDateRange(range); setBatchPage(1); }}
+                />
               </div>
             </CardContent>
           </Card>
@@ -1173,46 +1285,41 @@ export default function Shipments() {
                               {batch.createdAt ? formatPkDateTime(batch.createdAt) : "-"}
                             </TableCell>
                             <TableCell>
-                              <div className="flex items-center gap-1">
+                              <div className="flex items-center gap-1 flex-wrap">
                                 {(batch.successCount ?? 0) > 0 && (
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={async () => {
-                                      try {
-                                        const resp = await fetch(`/api/print/batch-awb/${batch.id}.pdf`);
-                                        if (!resp.ok) {
-                                          const err = await resp.json().catch(() => ({ message: "Failed to fetch airway bills" }));
-                                          toast({ title: "Invoice Error", description: err.message, variant: "destructive" });
-                                          return;
-                                        }
-                                        const blob = await resp.blob();
-                                        if (blob.size === 0 || blob.type.includes("json")) {
-                                          toast({ title: "Invoice Error", description: "Invoices not available for this batch", variant: "destructive" });
-                                          return;
-                                        }
-                                        const url = URL.createObjectURL(blob);
-                                        window.open(url, "_blank");
-                                        setTimeout(() => URL.revokeObjectURL(url), 60000);
-                                      } catch {
-                                        toast({ title: "Error", description: "Could not fetch airway bills", variant: "destructive" });
-                                      }
-                                    }}
-                                    title="Download Courier Airway Bills"
-                                    data-testid={`button-download-batch-awb-${batch.id}`}
-                                  >
-                                    <Printer className="w-4 h-4" />
-                                  </Button>
+                                  <>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      disabled={downloadingBatchAwb.has(batch.id)}
+                                      onClick={() => handleBatchAwbAction(batch.id, "print")}
+                                      data-testid={`button-print-batch-awb-${batch.id}`}
+                                    >
+                                      {downloadingBatchAwb.has(batch.id) ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Printer className="w-3.5 h-3.5 mr-1" />}
+                                      Print AWBs
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      disabled={downloadingBatchAwb.has(batch.id)}
+                                      onClick={() => handleBatchAwbAction(batch.id, "download")}
+                                      data-testid={`button-download-batch-awb-${batch.id}`}
+                                    >
+                                      {downloadingBatchAwb.has(batch.id) ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Download className="w-3.5 h-3.5 mr-1" />}
+                                      AWBs
+                                    </Button>
+                                  </>
                                 )}
                                 {batch.pdfBatchPath && (
                                   <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => window.open(`/api/print/batch/${batch.id}.pdf`, "_blank")}
-                                    title="Download Batch Loadsheet"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={downloadingBatchPdf.has(batch.id)}
+                                    onClick={() => handleBatchPdfDownload(batch.id)}
                                     data-testid={`button-download-batch-pdf-${batch.id}`}
                                   >
-                                    <Download className="w-4 h-4" />
+                                    {downloadingBatchPdf.has(batch.id) ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <FileSpreadsheet className="w-3.5 h-3.5 mr-1" />}
+                                    Loadsheet
                                   </Button>
                                 )}
                                 <Button
