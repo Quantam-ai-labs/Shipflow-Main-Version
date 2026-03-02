@@ -410,10 +410,20 @@ export class DatabaseStorage implements IStorage {
     }
 
     if (options?.searchOrderNumber) {
-      conditions.push(ilike(orders.orderNumber, `%${options.searchOrderNumber}%`));
+      const parts = options.searchOrderNumber.split(",").map(s => s.trim()).filter(Boolean);
+      if (parts.length > 1) {
+        conditions.push(or(...parts.map(p => ilike(orders.orderNumber, `%${p}%`)))!);
+      } else if (parts.length === 1) {
+        conditions.push(ilike(orders.orderNumber, `%${parts[0]}%`));
+      }
     }
     if (options?.searchTracking) {
-      conditions.push(ilike(orders.courierTracking, `%${options.searchTracking}%`));
+      const parts = options.searchTracking.split(",").map(s => s.trim()).filter(Boolean);
+      if (parts.length > 1) {
+        conditions.push(or(...parts.map(p => ilike(orders.courierTracking, `%${p}%`)))!);
+      } else if (parts.length === 1) {
+        conditions.push(ilike(orders.courierTracking, `%${parts[0]}%`));
+      }
     }
     if (options?.searchName) {
       conditions.push(ilike(orders.customerName, `%${options.searchName}%`));

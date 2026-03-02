@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,12 +22,20 @@ import {
   RotateCcw,
   Send,
   Ban,
+  Edit3,
+  Pause,
+  XCircle,
+  Undo2,
+  PenLine,
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import type { Order, Shipment } from "@shared/schema";
 import { Link, useLocation } from "wouter";
 import { useDateRange } from "@/contexts/date-range-context";
 import { AIInsightsBanner } from "@/components/ai-insights-banner";
+import { formatPkDateTime } from "@/lib/dateFormat";
 
 interface DashboardStats {
   totalOrders: number;
@@ -214,7 +222,14 @@ function OrderSearchSection() {
   const [searchName, setSearchName] = useState("");
   const [searchPhone, setSearchPhone] = useState("");
   const [debouncedParams, setDebouncedParams] = useState({ searchOrderNumber: "", searchTracking: "", searchName: "", searchPhone: "" });
-  const [, setLocation] = useLocation();
+  const [editingOrder, setEditingOrder] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editAddress, setEditAddress] = useState("");
+  const [editCity, setEditCity] = useState("");
+
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -236,7 +251,7 @@ function OrderSearchSection() {
   if (debouncedParams.searchName) queryParams.set("searchName", debouncedParams.searchName);
   if (debouncedParams.searchPhone) queryParams.set("searchPhone", debouncedParams.searchPhone);
   queryParams.set("light", "1");
-  queryParams.set("pageSize", "20");
+  queryParams.set("pageSize", "50");
 
   const { data, isLoading } = useQuery<{ orders: Order[]; total: number }>({
     queryKey: [`/api/orders?${queryParams.toString()}`],
@@ -244,6 +259,56 @@ function OrderSearchSection() {
   });
 
   const results = data?.orders || [];
+
+  const workflowMutation = useMutation({
+    mutationFn: async ({ orderId, action, extra }: { orderId: string; action: string; extra?: any }) => {
+      const res = await apiRequest("POST", `/api/orders/${orderId}/workflow`, { action, ...extra });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ predicate: (query) => {
+        const key = query.queryKey[0];
+        return typeof key === "string" && key.startsWith("/api/orders");
+      }});
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      toast({ title: "Order updated" });
+    },
+  });
+
+  const customerUpdateMutation = useMutation({
+    mutationFn: async ({ orderId, data }: { orderId: string; data: any }) => {
+      const res = await apiRequest("PATCH", `/api/orders/${orderId}/customer`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ predicate: (query) => {
+        const key = query.queryKey[0];
+        return typeof key === "string" && key.startsWith("/api/orders");
+      }});
+      setEditingOrder(null);
+      toast({ title: "Customer info updated" });
+    },
+  });
+
+  const handleSingleAction = useCallback((orderId: string, action: string) => {
+    workflowMutation.mutate({ orderId, action });
+  }, [workflowMutation]);
+
+  const isPending = workflowMutation.isPending;
+
+  const groupedResults = results.reduce<Record<string, Order[]>>((acc, order) => {
+    const stage = order.workflowStatus || "NEW";
+    if (!acc[stage]) acc[stage] = [];
+    acc[stage].push(order);
+    return acc;
+  }, {});
+
+  const stageOrder = ["NEW", "PENDING", "HOLD", "READY_TO_SHIP", "BOOKED", "FULFILLED", "DELIVERED", "RETURN", "CANCELLED"];
+  const sortedStages = Object.keys(groupedResults).sort((a, b) => {
+    const ai = stageOrder.indexOf(a);
+    const bi = stageOrder.indexOf(b);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  });
 
   const handleClear = () => {
     setSearchOrderNumber("");
@@ -253,6 +318,91 @@ function OrderSearchSection() {
   };
 
   const hasAnyInput = searchOrderNumber || searchTracking || searchName || searchPhone;
+
+  const hasShipmentColumns = (stage: string) => ["BOOKED", "FULFILLED", "DELIVERED", "RETURN"].includes(stage);
+  const hasAddressProducts = (stage: string) => ["NEW", "PENDING"].includes(stage);
+
+  const renderActionButtons = (order: Order, stage: string) => {
+    return (
+      <div className="flex items-center justify-end gap-1">
+        {(stage === "NEW" || stage === "PENDING" || stage === "HOLD") && (
+          <Button size="icon" variant="ghost" className="h-7 w-7 text-green-600"
+            onClick={() => handleSingleAction(order.id, stage === "HOLD" ? "release-hold" : stage === "PENDING" ? "fix-confirm" : "confirm")}
+            disabled={isPending}
+            title={stage === "HOLD" ? "Release" : "Confirm"}
+            data-testid={`button-search-confirm-${order.id}`}>
+            <CheckCircle2 className="w-4 h-4" />
+          </Button>
+        )}
+        {(stage === "NEW" || stage === "PENDING" || stage === "READY_TO_SHIP" || stage === "BOOKED" || stage === "FULFILLED") && (
+          <Button size="icon" variant="ghost" className="h-7 w-7"
+            onClick={() => {
+              setEditingOrder(order.id);
+              setEditName(order.customerName || "");
+              setEditPhone(order.customerPhone || "");
+              setEditAddress(order.shippingAddress || "");
+              setEditCity(order.city || "");
+            }}
+            title="Edit"
+            data-testid={`button-search-edit-${order.id}`}>
+            <Edit3 className="w-4 h-4" />
+          </Button>
+        )}
+        {(stage === "NEW" || stage === "PENDING") && (
+          <Button size="icon" variant="ghost" className="h-7 w-7 text-purple-600"
+            onClick={() => handleSingleAction(order.id, "hold")}
+            disabled={isPending}
+            title="Hold"
+            data-testid={`button-search-hold-${order.id}`}>
+            <Pause className="w-4 h-4" />
+          </Button>
+        )}
+        {stage === "HOLD" && (
+          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-amber-600"
+            onClick={() => handleSingleAction(order.id, "move-to-pending")}
+            disabled={isPending}
+            data-testid={`button-search-to-pending-${order.id}`}>
+            <Clock className="w-3.5 h-3.5 mr-1" />Pending
+          </Button>
+        )}
+        {stage === "READY_TO_SHIP" && (
+          <>
+            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-amber-600"
+              onClick={() => handleSingleAction(order.id, "pending")}
+              disabled={isPending}
+              title="Move to Pending"
+              data-testid={`button-search-pending-rts-${order.id}`}>
+              <Clock className="w-3.5 h-3.5 mr-1" />Pending
+            </Button>
+            <Button size="icon" variant="ghost" className="h-7 w-7 text-purple-600"
+              onClick={() => handleSingleAction(order.id, "hold")}
+              disabled={isPending}
+              title="Hold"
+              data-testid={`button-search-hold-rts-${order.id}`}>
+              <Pause className="w-4 h-4" />
+            </Button>
+          </>
+        )}
+        {stage !== "NEW" && stage !== "BOOKED" && stage !== "FULFILLED" && stage !== "DELIVERED" && stage !== "RETURN" && order.previousWorkflowStatus && (
+          <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground"
+            onClick={() => workflowMutation.mutate({ orderId: order.id, action: "revert" })}
+            disabled={isPending}
+            title="Revert"
+            data-testid={`button-search-revert-${order.id}`}>
+            <Undo2 className="w-4 h-4" />
+          </Button>
+        )}
+        {(stage === "NEW" || stage === "PENDING" || stage === "HOLD" || stage === "READY_TO_SHIP") && (
+          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-red-600"
+            onClick={() => handleSingleAction(order.id, "cancel")}
+            disabled={isPending}
+            data-testid={`button-search-cancel-${order.id}`}>
+            <XCircle className="w-3.5 h-3.5" />
+          </Button>
+        )}
+      </div>
+    );
+  };
 
   return (
     <Card>
@@ -279,7 +429,7 @@ function OrderSearchSection() {
               <Input
                 value={searchOrderNumber}
                 onChange={(e) => setSearchOrderNumber(e.target.value)}
-                placeholder="e.g. 23409"
+                placeholder="e.g. 23409, 23410"
                 className="pl-8 text-sm"
                 data-testid="input-search-order-id"
               />
@@ -292,7 +442,7 @@ function OrderSearchSection() {
               <Input
                 value={searchTracking}
                 onChange={(e) => setSearchTracking(e.target.value)}
-                placeholder="e.g. PW7513503972"
+                placeholder="e.g. PW751350, PW751351"
                 className="pl-8 text-sm"
                 data-testid="input-search-tracking"
               />
@@ -338,65 +488,145 @@ function OrderSearchSection() {
                 No orders found matching your search criteria
               </div>
             ) : (
-              <>
-                <div className="hidden sm:grid grid-cols-[100px_1fr_140px_1fr_100px_1fr] gap-2 px-4 py-2 border-b text-xs font-medium text-muted-foreground">
-                  <span>Order</span>
-                  <span>Customer</span>
-                  <span>Contact</span>
-                  <span>Address</span>
-                  <span>Stage</span>
-                  <span>Details</span>
-                </div>
-                <div className="max-h-[500px] overflow-y-auto divide-y">
-                  {results.map((order) => {
-                    const stage = order.workflowStatus || "NEW";
-                    const features = getStageFeatures(order);
-                    return (
-                      <button
-                        key={order.id}
-                        onClick={() => setLocation(`/orders/detail/${order.id}`)}
-                        className="w-full text-left px-4 py-3 hover-elevate"
-                        data-testid={`search-result-${order.id}`}
-                      >
-                        <div className="sm:grid sm:grid-cols-[100px_1fr_140px_1fr_100px_1fr] gap-2 items-center">
-                          <span className="font-medium text-sm" data-testid={`text-order-number-${order.id}`}>
-                            {String(order.orderNumber || '').replace(/^#/, '')}
-                          </span>
-                          <span className="text-sm truncate" data-testid={`text-customer-name-${order.id}`}>
-                            {order.customerName}
-                          </span>
-                          <span className="text-sm text-muted-foreground" data-testid={`text-customer-phone-${order.id}`}>
-                            {order.customerPhone || "-"}
-                          </span>
-                          <span className="text-sm text-muted-foreground truncate" data-testid={`text-address-${order.id}`}>
-                            {[order.shippingAddress, order.city].filter(Boolean).join(", ") || "-"}
-                          </span>
-                          <span>
-                            <Badge className={`text-[10px] ${WORKFLOW_STAGE_COLORS[stage] || ""}`} data-testid={`badge-stage-${order.id}`}>
-                              {WORKFLOW_STAGE_LABELS[stage] || stage}
-                            </Badge>
-                          </span>
-                          <span className="text-xs text-muted-foreground truncate" data-testid={`text-features-${order.id}`}>
-                            {features || "-"}
-                          </span>
-                        </div>
-                        <div className="sm:hidden mt-1 text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
-                          <span>{order.customerPhone || ""}</span>
-                          {order.city && <span>· {order.city}</span>}
-                          <Badge className={`text-[10px] ${WORKFLOW_STAGE_COLORS[stage] || ""}`}>
-                            {WORKFLOW_STAGE_LABELS[stage] || stage}
-                          </Badge>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
+              <div className="max-h-[600px] overflow-y-auto">
+                {sortedStages.map(stage => {
+                  const stageOrders = groupedResults[stage];
+                  return (
+                    <div key={stage} data-testid={`search-group-${stage}`}>
+                      <div className="sticky top-0 z-10 bg-muted/80 backdrop-blur-sm px-4 py-1.5 border-b flex items-center gap-2">
+                        <Badge className={`text-[10px] ${WORKFLOW_STAGE_COLORS[stage] || ""}`}>
+                          {WORKFLOW_STAGE_LABELS[stage] || stage}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">{stageOrders.length} order{stageOrders.length !== 1 ? "s" : ""}</span>
+                      </div>
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/30">
+                          <tr className="border-b">
+                            <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Order</th>
+                            <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Customer</th>
+                            <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs hidden md:table-cell">City</th>
+                            {hasAddressProducts(stage) && (
+                              <>
+                                <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs hidden lg:table-cell">Address</th>
+                                <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs hidden lg:table-cell">Products</th>
+                              </>
+                            )}
+                            <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Amount</th>
+                            {hasShipmentColumns(stage) && (
+                              <>
+                                <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Courier</th>
+                                <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Status</th>
+                              </>
+                            )}
+                            {stage === "CANCELLED" && (
+                              <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Reason</th>
+                            )}
+                            <th className="px-3 py-2 text-right font-medium text-muted-foreground text-xs">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {stageOrders.map(order => (
+                            <tr key={order.id} className="border-b transition-colors hover-elevate" data-testid={`search-result-${order.id}`}>
+                              <td className="px-3 py-1.5">
+                                <div className="flex items-center gap-1.5">
+                                  <Link href={`/orders/detail/${order.id}`} className="font-medium text-sm hover:underline" data-testid={`link-search-order-${order.id}`}>
+                                    {String(order.orderNumber || '').replace(/^#/, '')}
+                                  </Link>
+                                  {order.orderSource === "shopify_draft_order" && (
+                                    <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-green-100 dark:bg-green-900 border border-green-300 dark:border-green-700" title="Custom Order">
+                                      <PenLine className="w-2.5 h-2.5 text-green-700 dark:text-green-300" />
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  {order.orderDate ? formatPkDateTime(order.orderDate) : ""}
+                                </div>
+                              </td>
+                              <td className="px-3 py-1.5">
+                                {editingOrder === order.id ? (
+                                  <div className="space-y-1">
+                                    <Input value={editName} onChange={e => setEditName(e.target.value)} placeholder="Name" className="h-7 text-xs" data-testid={`input-search-edit-name-${order.id}`} />
+                                    <Input value={editPhone} onChange={e => setEditPhone(e.target.value)} placeholder="Phone" className="h-7 text-xs" data-testid={`input-search-edit-phone-${order.id}`} />
+                                    <Input value={editAddress} onChange={e => setEditAddress(e.target.value)} placeholder="Address" className="h-7 text-xs" data-testid={`input-search-edit-address-${order.id}`} />
+                                    <Input value={editCity} onChange={e => setEditCity(e.target.value)} placeholder="City" className="h-7 text-xs" data-testid={`input-search-edit-city-${order.id}`} />
+                                    <div className="flex gap-1">
+                                      <Button size="sm" className="h-6 text-xs px-2" onClick={() => {
+                                        customerUpdateMutation.mutate({
+                                          orderId: order.id,
+                                          data: { customerName: editName, customerPhone: editPhone, shippingAddress: editAddress, city: editCity }
+                                        });
+                                      }} data-testid={`button-search-save-edit-${order.id}`}>Save</Button>
+                                      <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={() => setEditingOrder(null)}>Cancel</Button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div>
+                                    <div className="font-medium text-sm truncate max-w-[120px]" title={order.customerName || ""}>{order.customerName && order.customerName.length > 15 ? order.customerName.slice(0, 13) + ".." : order.customerName}</div>
+                                    <div className="text-xs text-muted-foreground">{order.customerPhone || "No phone"}</div>
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-3 py-1.5 hidden md:table-cell text-sm truncate max-w-[100px]" title={order.city || ""}>{order.city && order.city.length > 15 ? order.city.slice(0, 13) + ".." : (order.city || "-")}</td>
+                              {hasAddressProducts(stage) && (
+                                <>
+                                  <td className="px-3 py-1.5 max-w-[200px] hidden lg:table-cell">
+                                    <div className="text-xs text-muted-foreground whitespace-normal leading-tight">{order.shippingAddress || "-"}</div>
+                                  </td>
+                                  <td className="px-3 py-1.5 max-w-[160px] hidden lg:table-cell">
+                                    <div className="text-xs text-muted-foreground leading-tight">
+                                      {order.itemSummary ? order.itemSummary.split(' || ').map((item, i) => (
+                                        <div key={i} className="truncate">{item}</div>
+                                      )) : "-"}
+                                    </div>
+                                  </td>
+                                </>
+                              )}
+                              <td className="px-3 py-1.5">
+                                <div className="font-medium text-sm">{Number(order.totalAmount).toLocaleString()}</div>
+                                {order.codPaymentStatus === "PAID" ? (
+                                  <Badge className="text-xs bg-green-500/10 text-green-600 border-green-500/20">Prepaid</Badge>
+                                ) : order.codPaymentStatus === "PARTIALLY_PAID" ? (
+                                  <span className="text-xs text-amber-600">COD: {Number(order.codRemaining ?? order.totalAmount).toLocaleString()}</span>
+                                ) : (
+                                  <div className="text-xs text-muted-foreground capitalize">{order.paymentMethod}</div>
+                                )}
+                              </td>
+                              {hasShipmentColumns(stage) && (
+                                <>
+                                  <td className="px-3 py-1.5">
+                                    <div className="text-xs font-medium">{order.courierName || "-"}</div>
+                                    <div className="text-xs text-muted-foreground">{order.courierTracking || "-"}</div>
+                                  </td>
+                                  <td className="px-3 py-1.5">
+                                    <Badge className={`text-xs ${UNIVERSAL_STATUS_COLORS[order.shipmentStatus || ""] || "bg-slate-100 text-slate-700"}`}
+                                      title={order.courierRawStatus ? `Courier: ${order.courierRawStatus}` : undefined}
+                                      data-testid={`badge-search-status-${order.id}`}>
+                                      {UNIVERSAL_STATUS_LABELS[order.shipmentStatus || ""] || order.shipmentStatus || "Unknown"}
+                                    </Badge>
+                                  </td>
+                                </>
+                              )}
+                              {stage === "CANCELLED" && (
+                                <td className="px-3 py-1.5">
+                                  <div className="text-xs text-muted-foreground">{order.cancelReason || "No reason given"}</div>
+                                </td>
+                              )}
+                              <td className="px-3 py-1.5 text-right">
+                                {renderActionButtons(order, stage)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })}
                 {(data?.total || 0) > results.length && (
                   <div className="px-4 py-2 text-xs text-muted-foreground text-center border-t">
                     Showing {results.length} of {data?.total} results
                   </div>
                 )}
-              </>
+              </div>
             )}
           </div>
         )}
