@@ -763,7 +763,9 @@ async function drawSingleAirwayBill(
     productLines.length * prodLineHeight + basePaddingTop + basePaddingBottom,
   );
 
-  const bottomY = topY - BILL_HEIGHT;
+  const realHeight = headerH + row1H + 25 + remarksH + productsH;
+  const finalHeight = Math.min(realHeight, BILL_HEIGHT);
+  const bottomY = topY - finalHeight;
 
   const minLines = 3;
 
@@ -774,7 +776,7 @@ async function drawSingleAirwayBill(
     x: x,
     y: bottomY,
     width: w,
-    height: BILL_HEIGHT,
+    height: finalHeight,
     borderColor: BLACK,
     borderWidth: 1,
   });
