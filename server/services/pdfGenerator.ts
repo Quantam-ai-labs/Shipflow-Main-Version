@@ -206,7 +206,6 @@ const BILL_WIDTH = A4_WIDTH - MARGIN_X * 2;
 const USABLE_HEIGHT = A4_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM;
 const SECTION_HEIGHT = USABLE_HEIGHT / 3;
 const BILL_HEIGHT = SECTION_HEIGHT;
-const GAP_Y = 4;
 
 const BLACK = rgb(0.05, 0.05, 0.05);
 const DARK = rgb(0.15, 0.15, 0.15);
@@ -763,28 +762,19 @@ async function drawSingleAirwayBill(
     40,
     productLines.length * prodLineHeight + basePaddingTop + basePaddingBottom,
   );
-  // Reserve fixed vertical zone for this invoice
-  const reservedBottomY = topY - BILL_HEIGHT;
 
-  // Real content height (dynamic)
-  const realHeight = headerH + row1H + 25 + remarksH + productsH;
-
-  // Do NOT allow invoice to exceed its reserved zone
-  const finalHeight = Math.min(realHeight, BILL_HEIGHT);
-
-  const bottomY = topY - finalHeight;
+  const bottomY = topY - BILL_HEIGHT;
 
   const minLines = 3;
 
   while (productLines.length < minLines) {
     productLines.push("");
   }
-  // Draw Main Box Border
   page.drawRectangle({
     x: x,
     y: bottomY,
     width: w,
-    height: finalHeight,
+    height: BILL_HEIGHT,
     borderColor: BLACK,
     borderWidth: 1,
   });
@@ -948,7 +938,7 @@ export async function generateMultiAirwayBillPdf(
     );
 
     if (position < 2 && i < bills.length - 1) {
-      const cutLineY = topY - BILL_HEIGHT - GAP_Y / 2;
+      const cutLineY = topY - SECTION_HEIGHT;
       drawDashedCutLine(currentPage, cutLineY);
     }
   }
