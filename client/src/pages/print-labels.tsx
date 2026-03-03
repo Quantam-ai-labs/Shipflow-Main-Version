@@ -188,26 +188,24 @@ function renderPages(labels: LabelData[], layout: LayoutMode, cols: number, rows
           height: "100%",
           justifyContent: pageLabels.length === 1 ? "flex-start" : "space-between",
         }}>
-          {pageLabels.map((label, idx) => (
-            <div key={label.orderId} style={{
-              flex: pageLabels.length === 1 ? "0 0 auto" : "1 1 0",
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "flex-start",
-              position: "relative",
-            }}>
-              <AwbLabel data={label} />
-              {idx < pageLabels.length - 1 && (
-                <div style={{
-                  position: "absolute",
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  borderTop: "1.5px dashed #999",
-                }} />
-              )}
-            </div>
-          ))}
+          {pageLabels.map((label, idx) => {
+            const isLast = idx === pageLabels.length - 1;
+            return (
+              <div key={label.orderId} style={{
+                flex: pageLabels.length === 1 ? "0 0 auto" : "1 1 0",
+                display: "flex",
+                flexDirection: "column",
+              }}>
+                <AwbLabel data={label} />
+                {!isLast && (
+                  <div style={{
+                    borderTop: "1.5px dashed #999",
+                    marginTop: "4px",
+                  }} />
+                )}
+              </div>
+            );
+          })}
         </div>
       ) : (
         <div style={{
