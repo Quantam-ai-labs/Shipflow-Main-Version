@@ -195,9 +195,14 @@ function renderPages(labels: LabelData[], layout: LayoutMode, cols: number, rows
                 boxSizing: "border-box",
                 display: "flex",
                 flexDirection: "column",
-                borderBottom: slot < 2 ? "1.5px dashed #999" : "none",
               }}>
                 {label && <AwbLabel data={label} />}
+                {label && slot < 2 && (
+                  <div style={{
+                    borderTop: "1.5px dashed #999",
+                    marginTop: "4px",
+                  }} />
+                )}
               </div>
             );
           })}

@@ -7233,7 +7233,7 @@ export async function registerRoutes(
           codAmount,
           isCOD,
           totalQuantity: order.totalQuantity || 1,
-          weight: Number(order.weight) || 0,
+          weight: Number(order.weight) || 200,
           pieces: 1,
           itemSummary: order.itemSummary || "",
           remark: [order.remark || order.notes, "Allow Open Parcel - Must Call Before Delivery - Handle With Care"].filter(Boolean).join(" - "),
