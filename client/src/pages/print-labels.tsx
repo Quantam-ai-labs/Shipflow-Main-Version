@@ -153,7 +153,7 @@ export default function PrintLabels() {
               {n === 2 && <Grid2x2 className="w-3.5 h-3.5 mr-1" />}
               {n === 3 && <Grid3x3 className="w-3.5 h-3.5 mr-1" />}
               {n === 4 && <LayoutGrid className="w-3.5 h-3.5 mr-1" />}
-              {n === 3 ? 4 : n}
+              {n}
             </Button>
           ))}
         </div>
@@ -172,7 +172,7 @@ export default function PrintLabels() {
 }
 
 function renderPages(labels: LabelData[], layout: LayoutMode, cols: number, rows: number) {
-  const perPage = layout === 1 ? 1 : layout === 2 ? 2 : layout === 3 ? 4 : 4;
+  const perPage = layout === 1 ? 1 : layout === 2 ? 2 : layout === 3 ? 3 : 4;
   const pages: LabelData[][] = [];
 
   for (let i = 0; i < labels.length; i += perPage) {
@@ -186,23 +186,18 @@ function renderPages(labels: LabelData[], layout: LayoutMode, cols: number, rows
           display: "flex",
           flexDirection: "column",
           height: "100%",
-          justifyContent: pageLabels.length === 1 ? "flex-start" : "space-between",
         }}>
-          {pageLabels.map((label, idx) => {
-            const isLast = idx === pageLabels.length - 1;
+          {[0, 1, 2].map((slot) => {
+            const label = pageLabels[slot];
             return (
-              <div key={label.orderId} style={{
-                flex: pageLabels.length === 1 ? "0 0 auto" : "1 1 0",
+              <div key={slot} style={{
+                height: "calc(100% / 3)",
+                boxSizing: "border-box",
                 display: "flex",
                 flexDirection: "column",
+                borderBottom: slot < 2 ? "1.5px dashed #999" : "none",
               }}>
-                <AwbLabel data={label} />
-                {!isLast && (
-                  <div style={{
-                    borderTop: "1.5px dashed #999",
-                    marginTop: "4px",
-                  }} />
-                )}
+                {label && <AwbLabel data={label} />}
               </div>
             );
           })}
