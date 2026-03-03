@@ -97,6 +97,7 @@ export default function PrintLabels() {
             margin: 0;
             padding: 8mm;
             box-sizing: border-box;
+            height: 297mm;
           }
           .print-page:last-child { page-break-after: auto; }
           @page {
@@ -108,7 +109,7 @@ export default function PrintLabels() {
           .print-page {
             background: #fff;
             width: 210mm;
-            min-height: 297mm;
+            height: 297mm;
             margin: 0 auto 16px;
             padding: 8mm;
             box-sizing: border-box;
@@ -181,14 +182,28 @@ function renderPages(labels: LabelData[], layout: LayoutMode, cols: number, rows
   return pages.map((pageLabels, pageIdx) => (
     <div key={pageIdx} className="print-page" data-testid={`print-page-${pageIdx}`}>
       {layout === 3 ? (
-        <div style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "flex-start" }}>
+        <div style={{
+          display: "flex",
+          flexDirection: "column",
+          height: "100%",
+          justifyContent: pageLabels.length === 1 ? "flex-start" : "space-between",
+        }}>
           {pageLabels.map((label, idx) => (
-            <div key={label.orderId}>
+            <div key={label.orderId} style={{
+              flex: pageLabels.length === 1 ? "0 0 auto" : "1 1 0",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "flex-start",
+              position: "relative",
+            }}>
               <AwbLabel data={label} />
               {idx < pageLabels.length - 1 && (
                 <div style={{
+                  position: "absolute",
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
                   borderTop: "1.5px dashed #999",
-                  margin: "6px 0",
                 }} />
               )}
             </div>
