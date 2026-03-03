@@ -204,7 +204,7 @@ const MARGIN_TOP = 20;
 const MARGIN_BOTTOM = 20;
 const BILL_WIDTH = A4_WIDTH - MARGIN_X * 2;
 const USABLE_HEIGHT = A4_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM;
-const SECTION_HEIGHT = USABLE_HEIGHT / 3;
+const SECTION_HEIGHT = USABLE_HEIGHT / 4;
 const BILL_HEIGHT = SECTION_HEIGHT;
 
 const BLACK = rgb(0.05, 0.05, 0.05);
@@ -827,7 +827,7 @@ export async function generateAirwayBillPdfBuffer(
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-  const INVOICES_PER_PAGE = 3;
+  const INVOICES_PER_PAGE = 4;
 
   const USABLE_HEIGHT = A4_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM;
   const SECTION_HEIGHT = USABLE_HEIGHT / INVOICES_PER_PAGE;
@@ -921,11 +921,11 @@ export async function generateMultiAirwayBillPdf(
   let currentPage = pdfDoc.addPage([A4_WIDTH, A4_HEIGHT]);
 
   for (let i = 0; i < bills.length; i++) {
-    if (i !== 0 && i % 3 === 0) {
+    if (i !== 0 && i % 4 === 0) {
       currentPage = pdfDoc.addPage([A4_WIDTH, A4_HEIGHT]);
     }
 
-    const position = i % 3;
+    const position = i % 4;
     const topY = A4_HEIGHT - MARGIN_TOP - position * SECTION_HEIGHT;
     await drawSingleAirwayBill(
       currentPage,
@@ -937,7 +937,7 @@ export async function generateMultiAirwayBillPdf(
       topY,
     );
 
-    if (position < 2 && i < bills.length - 1) {
+    if (position < 3 && i < bills.length - 1) {
       const cutLineY = topY - SECTION_HEIGHT;
       drawDashedCutLine(currentPage, cutLineY);
     }
