@@ -7703,6 +7703,150 @@ export async function registerRoutes(
   );
 
   app.post(
+    "/api/print/bulk-awb",
+    isAuthenticated,
+    async (req, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+
+        const { orderIds } = req.body;
+        if (!Array.isArray(orderIds) || orderIds.length === 0) {
+          return res.status(400).json({ message: "orderIds array required" });
+        }
+
+        const merchant = await storage.getMerchant(merchantId);
+        if (!merchant) {
+          return res.status(404).json({ message: "Merchant not found" });
+        }
+
+        const { fetchLeopardsSlipData, fetchLeopardsSlip, combinePdfs, generatePostExCustomSlip } = await import("./services/courierSlips");
+        const { generateAirwayBillPdfBuffer } = await import("./services/pdfGenerator");
+
+        const courierAcctList = await storage.getCourierAccounts(merchantId);
+        const leopardsCreds = courierAcctList.find((c) => c.courierName === "leopards");
+        const postexCreds = courierAcctList.find((c) => c.courierName === "postex");
+        const leopardsSettings = (leopardsCreds?.settings || {}) as any;
+        const postexSettings = (postexCreds?.settings || {}) as any;
+
+        const allBills: import("./services/pdfGenerator").AirwayBillData[] = [];
+        const postExContexts: import("./services/courierSlips").PostExOrderContext[] = [];
+        const fallbackPdfBuffers: Buffer[] = [];
+        const errors: string[] = [];
+
+        const CONCURRENCY = 5;
+        async function runInBatches<T, R>(items: T[], fn: (item: T) => Promise<R>): Promise<R[]> {
+          const results: R[] = [];
+          for (let i = 0; i < items.length; i += CONCURRENCY) {
+            const chunk = items.slice(i, i + CONCURRENCY);
+            const chunkResults = await Promise.all(chunk.map(fn));
+            results.push(...chunkResults);
+          }
+          return results;
+        }
+
+        await runInBatches(orderIds.slice(0, 100), async (orderId: string) => {
+          const order = await storage.getOrderById(merchantId, orderId);
+          if (!order || !order.courierTracking) {
+            errors.push(`${orderId}: Order not found or not booked`);
+            return;
+          }
+
+          const courierNorm = normalizeCourierName(order.courierName || "");
+          const lineItems = Array.isArray(order.lineItems) ? order.lineItems : [];
+          const itemsSummary = order.itemSummary || lineItems.map((li: any) => `${li.title || li.name || "Item"} x${li.quantity || 1}`).join(", ");
+
+          if (courierNorm === "postex") {
+            postExContexts.push({
+              trackingNumber: order.courierTracking,
+              orderNumber: order.orderNumber,
+              customerName: order.customerName,
+              customerPhone: order.customerPhone || "",
+              city: order.city || "",
+              shippingAddress: order.shippingAddress || "",
+              codAmount: parseFloat(String(order.codRemaining ?? order.totalAmount)) || 0,
+              merchantName: merchant.name || "",
+              merchantAddress: merchant.address || "",
+              itemsSummary,
+              totalQuantity: order.totalQuantity || 1,
+              remarks: order.notes || "",
+              bookedAt: order.bookedAt ? new Date(order.bookedAt).toLocaleDateString("en-GB") : new Date().toLocaleDateString("en-GB"),
+            });
+          } else if (courierNorm === "leopards") {
+            const bulkOrderCtx = { itemsSummary, quantity: order.totalQuantity || 1 };
+            const lCreds = leopardsCreds?.settings as any;
+
+            if (lCreds?.apiKey && lCreds?.apiPassword && order.courierTracking) {
+              const dataResult = await fetchLeopardsSlipData("", {
+                apiKey: lCreds.apiKey,
+                apiPassword: lCreds.apiPassword,
+                trackingNumber: order.courierTracking,
+              }, bulkOrderCtx);
+              if (dataResult.success && dataResult.bills) {
+                allBills.push(...dataResult.bills);
+                return;
+              }
+            }
+
+            const fallbackSlipUrl = order.courierSlipUrl || "";
+            if (fallbackSlipUrl || (lCreds?.apiKey && order.courierTracking)) {
+              const result = await fetchLeopardsSlip(
+                fallbackSlipUrl,
+                lCreds?.apiKey && lCreds?.apiPassword && order.courierTracking
+                  ? { apiKey: lCreds.apiKey, apiPassword: lCreds.apiPassword, trackingNumber: order.courierTracking }
+                  : undefined,
+                bulkOrderCtx,
+              );
+              if (result?.success && result.pdfBuffer) {
+                fallbackPdfBuffers.push(result.pdfBuffer);
+              } else {
+                errors.push(`${order.orderNumber}: ${result?.error || "Failed"}`);
+              }
+            } else {
+              errors.push(`${order.orderNumber}: No slip URL or credentials`);
+            }
+          } else {
+            errors.push(`${order.orderNumber}: Unsupported courier ${order.courierName}`);
+          }
+        });
+
+        const pdfParts: Buffer[] = [];
+
+        if (allBills.length > 0) {
+          pdfParts.push(await generateAirwayBillPdfBuffer(allBills));
+        }
+        if (postExContexts.length > 0) {
+          pdfParts.push(await generatePostExCustomSlip(postExContexts));
+        }
+        if (fallbackPdfBuffers.length > 0) {
+          pdfParts.push(...fallbackPdfBuffers);
+        }
+
+        if (pdfParts.length === 0) {
+          return res.status(502).json({
+            message: "Could not generate any airway bills",
+            errors,
+          });
+        }
+
+        let finalPdf: Buffer;
+        if (pdfParts.length === 1) {
+          finalPdf = pdfParts[0];
+        } else {
+          finalPdf = await combinePdfs(pdfParts);
+        }
+
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Disposition", `inline; filename="awb_bulk_${Date.now()}.pdf"`);
+        return res.send(finalPdf);
+      } catch (error) {
+        console.error("Error generating bulk AWB:", error);
+        res.status(500).json({ message: "Failed to generate airway bills" });
+      }
+    },
+  );
+
+  app.post(
     "/api/print/regenerate/:orderId",
     isAuthenticated,
     async (req, res) => {
