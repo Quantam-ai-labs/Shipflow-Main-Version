@@ -1037,26 +1037,13 @@ export default function Pipeline() {
               <Button
                 size="sm"
                 variant="outline"
-                onClick={async () => {
-                  const orderIds = Array.from(selectedIds);
-                  try {
-                    const res = await fetch("/api/print/orders-awb", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      credentials: "include",
-                      body: JSON.stringify({ orderIds }),
-                    });
-                    if (!res.ok) throw new Error("Failed to generate AWB PDF");
-                    const blob = await res.blob();
-                    const url = URL.createObjectURL(blob);
-                    window.open(url, "_blank");
-                  } catch (err: any) {
-                    toast({ title: "Print Failed", description: err.message || "Could not generate AWB PDF", variant: "destructive" });
-                  }
+                onClick={() => {
+                  const ids = Array.from(selectedIds).join(",");
+                  window.open(`/print-labels?ids=${ids}`, "_blank");
                 }}
                 data-testid="bulk-print-labels"
               >
-                <Printer className="w-3.5 h-3.5 mr-1.5" />Print AWBs
+                <Printer className="w-3.5 h-3.5 mr-1.5" />Print Labels
               </Button>
               <Button
                 size="sm"

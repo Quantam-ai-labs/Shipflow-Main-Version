@@ -7258,66 +7258,6 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/print/orders-awb", isAuthenticated, async (req, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-
-      const { orderIds } = req.body;
-      if (!Array.isArray(orderIds) || orderIds.length === 0) {
-        return res.status(400).json({ message: "orderIds array required" });
-      }
-
-      const merchant = await storage.getMerchant(merchantId);
-      if (!merchant) {
-        return res.status(404).json({ message: "Merchant not found" });
-      }
-
-      const { generateAirwayBillPdfBuffer } = await import("./services/pdfGenerator");
-      const bills: import("./services/pdfGenerator").AirwayBillData[] = [];
-
-      for (const orderId of orderIds.slice(0, 100)) {
-        const order = await storage.getOrderById(merchantId, orderId);
-        if (!order || !order.courierTracking) continue;
-
-        const lineItems = Array.isArray(order.lineItems) ? order.lineItems : [];
-        const itemsSummary = order.itemSummary || lineItems.map((li: any) => `${li.title || li.name || "Item"} x${li.quantity || 1}`).join(", ");
-
-        bills.push({
-          trackingNumber: order.courierTracking || "",
-          orderNumber: order.orderNumber,
-          consigneeName: order.customerName || "",
-          consigneePhone: order.customerPhone || "",
-          consigneeAddress: order.shippingAddress || "",
-          consigneeCity: order.city || "",
-          codAmount: Number(order.codRemaining ?? order.totalAmount) || 0,
-          weight: String(order.weight || 200),
-          pieces: 1,
-          courierName: order.courierName || "",
-          merchantName: merchant.name || "",
-          merchantAddress: merchant.address || "",
-          bookedAt: order.bookedAt ? new Date(order.bookedAt).toLocaleDateString("en-GB") : new Date().toLocaleDateString("en-GB"),
-          shipmentType: "Overnight",
-          remarks: order.notes || "",
-          itemsSummary,
-          quantity: order.totalQuantity || 1,
-        });
-      }
-
-      if (bills.length === 0) {
-        return res.status(404).json({ message: "No booked orders with tracking numbers found" });
-      }
-
-      const pdfBuffer = await generateAirwayBillPdfBuffer(bills);
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `inline; filename="awb_orders_${Date.now()}.pdf"`);
-      return res.send(pdfBuffer);
-    } catch (error) {
-      console.error("Error generating AWB PDF for orders:", error);
-      res.status(500).json({ message: "Failed to generate AWB PDF" });
-    }
-  });
-
   app.get("/api/couriers/postex/invoice", isAuthenticated, async (req, res) => {
     try {
       const merchantId = await requireMerchant(req, res);

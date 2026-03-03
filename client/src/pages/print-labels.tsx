@@ -153,7 +153,7 @@ export default function PrintLabels() {
               {n === 2 && <Grid2x2 className="w-3.5 h-3.5 mr-1" />}
               {n === 3 && <Grid3x3 className="w-3.5 h-3.5 mr-1" />}
               {n === 4 && <LayoutGrid className="w-3.5 h-3.5 mr-1" />}
-              {n}
+              {n === 3 ? 4 : n}
             </Button>
           ))}
         </div>
@@ -172,7 +172,7 @@ export default function PrintLabels() {
 }
 
 function renderPages(labels: LabelData[], layout: LayoutMode, cols: number, rows: number) {
-  const perPage = layout === 1 ? 1 : layout === 2 ? 2 : layout === 3 ? 3 : 4;
+  const perPage = layout === 1 ? 1 : layout === 2 ? 2 : layout === 3 ? 4 : 4;
   const pages: LabelData[][] = [];
 
   for (let i = 0; i < labels.length; i += perPage) {
