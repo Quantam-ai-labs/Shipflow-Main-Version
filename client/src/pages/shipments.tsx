@@ -38,7 +38,7 @@ import {
   Download,
   MessageSquare,
   RotateCcw,
-  ClipboardList,
+
   BookOpen,
   FileSpreadsheet,
   Clock,
@@ -132,30 +132,6 @@ interface ShipmentsResponse {
 }
 
 
-interface ShipperAdviceRow {
-  id: string;
-  orderNumber: string;
-  customerName: string;
-  customerPhone: string | null;
-  city: string | null;
-  courierName: string | null;
-  courierTracking: string | null;
-  totalAmount: string | null;
-  codRemaining: string | null;
-  codPaymentStatus: string | null;
-  workflowStatus: string;
-  paymentMethod: string | null;
-  prepaidAmount: string | null;
-  dispatchedAt: string | null;
-  deliveredAt: string | null;
-  orderDate: string | null;
-}
-
-interface ShipperAdviceResponse {
-  rows: ShipperAdviceRow[];
-  totalsByCourier: Record<string, { count: number; totalAmount: number; codCollected: number; codPending: number }>;
-  total: number;
-}
 
 const BATCH_STATUS_COLORS: Record<string, string> = {
   'SUCCESS': "bg-green-500/10 text-green-600 border-green-500/20",
@@ -253,8 +229,6 @@ export default function Shipments() {
   const [bkDateRange, setBkDateRange] = useState<DateRange | undefined>(undefined);
   const [bkPage, setBkPage] = useState(1);
 
-  const [saCourierFilter, setSaCourierFilter] = useState("all");
-  const [saDateRange, setSaDateRange] = useState<DateRange | undefined>(undefined);
 
   const [batchCourierFilter, setBatchCourierFilter] = useState("all");
   const [batchDateRange, setBatchDateRange] = useState<DateRange | undefined>(undefined);
@@ -353,26 +327,6 @@ export default function Shipments() {
   const bookingBatches = bkData?.batches ?? [];
   const bkTotalPages = Math.ceil((bkData?.total ?? 0) / 100);
 
-  const saDateParams = dateRangeToParams(saDateRange);
-  const saQueryParams = new URLSearchParams({
-    ...(saCourierFilter !== "all" && { courier: saCourierFilter }),
-    ...(saDateParams.dateFrom && { dateFrom: saDateParams.dateFrom }),
-    ...(saDateParams.dateTo && { dateTo: saDateParams.dateTo }),
-  });
-
-  const { data: saData, isLoading: saLoading } = useQuery<ShipperAdviceResponse>({
-    queryKey: ["/api/shipper-advice", saQueryParams.toString()],
-    queryFn: async () => {
-      const res = await fetch(`/api/shipper-advice?${saQueryParams.toString()}`, { credentials: "include" });
-      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
-      return res.json();
-    },
-    enabled: activeTab === "shipper-advice",
-  });
-
-  const saRows = saData?.rows ?? [];
-  const saTotals = saData?.totalsByCourier ?? {};
-
   const batchDateParams = dateRangeToParams(batchDateRange);
   const batchQueryParams = new URLSearchParams({
     page: batchPage.toString(),
@@ -406,12 +360,6 @@ export default function Shipments() {
     enabled: !!selectedBatchId,
   });
 
-  const courierGroupedRows = saRows.reduce<Record<string, ShipperAdviceRow[]>>((acc, row) => {
-    const cn = row.courierName || "Unknown";
-    if (!acc[cn]) acc[cn] = [];
-    acc[cn].push(row);
-    return acc;
-  }, {});
 
   const updateRemarkMutation = useMutation({
     mutationFn: async ({ orderId, value }: { orderId: string; value: string }) => {
@@ -554,10 +502,6 @@ export default function Shipments() {
           <TabsTrigger value="shipments" data-testid="tab-shipments">
             <Truck className="w-4 h-4 mr-2" />
             Shipments
-          </TabsTrigger>
-          <TabsTrigger value="shipper-advice" data-testid="tab-shipper-advice">
-            <ClipboardList className="w-4 h-4 mr-2" />
-            Shipper Advice
           </TabsTrigger>
           <TabsTrigger value="booking-logs" data-testid="tab-booking-logs">
             <BookOpen className="w-4 h-4 mr-2" />
@@ -839,151 +783,6 @@ export default function Shipments() {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
-
-        {/* ====== SHIPPER ADVICE TAB ====== */}
-        <TabsContent value="shipper-advice" className="space-y-6 mt-6">
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex flex-col sm:flex-row gap-4">
-                <Select value={saCourierFilter} onValueChange={setSaCourierFilter}>
-                  <SelectTrigger className="w-[160px]" data-testid="select-sa-courier">
-                    <Truck className="w-4 h-4 mr-2" />
-                    <SelectValue placeholder="Courier" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {courierOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <DateRangePicker
-                  dateRange={saDateRange}
-                  onDateRangeChange={setSaDateRange}
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {Object.keys(saTotals).length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {Object.entries(saTotals).map(([courier, totals]) => (
-                <Card key={courier}>
-                  <CardContent className="p-4">
-                    <h3 className="font-semibold capitalize mb-3" data-testid={`sa-courier-title-${courier}`}>{courier}</h3>
-                    <div className="grid grid-cols-2 gap-3 text-sm">
-                      <div>
-                        <p className="text-muted-foreground">Shipments</p>
-                        <p className="font-bold text-lg" data-testid={`sa-count-${courier}`}>{totals.count}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">Total Amount</p>
-                        <p className="font-bold text-lg" data-testid={`sa-amount-${courier}`}>PKR {totals.totalAmount.toLocaleString()}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">COD Collected</p>
-                        <p className="font-bold text-green-600" data-testid={`sa-collected-${courier}`}>PKR {totals.codCollected.toLocaleString()}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">COD Pending</p>
-                        <p className="font-bold text-amber-600" data-testid={`sa-pending-${courier}`}>PKR {totals.codPending.toLocaleString()}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-
-          {saLoading ? (
-            <Card>
-              <CardContent className="p-4 space-y-4">
-                {[1, 2, 3, 4, 5].map((i) => (
-                  <div key={i} className="flex items-center gap-4">
-                    <Skeleton className="h-4 w-20" />
-                    <Skeleton className="h-4 w-32 flex-1" />
-                    <Skeleton className="h-4 w-24" />
-                    <Skeleton className="h-4 w-20" />
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          ) : Object.keys(courierGroupedRows).length > 0 ? (
-            Object.entries(courierGroupedRows).map(([courier, rows]) => (
-              <Card key={courier}>
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-lg font-semibold flex items-center gap-2 capitalize">
-                    <Truck className="w-5 h-5" />
-                    {courier}
-                    <Badge variant="secondary" className="ml-2">{rows.length} shipments</Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Order</TableHead>
-                          <TableHead>Customer</TableHead>
-                          <TableHead>City</TableHead>
-                          <TableHead>Tracking #</TableHead>
-                          <TableHead className="text-right">Amount</TableHead>
-                          <TableHead>COD Status</TableHead>
-                          <TableHead>Stage</TableHead>
-                          <TableHead>Date</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {rows.map((row) => (
-                          <TableRow key={row.id} data-testid={`sa-row-${row.id}`}>
-                            <TableCell>
-                              <Link href={`/orders/detail/${row.id}`} className="text-primary hover:underline font-medium" data-testid={`sa-link-${row.id}`}>
-                                {String(row.orderNumber || '').replace(/^#/, '')}
-                              </Link>
-                            </TableCell>
-                            <TableCell>
-                              <div>
-                                <p className="font-medium text-sm">{row.customerName}</p>
-                                <p className="text-xs text-muted-foreground">{row.customerPhone || "-"}</p>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-muted-foreground">{row.city || "-"}</TableCell>
-                            <TableCell className="font-mono text-sm">{row.courierTracking || "-"}</TableCell>
-                            <TableCell className="text-right font-medium">
-                              {row.totalAmount ? `PKR ${Number(row.totalAmount).toLocaleString()}` : "-"}
-                            </TableCell>
-                            <TableCell>
-                              <Badge className={
-                                row.codPaymentStatus === "PAID"
-                                  ? "bg-green-500/10 text-green-600 border-green-500/20"
-                                  : "bg-amber-500/10 text-amber-600 border-amber-500/20"
-                              }>
-                                {row.codPaymentStatus || "Pending"}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>{getWorkflowBadge(row.workflowStatus)}</TableCell>
-                            <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
-                              {row.orderDate ? formatPkDate(row.orderDate) : "-"}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
-          ) : (
-            <Card>
-              <CardContent className="text-center py-16">
-                <ClipboardList className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
-                <h3 className="font-medium mb-1">No shipper advice data</h3>
-                <p className="text-sm text-muted-foreground">
-                  Select a date range to view shipment advice grouped by courier
-                </p>
-              </CardContent>
-            </Card>
-          )}
         </TabsContent>
 
         {/* ====== BOOKING LOGS TAB ====== */}
