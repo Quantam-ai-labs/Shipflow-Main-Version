@@ -230,6 +230,7 @@ export default function Shipments() {
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isExporting, setIsExporting] = useState(false);
+  const [issueSearchQuery, setIssueSearchQuery] = useState("");
 
   const [downloadingBatchAwb, setDownloadingBatchAwb] = useState<Set<string>>(new Set());
   const [downloadingBatchPdf, setDownloadingBatchPdf] = useState<Set<string>>(new Set());
@@ -1261,7 +1262,7 @@ export default function Shipments() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={issuesDialogOpen} onOpenChange={setIssuesDialogOpen}>
+      <Dialog open={issuesDialogOpen} onOpenChange={(open) => { setIssuesDialogOpen(open); if (!open) setIssueSearchQuery(""); }}>
         <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle data-testid="text-issues-dialog-title">Configure Issues Preset</DialogTitle>
@@ -1269,11 +1270,22 @@ export default function Shipments() {
           <p className="text-sm text-muted-foreground mb-3">
             Select the courier statuses you want to follow up on. Only pending (non-finalized) statuses are shown.
           </p>
+          <div className="relative mb-3">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Search statuses..."
+              value={issueSearchQuery}
+              onChange={(e) => setIssueSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+              data-testid="input-issue-search"
+            />
+          </div>
           <div className="space-y-2 max-h-[50vh] overflow-y-auto">
             {pendingStatuses.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-4">No pending courier statuses found</p>
             ) : (
-              pendingStatuses.map((status) => (
+              pendingStatuses.filter((status) => status.toLowerCase().includes(issueSearchQuery.toLowerCase())).map((status) => (
                 <label
                   key={status}
                   className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 cursor-pointer"
