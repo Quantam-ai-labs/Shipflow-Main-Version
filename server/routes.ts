@@ -3346,7 +3346,7 @@ export async function registerRoutes(
         }
       }
 
-      const existingInvite = await db
+      const existingInvites = await db
         .select()
         .from(teamInvites)
         .where(
@@ -3356,13 +3356,25 @@ export async function registerRoutes(
             eq(teamInvites.status, "pending"),
           ),
         );
-      if (existingInvite.length > 0) {
-        return res
-          .status(400)
-          .json({
-            message:
-              "An invitation has already been sent to this email. Use resend to send again.",
-          });
+      if (existingInvites.length > 0) {
+        const now = new Date();
+        const expiredInvites = existingInvites.filter((inv) => inv.expiresAt && new Date(inv.expiresAt) < now);
+        const activeInvites = existingInvites.filter((inv) => !inv.expiresAt || new Date(inv.expiresAt) >= now);
+
+        if (expiredInvites.length > 0) {
+          await db.delete(teamInvites).where(
+            inArray(teamInvites.id, expiredInvites.map((inv) => inv.id))
+          );
+        }
+
+        if (activeInvites.length > 0) {
+          return res
+            .status(400)
+            .json({
+              message:
+                "An invitation has already been sent to this email. Use resend to send again.",
+            });
+        }
       }
 
       const token = crypto.randomBytes(32).toString("hex");
