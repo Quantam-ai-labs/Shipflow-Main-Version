@@ -7839,8 +7839,12 @@ export async function registerRoutes(
 
         const orders = [];
         for (const orderId of orderIds.slice(0, 200)) {
-          const order = await storage.getOrderById(merchantId, orderId);
-          if (order) orders.push(order);
+          try {
+            const order = await storage.getOrderById(merchantId, orderId);
+            if (order) orders.push(order);
+          } catch (err) {
+            console.warn(`Picklist: failed to fetch order ${orderId}, skipping:`, err);
+          }
         }
 
         for (const order of orders) {
@@ -7889,9 +7893,10 @@ export async function registerRoutes(
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader("Content-Disposition", `inline; filename="picklist_${Date.now()}.pdf"`);
         return res.send(pdfBuffer);
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error generating picklist:", error);
-        res.status(500).json({ message: "Failed to generate picklist" });
+        const detail = error?.message || "Unknown error";
+        res.status(500).json({ message: `Failed to generate picklist: ${detail}` });
       }
     },
   );

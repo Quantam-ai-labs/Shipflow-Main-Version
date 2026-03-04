@@ -1321,10 +1321,18 @@ export async function generatePicklistPdfBuffer(items: PicklistItem[]): Promise<
     try {
       const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
       if (!response.ok) { imageCache.set(url, null); return null; }
+      const contentType = (response.headers.get("content-type") || "").toLowerCase();
+      const urlLower = url.toLowerCase();
+      const isPng = contentType.includes("image/png") || urlLower.includes(".png");
+      const isJpg = contentType.includes("image/jpeg") || contentType.includes("image/jpg") || urlLower.includes(".jpg") || urlLower.includes(".jpeg");
+      if (!isPng && !isJpg) {
+        imageCache.set(url, null);
+        return null;
+      }
       const arrayBuf = await response.arrayBuffer();
       const bytes = new Uint8Array(arrayBuf);
       let img: PDFImage;
-      if (url.toLowerCase().includes(".png")) {
+      if (isPng) {
         img = await pdfDoc.embedPng(bytes);
       } else {
         img = await pdfDoc.embedJpg(bytes);
@@ -1336,6 +1344,11 @@ export async function generatePicklistPdfBuffer(items: PicklistItem[]): Promise<
       return null;
     }
   }
+
+  const uniqueImageUrls = [...new Set(rows.map(r => r.image).filter(Boolean))] as string[];
+  await Promise.all(
+    uniqueImageUrls.map(url => fetchAndEmbedImage(url))
+  );
 
   function addNewPage(): { page: PDFPage; y: number } {
     const page = pdfDoc.addPage([pageWidth, pageHeight]);
