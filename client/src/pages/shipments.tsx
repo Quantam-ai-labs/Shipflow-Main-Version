@@ -1281,11 +1281,34 @@ export default function Shipments() {
               data-testid="input-issue-search"
             />
           </div>
-          <div className="space-y-2 max-h-[50vh] overflow-y-auto">
-            {pendingStatuses.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">No pending courier statuses found</p>
-            ) : (
-              pendingStatuses.filter((status) => status.toLowerCase().includes(issueSearchQuery.toLowerCase())).map((status) => (
+          {(() => {
+            const filteredStatuses = pendingStatuses.filter((status) => status.toLowerCase().includes(issueSearchQuery.toLowerCase()));
+            const allFilteredSelected = filteredStatuses.length > 0 && filteredStatuses.every((s) => issuesSelection.includes(s));
+            const someFilteredSelected = filteredStatuses.some((s) => issuesSelection.includes(s));
+            return (
+              <>
+                {filteredStatuses.length > 0 && (
+                  <label className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 cursor-pointer border-b border-border pb-3 mb-1" data-testid="checkbox-issue-select-all">
+                    <Checkbox
+                      checked={allFilteredSelected ? true : someFilteredSelected ? "indeterminate" : false}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setIssuesSelection((prev) => [...new Set([...prev, ...filteredStatuses])]);
+                        } else {
+                          setIssuesSelection((prev) => prev.filter((s) => !filteredStatuses.includes(s)));
+                        }
+                      }}
+                    />
+                    <span className="text-sm font-medium">Select All{issueSearchQuery ? ` (${filteredStatuses.length} results)` : ""}</span>
+                  </label>
+                )}
+                <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+                  {pendingStatuses.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">No pending courier statuses found</p>
+                  ) : filteredStatuses.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">No statuses match your search</p>
+                  ) : (
+                    filteredStatuses.map((status) => (
                 <label
                   key={status}
                   className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 cursor-pointer"
@@ -1301,9 +1324,12 @@ export default function Shipments() {
                   />
                   <span className="text-sm">{status}</span>
                 </label>
-              ))
-            )}
-          </div>
+                  ))
+                  )}
+                </div>
+              </>
+            );
+          })()}
           <DialogFooter>
             <Button variant="outline" onClick={() => setIssuesDialogOpen(false)} data-testid="button-issues-cancel">
               Cancel
