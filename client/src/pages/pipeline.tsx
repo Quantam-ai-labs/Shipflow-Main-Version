@@ -1230,7 +1230,7 @@ export default function Pipeline() {
           </div>
         ) : (
           <table className="w-full text-sm">
-            <thead className="bg-muted/50 sticky top-0">
+            <thead className="bg-muted sticky top-0 z-10">
               <tr className="border-b">
                 {activeTab !== "CANCELLED" && activeTab !== "DELIVERED" && activeTab !== "RETURN" && (
                   <th className="w-10 px-3 py-2 text-left">
