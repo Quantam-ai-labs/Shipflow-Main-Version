@@ -497,6 +497,7 @@ export class DatabaseStorage implements IStorage {
       codPaymentStatus: orders.codPaymentStatus,
       lastPaymentAt: orders.lastPaymentAt,
       orderSource: orders.orderSource,
+      lineItems: orders.lineItems,
     };
 
     const selectQuery = options?.excludeHeavyFields
