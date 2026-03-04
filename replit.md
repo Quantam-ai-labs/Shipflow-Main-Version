@@ -43,6 +43,7 @@ Preferred communication style: Simple, everyday language.
 - **Status Mapping Import/Export**: Functionality to export and import custom status mappings and keyword rules for couriers via JSON files.
 - **Product & Inventory Management**: Syncs Shopify product data (title, variants, SKU, price, cost, inventory) and displays a searchable catalog.
 - **Accounting & Finance Module**: A comprehensive double-entry accounting system across 19 dedicated pages, covering overview, money in/out, parties, products, stock management, sales, expenses, receivables/payables, settlements, and various reports (P&L, Balance Snapshot, Cash Flow).
+- **WhatsApp Order Notifications**: Sends WhatsApp messages to customers via Meta Graph API (`v22.0`, phone ID `967693413100547`) whenever an order status changes. Integrated into `workflowTransition.ts` — fires before audit log insert in `transitionOrder`, `bulkTransitionOrders`, and `revertOrder`. Pakistani phone numbers auto-formatted (03xxx → 923xxx). Uses `hello_world` template; can be swapped for a custom template with order parameters. Implementation in `server/utils/integrations/whatsapp.ts`. Requires `WHATSAPP_ACCESS_TOKEN` env secret.
 
 ### Database Reliability
 - **Connection Pool**: PostgreSQL pool configured in `server/db.ts` with `max: 20`, `idleTimeoutMillis: 30000`, `connectionTimeoutMillis: 10000` to prevent connection exhaustion from background syncs.

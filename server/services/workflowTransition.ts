@@ -4,6 +4,7 @@ import { eq, and, inArray, lt, sql } from "drizzle-orm";
 import type { Order } from "@shared/schema";
 import { writeBackCancel, writeBackTags } from './shopifyWriteBack';
 import { getMerchantRoboTags, type RoboTagConfig } from './roboTags';
+import { sendOrderStatusWhatsApp } from '../utils/integrations/whatsapp';
 
 export { getMerchantRoboTags, type RoboTagConfig };
 
@@ -125,6 +126,14 @@ async function _transitionOrderInner(params: TransitionParams): Promise<Transiti
     .where(and(eq(orders.id, orderId), eq(orders.merchantId, merchantId)))
     .returning();
 
+  await sendOrderStatusWhatsApp({
+    customerPhone: order.customerPhone,
+    customerName: order.customerName,
+    orderNumber: order.orderNumber,
+    fromStatus: order.workflowStatus,
+    toStatus,
+  }).catch(err => console.error(`[WhatsApp] Error in transitionOrder for ${orderId}:`, err));
+
   await db.insert(workflowAuditLog).values({
     orderId,
     merchantId,
@@ -176,6 +185,9 @@ export async function bulkTransitionOrders(params: {
     workflowStatus: orders.workflowStatus,
     shopifyOrderId: orders.shopifyOrderId,
     shipmentStatus: orders.shipmentStatus,
+    customerPhone: orders.customerPhone,
+    customerName: orders.customerName,
+    orderNumber: orders.orderNumber,
   }).from(orders)
     .where(and(
       inArray(orders.id, orderIds),
@@ -223,6 +235,18 @@ export async function bulkTransitionOrders(params: {
         .where(and(inArray(orders.id, staleIds), eq(orders.merchantId, merchantId)));
     }
   }
+
+  await Promise.all(
+    eligible.map(o =>
+      sendOrderStatusWhatsApp({
+        customerPhone: o.customerPhone,
+        customerName: o.customerName,
+        orderNumber: o.orderNumber,
+        fromStatus: o.workflowStatus,
+        toStatus,
+      }).catch(err => console.error(`[WhatsApp] Error in bulkTransition for ${o.id}:`, err))
+    )
+  );
 
   const auditEntries = eligible.map(o => ({
     orderId: o.id,
@@ -292,6 +316,14 @@ export async function revertOrder(merchantId: string, orderId: string, actorUser
     })
     .where(and(eq(orders.id, orderId), eq(orders.merchantId, merchantId)))
     .returning();
+
+  await sendOrderStatusWhatsApp({
+    customerPhone: order.customerPhone,
+    customerName: order.customerName,
+    orderNumber: order.orderNumber,
+    fromStatus: order.workflowStatus,
+    toStatus: order.previousWorkflowStatus,
+  }).catch(err => console.error(`[WhatsApp] Error in revertOrder for ${orderId}:`, err));
 
   await db.insert(workflowAuditLog).values({
     orderId,
