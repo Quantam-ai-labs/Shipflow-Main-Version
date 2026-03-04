@@ -2356,6 +2356,7 @@ export async function registerRoutes(
         pageSize: pageSizeStr,
         workflowStatus: wfStatus,
         shipmentStatus: shipStatusParam,
+        rawStatuses: rawStatusesParam,
       } = req.query;
       const page = parseInt(pageStr as string) || 1;
       const pageSize = parseInt(pageSizeStr as string) || 20;
@@ -2371,8 +2372,13 @@ export async function registerRoutes(
         conditions.push(eq(orders.workflowStatus, wfStatus as string));
       }
 
-      if (shipStatusParam && shipStatusParam !== "all") {
-        conditions.push(eq(orders.shipmentStatus, shipStatusParam as string));
+      if (rawStatusesParam) {
+        const rawArr = (rawStatusesParam as string).split(",").filter(Boolean);
+        if (rawArr.length > 0) {
+          conditions.push(inArray(orders.courierRawStatus, rawArr));
+        }
+      } else if (shipStatusParam && shipStatusParam !== "all") {
+        conditions.push(eq(orders.courierRawStatus, shipStatusParam as string));
       }
 
       if (courier && courier !== "all") {
@@ -2473,6 +2479,99 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching shipments:", error);
       res.status(500).json({ message: "Failed to fetch shipments" });
+    }
+  });
+
+  app.get("/api/shipments/raw-statuses", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const rows = await db
+        .select({
+          rawStatus: orders.courierRawStatus,
+          orderCount: count(orders.id),
+        })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.merchantId, merchantId),
+            isNotNull(orders.courierRawStatus),
+            inArray(orders.workflowStatus, ["FULFILLED", "DELIVERED", "RETURN"]),
+          ),
+        )
+        .groupBy(orders.courierRawStatus)
+        .orderBy(orders.courierRawStatus);
+
+      const finalizedWorkflowStatuses = ["DELIVERED", "RETURN", "CANCELLED"];
+      const finalizedRawRows = await db
+        .selectDistinct({ rawStatus: orders.courierRawStatus })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.merchantId, merchantId),
+            isNotNull(orders.courierRawStatus),
+            inArray(orders.workflowStatus, finalizedWorkflowStatuses),
+          ),
+        );
+      const onlyFinalizedStatuses = new Set(finalizedRawRows.map(r => r.rawStatus));
+
+      const pendingRawRows = await db
+        .selectDistinct({ rawStatus: orders.courierRawStatus })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.merchantId, merchantId),
+            isNotNull(orders.courierRawStatus),
+            eq(orders.workflowStatus, "FULFILLED"),
+          ),
+        );
+      const pendingStatuses = pendingRawRows.map(r => r.rawStatus).filter((s): s is string => !!s);
+
+      const allStatuses = rows.map(r => ({ status: r.rawStatus!, count: r.orderCount }));
+
+      res.json({ statuses: allStatuses, pendingStatuses });
+    } catch (error) {
+      console.error("Error fetching raw statuses:", error);
+      res.status(500).json({ message: "Failed to fetch raw statuses" });
+    }
+  });
+
+  app.get("/api/merchants/issue-preset", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const merchant = await storage.getMerchant(merchantId);
+      if (!merchant) return res.status(404).json({ message: "Merchant not found" });
+
+      const statuses = Array.isArray(merchant.issuePresetStatuses) ? merchant.issuePresetStatuses : [];
+      res.json({ statuses });
+    } catch (error) {
+      console.error("Error fetching issue preset:", error);
+      res.status(500).json({ message: "Failed to fetch issue preset" });
+    }
+  });
+
+  app.put("/api/merchants/issue-preset", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const { statuses } = req.body;
+      if (!Array.isArray(statuses)) {
+        return res.status(400).json({ message: "statuses must be an array" });
+      }
+
+      await db.update(merchants).set({
+        issuePresetStatuses: statuses,
+        updatedAt: new Date(),
+      }).where(eq(merchants.id, merchantId));
+
+      res.json({ success: true, statuses });
+    } catch (error) {
+      console.error("Error saving issue preset:", error);
+      res.status(500).json({ message: "Failed to save issue preset" });
     }
   });
 

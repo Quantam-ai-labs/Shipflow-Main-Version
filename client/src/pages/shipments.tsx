@@ -44,6 +44,8 @@ import {
   Clock,
   X,
   Loader2,
+  AlertTriangle,
+  Settings2,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -62,22 +64,6 @@ const workflowStatusOptions = [
   { value: "RETURN", label: "Return" },
 ];
 
-const shipmentStatusOptions = [
-  { value: "all", label: "All Shipment Statuses" },
-  { value: "BOOKED", label: "Booked" },
-  { value: "PICKED_UP", label: "Picked Up" },
-  { value: "ARRIVED_AT_ORIGIN", label: "At Origin" },
-  { value: "IN_TRANSIT", label: "In Transit" },
-  { value: "ARRIVED_AT_DESTINATION", label: "At Destination" },
-  { value: "OUT_FOR_DELIVERY", label: "Out for Delivery" },
-  { value: "DELIVERY_ATTEMPTED", label: "Delivery Attempted" },
-  { value: "DELIVERED", label: "Delivered" },
-  { value: "DELIVERY_FAILED", label: "Delivery Failed" },
-  { value: "READY_FOR_RETURN", label: "Ready for Return" },
-  { value: "RETURN_IN_TRANSIT", label: "Return in Transit" },
-  { value: "RETURNED_TO_SHIPPER", label: "Returned" },
-  { value: "CANCELLED", label: "Cancelled" },
-];
 
 const courierOptions = [
   { value: "all", label: "All Couriers" },
@@ -220,6 +206,9 @@ export default function Shipments() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [shipmentStatusFilter, setShipmentStatusFilter] = useState("all");
+  const [issuesActive, setIssuesActive] = useState(false);
+  const [issuesDialogOpen, setIssuesDialogOpen] = useState(false);
+  const [issuesSelection, setIssuesSelection] = useState<string[]>([]);
   const [courierFilter, setCourierFilter] = useState("all");
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [page, setPage] = useState(1);
@@ -271,13 +260,49 @@ export default function Shipments() {
     });
   };
 
+  const { data: rawStatusesData } = useQuery<{ statuses: { status: string; count: number }[]; pendingStatuses: string[] }>({
+    queryKey: ["/api/shipments/raw-statuses"],
+    queryFn: async () => {
+      const res = await fetch("/api/shipments/raw-statuses", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
+    enabled: activeTab === "shipments",
+  });
+
+  const { data: issuePresetData } = useQuery<{ statuses: string[] }>({
+    queryKey: ["/api/merchants/issue-preset"],
+    queryFn: async () => {
+      const res = await fetch("/api/merchants/issue-preset", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
+  });
+
+  const saveIssuePresetMutation = useMutation({
+    mutationFn: async (statuses: string[]) => {
+      const res = await apiRequest("PUT", "/api/merchants/issue-preset", { statuses });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/merchants/issue-preset"] });
+      toast({ title: "Issues preset saved" });
+    },
+  });
+
+  const savedIssueStatuses = issuePresetData?.statuses ?? [];
+  const allRawStatuses = rawStatusesData?.statuses ?? [];
+  const pendingStatuses = rawStatusesData?.pendingStatuses ?? [];
+
   const dateParams = dateRangeToParams(dateRange);
   const queryParams = new URLSearchParams({
     page: page.toString(),
     pageSize: pageSize.toString(),
     ...(search && { search }),
     ...(statusFilter !== "all" && { workflowStatus: statusFilter }),
-    ...(shipmentStatusFilter !== "all" && { shipmentStatus: shipmentStatusFilter }),
+    ...(issuesActive && savedIssueStatuses.length > 0
+      ? { rawStatuses: savedIssueStatuses.join(",") }
+      : shipmentStatusFilter !== "all" ? { shipmentStatus: shipmentStatusFilter } : {}),
     ...(courierFilter !== "all" && { courier: courierFilter }),
     ...(!search && dateParams.dateFrom && { dateFrom: dateParams.dateFrom }),
     ...(!search && dateParams.dateTo && { dateTo: dateParams.dateTo }),
@@ -474,7 +499,7 @@ export default function Shipments() {
                   order.totalAmount || "",
                   order.courierName || order.courierProvider || "",
                   order.courierTracking || order.trackingNumber || "",
-                  order.shipmentStatus || order.workflowStatus || "",
+                  order.courierRawStatus || order.workflowStatus || "",
                   order.dispatchedAt ? formatPkDate(order.dispatchedAt) : "",
                 ]);
                 exportCsvWithDate("shipments", headers, rows);
@@ -587,17 +612,50 @@ export default function Shipments() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <Select value={shipmentStatusFilter} onValueChange={(v) => { setShipmentStatusFilter(v); setPage(1); }}>
+                  <Select value={shipmentStatusFilter} onValueChange={(v) => { setShipmentStatusFilter(v); setIssuesActive(false); setPage(1); }}>
                     <SelectTrigger className="w-[200px]" data-testid="select-shipment-status-filter">
                       <Package className="w-4 h-4 mr-2" />
-                      <SelectValue placeholder="Shipment Status" />
+                      <SelectValue placeholder="Courier Status" />
                     </SelectTrigger>
                     <SelectContent>
-                      {shipmentStatusOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                      <SelectItem value="all">All Courier Statuses</SelectItem>
+                      {allRawStatuses.map((s) => (
+                        <SelectItem key={s.status} value={s.status}>{s.status} ({s.count})</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  <Button
+                    variant={issuesActive ? "default" : "outline"}
+                    size="sm"
+                    className={issuesActive ? "bg-amber-600 hover:bg-amber-700 text-white" : ""}
+                    onClick={() => {
+                      if (savedIssueStatuses.length === 0) {
+                        setIssuesSelection([]);
+                        setIssuesDialogOpen(true);
+                      } else {
+                        setIssuesActive(!issuesActive);
+                        if (!issuesActive) setShipmentStatusFilter("all");
+                        setPage(1);
+                      }
+                    }}
+                    data-testid="button-issues-preset"
+                  >
+                    <AlertTriangle className="w-4 h-4 mr-1" />
+                    Issues{savedIssueStatuses.length > 0 ? ` (${savedIssueStatuses.length})` : ""}
+                  </Button>
+                  {savedIssueStatuses.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setIssuesSelection([...savedIssueStatuses]);
+                        setIssuesDialogOpen(true);
+                      }}
+                      data-testid="button-edit-issues"
+                    >
+                      <Settings2 className="w-4 h-4" />
+                    </Button>
+                  )}
                   <Select value={courierFilter} onValueChange={(v) => { setCourierFilter(v); setPage(1); }}>
                     <SelectTrigger className="w-[160px]" data-testid="select-shipment-courier">
                       <Truck className="w-4 h-4 mr-2" />
@@ -709,35 +767,10 @@ export default function Shipments() {
                             <TableCell data-testid={`badge-status-${order.id}`}>
                               {getWorkflowBadge(order.workflowStatus)}
                             </TableCell>
-                            <TableCell className="text-sm" title={order.courierRawStatus ? `Courier: ${order.courierRawStatus}` : undefined}>
-                              {order.shipmentStatus ? (
-                                <Badge className={`text-xs font-medium ${
-                                  ({
-                                    'BOOKED': "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
-                                    'PICKED_UP': "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300",
-                                    'ARRIVED_AT_ORIGIN': "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
-                                    'IN_TRANSIT': "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300",
-                                    'ARRIVED_AT_DESTINATION': "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
-                                    'OUT_FOR_DELIVERY': "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300",
-                                    'DELIVERY_ATTEMPTED': "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300",
-                                    'DELIVERED': "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
-                                    'DELIVERY_FAILED': "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
-                                    'RETURNED_TO_SHIPPER': "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
-                                    'READY_FOR_RETURN': "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300",
-                                    'RETURN_IN_TRANSIT': "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
-                                    'RETURNED_TO_ORIGIN': "bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300",
-                                    'CANCELLED': "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
-                                  } as Record<string, string>)[order.shipmentStatus] || "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
-                                }`}>
-                                  {({
-                                    'BOOKED': 'Booked', 'PICKED_UP': 'Picked Up', 'ARRIVED_AT_ORIGIN': 'At Origin',
-                                    'IN_TRANSIT': 'In Transit', 'ARRIVED_AT_DESTINATION': 'At Destination',
-                                    'OUT_FOR_DELIVERY': 'Out for Delivery', 'DELIVERY_ATTEMPTED': 'Attempted',
-                                    'DELIVERED': 'Delivered', 'DELIVERY_FAILED': 'Failed',
-                                    'RETURNED_TO_SHIPPER': 'Returned', 'READY_FOR_RETURN': 'Ready for Return',
-                                    'RETURN_IN_TRANSIT': 'Return in Transit', 'RETURNED_TO_ORIGIN': 'Returned to Origin',
-                                    'CANCELLED': 'Cancelled',
-                                  } as Record<string, string>)[order.shipmentStatus] || order.shipmentStatus}
+                            <TableCell className="text-sm">
+                              {order.courierRawStatus ? (
+                                <Badge className="text-xs font-medium bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                                  {order.courierRawStatus}
                                 </Badge>
                               ) : "-"}
                             </TableCell>
@@ -1223,6 +1256,60 @@ export default function Shipments() {
               data-testid="button-remark-save"
             >
               {updateRemarkMutation.isPending ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={issuesDialogOpen} onOpenChange={setIssuesDialogOpen}>
+        <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle data-testid="text-issues-dialog-title">Configure Issues Preset</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground mb-3">
+            Select the courier statuses you want to follow up on. Only pending (non-finalized) statuses are shown.
+          </p>
+          <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+            {pendingStatuses.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">No pending courier statuses found</p>
+            ) : (
+              pendingStatuses.map((status) => (
+                <label
+                  key={status}
+                  className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 cursor-pointer"
+                  data-testid={`checkbox-issue-${status}`}
+                >
+                  <Checkbox
+                    checked={issuesSelection.includes(status)}
+                    onCheckedChange={(checked) => {
+                      setIssuesSelection((prev) =>
+                        checked ? [...prev, status] : prev.filter((s) => s !== status)
+                      );
+                    }}
+                  />
+                  <span className="text-sm">{status}</span>
+                </label>
+              ))
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIssuesDialogOpen(false)} data-testid="button-issues-cancel">
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                saveIssuePresetMutation.mutate(issuesSelection);
+                setIssuesDialogOpen(false);
+                if (issuesSelection.length > 0) {
+                  setIssuesActive(true);
+                  setShipmentStatusFilter("all");
+                  setPage(1);
+                }
+              }}
+              disabled={saveIssuePresetMutation.isPending}
+              data-testid="button-issues-save"
+            >
+              {saveIssuePresetMutation.isPending ? "Saving..." : `Save (${issuesSelection.length} selected)`}
             </Button>
           </DialogFooter>
         </DialogContent>
