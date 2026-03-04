@@ -7772,6 +7772,84 @@ export async function registerRoutes(
   );
 
   app.post(
+    "/api/print/picklist",
+    isAuthenticated,
+    async (req, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+
+        const { orderIds } = req.body;
+        if (!Array.isArray(orderIds) || orderIds.length === 0) {
+          return res.status(400).json({ message: "orderIds array required" });
+        }
+
+        const { generatePicklistPdfBuffer } = await import("./services/pdfGenerator");
+        type PicklistItemType = import("./services/pdfGenerator").PicklistItem;
+
+        const items: PicklistItemType[] = [];
+        const shopifyProductIds = new Set<string>();
+
+        const orders = [];
+        for (const orderId of orderIds.slice(0, 200)) {
+          const order = await storage.getOrderById(merchantId, orderId);
+          if (order) orders.push(order);
+        }
+
+        for (const order of orders) {
+          const lineItems = Array.isArray(order.lineItems) ? order.lineItems : [];
+          for (const li of lineItems as any[]) {
+            if (li.productId) shopifyProductIds.add(String(li.productId));
+          }
+        }
+
+        const productsList = shopifyProductIds.size > 0
+          ? await storage.getProductsByShopifyIds(merchantId, Array.from(shopifyProductIds))
+          : [];
+        const productsMap = new Map<string, any>();
+        for (const p of productsList) {
+          productsMap.set(p.shopifyProductId, p);
+        }
+
+        for (const order of orders) {
+          const lineItems = Array.isArray(order.lineItems) ? order.lineItems : [];
+          for (const li of lineItems as any[]) {
+            const product = li.productId ? productsMap.get(String(li.productId)) : null;
+
+            let costPrice = 0;
+            if (product?.variants && Array.isArray(product.variants) && li.variantId) {
+              const variant = product.variants.find((v: any) => String(v.id) === String(li.variantId));
+              if (variant?.cost) costPrice = parseFloat(variant.cost) || 0;
+              else if (variant?.price) costPrice = parseFloat(variant.price) || 0;
+            }
+
+            items.push({
+              image: li.image || product?.imageUrl || null,
+              productName: li.name || li.title || "Unknown Product",
+              variantTitle: li.variantTitle || null,
+              quantity: Number(li.quantity) || 1,
+              costPrice,
+              salePrice: parseFloat(li.price) || 0,
+            });
+          }
+        }
+
+        if (items.length === 0) {
+          return res.status(404).json({ message: "No line items found in selected orders" });
+        }
+
+        const pdfBuffer = await generatePicklistPdfBuffer(items);
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Disposition", `inline; filename="picklist_${Date.now()}.pdf"`);
+        return res.send(pdfBuffer);
+      } catch (error) {
+        console.error("Error generating picklist:", error);
+        res.status(500).json({ message: "Failed to generate picklist" });
+      }
+    },
+  );
+
+  app.post(
     "/api/print/regenerate/:orderId",
     isAuthenticated,
     async (req, res) => {

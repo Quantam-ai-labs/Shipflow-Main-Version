@@ -1273,6 +1273,239 @@ export async function generateBatchLoadsheetPdf(
   return filepath;
 }
 
+export interface PicklistItem {
+  image?: string | null;
+  productName: string;
+  variantTitle?: string | null;
+  quantity: number;
+  costPrice: number;
+  salePrice: number;
+}
+
+export async function generatePicklistPdfBuffer(items: PicklistItem[]): Promise<Buffer> {
+  const aggregated = new Map<string, PicklistItem>();
+  for (const item of items) {
+    const key = `${item.productName}|||${item.variantTitle || ""}`;
+    const existing = aggregated.get(key);
+    if (existing) {
+      existing.quantity += item.quantity;
+    } else {
+      aggregated.set(key, { ...item });
+    }
+  }
+  const rows = Array.from(aggregated.values()).sort((a, b) => a.productName.localeCompare(b.productName));
+
+  const pdfDoc = await PDFDocument.create();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  const pageWidth = 595.28;
+  const pageHeight = 841.89;
+  const margin = 40;
+  const usableWidth = pageWidth - margin * 2;
+
+  const colImage = 50;
+  const colQty = 45;
+  const colCost = 70;
+  const colSale = 70;
+  const colName = usableWidth - colImage - colQty - colCost - colSale;
+
+  const rowHeight = 50;
+  const headerHeight = 30;
+  const imgSize = 38;
+
+  const imageCache = new Map<string, PDFImage | null>();
+
+  async function fetchAndEmbedImage(url: string): Promise<PDFImage | null> {
+    if (imageCache.has(url)) return imageCache.get(url)!;
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
+      if (!response.ok) { imageCache.set(url, null); return null; }
+      const arrayBuf = await response.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuf);
+      let img: PDFImage;
+      if (url.toLowerCase().includes(".png")) {
+        img = await pdfDoc.embedPng(bytes);
+      } else {
+        img = await pdfDoc.embedJpg(bytes);
+      }
+      imageCache.set(url, img);
+      return img;
+    } catch {
+      imageCache.set(url, null);
+      return null;
+    }
+  }
+
+  function addNewPage(): { page: PDFPage; y: number } {
+    const page = pdfDoc.addPage([pageWidth, pageHeight]);
+    return { page, y: pageHeight - margin };
+  }
+
+  function drawTableHeader(page: PDFPage, y: number): number {
+    const headerY = y - headerHeight;
+    page.drawRectangle({
+      x: margin,
+      y: headerY,
+      width: usableWidth,
+      height: headerHeight,
+      color: rgb(0.15, 0.15, 0.15),
+    });
+
+    const textY = headerY + 9;
+    const headers = [
+      { text: "Image", x: margin + 5, w: colImage },
+      { text: "Product Name", x: margin + colImage + 5, w: colName },
+      { text: "Qty", x: margin + colImage + colName + 5, w: colQty },
+      { text: "Cost", x: margin + colImage + colName + colQty + 5, w: colCost },
+      { text: "Sale", x: margin + colImage + colName + colQty + colCost + 5, w: colSale },
+    ];
+
+    for (const h of headers) {
+      page.drawText(h.text, {
+        x: h.x,
+        y: textY,
+        size: 9,
+        font: fontBold,
+        color: rgb(1, 1, 1),
+      });
+    }
+
+    return headerY;
+  }
+
+  let { page, y } = addNewPage();
+
+  page.drawText("Products Picklist", {
+    x: margin,
+    y: y - 5,
+    size: 22,
+    font: fontBold,
+    color: rgb(0.1, 0.1, 0.1),
+  });
+  y -= 35;
+
+  page.drawText(`Total Items: ${rows.length}  |  Total Qty: ${rows.reduce((s, r) => s + r.quantity, 0)}`, {
+    x: margin,
+    y: y - 2,
+    size: 10,
+    font,
+    color: rgb(0.35, 0.35, 0.35),
+  });
+  y -= 22;
+
+  y = drawTableHeader(page, y);
+
+  let rowIndex = 0;
+  for (const row of rows) {
+    if (y - rowHeight < margin + 20) {
+      ({ page, y } = addNewPage());
+      y = drawTableHeader(page, y);
+    }
+
+    const rowY = y - rowHeight;
+
+    if (rowIndex % 2 === 1) {
+      page.drawRectangle({
+        x: margin,
+        y: rowY,
+        width: usableWidth,
+        height: rowHeight,
+        color: rgb(0.96, 0.96, 0.96),
+      });
+    }
+
+    page.drawLine({
+      start: { x: margin, y: rowY },
+      end: { x: margin + usableWidth, y: rowY },
+      thickness: 0.5,
+      color: rgb(0.85, 0.85, 0.85),
+    });
+
+    const cellY = rowY + (rowHeight - 9) / 2;
+
+    if (row.image) {
+      const img = await fetchAndEmbedImage(row.image);
+      if (img) {
+        const aspect = img.width / img.height;
+        let drawW = imgSize;
+        let drawH = imgSize;
+        if (aspect > 1) {
+          drawH = imgSize / aspect;
+        } else {
+          drawW = imgSize * aspect;
+        }
+        const imgX = margin + (colImage - drawW) / 2;
+        const imgY = rowY + (rowHeight - drawH) / 2;
+        page.drawImage(img, { x: imgX, y: imgY, width: drawW, height: drawH });
+      }
+    }
+
+    let displayName = row.productName;
+    if (row.variantTitle) {
+      displayName = `${row.productName} - ${row.variantTitle}`;
+    }
+    const nameX = margin + colImage + 5;
+    const maxNameWidth = colName - 10;
+    let truncatedName = displayName;
+    while (font.widthOfTextAtSize(truncatedName, 8.5) > maxNameWidth && truncatedName.length > 10) {
+      truncatedName = truncatedName.substring(0, truncatedName.length - 4) + "...";
+    }
+
+    const nameLines: string[] = [];
+    if (font.widthOfTextAtSize(displayName, 8.5) > maxNameWidth) {
+      const words = displayName.split(" ");
+      let line = "";
+      for (const word of words) {
+        const test = line ? `${line} ${word}` : word;
+        if (font.widthOfTextAtSize(test, 8.5) > maxNameWidth) {
+          if (line) nameLines.push(line);
+          line = word;
+        } else {
+          line = test;
+        }
+      }
+      if (line) nameLines.push(line);
+      if (nameLines.length > 2) {
+        nameLines.length = 2;
+        nameLines[1] = nameLines[1].substring(0, nameLines[1].length - 3) + "...";
+      }
+    } else {
+      nameLines.push(displayName);
+    }
+
+    const lineHeight = 11;
+    const totalTextHeight = nameLines.length * lineHeight;
+    let nameY = rowY + (rowHeight + totalTextHeight) / 2 - lineHeight + 2;
+    for (const line of nameLines) {
+      page.drawText(line, { x: nameX, y: nameY, size: 8.5, font, color: rgb(0.1, 0.1, 0.1) });
+      nameY -= lineHeight;
+    }
+
+    const qtyX = margin + colImage + colName + 5;
+    page.drawText(String(row.quantity), { x: qtyX, y: cellY, size: 9, font: fontBold, color: rgb(0.1, 0.1, 0.1) });
+
+    const costX = margin + colImage + colName + colQty + 5;
+    page.drawText(row.costPrice > 0 ? `Rs ${row.costPrice.toFixed(0)}` : "-", { x: costX, y: cellY, size: 8.5, font, color: rgb(0.3, 0.3, 0.3) });
+
+    const saleX = margin + colImage + colName + colQty + colCost + 5;
+    page.drawText(row.salePrice > 0 ? `Rs ${row.salePrice.toFixed(0)}` : "-", { x: saleX, y: cellY, size: 8.5, font, color: rgb(0.1, 0.1, 0.1) });
+
+    y = rowY;
+    rowIndex++;
+  }
+
+  page.drawLine({
+    start: { x: margin, y },
+    end: { x: margin + usableWidth, y },
+    thickness: 1,
+    color: rgb(0.15, 0.15, 0.15),
+  });
+
+  const pdfBytes = await pdfDoc.save();
+  return Buffer.from(pdfBytes);
+}
+
 export function getPdfPath(filepath: string): string | null {
   if (!filepath) return null;
   if (fs.existsSync(filepath)) return filepath;

@@ -59,6 +59,7 @@ import {
   History,
   PenLine,
   RefreshCw,
+  ClipboardList,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -1061,6 +1062,34 @@ export default function Pipeline() {
                 data-testid="bulk-print-labels"
               >
                 <Printer className="w-3.5 h-3.5 mr-1.5" />Print AWBs
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  try {
+                    const ids = Array.from(selectedIds);
+                    const resp = await fetch("/api/print/picklist", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      credentials: "include",
+                      body: JSON.stringify({ orderIds: ids }),
+                    });
+                    if (!resp.ok) {
+                      const err = await resp.json().catch(() => ({ message: "Failed" }));
+                      toast({ title: "Failed", description: err.message, variant: "destructive" });
+                      return;
+                    }
+                    const blob = await resp.blob();
+                    const url = URL.createObjectURL(blob);
+                    window.open(url, "_blank");
+                  } catch (err: any) {
+                    toast({ title: "Error", description: err.message || "Failed to generate picklist", variant: "destructive" });
+                  }
+                }}
+                data-testid="bulk-picklist"
+              >
+                <ClipboardList className="w-3.5 h-3.5 mr-1.5" />Picklist
               </Button>
               <Button
                 size="sm"
