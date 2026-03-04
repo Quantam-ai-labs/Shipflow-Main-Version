@@ -582,23 +582,14 @@ export async function registerRoutes(
     const settings = (account?.settings as Record<string, any>) || {};
 
     if (normalized === "leopards") {
-      const apiKey =
-        (!settings.useEnvCredentials && account?.apiKey) ||
-        process.env.LEOPARDS_API_KEY ||
-        null;
-      const apiSecret =
-        (!settings.useEnvCredentials && account?.apiSecret) ||
-        process.env.LEOPARDS_API_PASSWORD ||
-        null;
+      const apiKey = account?.apiKey || null;
+      const apiSecret = account?.apiSecret || null;
       if (!apiKey || !apiSecret) return null;
       return { apiKey, apiSecret };
     }
 
     if (normalized === "postex") {
-      const apiKey =
-        (!settings.useEnvCredentials && account?.apiKey) ||
-        process.env.POSTEX_API_TOKEN ||
-        null;
+      const apiKey = account?.apiKey || null;
       if (!apiKey) return null;
       return { apiKey, apiSecret: null };
     }
@@ -4139,20 +4130,6 @@ export async function registerRoutes(
         shopifyStore.accessToken !== "demo-access-token"
       );
 
-      const envCredentials: Record<
-        string,
-        { hasKey: boolean; hasSecret: boolean }
-      > = {
-        leopards: {
-          hasKey: !!process.env.LEOPARDS_API_KEY,
-          hasSecret: !!process.env.LEOPARDS_API_PASSWORD,
-        },
-        postex: {
-          hasKey: !!process.env.POSTEX_API_TOKEN,
-          hasSecret: false,
-        },
-      };
-
       res.json({
         shopify: {
           isConnected: isShopifyConnected,
@@ -4171,7 +4148,6 @@ export async function registerRoutes(
             settings,
           };
         }),
-        envCredentials,
       });
     } catch (error) {
       console.error("Error fetching integrations:", error);

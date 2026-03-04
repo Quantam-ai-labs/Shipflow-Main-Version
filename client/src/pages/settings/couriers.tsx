@@ -13,7 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Truck, CheckCircle2, Settings, ExternalLink, Zap, ShieldCheck, Key, Lock, Loader2, MapPin, RefreshCw, Copy, Webhook, Eye, EyeOff } from "lucide-react";
+import { Truck, CheckCircle2, Settings, ExternalLink, Zap, Lock, Loader2, MapPin, RefreshCw, Copy, Webhook, Eye, EyeOff } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -31,10 +31,8 @@ interface IntegrationsData {
     isActive: boolean;
     accountNumber: string | null;
     hasDbCredentials: boolean;
-    useEnvCredentials: boolean;
     settings?: Record<string, any>;
   }>;
-  envCredentials: Record<string, { hasKey: boolean; hasSecret: boolean }>;
 }
 
 const COURIER_CONFIG: Record<string, {
@@ -46,7 +44,6 @@ const COURIER_CONFIG: Record<string, {
     label: string;
     placeholder: string;
     type: string;
-    envVar: string;
     required: boolean;
   }>;
 }> = {
@@ -60,7 +57,6 @@ const COURIER_CONFIG: Record<string, {
         label: "API Key",
         placeholder: "Enter your Leopards API key",
         type: "password",
-        envVar: "LEOPARDS_API_KEY",
         required: true,
       },
       {
@@ -68,15 +64,13 @@ const COURIER_CONFIG: Record<string, {
         label: "API Password",
         placeholder: "Enter your Leopards API password",
         type: "password",
-        envVar: "LEOPARDS_API_PASSWORD",
         required: true,
       },
       {
         key: "shipperId",
         label: "Shipper ID",
-        placeholder: "Enter your Leopards Shipper ID (e.g. 2125655)",
+        placeholder: "Enter your Leopards Shipper ID",
         type: "text",
-        envVar: "",
         required: false,
       },
       {
@@ -84,7 +78,6 @@ const COURIER_CONFIG: Record<string, {
         label: "Shipper City (Origin)",
         placeholder: "Enter your pickup/origin city (e.g. Lahore, Karachi)",
         type: "text",
-        envVar: "",
         required: false,
       },
       {
@@ -92,7 +85,6 @@ const COURIER_CONFIG: Record<string, {
         label: "Shipper Address (Pickup)",
         placeholder: "Enter your pickup/warehouse address",
         type: "text",
-        envVar: "",
         required: false,
       },
     ],
@@ -107,7 +99,6 @@ const COURIER_CONFIG: Record<string, {
         label: "API Token",
         placeholder: "Enter your PostEx API token",
         type: "password",
-        envVar: "POSTEX_API_TOKEN",
         required: true,
       },
       {
@@ -115,7 +106,6 @@ const COURIER_CONFIG: Record<string, {
         label: "Pickup Address Code",
         placeholder: "Enter your PostEx Pickup Address Code (e.g. 002)",
         type: "text",
-        envVar: "",
         required: false,
       },
       {
@@ -123,7 +113,6 @@ const COURIER_CONFIG: Record<string, {
         label: "Store Address Code",
         placeholder: "Enter your PostEx Store/Default Address Code (e.g. 001)",
         type: "text",
-        envVar: "",
         required: false,
       },
     ],
@@ -138,7 +127,6 @@ const COURIER_CONFIG: Record<string, {
         label: "API Key",
         placeholder: "Enter your TCS API key",
         type: "password",
-        envVar: "TCS_API_KEY",
         required: true,
       },
     ],
@@ -150,7 +138,6 @@ export default function CouriersSettings() {
   const [isCourierDialogOpen, setIsCourierDialogOpen] = useState(false);
   const [selectedCourier, setSelectedCourier] = useState<string | null>(null);
   const [courierFormData, setCourierFormData] = useState<Record<string, string>>({});
-  const [useEnvCreds, setUseEnvCreds] = useState(false);
   const [postexAddresses, setPostexAddresses] = useState<any[]>([]);
   const [fetchingAddresses, setFetchingAddresses] = useState(false);
 
@@ -159,7 +146,7 @@ export default function CouriersSettings() {
   });
 
   const saveCourierMutation = useMutation({
-    mutationFn: async (payload: { courierName: string; apiKey?: string; apiSecret?: string; accountNumber?: string; useEnvCredentials: boolean; settings?: Record<string, any> }) => {
+    mutationFn: async (payload: { courierName: string; apiKey?: string; apiSecret?: string; accountNumber?: string; useEnvCredentials?: boolean; settings?: Record<string, any> }) => {
       return apiRequest("POST", "/api/integrations/couriers", payload);
     },
     onSuccess: () => {
@@ -167,7 +154,6 @@ export default function CouriersSettings() {
       setIsCourierDialogOpen(false);
       setCourierFormData({});
       setSelectedCourier(null);
-      setUseEnvCreds(false);
       toast({
         title: "Courier Connected",
         description: "Your courier account has been saved and is ready for tracking.",
@@ -208,16 +194,14 @@ export default function CouriersSettings() {
     const config = COURIER_CONFIG[selectedCourier];
     if (!config) return;
 
-    if (!useEnvCreds) {
-      const missingRequired = config.fields.filter(f => f.required && !courierFormData[f.key]);
-      if (missingRequired.length > 0) {
-        toast({
-          title: "Missing Credentials",
-          description: `Please fill in: ${missingRequired.map(f => f.label).join(', ')}`,
-          variant: "destructive",
-        });
-        return;
-      }
+    const missingRequired = config.fields.filter(f => f.required && !courierFormData[f.key]);
+    if (missingRequired.length > 0) {
+      toast({
+        title: "Missing Credentials",
+        description: `Please fill in: ${missingRequired.map(f => f.label).join(', ')}`,
+        variant: "destructive",
+      });
+      return;
     }
 
     saveCourierMutation.mutate({
@@ -225,7 +209,7 @@ export default function CouriersSettings() {
       apiKey: courierFormData.apiKey || undefined,
       apiSecret: courierFormData.apiSecret || undefined,
       accountNumber: courierFormData.accountNumber || undefined,
-      useEnvCredentials: useEnvCreds,
+      useEnvCredentials: false,
       settings: {
         ...(courierFormData.shipperId ? { shipperId: courierFormData.shipperId } : {}),
         ...(courierFormData.shipperCity ? { shipperCity: courierFormData.shipperCity } : {}),
@@ -240,8 +224,6 @@ export default function CouriersSettings() {
     setSelectedCourier(courierName);
     setCourierFormData({});
     const connectedCourier = data?.couriers.find(c => c.name === courierName);
-    const hasEnv = hasFullEnvCreds(courierName);
-    setUseEnvCreds(connectedCourier?.useEnvCredentials || (!connectedCourier?.hasDbCredentials && hasEnv));
     if (connectedCourier?.settings) {
       const s = connectedCourier.settings as Record<string, any>;
       if (s.shipperId) {
@@ -259,12 +241,6 @@ export default function CouriersSettings() {
       if (s.storeAddressCode) {
         setCourierFormData(prev => ({ ...prev, storeAddressCode: s.storeAddressCode }));
       }
-    }
-    if (!connectedCourier && courierName === 'leopards') {
-      setCourierFormData(prev => ({ ...prev, shipperId: '2125655' }));
-    }
-    if (!connectedCourier && courierName === 'postex') {
-      setCourierFormData(prev => ({ ...prev, pickupAddressCode: '002', storeAddressCode: '001' }));
     }
     setIsCourierDialogOpen(true);
   };
@@ -416,26 +392,11 @@ export default function CouriersSettings() {
     ...config,
   }));
 
-  function hasFullEnvCreds(courierName: string): boolean {
-    const envCreds = data?.envCredentials?.[courierName];
-    if (!envCreds) return false;
-    if (courierName === 'leopards') return !!(envCreds.hasKey && envCreds.hasSecret);
-    return !!envCreds.hasKey;
-  }
-
   function getCourierStatus(courierName: string): { connected: boolean; source: string } {
     const connected = data?.couriers.find(c => c.name === courierName);
-    const hasEnv = hasFullEnvCreds(courierName);
     
     if (connected?.isActive) {
-      if (connected.useEnvCredentials || (!connected.hasDbCredentials && hasEnv)) {
-        return { connected: true, source: 'env' };
-      }
       return { connected: true, source: 'custom' };
-    }
-    
-    if (hasEnv) {
-      return { connected: false, source: 'env_available' };
     }
     
     return { connected: false, source: 'none' };
@@ -579,11 +540,6 @@ export default function CouriersSettings() {
                       <CheckCircle2 className="w-3 h-3 mr-1" />
                       Connected
                     </Badge>
-                  ) : status.source === 'env_available' ? (
-                    <Badge className="bg-blue-500/10 text-blue-600 border-blue-500/20">
-                      <Key className="w-3 h-3 mr-1" />
-                      Key Available
-                    </Badge>
                   ) : (
                     <Badge variant="outline" className="text-muted-foreground">
                       Not Connected
@@ -595,17 +551,8 @@ export default function CouriersSettings() {
                 
                 {status.connected && (
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
-                    {status.source === 'env' ? (
-                      <>
-                        <ShieldCheck className="w-3 h-3" />
-                        <span>Using environment credentials</span>
-                      </>
-                    ) : (
-                      <>
-                        <Lock className="w-3 h-3" />
-                        <span>Using custom credentials</span>
-                      </>
-                    )}
+                    <Lock className="w-3 h-3" />
+                    <span>Using custom credentials</span>
                   </div>
                 )}
 
@@ -728,16 +675,6 @@ export default function CouriersSettings() {
                         Test
                       </Button>
                     </>
-                  ) : status.source === 'env_available' ? (
-                    <Button
-                      variant="default"
-                      size="sm"
-                      onClick={() => openCourierDialog(courier.name)}
-                      data-testid={`button-activate-${courier.name}`}
-                    >
-                      <Zap className="w-4 h-4 mr-2" />
-                      Activate
-                    </Button>
                   ) : (
                     <Button
                       variant="outline"
@@ -785,53 +722,26 @@ export default function CouriersSettings() {
           
           {selectedCourier && COURIER_CONFIG[selectedCourier] && (
             <div className="space-y-4 py-2">
-              {selectedCourier && hasFullEnvCreds(selectedCourier) && (
-                <div className="p-3 rounded-lg border bg-muted/30">
-                  <div className="flex items-start gap-3">
-                    <div className="mt-0.5">
-                      <input
-                        type="checkbox"
-                        id="useEnvCreds"
-                        checked={useEnvCreds}
-                        onChange={(e) => setUseEnvCreds(e.target.checked)}
-                        className="rounded border-input"
-                        data-testid="checkbox-use-env-credentials"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="useEnvCreds" className="text-sm font-medium cursor-pointer">
-                        Use pre-configured credentials
-                      </Label>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        API credentials are already configured in the environment. Check this to use them instead of entering custom credentials.
-                      </p>
-                    </div>
+              <div className="space-y-3">
+                {COURIER_CONFIG[selectedCourier].fields.map((field) => (
+                  <div key={field.key} className="space-y-2">
+                    <Label htmlFor={`courier-${field.key}`}>
+                      {field.label}
+                      {field.required && <span className="text-destructive ml-1">*</span>}
+                    </Label>
+                    <Input
+                      id={`courier-${field.key}`}
+                      type={field.type}
+                      placeholder={field.placeholder}
+                      value={courierFormData[field.key] || ""}
+                      onChange={(e) => setCourierFormData(prev => ({ ...prev, [field.key]: e.target.value }))}
+                      data-testid={`input-courier-${field.key}`}
+                    />
                   </div>
-                </div>
-              )}
+                ))}
+              </div>
 
-              {!useEnvCreds && (
-                <div className="space-y-3">
-                  {COURIER_CONFIG[selectedCourier].fields.map((field) => (
-                    <div key={field.key} className="space-y-2">
-                      <Label htmlFor={`courier-${field.key}`}>
-                        {field.label}
-                        {field.required && <span className="text-destructive ml-1">*</span>}
-                      </Label>
-                      <Input
-                        id={`courier-${field.key}`}
-                        type={field.type}
-                        placeholder={field.placeholder}
-                        value={courierFormData[field.key] || ""}
-                        onChange={(e) => setCourierFormData(prev => ({ ...prev, [field.key]: e.target.value }))}
-                        data-testid={`input-courier-${field.key}`}
-                      />
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {selectedCourier === 'leopards' && !useEnvCreds && (
+              {selectedCourier === 'leopards' && (
                 <div className="p-3 bg-amber-50 dark:bg-amber-950/50 rounded-lg border border-amber-200 dark:border-amber-800">
                   <p className="text-xs text-amber-700 dark:text-amber-300">
                     Find your API Key and Password in your Leopards account under <strong>API Settings</strong> &rarr; <strong>API Management</strong>.
@@ -839,7 +749,7 @@ export default function CouriersSettings() {
                 </div>
               )}
 
-              {selectedCourier === 'postex' && !useEnvCreds && (
+              {selectedCourier === 'postex' && (
                 <div className="p-3 bg-amber-50 dark:bg-amber-950/50 rounded-lg border border-amber-200 dark:border-amber-800">
                   <p className="text-xs text-amber-700 dark:text-amber-300">
                     Your API Token can be found in your PostEx merchant dashboard under <strong>Integration Settings</strong>.
@@ -947,7 +857,7 @@ export default function CouriersSettings() {
             </Button>
             <Button
               onClick={handleSaveCourier}
-              disabled={saveCourierMutation.isPending || (!useEnvCreds && !Object.values(courierFormData).some(v => v))}
+              disabled={saveCourierMutation.isPending || !Object.values(courierFormData).some(v => v)}
               data-testid="button-save-courier"
             >
               {saveCourierMutation.isPending ? (

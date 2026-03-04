@@ -34,7 +34,7 @@ export class PostExService {
   private baseUrl = 'https://api.postex.pk/services/integration/api/order';
 
   private getToken(overrides?: { apiToken?: string }): string {
-    return overrides?.apiToken || process.env.POSTEX_API_TOKEN || '';
+    return overrides?.apiToken || '';
   }
 
   async trackShipment(trackingNumber: string, credentials?: { apiToken?: string }): Promise<TrackingResult> {

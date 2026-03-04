@@ -88,12 +88,12 @@ async function getCourierCredentials(merchantId: string, courierName: string): P
   const settings = (account?.settings as Record<string, any>) || {};
 
   if (normalized === 'leopards') {
-    const apiKey = settings.apiKey || process.env.LEOPARDS_API_KEY || null;
-    const apiSecret = settings.apiPassword || process.env.LEOPARDS_API_PASSWORD || null;
+    const apiKey = settings.apiKey || account?.apiKey || null;
+    const apiSecret = settings.apiPassword || account?.apiSecret || null;
     return { apiKey, apiSecret };
   }
   if (normalized === 'postex') {
-    const apiKey = settings.apiToken || process.env.POSTEX_API_TOKEN || null;
+    const apiKey = settings.apiToken || account?.apiKey || null;
     return { apiKey, apiSecret: null };
   }
   return null;

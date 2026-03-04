@@ -47,8 +47,8 @@ export class LeopardsService {
 
   private getCredentials(overrides?: { apiKey?: string; apiPassword?: string }) {
     return {
-      apiKey: overrides?.apiKey || process.env.LEOPARDS_API_KEY || '',
-      apiPassword: overrides?.apiPassword || process.env.LEOPARDS_API_PASSWORD || '',
+      apiKey: overrides?.apiKey || '',
+      apiPassword: overrides?.apiPassword || '',
     };
   }
 

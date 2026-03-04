@@ -327,6 +327,10 @@ export default function Pipeline() {
     },
   });
 
+  const { data: integrationsData } = useQuery<{ couriers: Array<{ name: string; isActive: boolean; hasDbCredentials: boolean }> }>({
+    queryKey: ["/api/integrations"],
+  });
+
   const SHIPMENT_SUB_TABS: Record<string, { value: string; label: string }[]> = {
     BOOKED: [
       { value: "all", label: "All" },
@@ -747,6 +751,20 @@ export default function Pipeline() {
   const handleBookSelected = useCallback(async () => {
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
+
+    if (integrationsData) {
+      const courierAccount = integrationsData.couriers?.find(c => c.name === selectedCourier);
+      if (!courierAccount?.isActive || !courierAccount?.hasDbCredentials) {
+        const courierLabel = selectedCourier === "leopards" ? "Leopards" : selectedCourier === "postex" ? "PostEx" : selectedCourier;
+        toast({
+          title: "Courier Not Configured",
+          description: `Please configure your ${courierLabel} account in Settings → Couriers before booking.`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     setIsBookingLoading(true);
     try {
       const res = await apiRequest("POST", "/api/booking/preview", { orderIds: ids, courier: selectedCourier });
@@ -782,7 +800,7 @@ export default function Pipeline() {
     } finally {
       setIsBookingLoading(false);
     }
-  }, [selectedIds, selectedCourier, toast]);
+  }, [selectedIds, selectedCourier, toast, integrationsData]);
 
   const checkedCount = previewChecked.size;
 
