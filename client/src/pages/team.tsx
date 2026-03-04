@@ -200,6 +200,19 @@ const PAGE_SECTIONS: PageSection[] = [
       { id: "opening-balances", title: "Opening Balances" },
     ],
   },
+  {
+    id: "settings",
+    title: "Settings",
+    pages: [
+      { id: "settings", title: "General" },
+      { id: "settings-shopify", title: "Shopify" },
+      { id: "settings-couriers", title: "Couriers" },
+      { id: "settings-status-mapping", title: "Status Mapping" },
+      { id: "settings-marketing", title: "Marketing" },
+      { id: "preferences", title: "Preferences" },
+      { id: "team", title: "Team" },
+    ],
+  },
 ];
 
 const roleLabels: Record<string, string> = {
@@ -279,10 +292,9 @@ function ManageAccessDialog({
   onClose: () => void;
 }) {
   const { toast } = useToast();
-  const currentPages = member.allowedPages || [];
-  const [selected, setSelected] = useState<Set<string>>(new Set(currentPages));
-
   const allPageIds = PAGE_SECTIONS.flatMap(s => s.pages.map(p => p.id));
+  const currentPages = member.allowedPages === null || member.allowedPages === undefined ? allPageIds : member.allowedPages;
+  const [selected, setSelected] = useState<Set<string>>(new Set(currentPages));
   const isAllSelected = allPageIds.every(id => selected.has(id));
 
   const toggle = (id: string) => {
@@ -791,10 +803,10 @@ export default function Team() {
                   </div>
                   <div className="flex items-center gap-3 flex-wrap">
                     {getRoleBadge(member.role, member.isMerchantOwner)}
-                    {!member.isMerchantOwner && member.allowedPages && member.allowedPages.length > 0 && (
+                    {!member.isMerchantOwner && (
                       <Badge variant="secondary" className="text-xs">
                         <KeyRound className="w-3 h-3 mr-1" />
-                        {member.allowedPages.length} pages
+                        {member.allowedPages && member.allowedPages.length > 0 ? `${member.allowedPages.length} pages` : "Full Access"}
                       </Badge>
                     )}
                     {!member.isMerchantOwner && (
