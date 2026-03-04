@@ -1316,6 +1316,8 @@ export async function generatePicklistPdfBuffer(items: PicklistItem[]): Promise<
 
   const imageCache = new Map<string, PDFImage | null>();
 
+  const sharp = (await import("sharp")).default;
+
   async function fetchAndEmbedImage(url: string): Promise<PDFImage | null> {
     if (imageCache.has(url)) return imageCache.get(url)!;
     try {
@@ -1325,17 +1327,16 @@ export async function generatePicklistPdfBuffer(items: PicklistItem[]): Promise<
       const urlLower = url.toLowerCase();
       const isPng = contentType.includes("image/png") || urlLower.includes(".png");
       const isJpg = contentType.includes("image/jpeg") || contentType.includes("image/jpg") || urlLower.includes(".jpg") || urlLower.includes(".jpeg");
-      if (!isPng && !isJpg) {
-        imageCache.set(url, null);
-        return null;
-      }
       const arrayBuf = await response.arrayBuffer();
-      const bytes = new Uint8Array(arrayBuf);
+      let bytes = new Uint8Array(arrayBuf);
       let img: PDFImage;
       if (isPng) {
         img = await pdfDoc.embedPng(bytes);
-      } else {
+      } else if (isJpg) {
         img = await pdfDoc.embedJpg(bytes);
+      } else {
+        const pngBuffer = await sharp(Buffer.from(bytes)).png().toBuffer();
+        img = await pdfDoc.embedPng(new Uint8Array(pngBuffer));
       }
       imageCache.set(url, img);
       return img;
