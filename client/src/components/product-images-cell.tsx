@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Package } from "lucide-react";
+import { Package, Loader2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -16,6 +17,7 @@ interface LineItem {
   image?: string | null;
   variantTitle?: string | null;
   productId?: string | null;
+  costPrice?: number;
 }
 
 interface ProductImagesCellProps {
@@ -31,6 +33,18 @@ export function ProductImagesCell({ lineItems, orderId }: ProductImagesCellProps
     try { parsed = JSON.parse(parsed); } catch { parsed = null; }
   }
   const items: LineItem[] = Array.isArray(parsed) ? parsed : [];
+
+  const { data: enrichedItems, isLoading } = useQuery<LineItem[]>({
+    queryKey: ["/api/orders", orderId, "products-detail"],
+    queryFn: async () => {
+      const res = await fetch(`/api/orders/${orderId}/products-detail`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
+    enabled: open && !!orderId,
+  });
+
+  const displayItems = enrichedItems || items;
 
   if (items.length === 0) {
     return <span className="text-xs text-muted-foreground">-</span>;
@@ -74,52 +88,63 @@ export function ProductImagesCell({ lineItems, orderId }: ProductImagesCellProps
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Order Products</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3 py-2">
-            {items.map((item, i) => (
-              <div
-                key={i}
-                className="flex gap-3 p-2 rounded-lg border bg-card"
-                data-testid={`product-detail-${i}`}
-              >
-                <div className="w-16 h-16 rounded-md border bg-muted/50 overflow-hidden flex-shrink-0">
-                  {item.image ? (
-                    <img
-                      src={item.image}
-                      alt={item.name || item.title || "Product"}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <Package className="w-6 h-6 text-muted-foreground" />
-                    </div>
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium leading-tight truncate" data-testid={`product-name-${i}`}>
-                    {item.name || item.title || "Unknown Product"}
-                  </p>
-                  {item.variantTitle && (
-                    <p className="text-xs text-muted-foreground mt-0.5">{item.variantTitle}</p>
-                  )}
-                  {item.sku && (
-                    <p className="text-xs text-muted-foreground">SKU: {item.sku}</p>
-                  )}
-                  <div className="flex items-center gap-3 mt-1">
-                    <span className="text-xs font-medium">Qty: {item.quantity || 1}</span>
-                    {item.price && (
-                      <span className="text-xs text-muted-foreground">
-                        Rs {Number(item.price).toLocaleString()}
-                      </span>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <div className="space-y-3 py-2">
+              {displayItems.map((item, i) => (
+                <div
+                  key={i}
+                  className="flex gap-3 p-2 rounded-lg border bg-card"
+                  data-testid={`product-detail-${i}`}
+                >
+                  <div className="w-16 h-16 rounded-md border bg-muted/50 overflow-hidden flex-shrink-0">
+                    {item.image ? (
+                      <img
+                        src={item.image}
+                        alt={item.name || item.title || "Product"}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Package className="w-6 h-6 text-muted-foreground" />
+                      </div>
                     )}
                   </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium leading-tight" data-testid={`product-name-${i}`}>
+                      {item.name || item.title || "Unknown Product"}
+                    </p>
+                    {item.variantTitle && (
+                      <p className="text-xs text-muted-foreground mt-0.5">{item.variantTitle}</p>
+                    )}
+                    {item.sku && (
+                      <p className="text-xs text-muted-foreground">SKU: {item.sku}</p>
+                    )}
+                    <div className="flex items-center gap-3 mt-1">
+                      <span className="text-xs font-medium">Qty: {item.quantity || 1}</span>
+                      {item.price != null && (
+                        <span className="text-xs text-muted-foreground">
+                          Sale: Rs {Number(item.price).toLocaleString()}
+                        </span>
+                      )}
+                      {item.costPrice != null && item.costPrice > 0 && (
+                        <span className="text-xs text-muted-foreground">
+                          Cost: Rs {Number(item.costPrice).toLocaleString()}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </>

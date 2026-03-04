@@ -7115,6 +7115,54 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/orders/:orderId/products-detail", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const order = await storage.getOrderById(merchantId, req.params.orderId);
+      if (!order) return res.status(404).json({ message: "Order not found" });
+
+      const lineItems = Array.isArray(order.lineItems) ? order.lineItems : [];
+      const shopifyProductIds = new Set<string>();
+      for (const li of lineItems as any[]) {
+        if (li.productId) shopifyProductIds.add(String(li.productId));
+      }
+
+      const productsList = shopifyProductIds.size > 0
+        ? await storage.getProductsByShopifyIds(merchantId, Array.from(shopifyProductIds))
+        : [];
+      const productsMap = new Map<string, any>();
+      for (const p of productsList) {
+        productsMap.set(p.shopifyProductId, p);
+      }
+
+      const enriched = (lineItems as any[]).map((li: any) => {
+        const product = li.productId ? productsMap.get(String(li.productId)) : null;
+        let costPrice = 0;
+        if (product?.variants && Array.isArray(product.variants) && li.variantId) {
+          const variant = product.variants.find((v: any) => String(v.id) === String(li.variantId));
+          if (variant?.cost) costPrice = parseFloat(variant.cost) || 0;
+          else if (variant?.price) costPrice = parseFloat(variant.price) || 0;
+        }
+        return {
+          image: li.image || product?.imageUrl || null,
+          name: li.name || li.title || "Unknown Product",
+          variantTitle: li.variantTitle || null,
+          sku: li.sku || null,
+          quantity: Number(li.quantity) || 1,
+          price: parseFloat(li.price) || 0,
+          costPrice,
+        };
+      });
+
+      res.json(enriched);
+    } catch (error) {
+      console.error("Error fetching product details:", error);
+      res.status(500).json({ message: "Failed to fetch product details" });
+    }
+  });
+
   app.get("/api/print/order/:orderId", isAuthenticated, async (req, res) => {
     try {
       const merchantId = await requireMerchant(req, res);
