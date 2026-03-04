@@ -65,6 +65,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Order } from "@shared/schema";
+import { ProductImagesCell } from "@/components/product-images-cell";
 import { Link, useParams } from "wouter";
 import { formatDistanceToNow, isPast } from "date-fns";
 import { formatPkDateTime } from "@/lib/dateFormat";
@@ -1399,12 +1400,8 @@ export default function Pipeline() {
                           {order.shippingAddress || "-"}
                         </div>
                       </td>
-                      <td className="px-3 py-1.5 max-w-[180px]" data-testid={`cell-products-${order.id}`}>
-                        <div className="text-xs text-muted-foreground leading-tight">
-                          {order.itemSummary ? order.itemSummary.split(' || ').map((item, i) => (
-                            <div key={i} className="truncate">{item}</div>
-                          )) : "-"}
-                        </div>
+                      <td className="px-3 py-1.5" data-testid={`cell-products-${order.id}`}>
+                        <ProductImagesCell lineItems={order.lineItems as any} orderId={order.id} />
                       </td>
                     </>
                   )}
