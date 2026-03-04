@@ -126,14 +126,6 @@ async function _transitionOrderInner(params: TransitionParams): Promise<Transiti
     .where(and(eq(orders.id, orderId), eq(orders.merchantId, merchantId)))
     .returning();
 
-  await sendOrderStatusWhatsApp({
-    customerPhone: order.customerPhone,
-    customerName: order.customerName,
-    orderNumber: order.orderNumber,
-    fromStatus: order.workflowStatus,
-    toStatus,
-  }).catch(err => console.error(`[WhatsApp] Error in transitionOrder for ${orderId}:`, err));
-
   await db.insert(workflowAuditLog).values({
     orderId,
     merchantId,
@@ -145,6 +137,14 @@ async function _transitionOrderInner(params: TransitionParams): Promise<Transiti
     actorName: actorName || (actorType === "system" ? "System" : null),
     actorType,
   });
+
+  sendOrderStatusWhatsApp({
+    customerPhone: order.customerPhone,
+    customerName: order.customerName,
+    orderNumber: order.orderNumber,
+    fromStatus: order.workflowStatus,
+    toStatus,
+  }).catch(err => console.error(`[WhatsApp] Error in transitionOrder for ${orderId}:`, err));
 
   if (order.shopifyOrderId && action !== 'courier_status_sync') {
     if (toStatus === "CANCELLED" && action !== 'robo_cancel') {
@@ -236,18 +236,6 @@ export async function bulkTransitionOrders(params: {
     }
   }
 
-  await Promise.all(
-    eligible.map(o =>
-      sendOrderStatusWhatsApp({
-        customerPhone: o.customerPhone,
-        customerName: o.customerName,
-        orderNumber: o.orderNumber,
-        fromStatus: o.workflowStatus,
-        toStatus,
-      }).catch(err => console.error(`[WhatsApp] Error in bulkTransition for ${o.id}:`, err))
-    )
-  );
-
   const auditEntries = eligible.map(o => ({
     orderId: o.id,
     merchantId,
@@ -263,6 +251,18 @@ export async function bulkTransitionOrders(params: {
   if (auditEntries.length > 0) {
     await db.insert(workflowAuditLog).values(auditEntries);
   }
+
+  Promise.all(
+    eligible.map(o =>
+      sendOrderStatusWhatsApp({
+        customerPhone: o.customerPhone,
+        customerName: o.customerName,
+        orderNumber: o.orderNumber,
+        fromStatus: o.workflowStatus,
+        toStatus,
+      }).catch(err => console.error(`[WhatsApp] Error in bulkTransition for ${o.id}:`, err))
+    )
+  ).catch(err => console.error(`[WhatsApp] Bulk notification error:`, err));
 
   const shopifyOrders = eligible.filter(o => o.shopifyOrderId);
   if (shopifyOrders.length > 0) {
@@ -317,14 +317,6 @@ export async function revertOrder(merchantId: string, orderId: string, actorUser
     .where(and(eq(orders.id, orderId), eq(orders.merchantId, merchantId)))
     .returning();
 
-  await sendOrderStatusWhatsApp({
-    customerPhone: order.customerPhone,
-    customerName: order.customerName,
-    orderNumber: order.orderNumber,
-    fromStatus: order.workflowStatus,
-    toStatus: order.previousWorkflowStatus,
-  }).catch(err => console.error(`[WhatsApp] Error in revertOrder for ${orderId}:`, err));
-
   await db.insert(workflowAuditLog).values({
     orderId,
     merchantId,
@@ -336,6 +328,14 @@ export async function revertOrder(merchantId: string, orderId: string, actorUser
     actorName: actorName || null,
     actorType: "user",
   });
+
+  sendOrderStatusWhatsApp({
+    customerPhone: order.customerPhone,
+    customerName: order.customerName,
+    orderNumber: order.orderNumber,
+    fromStatus: order.workflowStatus,
+    toStatus: order.previousWorkflowStatus,
+  }).catch(err => console.error(`[WhatsApp] Error in revertOrder for ${orderId}:`, err));
 
   const ROBO_REVERT_STATUSES = ['READY_TO_SHIP', 'PENDING', 'CANCELLED'];
   if (order.shopifyOrderId && ROBO_REVERT_STATUSES.includes(order.previousWorkflowStatus)) {
