@@ -1,10 +1,11 @@
 import { db, withRetry } from "../db";
-import { orders, workflowAuditLog } from "@shared/schema";
+import { orders, workflowAuditLog, orderChangeLog } from "@shared/schema";
 import { eq, and, inArray, lt, sql } from "drizzle-orm";
 import type { Order } from "@shared/schema";
 import { writeBackCancel, writeBackTags } from './shopifyWriteBack';
 import { getMerchantRoboTags, type RoboTagConfig } from './roboTags';
 import { sendOrderStatusWhatsApp } from '../utils/integrations/whatsapp';
+import { storage } from '../storage';
 
 export { getMerchantRoboTags, type RoboTagConfig };
 
@@ -138,13 +139,29 @@ async function _transitionOrderInner(params: TransitionParams): Promise<Transiti
     actorType,
   });
 
-  sendOrderStatusWhatsApp({
-    customerPhone: order.customerPhone,
-    customerName: order.customerName,
-    orderNumber: order.orderNumber,
-    fromStatus: order.workflowStatus,
-    toStatus,
-  }).catch(err => console.error(`[WhatsApp] Error in transitionOrder for ${orderId}:`, err));
+  const WA_NOTIFY_STATUSES = ["NEW", "BOOKED", "FULFILLED", "DELIVERED"];
+  if (WA_NOTIFY_STATUSES.includes(toStatus)) {
+    storage.getWhatsAppTemplateForStatus(merchantId, toStatus).then(templateName => {
+      return sendOrderStatusWhatsApp({
+        customerPhone: order.customerPhone,
+        customerName: order.customerName,
+        orderNumber: order.orderNumber,
+        fromStatus: order.workflowStatus,
+        toStatus,
+        templateName,
+      }).then(result => {
+        return db.insert(orderChangeLog).values({
+          orderId,
+          merchantId,
+          changeType: "WHATSAPP_SENT",
+          newValue: result.success ? "sent" : "failed",
+          actorType: "system",
+          actorName: "WhatsApp",
+          metadata: { success: result.success, toStatus, phone: result.phone, templateName, messageId: result.messageId, error: result.error },
+        });
+      });
+    }).catch(err => console.error(`[WhatsApp] Error in transitionOrder for ${orderId}:`, err));
+  }
 
   if (order.shopifyOrderId && action !== 'courier_status_sync') {
     if (toStatus === "CANCELLED" && action !== 'robo_cancel') {
@@ -252,17 +269,33 @@ export async function bulkTransitionOrders(params: {
     await db.insert(workflowAuditLog).values(auditEntries);
   }
 
-  Promise.all(
-    eligible.map(o =>
-      sendOrderStatusWhatsApp({
-        customerPhone: o.customerPhone,
-        customerName: o.customerName,
-        orderNumber: o.orderNumber,
-        fromStatus: o.workflowStatus,
-        toStatus,
-      }).catch(err => console.error(`[WhatsApp] Error in bulkTransition for ${o.id}:`, err))
-    )
-  ).catch(err => console.error(`[WhatsApp] Bulk notification error:`, err));
+  const WA_BULK_NOTIFY_STATUSES = ["NEW", "BOOKED", "FULFILLED", "DELIVERED"];
+  if (WA_BULK_NOTIFY_STATUSES.includes(toStatus)) {
+    storage.getWhatsAppTemplateForStatus(merchantId, toStatus).then(templateName => {
+      return Promise.all(
+        eligible.map(o =>
+          sendOrderStatusWhatsApp({
+            customerPhone: o.customerPhone,
+            customerName: o.customerName,
+            orderNumber: o.orderNumber,
+            fromStatus: o.workflowStatus,
+            toStatus,
+            templateName,
+          }).then(result => {
+            return db.insert(orderChangeLog).values({
+              orderId: o.id,
+              merchantId,
+              changeType: "WHATSAPP_SENT",
+              newValue: result.success ? "sent" : "failed",
+              actorType: "system",
+              actorName: "WhatsApp",
+              metadata: { success: result.success, toStatus, phone: result.phone, templateName, messageId: result.messageId, error: result.error },
+            });
+          }).catch(err => console.error(`[WhatsApp] Error in bulkTransition for ${o.id}:`, err))
+        )
+      );
+    }).catch(err => console.error(`[WhatsApp] Bulk notification error:`, err));
+  }
 
   const shopifyOrders = eligible.filter(o => o.shopifyOrderId);
   if (shopifyOrders.length > 0) {
@@ -329,13 +362,29 @@ export async function revertOrder(merchantId: string, orderId: string, actorUser
     actorType: "user",
   });
 
-  sendOrderStatusWhatsApp({
-    customerPhone: order.customerPhone,
-    customerName: order.customerName,
-    orderNumber: order.orderNumber,
-    fromStatus: order.workflowStatus,
-    toStatus: order.previousWorkflowStatus,
-  }).catch(err => console.error(`[WhatsApp] Error in revertOrder for ${orderId}:`, err));
+  const WA_REVERT_STATUSES = ["NEW", "BOOKED", "FULFILLED", "DELIVERED"];
+  if (WA_REVERT_STATUSES.includes(order.previousWorkflowStatus)) {
+    storage.getWhatsAppTemplateForStatus(merchantId, order.previousWorkflowStatus).then(templateName => {
+      return sendOrderStatusWhatsApp({
+        customerPhone: order.customerPhone,
+        customerName: order.customerName,
+        orderNumber: order.orderNumber,
+        fromStatus: order.workflowStatus,
+        toStatus: order.previousWorkflowStatus,
+        templateName,
+      }).then(result => {
+        return db.insert(orderChangeLog).values({
+          orderId,
+          merchantId,
+          changeType: "WHATSAPP_SENT",
+          newValue: result.success ? "sent" : "failed",
+          actorType: "system",
+          actorName: "WhatsApp",
+          metadata: { success: result.success, toStatus: order.previousWorkflowStatus, phone: result.phone, templateName, messageId: result.messageId, error: result.error },
+        });
+      });
+    }).catch(err => console.error(`[WhatsApp] Error in revertOrder for ${orderId}:`, err));
+  }
 
   const ROBO_REVERT_STATUSES = ['READY_TO_SHIP', 'PENDING', 'CANCELLED'];
   if (order.shopifyOrderId && ROBO_REVERT_STATUSES.includes(order.previousWorkflowStatus)) {

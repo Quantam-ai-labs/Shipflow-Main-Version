@@ -6032,6 +6032,44 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/whatsapp-templates", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const templates = await storage.getWhatsAppTemplates(merchantId);
+      res.json(templates);
+    } catch (error: any) {
+      console.error("[WhatsApp Templates] Error fetching:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.put("/api/whatsapp-templates/:status", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const workflowStatus = req.params.status.toUpperCase();
+      const VALID_WA_STATUSES = ["NEW", "BOOKED", "FULFILLED", "DELIVERED"];
+      if (!VALID_WA_STATUSES.includes(workflowStatus)) {
+        return res.status(400).json({ error: "Invalid status. Must be one of: NEW, BOOKED, FULFILLED, DELIVERED" });
+      }
+      const { templateName, isActive } = req.body;
+      if (!templateName || typeof templateName !== "string" || templateName.trim().length === 0) {
+        return res.status(400).json({ error: "templateName is required" });
+      }
+      const template = await storage.upsertWhatsAppTemplate({
+        merchantId,
+        workflowStatus,
+        templateName: templateName.trim(),
+        isActive: isActive !== false,
+      });
+      res.json(template);
+    } catch (error: any) {
+      console.error("[WhatsApp Templates] Error upserting:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.patch("/api/settings", isAuthenticated, async (req, res) => {
     try {
       const merchantId = await requireMerchant(req, res);

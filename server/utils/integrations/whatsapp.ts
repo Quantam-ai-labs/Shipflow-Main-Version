@@ -5,14 +5,9 @@ const WHATSAPP_REQUEST_TIMEOUT_MS = 10_000;
 
 const STATUS_LABELS: Record<string, string> = {
   NEW: "New",
-  PENDING: "Pending",
-  HOLD: "On Hold",
-  READY_TO_SHIP: "Ready to Ship",
   BOOKED: "Booked",
   FULFILLED: "Shipped",
   DELIVERED: "Delivered",
-  RETURN: "Returned",
-  CANCELLED: "Cancelled",
 };
 
 function getStatusLabel(status: string): string {

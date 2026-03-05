@@ -319,6 +319,26 @@ export type OrderChangeLog = typeof orderChangeLog.$inferSelect;
 
 
 // ============================================
+// WHATSAPP TEMPLATES (Per-merchant, per-status template config)
+// ============================================
+export const whatsappTemplates = pgTable("whatsapp_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  workflowStatus: varchar("workflow_status", { length: 50 }).notNull(),
+  templateName: varchar("template_name", { length: 255 }).notNull().default("status_notify"),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_whatsapp_templates_merchant").on(table.merchantId),
+  uniqueIndex("idx_whatsapp_templates_merchant_status").on(table.merchantId, table.workflowStatus),
+]);
+export const insertWhatsappTemplateSchema = createInsertSchema(whatsappTemplates).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertWhatsappTemplate = z.infer<typeof insertWhatsappTemplateSchema>;
+export type WhatsappTemplate = typeof whatsappTemplates.$inferSelect;
+
+
+// ============================================
 // ORDER PAYMENTS (Prepaid / partial payment tracking)
 // ============================================
 export const orderPayments = pgTable("order_payments", {

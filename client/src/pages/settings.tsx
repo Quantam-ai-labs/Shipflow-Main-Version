@@ -5,12 +5,16 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
 import {
   Settings as SettingsIcon,
   Building2,
   Bell,
   Shield,
   Save,
+  MessageCircle,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -29,6 +33,143 @@ interface MerchantSettings {
     emailDeliveryAlerts: boolean;
     emailCodReminders: boolean;
   };
+}
+
+interface WhatsAppTemplate {
+  id: string;
+  merchantId: string;
+  workflowStatus: string;
+  templateName: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+const WA_STATUSES = [
+  { status: "NEW", label: "New Order", color: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300" },
+  { status: "BOOKED", label: "Booked", color: "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300" },
+  { status: "FULFILLED", label: "Shipped", color: "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300" },
+  { status: "DELIVERED", label: "Delivered", color: "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300" },
+];
+
+function WhatsAppTemplatesCard() {
+  const { toast } = useToast();
+  const [localTemplates, setLocalTemplates] = useState<Record<string, { templateName: string; isActive: boolean }>>({});
+  const [initialized, setInitialized] = useState(false);
+  const [savingStatus, setSavingStatus] = useState<Record<string, boolean>>({});
+
+  const { data: templates, isLoading } = useQuery<WhatsAppTemplate[]>({
+    queryKey: ["/api/whatsapp-templates"],
+  });
+
+  if (templates && !initialized) {
+    const map: Record<string, { templateName: string; isActive: boolean }> = {};
+    WA_STATUSES.forEach(({ status }) => {
+      const found = templates.find(t => t.workflowStatus === status);
+      map[status] = { templateName: found?.templateName ?? "status_notify", isActive: found?.isActive ?? true };
+    });
+    setLocalTemplates(map);
+    setInitialized(true);
+  }
+
+  const upsertMutation = useMutation({
+    mutationFn: async ({ status, templateName, isActive }: { status: string; templateName: string; isActive: boolean }) => {
+      return apiRequest("PUT", `/api/whatsapp-templates/${status}`, { templateName, isActive });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/whatsapp-templates"] });
+    },
+  });
+
+  const handleSave = async (status: string) => {
+    const entry = localTemplates[status];
+    if (!entry) return;
+    setSavingStatus(s => ({ ...s, [status]: true }));
+    try {
+      await upsertMutation.mutateAsync({ status, templateName: entry.templateName, isActive: entry.isActive });
+      toast({ title: "Template saved", description: `${WA_STATUSES.find(s => s.status === status)?.label} template updated.` });
+    } catch {
+      toast({ title: "Error", description: "Failed to save template.", variant: "destructive" });
+    } finally {
+      setSavingStatus(s => ({ ...s, [status]: false }));
+    }
+  };
+
+  const handleToggle = async (status: string, isActive: boolean) => {
+    setLocalTemplates(prev => ({ ...prev, [status]: { ...prev[status], isActive } }));
+    const entry = localTemplates[status];
+    if (!entry) return;
+    try {
+      await upsertMutation.mutateAsync({ status, templateName: entry.templateName, isActive });
+      queryClient.invalidateQueries({ queryKey: ["/api/whatsapp-templates"] });
+    } catch {
+      setLocalTemplates(prev => ({ ...prev, [status]: { ...prev[status], isActive: !isActive } }));
+      toast({ title: "Error", description: "Failed to update template.", variant: "destructive" });
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg flex items-center gap-2">
+          <MessageCircle className="w-5 h-5 text-green-600" />
+          WhatsApp Notifications
+        </CardTitle>
+        <CardDescription>
+          Configure the WhatsApp Business API template name used when notifying customers at each order status.
+          Templates must be pre-approved in your Meta Business account.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="space-y-4">
+            {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-14 w-full" />)}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {WA_STATUSES.map(({ status, label, color }) => {
+              const entry = localTemplates[status] ?? { templateName: "status_notify", isActive: true };
+              const isSaving = savingStatus[status] ?? false;
+              return (
+                <div key={status} className="flex items-center gap-3 p-3 border rounded-lg" data-testid={`whatsapp-template-row-${status.toLowerCase()}`}>
+                  <Badge className={`shrink-0 text-xs font-medium border-0 ${color}`}>{label}</Badge>
+                  <Input
+                    className="flex-1 h-8 text-sm font-mono"
+                    value={entry.templateName}
+                    onChange={e => setLocalTemplates(prev => ({ ...prev, [status]: { ...prev[status], templateName: e.target.value } }))}
+                    placeholder="status_notify"
+                    data-testid={`input-whatsapp-template-${status.toLowerCase()}`}
+                  />
+                  <Switch
+                    checked={entry.isActive}
+                    onCheckedChange={val => handleToggle(status, val)}
+                    data-testid={`switch-whatsapp-active-${status.toLowerCase()}`}
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleSave(status)}
+                    disabled={isSaving}
+                    className="h-8 px-3 shrink-0"
+                    data-testid={`button-save-whatsapp-${status.toLowerCase()}`}
+                  >
+                    {isSaving ? (
+                      <span className="text-xs">Saving...</span>
+                    ) : (
+                      <><Save className="w-3 h-3 mr-1" /><span className="text-xs">Save</span></>
+                    )}
+                  </Button>
+                </div>
+              );
+            })}
+            <p className="text-xs text-muted-foreground pt-1">
+              Toggle the switch to enable/disable notifications for each status. The template name must exactly match the approved template in Meta Business Manager.
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function Settings() {
@@ -192,6 +333,8 @@ export default function Settings() {
           )}
         </CardContent>
       </Card>
+
+      <WhatsAppTemplatesCard />
 
       <Card>
         <CardHeader>

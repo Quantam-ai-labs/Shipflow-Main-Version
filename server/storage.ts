@@ -3,7 +3,7 @@ import {
   merchants, teamMembers, shopifyStores, courierAccounts,
   orders, shipments, shipmentEvents, remarks, codReconciliation, syncLogs, workflowAuditLog, bookingJobs,
   shipmentBatches, shipmentBatchItems, shipmentPrintRecords, orderPayments, orderChangeLog,
-  shopifyWebhookEvents, cancellationJobs, cancellationJobItems,
+  shopifyWebhookEvents, cancellationJobs, cancellationJobItems, whatsappTemplates,
   type Merchant, type InsertMerchant,
   type TeamMember, type InsertTeamMember,
   type ShopifyStore, type InsertShopifyStore,
@@ -36,6 +36,7 @@ import {
   type CampaignJourneyEvent, type InsertCampaignJourneyEvent,
   platformSettings,
   type PlatformSettings,
+  type WhatsappTemplate,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, or, ilike, sql, count, inArray, isNull, isNotNull, gte, lte } from "drizzle-orm";
@@ -153,6 +154,11 @@ export interface IStorage {
   // Order Change Log
   createOrderChangeLog(entry: InsertOrderChangeLog): Promise<OrderChangeLog>;
   getOrderChangeLog(merchantId: string, orderId: string): Promise<OrderChangeLog[]>;
+
+  // WhatsApp Templates
+  getWhatsAppTemplates(merchantId: string): Promise<WhatsappTemplate[]>;
+  upsertWhatsAppTemplate(data: { merchantId: string; workflowStatus: string; templateName: string; isActive: boolean }): Promise<WhatsappTemplate>;
+  getWhatsAppTemplateForStatus(merchantId: string, workflowStatus: string): Promise<string>;
 
   // Order Payments
   getOrderPayments(merchantId: string, orderId: string): Promise<OrderPayment[]>;
@@ -1529,6 +1535,35 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(orderChangeLog).where(
       and(eq(orderChangeLog.merchantId, merchantId), eq(orderChangeLog.orderId, orderId))
     ).orderBy(desc(orderChangeLog.createdAt));
+  }
+
+  // WhatsApp Templates
+  async getWhatsAppTemplates(merchantId: string): Promise<WhatsappTemplate[]> {
+    return db.select().from(whatsappTemplates)
+      .where(eq(whatsappTemplates.merchantId, merchantId))
+      .orderBy(whatsappTemplates.workflowStatus);
+  }
+
+  async upsertWhatsAppTemplate(data: { merchantId: string; workflowStatus: string; templateName: string; isActive: boolean }): Promise<WhatsappTemplate> {
+    const now = new Date();
+    const [result] = await db.insert(whatsappTemplates)
+      .values({ ...data, updatedAt: now })
+      .onConflictDoUpdate({
+        target: [whatsappTemplates.merchantId, whatsappTemplates.workflowStatus],
+        set: { templateName: data.templateName, isActive: data.isActive, updatedAt: now },
+      })
+      .returning();
+    return result;
+  }
+
+  async getWhatsAppTemplateForStatus(merchantId: string, workflowStatus: string): Promise<string> {
+    const [template] = await db.select({ templateName: whatsappTemplates.templateName, isActive: whatsappTemplates.isActive })
+      .from(whatsappTemplates)
+      .where(and(eq(whatsappTemplates.merchantId, merchantId), eq(whatsappTemplates.workflowStatus, workflowStatus)));
+    if (template && template.isActive && template.templateName) {
+      return template.templateName;
+    }
+    return "status_notify";
   }
 
   // Order Payments

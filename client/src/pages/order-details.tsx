@@ -52,6 +52,7 @@ import {
   PenLine,
   Loader2,
   X,
+  Smartphone,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -211,6 +212,8 @@ function getActivityIcon(entry: any) {
       return MessageSquare;
     case "FIELD_EDIT":
       return Edit3;
+    case "WHATSAPP_SENT":
+      return Smartphone;
     default:
       return History;
   }
@@ -240,6 +243,10 @@ function getActivityColor(entry: any): string {
       return "text-violet-500 bg-violet-100 dark:bg-violet-950";
     case "FIELD_EDIT":
       return "text-amber-500 bg-amber-100 dark:bg-amber-950";
+    case "WHATSAPP_SENT":
+      return entry.newValue === "sent"
+        ? "text-green-600 bg-green-100 dark:bg-green-950"
+        : "text-red-500 bg-red-100 dark:bg-red-950";
     default:
       return "text-muted-foreground bg-muted";
   }
@@ -264,6 +271,7 @@ function getActivityLabel(entry: any): string {
     case "SHOPIFY_CANCELLED": return "Shopify Cancelled";
     case "REMARK_ADDED": return "Remark Added";
     case "FIELD_EDIT": return "Field Edited";
+    case "WHATSAPP_SENT": return entry.newValue === "sent" ? "WhatsApp Sent" : "WhatsApp Failed";
     default: return entry.changeType || "Change";
   }
 }
@@ -348,6 +356,19 @@ function ActivityTimeline({ auditLog, changeLog }: { auditLog: any[] | undefined
                     )}
                     {entry._type === "change" && entry.changeType === "REMARK_ADDED" && entry.newValue && (
                       <p className="text-xs text-muted-foreground mt-0.5 break-words">"{entry.newValue}"</p>
+                    )}
+                    {entry._type === "change" && entry.changeType === "WHATSAPP_SENT" && (
+                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                        {entry.metadata?.phone && (
+                          <span className="text-xs text-muted-foreground font-mono">{entry.metadata.phone}</span>
+                        )}
+                        {entry.metadata?.templateName && (
+                          <span className="text-xs text-muted-foreground">template: <span className="font-mono">{entry.metadata.templateName}</span></span>
+                        )}
+                        {entry.newValue === "failed" && entry.metadata?.error && (
+                          <span className="text-xs text-red-500 break-words">{entry.metadata.error}</span>
+                        )}
+                      </div>
                     )}
                     {entry.reason && entry._type === "status" && (
                       <p className="text-xs text-muted-foreground mt-0.5 break-words">{entry.reason}</p>
