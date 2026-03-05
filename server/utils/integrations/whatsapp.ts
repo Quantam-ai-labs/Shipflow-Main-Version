@@ -54,8 +54,19 @@ function buildTemplatePayload(formattedPhone: string, _params: {
     to: formattedPhone,
     type: "template",
     template: {
-      name: "hello_world",
+      name: "status_notify",
       language: { code: "en_US" },
+      components: [
+        {
+          type: "body",
+          parameters: [
+            {
+              type: "text",
+              text: `Dear ${_params.customerName}, your order #${_params.orderNumber} status has changed from ${getStatusLabel(_params.fromStatus)} to ${getStatusLabel(_params.toStatus)}.`
+            }
+          ]
+        }
+      ]
     },
   };
 }
