@@ -7,7 +7,6 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -38,11 +37,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   LayoutDashboard,
   Package,
-  Inbox,
   Clock,
-  Pause,
   Truck,
-  CheckCircle,
   XCircle,
   BarChart3,
   TrendingUp,
@@ -54,25 +50,18 @@ import {
   ChevronUp,
   ChevronRight,
   Shield,
-  BookmarkCheck,
   Send,
   PackageCheck,
   RotateCcw,
   Receipt,
-  FileCheck,
   ShoppingBag,
-  Calculator,
   Wallet,
   ArrowDownLeft,
-  ArrowUpRight,
   UserCircle,
-  ShoppingCart,
   PieChart,
   BookOpen,
-  Landmark,
-  Scale,
+  Calculator,
   Cog,
-  ArrowLeftRight,
   ToggleLeft,
   ToggleRight,
   SlidersHorizontal,
@@ -80,6 +69,7 @@ import {
   Activity,
   LayoutList,
   Brain,
+  Home,
   type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -101,133 +91,85 @@ interface NavGroup {
   items: NavItem[];
 }
 
-const pipelineItems: NavItem[] = [
+const orderItems: NavItem[] = [
   { id: "orders-all", title: "All Orders", url: "/orders/all", icon: LayoutList, key: "ALL" },
-  { id: "orders-new", title: "New Orders", url: "/orders/new", icon: Inbox, key: "NEW" },
   { id: "orders-pending", title: "Confirmation Pending", url: "/orders/pending", icon: Clock, key: "PENDING" },
-  { id: "orders-hold", title: "Hold", url: "/orders/hold", icon: Pause, key: "HOLD" },
   { id: "orders-ready", title: "Ready to Ship", url: "/orders/ready", icon: Truck, key: "READY_TO_SHIP" },
-  { id: "orders-booked", title: "Booked", url: "/orders/booked", icon: BookmarkCheck, key: "BOOKED" },
-  { id: "orders-fulfilled", title: "Fulfilled", url: "/orders/fulfilled", icon: Send, key: "FULFILLED" },
+  { id: "orders-fulfilled", title: "Shipped", url: "/orders/fulfilled", icon: Send, key: "FULFILLED" },
   { id: "orders-delivered", title: "Delivered", url: "/orders/delivered", icon: PackageCheck, key: "DELIVERED" },
-  { id: "orders-return", title: "Return", url: "/orders/return", icon: RotateCcw, key: "RETURN" },
+  { id: "orders-return", title: "Returns", url: "/orders/return", icon: RotateCcw, key: "RETURN" },
   { id: "orders-cancelled", title: "Cancelled", url: "/orders/cancelled", icon: XCircle, key: "CANCELLED" },
 ];
 
 const allNavGroups: NavGroup[] = [
   {
-    id: "logistics",
-    title: "Logistics",
-    icon: Truck,
-    items: [
-      { id: "shipments", title: "Shipments", url: "/shipments", icon: Truck },
-      { id: "cod-reconciliation", title: "COD Reconciliation", url: "/cod-reconciliation", icon: DollarSign },
-      { id: "payment-ledger", title: "Payment Ledger", url: "/payment-ledger", icon: Receipt },
-      { id: "manage-cheques", title: "Manage Cheques", url: "/manage-cheques", icon: FileCheck },
-    ],
-  },
-  {
-    id: "sales",
-    title: "Sales",
-    icon: ShoppingCart,
-    items: [
-      { id: "sale-invoices", title: "Sale Invoices", url: "/accounting/sales", icon: Receipt },
-      { id: "sale-orders", title: "Sale Orders", url: "/accounting/sale-orders", icon: BookOpen },
-    ],
-  },
-  {
-    id: "inventory",
-    title: "Inventory",
+    id: "products",
+    title: "Products",
     icon: ShoppingBag,
     items: [
       { id: "products", title: "Products", url: "/accounting/products", icon: ShoppingBag },
-      { id: "shopify-products", title: "Shopify Products", url: "/shopify-products", icon: Store },
+      { id: "stock-ledger", title: "Stock", url: "/stock-ledger", icon: BookOpen },
       { id: "add-stock", title: "Add Stock", url: "/accounting/stock-receipts", icon: ArrowDownLeft },
+      { id: "shopify-products", title: "Shopify Sync", url: "/shopify-products", icon: Store },
     ],
   },
   {
-    id: "finance",
-    title: "Finance",
+    id: "money",
+    title: "Money",
     icon: Wallet,
     items: [
-      { id: "money", title: "Money In/Out", url: "/accounting/transactions", icon: ArrowLeftRight },
+      { id: "money", title: "Transactions", url: "/accounting/transactions", icon: Receipt },
+      { id: "expense-history", title: "Expenses", url: "/accounting/expenses", icon: Calculator },
       { id: "customers", title: "Parties", url: "/accounting/parties", icon: UserCircle },
-      { id: "expense-history", title: "Expense History", url: "/accounting/expenses", icon: Receipt },
-      { id: "needs-payment", title: "Needs Payment", url: "/accounting/expenses-unpaid", icon: Clock },
-      { id: "cod-receivable", title: "COD Receivable", url: "/accounting/cod-receivable", icon: ArrowDownLeft },
-      { id: "courier-payable", title: "Courier Payable", url: "/accounting/courier-payable", icon: ArrowUpRight },
-      { id: "settlements", title: "Settlements", url: "/accounting/settlements", icon: Scale },
+      { id: "cod-reconciliation", title: "Courier", url: "/cod-reconciliation", icon: Truck },
+      { id: "sale-invoices", title: "Sales", url: "/accounting/sales", icon: Receipt },
     ],
   },
   {
-    id: "analytics",
-    title: "Analytics",
+    id: "growth",
+    title: "Growth",
+    icon: TrendingUp,
+    items: [
+      { id: "ads-dashboard", title: "Dashboard", url: "/marketing", icon: BarChart3 },
+      { id: "ads-manager", title: "Campaigns", url: "/marketing/ads-manager", icon: Megaphone },
+      { id: "ads-profitability", title: "Profitability", url: "/marketing/profitability", icon: TrendingUp },
+      { id: "ai-intelligence", title: "AI Insights", url: "/marketing/intelligence", icon: Brain },
+    ],
+  },
+  {
+    id: "reports",
+    title: "Reports",
     icon: BarChart3,
     items: [
       { id: "overview", title: "Overview", url: "/accounting", icon: Wallet },
-      { id: "profit-loss", title: "Profit & Loss", url: "/accounting/reports/pnl", icon: TrendingUp },
-      { id: "balance-snapshot", title: "Balance Snapshot", url: "/accounting/reports/balance-sheet", icon: PieChart },
-      { id: "cash-flow", title: "Cash Flow", url: "/accounting/reports/cash-flow", icon: BarChart3 },
-      { id: "stock-report", title: "Stock Report", url: "/accounting/reports/stock", icon: Package },
-      { id: "party-balances", title: "Party Balances", url: "/accounting/reports/party-balances", icon: Users },
-      { id: "product-analytics", title: "Product Analytics", url: "/product-analytics", icon: TrendingUp },
-      { id: "analytics-dashboard", title: "Analytics", url: "/analytics", icon: BarChart3 },
-    ],
-  },
-  {
-    id: "ai-assistant",
-    title: "AI Assistant",
-    icon: Brain,
-    items: [
-      { id: "ai-hub", title: "AI Hub", url: "/ai", icon: Brain },
-    ],
-  },
-  {
-    id: "marketing",
-    title: "Marketing",
-    icon: Megaphone,
-    items: [
-      { id: "ads-dashboard", title: "Ads Dashboard", url: "/marketing", icon: BarChart3 },
-      { id: "ads-manager", title: "Ads Manager", url: "/marketing/ads-manager", icon: LayoutList },
-      { id: "ads-profitability", title: "Ads Profitability", url: "/marketing/profitability", icon: Calculator },
-      { id: "ai-intelligence", title: "AI Intelligence", url: "/marketing/intelligence", icon: Brain },
-      { id: "live-campaigns", title: "Live Campaigns", url: "/marketing/live", icon: Activity },
-    ],
-  },
-  {
-    id: "accounting-advanced",
-    title: "Accounting",
-    icon: Calculator,
-    items: [
-      { id: "ledger", title: "Ledger", url: "/accounting/ledger", icon: BookOpen },
-      { id: "trial-balance", title: "Trial Balance", url: "/accounting/trial-balance", icon: Scale },
-      { id: "cash-accounts", title: "Cash Accounts", url: "/accounting/cash-accounts", icon: Landmark },
-      { id: "opening-balances", title: "Opening Balances", url: "/accounting/opening-balances", icon: Calculator },
+      { id: "profit-loss", title: "Profit", url: "/accounting/reports/pnl", icon: TrendingUp },
+      { id: "cash-flow", title: "Cash", url: "/accounting/reports/cash-flow", icon: BarChart3 },
+      { id: "stock-report", title: "Stock", url: "/accounting/reports/stock", icon: Package },
+      { id: "shipments", title: "Shipments", url: "/shipments", icon: Truck },
+      { id: "courier-dues", title: "Courier", url: "/courier-dues", icon: DollarSign },
     ],
   },
 ];
 
 const settingsItems: NavItem[] = [
-  { id: "team", title: "Team", url: "/team", icon: Users },
-  { id: "settings", title: "General", url: "/settings", icon: Settings },
-  { id: "settings-shopify", title: "Shopify", url: "/settings/shopify", icon: Store },
-  { id: "settings-couriers", title: "Couriers", url: "/settings/couriers", icon: Truck },
-  { id: "settings-status-mapping", title: "Status Mapping", url: "/settings/status-mapping", icon: ArrowLeftRight },
-  { id: "settings-marketing", title: "Marketing", url: "/settings/marketing", icon: Megaphone },
+  { id: "settings-shopify", title: "Integrations", url: "/settings/shopify", icon: Store },
+  { id: "team", title: "Users & Roles", url: "/team", icon: Users },
+  { id: "settings", title: "Notifications", url: "/settings", icon: Settings },
   { id: "preferences", title: "Preferences", url: "/accounting/settings", icon: Cog },
 ];
 
 const allPageIds = [
+  ...orderItems.map(i => i.id),
   ...allNavGroups.flatMap(g => g.items.map(i => i.id)),
   ...settingsItems.map(i => i.id),
 ];
 
 const defaultPinnedPages = [
-  "sale-invoices", "shipments",
-  "products", "add-stock",
-  "money", "cod-reconciliation", "customers",
-  "overview", "profit-loss",
-  "team", "settings", "settings-shopify", "settings-couriers",
+  "orders-all", "orders-pending", "orders-ready", "orders-fulfilled",
+  "products", "add-stock", "shopify-products",
+  "money", "customers", "sale-invoices",
+  "overview", "profit-loss", "shipments",
+  "settings-shopify", "team", "settings", "preferences",
 ];
 
 export function AppSidebar() {
@@ -301,10 +243,6 @@ export function AppSidebar() {
   const isOrdersRouteActive = location.startsWith("/orders");
   const isSimple = sidebarMode === "simple";
 
-  const totalOrderCount = counts
-    ? Object.values(counts).reduce((sum, c) => sum + (c || 0), 0)
-    : 0;
-
   const applyPageRestrictions = (groups: NavGroup[]) => {
     if (!hasPageRestrictions) return groups;
     return groups
@@ -337,9 +275,15 @@ export function AppSidebar() {
     return items;
   })();
 
-  const filteredPipelineItems = hasPageRestrictions
-    ? pipelineItems.filter(i => allowedPages!.includes(i.id))
-    : pipelineItems;
+  const filteredOrderItems = hasPageRestrictions
+    ? orderItems.filter(i => allowedPages!.includes(i.id))
+    : isSimple
+    ? orderItems.filter(i => pinnedPages.includes(i.id))
+    : orderItems;
+
+  const totalOrderCount = counts
+    ? Object.values(counts).reduce((sum, c) => sum + (c || 0), 0)
+    : 0;
 
   return (
     <Sidebar>
@@ -349,7 +293,7 @@ export function AppSidebar() {
             <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
               <Package className="w-5 h-5 text-primary-foreground" />
             </div>
-            <span className="font-bold text-lg">1SOL.AI</span>
+            <span className="font-bold text-lg">✨ Magic AI</span>
           </div>
         </Link>
       </SidebarHeader>
@@ -360,8 +304,8 @@ export function AppSidebar() {
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={location === "/dashboard"}>
                   <Link href="/dashboard" data-testid="nav-dashboard">
-                    <LayoutDashboard className="w-4 h-4" />
-                    <span>Dashboard</span>
+                    <Home className="w-4 h-4" />
+                    <span>Home</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -369,58 +313,51 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {filteredPipelineItems.length > 0 && (<SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={location === "/orders/all"}>
-                  <Link href="/orders/all" data-testid="nav-pipeline-all">
-                    <LayoutList className="w-4 h-4" />
-                    <span className="flex-1">All Orders</span>
-                    {totalOrderCount > 0 && (
-                      <Badge variant="secondary" className="h-5 min-w-[20px] px-1.5 text-xs">
-                        {totalOrderCount}
-                      </Badge>
-                    )}
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <Collapsible defaultOpen={isOrdersRouteActive} asChild className="group/collapsible">
-                <SidebarMenuItem>
-                  <CollapsibleTrigger asChild>
-                    <SidebarMenuButton data-testid="nav-orders-toggle" tooltip="Flow">
-                      <Package className="w-4 h-4" />
-                      <span className="flex-1">Flow</span>
-                      <ChevronRight className="w-4 h-4 ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
-                    </SidebarMenuButton>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <SidebarMenuSub>
-                      {filteredPipelineItems.filter(item => item.key !== "ALL").map((item) => {
-                        const count = counts?.[item.key!] || 0;
-                        return (
-                          <SidebarMenuSubItem key={item.key}>
-                            <SidebarMenuSubButton asChild isActive={location === item.url}>
-                              <Link href={item.url} data-testid={`nav-pipeline-${item.key!.toLowerCase()}`}>
-                                <item.icon className="w-3.5 h-3.5" />
-                                <span className="flex-1">{item.title}</span>
-                                {count > 0 && (
-                                  <Badge variant="secondary" className="h-5 min-w-[20px] px-1.5 text-xs ml-auto">
-                                    {count}
-                                  </Badge>
-                                )}
-                              </Link>
-                            </SidebarMenuSubButton>
-                          </SidebarMenuSubItem>
-                        );
-                      })}
-                    </SidebarMenuSub>
-                  </CollapsibleContent>
-                </SidebarMenuItem>
-              </Collapsible>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {filteredOrderItems.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <Collapsible defaultOpen={isOrdersRouteActive} asChild className="group/orders-collapsible">
+                  <SidebarMenuItem>
+                    <CollapsibleTrigger asChild>
+                      <SidebarMenuButton data-testid="nav-orders-toggle" tooltip="Orders">
+                        <Package className="w-4 h-4" />
+                        <span className="flex-1">Orders</span>
+                        {totalOrderCount > 0 && (
+                          <Badge variant="secondary" className="h-5 min-w-[20px] px-1.5 text-xs">
+                            {totalOrderCount}
+                          </Badge>
+                        )}
+                        <ChevronRight className="w-4 h-4 ml-1 transition-transform duration-200 group-data-[state=open]/orders-collapsible:rotate-90" />
+                      </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <SidebarMenuSub>
+                        {filteredOrderItems.map((item) => {
+                          const count = item.key && item.key !== "ALL" ? (counts?.[item.key] || 0) : 0;
+                          return (
+                            <SidebarMenuSubItem key={item.key}>
+                              <SidebarMenuSubButton asChild isActive={location === item.url}>
+                                <Link href={item.url} data-testid={`nav-pipeline-${item.key!.toLowerCase()}`}>
+                                  <item.icon className="w-3.5 h-3.5" />
+                                  <span className="flex-1">{item.title}</span>
+                                  {count > 0 && (
+                                    <Badge variant="secondary" className="h-5 min-w-[20px] px-1.5 text-xs ml-auto">
+                                      {count}
+                                    </Badge>
+                                  )}
+                                </Link>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          );
+                        })}
+                      </SidebarMenuSub>
+                    </CollapsibleContent>
+                  </SidebarMenuItem>
+                </Collapsible>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
         )}
 
         {filteredGroups.map((group) => {
@@ -429,20 +366,20 @@ export function AppSidebar() {
             <SidebarGroup key={group.id}>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  <Collapsible defaultOpen={isGroupActive} asChild className={`group/${group.id}-collapsible`}>
+                  <Collapsible defaultOpen={isGroupActive} asChild className="group/nav-group">
                     <SidebarMenuItem>
                       <CollapsibleTrigger asChild>
                         <SidebarMenuButton data-testid={`nav-${group.id}-toggle`} tooltip={group.title}>
                           <group.icon className="w-4 h-4" />
                           <span className="flex-1">{group.title}</span>
-                          <ChevronRight className="w-4 h-4 ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                          <ChevronRight className="w-4 h-4 ml-auto transition-transform duration-200 group-data-[state=open]/nav-group:rotate-90" />
                         </SidebarMenuButton>
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                         <SidebarMenuSub>
                           {group.items.map((item) => (
                             <SidebarMenuSubItem key={item.id}>
-                              <SidebarMenuSubButton asChild isActive={location === item.url}>
+                              <SidebarMenuSubButton asChild isActive={location === item.url || location.startsWith(item.url + "/")}>
                                 <Link href={item.url} data-testid={`nav-${item.id}`}>
                                   <item.icon className="w-3.5 h-3.5" />
                                   <span>{item.title}</span>
@@ -486,11 +423,6 @@ export function AppSidebar() {
                               <Link href={item.url} data-testid={`nav-${item.id}`}>
                                 <item.icon className="w-3.5 h-3.5" />
                                 <span className="flex-1">{item.title}</span>
-                                {item.id === "settings-status-mapping" && (unmappedCount?.count ?? 0) > 0 && (
-                                  <Badge variant="destructive" className="text-[10px] px-1.5 py-0 min-w-[18px] justify-center">
-                                    {unmappedCount!.count}
-                                  </Badge>
-                                )}
                               </Link>
                             </SidebarMenuSubButton>
                           </SidebarMenuSubItem>
@@ -506,7 +438,6 @@ export function AppSidebar() {
 
         {user?.role === "SUPER_ADMIN" && (
           <SidebarGroup>
-            <SidebarGroupLabel>Administration</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem>
@@ -571,7 +502,7 @@ export function AppSidebar() {
             <DropdownMenuItem
               onClick={() => logout()}
               disabled={isLoggingOut}
-              className="text-destructive focus:text-destructive cursor-pointer"
+              className="text-destructive focus:text-destructive"
               data-testid="nav-logout"
             >
               <LogOut className="w-4 h-4 mr-2" />
@@ -581,99 +512,61 @@ export function AppSidebar() {
         </DropdownMenu>
       </SidebarFooter>
 
-      <PagePickerDialog
-        open={showPagePicker}
-        onClose={() => setShowPagePicker(false)}
-        pinnedPages={pinnedPages}
-        onSave={(pages) => {
-          updatePrefsMutation.mutate({ sidebarPinnedPages: pages });
-          setShowPagePicker(false);
-        }}
-      />
-    </Sidebar>
-  );
-}
-
-function PagePickerDialog({
-  open,
-  onClose,
-  pinnedPages,
-  onSave,
-}: {
-  open: boolean;
-  onClose: () => void;
-  pinnedPages: string[];
-  onSave: (pages: string[]) => void;
-}) {
-  const [selected, setSelected] = useState<Set<string>>(new Set(pinnedPages));
-
-  const toggle = (id: string) => {
-    setSelected(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const handleSave = () => {
-    onSave(Array.from(selected));
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto" data-testid="dialog-page-picker">
-        <DialogHeader>
-          <DialogTitle>Customize Sidebar</DialogTitle>
-          <p className="text-sm text-muted-foreground">Choose which pages to show in Simple mode</p>
-        </DialogHeader>
-        <div className="space-y-4 py-2">
-          {allNavGroups.map((group) => (
-            <div key={group.id}>
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">{group.title}</p>
-              <div className="space-y-1">
-                {group.items.map((item) => (
-                  <label
-                    key={item.id}
-                    className="flex items-center gap-3 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer"
-                    data-testid={`picker-${item.id}`}
-                  >
+      <Dialog open={showPagePicker} onOpenChange={setShowPagePicker}>
+        <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Customize Sidebar</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">Choose which pages appear in Simple mode.</p>
+            {allNavGroups.map(group => (
+              <div key={group.id}>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">{group.title}</p>
+                <div className="space-y-1.5">
+                  {group.items.map(item => (
+                    <label key={item.id} className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded px-2 py-1">
+                      <Checkbox
+                        checked={pinnedPages.includes(item.id)}
+                        onCheckedChange={(checked) => {
+                          const next = checked
+                            ? [...pinnedPages, item.id]
+                            : pinnedPages.filter(p => p !== item.id);
+                          updatePrefsMutation.mutate({ sidebarPinnedPages: next });
+                        }}
+                      />
+                      <item.icon className="w-3.5 h-3.5 text-muted-foreground" />
+                      <span className="text-sm">{item.title}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Settings</p>
+              <div className="space-y-1.5">
+                {settingsItems.map(item => (
+                  <label key={item.id} className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded px-2 py-1">
                     <Checkbox
-                      checked={selected.has(item.id)}
-                      onCheckedChange={() => toggle(item.id)}
+                      checked={pinnedPages.includes(item.id)}
+                      onCheckedChange={(checked) => {
+                        const next = checked
+                          ? [...pinnedPages, item.id]
+                          : pinnedPages.filter(p => p !== item.id);
+                        updatePrefsMutation.mutate({ sidebarPinnedPages: next });
+                      }}
                     />
-                    <item.icon className="w-4 h-4 text-muted-foreground" />
+                    <item.icon className="w-3.5 h-3.5 text-muted-foreground" />
                     <span className="text-sm">{item.title}</span>
                   </label>
                 ))}
               </div>
             </div>
-          ))}
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Settings</p>
-            <div className="space-y-1">
-              {settingsItems.map((item) => (
-                <label
-                  key={item.id}
-                  className="flex items-center gap-3 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer"
-                  data-testid={`picker-${item.id}`}
-                >
-                  <Checkbox
-                    checked={selected.has(item.id)}
-                    onCheckedChange={() => toggle(item.id)}
-                  />
-                  <item.icon className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-sm">{item.title}</span>
-                </label>
-              ))}
-            </div>
           </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} data-testid="button-picker-cancel">Cancel</Button>
-          <Button onClick={handleSave} data-testid="button-picker-save">Save</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <DialogFooter>
+            <Button onClick={() => setShowPagePicker(false)}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Sidebar>
   );
 }
