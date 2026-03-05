@@ -319,7 +319,7 @@ export class DatabaseStorage implements IStorage {
 
     let conditions = [eq(orders.merchantId, merchantId)];
     
-    if (options?.workflowStatus && options.workflowStatus !== "all") {
+    if (options?.workflowStatus && options.workflowStatus !== "all" && options.workflowStatus !== "ALL") {
       conditions.push(eq(orders.workflowStatus, options.workflowStatus));
     }
 

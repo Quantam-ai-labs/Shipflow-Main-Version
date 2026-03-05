@@ -209,6 +209,7 @@ function CityAutocomplete({ value, onChange, cities, hasWarning, testId }: {
 }
 
 const STAGE_TO_STATUS: Record<string, string> = {
+  all: "ALL",
   new: "NEW",
   pending: "PENDING",
   hold: "HOLD",
@@ -221,6 +222,7 @@ const STAGE_TO_STATUS: Record<string, string> = {
 };
 
 const STAGE_TITLES: Record<string, string> = {
+  ALL: "All Orders",
   NEW: "New Orders",
   PENDING: "Pending Orders",
   HOLD: "On Hold",
@@ -260,6 +262,28 @@ const UNIVERSAL_STATUS_COLORS: Record<string, string> = {
   'CANCELLED': "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
   'Unfulfilled': "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
 };
+
+const WORKFLOW_STATUS_COLORS: Record<string, string> = {
+  'NEW': "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
+  'PENDING': "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300",
+  'HOLD': "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
+  'READY_TO_SHIP': "bg-cyan-100 text-cyan-700 dark:bg-cyan-900 dark:text-cyan-300",
+  'BOOKED': "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300",
+  'FULFILLED': "bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300",
+  'DELIVERED': "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
+  'RETURN': "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300",
+  'CANCELLED': "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
+};
+
+const WORKFLOW_STATUS_LABELS: Record<string, string> = {
+  'NEW': 'New', 'PENDING': 'Pending', 'HOLD': 'Hold',
+  'READY_TO_SHIP': 'Ready', 'BOOKED': 'Booked', 'FULFILLED': 'Fulfilled',
+  'DELIVERED': 'Delivered', 'RETURN': 'Return', 'CANCELLED': 'Cancelled',
+};
+
+function effectiveTab(activeTab: string, order: Order): string {
+  return activeTab === "ALL" ? (order.workflowStatus || "NEW") : activeTab;
+}
 
 const DEFAULT_TAG_CONFIG = { confirm: "Robo-Confirm", pending: "Robo-Pending", cancel: "Robo-Cancel" };
 
@@ -1063,17 +1087,17 @@ export default function Pipeline() {
           <span className="text-sm font-medium">{selectedIds.size} selected</span>
           <div className="h-4 w-px bg-border" />
 
-          {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "HOLD") && (
+          {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "HOLD" || activeTab === "ALL") && (
             <Button size="sm" onClick={() => handleBulkAction("confirm")} disabled={isPending} data-testid="bulk-confirm">
               <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />Confirm
             </Button>
           )}
-          {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "HOLD" || activeTab === "READY_TO_SHIP") && (
+          {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "HOLD" || activeTab === "READY_TO_SHIP" || activeTab === "ALL") && (
             <Button size="sm" variant="destructive" onClick={() => handleBulkAction("cancel")} disabled={isPending} data-testid="bulk-cancel">
               <XCircle className="w-3.5 h-3.5 mr-1.5" />Cancel
             </Button>
           )}
-          {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "READY_TO_SHIP") && (
+          {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "READY_TO_SHIP" || activeTab === "ALL") && (
             <Button size="sm" variant="secondary" onClick={() => handleBulkAction("hold")} disabled={isPending} data-testid="bulk-hold">
               <Pause className="w-3.5 h-3.5 mr-1.5" />Hold
             </Button>
@@ -1094,7 +1118,7 @@ export default function Pipeline() {
             </Button>
           )}
 
-          {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "HOLD" || activeTab === "READY_TO_SHIP") && (
+          {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "HOLD" || activeTab === "READY_TO_SHIP" || activeTab === "ALL") && (
             <>
               <Button
                 size="sm"
@@ -1323,23 +1347,26 @@ export default function Pipeline() {
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Customer</th>
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground hidden md:table-cell">City</th>
                 <th className="px-2 py-2.5 text-center font-medium text-muted-foreground w-[40px]" data-testid="header-history">#</th>
-                {(activeTab === "NEW" || activeTab === "PENDING") && (
+                {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "ALL") && (
                   <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Address</th>
                 )}
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Products</th>
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Amount (PKR)</th>
                 <th className="px-3 py-2.5 text-center font-medium text-muted-foreground hidden lg:table-cell w-[40px]">Items</th>
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground hidden md:table-cell max-w-[100px]" data-testid="header-tags">Tags</th>
-                {activeTab === "PENDING" && (
+                {activeTab === "ALL" && (
+                  <th className="px-3 py-2.5 text-left font-medium text-muted-foreground" data-testid="header-workflow-status">Status</th>
+                )}
+                {(activeTab === "PENDING" || activeTab === "ALL") && (
                   <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Reason</th>
                 )}
                 {activeTab === "HOLD" && (
                   <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Hold Until</th>
                 )}
-                {(activeTab === "BOOKED" || activeTab === "FULFILLED" || activeTab === "DELIVERED" || activeTab === "RETURN") && (
+                {(activeTab === "BOOKED" || activeTab === "FULFILLED" || activeTab === "DELIVERED" || activeTab === "RETURN" || activeTab === "ALL") && (
                   <>
                     <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Courier</th>
-                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Status</th>
+                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Courier Status</th>
                   </>
                 )}
                 {activeTab === "CANCELLED" && (
@@ -1367,7 +1394,7 @@ export default function Pipeline() {
                   }`}
                   data-testid={`order-row-${order.id}`}
                 >
-                  {activeTab !== "CANCELLED" && activeTab !== "DELIVERED" && activeTab !== "RETURN" && (
+                  {activeTab !== "CANCELLED" && activeTab !== "DELIVERED" && activeTab !== "RETURN" && (activeTab !== "ALL" || (order.workflowStatus !== "CANCELLED" && order.workflowStatus !== "DELIVERED" && order.workflowStatus !== "RETURN")) && (
                     <td className="px-3 py-1.5">
                       <Checkbox
                         checked={selectedIds.has(order.id)}
@@ -1375,6 +1402,9 @@ export default function Pipeline() {
                         data-testid={`checkbox-order-${order.id}`}
                       />
                     </td>
+                  )}
+                  {activeTab === "ALL" && (order.workflowStatus === "CANCELLED" || order.workflowStatus === "DELIVERED" || order.workflowStatus === "RETURN") && (
+                    <td className="px-3 py-1.5" />
                   )}
                   <td className="px-3 py-1.5">
                     <div className="flex items-center gap-1.5">
@@ -1390,14 +1420,14 @@ export default function Pipeline() {
                     <div className="text-xs text-muted-foreground">
                       {order.orderDate ? formatPkDateTime(order.orderDate) : ""}
                     </div>
-                    {activeTab === "PENDING" && order.lastStatusChangedAt && (
+                    {(activeTab === "PENDING" || (activeTab === "ALL" && order.workflowStatus === "PENDING")) && order.lastStatusChangedAt && (
                       <div className="text-xs text-amber-600 dark:text-amber-400" data-testid={`text-pending-duration-${order.id}`}>
                         Pending {formatDistanceToNow(new Date(order.lastStatusChangedAt))}
                       </div>
                     )}
                   </td>
                   <td className="px-3 py-1.5">
-                    {editingOrder === order.id && (activeTab === "NEW" || activeTab === "PENDING" || activeTab === "READY_TO_SHIP" || activeTab === "BOOKED" || activeTab === "FULFILLED") ? (
+                    {editingOrder === order.id && (activeTab === "ALL" || activeTab === "NEW" || activeTab === "PENDING" || activeTab === "READY_TO_SHIP" || activeTab === "BOOKED" || activeTab === "FULFILLED") ? (
                       <div className="space-y-1">
                         <Input
                           value={editName}
@@ -1469,7 +1499,7 @@ export default function Pipeline() {
                       );
                     })()}
                   </td>
-                  {(activeTab === "NEW" || activeTab === "PENDING") && (
+                  {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "ALL") && (
                     <td className="px-3 py-1.5 max-w-[220px]" data-testid={`cell-address-${order.id}`}>
                       <div className="text-xs text-muted-foreground whitespace-normal leading-tight">
                         {order.shippingAddress || "-"}
@@ -1504,12 +1534,27 @@ export default function Pipeline() {
                     </div>
                   </td>
 
-                  {/* Pending-specific columns */}
-                  {activeTab === "PENDING" && (
-                    <td className="px-3 py-1.5">
-                      <Badge variant="secondary" className="text-xs" data-testid={`badge-pending-reason-${order.id}`}>
-                        {PENDING_REASON_TYPES.find(r => r.value === order.pendingReasonType)?.label || order.pendingReasonType || "Unknown"}
+                  {/* Workflow status badge for ALL view */}
+                  {activeTab === "ALL" && (
+                    <td className="px-3 py-1.5" data-testid={`cell-workflow-status-${order.id}`}>
+                      <Badge className={`text-[10px] px-1.5 py-0 leading-4 ${WORKFLOW_STATUS_COLORS[order.workflowStatus || ""] || "bg-slate-100 text-slate-700"}`}>
+                        {WORKFLOW_STATUS_LABELS[order.workflowStatus || ""] || order.workflowStatus || "Unknown"}
                       </Badge>
+                    </td>
+                  )}
+
+                  {/* Pending-specific columns */}
+                  {(activeTab === "PENDING" || activeTab === "ALL") && (
+                    <td className="px-3 py-1.5">
+                      {(order.workflowStatus === "PENDING" || activeTab === "PENDING") ? (
+                        <Badge variant="secondary" className="text-xs" data-testid={`badge-pending-reason-${order.id}`}>
+                          {PENDING_REASON_TYPES.find(r => r.value === order.pendingReasonType)?.label || order.pendingReasonType || "Unknown"}
+                        </Badge>
+                      ) : activeTab === "ALL" && order.workflowStatus === "CANCELLED" ? (
+                        <span className="text-xs text-muted-foreground">{order.cancelReason || "-"}</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">-</span>
+                      )}
                     </td>
                   )}
 
@@ -1526,18 +1571,22 @@ export default function Pipeline() {
                   )}
 
                   {/* Courier columns for booked/fulfilled/delivered/return */}
-                  {(activeTab === "BOOKED" || activeTab === "FULFILLED" || activeTab === "DELIVERED" || activeTab === "RETURN") && (
+                  {(activeTab === "BOOKED" || activeTab === "FULFILLED" || activeTab === "DELIVERED" || activeTab === "RETURN" || activeTab === "ALL") && (
                     <>
                       <td className="px-3 py-1.5">
                         <div className="text-xs font-medium">{order.courierName || "-"}</div>
                         <div className="text-xs text-muted-foreground">{order.courierTracking || "-"}</div>
                       </td>
                       <td className="px-3 py-1.5">
-                        <Badge className={`text-xs ${UNIVERSAL_STATUS_COLORS[order.shipmentStatus || ""] || "bg-slate-100 text-slate-700"}`}
-                          data-testid={`badge-status-${order.id}`}
-                          title={order.courierRawStatus ? `Courier: ${order.courierRawStatus}` : undefined}>
-                          {UNIVERSAL_STATUS_LABELS[order.shipmentStatus || ""] || order.shipmentStatus || "Unknown"}
-                        </Badge>
+                        {order.shipmentStatus ? (
+                          <Badge className={`text-xs ${UNIVERSAL_STATUS_COLORS[order.shipmentStatus || ""] || "bg-slate-100 text-slate-700"}`}
+                            data-testid={`badge-status-${order.id}`}
+                            title={order.courierRawStatus ? `Courier: ${order.courierRawStatus}` : undefined}>
+                            {UNIVERSAL_STATUS_LABELS[order.shipmentStatus || ""] || order.shipmentStatus || "Unknown"}
+                          </Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">-</span>
+                        )}
                       </td>
                     </>
                   )}
@@ -1571,107 +1620,112 @@ export default function Pipeline() {
 
                   {/* Action buttons */}
                   <td className="px-3 py-1.5 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "HOLD") && (
-                        <Button size="icon" variant="ghost" className="text-green-600"
-                          onClick={() => handleSingleAction(order.id, activeTab === "HOLD" ? "release-hold" : activeTab === "PENDING" ? "fix-confirm" : "confirm")}
-                          disabled={isPending}
-                          title={activeTab === "HOLD" ? "Release" : "Confirm"}
-                          data-testid={`button-confirm-${order.id}`}>
-                          <CheckCircle2 className="w-4 h-4" />
-                        </Button>
-                      )}
-                      {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "READY_TO_SHIP" || activeTab === "BOOKED" || activeTab === "FULFILLED") && (
-                        <Button size="icon" variant="ghost"
-                          onClick={() => {
-                            setEditingOrder(order.id);
-                            setEditName(order.customerName || "");
-                            setEditPhone(order.customerPhone || "");
-                            setEditAddress(order.shippingAddress || "");
-                            setEditCity(order.city || "");
-                          }}
-                          title="Edit"
-                          data-testid={`button-edit-${order.id}`}>
-                          <Edit3 className="w-4 h-4" />
-                        </Button>
-                      )}
-                      {(activeTab === "NEW" || activeTab === "PENDING") && (
-                        <Button size="icon" variant="ghost" className="text-purple-600"
-                          onClick={() => handleSingleAction(order.id, "hold")}
-                          disabled={isPending}
-                          title="Hold"
-                          data-testid={`button-hold-${order.id}`}>
-                          <Pause className="w-4 h-4" />
-                        </Button>
-                      )}
-                      {activeTab === "HOLD" && (
-                        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-amber-600"
-                          onClick={() => handleSingleAction(order.id, "move-to-pending")}
-                          disabled={isPending}
-                          data-testid={`button-to-pending-${order.id}`}>
-                          <Clock className="w-3.5 h-3.5 mr-1" />Pending
-                        </Button>
-                      )}
-                      {activeTab === "READY_TO_SHIP" && (
-                        <>
-                          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-amber-600"
-                            onClick={() => handleSingleAction(order.id, "pending")}
-                            disabled={isPending}
-                            title="Move to Pending"
-                            data-testid={`button-pending-rts-${order.id}`}>
-                            <Clock className="w-3.5 h-3.5 mr-1" />Pending
-                          </Button>
-                          <Button size="icon" variant="ghost" className="text-purple-600"
-                            onClick={() => handleSingleAction(order.id, "hold")}
-                            disabled={isPending}
-                            title="Hold"
-                            data-testid={`button-hold-rts-${order.id}`}>
-                            <Pause className="w-4 h-4" />
-                          </Button>
-                        </>
-                      )}
-                      {activeTab === "BOOKED" && (
-                        <Button size="sm" variant="ghost" className="text-xs text-red-600"
-                          onClick={() => setCancelConfirm({ open: true, orderId: order.id, type: "courier", orderNumber: order.orderNumber })}
-                          disabled={cancelBookingMutation.isPending}
-                          data-testid={`button-cancel-booking-${order.id}`}>
-                          <Undo2 className="w-3.5 h-3.5 mr-1" />Cancel AWB
-                        </Button>
-                      )}
-                      {order.shopifyOrderId && !order.cancelledAt && activeTab === "BOOKED" && (
-                        <Button size="sm" variant="ghost" className="text-xs text-orange-600"
-                          onClick={() => setCancelConfirm({ open: true, orderId: order.id, type: "shopify", orderNumber: order.orderNumber })}
-                          disabled={cancelShopifyMutation.isPending}
-                          data-testid={`button-cancel-shopify-${order.id}`}>
-                          <XCircle className="w-3.5 h-3.5 mr-1" />Cancel Shopify
-                        </Button>
-                      )}
-                      {activeTab === "CANCELLED" && order.shopifyOrderId && !(order as any).isShopifyCancelled && (
-                        <Button size="sm" variant="ghost" className="text-xs text-orange-600"
-                          onClick={() => setCancelConfirm({ open: true, orderId: order.id, type: "shopify", orderNumber: order.orderNumber })}
-                          disabled={cancelShopifyMutation.isPending}
-                          data-testid={`button-cancel-shopify-${order.id}`}>
-                          <XCircle className="w-3.5 h-3.5 mr-1" />Cancel on Shopify
-                        </Button>
-                      )}
-                      {activeTab !== "NEW" && activeTab !== "BOOKED" && activeTab !== "FULFILLED" && activeTab !== "DELIVERED" && activeTab !== "RETURN" && order.previousWorkflowStatus && (
-                        <Button size="icon" variant="ghost" className="text-muted-foreground"
-                          onClick={() => workflowMutation.mutate({ orderId: order.id, action: "revert" })}
-                          disabled={isPending}
-                          title="Revert"
-                          data-testid={`button-revert-${order.id}`}>
-                          <Undo2 className="w-4 h-4" />
-                        </Button>
-                      )}
-                      {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "HOLD" || activeTab === "READY_TO_SHIP") && (
-                        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-red-600"
-                          onClick={() => handleSingleAction(order.id, "cancel")}
-                          disabled={isPending}
-                          data-testid={`button-cancel-${order.id}`}>
-                          <XCircle className="w-3.5 h-3.5" />
-                        </Button>
-                      )}
-                    </div>
+                    {(() => {
+                      const et = effectiveTab(activeTab, order);
+                      return (
+                        <div className="flex items-center justify-end gap-1">
+                          {(et === "NEW" || et === "PENDING" || et === "HOLD") && (
+                            <Button size="icon" variant="ghost" className="text-green-600"
+                              onClick={() => handleSingleAction(order.id, et === "HOLD" ? "release-hold" : et === "PENDING" ? "fix-confirm" : "confirm")}
+                              disabled={isPending}
+                              title={et === "HOLD" ? "Release" : "Confirm"}
+                              data-testid={`button-confirm-${order.id}`}>
+                              <CheckCircle2 className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {(et === "NEW" || et === "PENDING" || et === "READY_TO_SHIP" || et === "BOOKED" || et === "FULFILLED") && (
+                            <Button size="icon" variant="ghost"
+                              onClick={() => {
+                                setEditingOrder(order.id);
+                                setEditName(order.customerName || "");
+                                setEditPhone(order.customerPhone || "");
+                                setEditAddress(order.shippingAddress || "");
+                                setEditCity(order.city || "");
+                              }}
+                              title="Edit"
+                              data-testid={`button-edit-${order.id}`}>
+                              <Edit3 className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {(et === "NEW" || et === "PENDING") && (
+                            <Button size="icon" variant="ghost" className="text-purple-600"
+                              onClick={() => handleSingleAction(order.id, "hold")}
+                              disabled={isPending}
+                              title="Hold"
+                              data-testid={`button-hold-${order.id}`}>
+                              <Pause className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {et === "HOLD" && (
+                            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-amber-600"
+                              onClick={() => handleSingleAction(order.id, "move-to-pending")}
+                              disabled={isPending}
+                              data-testid={`button-to-pending-${order.id}`}>
+                              <Clock className="w-3.5 h-3.5 mr-1" />Pending
+                            </Button>
+                          )}
+                          {et === "READY_TO_SHIP" && (
+                            <>
+                              <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-amber-600"
+                                onClick={() => handleSingleAction(order.id, "pending")}
+                                disabled={isPending}
+                                title="Move to Pending"
+                                data-testid={`button-pending-rts-${order.id}`}>
+                                <Clock className="w-3.5 h-3.5 mr-1" />Pending
+                              </Button>
+                              <Button size="icon" variant="ghost" className="text-purple-600"
+                                onClick={() => handleSingleAction(order.id, "hold")}
+                                disabled={isPending}
+                                title="Hold"
+                                data-testid={`button-hold-rts-${order.id}`}>
+                                <Pause className="w-4 h-4" />
+                              </Button>
+                            </>
+                          )}
+                          {et === "BOOKED" && (
+                            <Button size="sm" variant="ghost" className="text-xs text-red-600"
+                              onClick={() => setCancelConfirm({ open: true, orderId: order.id, type: "courier", orderNumber: order.orderNumber })}
+                              disabled={cancelBookingMutation.isPending}
+                              data-testid={`button-cancel-booking-${order.id}`}>
+                              <Undo2 className="w-3.5 h-3.5 mr-1" />Cancel AWB
+                            </Button>
+                          )}
+                          {order.shopifyOrderId && !order.cancelledAt && et === "BOOKED" && (
+                            <Button size="sm" variant="ghost" className="text-xs text-orange-600"
+                              onClick={() => setCancelConfirm({ open: true, orderId: order.id, type: "shopify", orderNumber: order.orderNumber })}
+                              disabled={cancelShopifyMutation.isPending}
+                              data-testid={`button-cancel-shopify-${order.id}`}>
+                              <XCircle className="w-3.5 h-3.5 mr-1" />Cancel Shopify
+                            </Button>
+                          )}
+                          {et === "CANCELLED" && order.shopifyOrderId && !(order as any).isShopifyCancelled && (
+                            <Button size="sm" variant="ghost" className="text-xs text-orange-600"
+                              onClick={() => setCancelConfirm({ open: true, orderId: order.id, type: "shopify", orderNumber: order.orderNumber })}
+                              disabled={cancelShopifyMutation.isPending}
+                              data-testid={`button-cancel-shopify-${order.id}`}>
+                              <XCircle className="w-3.5 h-3.5 mr-1" />Cancel on Shopify
+                            </Button>
+                          )}
+                          {et !== "NEW" && et !== "BOOKED" && et !== "FULFILLED" && et !== "DELIVERED" && et !== "RETURN" && order.previousWorkflowStatus && (
+                            <Button size="icon" variant="ghost" className="text-muted-foreground"
+                              onClick={() => workflowMutation.mutate({ orderId: order.id, action: "revert" })}
+                              disabled={isPending}
+                              title="Revert"
+                              data-testid={`button-revert-${order.id}`}>
+                              <Undo2 className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {(et === "NEW" || et === "PENDING" || et === "HOLD" || et === "READY_TO_SHIP") && (
+                            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-red-600"
+                              onClick={() => handleSingleAction(order.id, "cancel")}
+                              disabled={isPending}
+                              data-testid={`button-cancel-${order.id}`}>
+                              <XCircle className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </td>
                 </tr>
               ))}

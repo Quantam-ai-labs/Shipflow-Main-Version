@@ -102,6 +102,7 @@ interface NavGroup {
 }
 
 const pipelineItems: NavItem[] = [
+  { id: "orders-all", title: "All Orders", url: "/orders/all", icon: LayoutList, key: "ALL" },
   { id: "orders-new", title: "New Orders", url: "/orders/new", icon: Inbox, key: "NEW" },
   { id: "orders-pending", title: "Confirmation Pending", url: "/orders/pending", icon: Clock, key: "PENDING" },
   { id: "orders-hold", title: "Hold", url: "/orders/hold", icon: Pause, key: "HOLD" },
@@ -371,23 +372,31 @@ export function AppSidebar() {
         {filteredPipelineItems.length > 0 && (<SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={location === "/orders/all"}>
+                  <Link href="/orders/all" data-testid="nav-pipeline-all">
+                    <LayoutList className="w-4 h-4" />
+                    <span className="flex-1">All Orders</span>
+                    {totalOrderCount > 0 && (
+                      <Badge variant="secondary" className="h-5 min-w-[20px] px-1.5 text-xs">
+                        {totalOrderCount}
+                      </Badge>
+                    )}
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
               <Collapsible defaultOpen={isOrdersRouteActive} asChild className="group/collapsible">
                 <SidebarMenuItem>
                   <CollapsibleTrigger asChild>
-                    <SidebarMenuButton data-testid="nav-orders-toggle" tooltip="Orders">
+                    <SidebarMenuButton data-testid="nav-orders-toggle" tooltip="Flow">
                       <Package className="w-4 h-4" />
-                      <span className="flex-1">Orders</span>
-                      {totalOrderCount > 0 && (
-                        <Badge variant="secondary" className="h-5 min-w-[20px] px-1.5 text-xs">
-                          {totalOrderCount}
-                        </Badge>
-                      )}
+                      <span className="flex-1">Flow</span>
                       <ChevronRight className="w-4 h-4 ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
                     </SidebarMenuButton>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <SidebarMenuSub>
-                      {filteredPipelineItems.map((item) => {
+                      {filteredPipelineItems.filter(item => item.key !== "ALL").map((item) => {
                         const count = counts?.[item.key!] || 0;
                         return (
                           <SidebarMenuSubItem key={item.key}>
