@@ -8,6 +8,8 @@ import { sendOrderStatusWhatsApp } from '../utils/integrations/whatsapp';
 
 export { getMerchantRoboTags, type RoboTagConfig };
 
+const WA_NOTIFY_STATUSES = ["NEW", "BOOKED", "FULFILLED", "DELIVERED"] as const;
+
 const VALID_STATUSES = ["NEW", "PENDING", "HOLD", "READY_TO_SHIP", "BOOKED", "FULFILLED", "DELIVERED", "RETURN", "CANCELLED"] as const;
 type WorkflowStatus = typeof VALID_STATUSES[number];
 
@@ -138,20 +140,22 @@ async function _transitionOrderInner(params: TransitionParams): Promise<Transiti
     actorType,
   });
 
-  sendOrderStatusWhatsApp({
-    orderId,
-    merchantId,
-    customerPhone: order.customerPhone,
-    customerName: order.customerName,
-    orderNumber: order.orderNumber,
-    fromStatus: order.workflowStatus,
-    toStatus,
-    city: order.city,
-    shippingAddress: order.shippingAddress,
-    totalAmount: order.totalAmount,
-    courierName: order.courierName,
-    courierTracking: order.courierTracking,
-  }).catch(err => console.error(`[WhatsApp] Error in transitionOrder for ${orderId}:`, err));
+  if (WA_NOTIFY_STATUSES.includes(toStatus as any)) {
+    sendOrderStatusWhatsApp({
+      orderId,
+      merchantId,
+      customerPhone: order.customerPhone,
+      customerName: order.customerName,
+      orderNumber: order.orderNumber,
+      fromStatus: order.workflowStatus,
+      toStatus,
+      city: order.city,
+      shippingAddress: order.shippingAddress,
+      totalAmount: order.totalAmount,
+      courierName: order.courierName,
+      courierTracking: order.courierTracking,
+    }).catch(err => console.error(`[WhatsApp] Error in transitionOrder for ${orderId}:`, err));
+  }
 
   if (order.shopifyOrderId && action !== 'courier_status_sync') {
     if (toStatus === "CANCELLED" && action !== 'robo_cancel') {
@@ -264,22 +268,24 @@ export async function bulkTransitionOrders(params: {
     await db.insert(workflowAuditLog).values(auditEntries);
   }
 
-  eligible.forEach(o => {
-    sendOrderStatusWhatsApp({
-      orderId: o.id,
-      merchantId,
-      customerPhone: o.customerPhone,
-      customerName: o.customerName,
-      orderNumber: o.orderNumber,
-      fromStatus: o.workflowStatus,
-      toStatus,
-      city: o.city,
-      shippingAddress: o.shippingAddress,
-      totalAmount: o.totalAmount,
-      courierName: o.courierName,
-      courierTracking: o.courierTracking,
-    }).catch(err => console.error(`[WhatsApp] Error in bulkTransition for ${o.id}:`, err));
-  });
+  if (WA_NOTIFY_STATUSES.includes(toStatus as any)) {
+    eligible.forEach(o => {
+      sendOrderStatusWhatsApp({
+        orderId: o.id,
+        merchantId,
+        customerPhone: o.customerPhone,
+        customerName: o.customerName,
+        orderNumber: o.orderNumber,
+        fromStatus: o.workflowStatus,
+        toStatus,
+        city: o.city,
+        shippingAddress: o.shippingAddress,
+        totalAmount: o.totalAmount,
+        courierName: o.courierName,
+        courierTracking: o.courierTracking,
+      }).catch(err => console.error(`[WhatsApp] Error in bulkTransition for ${o.id}:`, err));
+    });
+  }
 
   const shopifyOrders = eligible.filter(o => o.shopifyOrderId);
   if (shopifyOrders.length > 0) {
@@ -346,20 +352,22 @@ export async function revertOrder(merchantId: string, orderId: string, actorUser
       actorType: "user",
     });
 
-    sendOrderStatusWhatsApp({
-      orderId,
-      merchantId,
-      customerPhone: order.customerPhone,
-      customerName: order.customerName,
-      orderNumber: order.orderNumber,
-      fromStatus: order.workflowStatus,
-      toStatus: order.previousWorkflowStatus,
-      city: order.city,
-      shippingAddress: order.shippingAddress,
-      totalAmount: order.totalAmount,
-      courierName: order.courierName,
-      courierTracking: order.courierTracking,
-    }).catch(err => console.error(`[WhatsApp] Error in revertOrder for ${orderId}:`, err));
+    if (WA_NOTIFY_STATUSES.includes(order.previousWorkflowStatus as any)) {
+      sendOrderStatusWhatsApp({
+        orderId,
+        merchantId,
+        customerPhone: order.customerPhone,
+        customerName: order.customerName,
+        orderNumber: order.orderNumber,
+        fromStatus: order.workflowStatus,
+        toStatus: order.previousWorkflowStatus,
+        city: order.city,
+        shippingAddress: order.shippingAddress,
+        totalAmount: order.totalAmount,
+        courierName: order.courierName,
+        courierTracking: order.courierTracking,
+      }).catch(err => console.error(`[WhatsApp] Error in revertOrder for ${orderId}:`, err));
+    }
 
     const ROBO_REVERT_STATUSES = ['READY_TO_SHIP', 'PENDING', 'CANCELLED'];
     if (order.shopifyOrderId && ROBO_REVERT_STATUSES.includes(order.previousWorkflowStatus)) {
