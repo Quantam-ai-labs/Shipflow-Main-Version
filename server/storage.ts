@@ -442,7 +442,7 @@ export class DatabaseStorage implements IStorage {
 
     if (options?.filterTag && options.filterTag.trim()) {
       const tagVal = options.filterTag.trim();
-      conditions.push(sql`${orders.tags} @> jsonb_build_array(${tagVal})`);
+      conditions.push(sql`${tagVal} = ANY(${orders.tags})`);
     }
 
     if (options?.filterStatuses && options.filterStatuses.trim()) {
