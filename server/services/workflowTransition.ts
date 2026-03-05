@@ -141,7 +141,7 @@ async function _transitionOrderInner(params: TransitionParams): Promise<Transiti
 
   const WA_NOTIFY_STATUSES = ["NEW", "BOOKED", "FULFILLED", "DELIVERED"];
   if (WA_NOTIFY_STATUSES.includes(toStatus)) {
-    storage.getWhatsAppTemplateForStatus(merchantId, toStatus).then(templateName => {
+    storage.getWhatsAppTemplateForStatus(merchantId, toStatus).then(({ templateName, messageBody }) => {
       return sendOrderStatusWhatsApp({
         customerPhone: order.customerPhone,
         customerName: order.customerName,
@@ -149,6 +149,12 @@ async function _transitionOrderInner(params: TransitionParams): Promise<Transiti
         fromStatus: order.workflowStatus,
         toStatus,
         templateName,
+        messageBody,
+        city: order.city,
+        shippingAddress: order.shippingAddress,
+        totalAmount: order.totalAmount,
+        courierName: order.courierName,
+        courierTracking: order.courierTracking,
       }).then(result => {
         return db.insert(orderChangeLog).values({
           orderId,
@@ -205,6 +211,11 @@ export async function bulkTransitionOrders(params: {
     customerPhone: orders.customerPhone,
     customerName: orders.customerName,
     orderNumber: orders.orderNumber,
+    city: orders.city,
+    shippingAddress: orders.shippingAddress,
+    totalAmount: orders.totalAmount,
+    courierName: orders.courierName,
+    courierTracking: orders.courierTracking,
   }).from(orders)
     .where(and(
       inArray(orders.id, orderIds),
@@ -271,7 +282,7 @@ export async function bulkTransitionOrders(params: {
 
   const WA_BULK_NOTIFY_STATUSES = ["NEW", "BOOKED", "FULFILLED", "DELIVERED"];
   if (WA_BULK_NOTIFY_STATUSES.includes(toStatus)) {
-    storage.getWhatsAppTemplateForStatus(merchantId, toStatus).then(templateName => {
+    storage.getWhatsAppTemplateForStatus(merchantId, toStatus).then(({ templateName, messageBody }) => {
       return Promise.all(
         eligible.map(o =>
           sendOrderStatusWhatsApp({
@@ -281,6 +292,12 @@ export async function bulkTransitionOrders(params: {
             fromStatus: o.workflowStatus,
             toStatus,
             templateName,
+            messageBody,
+            city: o.city,
+            shippingAddress: o.shippingAddress,
+            totalAmount: o.totalAmount,
+            courierName: o.courierName,
+            courierTracking: o.courierTracking,
           }).then(result => {
             return db.insert(orderChangeLog).values({
               orderId: o.id,
@@ -364,7 +381,7 @@ export async function revertOrder(merchantId: string, orderId: string, actorUser
 
   const WA_REVERT_STATUSES = ["NEW", "BOOKED", "FULFILLED", "DELIVERED"];
   if (WA_REVERT_STATUSES.includes(order.previousWorkflowStatus)) {
-    storage.getWhatsAppTemplateForStatus(merchantId, order.previousWorkflowStatus).then(templateName => {
+    storage.getWhatsAppTemplateForStatus(merchantId, order.previousWorkflowStatus).then(({ templateName, messageBody }) => {
       return sendOrderStatusWhatsApp({
         customerPhone: order.customerPhone,
         customerName: order.customerName,
@@ -372,6 +389,12 @@ export async function revertOrder(merchantId: string, orderId: string, actorUser
         fromStatus: order.workflowStatus,
         toStatus: order.previousWorkflowStatus,
         templateName,
+        messageBody,
+        city: order.city,
+        shippingAddress: order.shippingAddress,
+        totalAmount: order.totalAmount,
+        courierName: order.courierName,
+        courierTracking: order.courierTracking,
       }).then(result => {
         return db.insert(orderChangeLog).values({
           orderId,

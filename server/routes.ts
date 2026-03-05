@@ -6053,7 +6053,7 @@ export async function registerRoutes(
       if (!VALID_WA_STATUSES.includes(workflowStatus)) {
         return res.status(400).json({ error: "Invalid status. Must be one of: NEW, BOOKED, FULFILLED, DELIVERED" });
       }
-      const { templateName, isActive } = req.body;
+      const { templateName, messageBody, isActive } = req.body;
       if (!templateName || typeof templateName !== "string" || templateName.trim().length === 0) {
         return res.status(400).json({ error: "templateName is required" });
       }
@@ -6061,11 +6061,29 @@ export async function registerRoutes(
         merchantId,
         workflowStatus,
         templateName: templateName.trim(),
+        messageBody: messageBody ? String(messageBody).trim() : null,
         isActive: isActive !== false,
       });
       res.json(template);
     } catch (error: any) {
       console.error("[WhatsApp Templates] Error upserting:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/whatsapp-templates/:status", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const workflowStatus = req.params.status.toUpperCase();
+      const VALID_WA_STATUSES = ["NEW", "BOOKED", "FULFILLED", "DELIVERED"];
+      if (!VALID_WA_STATUSES.includes(workflowStatus)) {
+        return res.status(400).json({ error: "Invalid status" });
+      }
+      await storage.deleteWhatsAppTemplate(merchantId, workflowStatus);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("[WhatsApp Templates] Error deleting:", error);
       res.status(500).json({ error: error.message });
     }
   });

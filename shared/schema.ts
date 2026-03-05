@@ -326,6 +326,7 @@ export const whatsappTemplates = pgTable("whatsapp_templates", {
   merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
   workflowStatus: varchar("workflow_status", { length: 50 }).notNull(),
   templateName: varchar("template_name", { length: 255 }).notNull().default("status_notify"),
+  messageBody: text("message_body"),
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

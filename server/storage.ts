@@ -157,8 +157,9 @@ export interface IStorage {
 
   // WhatsApp Templates
   getWhatsAppTemplates(merchantId: string): Promise<WhatsappTemplate[]>;
-  upsertWhatsAppTemplate(data: { merchantId: string; workflowStatus: string; templateName: string; isActive: boolean }): Promise<WhatsappTemplate>;
-  getWhatsAppTemplateForStatus(merchantId: string, workflowStatus: string): Promise<string>;
+  upsertWhatsAppTemplate(data: { merchantId: string; workflowStatus: string; templateName: string; messageBody?: string | null; isActive: boolean }): Promise<WhatsappTemplate>;
+  deleteWhatsAppTemplate(merchantId: string, workflowStatus: string): Promise<void>;
+  getWhatsAppTemplateForStatus(merchantId: string, workflowStatus: string): Promise<{ templateName: string; messageBody: string | null }>;
 
   // Order Payments
   getOrderPayments(merchantId: string, orderId: string): Promise<OrderPayment[]>;
@@ -1544,26 +1545,31 @@ export class DatabaseStorage implements IStorage {
       .orderBy(whatsappTemplates.workflowStatus);
   }
 
-  async upsertWhatsAppTemplate(data: { merchantId: string; workflowStatus: string; templateName: string; isActive: boolean }): Promise<WhatsappTemplate> {
+  async upsertWhatsAppTemplate(data: { merchantId: string; workflowStatus: string; templateName: string; messageBody?: string | null; isActive: boolean }): Promise<WhatsappTemplate> {
     const now = new Date();
     const [result] = await db.insert(whatsappTemplates)
       .values({ ...data, updatedAt: now })
       .onConflictDoUpdate({
         target: [whatsappTemplates.merchantId, whatsappTemplates.workflowStatus],
-        set: { templateName: data.templateName, isActive: data.isActive, updatedAt: now },
+        set: { templateName: data.templateName, messageBody: data.messageBody ?? null, isActive: data.isActive, updatedAt: now },
       })
       .returning();
     return result;
   }
 
-  async getWhatsAppTemplateForStatus(merchantId: string, workflowStatus: string): Promise<string> {
-    const [template] = await db.select({ templateName: whatsappTemplates.templateName, isActive: whatsappTemplates.isActive })
+  async deleteWhatsAppTemplate(merchantId: string, workflowStatus: string): Promise<void> {
+    await db.delete(whatsappTemplates)
+      .where(and(eq(whatsappTemplates.merchantId, merchantId), eq(whatsappTemplates.workflowStatus, workflowStatus)));
+  }
+
+  async getWhatsAppTemplateForStatus(merchantId: string, workflowStatus: string): Promise<{ templateName: string; messageBody: string | null }> {
+    const [template] = await db.select({ templateName: whatsappTemplates.templateName, messageBody: whatsappTemplates.messageBody, isActive: whatsappTemplates.isActive })
       .from(whatsappTemplates)
       .where(and(eq(whatsappTemplates.merchantId, merchantId), eq(whatsappTemplates.workflowStatus, workflowStatus)));
     if (template && template.isActive && template.templateName) {
-      return template.templateName;
+      return { templateName: template.templateName, messageBody: template.messageBody ?? null };
     }
-    return "status_notify";
+    return { templateName: "status_notify", messageBody: null };
   }
 
   // Order Payments

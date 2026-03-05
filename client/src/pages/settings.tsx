@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,6 +6,25 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Settings as SettingsIcon,
   Building2,
@@ -13,8 +32,9 @@ import {
   Shield,
   Save,
   MessageCircle,
-  CheckCircle2,
-  XCircle,
+  Pencil,
+  Trash2,
+  Plus,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -40,135 +60,392 @@ interface WhatsAppTemplate {
   merchantId: string;
   workflowStatus: string;
   templateName: string;
+  messageBody: string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
 }
 
 const WA_STATUSES = [
-  { status: "NEW", label: "New Order", color: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300" },
-  { status: "BOOKED", label: "Booked", color: "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300" },
-  { status: "FULFILLED", label: "Shipped", color: "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300" },
-  { status: "DELIVERED", label: "Delivered", color: "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300" },
+  { status: "NEW",       label: "New Order",  color: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300" },
+  { status: "BOOKED",    label: "Booked",      color: "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300" },
+  { status: "FULFILLED", label: "Shipped",     color: "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300" },
+  { status: "DELIVERED", label: "Delivered",   color: "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300" },
 ];
+
+const VARIABLE_CHIPS = [
+  { key: "customer_name",   label: "Customer Name" },
+  { key: "order_number",    label: "Order No." },
+  { key: "new_status",      label: "New Status" },
+  { key: "old_status",      label: "Old Status" },
+  { key: "city",            label: "City" },
+  { key: "address",         label: "Address" },
+  { key: "total_amount",    label: "Amount" },
+  { key: "courier_name",    label: "Courier" },
+  { key: "tracking_number", label: "Tracking No." },
+];
+
+const DEFAULT_MESSAGE_BODY = "Hello {customer_name}, your order #{order_number} status has been updated to {new_status}.";
+
+function VariableChip({ label, varKey, onClick }: { label: string; varKey: string; onClick: (key: string) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onClick(varKey)}
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-mono bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300 border border-green-200 dark:border-green-800 hover:bg-green-200 dark:hover:bg-green-900 transition-colors cursor-pointer"
+      title={`Insert {${varKey}}`}
+    >
+      <Plus className="w-2.5 h-2.5" />
+      {label}
+    </button>
+  );
+}
+
+interface EditDialogProps {
+  open: boolean;
+  statusInfo: { status: string; label: string; color: string } | null;
+  initial: { templateName: string; messageBody: string };
+  onSave: (templateName: string, messageBody: string) => void;
+  onClose: () => void;
+  isSaving: boolean;
+}
+
+function EditDialog({ open, statusInfo, initial, onSave, onClose, isSaving }: EditDialogProps) {
+  const [templateName, setTemplateName] = useState(initial.templateName);
+  const [messageBody, setMessageBody] = useState(initial.messageBody);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const insertVariable = (varKey: string) => {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      setMessageBody(prev => prev + `{${varKey}}`);
+      return;
+    }
+    const start = textarea.selectionStart ?? messageBody.length;
+    const end = textarea.selectionEnd ?? messageBody.length;
+    const insertion = `{${varKey}}`;
+    const newBody = messageBody.slice(0, start) + insertion + messageBody.slice(end);
+    setMessageBody(newBody);
+    setTimeout(() => {
+      textarea.focus();
+      const newPos = start + insertion.length;
+      textarea.setSelectionRange(newPos, newPos);
+    }, 0);
+  };
+
+  const handleSave = () => {
+    onSave(templateName.trim(), messageBody.trim() || DEFAULT_MESSAGE_BODY);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={open ? undefined : onClose}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <MessageCircle className="w-5 h-5 text-green-600" />
+            {statusInfo ? `Edit WhatsApp Template — ${statusInfo.label}` : "Edit WhatsApp Template"}
+          </DialogTitle>
+          <DialogDescription>
+            Configure the WhatsApp Business template for this order status notification.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label htmlFor="dialog-template-name" className="text-sm font-medium">
+              Template Name
+              <span className="ml-1 text-xs text-muted-foreground font-normal">(must match your Meta Business Manager template)</span>
+            </Label>
+            <Input
+              id="dialog-template-name"
+              value={templateName}
+              onChange={e => setTemplateName(e.target.value)}
+              placeholder="status_notify"
+              className="font-mono text-sm"
+              data-testid="dialog-input-template-name"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Message Body</Label>
+            <div className="flex flex-wrap gap-1.5 p-2 bg-muted/50 rounded-md border">
+              <span className="text-xs text-muted-foreground self-center mr-1">Insert variable:</span>
+              {VARIABLE_CHIPS.map(chip => (
+                <VariableChip
+                  key={chip.key}
+                  label={chip.label}
+                  varKey={chip.key}
+                  onClick={insertVariable}
+                />
+              ))}
+            </div>
+            <Textarea
+              ref={textareaRef}
+              value={messageBody}
+              onChange={e => setMessageBody(e.target.value)}
+              placeholder={DEFAULT_MESSAGE_BODY}
+              className="font-mono text-sm min-h-[100px] resize-y"
+              data-testid="dialog-textarea-message-body"
+            />
+            <p className="text-xs text-muted-foreground">
+              Click a chip above to insert a variable at your cursor position. Variables will be replaced with the actual order values when sent.
+            </p>
+          </div>
+
+          {messageBody && messageBody.trim().length > 0 && (
+            <div className="p-3 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-md">
+              <p className="text-xs text-muted-foreground mb-1 font-medium">Preview (example values):</p>
+              <p className="text-sm break-words">
+                {messageBody
+                  .replace(/{customer_name}/g, "Ahmad Ali")
+                  .replace(/{order_number}/g, "12345")
+                  .replace(/{new_status}/g, statusInfo?.label ?? "Shipped")
+                  .replace(/{old_status}/g, "New Order")
+                  .replace(/{city}/g, "Karachi")
+                  .replace(/{address}/g, "Block 5, Clifton")
+                  .replace(/{total_amount}/g, "Rs 2,500")
+                  .replace(/{courier_name}/g, "Leopards")
+                  .replace(/{tracking_number}/g, "LP123456")
+                }
+              </p>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={isSaving} data-testid="dialog-button-cancel">
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={isSaving || !templateName.trim()} data-testid="dialog-button-save">
+            {isSaving ? "Saving..." : "Save Template"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 function WhatsAppTemplatesCard() {
   const { toast } = useToast();
-  const [localTemplates, setLocalTemplates] = useState<Record<string, { templateName: string; isActive: boolean }>>({});
-  const [initialized, setInitialized] = useState(false);
-  const [savingStatus, setSavingStatus] = useState<Record<string, boolean>>({});
+  const [editingStatus, setEditingStatus] = useState<string | null>(null);
+  const [deletingStatus, setDeletingStatus] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [toggling, setToggling] = useState<string | null>(null);
 
   const { data: templates, isLoading } = useQuery<WhatsAppTemplate[]>({
     queryKey: ["/api/whatsapp-templates"],
   });
 
-  if (templates && !initialized) {
-    const map: Record<string, { templateName: string; isActive: boolean }> = {};
-    WA_STATUSES.forEach(({ status }) => {
-      const found = templates.find(t => t.workflowStatus === status);
-      map[status] = { templateName: found?.templateName ?? "status_notify", isActive: found?.isActive ?? true };
-    });
-    setLocalTemplates(map);
-    setInitialized(true);
-  }
-
   const upsertMutation = useMutation({
-    mutationFn: async ({ status, templateName, isActive }: { status: string; templateName: string; isActive: boolean }) => {
-      return apiRequest("PUT", `/api/whatsapp-templates/${status}`, { templateName, isActive });
+    mutationFn: async ({ status, templateName, messageBody, isActive }: { status: string; templateName: string; messageBody?: string | null; isActive: boolean }) => {
+      return apiRequest("PUT", `/api/whatsapp-templates/${status}`, { templateName, messageBody, isActive });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/whatsapp-templates"] });
     },
   });
 
-  const handleSave = async (status: string) => {
-    const entry = localTemplates[status];
-    if (!entry) return;
-    setSavingStatus(s => ({ ...s, [status]: true }));
+  const deleteMutation = useMutation({
+    mutationFn: async (status: string) => {
+      return apiRequest("DELETE", `/api/whatsapp-templates/${status}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/whatsapp-templates"] });
+    },
+  });
+
+  const getTemplate = (status: string): WhatsAppTemplate | undefined =>
+    templates?.find(t => t.workflowStatus === status);
+
+  const getEditInitial = (status: string) => {
+    const t = getTemplate(status);
+    return {
+      templateName: t?.templateName ?? "status_notify",
+      messageBody: t?.messageBody ?? "",
+    };
+  };
+
+  const handleSave = async (templateName: string, messageBody: string) => {
+    if (!editingStatus) return;
+    setIsSaving(true);
     try {
-      await upsertMutation.mutateAsync({ status, templateName: entry.templateName, isActive: entry.isActive });
-      toast({ title: "Template saved", description: `${WA_STATUSES.find(s => s.status === status)?.label} template updated.` });
+      const existing = getTemplate(editingStatus);
+      await upsertMutation.mutateAsync({
+        status: editingStatus,
+        templateName,
+        messageBody,
+        isActive: existing?.isActive ?? true,
+      });
+      toast({ title: "Template saved", description: `${WA_STATUSES.find(s => s.status === editingStatus)?.label} template updated.` });
+      setEditingStatus(null);
     } catch {
       toast({ title: "Error", description: "Failed to save template.", variant: "destructive" });
     } finally {
-      setSavingStatus(s => ({ ...s, [status]: false }));
+      setIsSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deletingStatus) return;
+    setIsDeleting(true);
+    try {
+      await deleteMutation.mutateAsync(deletingStatus);
+      toast({ title: "Template deleted", description: `${WA_STATUSES.find(s => s.status === deletingStatus)?.label} template has been reset to default.` });
+      setDeletingStatus(null);
+    } catch {
+      toast({ title: "Error", description: "Failed to delete template.", variant: "destructive" });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
   const handleToggle = async (status: string, isActive: boolean) => {
-    setLocalTemplates(prev => ({ ...prev, [status]: { ...prev[status], isActive } }));
-    const entry = localTemplates[status];
-    if (!entry) return;
+    setToggling(status);
     try {
-      await upsertMutation.mutateAsync({ status, templateName: entry.templateName, isActive });
-      queryClient.invalidateQueries({ queryKey: ["/api/whatsapp-templates"] });
+      const existing = getTemplate(status);
+      await upsertMutation.mutateAsync({
+        status,
+        templateName: existing?.templateName ?? "status_notify",
+        messageBody: existing?.messageBody ?? null,
+        isActive,
+      });
     } catch {
-      setLocalTemplates(prev => ({ ...prev, [status]: { ...prev[status], isActive: !isActive } }));
       toast({ title: "Error", description: "Failed to update template.", variant: "destructive" });
+    } finally {
+      setToggling(null);
     }
   };
 
+  const editingStatusInfo = WA_STATUSES.find(s => s.status === editingStatus) ?? null;
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-lg flex items-center gap-2">
-          <MessageCircle className="w-5 h-5 text-green-600" />
-          WhatsApp Notifications
-        </CardTitle>
-        <CardDescription>
-          Configure the WhatsApp Business API template name used when notifying customers at each order status.
-          Templates must be pre-approved in your Meta Business account.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {isLoading ? (
-          <div className="space-y-4">
-            {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-14 w-full" />)}
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {WA_STATUSES.map(({ status, label, color }) => {
-              const entry = localTemplates[status] ?? { templateName: "status_notify", isActive: true };
-              const isSaving = savingStatus[status] ?? false;
-              return (
-                <div key={status} className="flex items-center gap-3 p-3 border rounded-lg" data-testid={`whatsapp-template-row-${status.toLowerCase()}`}>
-                  <Badge className={`shrink-0 text-xs font-medium border-0 ${color}`}>{label}</Badge>
-                  <Input
-                    className="flex-1 h-8 text-sm font-mono"
-                    value={entry.templateName}
-                    onChange={e => setLocalTemplates(prev => ({ ...prev, [status]: { ...prev[status], templateName: e.target.value } }))}
-                    placeholder="status_notify"
-                    data-testid={`input-whatsapp-template-${status.toLowerCase()}`}
-                  />
-                  <Switch
-                    checked={entry.isActive}
-                    onCheckedChange={val => handleToggle(status, val)}
-                    data-testid={`switch-whatsapp-active-${status.toLowerCase()}`}
-                  />
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleSave(status)}
-                    disabled={isSaving}
-                    className="h-8 px-3 shrink-0"
-                    data-testid={`button-save-whatsapp-${status.toLowerCase()}`}
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <MessageCircle className="w-5 h-5 text-green-600" />
+            WhatsApp Notifications
+          </CardTitle>
+          <CardDescription>
+            Configure WhatsApp message templates for each order status. Templates must be pre-approved in your Meta Business Manager account.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-16 w-full" />)}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {WA_STATUSES.map(({ status, label, color }) => {
+                const template = getTemplate(status);
+                const isActive = template?.isActive ?? true;
+                const isTogglingThis = toggling === status;
+                const hasTemplate = !!template;
+
+                return (
+                  <div
+                    key={status}
+                    className="flex items-center gap-3 p-3 border rounded-lg"
+                    data-testid={`whatsapp-template-row-${status.toLowerCase()}`}
                   >
-                    {isSaving ? (
-                      <span className="text-xs">Saving...</span>
-                    ) : (
-                      <><Save className="w-3 h-3 mr-1" /><span className="text-xs">Save</span></>
-                    )}
-                  </Button>
-                </div>
-              );
-            })}
-            <p className="text-xs text-muted-foreground pt-1">
-              Toggle the switch to enable/disable notifications for each status. The template name must exactly match the approved template in Meta Business Manager.
-            </p>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+                    <Badge className={`shrink-0 text-xs font-medium border-0 ${color} min-w-[80px] justify-center`}>
+                      {label}
+                    </Badge>
+
+                    <div className="flex-1 min-w-0">
+                      {hasTemplate ? (
+                        <div className="space-y-0.5">
+                          <p className="text-xs font-mono text-foreground truncate">{template.templateName}</p>
+                          {template.messageBody ? (
+                            <p className="text-xs text-muted-foreground truncate">{template.messageBody}</p>
+                          ) : (
+                            <p className="text-xs text-muted-foreground italic">Default message body</p>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground italic">No template configured — using defaults</p>
+                      )}
+                    </div>
+
+                    <Switch
+                      checked={isActive}
+                      onCheckedChange={val => handleToggle(status, val)}
+                      disabled={isTogglingThis}
+                      data-testid={`switch-whatsapp-active-${status.toLowerCase()}`}
+                    />
+
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 w-8 p-0 shrink-0"
+                      onClick={() => setEditingStatus(status)}
+                      data-testid={`button-edit-whatsapp-${status.toLowerCase()}`}
+                      title="Edit template"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </Button>
+
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 w-8 p-0 shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                      onClick={() => setDeletingStatus(status)}
+                      disabled={!hasTemplate}
+                      data-testid={`button-delete-whatsapp-${status.toLowerCase()}`}
+                      title="Reset to default"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                );
+              })}
+
+              <div className="pt-1 border-t">
+                <p className="text-xs text-muted-foreground">
+                  Use the pencil icon to configure a template. Click variable chips inside the editor to insert dynamic order fields.
+                  Toggle the switch to enable/disable notifications per status.
+                </p>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {editingStatus && (
+        <EditDialog
+          open={!!editingStatus}
+          statusInfo={editingStatusInfo}
+          initial={getEditInitial(editingStatus)}
+          onSave={handleSave}
+          onClose={() => setEditingStatus(null)}
+          isSaving={isSaving}
+        />
+      )}
+
+      <AlertDialog open={!!deletingStatus} onOpenChange={open => { if (!open) setDeletingStatus(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reset template?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove the custom template for "{WA_STATUSES.find(s => s.status === deletingStatus)?.label}" and reset it to the system default. WhatsApp notifications for this status will still be sent using the default template name and message.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+              data-testid="button-confirm-delete-template"
+            >
+              {isDeleting ? "Deleting..." : "Reset to Default"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 
@@ -206,37 +483,20 @@ export default function Settings() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
-      toast({
-        title: "Settings saved",
-        description: "Your settings have been updated successfully.",
-      });
+      toast({ title: "Settings saved", description: "Your settings have been updated successfully." });
     },
     onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to save settings. Please try again.",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Failed to save settings. Please try again.", variant: "destructive" });
     },
   });
 
   const handleSaveProfile = () => {
-    saveSettingsMutation.mutate({
-      name,
-      email,
-      phone,
-      address,
-      city,
-    });
+    saveSettingsMutation.mutate({ name, email, phone, address, city });
   };
 
   const handleSaveNotifications = () => {
     saveSettingsMutation.mutate({
-      notifications: {
-        emailOrderUpdates,
-        emailDeliveryAlerts,
-        emailCodReminders,
-      },
+      notifications: { emailOrderUpdates, emailDeliveryAlerts, emailCodReminders },
     });
   };
 
@@ -260,72 +520,35 @@ export default function Settings() {
         <CardContent>
           {isLoading ? (
             <div className="space-y-4">
-              {[1, 2, 3, 4].map((i) => (
-                <Skeleton key={i} className="h-10 w-full" />
-              ))}
+              {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-10 w-full" />)}
             </div>
           ) : (
             <div className="space-y-4">
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="businessName">Business Name</Label>
-                  <Input
-                    id="businessName"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Your business name"
-                    data-testid="input-business-name"
-                  />
+                  <Input id="businessName" value={name} onChange={e => setName(e.target.value)} placeholder="Your business name" data-testid="input-business-name" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="businessEmail">Email</Label>
-                  <Input
-                    id="businessEmail"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="business@example.com"
-                    data-testid="input-business-email"
-                  />
+                  <Input id="businessEmail" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="business@example.com" data-testid="input-business-email" />
                 </div>
               </div>
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="phone">Phone Number</Label>
-                  <Input
-                    id="phone"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="+92 300 1234567"
-                    data-testid="input-phone"
-                  />
+                  <Input id="phone" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+92 300 1234567" data-testid="input-phone" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="city">City</Label>
-                  <Input
-                    id="city"
-                    value={city}
-                    onChange={(e) => setCity(e.target.value)}
-                    placeholder="Karachi"
-                    data-testid="input-city"
-                  />
+                  <Input id="city" value={city} onChange={e => setCity(e.target.value)} placeholder="Karachi" data-testid="input-city" />
                 </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="address">Address</Label>
-                <Input
-                  id="address"
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  placeholder="Your business address"
-                  data-testid="input-address"
-                />
+                <Input id="address" value={address} onChange={e => setAddress(e.target.value)} placeholder="Your business address" data-testid="input-address" />
               </div>
-              <Button
-                onClick={handleSaveProfile}
-                disabled={saveSettingsMutation.isPending}
-                data-testid="button-save-profile"
-              >
+              <Button onClick={handleSaveProfile} disabled={saveSettingsMutation.isPending} data-testid="button-save-profile">
                 <Save className="w-4 h-4 mr-2" />
                 {saveSettingsMutation.isPending ? "Saving..." : "Save Changes"}
               </Button>
@@ -349,58 +572,34 @@ export default function Settings() {
         <CardContent>
           {isLoading ? (
             <div className="space-y-4">
-              {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-12 w-full" />
-              ))}
+              {[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}
             </div>
           ) : (
             <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label>Order Updates</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Receive email notifications when orders are synced or updated.
-                  </p>
+                  <p className="text-sm text-muted-foreground">Receive email notifications when orders are synced or updated.</p>
                 </div>
-                <Switch
-                  checked={emailOrderUpdates}
-                  onCheckedChange={setEmailOrderUpdates}
-                  data-testid="switch-order-updates"
-                />
+                <Switch checked={emailOrderUpdates} onCheckedChange={setEmailOrderUpdates} data-testid="switch-order-updates" />
               </div>
               <Separator />
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label>Delivery Alerts</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Get notified when shipments are delivered or have issues.
-                  </p>
+                  <p className="text-sm text-muted-foreground">Get notified when shipments are delivered or have issues.</p>
                 </div>
-                <Switch
-                  checked={emailDeliveryAlerts}
-                  onCheckedChange={setEmailDeliveryAlerts}
-                  data-testid="switch-delivery-alerts"
-                />
+                <Switch checked={emailDeliveryAlerts} onCheckedChange={setEmailDeliveryAlerts} data-testid="switch-delivery-alerts" />
               </div>
               <Separator />
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label>COD Reminders</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Weekly reminders about pending COD reconciliation.
-                  </p>
+                  <p className="text-sm text-muted-foreground">Weekly reminders about pending COD reconciliation.</p>
                 </div>
-                <Switch
-                  checked={emailCodReminders}
-                  onCheckedChange={setEmailCodReminders}
-                  data-testid="switch-cod-reminders"
-                />
+                <Switch checked={emailCodReminders} onCheckedChange={setEmailCodReminders} data-testid="switch-cod-reminders" />
               </div>
-              <Button
-                onClick={handleSaveNotifications}
-                disabled={saveSettingsMutation.isPending}
-                data-testid="button-save-notifications"
-              >
+              <Button onClick={handleSaveNotifications} disabled={saveSettingsMutation.isPending} data-testid="button-save-notifications">
                 <Save className="w-4 h-4 mr-2" />
                 {saveSettingsMutation.isPending ? "Saving..." : "Save Preferences"}
               </Button>
@@ -424,9 +623,7 @@ export default function Settings() {
             <div className="flex items-center justify-between p-4 border rounded-md">
               <div>
                 <p className="font-medium">Authentication</p>
-                <p className="text-sm text-muted-foreground">
-                  You're signed in via Replit Auth with secure OAuth 2.0.
-                </p>
+                <p className="text-sm text-muted-foreground">You're signed in via Replit Auth with secure OAuth 2.0.</p>
               </div>
               <SettingsIcon className="w-5 h-5 text-muted-foreground" />
             </div>
