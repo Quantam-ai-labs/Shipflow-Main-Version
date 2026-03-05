@@ -78,6 +78,7 @@ import {
   LayoutList,
   Brain,
   Home,
+  MessageCircle,
   type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -157,6 +158,7 @@ const allNavGroups: NavGroup[] = [
       { id: "ads-profitability", title: "Profitability", url: "/marketing/profitability", icon: TrendingUp },
       { id: "ai-intelligence", title: "AI Insights", url: "/marketing/intelligence", icon: Brain },
       { id: "ai-hub", title: "AI Hub", url: "/ai", icon: Brain },
+      { id: "whatsapp-hub", title: "WhatsApp", url: "/whatsapp", icon: MessageCircle },
     ],
   },
   {

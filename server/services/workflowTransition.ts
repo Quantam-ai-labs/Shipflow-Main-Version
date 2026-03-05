@@ -1,11 +1,10 @@
 import { db, withRetry } from "../db";
-import { orders, workflowAuditLog, orderChangeLog } from "@shared/schema";
+import { orders, workflowAuditLog } from "@shared/schema";
 import { eq, and, inArray, lt, sql } from "drizzle-orm";
 import type { Order } from "@shared/schema";
 import { writeBackCancel, writeBackTags } from './shopifyWriteBack';
 import { getMerchantRoboTags, type RoboTagConfig } from './roboTags';
 import { sendOrderStatusWhatsApp } from '../utils/integrations/whatsapp';
-import { storage } from '../storage';
 
 export { getMerchantRoboTags, type RoboTagConfig };
 
@@ -139,35 +138,20 @@ async function _transitionOrderInner(params: TransitionParams): Promise<Transiti
     actorType,
   });
 
-  const WA_NOTIFY_STATUSES = ["NEW", "BOOKED", "FULFILLED", "DELIVERED"];
-  if (WA_NOTIFY_STATUSES.includes(toStatus)) {
-    storage.getWhatsAppTemplateForStatus(merchantId, toStatus).then(({ templateName, messageBody }) => {
-      return sendOrderStatusWhatsApp({
-        customerPhone: order.customerPhone,
-        customerName: order.customerName,
-        orderNumber: order.orderNumber,
-        fromStatus: order.workflowStatus,
-        toStatus,
-        templateName,
-        messageBody,
-        city: order.city,
-        shippingAddress: order.shippingAddress,
-        totalAmount: order.totalAmount,
-        courierName: order.courierName,
-        courierTracking: order.courierTracking,
-      }).then(result => {
-        return db.insert(orderChangeLog).values({
-          orderId,
-          merchantId,
-          changeType: "WHATSAPP_SENT",
-          newValue: result.success ? "sent" : "failed",
-          actorType: "system",
-          actorName: "WhatsApp",
-          metadata: { success: result.success, toStatus, phone: result.phone, templateName, messageId: result.messageId, error: result.error },
-        });
-      });
-    }).catch(err => console.error(`[WhatsApp] Error in transitionOrder for ${orderId}:`, err));
-  }
+  sendOrderStatusWhatsApp({
+    orderId,
+    merchantId,
+    customerPhone: order.customerPhone,
+    customerName: order.customerName,
+    orderNumber: order.orderNumber,
+    fromStatus: order.workflowStatus,
+    toStatus,
+    city: order.city,
+    shippingAddress: order.shippingAddress,
+    totalAmount: order.totalAmount,
+    courierName: order.courierName,
+    courierTracking: order.courierTracking,
+  }).catch(err => console.error(`[WhatsApp] Error in transitionOrder for ${orderId}:`, err));
 
   if (order.shopifyOrderId && action !== 'courier_status_sync') {
     if (toStatus === "CANCELLED" && action !== 'robo_cancel') {
@@ -280,39 +264,22 @@ export async function bulkTransitionOrders(params: {
     await db.insert(workflowAuditLog).values(auditEntries);
   }
 
-  const WA_BULK_NOTIFY_STATUSES = ["NEW", "BOOKED", "FULFILLED", "DELIVERED"];
-  if (WA_BULK_NOTIFY_STATUSES.includes(toStatus)) {
-    storage.getWhatsAppTemplateForStatus(merchantId, toStatus).then(({ templateName, messageBody }) => {
-      return Promise.all(
-        eligible.map(o =>
-          sendOrderStatusWhatsApp({
-            customerPhone: o.customerPhone,
-            customerName: o.customerName,
-            orderNumber: o.orderNumber,
-            fromStatus: o.workflowStatus,
-            toStatus,
-            templateName,
-            messageBody,
-            city: o.city,
-            shippingAddress: o.shippingAddress,
-            totalAmount: o.totalAmount,
-            courierName: o.courierName,
-            courierTracking: o.courierTracking,
-          }).then(result => {
-            return db.insert(orderChangeLog).values({
-              orderId: o.id,
-              merchantId,
-              changeType: "WHATSAPP_SENT",
-              newValue: result.success ? "sent" : "failed",
-              actorType: "system",
-              actorName: "WhatsApp",
-              metadata: { success: result.success, toStatus, phone: result.phone, templateName, messageId: result.messageId, error: result.error },
-            });
-          }).catch(err => console.error(`[WhatsApp] Error in bulkTransition for ${o.id}:`, err))
-        )
-      );
-    }).catch(err => console.error(`[WhatsApp] Bulk notification error:`, err));
-  }
+  eligible.forEach(o => {
+    sendOrderStatusWhatsApp({
+      orderId: o.id,
+      merchantId,
+      customerPhone: o.customerPhone,
+      customerName: o.customerName,
+      orderNumber: o.orderNumber,
+      fromStatus: o.workflowStatus,
+      toStatus,
+      city: o.city,
+      shippingAddress: o.shippingAddress,
+      totalAmount: o.totalAmount,
+      courierName: o.courierName,
+      courierTracking: o.courierTracking,
+    }).catch(err => console.error(`[WhatsApp] Error in bulkTransition for ${o.id}:`, err));
+  });
 
   const shopifyOrders = eligible.filter(o => o.shopifyOrderId);
   if (shopifyOrders.length > 0) {
@@ -344,79 +311,64 @@ export async function bulkTransitionOrders(params: {
 
 export async function revertOrder(merchantId: string, orderId: string, actorUserId?: string, reason?: string, actorName?: string): Promise<TransitionResult> {
   return withRetry(async () => {
-  const [order] = await db.select().from(orders)
-    .where(and(eq(orders.id, orderId), eq(orders.merchantId, merchantId)));
+    const [order] = await db.select().from(orders)
+      .where(and(eq(orders.id, orderId), eq(orders.merchantId, merchantId)));
 
-  if (!order) {
-    return { success: false, error: "Order not found" };
-  }
+    if (!order) {
+      return { success: false, error: "Order not found" };
+    }
 
-  if (!order.previousWorkflowStatus) {
-    return { success: false, error: "No previous status to revert to" };
-  }
+    if (!order.previousWorkflowStatus) {
+      return { success: false, error: "No previous status to revert to" };
+    }
 
-  const now = new Date();
-  const [updated] = await db.update(orders)
-    .set({
-      workflowStatus: order.previousWorkflowStatus,
-      previousWorkflowStatus: order.workflowStatus,
-      lastStatusChangedAt: now,
-      lastStatusChangedByUserId: actorUserId || null,
-      updatedAt: now,
-    })
-    .where(and(eq(orders.id, orderId), eq(orders.merchantId, merchantId)))
-    .returning();
+    const now = new Date();
+    const [updated] = await db.update(orders)
+      .set({
+        workflowStatus: order.previousWorkflowStatus,
+        previousWorkflowStatus: order.workflowStatus,
+        lastStatusChangedAt: now,
+        lastStatusChangedByUserId: actorUserId || null,
+        updatedAt: now,
+      })
+      .where(and(eq(orders.id, orderId), eq(orders.merchantId, merchantId)))
+      .returning();
 
-  await db.insert(workflowAuditLog).values({
-    orderId,
-    merchantId,
-    fromStatus: order.workflowStatus,
-    toStatus: order.previousWorkflowStatus,
-    action: "revert",
-    reason: reason || "User reverted status",
-    actorUserId: actorUserId || null,
-    actorName: actorName || null,
-    actorType: "user",
-  });
+    await db.insert(workflowAuditLog).values({
+      orderId,
+      merchantId,
+      fromStatus: order.workflowStatus,
+      toStatus: order.previousWorkflowStatus,
+      action: "revert",
+      reason: reason || "User reverted status",
+      actorUserId: actorUserId || null,
+      actorName: actorName || null,
+      actorType: "user",
+    });
 
-  const WA_REVERT_STATUSES = ["NEW", "BOOKED", "FULFILLED", "DELIVERED"];
-  if (WA_REVERT_STATUSES.includes(order.previousWorkflowStatus)) {
-    storage.getWhatsAppTemplateForStatus(merchantId, order.previousWorkflowStatus).then(({ templateName, messageBody }) => {
-      return sendOrderStatusWhatsApp({
-        customerPhone: order.customerPhone,
-        customerName: order.customerName,
-        orderNumber: order.orderNumber,
-        fromStatus: order.workflowStatus,
-        toStatus: order.previousWorkflowStatus,
-        templateName,
-        messageBody,
-        city: order.city,
-        shippingAddress: order.shippingAddress,
-        totalAmount: order.totalAmount,
-        courierName: order.courierName,
-        courierTracking: order.courierTracking,
-      }).then(result => {
-        return db.insert(orderChangeLog).values({
-          orderId,
-          merchantId,
-          changeType: "WHATSAPP_SENT",
-          newValue: result.success ? "sent" : "failed",
-          actorType: "system",
-          actorName: "WhatsApp",
-          metadata: { success: result.success, toStatus: order.previousWorkflowStatus, phone: result.phone, templateName, messageId: result.messageId, error: result.error },
-        });
-      });
+    sendOrderStatusWhatsApp({
+      orderId,
+      merchantId,
+      customerPhone: order.customerPhone,
+      customerName: order.customerName,
+      orderNumber: order.orderNumber,
+      fromStatus: order.workflowStatus,
+      toStatus: order.previousWorkflowStatus,
+      city: order.city,
+      shippingAddress: order.shippingAddress,
+      totalAmount: order.totalAmount,
+      courierName: order.courierName,
+      courierTracking: order.courierTracking,
     }).catch(err => console.error(`[WhatsApp] Error in revertOrder for ${orderId}:`, err));
-  }
 
-  const ROBO_REVERT_STATUSES = ['READY_TO_SHIP', 'PENDING', 'CANCELLED'];
-  if (order.shopifyOrderId && ROBO_REVERT_STATUSES.includes(order.previousWorkflowStatus)) {
-    writeBackTags(merchantId, order.shopifyOrderId, order.previousWorkflowStatus)
-      .then(r => { if (!r.success) console.warn(`[ShopifyWriteBack] Revert tag sync failed for ${orderId}: ${r.error}`); })
-      .catch(e => console.error(`[ShopifyWriteBack] Revert tag sync error:`, e));
-  }
+    const ROBO_REVERT_STATUSES = ['READY_TO_SHIP', 'PENDING', 'CANCELLED'];
+    if (order.shopifyOrderId && ROBO_REVERT_STATUSES.includes(order.previousWorkflowStatus)) {
+      writeBackTags(merchantId, order.shopifyOrderId, order.previousWorkflowStatus)
+        .then(r => { if (!r.success) console.warn(`[ShopifyWriteBack] Revert tag sync failed for ${orderId}: ${r.error}`); })
+        .catch(e => console.error(`[ShopifyWriteBack] Revert tag sync error:`, e));
+    }
 
-  return { success: true, order: updated };
+    return { success: true, order: updated };
   }, `revertOrder:${orderId}`);
 }
 
@@ -470,6 +422,8 @@ export async function autoMoveStalePending(merchantId: string): Promise<number> 
 
   return staleOrders.length;
 }
+
+const DEFAULT_ROBO_TAGS = { confirm: "confirm", cancel: "cancel", pending: "pending" };
 
 export function parseRoboTags(tags: string[] | null, config?: RoboTagConfig): { roboConfirm: boolean; roboCancel: boolean; roboPending: boolean } {
   if (!tags || tags.length === 0) return { roboConfirm: false, roboCancel: false, roboPending: false };

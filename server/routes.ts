@@ -30,6 +30,7 @@ import {
   sales,
   cashAccounts,
   parties,
+  orderChangeLog,
 } from "@shared/schema";
 import {
   and,
@@ -6084,6 +6085,38 @@ export async function registerRoutes(
       res.json({ success: true });
     } catch (error: any) {
       console.error("[WhatsApp Templates] Error deleting:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/whatsapp-logs", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+      const logs = await db
+        .select({
+          id: orderChangeLog.id,
+          orderId: orderChangeLog.orderId,
+          newValue: orderChangeLog.newValue,
+          metadata: orderChangeLog.metadata,
+          createdAt: orderChangeLog.createdAt,
+          orderNumber: orders.orderNumber,
+          customerName: orders.customerName,
+        })
+        .from(orderChangeLog)
+        .innerJoin(orders, eq(orderChangeLog.orderId, orders.id))
+        .where(
+          and(
+            eq(orderChangeLog.merchantId, merchantId),
+            eq(orderChangeLog.changeType, "WHATSAPP_SENT")
+          )
+        )
+        .orderBy(desc(orderChangeLog.createdAt))
+        .limit(limit);
+      res.json(logs);
+    } catch (error: any) {
+      console.error("[WhatsApp Logs] Error fetching:", error);
       res.status(500).json({ error: error.message });
     }
   });

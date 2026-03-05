@@ -102,6 +102,7 @@ import AdsManager from "@/pages/marketing/ads-manager";
 import AdsProfitability from "@/pages/marketing/ads-profitability";
 import AIInsights from "@/pages/marketing/ai-insights";
 import AIAssistant from "@/pages/ai-assistant";
+import WhatsAppPage from "@/pages/whatsapp";
 import SettingsShopify from "@/pages/settings/shopify";
 import SettingsCouriers from "@/pages/settings/couriers";
 import SettingsStatusMapping from "@/pages/settings/status-mapping";
@@ -160,6 +161,7 @@ const routeToPageId: Record<string, string> = {
   "/marketing/ads-manager": "ads-manager",
   "/marketing/profitability": "ads-profitability",
   "/marketing/intelligence": "ai-intelligence",
+  "/whatsapp": "whatsapp-hub",
   "/accounting/settings": "preferences",
   "/settings/shopify": "settings-shopify",
   "/settings/couriers": "settings-couriers",
@@ -268,6 +270,7 @@ function AppRoutes() {
       <Route path="/marketing/ads-manager">{() => <ProtectedRoute component={AdsManager} path="/marketing/ads-manager" />}</Route>
       <Route path="/marketing/profitability">{() => <ProtectedRoute component={AdsProfitability} path="/marketing/profitability" />}</Route>
       <Route path="/marketing/intelligence">{() => <ProtectedRoute component={AIInsights} path="/marketing/intelligence" />}</Route>
+      <Route path="/whatsapp">{() => <ProtectedRoute component={WhatsAppPage} path="/whatsapp" />}</Route>
       <Route path="/accounting/settings">{() => <ProtectedRoute component={AccountingSettings} path="/accounting/settings" />}</Route>
       <Route path="/settings/shopify">{() => <ProtectedRoute component={SettingsShopify} path="/settings/shopify" />}</Route>
       <Route path="/settings/couriers">{() => <ProtectedRoute component={SettingsCouriers} path="/settings/couriers" />}</Route>
