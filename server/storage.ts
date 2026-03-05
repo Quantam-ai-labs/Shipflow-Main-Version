@@ -419,6 +419,7 @@ export class DatabaseStorage implements IStorage {
             ilike(orders.orderNumber, `%${p}%`),
             ilike(orders.customerPhone, `%${p}%`),
             ilike(orders.courierTracking, `%${p}%`),
+            ilike(orders.customerName, `%${p}%`),
           )!
         );
         conditions.push(partConds.length > 1 ? or(...partConds)! : partConds[0]);
