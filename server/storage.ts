@@ -1569,7 +1569,8 @@ export class DatabaseStorage implements IStorage {
     if (template && template.isActive && template.templateName) {
       return { templateName: template.templateName, messageBody: template.messageBody ?? null };
     }
-    return { templateName: "status_notify", messageBody: null };
+    const defaultName = workflowStatus === "NEW" ? "order_confirmation" : "order_updates";
+    return { templateName: defaultName, messageBody: null };
   }
 
   // Order Payments

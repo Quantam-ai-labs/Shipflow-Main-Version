@@ -95,6 +95,9 @@ const DEFAULT_MESSAGE_BODIES: Record<string, string> = {
 
 const DEFAULT_MESSAGE_BODY = DEFAULT_MESSAGE_BODIES.DELIVERED;
 
+const defaultTemplateName = (status: string) =>
+  status === "NEW" ? "order_confirmation" : "order_updates";
+
 const WA_PREVIEW_VALUES: Record<string, string> = {
   customer_name: "Ali",
   order_number: "132",
@@ -273,7 +276,7 @@ function EditDialog({ open, statusInfo, initial, onSave, onClose, isSaving }: Ed
                 id="dialog-template-name"
                 value={templateName}
                 onChange={e => setTemplateName(e.target.value)}
-                placeholder="status_notify"
+                placeholder={defaultTemplateName(statusInfo?.status ?? "")}
                 className="font-mono text-sm"
                 data-testid="dialog-input-template-name"
               />
@@ -361,7 +364,7 @@ function WhatsAppTemplatesCard() {
   const getEditInitial = (status: string) => {
     const t = getTemplate(status);
     return {
-      templateName: t?.templateName ?? "status_notify",
+      templateName: t?.templateName ?? defaultTemplateName(status),
       messageBody: t?.messageBody ?? DEFAULT_MESSAGE_BODIES[status] ?? "",
     };
   };
@@ -406,7 +409,7 @@ function WhatsAppTemplatesCard() {
       const existing = getTemplate(status);
       await upsertMutation.mutateAsync({
         status,
-        templateName: existing?.templateName ?? "status_notify",
+        templateName: existing?.templateName ?? defaultTemplateName(status),
         messageBody: existing?.messageBody ?? null,
         isActive,
       });

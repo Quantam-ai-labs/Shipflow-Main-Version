@@ -90,6 +90,9 @@ const DEFAULT_MESSAGE_BODIES: Record<string, string> = {
 
 const DEFAULT_MESSAGE_BODY = DEFAULT_MESSAGE_BODIES.DELIVERED;
 
+const defaultTemplateName = (status: string) =>
+  status === "NEW" ? "order_confirmation" : "order_updates";
+
 const WA_STATUSES = [
   { status: "NEW", label: "New Order", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" },
   { status: "BOOKED", label: "Booked", color: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300" },
@@ -254,7 +257,7 @@ function EditTemplateDialog({ open, onClose, statusInfo, initial, onSave, isSavi
                 data-testid="dialog-input-template-name"
                 value={templateName}
                 onChange={e => setTemplateName(e.target.value)}
-                placeholder="e.g. status_notify"
+                placeholder={defaultTemplateName(statusInfo?.status ?? "")}
               />
               <p className="text-xs text-muted-foreground">
                 Must match an approved template in your WhatsApp Business account.
@@ -354,7 +357,7 @@ function TemplatesTab() {
   const getEditInitial = (status: string) => {
     const t = getTemplate(status);
     return {
-      templateName: t?.templateName ?? "status_notify",
+      templateName: t?.templateName ?? defaultTemplateName(status),
       messageBody: t?.messageBody ?? DEFAULT_MESSAGE_BODIES[status] ?? "",
     };
   };
@@ -363,7 +366,7 @@ function TemplatesTab() {
     const t = getTemplate(status);
     saveMutation.mutate({
       status,
-      templateName: t?.templateName ?? "status_notify",
+      templateName: t?.templateName ?? defaultTemplateName(status),
       messageBody: t?.messageBody ?? null,
       isActive,
     });
@@ -413,7 +416,7 @@ function TemplatesTab() {
               {WA_STATUSES.map(({ status, label, color }) => {
                 const t = getTemplate(status);
                 const isActive = t?.isActive ?? true;
-                const templateName = t?.templateName ?? "status_notify";
+                const templateName = t?.templateName ?? defaultTemplateName(status);
                 const messageBody = t?.messageBody;
                 return (
                   <div
@@ -480,7 +483,7 @@ function TemplatesTab() {
             <AlertDialogDescription>
               This will remove the custom configuration for{" "}
               <strong>{WA_STATUSES.find(s => s.status === deleteStatus)?.label}</strong> and
-              revert to the default "status_notify" template with the default message body.
+              revert to the default template name and message body for this status.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
