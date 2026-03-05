@@ -111,7 +111,7 @@ export async function sendOrderStatusWhatsApp(params: {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
+          "Content-Type": "application/json",9
         },
         body: JSON.stringify(payload),
         signal: AbortSignal.timeout(WHATSAPP_REQUEST_TIMEOUT_MS),
