@@ -1548,7 +1548,7 @@ export class DatabaseStorage implements IStorage {
       {
         workflowStatus: "NEW",
         templateName: "order_confirmation",
-        messageBody: `Hello {customer_name},\n\nYour order #{order_number} of {item_name} has been received.\n\nThank you for shopping with lalaimports. We appreciate your trust!`,
+        messageBody: `Hello {customer_name},\n\nYour order #{order_number} of {item_name} is pending for Confirmation.\nPlease Reply with Confirm or Cancel.`,
       },
       {
         workflowStatus: "BOOKED",

@@ -87,7 +87,7 @@ const VARIABLE_CHIPS = [
 ];
 
 const DEFAULT_MESSAGE_BODIES: Record<string, string> = {
-  NEW: `Hello {customer_name},\n\nYour order of {item_name} is pending for Confirmation.\nPlease Reply with Confirm or Cancel.`,
+  NEW: `Hello {customer_name},\n\nYour order #{order_number} of {item_name} is pending for Confirmation.\nPlease Reply with Confirm or Cancel.`,
   BOOKED: `Hello {customer_name},\n\nYour order #{order_number} of {item_name} is "booked".\n\nThank you for shopping with lalaimports. We appreciate your trust!`,
   FULFILLED: `Hello {customer_name},\n\nYour order #{order_number} of {item_name} is "shipped".\n\nThank you for shopping with lalaimports. We appreciate your trust!`,
   DELIVERED: `Hello {customer_name},\n\nYour order #{order_number} of {item_name} is "delivered".\n\nThank you for shopping with lalaimports. We appreciate your trust!`,
