@@ -71,6 +71,7 @@ interface WhatsAppLog {
 const VARIABLE_CHIPS = [
   { key: "{customer_name}", label: "Customer Name" },
   { key: "{order_number}", label: "Order No." },
+  { key: "{item_name}", label: "Item Name" },
   { key: "{new_status}", label: "New Status" },
   { key: "{old_status}", label: "Old Status" },
   { key: "{city}", label: "City" },
@@ -80,8 +81,14 @@ const VARIABLE_CHIPS = [
   { key: "{tracking_number}", label: "Tracking No." },
 ];
 
-const DEFAULT_MESSAGE_BODY =
-  "Hello {customer_name}, your order #{order_number} status has been updated to {new_status}.";
+const DEFAULT_MESSAGE_BODIES: Record<string, string> = {
+  NEW: `Hello {customer_name},\n\nYour order #{order_number} of {item_name} has been received.\n\nThank you for shopping with lalaimports. We appreciate your trust!`,
+  BOOKED: `Hello {customer_name},\n\nYour order #{order_number} of {item_name} is "booked".\n\nThank you for shopping with lalaimports. We appreciate your trust!`,
+  FULFILLED: `Hello {customer_name},\n\nYour order #{order_number} of {item_name} is "shipped".\n\nThank you for shopping with lalaimports. We appreciate your trust!`,
+  DELIVERED: `Hello {customer_name},\n\nYour order #{order_number} of {item_name} is "delivered".\n\nThank you for shopping with lalaimports. We appreciate your trust!`,
+};
+
+const DEFAULT_MESSAGE_BODY = DEFAULT_MESSAGE_BODIES.DELIVERED;
 
 const WA_STATUSES = [
   { status: "NEW", label: "New Order", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" },
@@ -91,8 +98,9 @@ const WA_STATUSES = [
 ];
 
 const PREVIEW_VALUES: Record<string, string> = {
-  customer_name: "Ahmad Ali",
-  order_number: "12345",
+  customer_name: "Ali",
+  order_number: "132",
+  item_name: "MacBook Pro 2019",
   new_status: "Booked",
   old_status: "New Order",
   city: "Lahore",
@@ -102,8 +110,54 @@ const PREVIEW_VALUES: Record<string, string> = {
   tracking_number: "LP123456",
 };
 
-function previewMessage(body: string): string {
-  return body.replace(/\{(\w+)\}/g, (_, key) => PREVIEW_VALUES[key] ?? `{${key}}`);
+function previewMessage(body: string, statusLabel?: string): string {
+  return body.replace(/\{(\w+)\}/g, (_, key) => {
+    if (key === "new_status" && statusLabel) return statusLabel;
+    return PREVIEW_VALUES[key] ?? `{${key}}`;
+  });
+}
+
+function WhatsAppBubble({ message }: { message: string }) {
+  const timeStr = new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
+  return (
+    <div className="flex flex-col rounded-xl overflow-hidden border border-[#222d35] shadow-lg h-full min-h-[300px]">
+      <div className="bg-[#1F2C34] flex items-center gap-2.5 px-3 py-2.5 flex-shrink-0">
+        <div className="w-8 h-8 rounded-full bg-green-600 flex items-center justify-center text-white font-bold text-xs select-none">L</div>
+        <div>
+          <p className="text-white text-xs font-semibold leading-tight">Lalaimports</p>
+          <p className="text-[#8696A0] text-[10px]">online</p>
+        </div>
+      </div>
+      <div className="flex-1 bg-[#0B141A] px-3 py-3 flex flex-col justify-end gap-2 overflow-auto">
+        <div className="flex justify-center mb-1">
+          <span className="bg-[#1F2C34] text-[#8696A0] text-[9px] px-2 py-0.5 rounded-full">Today</span>
+        </div>
+        <div className="flex justify-end">
+          <div className="relative bg-[#005C4B] rounded-tl-xl rounded-tr-sm rounded-bl-xl rounded-br-xl px-3 py-2 max-w-[92%] shadow-md">
+            <div className="absolute top-0 -right-1.5 w-0 h-0 border-t-[8px] border-t-[#005C4B] border-r-[8px] border-r-transparent" />
+            <p className="text-white text-[11.5px] whitespace-pre-wrap leading-relaxed break-words">{message}</p>
+            <div className="flex items-center justify-end gap-1 mt-1">
+              <span className="text-[#8696A0] text-[9px]">{timeStr}</span>
+              <svg width="14" height="10" viewBox="0 0 16 11" fill="none" className="flex-shrink-0">
+                <path d="M1 5.5L4.5 9L10.5 1" stroke="#53BDEB" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M6 9L12 1" stroke="#53BDEB" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="bg-[#1F2C34] flex items-center gap-2 px-3 py-2 flex-shrink-0">
+        <div className="flex-1 bg-[#2A3942] rounded-full px-3 py-1.5">
+          <span className="text-[#8696A0] text-[10px]">Type a message</span>
+        </div>
+        <div className="w-7 h-7 rounded-full bg-[#00A884] flex items-center justify-center flex-shrink-0">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="white">
+            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 interface EditDialogProps {
@@ -136,70 +190,75 @@ function EditTemplateDialog({ open, onClose, statusInfo, initial, onSave, isSavi
     }, 0);
   };
 
+  const fallback = DEFAULT_MESSAGE_BODIES[statusInfo?.status ?? ""] ?? DEFAULT_MESSAGE_BODY;
+  const previewBody = messageBody.trim() || fallback;
+
   const handleSave = () => {
-    onSave(templateName.trim(), messageBody.trim() || DEFAULT_MESSAGE_BODY);
+    onSave(templateName.trim(), messageBody.trim() || fallback);
   };
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-xl">
+      <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle>
             {statusInfo ? `Edit WhatsApp Template — ${statusInfo.label}` : "Edit WhatsApp Template"}
           </DialogTitle>
           <DialogDescription>
-            Configure the WhatsApp Business template for this order status notification.
+            Configure the message sent when an order moves to this status. Variables are replaced with real order data when sent.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-2">
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium">Template Name</label>
-            <Input
-              data-testid="dialog-input-template-name"
-              value={templateName}
-              onChange={e => setTemplateName(e.target.value)}
-              placeholder="e.g. status_notify"
-            />
-            <p className="text-xs text-muted-foreground">
-              Must match an approved template in your WhatsApp Business account.
-            </p>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium">Message Body</label>
-            <div className="flex flex-wrap gap-1.5 p-2 bg-muted/50 rounded-md border">
-              {VARIABLE_CHIPS.map(chip => (
-                <button
-                  key={chip.key}
-                  type="button"
-                  onClick={() => insertChip(chip.key)}
-                  className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors font-mono"
-                  data-testid={`chip-${chip.key.replace(/[{}]/g, "")}`}
-                >
-                  + {chip.label}
-                </button>
-              ))}
-            </div>
-            <Textarea
-              ref={textareaRef}
-              data-testid="dialog-textarea-message-body"
-              value={messageBody}
-              onChange={e => setMessageBody(e.target.value)}
-              placeholder={DEFAULT_MESSAGE_BODY}
-              rows={4}
-              className="font-mono text-sm resize-none"
-            />
-          </div>
-
-          {messageBody && messageBody.trim().length > 0 && (
-            <div className="rounded-md bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-3">
-              <p className="text-xs font-medium text-green-700 dark:text-green-400 mb-1">Preview</p>
-              <p className="text-sm text-green-800 dark:text-green-300">
-                {previewMessage(messageBody)}
+        <div className="flex gap-5 py-2">
+          <div className="flex-1 min-w-0 space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Template Name</label>
+              <Input
+                data-testid="dialog-input-template-name"
+                value={templateName}
+                onChange={e => setTemplateName(e.target.value)}
+                placeholder="e.g. status_notify"
+              />
+              <p className="text-xs text-muted-foreground">
+                Must match an approved template in your WhatsApp Business account.
               </p>
             </div>
-          )}
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Message Body</label>
+              <div className="flex flex-wrap gap-1.5 p-2 bg-muted/50 rounded-md border">
+                <span className="text-xs text-muted-foreground self-center mr-1">Insert:</span>
+                {VARIABLE_CHIPS.map(chip => (
+                  <button
+                    key={chip.key}
+                    type="button"
+                    onClick={() => insertChip(chip.key)}
+                    className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300 border border-green-200 dark:border-green-800 hover:bg-green-200 dark:hover:bg-green-900 transition-colors font-mono"
+                    data-testid={`chip-${chip.key.replace(/[{}]/g, "")}`}
+                  >
+                    + {chip.label}
+                  </button>
+                ))}
+              </div>
+              <Textarea
+                ref={textareaRef}
+                data-testid="dialog-textarea-message-body"
+                value={messageBody}
+                onChange={e => setMessageBody(e.target.value)}
+                placeholder={fallback}
+                rows={6}
+                className="font-mono text-sm resize-y"
+              />
+              <p className="text-xs text-muted-foreground">
+                Leave blank to use the default template shown in the preview.
+              </p>
+            </div>
+          </div>
+
+          <div className="w-52 flex-shrink-0 flex flex-col gap-2">
+            <p className="text-xs font-medium text-muted-foreground">Live preview</p>
+            <WhatsAppBubble message={previewMessage(previewBody, statusInfo?.label)} />
+          </div>
         </div>
 
         <DialogFooter>
@@ -259,7 +318,7 @@ function TemplatesTab() {
     const t = getTemplate(status);
     return {
       templateName: t?.templateName ?? "status_notify",
-      messageBody: t?.messageBody ?? "",
+      messageBody: t?.messageBody ?? DEFAULT_MESSAGE_BODIES[status] ?? "",
     };
   };
 

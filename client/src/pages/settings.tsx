@@ -76,6 +76,7 @@ const WA_STATUSES = [
 const VARIABLE_CHIPS = [
   { key: "customer_name",   label: "Customer Name" },
   { key: "order_number",    label: "Order No." },
+  { key: "item_name",       label: "Item Name" },
   { key: "new_status",      label: "New Status" },
   { key: "old_status",      label: "Old Status" },
   { key: "city",            label: "City" },
@@ -85,7 +86,77 @@ const VARIABLE_CHIPS = [
   { key: "tracking_number", label: "Tracking No." },
 ];
 
-const DEFAULT_MESSAGE_BODY = "Hello {customer_name}, your order #{order_number} status has been updated to {new_status}.";
+const DEFAULT_MESSAGE_BODIES: Record<string, string> = {
+  NEW: `Hello {customer_name},\n\nYour order #{order_number} of {item_name} has been received.\n\nThank you for shopping with lalaimports. We appreciate your trust!`,
+  BOOKED: `Hello {customer_name},\n\nYour order #{order_number} of {item_name} is "booked".\n\nThank you for shopping with lalaimports. We appreciate your trust!`,
+  FULFILLED: `Hello {customer_name},\n\nYour order #{order_number} of {item_name} is "shipped".\n\nThank you for shopping with lalaimports. We appreciate your trust!`,
+  DELIVERED: `Hello {customer_name},\n\nYour order #{order_number} of {item_name} is "delivered".\n\nThank you for shopping with lalaimports. We appreciate your trust!`,
+};
+
+const DEFAULT_MESSAGE_BODY = DEFAULT_MESSAGE_BODIES.DELIVERED;
+
+const WA_PREVIEW_VALUES: Record<string, string> = {
+  customer_name: "Ali",
+  order_number: "132",
+  item_name: "MacBook Pro 2019",
+  new_status: "Delivered",
+  old_status: "Shipped",
+  city: "Lahore",
+  address: "House 12, Block B, DHA",
+  total_amount: "Rs 2,500",
+  courier_name: "Leopards",
+  tracking_number: "LP123456",
+};
+
+function buildPreview(body: string, statusLabel?: string): string {
+  return body.replace(/\{(\w+)\}/g, (_, key) => {
+    if (key === "new_status" && statusLabel) return statusLabel;
+    return WA_PREVIEW_VALUES[key] ?? `{${key}}`;
+  });
+}
+
+function WhatsAppBubble({ message }: { message: string }) {
+  const timeStr = new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
+  return (
+    <div className="flex flex-col rounded-xl overflow-hidden border border-[#222d35] shadow-lg h-full min-h-[300px]">
+      <div className="bg-[#1F2C34] flex items-center gap-2.5 px-3 py-2.5 flex-shrink-0">
+        <div className="w-8 h-8 rounded-full bg-green-600 flex items-center justify-center text-white font-bold text-xs select-none">L</div>
+        <div>
+          <p className="text-white text-xs font-semibold leading-tight">Lalaimports</p>
+          <p className="text-[#8696A0] text-[10px]">online</p>
+        </div>
+      </div>
+      <div className="flex-1 bg-[#0B141A] px-3 py-3 flex flex-col justify-end gap-2 overflow-auto">
+        <div className="flex justify-center mb-1">
+          <span className="bg-[#1F2C34] text-[#8696A0] text-[9px] px-2 py-0.5 rounded-full">Today</span>
+        </div>
+        <div className="flex justify-end">
+          <div className="relative bg-[#005C4B] rounded-tl-xl rounded-tr-sm rounded-bl-xl rounded-br-xl px-3 py-2 max-w-[92%] shadow-md">
+            <div className="absolute top-0 -right-1.5 w-0 h-0 border-t-[8px] border-t-[#005C4B] border-r-[8px] border-r-transparent" />
+            <p className="text-white text-[11.5px] whitespace-pre-wrap leading-relaxed break-words">{message}</p>
+            <div className="flex items-center justify-end gap-1 mt-1">
+              <span className="text-[#8696A0] text-[9px]">{timeStr}</span>
+              <svg width="14" height="10" viewBox="0 0 16 11" fill="none" className="flex-shrink-0">
+                <path d="M1 5.5L4.5 9L10.5 1" stroke="#53BDEB" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M6 9L12 1" stroke="#53BDEB" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="bg-[#1F2C34] flex items-center gap-2 px-3 py-2 flex-shrink-0">
+        <div className="flex-1 bg-[#2A3942] rounded-full px-3 py-1.5">
+          <span className="text-[#8696A0] text-[10px]">Type a message</span>
+        </div>
+        <div className="w-7 h-7 rounded-full bg-[#00A884] flex items-center justify-center flex-shrink-0">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="white">
+            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function VariableChip({ label, varKey, onClick }: { label: string; varKey: string; onClick: (key: string) => void }) {
   return (
@@ -133,83 +204,75 @@ function EditDialog({ open, statusInfo, initial, onSave, onClose, isSaving }: Ed
     }, 0);
   };
 
+  const fallback = DEFAULT_MESSAGE_BODIES[statusInfo?.status ?? ""] ?? DEFAULT_MESSAGE_BODY;
+
   const handleSave = () => {
-    onSave(templateName.trim(), messageBody.trim() || DEFAULT_MESSAGE_BODY);
+    onSave(templateName.trim(), messageBody.trim() || fallback);
   };
+
+  const previewBody = messageBody.trim() || fallback;
 
   return (
     <Dialog open={open} onOpenChange={open ? undefined : onClose}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <MessageCircle className="w-5 h-5 text-green-600" />
             {statusInfo ? `Edit WhatsApp Template — ${statusInfo.label}` : "Edit WhatsApp Template"}
           </DialogTitle>
           <DialogDescription>
-            Configure the WhatsApp Business template for this order status notification.
+            Configure the message sent when an order moves to this status. Variables are replaced with real order data when sent.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-2">
-          <div className="space-y-2">
-            <Label htmlFor="dialog-template-name" className="text-sm font-medium">
-              Template Name
-              <span className="ml-1 text-xs text-muted-foreground font-normal">(must match your Meta Business Manager template)</span>
-            </Label>
-            <Input
-              id="dialog-template-name"
-              value={templateName}
-              onChange={e => setTemplateName(e.target.value)}
-              placeholder="status_notify"
-              className="font-mono text-sm"
-              data-testid="dialog-input-template-name"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">Message Body</Label>
-            <div className="flex flex-wrap gap-1.5 p-2 bg-muted/50 rounded-md border">
-              <span className="text-xs text-muted-foreground self-center mr-1">Insert variable:</span>
-              {VARIABLE_CHIPS.map(chip => (
-                <VariableChip
-                  key={chip.key}
-                  label={chip.label}
-                  varKey={chip.key}
-                  onClick={insertVariable}
-                />
-              ))}
+        <div className="flex gap-5 py-2">
+          <div className="flex-1 min-w-0 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="dialog-template-name" className="text-sm font-medium">
+                Template Name
+                <span className="ml-1 text-xs text-muted-foreground font-normal">(must match your Meta template)</span>
+              </Label>
+              <Input
+                id="dialog-template-name"
+                value={templateName}
+                onChange={e => setTemplateName(e.target.value)}
+                placeholder="status_notify"
+                className="font-mono text-sm"
+                data-testid="dialog-input-template-name"
+              />
             </div>
-            <Textarea
-              ref={textareaRef}
-              value={messageBody}
-              onChange={e => setMessageBody(e.target.value)}
-              placeholder={DEFAULT_MESSAGE_BODY}
-              className="font-mono text-sm min-h-[100px] resize-y"
-              data-testid="dialog-textarea-message-body"
-            />
-            <p className="text-xs text-muted-foreground">
-              Click a chip above to insert a variable at your cursor position. Variables will be replaced with the actual order values when sent.
-            </p>
-          </div>
 
-          {messageBody && messageBody.trim().length > 0 && (
-            <div className="p-3 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-md">
-              <p className="text-xs text-muted-foreground mb-1 font-medium">Preview (example values):</p>
-              <p className="text-sm break-words">
-                {messageBody
-                  .replace(/{customer_name}/g, "Ahmad Ali")
-                  .replace(/{order_number}/g, "12345")
-                  .replace(/{new_status}/g, statusInfo?.label ?? "Shipped")
-                  .replace(/{old_status}/g, "New Order")
-                  .replace(/{city}/g, "Karachi")
-                  .replace(/{address}/g, "Block 5, Clifton")
-                  .replace(/{total_amount}/g, "Rs 2,500")
-                  .replace(/{courier_name}/g, "Leopards")
-                  .replace(/{tracking_number}/g, "LP123456")
-                }
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Message Body</Label>
+              <div className="flex flex-wrap gap-1.5 p-2 bg-muted/50 rounded-md border">
+                <span className="text-xs text-muted-foreground self-center mr-1">Insert:</span>
+                {VARIABLE_CHIPS.map(chip => (
+                  <VariableChip
+                    key={chip.key}
+                    label={chip.label}
+                    varKey={chip.key}
+                    onClick={insertVariable}
+                  />
+                ))}
+              </div>
+              <Textarea
+                ref={textareaRef}
+                value={messageBody}
+                onChange={e => setMessageBody(e.target.value)}
+                placeholder={fallback}
+                className="font-mono text-sm min-h-[140px] resize-y"
+                data-testid="dialog-textarea-message-body"
+              />
+              <p className="text-xs text-muted-foreground">
+                Click a variable to insert it at your cursor. Leave blank to use the default template.
               </p>
             </div>
-          )}
+          </div>
+
+          <div className="w-52 flex-shrink-0 flex flex-col gap-2">
+            <p className="text-xs font-medium text-muted-foreground">Live preview</p>
+            <WhatsAppBubble message={buildPreview(previewBody, statusInfo?.label)} />
+          </div>
         </div>
 
         <DialogFooter>
@@ -262,7 +325,7 @@ function WhatsAppTemplatesCard() {
     const t = getTemplate(status);
     return {
       templateName: t?.templateName ?? "status_notify",
-      messageBody: t?.messageBody ?? "",
+      messageBody: t?.messageBody ?? DEFAULT_MESSAGE_BODIES[status] ?? "",
     };
   };
 

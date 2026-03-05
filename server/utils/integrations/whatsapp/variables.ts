@@ -20,6 +20,7 @@ export function getStatusLabel(status: string): string {
 export const WA_VARIABLE_CHIPS = [
   { key: "{customer_name}", label: "Customer Name" },
   { key: "{order_number}", label: "Order No." },
+  { key: "{item_name}", label: "Item Name" },
   { key: "{new_status}", label: "New Status" },
   { key: "{old_status}", label: "Old Status" },
   { key: "{city}", label: "City" },
@@ -29,15 +30,28 @@ export const WA_VARIABLE_CHIPS = [
   { key: "{tracking_number}", label: "Tracking No." },
 ] as const;
 
+export const DEFAULT_MESSAGE_BODIES: Record<string, string> = {
+  NEW: `Hello {customer_name},\n\nYour order #{order_number} of {item_name} has been received.\n\nThank you for shopping with lalaimports. We appreciate your trust!`,
+  BOOKED: `Hello {customer_name},\n\nYour order #{order_number} of {item_name} is "booked".\n\nThank you for shopping with lalaimports. We appreciate your trust!`,
+  FULFILLED: `Hello {customer_name},\n\nYour order #{order_number} of {item_name} is "shipped".\n\nThank you for shopping with lalaimports. We appreciate your trust!`,
+  DELIVERED: `Hello {customer_name},\n\nYour order #{order_number} of {item_name} is "delivered".\n\nThank you for shopping with lalaimports. We appreciate your trust!`,
+};
+
 export const DEFAULT_MESSAGE_BODY =
-  "Hello {customer_name}, your order #{order_number} status has been updated to {new_status}.";
+  DEFAULT_MESSAGE_BODIES.DELIVERED;
+
+export function getDefaultMessageBody(status?: string): string {
+  if (status && DEFAULT_MESSAGE_BODIES[status]) return DEFAULT_MESSAGE_BODIES[status];
+  return DEFAULT_MESSAGE_BODY;
+}
 
 export function interpolateMessageBody(
   body: string | null | undefined,
-  vars: Record<string, string>
+  vars: Record<string, string>,
+  status?: string
 ): string {
   const template =
-    body && body.trim().length > 0 ? body : DEFAULT_MESSAGE_BODY;
+    body && body.trim().length > 0 ? body : getDefaultMessageBody(status);
   return template.replace(/\{(\w+)\}/g, (_, key) => vars[key] ?? `{${key}}`);
 }
 
@@ -51,10 +65,12 @@ export function buildVarsFromParams(params: {
   totalAmount?: string | null;
   courierName?: string | null;
   courierTracking?: string | null;
+  itemSummary?: string | null;
 }): Record<string, string> {
   return {
     customer_name: params.customerName || "Customer",
     order_number: params.orderNumber || "N/A",
+    item_name: params.itemSummary || "your order",
     new_status: getStatusLabel(params.toStatus),
     old_status: getStatusLabel(params.fromStatus),
     city: params.city || "",

@@ -18,4 +18,5 @@ export interface OrderNotificationParams {
   totalAmount?: string | null;
   courierName?: string | null;
   courierTracking?: string | null;
+  itemSummary?: string | null;
 }

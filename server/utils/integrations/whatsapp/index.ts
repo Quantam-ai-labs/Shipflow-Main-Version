@@ -10,7 +10,7 @@ import {
 import { formatPhoneForWhatsApp, sendWhatsAppApiRequest } from "./sender";
 import type { OrderNotificationParams } from "./types";
 
-export { WA_VARIABLE_CHIPS, DEFAULT_MESSAGE_BODY, interpolateMessageBody, STATUS_LABELS, getStatusLabel, WA_NOTIFY_STATUSES } from "./variables";
+export { WA_VARIABLE_CHIPS, DEFAULT_MESSAGE_BODY, DEFAULT_MESSAGE_BODIES, getDefaultMessageBody, interpolateMessageBody, STATUS_LABELS, getStatusLabel, WA_NOTIFY_STATUSES } from "./variables";
 export type { WaNotifyStatus } from "./variables";
 export { formatPhoneForWhatsApp } from "./sender";
 export type { SendResult, OrderNotificationParams } from "./types";
@@ -53,7 +53,7 @@ export async function sendOrderStatusWhatsApp(
     }
 
     const vars = buildVarsFromParams(params);
-    const messageText = interpolateMessageBody(messageBody, vars);
+    const messageText = interpolateMessageBody(messageBody, vars, params.toStatus);
 
     const fromLabel = getStatusLabel(params.fromStatus);
     const toLabel = getStatusLabel(params.toStatus);
