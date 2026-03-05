@@ -413,10 +413,15 @@ export class DatabaseStorage implements IStorage {
 
     if (options?.searchOrderNumber) {
       const parts = options.searchOrderNumber.split(",").map(s => s.trim()).filter(Boolean);
-      if (parts.length > 1) {
-        conditions.push(or(...parts.map(p => ilike(orders.orderNumber, `%${p}%`)))!);
-      } else if (parts.length === 1) {
-        conditions.push(ilike(orders.orderNumber, `%${parts[0]}%`));
+      if (parts.length > 0) {
+        const partConds = parts.map(p =>
+          or(
+            ilike(orders.orderNumber, `%${p}%`),
+            ilike(orders.customerPhone, `%${p}%`),
+            ilike(orders.courierTracking, `%${p}%`),
+          )!
+        );
+        conditions.push(partConds.length > 1 ? or(...partConds)! : partConds[0]);
       }
     }
     if (options?.searchTracking) {

@@ -1063,7 +1063,7 @@ export default function Pipeline() {
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Order IDs, comma-separated..."
+                placeholder="Order #, phone, or tracking..."
                 value={allOrderIds}
                 onChange={e => { setAllOrderIds(e.target.value); setPage(1); }}
                 className="pl-8 w-[250px] h-9"
