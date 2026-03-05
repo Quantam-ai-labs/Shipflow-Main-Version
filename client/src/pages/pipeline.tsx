@@ -1865,7 +1865,6 @@ export default function Pipeline() {
                           </th>
                           <th className="px-2 py-2 text-left font-semibold w-8 border border-emerald-600 dark:border-emerald-700 text-white text-xs">#</th>
                           <th className="px-2 py-2 text-left font-semibold w-24 border border-emerald-600 dark:border-emerald-700 text-white text-xs">Order</th>
-                          <th className="px-2 py-2 text-left font-semibold w-[80px] border border-emerald-600 dark:border-emerald-700 text-white text-xs">Products</th>
                           <th className="px-2 py-2 text-left font-semibold min-w-[140px] border border-emerald-600 dark:border-emerald-700 text-white text-xs">Name</th>
                           <th className="px-2 py-2 text-left font-semibold min-w-[100px] border border-emerald-600 dark:border-emerald-700 text-white text-xs">Phone</th>
                           <th className="px-2 py-2 text-left font-semibold min-w-[350px] border border-emerald-600 dark:border-emerald-700 text-white text-xs">Address</th>
@@ -1934,31 +1933,6 @@ export default function Pipeline() {
                                     {order.missingFields.join(", ")}
                                   </span>
                                 )}
-                              </td>
-                              <td className="px-1 py-0.5 border border-border">
-                                {(() => {
-                                  const items = Array.isArray(order.lineItems) ? order.lineItems : [];
-                                  if (items.length === 0) return <span className="text-muted-foreground text-[10px]">—</span>;
-                                  return (
-                                    <div className="flex items-center gap-0.5 flex-wrap" data-testid={`products-preview-${order.orderId}`}>
-                                      {items.slice(0, 3).map((item: any, i: number) => (
-                                        <div key={i} className="flex items-center gap-0.5" title={`${item.name || item.title || ""}${item.variantTitle ? ` - ${item.variantTitle}` : ""} x${item.quantity || 1}`}>
-                                          {(item.image || item.imageUrl) ? (
-                                            <img src={item.image || item.imageUrl} alt="" className="w-6 h-6 rounded object-cover border" />
-                                          ) : (
-                                            <div className="w-6 h-6 rounded border bg-muted flex items-center justify-center">
-                                              <Package className="w-3 h-3 text-muted-foreground" />
-                                            </div>
-                                          )}
-                                          {(item.quantity || 1) > 1 && (
-                                            <span className="text-[9px] text-muted-foreground">x{item.quantity}</span>
-                                          )}
-                                        </div>
-                                      ))}
-                                      {items.length > 3 && <span className="text-[9px] text-muted-foreground">+{items.length - 3}</span>}
-                                    </div>
-                                  );
-                                })()}
                               </td>
                               <td className="px-1 py-0.5 border border-border">
                                 <Input
