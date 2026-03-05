@@ -250,7 +250,7 @@ function EditDialog({ open, statusInfo, initial, onSave, onClose, isSaving }: Ed
   const previewBody = messageBody.trim() || fallback;
 
   return (
-    <Dialog open={open} onOpenChange={open ? undefined : onClose}>
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
       <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
