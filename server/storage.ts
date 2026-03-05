@@ -38,7 +38,7 @@ import {
   type PlatformSettings,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, or, ilike, sql, count, inArray, isNull, isNotNull, gte } from "drizzle-orm";
+import { eq, desc, asc, and, or, ilike, sql, count, inArray, isNull, isNotNull, gte, lte } from "drizzle-orm";
 import { normalizePakistaniPhone } from "./utils/phone";
 
 export interface IStorage {
@@ -68,7 +68,7 @@ export interface IStorage {
   updateCourierAccount(id: string, data: Partial<InsertCourierAccount>): Promise<CourierAccount | undefined>;
 
   // Orders - All scoped by merchantId
-  getOrders(merchantId: string, options?: { search?: string; searchOrderNumber?: string; searchTracking?: string; searchName?: string; searchPhone?: string; status?: string; courier?: string; city?: string; month?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number; workflowStatus?: string; pendingReasonType?: string; shipmentStatus?: string; excludeHeavyFields?: boolean; timezone?: string }): Promise<{ orders: Order[]; total: number }>;
+  getOrders(merchantId: string, options?: { search?: string; searchOrderNumber?: string; searchTracking?: string; searchName?: string; searchPhone?: string; status?: string; courier?: string; city?: string; month?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number; workflowStatus?: string; pendingReasonType?: string; shipmentStatus?: string; excludeHeavyFields?: boolean; timezone?: string; filterTag?: string; filterStatuses?: string; minItems?: number; maxItems?: number; sortBy?: string; sortDir?: string }): Promise<{ orders: Order[]; total: number }>;
   getUniqueCities(merchantId: string): Promise<string[]>;
   getUniqueStatuses(merchantId: string): Promise<string[]>;
   getOrderById(merchantId: string, id: string): Promise<Order | undefined>;
@@ -312,7 +312,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Orders - All scoped by merchantId
-  async getOrders(merchantId: string, options?: { search?: string; searchOrderNumber?: string; searchTracking?: string; searchName?: string; searchPhone?: string; status?: string; courier?: string; city?: string; month?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number; workflowStatus?: string; pendingReasonType?: string; shipmentStatus?: string; excludeHeavyFields?: boolean; timezone?: string }): Promise<{ orders: Order[]; total: number }> {
+  async getOrders(merchantId: string, options?: { search?: string; searchOrderNumber?: string; searchTracking?: string; searchName?: string; searchPhone?: string; status?: string; courier?: string; city?: string; month?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number; workflowStatus?: string; pendingReasonType?: string; shipmentStatus?: string; excludeHeavyFields?: boolean; timezone?: string; filterTag?: string; filterStatuses?: string; minItems?: number; maxItems?: number; sortBy?: string; sortDir?: string }): Promise<{ orders: Order[]; total: number }> {
     const page = options?.page || 1;
     const pageSize = options?.pageSize || 20;
     const offset = (page - 1) * pageSize;
@@ -434,6 +434,26 @@ export class DatabaseStorage implements IStorage {
       conditions.push(ilike(orders.customerPhone, `%${options.searchPhone}%`));
     }
 
+    if (options?.filterTag && options.filterTag.trim()) {
+      const tagVal = options.filterTag.trim();
+      conditions.push(sql`${orders.tags} @> ${JSON.stringify([tagVal])}::jsonb`);
+    }
+
+    if (options?.filterStatuses && options.filterStatuses.trim()) {
+      const statuses = options.filterStatuses.split(",").map(s => s.trim()).filter(Boolean);
+      if (statuses.length > 0) {
+        conditions.push(inArray(orders.workflowStatus, statuses));
+      }
+    }
+
+    if (options?.minItems !== undefined && options.minItems > 0) {
+      conditions.push(gte(orders.totalQuantity, options.minItems));
+    }
+
+    if (options?.maxItems !== undefined && options.maxItems > 0) {
+      conditions.push(lte(orders.totalQuantity, options.maxItems));
+    }
+
     const whereClause = and(...conditions);
 
     const lightColumns = {
@@ -504,8 +524,18 @@ export class DatabaseStorage implements IStorage {
       ? db.select(lightColumns).from(orders)
       : db.select().from(orders);
 
+    const sortColumnMap: Record<string, any> = {
+      orderDate: orders.orderDate,
+      totalAmount: orders.totalAmount,
+      totalQuantity: orders.totalQuantity,
+      workflowStatus: orders.workflowStatus,
+      courierName: orders.courierName,
+    };
+    const sortCol = (options?.sortBy && sortColumnMap[options.sortBy]) ? sortColumnMap[options.sortBy] : orders.orderDate;
+    const sortFn = options?.sortDir === "asc" ? asc : desc;
+
     const [result, totalResult] = await Promise.all([
-      selectQuery.where(whereClause).orderBy(desc(orders.orderDate)).limit(pageSize).offset(offset),
+      selectQuery.where(whereClause).orderBy(sortFn(sortCol)).limit(pageSize).offset(offset),
       db.select({ count: count() }).from(orders).where(whereClause)
     ]);
 

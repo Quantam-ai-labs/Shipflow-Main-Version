@@ -664,6 +664,12 @@ export async function registerRoutes(
         pendingReasonType,
         shipmentStatus,
         light,
+        filterTag,
+        filterStatuses,
+        minItems,
+        maxItems,
+        sortBy,
+        sortDir,
       } = req.query;
 
       const timezone = await getMerchantTimezone(merchantId);
@@ -688,6 +694,12 @@ export async function registerRoutes(
         shipmentStatus: shipmentStatus as string,
         excludeHeavyFields: isLight && !isCancelledQuery,
         timezone,
+        filterTag: filterTag as string,
+        filterStatuses: filterStatuses as string,
+        minItems: minItems ? parseInt(minItems as string) : undefined,
+        maxItems: maxItems ? parseInt(maxItems as string) : undefined,
+        sortBy: sortBy as string,
+        sortDir: sortDir as string,
       });
 
       if (isCancelledQuery && isLight) {

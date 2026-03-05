@@ -52,8 +52,11 @@ import {
   Loader2,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
   ChevronsLeft,
   ChevronsRight,
+  ChevronsUpDown,
   Edit3,
   Undo2,
   Send,
@@ -75,6 +78,8 @@ import {
   Mail,
   StickyNote,
   MoreHorizontal,
+  SlidersHorizontal,
+  Tag,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -404,6 +409,19 @@ export default function Pipeline() {
   const [selectedRemarkOrder, setSelectedRemarkOrder] = useState<Order | null>(null);
   const [remarkValue, setRemarkValue] = useState("");
 
+  const [allOrderIds, setAllOrderIds] = useState("");
+  const debouncedAllOrderIds = useDebounce(allOrderIds, 400);
+  const [allFilterTag, setAllFilterTag] = useState("");
+  const debouncedAllFilterTag = useDebounce(allFilterTag, 400);
+  const [allFilterStatuses, setAllFilterStatuses] = useState<string[]>([]);
+  const [allFilterCourier, setAllFilterCourier] = useState("all");
+  const [allFilterCourierStatus, setAllFilterCourierStatus] = useState("all");
+  const [allMinItems, setAllMinItems] = useState("");
+  const [allMaxItems, setAllMaxItems] = useState("");
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [allSortBy, setAllSortBy] = useState("orderDate");
+  const [allSortDir, setAllSortDir] = useState<"asc" | "desc">("desc");
+
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -417,10 +435,20 @@ export default function Pipeline() {
     setSearch("");
     setPendingReasonFilter("all");
     setShipmentSubFilter("all");
+    setAllOrderIds("");
+    setAllFilterTag("");
+    setAllFilterStatuses([]);
+    setAllFilterCourier("all");
+    setAllFilterCourierStatus("all");
+    setAllMinItems("");
+    setAllMaxItems("");
+    setShowAdvancedFilters(false);
+    setAllSortBy("orderDate");
+    setAllSortDir("desc");
   }, [activeTab]);
 
   const { data, isLoading, isFetching } = useQuery<{ orders: Order[]; total: number }>({
-    queryKey: ["/api/orders", { workflowStatus: activeTab, search: debouncedSearch, page, pageSize, pendingReasonType: activeTab === "PENDING" ? pendingReasonFilter : undefined, shipmentStatus: shipmentSubFilter !== "all" ? shipmentSubFilter : undefined, dateFrom: debouncedSearch ? undefined : dateParams.dateFrom, dateTo: debouncedSearch ? undefined : dateParams.dateTo }],
+    queryKey: ["/api/orders", { workflowStatus: activeTab, search: debouncedSearch, page, pageSize, pendingReasonType: activeTab === "PENDING" ? pendingReasonFilter : undefined, shipmentStatus: shipmentSubFilter !== "all" ? shipmentSubFilter : undefined, dateFrom: debouncedSearch ? undefined : dateParams.dateFrom, dateTo: debouncedSearch ? undefined : dateParams.dateTo, ...(activeTab === "ALL" ? { allOrderIds: debouncedAllOrderIds, allFilterTag: debouncedAllFilterTag, allFilterStatuses: allFilterStatuses.join(","), allFilterCourier, allFilterCourierStatus, allMinItems, allMaxItems, allSortBy, allSortDir } : {}) }],
     queryFn: async () => {
       const params = new URLSearchParams();
       params.set("workflowStatus", activeTab);
@@ -432,6 +460,19 @@ export default function Pipeline() {
       if (shipmentSubFilter !== "all") params.set("shipmentStatus", shipmentSubFilter);
       if (!debouncedSearch && dateParams.dateFrom) params.set("dateFrom", dateParams.dateFrom);
       if (!debouncedSearch && dateParams.dateTo) params.set("dateTo", dateParams.dateTo);
+      if (activeTab === "ALL") {
+        if (debouncedAllOrderIds.trim()) params.set("searchOrderNumber", debouncedAllOrderIds);
+        if (debouncedAllFilterTag.trim()) params.set("filterTag", debouncedAllFilterTag.trim());
+        if (allFilterStatuses.length > 0) params.set("filterStatuses", allFilterStatuses.join(","));
+        if (allFilterCourier !== "all") params.set("courier", allFilterCourier);
+        if (allFilterCourierStatus !== "all") params.set("shipmentStatus", allFilterCourierStatus);
+        if (allMinItems) params.set("minItems", allMinItems);
+        if (allMaxItems) params.set("maxItems", allMaxItems);
+        if (allSortBy !== "orderDate" || allSortDir !== "desc") {
+          params.set("sortBy", allSortBy);
+          params.set("sortDir", allSortDir);
+        }
+      }
       const res = await fetch(`/api/orders?${params.toString()}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
@@ -1018,16 +1059,57 @@ export default function Pipeline() {
       <div className="flex items-center justify-between gap-3 px-4 py-3 border-b flex-wrap">
         <div className="flex items-center gap-3 flex-wrap">
           <h1 className="text-lg font-semibold mr-2" data-testid="text-page-title">{STAGE_TITLES[activeTab] || "Orders"}</h1>
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search orders..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="pl-8 w-[200px] h-9"
-              data-testid="input-search-pipeline"
-            />
-          </div>
+          {activeTab === "ALL" ? (
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Order IDs, comma-separated..."
+                value={allOrderIds}
+                onChange={e => { setAllOrderIds(e.target.value); setPage(1); }}
+                className="pl-8 w-[250px] h-9"
+                data-testid="input-all-order-ids"
+              />
+            </div>
+          ) : (
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search orders..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="pl-8 w-[200px] h-9"
+                data-testid="input-search-pipeline"
+              />
+            </div>
+          )}
+
+          {activeTab === "ALL" && (() => {
+            const filterCount = [
+              allFilterTag.trim(),
+              allFilterStatuses.length > 0 ? "x" : "",
+              allFilterCourier !== "all" ? "x" : "",
+              allFilterCourierStatus !== "all" ? "x" : "",
+              allMinItems,
+              allMaxItems,
+            ].filter(Boolean).length;
+            return (
+              <Button
+                variant={showAdvancedFilters ? "default" : "outline"}
+                size="sm"
+                className="h-9 gap-1.5"
+                onClick={() => setShowAdvancedFilters(v => !v)}
+                data-testid="button-advanced-filters"
+              >
+                <SlidersHorizontal className="w-4 h-4" />
+                Filters
+                {filterCount > 0 && (
+                  <span className="ml-0.5 bg-primary-foreground text-primary rounded-full text-[10px] font-bold w-4 h-4 flex items-center justify-center">
+                    {filterCount}
+                  </span>
+                )}
+              </Button>
+            );
+          })()}
 
           {activeTab === "PENDING" && (
             <Select value={pendingReasonFilter} onValueChange={v => { setPendingReasonFilter(v); setPage(1); }}>
@@ -1072,6 +1154,145 @@ export default function Pipeline() {
           </Button>
         </div>
       </div>
+
+      {/* Advanced Filter Panel — All Orders only */}
+      {activeTab === "ALL" && showAdvancedFilters && (
+        <div className="px-4 py-3 border-b bg-muted/30 space-y-3" data-testid="advanced-filter-panel">
+          <div className="flex flex-wrap gap-3 items-end">
+            {/* Tag filter */}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-muted-foreground flex items-center gap-1"><Tag className="w-3 h-3" />Tag</label>
+              <Input
+                placeholder="e.g. leopards"
+                value={allFilterTag}
+                onChange={e => { setAllFilterTag(e.target.value); setPage(1); }}
+                className="h-8 w-[140px] text-sm"
+                data-testid="filter-tag-input"
+              />
+            </div>
+
+            {/* Courier filter */}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-muted-foreground">Courier</label>
+              <Select value={allFilterCourier} onValueChange={v => { setAllFilterCourier(v); setPage(1); }}>
+                <SelectTrigger className="h-8 w-[130px] text-sm" data-testid="filter-courier-select">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Couriers</SelectItem>
+                  <SelectItem value="leopards">Leopards</SelectItem>
+                  <SelectItem value="postex">PostEx</SelectItem>
+                  <SelectItem value="tcs">TCS</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Courier status filter */}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-muted-foreground">Courier Status</label>
+              <Select value={allFilterCourierStatus} onValueChange={v => { setAllFilterCourierStatus(v); setPage(1); }}>
+                <SelectTrigger className="h-8 w-[160px] text-sm" data-testid="filter-courier-status-select">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  {Object.entries(UNIVERSAL_STATUS_LABELS).map(([k, v]) => (
+                    <SelectItem key={k} value={k}>{v}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Items range */}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-muted-foreground">Items</label>
+              <div className="flex items-center gap-1.5">
+                <Input
+                  type="number"
+                  min="1"
+                  placeholder="Min"
+                  value={allMinItems}
+                  onChange={e => { setAllMinItems(e.target.value); setPage(1); }}
+                  className="h-8 w-[70px] text-sm"
+                  data-testid="filter-min-items"
+                />
+                <span className="text-xs text-muted-foreground">–</span>
+                <Input
+                  type="number"
+                  min="1"
+                  placeholder="Max"
+                  value={allMaxItems}
+                  onChange={e => { setAllMaxItems(e.target.value); setPage(1); }}
+                  className="h-8 w-[70px] text-sm"
+                  data-testid="filter-max-items"
+                />
+              </div>
+            </div>
+
+            {/* Clear button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 text-xs text-muted-foreground"
+              onClick={() => {
+                setAllFilterTag(""); setAllFilterStatuses([]); setAllFilterCourier("all");
+                setAllFilterCourierStatus("all"); setAllMinItems(""); setAllMaxItems(""); setPage(1);
+              }}
+              data-testid="button-clear-all-filters"
+            >
+              Clear All
+            </Button>
+          </div>
+
+          {/* Status multi-toggle */}
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-muted-foreground">Workflow Status</label>
+            <div className="flex flex-wrap gap-1.5" data-testid="filter-status-toggles">
+              {Object.entries(WORKFLOW_STATUS_LABELS).map(([key, label]) => {
+                const isActive = allFilterStatuses.includes(key);
+                return (
+                  <button
+                    key={key}
+                    onClick={() => {
+                      setAllFilterStatuses(prev => isActive ? prev.filter(s => s !== key) : [...prev, key]);
+                      setPage(1);
+                    }}
+                    className={`px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors ${isActive ? WORKFLOW_STATUS_COLORS[key] + " border-transparent" : "bg-background border-border text-muted-foreground hover:border-primary/50"}`}
+                    data-testid={`filter-status-toggle-${key}`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Active filter chips — All Orders only */}
+      {activeTab === "ALL" && (() => {
+        const chips: Array<{ label: string; clear: () => void }> = [];
+        if (allFilterTag.trim()) chips.push({ label: `Tag: ${allFilterTag}`, clear: () => setAllFilterTag("") });
+        if (allFilterStatuses.length > 0) chips.push({ label: `Status: ${allFilterStatuses.map(s => WORKFLOW_STATUS_LABELS[s] || s).join(", ")}`, clear: () => setAllFilterStatuses([]) });
+        if (allFilterCourier !== "all") chips.push({ label: `Courier: ${allFilterCourier}`, clear: () => setAllFilterCourier("all") });
+        if (allFilterCourierStatus !== "all") chips.push({ label: `Courier Status: ${UNIVERSAL_STATUS_LABELS[allFilterCourierStatus] || allFilterCourierStatus}`, clear: () => setAllFilterCourierStatus("all") });
+        if (allMinItems) chips.push({ label: `Min Items: ${allMinItems}`, clear: () => setAllMinItems("") });
+        if (allMaxItems) chips.push({ label: `Max Items: ${allMaxItems}`, clear: () => setAllMaxItems("") });
+        if (chips.length === 0) return null;
+        return (
+          <div className="flex flex-wrap gap-1.5 px-4 py-2 border-b bg-background" data-testid="active-filter-chips">
+            {chips.map((chip, i) => (
+              <span key={i} className="inline-flex items-center gap-1 bg-primary/10 text-primary text-xs px-2 py-0.5 rounded-full font-medium">
+                {chip.label}
+                <button onClick={chip.clear} className="hover:text-primary/70 ml-0.5" data-testid={`chip-clear-${i}`}>
+                  <XCircle className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        );
+      })()}
+
       {/* Selection Indicator */}
       {selectedIds.size > 0 && (
         <div className="flex items-center gap-3 px-4 py-2 bg-blue-50 dark:bg-blue-950 border-b border-blue-200 dark:border-blue-800" data-testid="selection-indicator-bar">
@@ -1359,13 +1580,36 @@ export default function Pipeline() {
                   <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Address</th>
                 )}
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Products</th>
-                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Amount (PKR)</th>
-                <th className="px-3 py-2.5 text-center font-medium text-muted-foreground hidden lg:table-cell w-[40px]">Items</th>
+                {activeTab === "ALL" ? (
+                  <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">
+                    <button className="flex items-center gap-1 hover:text-foreground transition-colors" onClick={() => { if (allSortBy === "totalAmount") setAllSortDir(d => d === "asc" ? "desc" : "asc"); else { setAllSortBy("totalAmount"); setAllSortDir("desc"); } setPage(1); }} data-testid="sort-amount">
+                      Amount (PKR)
+                      {allSortBy === "totalAmount" ? (allSortDir === "asc" ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />) : <ChevronsUpDown className="w-3.5 h-3.5 opacity-40" />}
+                    </button>
+                  </th>
+                ) : (
+                  <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Amount (PKR)</th>
+                )}
+                {activeTab === "ALL" ? (
+                  <th className="px-3 py-2.5 text-center font-medium text-muted-foreground hidden lg:table-cell w-[40px]">
+                    <button className="flex items-center gap-1 hover:text-foreground transition-colors" onClick={() => { if (allSortBy === "totalQuantity") setAllSortDir(d => d === "asc" ? "desc" : "asc"); else { setAllSortBy("totalQuantity"); setAllSortDir("desc"); } setPage(1); }} data-testid="sort-items">
+                      Items
+                      {allSortBy === "totalQuantity" ? (allSortDir === "asc" ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />) : <ChevronsUpDown className="w-3.5 h-3.5 opacity-40" />}
+                    </button>
+                  </th>
+                ) : (
+                  <th className="px-3 py-2.5 text-center font-medium text-muted-foreground hidden lg:table-cell w-[40px]">Items</th>
+                )}
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground hidden md:table-cell max-w-[100px]" data-testid="header-tags">Tags</th>
                 {activeTab === "ALL" && (
-                  <th className="px-3 py-2.5 text-left font-medium text-muted-foreground" data-testid="header-workflow-status">Status</th>
+                  <th className="px-3 py-2.5 text-left font-medium text-muted-foreground" data-testid="header-workflow-status">
+                    <button className="flex items-center gap-1 hover:text-foreground transition-colors" onClick={() => { if (allSortBy === "workflowStatus") setAllSortDir(d => d === "asc" ? "desc" : "asc"); else { setAllSortBy("workflowStatus"); setAllSortDir("desc"); } setPage(1); }} data-testid="sort-status">
+                      Status
+                      {allSortBy === "workflowStatus" ? (allSortDir === "asc" ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />) : <ChevronsUpDown className="w-3.5 h-3.5 opacity-40" />}
+                    </button>
+                  </th>
                 )}
-                {(activeTab === "PENDING" || activeTab === "ALL") && (
+                {activeTab === "PENDING" && (
                   <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Reason</th>
                 )}
                 {activeTab === "HOLD" && (
@@ -1373,7 +1617,16 @@ export default function Pipeline() {
                 )}
                 {(activeTab === "BOOKED" || activeTab === "FULFILLED" || activeTab === "DELIVERED" || activeTab === "RETURN" || activeTab === "ALL") && (
                   <>
-                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Courier</th>
+                    {activeTab === "ALL" ? (
+                      <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">
+                        <button className="flex items-center gap-1 hover:text-foreground transition-colors" onClick={() => { if (allSortBy === "courierName") setAllSortDir(d => d === "asc" ? "desc" : "asc"); else { setAllSortBy("courierName"); setAllSortDir("desc"); } setPage(1); }} data-testid="sort-courier">
+                          Courier
+                          {allSortBy === "courierName" ? (allSortDir === "asc" ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />) : <ChevronsUpDown className="w-3.5 h-3.5 opacity-40" />}
+                        </button>
+                      </th>
+                    ) : (
+                      <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Courier</th>
+                    )}
                     <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Courier Status</th>
                   </>
                 )}
@@ -1567,17 +1820,11 @@ export default function Pipeline() {
                   )}
 
                   {/* Pending-specific columns */}
-                  {(activeTab === "PENDING" || activeTab === "ALL") && (
+                  {activeTab === "PENDING" && (
                     <td className="px-3 py-1.5">
-                      {(order.workflowStatus === "PENDING" || activeTab === "PENDING") ? (
-                        <Badge variant="secondary" className="text-xs" data-testid={`badge-pending-reason-${order.id}`}>
-                          {PENDING_REASON_TYPES.find(r => r.value === order.pendingReasonType)?.label || order.pendingReasonType || "Unknown"}
-                        </Badge>
-                      ) : activeTab === "ALL" && order.workflowStatus === "CANCELLED" ? (
-                        <span className="text-xs text-muted-foreground">{order.cancelReason || "-"}</span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">-</span>
-                      )}
+                      <Badge variant="secondary" className="text-xs" data-testid={`badge-pending-reason-${order.id}`}>
+                        {PENDING_REASON_TYPES.find(r => r.value === order.pendingReasonType)?.label || order.pendingReasonType || "Unknown"}
+                      </Badge>
                     </td>
                   )}
 
