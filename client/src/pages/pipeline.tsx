@@ -2101,7 +2101,7 @@ export default function Pipeline() {
         </DialogContent>
       </Dialog>
       <Dialog open={orderDetailPopup.open} onOpenChange={open => { if (!open) setOrderDetailPopup({ open: false, order: null }); }}>
-        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Order Details — #{orderDetailPopup.order?.orderNumber || ""}</DialogTitle>
             <DialogDescription>Complete order information</DialogDescription>
@@ -2109,6 +2109,7 @@ export default function Pipeline() {
           {orderDetailPopup.order && (() => {
             const o = orderDetailPopup.order;
             const items = Array.isArray(o.lineItems) ? o.lineItems : [];
+            const tags = Array.isArray(o.tags) ? o.tags : [];
             return (
               <div className="space-y-4" data-testid="order-detail-popup">
                 <div className="grid grid-cols-2 gap-3">
@@ -2153,23 +2154,33 @@ export default function Pipeline() {
                     <p className="text-sm"><Badge variant="outline">{o.workflowStatus || "—"}</Badge></p>
                   </div>
                 </div>
+                {tags.length > 0 && (
+                  <div className="space-y-2" data-testid="detail-tags">
+                    <span className="text-xs text-muted-foreground font-medium">Tags</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {tags.map((tag: string, i: number) => (
+                        <Badge key={i} variant="secondary" className="text-xs" data-testid={`detail-tag-${i}`}>{tag}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {items.length > 0 && (
                   <div className="space-y-2">
                     <span className="text-xs text-muted-foreground font-medium">Products ({items.length})</span>
                     <div className="space-y-2">
                       {items.map((item: any, i: number) => (
-                        <div key={i} className="flex items-center gap-3 p-2 rounded border" data-testid={`detail-product-${i}`}>
+                        <div key={i} className="flex items-start gap-3 p-2.5 rounded border" data-testid={`detail-product-${i}`}>
                           {(item.image || item.imageUrl) ? (
-                            <img src={item.image || item.imageUrl} alt="" className="w-10 h-10 rounded object-cover border shrink-0" />
+                            <img src={item.image || item.imageUrl} alt="" className="w-14 h-14 rounded object-cover border shrink-0" />
                           ) : (
-                            <div className="w-10 h-10 rounded border bg-muted flex items-center justify-center shrink-0">
-                              <Package className="w-5 h-5 text-muted-foreground" />
+                            <div className="w-14 h-14 rounded border bg-muted flex items-center justify-center shrink-0">
+                              <Package className="w-6 h-6 text-muted-foreground" />
                             </div>
                           )}
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{item.name || item.title || "Item"}</p>
-                            {item.variantTitle && <p className="text-xs text-muted-foreground">{item.variantTitle}</p>}
-                            <p className="text-xs text-muted-foreground">Qty: {item.quantity || 1} {item.price ? `• Rs. ${item.price}` : ""}</p>
+                            <p className="text-sm font-medium break-words">{item.name || item.title || "Item"}</p>
+                            {item.variantTitle && <p className="text-xs text-muted-foreground mt-0.5">{item.variantTitle}</p>}
+                            <p className="text-xs text-muted-foreground mt-0.5">Qty: {item.quantity || 1} {item.price ? `• Rs. ${item.price}` : ""}</p>
                           </div>
                         </div>
                       ))}

@@ -6432,6 +6432,7 @@ export async function registerRoutes(
             customerEmail: order.customerEmail || "",
             notes: order.notes || "",
             workflowStatus: order.workflowStatus,
+            tags: order.tags || [],
           });
         } else {
           valid.push({
@@ -6453,6 +6454,7 @@ export async function registerRoutes(
             customerEmail: order.customerEmail || "",
             notes: order.notes || "",
             workflowStatus: order.workflowStatus,
+            tags: order.tags || [],
           });
         }
       }
