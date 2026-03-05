@@ -82,7 +82,7 @@ const VARIABLE_CHIPS = [
 ];
 
 const DEFAULT_MESSAGE_BODIES: Record<string, string> = {
-  NEW: `Hello {customer_name},\n\nYour order #{order_number} of {item_name} has been received.\n\nThank you for shopping with lalaimports. We appreciate your trust!`,
+  NEW: `Hello {customer_name},\n\nYour order of {item_name} is pending for Confirmation.\nPlease Reply with Confirm or Cancel.`,
   BOOKED: `Hello {customer_name},\n\nYour order #{order_number} of {item_name} is "booked".\n\nThank you for shopping with lalaimports. We appreciate your trust!`,
   FULFILLED: `Hello {customer_name},\n\nYour order #{order_number} of {item_name} is "shipped".\n\nThank you for shopping with lalaimports. We appreciate your trust!`,
   DELIVERED: `Hello {customer_name},\n\nYour order #{order_number} of {item_name} is "delivered".\n\nThank you for shopping with lalaimports. We appreciate your trust!`,
@@ -117,8 +117,19 @@ function previewMessage(body: string, statusLabel?: string): string {
   });
 }
 
-function WhatsAppBubble({ message }: { message: string }) {
+function WaTicks() {
+  return (
+    <svg width="14" height="10" viewBox="0 0 16 11" fill="none" className="flex-shrink-0">
+      <path d="M1 5.5L4.5 9L10.5 1" stroke="#53BDEB" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M6 9L12 1" stroke="#53BDEB" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+
+function WhatsAppBubble({ message, status }: { message: string; status?: string }) {
   const timeStr = new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
+  const isNew = status === "NEW";
+
   return (
     <div className="flex flex-col rounded-xl overflow-hidden border border-[#222d35] shadow-lg h-full min-h-[300px]">
       <div className="bg-[#1F2C34] flex items-center gap-2.5 px-3 py-2.5 flex-shrink-0">
@@ -128,24 +139,50 @@ function WhatsAppBubble({ message }: { message: string }) {
           <p className="text-[#8696A0] text-[10px]">online</p>
         </div>
       </div>
+
       <div className="flex-1 bg-[#0B141A] px-3 py-3 flex flex-col justify-end gap-2 overflow-auto">
         <div className="flex justify-center mb-1">
           <span className="bg-[#1F2C34] text-[#8696A0] text-[9px] px-2 py-0.5 rounded-full">Today</span>
         </div>
-        <div className="flex justify-end">
-          <div className="relative bg-[#005C4B] rounded-tl-xl rounded-tr-sm rounded-bl-xl rounded-br-xl px-3 py-2 max-w-[92%] shadow-md">
-            <div className="absolute top-0 -right-1.5 w-0 h-0 border-t-[8px] border-t-[#005C4B] border-r-[8px] border-r-transparent" />
-            <p className="text-white text-[11.5px] whitespace-pre-wrap leading-relaxed break-words">{message}</p>
-            <div className="flex items-center justify-end gap-1 mt-1">
-              <span className="text-[#8696A0] text-[9px]">{timeStr}</span>
-              <svg width="14" height="10" viewBox="0 0 16 11" fill="none" className="flex-shrink-0">
-                <path d="M1 5.5L4.5 9L10.5 1" stroke="#53BDEB" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M6 9L12 1" stroke="#53BDEB" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
+
+        {isNew ? (
+          <div className="flex justify-end">
+            <div className="w-[93%] shadow-md rounded-tl-xl rounded-tr-sm rounded-bl-xl overflow-hidden">
+              <div className="relative bg-[#005C4B] px-3 py-2.5">
+                <div className="absolute top-0 -right-1.5 w-0 h-0 border-t-[8px] border-t-[#005C4B] border-r-[8px] border-r-transparent" />
+                <p className="text-white text-[12px] font-bold mb-1.5">Confirmation Required</p>
+                <p className="text-white text-[11.5px] whitespace-pre-wrap leading-relaxed break-words">{message}</p>
+                <div className="flex items-center justify-end gap-1 mt-1.5">
+                  <span className="text-[#8696A0] text-[9px]">{timeStr}</span>
+                  <WaTicks />
+                </div>
+              </div>
+              <div className="border-t border-[#1A3830]">
+                <div className="flex items-center justify-center gap-1.5 py-2 bg-[#005C4B] border-b border-[#1A3830]">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#53BDEB" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  <span className="text-[#53BDEB] text-[12px] font-medium">Confirm</span>
+                </div>
+                <div className="flex items-center justify-center gap-1.5 py-2 bg-[#005C4B]">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#53BDEB" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  <span className="text-[#53BDEB] text-[12px] font-medium">Cancel</span>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="flex justify-end">
+            <div className="relative bg-[#005C4B] rounded-tl-xl rounded-tr-sm rounded-bl-xl rounded-br-xl px-3 py-2 max-w-[92%] shadow-md">
+              <div className="absolute top-0 -right-1.5 w-0 h-0 border-t-[8px] border-t-[#005C4B] border-r-[8px] border-r-transparent" />
+              <p className="text-white text-[11.5px] whitespace-pre-wrap leading-relaxed break-words">{message}</p>
+              <div className="flex items-center justify-end gap-1 mt-1">
+                <span className="text-[#8696A0] text-[9px]">{timeStr}</span>
+                <WaTicks />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
+
       <div className="bg-[#1F2C34] flex items-center gap-2 px-3 py-2 flex-shrink-0">
         <div className="flex-1 bg-[#2A3942] rounded-full px-3 py-1.5">
           <span className="text-[#8696A0] text-[10px]">Type a message</span>
@@ -257,7 +294,7 @@ function EditTemplateDialog({ open, onClose, statusInfo, initial, onSave, isSavi
 
           <div className="w-52 flex-shrink-0 flex flex-col gap-2">
             <p className="text-xs font-medium text-muted-foreground">Live preview</p>
-            <WhatsAppBubble message={previewMessage(previewBody, statusInfo?.label)} />
+            <WhatsAppBubble message={previewMessage(previewBody, statusInfo?.label)} status={statusInfo?.status} />
           </div>
         </div>
 
