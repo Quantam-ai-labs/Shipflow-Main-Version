@@ -5892,6 +5892,38 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/settings/booking-remarks", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const merchant = await storage.getMerchant(merchantId);
+      if (!merchant) return res.status(404).json({ message: "Merchant not found" });
+      res.json({ bookingRemarks: merchant.bookingRemarks || "" });
+    } catch (error) {
+      console.error("Error fetching booking remarks:", error);
+      res.status(500).json({ message: "Failed to fetch booking remarks" });
+    }
+  });
+
+  app.patch("/api/settings/booking-remarks", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { bookingRemarks } = req.body;
+      if (typeof bookingRemarks !== "string") {
+        return res.status(400).json({ message: "bookingRemarks must be a string" });
+      }
+      await db.update(merchants).set({
+        bookingRemarks: bookingRemarks.trim() || null,
+        updatedAt: new Date(),
+      }).where(eq(merchants.id, merchantId));
+      res.json({ success: true, bookingRemarks: bookingRemarks.trim() });
+    } catch (error) {
+      console.error("Error updating booking remarks:", error);
+      res.status(500).json({ message: "Failed to update booking remarks" });
+    }
+  });
+
   // Settings
   app.get("/api/settings", isAuthenticated, async (req, res) => {
     try {
@@ -6396,6 +6428,10 @@ export async function registerRoutes(
             matchedCityName: cityMatch.matchedCity,
             matchedCityId: cityMatch.matchedCityId,
             missingFields: missing,
+            lineItems: order.lineItems || [],
+            customerEmail: order.customerEmail || "",
+            notes: order.notes || "",
+            workflowStatus: order.workflowStatus,
           });
         } else {
           valid.push({
@@ -6413,6 +6449,10 @@ export async function registerRoutes(
             cityMatched: cityMatch.matched,
             matchedCityName: cityMatch.matchedCity,
             matchedCityId: cityMatch.matchedCityId,
+            lineItems: order.lineItems || [],
+            customerEmail: order.customerEmail || "",
+            notes: order.notes || "",
+            workflowStatus: order.workflowStatus,
           });
         }
       }
@@ -6720,7 +6760,7 @@ export async function registerRoutes(
       }));
 
       const packets = toBook.map((order) => {
-        const pkt = orderToPacket(order);
+        const pkt = orderToPacket(order, merchant.bookingRemarks);
         const ovr = overridesMap.get(order.id);
         if (ovr) {
           if (ovr.weight) pkt.weight = ovr.weight;
@@ -6732,6 +6772,7 @@ export async function registerRoutes(
           if (ovr.codAmount !== undefined) pkt.codAmount = ovr.codAmount;
           if (ovr.description) pkt.itemSummary = ovr.description;
           if (ovr.pieces !== undefined && ovr.pieces > 0) pkt.pieces = ovr.pieces;
+          if (ovr.orderNumber) pkt.orderNumber = ovr.orderNumber;
         }
         return pkt;
       });

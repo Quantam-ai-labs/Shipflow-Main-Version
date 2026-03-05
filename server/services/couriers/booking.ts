@@ -103,7 +103,7 @@ export function validateOrderForBooking(order: Order): string[] {
 
 export const COURIER_SPECIAL_INSTRUCTIONS = "Allow Open Parcel - Must Call Before Delivery - Handle With Care";
 
-export function orderToPacket(order: Order): BookingPacket {
+export function orderToPacket(order: Order, merchantBookingRemarks?: string | null): BookingPacket {
   const items = order.lineItems as any[];
   const pieces = order.totalQuantity || items?.length || 1;
   const itemSummary = items && items.length > 0
@@ -117,7 +117,7 @@ export function orderToPacket(order: Order): BookingPacket {
 
   const notesParts: string[] = [];
   if (order.notes) notesParts.push(order.notes);
-  notesParts.push(COURIER_SPECIAL_INSTRUCTIONS);
+  notesParts.push(merchantBookingRemarks || COURIER_SPECIAL_INSTRUCTIONS);
 
   return {
     orderId: order.id,

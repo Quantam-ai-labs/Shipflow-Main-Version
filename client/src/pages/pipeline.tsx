@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
+import ReactDOM from "react-dom";
 import { AIInsightsBanner } from "@/components/ai-insights-banner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,6 +61,12 @@ import {
   PenLine,
   RefreshCw,
   ClipboardList,
+  Eye,
+  User,
+  MapPin,
+  Phone,
+  Mail,
+  StickyNote,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -82,8 +89,11 @@ function CityAutocomplete({ value, onChange, cities, hasWarning, testId }: {
 }) {
   const [query, setQuery] = useState(value || "");
   const [open, setOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const [dropdownStyle, setDropdownStyle] = useState<{ top: number; left: number } | null>(null);
 
   useEffect(() => { setQuery(value || ""); }, [value]);
 
@@ -92,6 +102,69 @@ function CityAutocomplete({ value, onChange, cities, hasWarning, testId }: {
     const q = query.toLowerCase();
     return cities.filter(c => c.name.toLowerCase().includes(q)).slice(0, 30);
   }, [query, cities]);
+
+  useEffect(() => { setHighlightedIndex(-1); }, [filtered]);
+
+  const updateDropdownPosition = useCallback(() => {
+    if (inputRef.current) {
+      const rect = inputRef.current.getBoundingClientRect();
+      setDropdownStyle({ top: rect.bottom + 2, left: rect.left });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (open) {
+      updateDropdownPosition();
+      const scrollParent = containerRef.current?.closest(".overflow-y-auto, .overflow-auto, [style*='overflow']");
+      const handleScroll = () => updateDropdownPosition();
+      window.addEventListener("scroll", handleScroll, true);
+      scrollParent?.addEventListener("scroll", handleScroll);
+      window.addEventListener("resize", handleScroll);
+      return () => {
+        window.removeEventListener("scroll", handleScroll, true);
+        scrollParent?.removeEventListener("scroll", handleScroll);
+        window.removeEventListener("resize", handleScroll);
+      };
+    }
+  }, [open, updateDropdownPosition]);
+
+  const selectCity = (name: string) => {
+    onChange(name);
+    setQuery(name);
+    setOpen(false);
+    setHighlightedIndex(-1);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!open || filtered.length === 0) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        setOpen(true);
+        e.preventDefault();
+      }
+      return;
+    }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const next = highlightedIndex < filtered.length - 1 ? highlightedIndex + 1 : 0;
+      setHighlightedIndex(next);
+      listRef.current?.children[next]?.scrollIntoView({ block: "nearest" });
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      const prev = highlightedIndex > 0 ? highlightedIndex - 1 : filtered.length - 1;
+      setHighlightedIndex(prev);
+      listRef.current?.children[prev]?.scrollIntoView({ block: "nearest" });
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (highlightedIndex >= 0 && highlightedIndex < filtered.length) {
+        selectCity(filtered[highlightedIndex].name);
+      } else if (filtered.length > 0) {
+        selectCity(filtered[0].name);
+      }
+    } else if (e.key === "Escape") {
+      setOpen(false);
+      setHighlightedIndex(-1);
+    }
+  };
 
   return (
     <div ref={containerRef} className="relative">
@@ -105,27 +178,31 @@ function CityAutocomplete({ value, onChange, cities, hasWarning, testId }: {
         }}
         onFocus={() => setOpen(true)}
         onBlur={() => { setTimeout(() => setOpen(false), 150); }}
+        onKeyDown={handleKeyDown}
         placeholder="Type city..."
         data-testid={testId}
       />
-      {open && filtered.length > 0 && (
-        <div className="absolute z-50 top-full left-0 w-[220px] max-h-[200px] overflow-y-auto bg-popover border rounded-md shadow-lg mt-0.5">
-          {filtered.map((c) => (
+      {open && filtered.length > 0 && dropdownStyle && ReactDOM.createPortal(
+        <div
+          ref={listRef}
+          className="fixed z-[9999] w-[220px] max-h-[200px] overflow-y-auto bg-popover border rounded-md shadow-lg"
+          style={{ top: dropdownStyle.top, left: dropdownStyle.left }}
+        >
+          {filtered.map((c, i) => (
             <div
               key={c.name}
-              className={`px-2 py-1 text-xs cursor-pointer hover-elevate ${c.name === value ? "bg-primary/10 font-medium" : ""}`}
+              className={`px-2 py-1 text-xs cursor-pointer hover:bg-accent ${i === highlightedIndex ? "bg-accent font-medium" : ""} ${c.name === value ? "bg-primary/10 font-medium" : ""}`}
               onMouseDown={(e) => {
                 e.preventDefault();
-                onChange(c.name);
-                setQuery(c.name);
-                setOpen(false);
+                selectCity(c.name);
               }}
               data-testid={`city-option-${c.name}`}
             >
               {c.name}
             </div>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -280,9 +357,10 @@ export default function Pipeline() {
   const [previewOverrides, setPreviewOverrides] = useState<Record<string, {
     weight: number; mode: string; customerName: string; phone: string;
     address: string; city: string; codAmount: number; description: string;
-    pieces: number;
+    pieces: number; orderNumber: string;
   }>>({});
   const [courierCities, setCourierCities] = useState<Array<{ id?: number; name: string }>>([]);
+  const [orderDetailPopup, setOrderDetailPopup] = useState<{ open: boolean; order: any | null }>({ open: false, order: null });
 
   const [paymentModal, setPaymentModal] = useState<{ open: boolean; orderId: string; orderNumber: string; totalAmount: number; prepaidAmount: number }>({ open: false, orderId: "", orderNumber: "", totalAmount: 0, prepaidAmount: 0 });
   const [quickPayAmount, setQuickPayAmount] = useState("");
@@ -1246,11 +1324,9 @@ export default function Pipeline() {
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground hidden md:table-cell">City</th>
                 <th className="px-2 py-2.5 text-center font-medium text-muted-foreground w-[40px]" data-testid="header-history">#</th>
                 {(activeTab === "NEW" || activeTab === "PENDING") && (
-                  <>
-                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Address</th>
-                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Products</th>
-                  </>
+                  <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Address</th>
                 )}
+                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Products</th>
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Amount (PKR)</th>
                 <th className="px-3 py-2.5 text-center font-medium text-muted-foreground hidden lg:table-cell w-[40px]">Items</th>
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground hidden md:table-cell max-w-[100px]" data-testid="header-tags">Tags</th>
@@ -1394,17 +1470,15 @@ export default function Pipeline() {
                     })()}
                   </td>
                   {(activeTab === "NEW" || activeTab === "PENDING") && (
-                    <>
-                      <td className="px-3 py-1.5 max-w-[220px]" data-testid={`cell-address-${order.id}`}>
-                        <div className="text-xs text-muted-foreground whitespace-normal leading-tight">
-                          {order.shippingAddress || "-"}
-                        </div>
-                      </td>
-                      <td className="px-3 py-1.5" data-testid={`cell-products-${order.id}`}>
-                        <ProductImagesCell lineItems={order.lineItems as any} orderId={order.id} />
-                      </td>
-                    </>
+                    <td className="px-3 py-1.5 max-w-[220px]" data-testid={`cell-address-${order.id}`}>
+                      <div className="text-xs text-muted-foreground whitespace-normal leading-tight">
+                        {order.shippingAddress || "-"}
+                      </div>
+                    </td>
                   )}
+                  <td className="px-3 py-1.5" data-testid={`cell-products-${order.id}`}>
+                    <ProductImagesCell lineItems={order.lineItems as any} orderId={order.id} />
+                  </td>
                   <td className="px-3 py-1.5">
                     <div className="font-medium text-sm">{Number(order.totalAmount).toLocaleString()}</div>
                     {order.codPaymentStatus === "PAID" ? (
@@ -1736,10 +1810,10 @@ export default function Pipeline() {
       </Dialog>
       {/* Booking Confirmation Modal */}
       <Dialog open={bookingConfirmModal.open} onOpenChange={open => { if (!open) setBookingConfirmModal({ open: false, preview: null }); }}>
-        <DialogContent className="max-w-[97vw] w-[1500px]">
-          <DialogHeader>
+        <DialogContent className="max-w-[100vw] w-screen h-screen max-h-screen rounded-none border-none p-0 flex flex-col [&>button]:z-50">
+          <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
             <DialogTitle>Confirm Booking via {selectedCourier === "leopards" ? "Leopards" : "PostEx"}</DialogTitle>
-            <DialogDescription>Review and edit order details before booking. All fields except Order ID are editable.</DialogDescription>
+            <DialogDescription>Review and edit order details before booking. All fields are editable.</DialogDescription>
           </DialogHeader>
           {bookingConfirmModal.preview && (() => {
             const allOrders = [
@@ -1772,9 +1846,9 @@ export default function Pipeline() {
             });
             const hasCityErrors = checkedOrdersWithCityError.length > 0;
             return (
-              <div className="space-y-3">
+              <div className="flex flex-col flex-1 min-h-0 px-6">
                 {allOrders.length > 0 && (
-                  <div className="overflow-x-auto max-h-[60vh] overflow-y-auto border border-border">
+                  <div className="overflow-x-auto overflow-y-auto border border-border flex-1 min-h-0">
                     <table className="w-full text-sm border-collapse">
                       <thead className="bg-emerald-700 dark:bg-emerald-800 sticky top-0 z-10">
                         <tr>
@@ -1790,7 +1864,8 @@ export default function Pipeline() {
                             />
                           </th>
                           <th className="px-2 py-2 text-left font-semibold w-8 border border-emerald-600 dark:border-emerald-700 text-white text-xs">#</th>
-                          <th className="px-2 py-2 text-left font-semibold w-20 border border-emerald-600 dark:border-emerald-700 text-white text-xs">Order</th>
+                          <th className="px-2 py-2 text-left font-semibold w-24 border border-emerald-600 dark:border-emerald-700 text-white text-xs">Order</th>
+                          <th className="px-2 py-2 text-left font-semibold w-[80px] border border-emerald-600 dark:border-emerald-700 text-white text-xs">Products</th>
                           <th className="px-2 py-2 text-left font-semibold min-w-[140px] border border-emerald-600 dark:border-emerald-700 text-white text-xs">Name</th>
                           <th className="px-2 py-2 text-left font-semibold min-w-[100px] border border-emerald-600 dark:border-emerald-700 text-white text-xs">Phone</th>
                           <th className="px-2 py-2 text-left font-semibold min-w-[350px] border border-emerald-600 dark:border-emerald-700 text-white text-xs">Address</th>
@@ -1836,13 +1911,54 @@ export default function Pipeline() {
                                 )}
                               </td>
                               <td className="px-2 py-1 border border-border text-muted-foreground text-xs">{idx + 1}</td>
-                              <td className="px-2 py-1 border border-border font-medium whitespace-nowrap text-xs" data-testid={`text-order-${order.orderId}`}>
-                                {orderNum}
+                              <td className="px-1 py-0.5 border border-border" data-testid={`text-order-${order.orderId}`}>
+                                <div className="flex items-center gap-1">
+                                  <Input
+                                    className="h-7 text-xs px-1 w-[70px] border-0 shadow-none focus-visible:ring-1 bg-transparent font-medium"
+                                    value={ovr?.orderNumber ?? orderNum}
+                                    onChange={(e) => updateField(order.orderId, "orderNumber", e.target.value)}
+                                    data-testid={`input-order-number-${order.orderId}`}
+                                  />
+                                  <button
+                                    type="button"
+                                    className="text-muted-foreground hover:text-foreground shrink-0"
+                                    onClick={() => setOrderDetailPopup({ open: true, order })}
+                                    title="View order details"
+                                    data-testid={`button-order-details-${order.orderId}`}
+                                  >
+                                    <Eye className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
                                 {hasError && (
-                                  <span className="block text-red-500 text-[10px] font-normal" title={order.missingFields.join(", ")}>
+                                  <span className="block text-red-500 text-[10px] font-normal px-1" title={order.missingFields.join(", ")}>
                                     {order.missingFields.join(", ")}
                                   </span>
                                 )}
+                              </td>
+                              <td className="px-1 py-0.5 border border-border">
+                                {(() => {
+                                  const items = Array.isArray(order.lineItems) ? order.lineItems : [];
+                                  if (items.length === 0) return <span className="text-muted-foreground text-[10px]">—</span>;
+                                  return (
+                                    <div className="flex items-center gap-0.5 flex-wrap" data-testid={`products-preview-${order.orderId}`}>
+                                      {items.slice(0, 3).map((item: any, i: number) => (
+                                        <div key={i} className="flex items-center gap-0.5" title={`${item.name || item.title || ""}${item.variantTitle ? ` - ${item.variantTitle}` : ""} x${item.quantity || 1}`}>
+                                          {(item.image || item.imageUrl) ? (
+                                            <img src={item.image || item.imageUrl} alt="" className="w-6 h-6 rounded object-cover border" />
+                                          ) : (
+                                            <div className="w-6 h-6 rounded border bg-muted flex items-center justify-center">
+                                              <Package className="w-3 h-3 text-muted-foreground" />
+                                            </div>
+                                          )}
+                                          {(item.quantity || 1) > 1 && (
+                                            <span className="text-[9px] text-muted-foreground">x{item.quantity}</span>
+                                          )}
+                                        </div>
+                                      ))}
+                                      {items.length > 3 && <span className="text-[9px] text-muted-foreground">+{items.length - 3}</span>}
+                                    </div>
+                                  );
+                                })()}
                               </td>
                               <td className="px-1 py-0.5 border border-border">
                                 <Input
@@ -1982,7 +2098,7 @@ export default function Pipeline() {
               </div>
             );
           })()}
-          <DialogFooter>
+          <DialogFooter className="px-6 pb-6 pt-2 shrink-0">
             <Button variant="ghost" onClick={() => setBookingConfirmModal({ open: false, preview: null })} data-testid="button-cancel-booking">Back</Button>
             <Button
               onClick={submitBooking}
@@ -2008,6 +2124,87 @@ export default function Pipeline() {
               Book {checkedCount} Orders
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={orderDetailPopup.open} onOpenChange={open => { if (!open) setOrderDetailPopup({ open: false, order: null }); }}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Order Details — #{orderDetailPopup.order?.orderNumber || ""}</DialogTitle>
+            <DialogDescription>Complete order information</DialogDescription>
+          </DialogHeader>
+          {orderDetailPopup.order && (() => {
+            const o = orderDetailPopup.order;
+            const items = Array.isArray(o.lineItems) ? o.lineItems : [];
+            return (
+              <div className="space-y-4" data-testid="order-detail-popup">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground"><User className="w-3.5 h-3.5" /> Customer</div>
+                    <p className="text-sm font-medium" data-testid="detail-customer-name">{o.customerName || "—"}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground"><Phone className="w-3.5 h-3.5" /> Phone</div>
+                    <p className="text-sm font-mono" data-testid="detail-phone">{o.phone || "—"}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground"><Mail className="w-3.5 h-3.5" /> Email</div>
+                    <p className="text-sm" data-testid="detail-email">{o.customerEmail || "—"}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground"><MapPin className="w-3.5 h-3.5" /> City</div>
+                    <p className="text-sm" data-testid="detail-city">{o.city || "—"}</p>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground"><MapPin className="w-3.5 h-3.5" /> Address</div>
+                  <p className="text-sm" data-testid="detail-address">{o.address || "—"}</p>
+                </div>
+                {o.notes && (
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground"><StickyNote className="w-3.5 h-3.5" /> Notes</div>
+                    <p className="text-sm bg-muted/50 rounded p-2" data-testid="detail-notes">{o.notes}</p>
+                  </div>
+                )}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <span className="text-xs text-muted-foreground">COD Amount</span>
+                    <p className="text-sm font-medium" data-testid="detail-cod">Rs. {o.codAmount ?? o.amount ?? "0"}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-xs text-muted-foreground">Weight</span>
+                    <p className="text-sm">{o.weight || 200}g</p>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-xs text-muted-foreground">Status</span>
+                    <p className="text-sm"><Badge variant="outline">{o.workflowStatus || "—"}</Badge></p>
+                  </div>
+                </div>
+                {items.length > 0 && (
+                  <div className="space-y-2">
+                    <span className="text-xs text-muted-foreground font-medium">Products ({items.length})</span>
+                    <div className="space-y-2">
+                      {items.map((item: any, i: number) => (
+                        <div key={i} className="flex items-center gap-3 p-2 rounded border" data-testid={`detail-product-${i}`}>
+                          {(item.image || item.imageUrl) ? (
+                            <img src={item.image || item.imageUrl} alt="" className="w-10 h-10 rounded object-cover border shrink-0" />
+                          ) : (
+                            <div className="w-10 h-10 rounded border bg-muted flex items-center justify-center shrink-0">
+                              <Package className="w-5 h-5 text-muted-foreground" />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{item.name || item.title || "Item"}</p>
+                            {item.variantTitle && <p className="text-xs text-muted-foreground">{item.variantTitle}</p>}
+                            <p className="text-xs text-muted-foreground">Qty: {item.quantity || 1} {item.price ? `• Rs. ${item.price}` : ""}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
       {/* Booking Results Modal */}

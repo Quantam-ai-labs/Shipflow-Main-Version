@@ -57,27 +57,36 @@ export function ProductImagesCell({ lineItems, orderId }: ProductImagesCellProps
   return (
     <>
       <div
-        className="flex items-center gap-1 cursor-pointer group"
+        className="flex items-center gap-1.5 cursor-pointer group"
         onClick={() => setOpen(true)}
         data-testid={`product-images-${orderId}`}
       >
         {visible.map((item, i) => (
-          <div
-            key={i}
-            className="w-7 h-7 rounded border border-border bg-muted/50 overflow-hidden flex-shrink-0 group-hover:border-primary/50 transition-colors"
-          >
-            {item.image ? (
-              <img
-                src={item.image}
-                alt={item.name || item.title || "Product"}
-                className="w-full h-full object-cover"
-                loading="lazy"
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center">
-                <Package className="w-3.5 h-3.5 text-muted-foreground" />
-              </div>
-            )}
+          <div key={i} className="flex items-center gap-1 flex-shrink-0">
+            <div
+              className="w-7 h-7 rounded border border-border bg-muted/50 overflow-hidden flex-shrink-0 group-hover:border-primary/50 transition-colors"
+            >
+              {item.image ? (
+                <img
+                  src={item.image}
+                  alt={item.name || item.title || "Product"}
+                  className="w-full h-full object-cover"
+                  loading="lazy"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <Package className="w-3.5 h-3.5 text-muted-foreground" />
+                </div>
+              )}
+            </div>
+            <div className="flex flex-col leading-none">
+              {(item.quantity != null && item.quantity > 1) && (
+                <span className="text-[10px] font-medium text-muted-foreground" data-testid={`product-qty-${orderId}-${i}`}>x{item.quantity}</span>
+              )}
+              {item.variantTitle && (
+                <span className="text-[10px] text-muted-foreground max-w-[60px] truncate" data-testid={`product-variant-${orderId}-${i}`}>{item.variantTitle}</span>
+              )}
+            </div>
           </div>
         ))}
         {remaining > 0 && (

@@ -35,6 +35,7 @@ export const merchants = pgTable("merchants", {
   roboTags: jsonb("robo_tags").default({ confirm: "Robo-Confirm", pending: "Robo-Pending", cancel: "Robo-Cancel" }),
   otpRequired: boolean("otp_required").default(true),
   issuePresetStatuses: jsonb("issue_preset_statuses").default([]),
+  bookingRemarks: text("booking_remarks"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

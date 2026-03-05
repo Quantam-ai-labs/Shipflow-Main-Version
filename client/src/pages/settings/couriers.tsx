@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import {
   Dialog,
@@ -13,7 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Truck, CheckCircle2, Settings, ExternalLink, Zap, Lock, Loader2, MapPin, RefreshCw, Copy, Webhook, Eye, EyeOff } from "lucide-react";
+import { Truck, CheckCircle2, Settings, ExternalLink, Zap, Lock, Loader2, MapPin, RefreshCw, Copy, Webhook, Eye, EyeOff, Save, MessageSquare } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -140,9 +141,40 @@ export default function CouriersSettings() {
   const [courierFormData, setCourierFormData] = useState<Record<string, string>>({});
   const [postexAddresses, setPostexAddresses] = useState<any[]>([]);
   const [fetchingAddresses, setFetchingAddresses] = useState(false);
+  const [bookingRemarksValue, setBookingRemarksValue] = useState("");
 
   const { data, isLoading } = useQuery<IntegrationsData>({
     queryKey: ["/api/integrations"],
+  });
+
+  const { data: bookingRemarksData, isLoading: isLoadingRemarks } = useQuery<{ bookingRemarks: string }>({
+    queryKey: ["/api/settings/booking-remarks"],
+  });
+
+  useEffect(() => {
+    if (bookingRemarksData?.bookingRemarks !== undefined) {
+      setBookingRemarksValue(bookingRemarksData.bookingRemarks);
+    }
+  }, [bookingRemarksData]);
+
+  const saveRemarksMutation = useMutation({
+    mutationFn: async (bookingRemarks: string) => {
+      return apiRequest("PATCH", "/api/settings/booking-remarks", { bookingRemarks });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/booking-remarks"] });
+      toast({
+        title: "Booking Remarks Saved",
+        description: "Your booking special instructions have been updated.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to save booking remarks. Please try again.",
+        variant: "destructive",
+      });
+    },
   });
 
   const saveCourierMutation = useMutation({
@@ -408,6 +440,43 @@ export default function CouriersSettings() {
         <h1 className="text-2xl font-bold" data-testid="text-couriers-title">Courier Integrations</h1>
         <p className="text-muted-foreground">Connect and configure your courier accounts for shipment tracking and booking.</p>
       </div>
+
+      <Card data-testid="card-booking-remarks">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <MessageSquare className="w-5 h-5 text-muted-foreground" />
+            <CardTitle className="text-base">Booking Remarks</CardTitle>
+          </div>
+          <CardDescription>
+            Customize the special instructions that will be included with every courier booking.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {isLoadingRemarks ? (
+            <Skeleton className="h-20 w-full" data-testid="skeleton-booking-remarks" />
+          ) : (
+            <Textarea
+              data-testid="textarea-booking-remarks"
+              placeholder="Allow Open Parcel - Must Call Before Delivery - Handle With Care"
+              value={bookingRemarksValue}
+              onChange={(e) => setBookingRemarksValue(e.target.value)}
+              rows={3}
+            />
+          )}
+          <Button
+            data-testid="button-save-booking-remarks"
+            size="sm"
+            onClick={() => saveRemarksMutation.mutate(bookingRemarksValue)}
+            disabled={saveRemarksMutation.isPending || isLoadingRemarks}
+          >
+            {saveRemarksMutation.isPending ? (
+              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving...</>
+            ) : (
+              <><Save className="w-4 h-4 mr-2" />Save</>
+            )}
+          </Button>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent className="p-4">
