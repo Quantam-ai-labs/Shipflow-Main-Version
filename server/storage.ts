@@ -532,6 +532,7 @@ export class DatabaseStorage implements IStorage {
 
     const sortColumnMap: Record<string, any> = {
       orderDate: orders.orderDate,
+      orderNumber: orders.orderNumber,
       totalAmount: orders.totalAmount,
       totalQuantity: orders.totalQuantity,
       workflowStatus: orders.workflowStatus,

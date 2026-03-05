@@ -1572,7 +1572,16 @@ export default function Pipeline() {
                     />
                   </th>
                 )}
-                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Order</th>
+                {activeTab === "ALL" ? (
+                  <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">
+                    <button className="flex items-center gap-1 hover:text-foreground transition-colors" onClick={() => { if (allSortBy === "orderNumber") setAllSortDir(d => d === "asc" ? "desc" : "asc"); else { setAllSortBy("orderNumber"); setAllSortDir("desc"); } setPage(1); }} data-testid="sort-order-number">
+                      Order
+                      {allSortBy === "orderNumber" ? (allSortDir === "asc" ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />) : <ChevronsUpDown className="w-3.5 h-3.5 opacity-40" />}
+                    </button>
+                  </th>
+                ) : (
+                  <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Order</th>
+                )}
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Customer</th>
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground hidden md:table-cell">City</th>
                 <th className="px-2 py-2.5 text-center font-medium text-muted-foreground w-[40px]" data-testid="header-history">#</th>
