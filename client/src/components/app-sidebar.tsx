@@ -37,6 +37,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   LayoutDashboard,
   Package,
+  Inbox,
+  Pause,
   Clock,
   Truck,
   XCircle,
@@ -50,16 +52,22 @@ import {
   ChevronUp,
   ChevronRight,
   Shield,
+  BookmarkCheck,
   Send,
   PackageCheck,
   RotateCcw,
   Receipt,
+  FileCheck,
   ShoppingBag,
   Wallet,
   ArrowDownLeft,
+  ArrowUpRight,
+  ArrowLeftRight,
   UserCircle,
   PieChart,
   BookOpen,
+  Landmark,
+  Scale,
   Calculator,
   Cog,
   ToggleLeft,
@@ -93,8 +101,11 @@ interface NavGroup {
 
 const orderItems: NavItem[] = [
   { id: "orders-all", title: "All Orders", url: "/orders/all", icon: LayoutList, key: "ALL" },
+  { id: "orders-new", title: "New Orders", url: "/orders/new", icon: Inbox, key: "NEW" },
   { id: "orders-pending", title: "Confirmation Pending", url: "/orders/pending", icon: Clock, key: "PENDING" },
+  { id: "orders-hold", title: "Hold", url: "/orders/hold", icon: Pause, key: "HOLD" },
   { id: "orders-ready", title: "Ready to Ship", url: "/orders/ready", icon: Truck, key: "READY_TO_SHIP" },
+  { id: "orders-booked", title: "Booked", url: "/orders/booked", icon: BookmarkCheck, key: "BOOKED" },
   { id: "orders-fulfilled", title: "Shipped", url: "/orders/fulfilled", icon: Send, key: "FULFILLED" },
   { id: "orders-delivered", title: "Delivered", url: "/orders/delivered", icon: PackageCheck, key: "DELIVERED" },
   { id: "orders-return", title: "Returns", url: "/orders/return", icon: RotateCcw, key: "RETURN" },
@@ -120,9 +131,19 @@ const allNavGroups: NavGroup[] = [
     items: [
       { id: "money", title: "Transactions", url: "/accounting/transactions", icon: Receipt },
       { id: "expense-history", title: "Expenses", url: "/accounting/expenses", icon: Calculator },
+      { id: "needs-payment", title: "Needs Payment", url: "/accounting/expenses-unpaid", icon: Clock },
       { id: "customers", title: "Parties", url: "/accounting/parties", icon: UserCircle },
-      { id: "cod-reconciliation", title: "Courier", url: "/cod-reconciliation", icon: Truck },
       { id: "sale-invoices", title: "Sales", url: "/accounting/sales", icon: Receipt },
+      { id: "sale-orders", title: "Sale Orders", url: "/accounting/sale-orders", icon: BookOpen },
+      { id: "cod-reconciliation", title: "COD Reconciliation", url: "/cod-reconciliation", icon: DollarSign },
+      { id: "cod-receivable", title: "COD Receivable", url: "/accounting/cod-receivable", icon: ArrowDownLeft },
+      { id: "courier-payable", title: "Courier Payable", url: "/accounting/courier-payable", icon: ArrowUpRight },
+      { id: "payment-ledger", title: "Payment Ledger", url: "/payment-ledger", icon: Receipt },
+      { id: "manage-cheques", title: "Manage Cheques", url: "/manage-cheques", icon: FileCheck },
+      { id: "settlements", title: "Settlements", url: "/accounting/settlements", icon: Scale },
+      { id: "ledger", title: "Ledger", url: "/accounting/ledger", icon: BookOpen },
+      { id: "cash-accounts", title: "Cash Accounts", url: "/accounting/cash-accounts", icon: Landmark },
+      { id: "opening-balances", title: "Opening Balances", url: "/accounting/opening-balances", icon: Calculator },
     ],
   },
   {
@@ -132,8 +153,10 @@ const allNavGroups: NavGroup[] = [
     items: [
       { id: "ads-dashboard", title: "Dashboard", url: "/marketing", icon: BarChart3 },
       { id: "ads-manager", title: "Campaigns", url: "/marketing/ads-manager", icon: Megaphone },
+      { id: "live-campaigns", title: "Live Campaigns", url: "/marketing/live", icon: Activity },
       { id: "ads-profitability", title: "Profitability", url: "/marketing/profitability", icon: TrendingUp },
       { id: "ai-intelligence", title: "AI Insights", url: "/marketing/intelligence", icon: Brain },
+      { id: "ai-hub", title: "AI Hub", url: "/ai", icon: Brain },
     ],
   },
   {
@@ -145,14 +168,21 @@ const allNavGroups: NavGroup[] = [
       { id: "profit-loss", title: "Profit", url: "/accounting/reports/pnl", icon: TrendingUp },
       { id: "cash-flow", title: "Cash", url: "/accounting/reports/cash-flow", icon: BarChart3 },
       { id: "stock-report", title: "Stock", url: "/accounting/reports/stock", icon: Package },
+      { id: "balance-snapshot", title: "Balance Snapshot", url: "/accounting/reports/balance-sheet", icon: PieChart },
+      { id: "party-balances", title: "Party Balances", url: "/accounting/reports/party-balances", icon: Users },
+      { id: "trial-balance", title: "Trial Balance", url: "/accounting/trial-balance", icon: Scale },
       { id: "shipments", title: "Shipments", url: "/shipments", icon: Truck },
-      { id: "courier-dues", title: "Courier", url: "/courier-dues", icon: DollarSign },
+      { id: "courier-dues", title: "Courier Dues", url: "/courier-dues", icon: DollarSign },
+      { id: "product-analytics", title: "Product Analytics", url: "/product-analytics", icon: TrendingUp },
+      { id: "analytics-dashboard", title: "Analytics", url: "/analytics", icon: BarChart3 },
     ],
   },
 ];
 
 const settingsItems: NavItem[] = [
   { id: "settings-shopify", title: "Integrations", url: "/settings/shopify", icon: Store },
+  { id: "settings-couriers", title: "Couriers", url: "/settings/couriers", icon: Truck },
+  { id: "settings-status-mapping", title: "Status Mapping", url: "/settings/status-mapping", icon: ArrowLeftRight },
   { id: "team", title: "Users & Roles", url: "/team", icon: Users },
   { id: "settings", title: "Notifications", url: "/settings", icon: Settings },
   { id: "preferences", title: "Preferences", url: "/accounting/settings", icon: Cog },
@@ -165,11 +195,12 @@ const allPageIds = [
 ];
 
 const defaultPinnedPages = [
-  "orders-all", "orders-pending", "orders-ready", "orders-fulfilled",
+  "orders-all", "orders-new", "orders-pending", "orders-ready", "orders-booked", "orders-fulfilled",
   "products", "add-stock", "shopify-products",
-  "money", "customers", "sale-invoices",
+  "money", "customers", "sale-invoices", "cod-reconciliation", "payment-ledger",
+  "ads-dashboard", "ads-profitability",
   "overview", "profit-loss", "shipments",
-  "settings-shopify", "team", "settings", "preferences",
+  "settings-shopify", "settings-couriers", "settings-status-mapping", "team", "settings", "preferences",
 ];
 
 export function AppSidebar() {
@@ -423,6 +454,11 @@ export function AppSidebar() {
                               <Link href={item.url} data-testid={`nav-${item.id}`}>
                                 <item.icon className="w-3.5 h-3.5" />
                                 <span className="flex-1">{item.title}</span>
+                                {item.id === "settings-status-mapping" && (unmappedCount?.count ?? 0) > 0 && (
+                                  <Badge variant="destructive" className="text-[10px] px-1.5 py-0 min-w-[18px] justify-center">
+                                    {unmappedCount!.count}
+                                  </Badge>
+                                )}
                               </Link>
                             </SidebarMenuSubButton>
                           </SidebarMenuSubItem>
