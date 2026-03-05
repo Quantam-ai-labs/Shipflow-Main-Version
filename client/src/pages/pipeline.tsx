@@ -382,6 +382,8 @@ export default function Pipeline() {
   const [editPhone, setEditPhone] = useState("");
   const [editAddress, setEditAddress] = useState("");
   const [editCity, setEditCity] = useState("");
+  const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
+  const [editAddressText, setEditAddressText] = useState("");
 
   const [selectedCourier, setSelectedCourier] = useState<string>("leopards");
   const [bookingConfirmModal, setBookingConfirmModal] = useState<{ open: boolean; preview: any | null }>({ open: false, preview: null });
@@ -1585,7 +1587,7 @@ export default function Pipeline() {
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Customer</th>
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground hidden md:table-cell">City</th>
                 <th className="px-2 py-2.5 text-center font-medium text-muted-foreground w-[40px]" data-testid="header-history">#</th>
-                {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "ALL" || activeTab === "READY_TO_SHIP") && (
+                {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "ALL" || activeTab === "READY_TO_SHIP" || activeTab === "HOLD") && (
                   <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Address</th>
                 )}
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Products</th>
@@ -1769,11 +1771,44 @@ export default function Pipeline() {
                       );
                     })()}
                   </td>
-                  {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "ALL" || activeTab === "READY_TO_SHIP") && (
+                  {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "ALL" || activeTab === "READY_TO_SHIP" || activeTab === "HOLD") && (
                     <td className="px-3 py-1.5 max-w-[220px]" data-testid={`cell-address-${order.id}`}>
-                      <div className="text-xs text-muted-foreground whitespace-normal leading-tight">
-                        {order.shippingAddress || "-"}
-                      </div>
+                      {editingAddressId === order.id ? (
+                        <div className="flex flex-col gap-1">
+                          <textarea
+                            className="w-full text-xs border rounded px-1.5 py-1 resize-none bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+                            rows={2}
+                            value={editAddressText}
+                            onChange={e => setEditAddressText(e.target.value)}
+                            autoFocus
+                            data-testid={`input-address-${order.id}`}
+                          />
+                          <div className="flex gap-1">
+                            <Button size="sm" className="h-5 text-xs px-2 py-0" onClick={async () => {
+                              await apiRequest("PATCH", `/api/orders/${order.id}/customer`, { shippingAddress: editAddressText.trim() });
+                              queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+                              setEditingAddressId(null);
+                            }} data-testid={`button-save-address-${order.id}`}>Save</Button>
+                            <Button size="sm" variant="ghost" className="h-5 text-xs px-2 py-0" onClick={() => setEditingAddressId(null)} data-testid={`button-cancel-address-${order.id}`}>Cancel</Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="group flex items-start gap-1">
+                          <div className="text-xs text-muted-foreground whitespace-normal leading-tight flex-1">
+                            {order.shippingAddress || "-"}
+                          </div>
+                          {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "HOLD" || activeTab === "READY_TO_SHIP") && (
+                            <button
+                              className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 text-muted-foreground hover:text-foreground mt-0.5"
+                              onClick={() => { setEditingAddressId(order.id); setEditAddressText(order.shippingAddress || ""); }}
+                              title="Edit address"
+                              data-testid={`button-edit-address-${order.id}`}
+                            >
+                              <PenLine className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </td>
                   )}
                   <td className="px-3 py-1.5" data-testid={`cell-products-${order.id}`}>
