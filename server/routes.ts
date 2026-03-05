@@ -84,6 +84,8 @@ import {
   writeBackCancel,
   writeBackTags,
   writeBackFulfillment,
+  writeBackAddTag,
+  writeBackRemoveTag,
 } from "./services/shopifyWriteBack";
 import { leopardsService } from "./services/couriers/leopards";
 import { postexService } from "./services/couriers/postex";
@@ -1880,6 +1882,69 @@ export async function registerRoutes(
       }
     },
   );
+
+  app.post("/api/orders/:id/tags", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const orderId = req.params.id;
+      const { tag } = req.body;
+      if (!tag || typeof tag !== "string" || !tag.trim()) {
+        return res.status(400).json({ message: "Tag is required" });
+      }
+      const trimmedTag = tag.trim();
+      const order = await storage.getOrderById(merchantId, orderId);
+      if (!order) return res.status(404).json({ message: "Order not found" });
+
+      const currentTags = Array.isArray(order.tags) ? (order.tags as string[]) : [];
+      if (currentTags.some(t => t.toLowerCase() === trimmedTag.toLowerCase())) {
+        return res.json({ success: true, tags: currentTags });
+      }
+      const newTags = [...currentTags, trimmedTag];
+      await storage.updateOrder(merchantId, orderId, { tags: newTags } as any);
+
+      if (order.shopifyOrderId) {
+        writeBackAddTag(merchantId, order.shopifyOrderId, trimmedTag).catch(err => {
+          console.error(`[Tags] Shopify tag add failed for order ${orderId}:`, err.message);
+        });
+      }
+
+      res.json({ success: true, tags: newTags });
+    } catch (error: any) {
+      console.error("Error adding tag:", error);
+      res.status(500).json({ message: "Failed to add tag" });
+    }
+  });
+
+  app.delete("/api/orders/:id/tags", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const orderId = req.params.id;
+      const { tag } = req.body;
+      if (!tag || typeof tag !== "string" || !tag.trim()) {
+        return res.status(400).json({ message: "Tag is required" });
+      }
+      const trimmedTag = tag.trim();
+      const order = await storage.getOrderById(merchantId, orderId);
+      if (!order) return res.status(404).json({ message: "Order not found" });
+
+      const currentTags = Array.isArray(order.tags) ? (order.tags as string[]) : [];
+      const newTags = currentTags.filter(t => t.toLowerCase() !== trimmedTag.toLowerCase());
+      await storage.updateOrder(merchantId, orderId, { tags: newTags } as any);
+
+      if (order.shopifyOrderId) {
+        writeBackRemoveTag(merchantId, order.shopifyOrderId, trimmedTag).catch(err => {
+          console.error(`[Tags] Shopify tag remove failed for order ${orderId}:`, err.message);
+        });
+      }
+
+      res.json({ success: true, tags: newTags });
+    } catch (error: any) {
+      console.error("Error removing tag:", error);
+      res.status(500).json({ message: "Failed to remove tag" });
+    }
+  });
 
   app.get("/api/orders/:id", isAuthenticated, async (req, res) => {
     try {
@@ -6878,6 +6943,21 @@ export async function registerRoutes(
             actorType: "user",
             reason: `Booked with ${courier === "leopards" ? "Leopards" : "PostEx"} - ${br.trackingNumber}`,
           });
+
+          const courierTag = courier === "leopards" ? "leopards" : "postex";
+          const orderForTag = fetchedOrders.find((o) => o.id === br.orderId);
+          if (orderForTag) {
+            const existingTags = Array.isArray(orderForTag.tags) ? (orderForTag.tags as string[]) : [];
+            if (!existingTags.some(t => t.toLowerCase() === courierTag)) {
+              const updatedTags = [...existingTags, courierTag];
+              await storage.updateOrder(merchantId, br.orderId, { tags: updatedTags } as any);
+            }
+            if (orderForTag.shopifyOrderId) {
+              writeBackAddTag(merchantId, orderForTag.shopifyOrderId, courierTag).catch(err => {
+                console.error(`[Booking] Shopify courier tag add failed for ${orderForTag.orderNumber}:`, err.message);
+              });
+            }
+          }
 
           const orderForFulfill = fetchedOrders.find(
             (o) => o.id === br.orderId,

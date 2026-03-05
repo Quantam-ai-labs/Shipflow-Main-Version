@@ -262,6 +262,142 @@ export async function writeBackTags(
   });
 }
 
+export async function writeBackAddTag(
+  merchantId: string,
+  shopifyOrderId: string,
+  tag: string,
+): Promise<{ success: boolean; error?: string }> {
+  return enqueueWriteBack(`addtag:${shopifyOrderId}:${tag}`, async () => {
+    const creds = await getShopifyCredentials(merchantId);
+    if (!creds) {
+      return { success: false, error: 'Shopify not connected' };
+    }
+
+    try {
+      const getUrl = `https://${creds.shopDomain}/admin/api/${API_VERSION}/orders/${shopifyOrderId}.json?fields=id,tags`;
+      const getRes = await fetch(getUrl, {
+        headers: {
+          'X-Shopify-Access-Token': creds.accessToken,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!getRes.ok) {
+        const errText = await getRes.text();
+        return { success: false, error: `Failed to get order: ${getRes.status}` };
+      }
+
+      const orderData = await getRes.json();
+      const existingTags = (orderData.order?.tags || '')
+        .split(',')
+        .map((t: string) => t.trim())
+        .filter((t: string) => t.length > 0);
+
+      if (existingTags.some((t: string) => t.toLowerCase() === tag.toLowerCase())) {
+        return { success: true };
+      }
+
+      existingTags.push(tag);
+      const updatedTags = existingTags.join(', ');
+
+      markWriteBack(shopifyOrderId);
+      await new Promise(r => setTimeout(r, 550));
+
+      const putUrl = `https://${creds.shopDomain}/admin/api/${API_VERSION}/orders/${shopifyOrderId}.json`;
+      const putRes = await fetch(putUrl, {
+        method: 'PUT',
+        headers: {
+          'X-Shopify-Access-Token': creds.accessToken,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          order: { id: shopifyOrderId, tags: updatedTags },
+        }),
+      });
+
+      if (!putRes.ok) {
+        const errText = await putRes.text();
+        console.error(`[ShopifyWriteBack] Add tag failed: ${putRes.status} ${errText}`);
+        return { success: false, error: `Shopify API error ${putRes.status}` };
+      }
+
+      console.log(`[ShopifyWriteBack] Tag added for order ${shopifyOrderId}: ${tag}`);
+      return { success: true };
+    } catch (error: any) {
+      console.error(`[ShopifyWriteBack] Add tag error:`, error);
+      return { success: false, error: error.message || 'Unknown error' };
+    }
+  });
+}
+
+export async function writeBackRemoveTag(
+  merchantId: string,
+  shopifyOrderId: string,
+  tag: string,
+): Promise<{ success: boolean; error?: string }> {
+  return enqueueWriteBack(`removetag:${shopifyOrderId}:${tag}`, async () => {
+    const creds = await getShopifyCredentials(merchantId);
+    if (!creds) {
+      return { success: false, error: 'Shopify not connected' };
+    }
+
+    try {
+      const getUrl = `https://${creds.shopDomain}/admin/api/${API_VERSION}/orders/${shopifyOrderId}.json?fields=id,tags`;
+      const getRes = await fetch(getUrl, {
+        headers: {
+          'X-Shopify-Access-Token': creds.accessToken,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!getRes.ok) {
+        const errText = await getRes.text();
+        return { success: false, error: `Failed to get order: ${getRes.status}` };
+      }
+
+      const orderData = await getRes.json();
+      const existingTags = (orderData.order?.tags || '')
+        .split(',')
+        .map((t: string) => t.trim())
+        .filter((t: string) => t.length > 0);
+
+      const filteredTags = existingTags.filter((t: string) => t.toLowerCase() !== tag.toLowerCase());
+      if (filteredTags.length === existingTags.length) {
+        return { success: true };
+      }
+
+      const updatedTags = filteredTags.join(', ');
+
+      markWriteBack(shopifyOrderId);
+      await new Promise(r => setTimeout(r, 550));
+
+      const putUrl = `https://${creds.shopDomain}/admin/api/${API_VERSION}/orders/${shopifyOrderId}.json`;
+      const putRes = await fetch(putUrl, {
+        method: 'PUT',
+        headers: {
+          'X-Shopify-Access-Token': creds.accessToken,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          order: { id: shopifyOrderId, tags: updatedTags },
+        }),
+      });
+
+      if (!putRes.ok) {
+        const errText = await putRes.text();
+        console.error(`[ShopifyWriteBack] Remove tag failed: ${putRes.status} ${errText}`);
+        return { success: false, error: `Shopify API error ${putRes.status}` };
+      }
+
+      console.log(`[ShopifyWriteBack] Tag removed for order ${shopifyOrderId}: ${tag}`);
+      return { success: true };
+    } catch (error: any) {
+      console.error(`[ShopifyWriteBack] Remove tag error:`, error);
+      return { success: false, error: error.message || 'Unknown error' };
+    }
+  });
+}
+
 export async function writeBackFulfillment(
   merchantId: string,
   orderId: string,

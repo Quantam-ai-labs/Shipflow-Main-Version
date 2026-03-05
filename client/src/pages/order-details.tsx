@@ -50,6 +50,8 @@ import {
   Bot,
   UserCircle,
   PenLine,
+  Loader2,
+  X,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -651,6 +653,34 @@ export default function OrderDetails() {
   const [paymentRef, setPaymentRef] = useState("");
   const [paymentNotes, setPaymentNotes] = useState("");
   const [showCancelShopifyConfirm, setShowCancelShopifyConfirm] = useState(false);
+  const [newTagInput, setNewTagInput] = useState("");
+
+  const addTagMutation = useMutation({
+    mutationFn: async (tag: string) => {
+      const res = await apiRequest("POST", `/api/orders/${id}/tags`, { tag });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders", id] });
+      setNewTagInput("");
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to add tag", description: error.message || "Please try again", variant: "destructive" });
+    },
+  });
+
+  const removeTagMutation = useMutation({
+    mutationFn: async (tag: string) => {
+      const res = await apiRequest("DELETE", `/api/orders/${id}/tags`, { tag });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders", id] });
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to remove tag", description: error.message || "Please try again", variant: "destructive" });
+    },
+  });
 
   const { data: auditLog } = useQuery<any[]>({
     queryKey: ["/api/orders", id, "audit-log"],
@@ -1581,39 +1611,82 @@ export default function OrderDetails() {
           </Card>
 
           {/* Tags */}
-          {order.tags && Array.isArray(order.tags) && order.tags.length > 0 && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg flex items-center gap-2" data-testid="text-tags-title">
-                  <Tag className="w-5 h-5" />
-                  Tags
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-2" data-testid="tags-list">
-                  {(order.tags as string[]).map((tag, index) => {
-                    const lowerTag = tag.toLowerCase();
-                    const tc = tagConfig || { confirm: "Robo-Confirm", pending: "Robo-Pending", cancel: "Robo-Cancel" };
-                    const roboStyle =
-                      lowerTag === tc.confirm.toLowerCase() ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' :
-                      lowerTag === tc.pending.toLowerCase() ? 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300' :
-                      lowerTag === tc.cancel.toLowerCase() ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
-                      '';
-                    return (
-                      <Badge
-                        key={index}
-                        variant="secondary"
-                        className={roboStyle}
-                        data-testid={`badge-tag-${index}`}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2" data-testid="text-tags-title">
+                <Tag className="w-5 h-5" />
+                Tags
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {(() => {
+                const tags = Array.isArray(order.tags) ? (order.tags as string[]) : [];
+                const tc = tagConfig || { confirm: "Robo-Confirm", pending: "Robo-Pending", cancel: "Robo-Cancel" };
+                const getRoboStyle = (tag: string) => {
+                  const lt = tag.toLowerCase();
+                  if (lt === tc.confirm.toLowerCase()) return 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300';
+                  if (lt === tc.pending.toLowerCase()) return 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300';
+                  if (lt === tc.cancel.toLowerCase()) return 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300';
+                  return '';
+                };
+                return (
+                  <>
+                    {tags.length > 0 ? (
+                      <div className="flex flex-wrap gap-2" data-testid="tags-list">
+                        {tags.map((tag, index) => (
+                          <Badge
+                            key={index}
+                            variant="secondary"
+                            className={`${getRoboStyle(tag) || 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'} pr-1 flex items-center gap-1`}
+                            data-testid={`badge-tag-${index}`}
+                          >
+                            <span className="max-w-[120px] truncate">{tag}</span>
+                            <button
+                              onClick={() => removeTagMutation.mutate(tag)}
+                              disabled={removeTagMutation.isPending}
+                              className="ml-0.5 rounded-full hover:bg-black/10 dark:hover:bg-white/10 p-0.5"
+                              data-testid={`button-remove-tag-${index}`}
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground" data-testid="text-no-tags">No tags yet</p>
+                    )}
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Add a tag..."
+                        value={newTagInput}
+                        onChange={(e) => setNewTagInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && newTagInput.trim()) {
+                            addTagMutation.mutate(newTagInput.trim());
+                          }
+                        }}
+                        className="h-8 text-sm"
+                        data-testid="input-add-tag"
+                      />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 px-3"
+                        onClick={() => {
+                          if (newTagInput.trim()) addTagMutation.mutate(newTagInput.trim());
+                        }}
+                        disabled={!newTagInput.trim() || addTagMutation.isPending}
+                        data-testid="button-add-tag"
                       >
-                        {tag}
-                      </Badge>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+                        {addTagMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5 mr-1" />}
+                        Add
+                      </Button>
+                    </div>
+                  </>
+                );
+              })()}
+            </CardContent>
+          </Card>
 
           {order.courierTracking && (
             <Card>
