@@ -5,16 +5,17 @@ import {
   buildVarsFromParams,
   interpolateMessageBody,
   getStatusLabel,
+  WA_NOTIFY_STATUSES,
 } from "./variables";
 import { formatPhoneForWhatsApp, sendWhatsAppApiRequest } from "./sender";
 import type { OrderNotificationParams } from "./types";
 
-export { WA_VARIABLE_CHIPS, DEFAULT_MESSAGE_BODY, interpolateMessageBody, STATUS_LABELS, getStatusLabel } from "./variables";
+export { WA_VARIABLE_CHIPS, DEFAULT_MESSAGE_BODY, interpolateMessageBody, STATUS_LABELS, getStatusLabel, WA_NOTIFY_STATUSES } from "./variables";
+export type { WaNotifyStatus } from "./variables";
 export { formatPhoneForWhatsApp } from "./sender";
 export type { SendResult, OrderNotificationParams } from "./types";
 
 const LOG_PREFIX = "[WhatsApp]";
-const WA_NOTIFY_STATUSES = ["NEW", "BOOKED", "FULFILLED", "DELIVERED"];
 
 export async function sendOrderStatusWhatsApp(
   params: OrderNotificationParams

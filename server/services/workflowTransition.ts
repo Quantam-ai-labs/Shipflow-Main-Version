@@ -4,11 +4,9 @@ import { eq, and, inArray, lt, sql } from "drizzle-orm";
 import type { Order } from "@shared/schema";
 import { writeBackCancel, writeBackTags } from './shopifyWriteBack';
 import { getMerchantRoboTags, type RoboTagConfig } from './roboTags';
-import { sendOrderStatusWhatsApp } from '../utils/integrations/whatsapp';
+import { sendOrderStatusWhatsApp, WA_NOTIFY_STATUSES } from '../utils/integrations/whatsapp';
 
 export { getMerchantRoboTags, type RoboTagConfig };
-
-const WA_NOTIFY_STATUSES = ["NEW", "BOOKED", "FULFILLED", "DELIVERED"] as const;
 
 const VALID_STATUSES = ["NEW", "PENDING", "HOLD", "READY_TO_SHIP", "BOOKED", "FULFILLED", "DELIVERED", "RETURN", "CANCELLED"] as const;
 type WorkflowStatus = typeof VALID_STATUSES[number];

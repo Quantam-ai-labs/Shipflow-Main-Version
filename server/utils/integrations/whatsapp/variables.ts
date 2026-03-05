@@ -1,3 +1,6 @@
+export const WA_NOTIFY_STATUSES = ["NEW", "BOOKED", "FULFILLED", "DELIVERED"] as const;
+export type WaNotifyStatus = typeof WA_NOTIFY_STATUSES[number];
+
 export const STATUS_LABELS: Record<string, string> = {
   NEW: "New Order",
   BOOKED: "Booked",
