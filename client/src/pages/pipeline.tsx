@@ -1585,7 +1585,7 @@ export default function Pipeline() {
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Customer</th>
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground hidden md:table-cell">City</th>
                 <th className="px-2 py-2.5 text-center font-medium text-muted-foreground w-[40px]" data-testid="header-history">#</th>
-                {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "ALL") && (
+                {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "ALL" || activeTab === "READY_TO_SHIP") && (
                   <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Address</th>
                 )}
                 <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Products</th>
@@ -1769,7 +1769,7 @@ export default function Pipeline() {
                       );
                     })()}
                   </td>
-                  {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "ALL") && (
+                  {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "ALL" || activeTab === "READY_TO_SHIP") && (
                     <td className="px-3 py-1.5 max-w-[220px]" data-testid={`cell-address-${order.id}`}>
                       <div className="text-xs text-muted-foreground whitespace-normal leading-tight">
                         {order.shippingAddress || "-"}
