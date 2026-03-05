@@ -1540,9 +1540,46 @@ export class DatabaseStorage implements IStorage {
 
   // WhatsApp Templates
   async getWhatsAppTemplates(merchantId: string): Promise<WhatsappTemplate[]> {
-    return db.select().from(whatsappTemplates)
+    const existing = await db.select().from(whatsappTemplates)
       .where(eq(whatsappTemplates.merchantId, merchantId))
       .orderBy(whatsappTemplates.workflowStatus);
+
+    const WA_DEFAULTS: { workflowStatus: string; templateName: string; messageBody: string }[] = [
+      {
+        workflowStatus: "NEW",
+        templateName: "order_confirmation",
+        messageBody: `Hello {customer_name},\n\nYour order #{order_number} of {item_name} has been received.\n\nThank you for shopping with lalaimports. We appreciate your trust!`,
+      },
+      {
+        workflowStatus: "BOOKED",
+        templateName: "order_updates",
+        messageBody: `Hello {customer_name},\n\nYour order #{order_number} of {item_name} is "booked".\n\nThank you for shopping with lalaimports. We appreciate your trust!`,
+      },
+      {
+        workflowStatus: "FULFILLED",
+        templateName: "order_updates",
+        messageBody: `Hello {customer_name},\n\nYour order #{order_number} of {item_name} is "shipped".\n\nThank you for shopping with lalaimports. We appreciate your trust!`,
+      },
+      {
+        workflowStatus: "DELIVERED",
+        templateName: "order_updates",
+        messageBody: `Hello {customer_name},\n\nYour order #{order_number} of {item_name} is "delivered".\n\nThank you for shopping with lalaimports. We appreciate your trust!`,
+      },
+    ];
+
+    const existingStatuses = new Set(existing.map(t => t.workflowStatus));
+    const missing = WA_DEFAULTS.filter(d => !existingStatuses.has(d.workflowStatus));
+
+    if (missing.length > 0) {
+      await db.insert(whatsappTemplates)
+        .values(missing.map(d => ({ merchantId, ...d, isActive: true })))
+        .onConflictDoNothing();
+      return db.select().from(whatsappTemplates)
+        .where(eq(whatsappTemplates.merchantId, merchantId))
+        .orderBy(whatsappTemplates.workflowStatus);
+    }
+
+    return existing;
   }
 
   async upsertWhatsAppTemplate(data: { merchantId: string; workflowStatus: string; templateName: string; messageBody?: string | null; isActive: boolean }): Promise<WhatsappTemplate> {
