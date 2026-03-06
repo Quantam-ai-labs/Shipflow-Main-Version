@@ -138,7 +138,6 @@ const allNavGroups: NavGroup[] = [
       { id: "customers", title: "Parties", url: "/accounting/parties", icon: UserCircle },
       { id: "sale-orders", title: "Point of Sale", url: "/accounting/sale-orders", icon: ShoppingCart },
       { id: "cash-accounts", title: "Cash Accounts", url: "/accounting/cash-accounts", icon: Landmark },
-      { id: "opening-balances", title: "Opening Balances", url: "/accounting/opening-balances", icon: Calculator },
     ],
   },
   {
@@ -162,6 +161,7 @@ const settingsItems: NavItem[] = [
   { id: "team", title: "Users & Roles", url: "/settings?tab=team", icon: Users },
   { id: "settings", title: "Notifications", url: "/settings?tab=notifications", icon: Settings },
   { id: "preferences", title: "Preferences", url: "/accounting/settings", icon: Cog },
+  { id: "opening-balances", title: "Opening Balances", url: "/accounting/opening-balances", icon: Calculator },
 ];
 
 const allPageIds = [
