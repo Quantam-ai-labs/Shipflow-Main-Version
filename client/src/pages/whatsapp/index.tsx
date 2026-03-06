@@ -21,19 +21,8 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
   MessageCircle,
   Pencil,
-  Trash2,
   CheckCircle2,
   XCircle,
   Clock,
@@ -392,7 +381,6 @@ function EditTemplateDialog({ open, onClose, statusInfo, initial, onSave, isSavi
 function TemplatesTab() {
   const { toast } = useToast();
   const [editOpen, setEditOpen] = useState(false);
-  const [deleteStatus, setDeleteStatus] = useState<string | null>(null);
   const [editingStatus, setEditingStatus] = useState<string | null>(null);
 
   const { data: templates, isLoading } = useQuery<WhatsAppTemplate[]>({
@@ -409,17 +397,6 @@ function TemplatesTab() {
       toast({ title: "Template saved" });
     },
     onError: () => toast({ title: "Failed to save template", variant: "destructive" }),
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: async (status: string) =>
-      apiRequest("DELETE", `/api/whatsapp-templates/${status}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/whatsapp-templates"] });
-      setDeleteStatus(null);
-      toast({ title: "Reset to default" });
-    },
-    onError: () => toast({ title: "Failed to reset template", variant: "destructive" }),
   });
 
   const getTemplate = (status: string) =>
@@ -456,87 +433,86 @@ function TemplatesTab() {
 
   const editingStatusInfo = WA_STATUSES.find(s => s.status === editingStatus) ?? null;
 
+  const openEdit = (status: string) => {
+    setEditingStatus(status);
+    setEditOpen(true);
+  };
+
   return (
     <>
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <MessageCircle className="w-5 h-5 text-green-500" />
-            WhatsApp Notification Templates
-          </CardTitle>
-          <CardDescription>
-            Configure which WhatsApp Business template is sent when an order reaches each status.
-            Use variable chips in the message body to insert dynamic order fields.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-3 flex gap-2">
-            <Info className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-            <p className="text-xs text-amber-700 dark:text-amber-400">
-              Only <strong>New Order</strong>, <strong>Booked</strong>, <strong>Shipped</strong>, and <strong>Delivered</strong> statuses
-              trigger WhatsApp notifications. Template names must match approved templates in your Meta Business account.
-            </p>
-          </div>
+      <div className="space-y-4">
+        <div className="rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-3 flex gap-2">
+          <Info className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+          <p className="text-xs text-amber-700 dark:text-amber-400">
+            Only <strong>New Order</strong>, <strong>Booked</strong>, <strong>Shipped</strong>, and <strong>Delivered</strong> statuses
+            trigger WhatsApp notifications. Template names must match approved templates in your Meta Business account.
+          </p>
+        </div>
 
-          {isLoading ? (
-            <div className="space-y-2">
-              {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-16 w-full" />)}
-            </div>
-          ) : (
-            <div className="divide-y rounded-md border">
-              {WA_STATUSES.map(({ status, label, color }) => {
-                const t = getTemplate(status);
-                const isActive = t?.isActive ?? true;
-                const templateName = t?.templateName ?? defaultTemplateName(status);
-                const messageBody = t?.messageBody;
-                return (
-                  <div
-                    key={status}
-                    className="flex items-center gap-3 px-4 py-3"
-                    data-testid={`whatsapp-template-row-${status.toLowerCase()}`}
-                  >
-                    <Badge className={`${color} border-0 text-xs shrink-0`}>{label}</Badge>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{templateName}</p>
-                      {messageBody ? (
-                        <p className="text-xs text-muted-foreground truncate">{messageBody}</p>
-                      ) : (
-                        <p className="text-xs text-muted-foreground italic">Default message</p>
-                      )}
+        {isLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-44 w-full rounded-xl" />)}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {WA_STATUSES.map(({ status, label, color }) => {
+              const t = getTemplate(status);
+              const isActive = t?.isActive ?? true;
+              const templateName = t?.templateName ?? defaultTemplateName(status);
+              const messageBody = t?.messageBody;
+              const isSystemTpl = hasSystemOption(status) && templateName === SYSTEM_TEMPLATE_NAMES[status];
+
+              return (
+                <Card
+                  key={status}
+                  className={`flex flex-col transition-opacity ${isActive ? "" : "opacity-60"}`}
+                  data-testid={`whatsapp-template-card-${status.toLowerCase()}`}
+                >
+                  <CardHeader className="pb-2 flex flex-row items-start justify-between gap-2">
+                    <div className="flex flex-col gap-1.5 min-w-0">
+                      <Badge className={`${color} border-0 text-xs w-fit`}>{label}</Badge>
+                      <p className="text-sm font-semibold truncate">{templateName}</p>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <Switch
-                        checked={isActive}
-                        onCheckedChange={v => handleToggle(status, v)}
-                        data-testid={`toggle-whatsapp-${status.toLowerCase()}`}
-                      />
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => { setEditingStatus(status); setEditOpen(true); }}
-                        data-testid={`button-edit-whatsapp-${status.toLowerCase()}`}
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-destructive hover:text-destructive"
-                        disabled={!t}
-                        onClick={() => setDeleteStatus(status)}
-                        data-testid={`button-delete-whatsapp-${status.toLowerCase()}`}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
+                    <Switch
+                      checked={isActive}
+                      onCheckedChange={v => handleToggle(status, v)}
+                      data-testid={`toggle-whatsapp-${status.toLowerCase()}`}
+                      className="shrink-0 mt-0.5"
+                    />
+                  </CardHeader>
+
+                  <CardContent className="flex-1 pb-3">
+                    {isSystemTpl ? (
+                      <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-2">
+                        <p className="text-xs text-blue-700 dark:text-blue-400">
+                          Pre-approved Meta template — no custom body required.
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground line-clamp-3 leading-relaxed whitespace-pre-wrap">
+                        {messageBody ?? DEFAULT_MESSAGE_BODIES[status] ?? ""}
+                      </p>
+                    )}
+                  </CardContent>
+
+                  <div className="px-6 pb-4">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => openEdit(status)}
+                      data-testid={`button-edit-whatsapp-${status.toLowerCase()}`}
+                    >
+                      <Pencil className="w-3.5 h-3.5 mr-1.5" />
+                      Edit Template
+                    </Button>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       <EditTemplateDialog
         open={editOpen}
@@ -546,28 +522,6 @@ function TemplatesTab() {
         onSave={handleSave}
         isSaving={saveMutation.isPending}
       />
-
-      <AlertDialog open={!!deleteStatus} onOpenChange={v => { if (!v) setDeleteStatus(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Reset template?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will remove the custom configuration for{" "}
-              <strong>{WA_STATUSES.find(s => s.status === deleteStatus)?.label}</strong> and
-              revert to the default template name and message body for this status.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => deleteStatus && deleteMutation.mutate(deleteStatus)}
-              data-testid="button-confirm-delete-template"
-            >
-              Reset to Default
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </>
   );
 }
