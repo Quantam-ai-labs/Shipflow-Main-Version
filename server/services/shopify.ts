@@ -657,6 +657,7 @@ export class ShopifyService {
                     shippingAddress: created.shippingAddress,
                     totalAmount: created.totalAmount,
                     itemSummary: created.itemSummary,
+                    lineItems: Array.isArray(created.lineItems) ? (created.lineItems as any[]) : null,
                   });
                 } catch (e) {}
               })()
@@ -689,6 +690,7 @@ export class ShopifyService {
                   shippingAddress: created.shippingAddress,
                   totalAmount: created.totalAmount,
                   itemSummary: created.itemSummary,
+                  lineItems: Array.isArray(created.lineItems) ? (created.lineItems as any[]) : null,
                 });
               } catch (e2) {}
             }

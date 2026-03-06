@@ -19,4 +19,5 @@ export interface OrderNotificationParams {
   courierName?: string | null;
   courierTracking?: string | null;
   itemSummary?: string | null;
+  lineItems?: Array<{ name: string; quantity: number; price: number; variantTitle?: string | null; sku?: string | null }> | null;
 }

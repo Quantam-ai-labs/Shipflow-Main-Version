@@ -31,10 +31,10 @@ export const WA_VARIABLE_CHIPS = [
 ] as const;
 
 export const DEFAULT_MESSAGE_BODIES: Record<string, string> = {
-  NEW: `Hello {customer_name},\n\nYour order #{order_number} of {item_name} is pending for Confirmation.\nPlease Reply with Confirm or Cancel.`,
-  BOOKED: `Hello {customer_name},\n\nYour order #{order_number} of {item_name} is "booked".\n\nThank you for shopping with lalaimports. We appreciate your trust!`,
-  FULFILLED: `Hello {customer_name},\n\nYour order #{order_number} of {item_name} is "shipped".\n\nThank you for shopping with lalaimports. We appreciate your trust!`,
-  DELIVERED: `Hello {customer_name},\n\nYour order #{order_number} of {item_name} is "delivered".\n\nThank you for shopping with lalaimports. We appreciate your trust!`,
+  NEW: `Hello {customer_name},\n\nYour order #{order_number} has been received!\n\n{item_name}\n\nTotal: Rs. {total_amount}\n\nPlease reply *Confirm* or *Cancel*.`,
+  BOOKED: `Hello {customer_name},\n\nYour order #{order_number} has been booked with {courier_name}.\n\n{item_name}\n\nTotal: Rs. {total_amount}\nTracking: {tracking_number}\n\nThank you for shopping with us!`,
+  FULFILLED: `Hello {customer_name},\n\nYour order #{order_number} is on its way!\n\n{item_name}\n\nTracking: {tracking_number} ({courier_name})\n\nThank you for shopping with us!`,
+  DELIVERED: `Hello {customer_name},\n\nYour order #{order_number} has been delivered.\n\n{item_name}\n\nTotal: Rs. {total_amount}\n\nThank you for shopping with us!`,
 };
 
 export const DEFAULT_MESSAGE_BODY =
@@ -55,6 +55,20 @@ export function interpolateMessageBody(
   return template.replace(/\{(\w+)\}/g, (_, key) => vars[key] ?? `{${key}}`);
 }
 
+function buildItemLines(
+  lineItems?: Array<{ name: string; quantity: number; price: number; variantTitle?: string | null }> | null,
+  itemSummary?: string | null
+): string {
+  if (lineItems && lineItems.length > 0) {
+    return lineItems.map(item => {
+      const variant = item.variantTitle ? ` - ${item.variantTitle}` : "";
+      const total = (item.price * item.quantity).toLocaleString("en-PK");
+      return `• ${item.name}${variant} x${item.quantity} @ Rs.${total}`;
+    }).join("\n");
+  }
+  return itemSummary || "your order";
+}
+
 export function buildVarsFromParams(params: {
   customerName: string;
   orderNumber: string;
@@ -66,16 +80,17 @@ export function buildVarsFromParams(params: {
   courierName?: string | null;
   courierTracking?: string | null;
   itemSummary?: string | null;
+  lineItems?: Array<{ name: string; quantity: number; price: number; variantTitle?: string | null; sku?: string | null }> | null;
 }): Record<string, string> {
   return {
     customer_name: params.customerName || "Customer",
     order_number: params.orderNumber || "N/A",
-    item_name: params.itemSummary || "your order",
+    item_name: buildItemLines(params.lineItems, params.itemSummary),
     new_status: getStatusLabel(params.toStatus),
     old_status: getStatusLabel(params.fromStatus),
     city: params.city || "",
     address: params.shippingAddress || "",
-    total_amount: params.totalAmount || "",
+    total_amount: params.totalAmount ? Number(params.totalAmount).toLocaleString("en-PK") : "",
     courier_name: params.courierName || "",
     tracking_number: params.courierTracking || "",
   };
