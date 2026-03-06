@@ -7748,7 +7748,9 @@ export async function registerRoutes(
       }
       const merchant = await storage.getMerchant(merchantId);
       const lineItems = Array.isArray(order.lineItems) ? order.lineItems : [];
-      const itemsSummary = order.itemSummary || lineItems.map((li: any) => `${li.title || li.name || "Item"} x${li.quantity || 1}`).join(", ");
+      const itemsSummary = lineItems.length > 0
+        ? lineItems.map((li: any) => { const v = li.variantTitle || li.variant_title; return `${li.title || li.name || "Item"}${v ? ` - ${v}` : ""} x ${li.quantity || 1}`; }).join(" || ")
+        : (order.itemSummary || "Order items");
       const pdfBuffer = await generatePostExCustomSlip([{
         trackingNumber,
         orderNumber: order.orderNumber,
@@ -7822,7 +7824,9 @@ export async function registerRoutes(
             continue;
           }
           const lineItems = Array.isArray(order.lineItems) ? order.lineItems : [];
-          const itemsSummary = order.itemSummary || lineItems.map((li: any) => `${li.title || li.name || "Item"} x${li.quantity || 1}`).join(", ");
+          const itemsSummary = lineItems.length > 0
+            ? lineItems.map((li: any) => { const v = li.variantTitle || li.variant_title; return `${li.title || li.name || "Item"}${v ? ` - ${v}` : ""} x ${li.quantity || 1}`; }).join(" || ")
+            : (order.itemSummary || "Order items");
           postExContexts.push({
             trackingNumber: tn,
             orderNumber: order.orderNumber,
@@ -7893,7 +7897,9 @@ export async function registerRoutes(
         const courierNorm = normalizeCourierName(order.courierName || "");
 
         const lineItems = Array.isArray(order.lineItems) ? order.lineItems : [];
-        const orderItemsSummary = order.itemSummary || lineItems.map((li: any) => `${li.title || li.name || "Item"} x${li.quantity || 1}`).join(", ");
+        const orderItemsSummary = lineItems.length > 0
+          ? lineItems.map((li: any) => { const v = li.variantTitle || li.variant_title; return `${li.title || li.name || "Item"}${v ? ` - ${v}` : ""} x ${li.quantity || 1}`; }).join(" || ")
+          : (order.itemSummary || "Order items");
 
         let result;
         if (courierNorm === "leopards") {
@@ -7918,7 +7924,9 @@ export async function registerRoutes(
           const { generatePostExCustomSlip } = await import("./services/courierSlips");
           const merchant = await storage.getMerchant(merchantId);
           const lineItems = Array.isArray(order.lineItems) ? order.lineItems : [];
-          const itemsSummary = order.itemSummary || lineItems.map((li: any) => `${li.title || li.name || "Item"} x${li.quantity || 1}`).join(", ");
+          const itemsSummary = lineItems.length > 0
+            ? lineItems.map((li: any) => { const v = li.variantTitle || li.variant_title; return `${li.title || li.name || "Item"}${v ? ` - ${v}` : ""} x ${li.quantity || 1}`; }).join(" || ")
+            : (order.itemSummary || "Order items");
           const pdfBuffer = await generatePostExCustomSlip([{
             trackingNumber: order.courierTracking!,
             orderNumber: order.orderNumber,
@@ -8025,7 +8033,9 @@ export async function registerRoutes(
             const order = await storage.getOrderById(merchantId, item.orderId);
             if (!order) return null;
             const lineItems = Array.isArray(order.lineItems) ? order.lineItems : [];
-            const itemsSummary = order.itemSummary || lineItems.map((li: any) => `${li.title || li.name || "Item"} x${li.quantity || 1}`).join(", ");
+            const itemsSummary = lineItems.length > 0
+              ? lineItems.map((li: any) => { const v = li.variantTitle || li.variant_title; return `${li.title || li.name || "Item"}${v ? ` - ${v}` : ""} x ${li.quantity || 1}`; }).join(" || ")
+              : (order.itemSummary || "Order items");
             return {
               trackingNumber: item.trackingNumber || order.courierTracking || "",
               orderNumber: item.orderNumber || order.orderNumber,
@@ -8080,7 +8090,9 @@ export async function registerRoutes(
             const slipUrl = item.slipUrl;
             const order = await storage.getOrderById(merchantId, item.orderId);
             const bulkLineItems = Array.isArray(order?.lineItems) ? order.lineItems : [];
-            const bulkItemsSummary = order?.itemSummary || bulkLineItems.map((li: any) => `${li.title || li.name || "Item"} x${li.quantity || 1}`).join(", ");
+            const bulkItemsSummary = bulkLineItems.length > 0
+              ? bulkLineItems.map((li: any) => { const v = li.variantTitle || li.variant_title; return `${li.title || li.name || "Item"}${v ? ` - ${v}` : ""} x ${li.quantity || 1}`; }).join(" || ")
+              : (order?.itemSummary || "Order items");
             const bulkOrderCtx = { itemsSummary: bulkItemsSummary, quantity: order?.totalQuantity || 1 };
 
             if (leopardsCreds?.apiKey && leopardsCreds?.apiSecret && trackingNum) {
@@ -8200,7 +8212,9 @@ export async function registerRoutes(
           if (!order) continue;
 
           const lineItems = Array.isArray(order.lineItems) ? order.lineItems : [];
-          const itemsSummary = order.itemSummary || lineItems.map((li: any) => `${li.title || li.name || "Item"} x${li.quantity || 1}`).join(", ");
+          const itemsSummary = lineItems.length > 0
+            ? lineItems.map((li: any) => { const v = li.variantTitle || li.variant_title; return `${li.title || li.name || "Item"}${v ? ` - ${v}` : ""} x ${li.quantity || 1}`; }).join(" || ")
+            : (order.itemSummary || "Order items");
           const remarks = [order.remark || order.notes, "Allow Open Parcel", "Must Call Before Delivery", "Handle With Care"].filter(Boolean).join(" - ");
 
           bills.push({

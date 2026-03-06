@@ -972,7 +972,10 @@ export class ShopifyService {
     const totalQuantity = shopifyOrder.line_items.reduce((sum, item) => sum + item.quantity, 0);
 
     const itemSummary = shopifyOrder.line_items
-      .map(item => `${item.title} x ${item.quantity}`)
+      .map(item => {
+        const variant = item.variant_title ? ` - ${item.variant_title}` : "";
+        return `${item.title}${variant} x ${item.quantity}`;
+      })
       .join(' || ');
 
     const isCod = shopifyOrder.financial_status === 'pending' || 
