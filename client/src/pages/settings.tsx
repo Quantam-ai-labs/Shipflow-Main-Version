@@ -496,14 +496,13 @@ export default function Settings() {
                 key={tab.id}
                 onClick={handleClick}
                 data-testid={`settings-tab-${tab.id}`}
-                style={isActive ? { outline: "2.5px solid rgba(255,255,255,0.75)", outlineOffset: "0px" } : undefined}
                 className={[
                   "relative flex-shrink-0 flex flex-col items-center justify-center gap-2.5",
                   "px-4 py-5 rounded-2xl cursor-pointer select-none",
                   "min-w-[100px] transition-all duration-200 ease-out overflow-hidden",
                   `bg-gradient-to-br ${tab.gradient}`,
                   isActive
-                    ? "shadow-2xl brightness-110"
+                    ? "ring-inset ring-[3px] ring-white/80 shadow-2xl brightness-110"
                     : "opacity-75 hover:opacity-95 shadow-md",
                 ].join(" ")}
               >
