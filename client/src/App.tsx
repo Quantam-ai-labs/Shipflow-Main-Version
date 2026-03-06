@@ -71,13 +71,12 @@ import ShopifyProducts from "@/pages/shopify-products";
 import ShopifyProductDetail from "@/pages/shopify-product-detail";
 import ProductAnalytics from "@/pages/product-analytics";
 import ExpenseTracker from "@/pages/expense-tracker";
-import StockLedger from "@/pages/stock-ledger";
 import CourierDues from "@/pages/courier-dues";
 import FinancialDashboard from "@/pages/financial-dashboard";
 import AccountingOverview from "@/pages/accounting/overview";
 import AccountingParties from "@/pages/accounting/parties";
 import AccountingProducts from "@/pages/accounting/products";
-import AccountingStockReceipts from "@/pages/accounting/stock-receipts";
+import AccountingStock from "@/pages/accounting/stock";
 import AccountingSales from "@/pages/accounting/sales";
 import SaleOrdersPage from "@/pages/accounting/sale-orders";
 import AccountingExpenses from "@/pages/accounting/expenses";
@@ -132,7 +131,7 @@ const routeToPageId: Record<string, string> = {
   "/accounting/transactions": "money",
   "/accounting/parties": "customers",
   "/accounting/products": "products",
-  "/accounting/stock-receipts": "add-stock",
+  "/accounting/stock": "stock",
   "/accounting/sales": "sale-orders",
   "/accounting/sale-orders": "sale-orders",
   "/accounting/expenses": "expense-history",
@@ -234,12 +233,11 @@ function AppRoutes() {
       <Route path="/expense-tracker" component={ExpenseTracker} />
       <Route path="/courier-dues" component={CourierDues} />
       <Route path="/financial-dashboard" component={FinancialDashboard} />
-      <Route path="/stock-ledger" component={StockLedger} />
       <Route path="/accounting">{() => <ProtectedRoute component={AccountingOverview} path="/accounting" />}</Route>
       <Route path="/accounting/transactions">{() => <ProtectedRoute component={AccountingTransactions} path="/accounting/transactions" />}</Route>
       <Route path="/accounting/parties">{() => <ProtectedRoute component={AccountingParties} path="/accounting/parties" />}</Route>
       <Route path="/accounting/products">{() => <ProtectedRoute component={AccountingProducts} path="/accounting/products" />}</Route>
-      <Route path="/accounting/stock-receipts">{() => <ProtectedRoute component={AccountingStockReceipts} path="/accounting/stock-receipts" />}</Route>
+      <Route path="/accounting/stock">{() => <ProtectedRoute component={AccountingStock} path="/accounting/stock" />}</Route>
       <Route path="/accounting/sales">{() => <ProtectedRoute component={AccountingSales} path="/accounting/sales" />}</Route>
       <Route path="/accounting/sale-orders">{() => <ProtectedRoute component={SaleOrdersPage} path="/accounting/sale-orders" />}</Route>
       <Route path="/accounting/expenses">{() => <ProtectedRoute component={AccountingExpenses} path="/accounting/expenses" />}</Route>

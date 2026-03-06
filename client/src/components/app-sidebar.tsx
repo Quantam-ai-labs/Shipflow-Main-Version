@@ -122,8 +122,7 @@ const allNavGroups: NavGroup[] = [
     icon: ShoppingBag,
     items: [
       { id: "products", title: "Products", url: "/accounting/products", icon: ShoppingBag },
-      { id: "stock-ledger", title: "Stock", url: "/stock-ledger", icon: BookOpen },
-      { id: "add-stock", title: "Add Stock", url: "/accounting/stock-receipts", icon: ArrowDownLeft },
+      { id: "stock", title: "Stock", url: "/accounting/stock", icon: BookOpen },
       { id: "sale-orders", title: "Point of Sale", url: "/accounting/sale-orders", icon: ShoppingCart },
     ],
   },
@@ -171,7 +170,7 @@ const allPageIds = [
 
 const defaultPinnedPages = [
   "orders-all", "orders-new", "orders-pending", "orders-ready", "orders-booked", "orders-fulfilled",
-  "products", "add-stock",
+  "products", "stock",
   "money", "customers", "sale-orders", "cod-reconciliation", "payment-ledger",
   "ads-dashboard", "ads-profitability",
   "overview", "profit-loss", "shipments",
