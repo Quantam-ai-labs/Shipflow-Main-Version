@@ -133,7 +133,6 @@ const allNavGroups: NavGroup[] = [
     items: [
       { id: "money", title: "Transactions", url: "/accounting/transactions", icon: Receipt },
       { id: "expense-history", title: "Expenses", url: "/accounting/expenses", icon: Calculator },
-      { id: "needs-payment", title: "Needs Payment", url: "/accounting/expenses-unpaid", icon: Clock },
       { id: "customers", title: "Parties", url: "/accounting/parties", icon: UserCircle },
       { id: "sale-orders", title: "Point of Sale", url: "/accounting/sale-orders", icon: ShoppingCart },
       { id: "cash-accounts", title: "Cash Accounts", url: "/accounting/cash-accounts", icon: Landmark },

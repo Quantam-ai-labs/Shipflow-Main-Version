@@ -81,7 +81,6 @@ import AccountingStockReceipts from "@/pages/accounting/stock-receipts";
 import AccountingSales from "@/pages/accounting/sales";
 import SaleOrdersPage from "@/pages/accounting/sale-orders";
 import AccountingExpenses from "@/pages/accounting/expenses";
-import AccountingExpensesUnpaid from "@/pages/accounting/expenses-unpaid";
 import AccountingCodReceivable from "@/pages/accounting/cod-receivable";
 import AccountingCourierPayable from "@/pages/accounting/courier-payable";
 import AccountingPnl from "@/pages/accounting/reports/pnl";
@@ -137,7 +136,6 @@ const routeToPageId: Record<string, string> = {
   "/accounting/sales": "sale-orders",
   "/accounting/sale-orders": "sale-orders",
   "/accounting/expenses": "expense-history",
-  "/accounting/expenses-unpaid": "needs-payment",
   "/accounting/cod-receivable": "cod-receivable",
   "/accounting/courier-payable": "courier-payable",
   "/accounting/reports/pnl": "profit-loss",
@@ -245,7 +243,6 @@ function AppRoutes() {
       <Route path="/accounting/sales">{() => <ProtectedRoute component={AccountingSales} path="/accounting/sales" />}</Route>
       <Route path="/accounting/sale-orders">{() => <ProtectedRoute component={SaleOrdersPage} path="/accounting/sale-orders" />}</Route>
       <Route path="/accounting/expenses">{() => <ProtectedRoute component={AccountingExpenses} path="/accounting/expenses" />}</Route>
-      <Route path="/accounting/expenses-unpaid">{() => <ProtectedRoute component={AccountingExpensesUnpaid} path="/accounting/expenses-unpaid" />}</Route>
       <Route path="/accounting/cod-receivable">{() => <ProtectedRoute component={AccountingCodReceivable} path="/accounting/cod-receivable" />}</Route>
       <Route path="/accounting/courier-payable">{() => <ProtectedRoute component={AccountingCourierPayable} path="/accounting/courier-payable" />}</Route>
       <Route path="/accounting/reports/pnl">{() => <ProtectedRoute component={AccountingPnl} path="/accounting/reports/pnl" />}</Route>
