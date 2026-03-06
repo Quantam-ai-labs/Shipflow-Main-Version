@@ -160,7 +160,7 @@ const settingsItems: NavItem[] = [
   { id: "settings-status-mapping", title: "Status Mapping", url: "/settings?tab=mapping", icon: ArrowLeftRight },
   { id: "team", title: "Users & Roles", url: "/settings?tab=team", icon: Users },
   { id: "settings", title: "Notifications", url: "/settings?tab=notifications", icon: Settings },
-  { id: "preferences", title: "Preferences", url: "/accounting/settings", icon: Cog },
+  { id: "preferences", title: "Preferences", url: "/settings?tab=accounting", icon: Cog },
   { id: "opening-balances", title: "Opening Balances", url: "/accounting/opening-balances", icon: Calculator },
 ];
 
