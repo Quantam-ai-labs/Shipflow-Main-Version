@@ -1467,6 +1467,7 @@ export const accountingSettings = pgTable("accounting_settings", {
   defaultCurrency: varchar("default_currency", { length: 10 }).default("PKR"),
   financialYearStart: integer("financial_year_start").default(7),
   openingBalancesSet: boolean("opening_balances_set").default(false),
+  openingBalancesUnlocked: boolean("opening_balances_unlocked").default(false),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
   uniqueIndex("idx_acct_settings_merchant").on(table.merchantId),

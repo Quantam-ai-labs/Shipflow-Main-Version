@@ -1,6 +1,7 @@
 import { Express, Request, Response } from "express";
 import { db } from "../db";
 import { eq, and, desc, sql, gte, lte, sum, count } from "drizzle-orm";
+import bcrypt from "bcrypt";
 import {
   parties, insertPartySchema,
   partyBalances,
@@ -26,6 +27,8 @@ import {
   codReconciliation,
   teamMembers,
   transactions,
+  users,
+  merchants,
 } from "../../shared/schema";
 import type {
   Party, CashAccount, AccountingProduct,
@@ -1851,6 +1854,9 @@ export function registerAccountingRoutes(app: Express) {
   // ========== OPENING BALANCES ==========
 
   async function isSystemLocked(merchantId: string): Promise<boolean> {
+    const [settings] = await db.select({ openingBalancesUnlocked: accountingSettings.openingBalancesUnlocked })
+      .from(accountingSettings).where(eq(accountingSettings.merchantId, merchantId));
+    if (settings?.openingBalancesUnlocked) return false;
     const [completedSale] = await db.select({ id: sales.id }).from(sales)
       .where(and(eq(sales.merchantId, merchantId), eq(sales.status, "COMPLETED"))).limit(1);
     if (completedSale) return true;
@@ -1873,8 +1879,77 @@ export function registerAccountingRoutes(app: Express) {
   app.get("/api/accounting/opening-balances/lock-status", isAuthenticated, async (req: any, res) => {
     try {
       const merchantId = await getMerchantId(req);
-      const locked = await isSystemLocked(merchantId);
-      res.json({ locked });
+      const [settings] = await db.select({ openingBalancesUnlocked: accountingSettings.openingBalancesUnlocked })
+        .from(accountingSettings).where(eq(accountingSettings.merchantId, merchantId));
+      const unlocked = settings?.openingBalancesUnlocked ?? false;
+      const locked = unlocked ? false : await isSystemLocked(merchantId);
+      res.json({ locked, unlocked });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/accounting/opening-balances/unlock", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const userId = req.session?.userId;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+      const [user] = await db.select({ email: users.email, passwordHash: users.passwordHash })
+        .from(users).where(eq(users.id, userId));
+      if (!user) return res.status(401).json({ message: "User not found" });
+
+      const [merchant] = await db.select({ email: merchants.email })
+        .from(merchants).where(eq(merchants.id, merchantId));
+
+      const isMerchantOwner = merchant?.email && user.email?.toLowerCase() === merchant.email.toLowerCase();
+      const [membership] = await db.select({ role: teamMembers.role }).from(teamMembers)
+        .where(eq(teamMembers.userId, userId));
+      const hasAdminRole = membership && ["admin", "manager"].includes(membership.role);
+
+      if (!isMerchantOwner && !hasAdminRole) {
+        return res.status(403).json({ message: "Only admin users can unlock opening balances" });
+      }
+
+      const { password } = req.body;
+      if (!password) return res.status(400).json({ message: "Password is required" });
+      if (!user.passwordHash) return res.status(401).json({ message: "Account has no password set" });
+
+      const valid = await bcrypt.compare(password, user.passwordHash);
+      if (!valid) return res.status(401).json({ message: "Incorrect password" });
+
+      await db.update(accountingSettings)
+        .set({ openingBalancesUnlocked: true })
+        .where(eq(accountingSettings.merchantId, merchantId));
+
+      res.json({ message: "Opening balances unlocked successfully" });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/accounting/opening-balances/lock", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const userId = req.session?.userId;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+      const [user] = await db.select({ email: users.email }).from(users).where(eq(users.id, userId));
+      if (!user) return res.status(401).json({ message: "User not found" });
+
+      const [merchant] = await db.select({ email: merchants.email })
+        .from(merchants).where(eq(merchants.id, merchantId));
+
+      const isMerchantOwner = merchant?.email && user.email?.toLowerCase() === merchant.email.toLowerCase();
+      const [membership] = await db.select({ role: teamMembers.role }).from(teamMembers)
+        .where(eq(teamMembers.userId, userId));
+      const hasAdminRole = membership && ["admin", "manager"].includes(membership.role);
+
+      if (!isMerchantOwner && !hasAdminRole) {
+        return res.status(403).json({ message: "Only admin users can lock opening balances" });
+      }
+
+      await db.update(accountingSettings)
+        .set({ openingBalancesUnlocked: false })
+        .where(eq(accountingSettings.merchantId, merchantId));
+
+      res.json({ message: "Opening balances locked successfully" });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 

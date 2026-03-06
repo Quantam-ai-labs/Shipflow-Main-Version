@@ -23,9 +23,10 @@ import {
   Alert, AlertDescription,
 } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 import {
   Plus, Trash2, Upload, FileSpreadsheet, RotateCcw, AlertTriangle,
-  CheckCircle, XCircle, Lock, Download,
+  CheckCircle, XCircle, Lock, LockOpen, Loader2, Download,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 
@@ -74,6 +75,7 @@ interface ManualLine {
 
 export default function OpeningBalancesPage() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [manualDate, setManualDate] = useState(new Date().toISOString().split("T")[0]);
@@ -91,7 +93,11 @@ export default function OpeningBalancesPage() {
   const [reverseTarget, setReverseTarget] = useState<Batch | null>(null);
   const [reverseReason, setReverseReason] = useState("");
 
-  const { data: lockStatus } = useQuery<{ locked: boolean }>({
+  const [unlockDialogOpen, setUnlockDialogOpen] = useState(false);
+  const [unlockPassword, setUnlockPassword] = useState("");
+  const [unlockError, setUnlockError] = useState("");
+
+  const { data: lockStatus } = useQuery<{ locked: boolean; unlocked: boolean }>({
     queryKey: ["/api/accounting/opening-balances/lock-status"],
   });
 
@@ -100,6 +106,44 @@ export default function OpeningBalancesPage() {
   });
 
   const isLocked = lockStatus?.locked === true;
+  const isManuallyUnlocked = lockStatus?.unlocked === true;
+
+  const isAdmin = user?.isMerchantOwner || user?.teamRole === "admin" || user?.teamRole === "manager";
+
+  const unlockMutation = useMutation({
+    mutationFn: async (password: string) => {
+      const res = await apiRequest("POST", "/api/accounting/opening-balances/unlock", { password });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || "Failed to unlock");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Unlocked", description: "Opening balances are now unlocked." });
+      queryClient.invalidateQueries({ queryKey: ["/api/accounting/opening-balances/lock-status"] });
+      setUnlockDialogOpen(false);
+      setUnlockPassword("");
+      setUnlockError("");
+    },
+    onError: (e: any) => {
+      setUnlockError(e.message || "Incorrect password");
+    },
+  });
+
+  const lockMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/accounting/opening-balances/lock", {});
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Locked", description: "Opening balances have been locked." });
+      queryClient.invalidateQueries({ queryKey: ["/api/accounting/opening-balances/lock-status"] });
+    },
+    onError: (e: any) => {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    },
+  });
 
   const parseMutation = useMutation({
     mutationFn: async (rows: any[]) => {
@@ -292,21 +336,99 @@ export default function OpeningBalancesPage() {
     <div className="p-6 max-w-6xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold" data-testid="text-page-title">Opening Balances</h1>
-        {isLocked && (
-          <Badge variant="secondary" className="gap-1" data-testid="badge-locked">
-            <Lock className="h-3 w-3" /> Locked
-          </Badge>
-        )}
+        <div className="flex items-center gap-2">
+          {isManuallyUnlocked ? (
+            <>
+              <Badge className="gap-1 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 border-green-200 dark:border-green-700" data-testid="badge-unlocked">
+                <LockOpen className="h-3 w-3" /> Unlocked
+              </Badge>
+              {isAdmin && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1 text-xs"
+                  onClick={() => lockMutation.mutate()}
+                  disabled={lockMutation.isPending}
+                  data-testid="button-relock"
+                >
+                  {lockMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Lock className="h-3 w-3" />}
+                  Re-lock
+                </Button>
+              )}
+            </>
+          ) : lockStatus !== undefined && (lockStatus.locked) ? (
+            <>
+              <Badge variant="secondary" className="gap-1" data-testid="badge-locked">
+                <Lock className="h-3 w-3" /> Locked
+              </Badge>
+              {isAdmin && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1 text-xs"
+                  onClick={() => { setUnlockPassword(""); setUnlockError(""); setUnlockDialogOpen(true); }}
+                  data-testid="button-unlock"
+                >
+                  <LockOpen className="h-3 w-3" /> Unlock
+                </Button>
+              )}
+            </>
+          ) : null}
+        </div>
       </div>
 
-      {isLocked && (
-        <Alert data-testid="alert-locked">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertDescription>
-            System is locked because transactions have been recorded. You can view existing batches and reverse them, but cannot post new opening balances.
+      {(isLocked || isManuallyUnlocked) && (
+        <Alert data-testid="alert-lock-status" className={isManuallyUnlocked ? "border-green-200 dark:border-green-700 bg-green-50 dark:bg-green-950/30" : ""}>
+          {isManuallyUnlocked ? <LockOpen className="h-4 w-4 text-green-600 dark:text-green-400" /> : <AlertTriangle className="h-4 w-4" />}
+          <AlertDescription className={isManuallyUnlocked ? "text-green-700 dark:text-green-300" : ""}>
+            {isManuallyUnlocked
+              ? "System is temporarily unlocked. You can post new opening balances. Re-lock when done to protect your financial records."
+              : "System is locked because transactions have been recorded. You can view existing batches and reverse them, but cannot post new opening balances."
+            }
           </AlertDescription>
         </Alert>
       )}
+
+      <Dialog open={unlockDialogOpen} onOpenChange={(open) => { setUnlockDialogOpen(open); if (!open) { setUnlockPassword(""); setUnlockError(""); } }}>
+        <DialogContent className="max-w-sm" data-testid="dialog-unlock">
+          <DialogHeader>
+            <DialogTitle>Unlock Opening Balances</DialogTitle>
+            <DialogDescription>
+              Enter your account password to temporarily override the lock. This allows posting new opening balances.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1">
+              <Label htmlFor="unlock-password">Account Password</Label>
+              <Input
+                id="unlock-password"
+                type="password"
+                placeholder="Enter your password"
+                value={unlockPassword}
+                onChange={(e) => { setUnlockPassword(e.target.value); setUnlockError(""); }}
+                onKeyDown={(e) => { if (e.key === "Enter" && unlockPassword) unlockMutation.mutate(unlockPassword); }}
+                data-testid="input-unlock-password"
+              />
+            </div>
+            {unlockError && (
+              <p className="text-sm text-destructive" data-testid="text-unlock-error">{unlockError}</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setUnlockDialogOpen(false)} data-testid="button-cancel-unlock">
+              Cancel
+            </Button>
+            <Button
+              onClick={() => unlockMutation.mutate(unlockPassword)}
+              disabled={!unlockPassword || unlockMutation.isPending}
+              data-testid="button-confirm-unlock"
+            >
+              {unlockMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Unlock
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Tabs defaultValue="manual" data-testid="tabs-opening-balances">
         <TabsList>
