@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useLocation, Link } from "wouter";
+import { useLocation, useSearch, Link } from "wouter";
 import { useDateRange } from "@/contexts/date-range-context";
 import {
   Sidebar,
@@ -182,11 +182,11 @@ const allNavGroups: NavGroup[] = [
 ];
 
 const settingsItems: NavItem[] = [
-  { id: "settings-shopify", title: "Integrations", url: "/settings/shopify", icon: Store },
-  { id: "settings-couriers", title: "Couriers", url: "/settings/couriers", icon: Truck },
-  { id: "settings-status-mapping", title: "Status Mapping", url: "/settings/status-mapping", icon: ArrowLeftRight },
-  { id: "team", title: "Users & Roles", url: "/team", icon: Users },
-  { id: "settings", title: "Notifications", url: "/settings", icon: Settings },
+  { id: "settings-shopify", title: "Integrations", url: "/settings?tab=shopify", icon: Store },
+  { id: "settings-couriers", title: "Couriers", url: "/settings?tab=couriers", icon: Truck },
+  { id: "settings-status-mapping", title: "Status Mapping", url: "/settings?tab=mapping", icon: ArrowLeftRight },
+  { id: "team", title: "Users & Roles", url: "/settings?tab=team", icon: Users },
+  { id: "settings", title: "Notifications", url: "/settings?tab=notifications", icon: Settings },
   { id: "preferences", title: "Preferences", url: "/accounting/settings", icon: Cog },
 ];
 
@@ -207,6 +207,7 @@ const defaultPinnedPages = [
 
 export function AppSidebar() {
   const [location] = useLocation();
+  const searchString = useSearch();
   const { user, logout, isLoggingOut } = useAuth();
   const queryClient = useQueryClient();
   const [showPagePicker, setShowPagePicker] = useState(false);
@@ -434,7 +435,7 @@ export function AppSidebar() {
           <SidebarGroup>
             <SidebarGroupContent>
               <SidebarMenu>
-                <Collapsible defaultOpen={location.startsWith("/settings") || location === "/team" || location === "/accounting/settings"} asChild className="group/settings-collapsible">
+                <Collapsible defaultOpen={location.startsWith("/settings") || location === "/accounting/settings"} asChild className="group/settings-collapsible">
                   <SidebarMenuItem>
                     <CollapsibleTrigger asChild>
                       <SidebarMenuButton data-testid="nav-settings-toggle" tooltip="Settings">
@@ -450,9 +451,17 @@ export function AppSidebar() {
                     </CollapsibleTrigger>
                     <CollapsibleContent>
                       <SidebarMenuSub>
-                        {filteredSettings.map((item) => (
+                        {filteredSettings.map((item) => {
+                          const itemUrl = new URL(item.url, "http://x");
+                          const itemTab = itemUrl.searchParams.get("tab");
+                          const currentTab = new URLSearchParams(searchString).get("tab");
+                          const isSettingsItem = item.url.startsWith("/settings?");
+                          const isItemActive = isSettingsItem
+                            ? location === "/settings" && currentTab === itemTab
+                            : location === item.url;
+                          return (
                           <SidebarMenuSubItem key={item.id}>
-                            <SidebarMenuSubButton asChild isActive={location === item.url}>
+                            <SidebarMenuSubButton asChild isActive={isItemActive}>
                               <Link href={item.url} data-testid={`nav-${item.id}`}>
                                 <item.icon className="w-3.5 h-3.5" />
                                 <span className="flex-1">{item.title}</span>
@@ -464,7 +473,8 @@ export function AppSidebar() {
                               </Link>
                             </SidebarMenuSubButton>
                           </SidebarMenuSubItem>
-                        ))}
+                          );
+                        })}
                       </SidebarMenuSub>
                     </CollapsibleContent>
                   </SidebarMenuItem>

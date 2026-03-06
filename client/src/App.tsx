@@ -103,10 +103,6 @@ import AdsProfitability from "@/pages/marketing/ads-profitability";
 import AIInsights from "@/pages/marketing/ai-insights";
 import AIAssistant from "@/pages/ai-assistant";
 import WhatsAppPage from "@/pages/whatsapp";
-import SettingsShopify from "@/pages/settings/shopify";
-import SettingsCouriers from "@/pages/settings/couriers";
-import SettingsStatusMapping from "@/pages/settings/status-mapping";
-import SettingsMarketing from "@/pages/settings/marketing";
 import NotFound from "@/pages/not-found";
 
 function OnboardingBanner() {
@@ -233,7 +229,7 @@ function AppRoutes() {
       <Route path="/manage-cheques">{() => <ProtectedRoute component={ManageCheques} path="/manage-cheques" />}</Route>
       <Route path="/team">{() => <ProtectedRoute component={Team} path="/team" />}</Route>
       <Route path="/integrations">
-        <Redirect to="/settings/shopify" />
+        <Redirect to="/settings?tab=shopify" />
       </Route>
       <Route path="/products" component={Products} />
       <Route path="/shopify-products/:id">{() => <ProtectedRoute component={ShopifyProductDetail} path="/shopify-products" />}</Route>
@@ -272,10 +268,10 @@ function AppRoutes() {
       <Route path="/marketing/intelligence">{() => <ProtectedRoute component={AIInsights} path="/marketing/intelligence" />}</Route>
       <Route path="/whatsapp">{() => <ProtectedRoute component={WhatsAppPage} path="/whatsapp" />}</Route>
       <Route path="/accounting/settings">{() => <ProtectedRoute component={AccountingSettings} path="/accounting/settings" />}</Route>
-      <Route path="/settings/shopify">{() => <ProtectedRoute component={SettingsShopify} path="/settings/shopify" />}</Route>
-      <Route path="/settings/couriers">{() => <ProtectedRoute component={SettingsCouriers} path="/settings/couriers" />}</Route>
-      <Route path="/settings/status-mapping">{() => <ProtectedRoute component={SettingsStatusMapping} path="/settings/status-mapping" />}</Route>
-      <Route path="/settings/marketing">{() => <ProtectedRoute component={SettingsMarketing} path="/settings/marketing" />}</Route>
+      <Route path="/settings/shopify"><Redirect to="/settings?tab=shopify" /></Route>
+      <Route path="/settings/couriers"><Redirect to="/settings?tab=couriers" /></Route>
+      <Route path="/settings/status-mapping"><Redirect to="/settings?tab=mapping" /></Route>
+      <Route path="/settings/marketing"><Redirect to="/settings?tab=marketing" /></Route>
       <Route path="/settings">{() => <ProtectedRoute component={Settings} path="/settings" />}</Route>
       <Route path="/onboarding" component={Onboarding} />
       <Route path="/admin" component={AdminPanel} />
