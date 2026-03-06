@@ -53,6 +53,7 @@ import SettingsStatusMapping from "./settings/status-mapping";
 import SettingsMarketing from "./settings/marketing";
 import Team from "./team";
 import AccountingSettings from "./accounting/settings";
+import OpeningBalancesPage from "./accounting/opening-balances";
 
 interface MerchantSettings {
   id: string;
@@ -671,7 +672,12 @@ export default function Settings() {
         {activeTab === "marketing" && <SettingsMarketing />}
 
         {activeTab === "team" && <Team />}
-        {activeTab === "accounting" && <AccountingSettings />}
+        {activeTab === "accounting" && (
+          <div className="space-y-8">
+            <AccountingSettings />
+            <OpeningBalancesPage />
+          </div>
+        )}
       </div>
     </div>
   );
