@@ -431,54 +431,31 @@ export function AppSidebar() {
           );
         })}
 
-        {filteredSettings.length > 0 && (
+        {canAccessSettings && (
           <SidebarGroup>
             <SidebarGroupContent>
               <SidebarMenu>
-                <Collapsible defaultOpen={location.startsWith("/settings") || location === "/accounting/settings"} asChild className="group/settings-collapsible">
-                  <SidebarMenuItem>
-                    <CollapsibleTrigger asChild>
-                      <SidebarMenuButton data-testid="nav-settings-toggle" tooltip="Settings">
-                        <Settings className="w-4 h-4" />
-                        <span className="flex-1">Settings</span>
-                        {(unmappedCount?.count ?? 0) > 0 && (
-                          <Badge variant="destructive" className="text-[10px] px-1.5 py-0 min-w-[18px] justify-center" data-testid="badge-unmapped-statuses">
-                            {unmappedCount!.count}
-                          </Badge>
-                        )}
-                        <ChevronRight className="w-4 h-4 ml-auto transition-transform duration-200 group-data-[state=open]/settings-collapsible:rotate-90" />
-                      </SidebarMenuButton>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                      <SidebarMenuSub>
-                        {filteredSettings.map((item) => {
-                          const itemUrl = new URL(item.url, "http://x");
-                          const itemTab = itemUrl.searchParams.get("tab");
-                          const currentTab = new URLSearchParams(searchString).get("tab");
-                          const isSettingsItem = item.url.startsWith("/settings?");
-                          const isItemActive = isSettingsItem
-                            ? location === "/settings" && currentTab === itemTab
-                            : location === item.url;
-                          return (
-                          <SidebarMenuSubItem key={item.id}>
-                            <SidebarMenuSubButton asChild isActive={isItemActive}>
-                              <Link href={item.url} data-testid={`nav-${item.id}`}>
-                                <item.icon className="w-3.5 h-3.5" />
-                                <span className="flex-1">{item.title}</span>
-                                {item.id === "settings-status-mapping" && (unmappedCount?.count ?? 0) > 0 && (
-                                  <Badge variant="destructive" className="text-[10px] px-1.5 py-0 min-w-[18px] justify-center">
-                                    {unmappedCount!.count}
-                                  </Badge>
-                                )}
-                              </Link>
-                            </SidebarMenuSubButton>
-                          </SidebarMenuSubItem>
-                          );
-                        })}
-                      </SidebarMenuSub>
-                    </CollapsibleContent>
-                  </SidebarMenuItem>
-                </Collapsible>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={location.startsWith("/settings")} data-testid="nav-settings-toggle">
+                    <Link href="/settings">
+                      <Settings className="w-4 h-4" />
+                      <span className="flex-1">Settings</span>
+                      {(unmappedCount?.count ?? 0) > 0 && (
+                        <Badge variant="destructive" className="text-[10px] px-1.5 py-0 min-w-[18px] justify-center" data-testid="badge-unmapped-statuses">
+                          {unmappedCount!.count}
+                        </Badge>
+                      )}
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={location === "/accounting/settings"} data-testid="nav-preferences">
+                    <Link href="/accounting/settings">
+                      <Cog className="w-4 h-4" />
+                      <span>Preferences</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>

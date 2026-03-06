@@ -40,7 +40,7 @@ import {
   ArrowLeftRight,
   Users,
   BarChart2,
-  Mail,
+  Cog,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -405,20 +405,21 @@ function WhatsAppTemplatesCard() {
 }
 
 const SETTINGS_TABS = [
-  { id: "profile",      label: "Profile",        icon: Building2,     description: "Business & security" },
-  { id: "shopify",      label: "Shopify",         icon: Store,         description: "Store integration" },
-  { id: "couriers",     label: "Couriers",        icon: Truck,         description: "Delivery partners" },
-  { id: "whatsapp",     label: "WhatsApp",        icon: MessageCircle, description: "Message templates" },
-  { id: "notifications",label: "Notifications",   icon: Bell,          description: "Email alerts" },
-  { id: "mapping",      label: "Status Mapping",  icon: ArrowLeftRight,description: "Courier statuses" },
-  { id: "marketing",    label: "Marketing",       icon: BarChart2,     description: "Ad integrations" },
-  { id: "team",         label: "Team",            icon: Users,         description: "Users & roles" },
+  { id: "profile",       label: "Profile",        icon: Building2,      gradient: "from-violet-500 to-purple-700",  href: null,                   description: "Business & security" },
+  { id: "shopify",       label: "Shopify",        icon: Store,          gradient: "from-orange-400 to-amber-600",   href: null,                   description: "Store integration" },
+  { id: "couriers",      label: "Couriers",       icon: Truck,          gradient: "from-teal-400 to-cyan-600",      href: null,                   description: "Delivery partners" },
+  { id: "whatsapp",      label: "WhatsApp",       icon: MessageCircle,  gradient: "from-green-400 to-emerald-600",  href: null,                   description: "Message templates" },
+  { id: "notifications", label: "Notifications",  icon: Bell,           gradient: "from-blue-400 to-indigo-600",    href: null,                   description: "Email alerts" },
+  { id: "mapping",       label: "Status Mapping", icon: ArrowLeftRight, gradient: "from-rose-400 to-red-600",       href: null,                   description: "Courier statuses" },
+  { id: "marketing",     label: "Marketing",      icon: BarChart2,      gradient: "from-fuchsia-400 to-pink-600",   href: null,                   description: "Ad integrations" },
+  { id: "team",          label: "Team",           icon: Users,          gradient: "from-slate-400 to-gray-600",     href: null,                   description: "Users & roles" },
+  { id: "preferences",   label: "Preferences",    icon: Cog,            gradient: "from-amber-500 to-orange-700",   href: "/accounting/settings", description: "Accounting settings" },
 ];
 
 export default function Settings() {
   const { toast } = useToast();
   const searchString = useSearch();
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
 
   const searchParams = new URLSearchParams(searchString);
   const activeTab = searchParams.get("tab") || "profile";
@@ -476,60 +477,61 @@ export default function Settings() {
     });
   };
 
-  const currentTab = SETTINGS_TABS.find(t => t.id === activeTab) ?? SETTINGS_TABS[0];
+  const isPreferencesActive = location === "/accounting/settings";
+  const currentTab = isPreferencesActive
+    ? SETTINGS_TABS.find(t => t.id === "preferences")!
+    : (SETTINGS_TABS.find(t => t.id === activeTab) ?? SETTINGS_TABS[0]);
 
   return (
     <div className="min-h-full">
-      {/* Hero gradient header */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-primary/8 via-violet-500/5 to-blue-500/8 border-b border-white/40 dark:border-white/5 pb-6 pt-6 px-6">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(139,92,246,0.08),transparent_60%)]" />
-        <div className="relative">
+      {/* Header strip */}
+      <div className="border-b bg-muted/20 px-6 pt-5 pb-5">
+        <div className="mb-5">
           <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {currentTab.description} — {currentTab.label}
           </p>
         </div>
 
-        {/* Glassmorphism tab cards */}
-        <div className="mt-5 flex gap-2.5 overflow-x-auto pb-0.5 scrollbar-none" data-testid="settings-tab-nav">
+        {/* Vibrant gradient tab cards */}
+        <div className="flex gap-2.5 overflow-x-auto pb-1 scrollbar-none" data-testid="settings-tab-nav">
           {SETTINGS_TABS.map(tab => {
             const Icon = tab.icon;
-            const isActive = tab.id === activeTab;
+            const isActive = tab.href
+              ? location === tab.href
+              : tab.id === activeTab;
+
+            const handleClick = () => {
+              if (tab.href) {
+                navigate(tab.href);
+              } else {
+                setActiveTab(tab.id);
+              }
+            };
+
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={handleClick}
                 data-testid={`settings-tab-${tab.id}`}
                 className={[
-                  "group relative flex-shrink-0 flex flex-col items-center gap-1.5 px-4 py-3 rounded-2xl",
-                  "border transition-all duration-200 ease-out cursor-pointer select-none",
-                  "min-w-[80px]",
+                  "relative flex-shrink-0 flex flex-col items-center justify-center gap-2",
+                  "px-3 py-3.5 rounded-2xl cursor-pointer select-none",
+                  "min-w-[82px] transition-all duration-200 ease-out overflow-hidden",
+                  `bg-gradient-to-br ${tab.gradient}`,
                   isActive
-                    ? "bg-white/80 dark:bg-white/10 border-primary/40 shadow-[0_4px_24px_rgba(139,92,246,0.18)] scale-[1.03]"
-                    : "bg-white/35 dark:bg-white/4 border-white/60 dark:border-white/8 hover:bg-white/55 dark:hover:bg-white/8 hover:border-white/80 dark:hover:border-white/15 hover:scale-[1.01] backdrop-blur-xl",
-                  "backdrop-blur-xl",
+                    ? "ring-[2.5px] ring-white/70 shadow-xl scale-[1.07] brightness-110"
+                    : "opacity-75 hover:opacity-95 hover:scale-[1.04] shadow-md",
                 ].join(" ")}
               >
-                {isActive && (
-                  <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary/10 via-violet-500/8 to-transparent pointer-events-none" />
-                )}
-                <Icon
-                  className={[
-                    "w-4 h-4 transition-colors",
-                    isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground",
-                  ].join(" ")}
+                <div
+                  className="absolute inset-0 pointer-events-none"
+                  style={{ backgroundImage: "repeating-linear-gradient(45deg,rgba(255,255,255,0.07) 0px,rgba(255,255,255,0.07) 1px,transparent 1px,transparent 9px)" }}
                 />
-                <span
-                  className={[
-                    "text-[11px] font-medium leading-tight text-center whitespace-nowrap transition-colors",
-                    isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground",
-                  ].join(" ")}
-                >
+                <Icon className="relative w-5 h-5 text-white drop-shadow-sm" />
+                <span className="relative text-[10.5px] font-bold text-white/95 text-center leading-tight whitespace-nowrap tracking-wide drop-shadow-sm">
                   {tab.label}
                 </span>
-                {isActive && (
-                  <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full bg-primary" />
-                )}
               </button>
             );
           })}
