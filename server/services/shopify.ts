@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { decryptToken } from './encryption';
 import { normalizePakistaniPhone } from '../utils/phone';
 import { toMerchantStartOfDay, DEFAULT_TIMEZONE } from '../utils/timezone';
+import { sendOrderStatusWhatsApp } from '../utils/integrations/whatsapp';
 
 interface ShopifyConfig {
   clientId: string;
@@ -633,22 +634,37 @@ export class ShopifyService {
         newCount += createdOrders.length;
 
         const createdByShopifyId = new Map(createdOrders.map(o => [o.shopifyOrderId, o]));
-        const roboTagPromises: Promise<void>[] = [];
+        const postCreatePromises: Promise<void>[] = [];
         for (const pending of batch) {
           const created = createdByShopifyId.get(pending.createData.shopifyOrderId);
           if (created?.id && pending.initialWorkflowStatus === 'NEW') {
-            roboTagPromises.push(
+            postCreatePromises.push(
               (async () => {
                 try {
                   const { applyRoboTags } = await import('./workflowTransition');
                   await applyRoboTags(merchantId, created.id, pending.tags);
                 } catch (e) {}
+                try {
+                  await sendOrderStatusWhatsApp({
+                    merchantId,
+                    orderId: created.id,
+                    orderNumber: created.orderNumber,
+                    customerPhone: created.customerPhone,
+                    customerName: created.customerName,
+                    fromStatus: '',
+                    toStatus: 'NEW',
+                    city: created.city,
+                    shippingAddress: created.shippingAddress,
+                    totalAmount: created.totalAmount,
+                    itemSummary: created.itemSummary,
+                  });
+                } catch (e) {}
               })()
             );
           }
         }
-        if (roboTagPromises.length > 0) {
-          await Promise.allSettled(roboTagPromises);
+        if (postCreatePromises.length > 0) {
+          await Promise.allSettled(postCreatePromises);
         }
       } catch (e) {
         console.error(`[Shopify] Error in bulk insert batch (${batch.length} orders):`, e);
@@ -659,6 +675,21 @@ export class ShopifyService {
               try {
                 const { applyRoboTags } = await import('./workflowTransition');
                 await applyRoboTags(merchantId, created.id, item.tags);
+              } catch (e2) {}
+              try {
+                await sendOrderStatusWhatsApp({
+                  merchantId,
+                  orderId: created.id,
+                  orderNumber: created.orderNumber,
+                  customerPhone: created.customerPhone,
+                  customerName: created.customerName,
+                  fromStatus: '',
+                  toStatus: 'NEW',
+                  city: created.city,
+                  shippingAddress: created.shippingAddress,
+                  totalAmount: created.totalAmount,
+                  itemSummary: created.itemSummary,
+                });
               } catch (e2) {}
             }
             newCount++;

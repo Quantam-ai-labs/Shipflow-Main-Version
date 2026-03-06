@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { storage } from '../storage';
 import { shopifyService } from './shopify';
 import { isRecentWriteBack } from './shopifyWriteBack';
+import { sendOrderStatusWhatsApp } from '../utils/integrations/whatsapp';
 
 interface WebhookProcessResult {
   success: boolean;
@@ -151,6 +152,23 @@ export class WebhookHandler {
         });
         resultOrderId = created.id;
         console.log(`[Webhook] Created new order ${transformedOrder.orderNumber} (${topic})`);
+        try {
+          await sendOrderStatusWhatsApp({
+            merchantId,
+            orderId: created.id,
+            orderNumber: created.orderNumber,
+            customerPhone: created.customerPhone,
+            customerName: created.customerName,
+            fromStatus: '',
+            toStatus: 'NEW',
+            city: created.city,
+            shippingAddress: created.shippingAddress,
+            totalAmount: created.totalAmount,
+            itemSummary: created.itemSummary,
+          });
+        } catch (waErr) {
+          console.error(`[Webhook] WhatsApp notification failed for order ${created.orderNumber}:`, waErr);
+        }
       }
 
       await storage.updateWebhookEventStatus(webhookEvent.id, 'processed');
