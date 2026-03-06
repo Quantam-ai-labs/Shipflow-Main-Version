@@ -52,6 +52,7 @@ import SettingsCouriers from "./settings/couriers";
 import SettingsStatusMapping from "./settings/status-mapping";
 import SettingsMarketing from "./settings/marketing";
 import Team from "./team";
+import AccountingSettings from "./accounting/settings";
 
 interface MerchantSettings {
   id: string;
@@ -413,7 +414,7 @@ const SETTINGS_TABS = [
   { id: "mapping",       label: "Status Mapping", icon: ArrowLeftRight, gradient: "from-rose-400 to-red-600",       href: null,                   description: "Courier statuses" },
   { id: "marketing",     label: "Marketing",      icon: BarChart2,      gradient: "from-fuchsia-400 to-pink-600",   href: null,                   description: "Ad integrations" },
   { id: "team",          label: "Team",           icon: Users,          gradient: "from-slate-400 to-gray-600",     href: null,                   description: "Users & roles" },
-  { id: "preferences",   label: "Preferences",    icon: Cog,            gradient: "from-amber-500 to-orange-700",   href: "/accounting/settings", description: "Accounting settings" },
+  { id: "accounting",    label: "Accounting",     icon: Cog,            gradient: "from-amber-500 to-orange-700",   href: null,                   description: "Accounting settings" },
 ];
 
 export default function Settings() {
@@ -481,20 +482,13 @@ export default function Settings() {
     <div className="min-h-full">
       {/* Tab card nav strip — no heading, just the cards */}
       <div className="border-b bg-muted/20 px-6 py-4">
-        {/* overflow-visible so the scale on the active card isn't clipped */}
-        <div className="flex gap-3 overflow-x-auto py-2 scrollbar-none" style={{ overflowY: "visible" }} data-testid="settings-tab-nav">
+        <div className="flex gap-3 overflow-x-auto scrollbar-none" data-testid="settings-tab-nav">
           {SETTINGS_TABS.map(tab => {
             const Icon = tab.icon;
-            const isActive = tab.href
-              ? location === tab.href
-              : tab.id === activeTab;
+            const isActive = tab.id === activeTab;
 
             const handleClick = () => {
-              if (tab.href) {
-                navigate(tab.href);
-              } else {
-                setActiveTab(tab.id);
-              }
+              setActiveTab(tab.id);
             };
 
             return (
@@ -508,8 +502,8 @@ export default function Settings() {
                   "min-w-[100px] transition-all duration-200 ease-out overflow-hidden",
                   `bg-gradient-to-br ${tab.gradient}`,
                   isActive
-                    ? "ring-[2.5px] ring-white/70 shadow-2xl scale-[1.05] brightness-110"
-                    : "opacity-72 hover:opacity-95 hover:scale-[1.03] shadow-md",
+                    ? "ring-[2.5px] ring-white/70 shadow-2xl brightness-110 -translate-y-1"
+                    : "opacity-75 hover:opacity-95 hover:-translate-y-0.5 shadow-md",
                 ].join(" ")}
               >
                 <div
@@ -676,6 +670,7 @@ export default function Settings() {
         {activeTab === "marketing" && <SettingsMarketing />}
 
         {activeTab === "team" && <Team />}
+        {activeTab === "accounting" && <AccountingSettings />}
       </div>
     </div>
   );
