@@ -1959,6 +1959,59 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/orders/bulk-tags", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { orderIds, addTags = [], removeTags = [] } = req.body;
+      if (!Array.isArray(orderIds) || orderIds.length === 0) {
+        return res.status(400).json({ message: "orderIds is required" });
+      }
+      let updated = 0;
+      for (const orderId of orderIds) {
+        try {
+          const order = await storage.getOrderById(merchantId, orderId);
+          if (!order) continue;
+          let tags = Array.isArray(order.tags) ? [...(order.tags as string[])] : [];
+          if (removeTags.length > 0) {
+            const removeSet = new Set(removeTags.map((t: string) => t.toLowerCase().trim()));
+            const tagsToRemove = tags.filter(t => removeSet.has(t.toLowerCase()));
+            tags = tags.filter(t => !removeSet.has(t.toLowerCase()));
+            if (order.shopifyOrderId) {
+              tagsToRemove.forEach(t => {
+                writeBackRemoveTag(merchantId, order.shopifyOrderId!, t).catch(err => {
+                  console.error(`[BulkTags] Shopify remove failed for ${orderId}:`, err.message);
+                });
+              });
+            }
+          }
+          if (addTags.length > 0) {
+            const existingLower = new Set(tags.map((t: string) => t.toLowerCase()));
+            const tagsToAdd = (addTags as string[])
+              .map(t => t.trim())
+              .filter(t => t && !existingLower.has(t.toLowerCase()));
+            tags = [...tags, ...tagsToAdd];
+            if (order.shopifyOrderId) {
+              tagsToAdd.forEach(t => {
+                writeBackAddTag(merchantId, order.shopifyOrderId!, t).catch(err => {
+                  console.error(`[BulkTags] Shopify add failed for ${orderId}:`, err.message);
+                });
+              });
+            }
+          }
+          await storage.updateOrder(merchantId, orderId, { tags } as any);
+          updated++;
+        } catch (err) {
+          console.error(`[BulkTags] Error processing order ${orderId}:`, err);
+        }
+      }
+      res.json({ updated });
+    } catch (error: any) {
+      console.error("Error in bulk tags:", error);
+      res.status(500).json({ message: "Failed to update tags" });
+    }
+  });
+
   app.get("/api/orders/:id", isAuthenticated, async (req, res) => {
     try {
       const merchantId = await requireMerchant(req, res);

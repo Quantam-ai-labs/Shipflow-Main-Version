@@ -80,6 +80,7 @@ import {
   MoreHorizontal,
   SlidersHorizontal,
   Tag,
+  X,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -405,6 +406,11 @@ export default function Pipeline() {
   const [quickPayAmount, setQuickPayAmount] = useState("");
   const [quickPayMethod, setQuickPayMethod] = useState("CASH");
   const [prepaidConfirmOpen, setPrepaidConfirmOpen] = useState(false);
+  const [bulkTagModalOpen, setBulkTagModalOpen] = useState(false);
+  const [addTagInput, setAddTagInput] = useState("");
+  const [removeTagInput, setRemoveTagInput] = useState("");
+  const [addTagChips, setAddTagChips] = useState<string[]>([]);
+  const [removeTagChips, setRemoveTagChips] = useState<string[]>([]);
   const [confirmActionModal, setConfirmActionModal] = useState<{ open: boolean; action: string; orderIds: string[]; description: string }>({ open: false, action: "", orderIds: [], description: "" });
 
   const [remarkDialogOpen, setRemarkDialogOpen] = useState(false);
@@ -684,6 +690,23 @@ export default function Pipeline() {
     },
     onError: (err: any) => {
       toast({ title: "Error", description: err.message || "Failed to mark as prepaid", variant: "destructive" });
+    },
+  });
+
+  const bulkTagsMutation = useMutation({
+    mutationFn: (data: { orderIds: string[]; addTags: string[]; removeTags: string[] }) =>
+      apiRequest("POST", "/api/orders/bulk-tags", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      toast({ title: "Tags updated", description: `Tags updated for ${selectedIds.size} order${selectedIds.size !== 1 ? "s" : ""}` });
+      setBulkTagModalOpen(false);
+      setAddTagChips([]);
+      setRemoveTagChips([]);
+      setAddTagInput("");
+      setRemoveTagInput("");
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed", description: err.message || "Failed to update tags", variant: "destructive" });
     },
   });
 
@@ -1494,6 +1517,16 @@ export default function Pipeline() {
               </Button>
             </>
           )}
+
+          <div className="h-4 w-px bg-border" />
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setBulkTagModalOpen(true)}
+            data-testid="bulk-tags-button"
+          >
+            <Tag className="w-3.5 h-3.5 mr-1.5" />Tags
+          </Button>
 
           <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())} data-testid="bulk-clear">
             Clear
@@ -2870,6 +2903,123 @@ export default function Pipeline() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* Bulk Tag Modal */}
+      <Dialog
+        open={bulkTagModalOpen}
+        onOpenChange={v => {
+          if (!v) {
+            setBulkTagModalOpen(false);
+            setAddTagChips([]);
+            setRemoveTagChips([]);
+            setAddTagInput("");
+            setRemoveTagInput("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Tag className="w-4 h-4" />Manage Tags
+            </DialogTitle>
+            <DialogDescription>
+              Applies to {selectedIds.size} selected order{selectedIds.size !== 1 ? "s" : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-1">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Add Tags</label>
+              <Input
+                data-testid="input-add-tag"
+                placeholder="Type a tag and press Enter"
+                value={addTagInput}
+                onChange={e => setAddTagInput(e.target.value)}
+                onKeyDown={e => {
+                  if ((e.key === "Enter" || e.key === ",") && addTagInput.trim()) {
+                    e.preventDefault();
+                    const t = addTagInput.trim().replace(/,+$/, "");
+                    if (t && !addTagChips.includes(t)) setAddTagChips(prev => [...prev, t]);
+                    setAddTagInput("");
+                  }
+                }}
+              />
+              {addTagChips.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {addTagChips.map(chip => (
+                    <Badge key={chip} variant="secondary" className="gap-1 pr-1">
+                      {chip}
+                      <button
+                        onClick={() => setAddTagChips(prev => prev.filter(c => c !== chip))}
+                        className="hover:text-destructive ml-0.5"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Remove Tags</label>
+              <Input
+                data-testid="input-remove-tag"
+                placeholder="Type a tag and press Enter"
+                value={removeTagInput}
+                onChange={e => setRemoveTagInput(e.target.value)}
+                onKeyDown={e => {
+                  if ((e.key === "Enter" || e.key === ",") && removeTagInput.trim()) {
+                    e.preventDefault();
+                    const t = removeTagInput.trim().replace(/,+$/, "");
+                    if (t && !removeTagChips.includes(t)) setRemoveTagChips(prev => [...prev, t]);
+                    setRemoveTagInput("");
+                  }
+                }}
+              />
+              {removeTagChips.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {removeTagChips.map(chip => (
+                    <Badge key={chip} variant="outline" className="gap-1 pr-1 border-destructive/50 text-destructive">
+                      {chip}
+                      <button
+                        onClick={() => setRemoveTagChips(prev => prev.filter(c => c !== chip))}
+                        className="hover:text-destructive ml-0.5"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setBulkTagModalOpen(false);
+                setAddTagChips([]);
+                setRemoveTagChips([]);
+                setAddTagInput("");
+                setRemoveTagInput("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              data-testid="btn-apply-tags"
+              disabled={(addTagChips.length === 0 && removeTagChips.length === 0) || bulkTagsMutation.isPending}
+              onClick={() => bulkTagsMutation.mutate({
+                orderIds: Array.from(selectedIds),
+                addTags: addTagChips,
+                removeTags: removeTagChips,
+              })}
+            >
+              {bulkTagsMutation.isPending && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
+              Apply to {selectedIds.size} order{selectedIds.size !== 1 ? "s" : ""}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Customer Order History Dialog */}
       <Dialog open={!!historyPopup} onOpenChange={open => { if (!open) setHistoryPopup(null); }}>
         <DialogContent className="max-w-lg max-h-[80vh] overflow-hidden flex flex-col">
