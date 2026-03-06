@@ -135,7 +135,7 @@ const routeToPageId: Record<string, string> = {
   "/accounting/parties": "customers",
   "/accounting/products": "products",
   "/accounting/stock-receipts": "add-stock",
-  "/accounting/sales": "sale-invoices",
+  "/accounting/sales": "sale-orders",
   "/accounting/sale-orders": "sale-orders",
   "/accounting/expenses": "expense-history",
   "/accounting/expenses-unpaid": "needs-payment",
