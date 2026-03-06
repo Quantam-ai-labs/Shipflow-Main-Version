@@ -5326,101 +5326,332 @@ export async function registerRoutes(
 
   // POST: Receive incoming messages from customers
   app.post("/webhooks/whatsapp", async (req: any, res) => {
+    const requestId = `REQ-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
     try {
-      console.log("[WhatsApp Webhook] Received payload:", JSON.stringify(req.body, null, 2));
+      console.log(`\n${'='.repeat(80)}`);
+      console.log(`[WhatsApp Webhook] ${requestId} - INCOMING MESSAGE`);
+      console.log(`Timestamp: ${new Date().toISOString()}`);
+      console.log(`${'='.repeat(80)}`);
+
       const body = req.body;
-      // Always acknowledge immediately to Meta
+
+      // ✅ Step 1: Acknowledge immediately to Meta
+      console.log(`[WhatsApp Webhook] ${requestId} - Sending 200 OK to Meta`);
       res.status(200).json({ status: "ok" });
 
-      if (body?.object !== "whatsapp_business_account") return;
+      // ✅ Step 2: Validate object type
+      console.log(`[WhatsApp Webhook] ${requestId} - Validating object type...`);
+      if (body?.object !== "whatsapp_business_account") {
+        console.warn(`[WhatsApp Webhook] ${requestId} - ❌ Wrong object: "${body?.object}"`);
+        return;
+      }
+      console.log(`[WhatsApp Webhook] ${requestId} - ✅ Valid object type`);
 
-      for (const entry of body?.entry ?? []) {
-        for (const change of entry?.changes ?? []) {
-          if (change?.field !== "messages") continue;
+      // ✅ Step 3: Process entries
+      const entries = body?.entry ?? [];
+      console.log(`[WhatsApp Webhook] ${requestId} - Processing ${entries.length} entries`);
+
+      for (let entryIndex = 0; entryIndex < entries.length; entryIndex++) {
+        const entry = entries[entryIndex];
+        console.log(`  ├─ Entry ${entryIndex + 1}/${entries.length}`);
+
+        const changes = entry?.changes ?? [];
+        console.log(`  │  ├─ Changes: ${changes.length}`);
+
+        for (let changeIndex = 0; changeIndex < changes.length; changeIndex++) {
+          const change = changes[changeIndex];
+          const field = change?.field ?? "unknown";
+
+          console.log(`  │  │  ├─ Change ${changeIndex + 1}/${changes.length}: field="${field}"`);
+
+          // ✅ Step 4: Filter for messages
+          if (field !== "messages") {
+            console.log(`  │  │  │  └─ ⏭️  Skipping (not messages)`);
+            continue;
+          }
+
           const value = change.value;
-          const phoneNumberId: string = value?.metadata?.phone_number_id ?? "";
+          const phoneNumberId = value?.metadata?.phone_number_id ?? "";
+          const configuredPhoneId = process.env.WHATSAPP_PHONE_NO_ID ?? "";
 
-          for (const message of value?.messages ?? []) {
-            const fromPhone: string = message.from ?? "";
-            const waMessageId: string = message.id ?? "";
-            const messageType: string = message.type ?? "text";
-            const messageBody: string =
+          console.log(`  │  │  ├─ Phone ID: ${phoneNumberId}`);
+          console.log(`  │  │  ├─ Configured: ${configuredPhoneId}`);
+
+          if (phoneNumberId && configuredPhoneId && phoneNumberId !== configuredPhoneId) {
+            console.warn(`  │  │  └─ ❌ Phone ID mismatch! Skipping.`);
+            continue;
+          }
+          console.log(`  │  │  ├─ ✅ Phone ID valid`);
+
+          // ✅ Step 5: Process messages
+          const messages = value?.messages ?? [];
+          console.log(`  │  │  ├─ Messages: ${messages.length}`);
+
+          for (let msgIndex = 0; msgIndex < messages.length; msgIndex++) {
+            const message = messages[msgIndex];
+            const fromPhone = message.from ?? "";
+            const waMessageId = message.id ?? "";
+            const messageType = message.type ?? "text";
+            const messageBody =
               message.text?.body ??
               message.button?.text ??
               message.interactive?.button_reply?.title ??
               message.interactive?.list_reply?.title ??
               "[non-text message]";
 
-            console.log(`[WhatsApp Webhook] Incoming from ${fromPhone}: "${messageBody}"`);
+            console.log(`\n    [Message ${msgIndex + 1}/${messages.length}]`);
+            console.log(`      ├─ From Phone: ${fromPhone}`);
+            console.log(`      ├─ Type: ${messageType}`);
+            console.log(`      ├─ ID: ${waMessageId}`);
+            console.log(`      └─ Text: "${messageBody}"`);
 
-            // Find the merchant by WHATSAPP_PHONE_NO_ID (env) — match phoneNumberId
-            const configuredPhoneId = process.env.WHATSAPP_PHONE_NO_ID ?? "";
-            if (phoneNumberId && configuredPhoneId && phoneNumberId !== configuredPhoneId) {
-              console.log(`[WhatsApp Webhook] Phone ID mismatch — skipping`);
-              continue;
-            }
+            // ✅ Step 6: Normalize phone number
+            const normalizedPhone = fromPhone.replace(/^\+/, "");
+            console.log(`      └─ Normalized: ${normalizedPhone}`);
 
-            // Normalise the incoming phone into multiple formats to maximise match chances
-            const normalizedPhone = fromPhone.replace(/^\+/, ""); // e.g. "923001234567"
-            const withPlus = `+${normalizedPhone}`;               // "+923001234567"
-            const withLeadingZero = `0${normalizedPhone.slice(2)}`; // "03001234567"
-            const noCountryCode = normalizedPhone.slice(2);       // "3001234567"
-
+            // ✅ Step 7: Find matching order
+            console.log(`      └─ Querying database for matching order...`);
             const [matchedOrder] = await db
-              .select({ id: orders.id, merchantId: orders.merchantId })
+              .select({
+                id: orders.id,
+                merchantId: orders.merchantId,
+                status: orders.workflowStatus,
+                orderNumber: orders.orderNumber,
+              })
               .from(orders)
               .where(
-                or(
-                  eq(orders.customerPhone, normalizedPhone),
-                  eq(orders.customerPhone, withPlus),
-                  eq(orders.customerPhone, withLeadingZero),
-                  eq(orders.customerPhone, noCountryCode),
-                  ilike(orders.customerPhone, `%${noCountryCode}`),
+                and(
+                  or(
+                    eq(orders.customerPhone, normalizedPhone),
+                    eq(orders.customerPhone, `+${normalizedPhone}`),
+                    eq(orders.customerPhone, `0${normalizedPhone.slice(2)}`),
+                  )
                 )
               )
               .orderBy(desc(orders.createdAt))
               .limit(1);
 
-            let resolvedMerchantId: string | null = matchedOrder?.merchantId ?? null;
-            let resolvedOrderId: string | null = matchedOrder?.id ?? null;
-
-            if (!resolvedMerchantId) {
-              // Fallback: find the first available merchant (WhatsApp is env-configured per deployment)
-              const [fallbackMerchant] = await db
-                .select({ id: merchants.id })
-                .from(merchants)
-                .limit(1);
-              resolvedMerchantId = fallbackMerchant?.id ?? null;
-              console.log(`[WhatsApp Webhook] No order found for phone ${fromPhone} — saving under fallback merchant ${resolvedMerchantId ?? "none"}`);
-            }
-
-            if (!resolvedMerchantId) {
-              console.warn(`[WhatsApp Webhook] Could not resolve any merchant for phone ${fromPhone} — dropping message`);
+            if (!matchedOrder) {
+              console.warn(`      ❌ NO MATCHING ORDER FOUND`);
+              console.warn(`         Tried patterns: ${normalizedPhone}, +${normalizedPhone}, 0${normalizedPhone.slice(2)}`);
               continue;
             }
 
-            await storage.saveWhatsappResponse({
-              merchantId: resolvedMerchantId,
-              orderId: resolvedOrderId,
-              waMessageId,
-              fromPhone: normalizedPhone,
-              messageType,
-              messageBody,
-              rawPayload: message,
-            });
+            console.log(`      ✅ ORDER FOUND`);
+            console.log(`         ├─ Order ID: ${matchedOrder.id}`);
+            console.log(`         ├─ Merchant ID: ${matchedOrder.merchantId}`);
+            console.log(`         ├─ Order Number: ${matchedOrder.orderNumber}`);
+            console.log(`         └─ Current Status: ${matchedOrder.status}`);
 
-            if (resolvedOrderId) {
-              console.log(`[WhatsApp Webhook] Saved response for order ${resolvedOrderId}`);
-            } else {
-              console.log(`[WhatsApp Webhook] Saved unlinked response from ${fromPhone} under merchant ${resolvedMerchantId}`);
+            // ✅ Step 8: Save response
+            console.log(`      └─ Saving message response to database...`);
+            try {
+              await storage.saveWhatsappResponse({
+                merchantId: matchedOrder.merchantId,
+                orderId: matchedOrder.id,
+                waMessageId,
+                fromPhone: normalizedPhone,
+                messageType,
+                messageBody,
+                rawPayload: message,
+              });
+              console.log(`      ✅ Response saved`);
+
+              // ✅ Step 9: Process the response (CONFIRM/CANCEL logic)
+              console.log(`      └─ Processing user response...`);
+              await processWhatsAppOrderResponse(
+                matchedOrder.merchantId,
+                matchedOrder.id,
+                matchedOrder.orderNumber,
+                messageBody,
+                fromPhone,
+                normalizedPhone
+              );
+            } catch (dbError: any) {
+              console.error(`      ❌ DATABASE ERROR: ${dbError.message}`);
             }
           }
         }
       }
+
+      console.log(`\n${'='.repeat(80)}\n`);
     } catch (err: any) {
-      console.error("[WhatsApp Webhook] Error:", err.message);
+      console.error(`\n[WhatsApp Webhook] ${requestId} - FATAL ERROR`);
+      console.error(`Message: ${err.message}`);
+      console.error(`Stack: ${err.stack}\n`);
     }
   });
+
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Process WhatsApp user responses (confirm/cancel orders)
+   */
+  async function processWhatsAppOrderResponse(
+    merchantId: string,
+    orderId: string,
+    orderNumber: string,
+    messageBody: string,
+    phoneNumber: string,
+    normalizedPhone: string
+  ) {
+    try {
+      const lowerMessage = messageBody.toLowerCase().trim();
+      console.log(`        Analyzing message: "${lowerMessage}"`);
+
+      if (lowerMessage.includes("confirm")) {
+        console.log(`        ✅ User wants to CONFIRM order`);
+
+        // Update order workflow status
+        const userId = "whatsapp_webhook";
+        const result = await transitionOrder({
+          merchantId,
+          orderId,
+          toStatus: "READY_TO_SHIP",
+          action: "whatsapp_confirm",
+          actorUserId: userId,
+          actorName: "WhatsApp Confirmation",
+          actorType: "system",
+          reason: `Order confirmed via WhatsApp by customer`,
+        });
+
+        if (result.success) {
+          console.log(`        ✅ Order status updated to READY_TO_SHIP`);
+
+          // Send confirmation reply to user
+          await sendWhatsAppReply(
+            normalizedPhone,
+            `✅ Thank you! Order #${orderNumber} has been confirmed. We'll process and ship it shortly.`
+          );
+
+          // Create change log entry
+          await storage.createOrderChangeLog({
+            orderId,
+            merchantId,
+            changeType: "WHATSAPP_CONFIRMED",
+            fieldName: "workflowStatus",
+            oldValue: "PENDING",
+            newValue: "READY_TO_SHIP",
+            actorUserId: userId,
+            actorName: "WhatsApp Confirmation",
+            actorType: "system",
+            metadata: { phoneNumber: normalizedPhone, waMessageBody: messageBody },
+          });
+        } else {
+          console.log(`        ❌ Failed to update order: ${result.error}`);
+          await sendWhatsAppReply(
+            normalizedPhone,
+            `❌ Sorry, there was an issue confirming your order. Please try again or contact support.`
+          );
+        }
+      } else if (lowerMessage.includes("cancel")) {
+        console.log(`        ❌ User wants to CANCEL order`);
+
+        // Update order workflow status to CANCELLED
+        const userId = "whatsapp_webhook";
+        const result = await transitionOrder({
+          merchantId,
+          orderId,
+          toStatus: "CANCELLED",
+          action: "whatsapp_cancel",
+          actorUserId: userId,
+          actorName: "WhatsApp Cancellation",
+          actorType: "system",
+          reason: `Order cancelled via WhatsApp by customer request`,
+        });
+
+        if (result.success) {
+          console.log(`        ✅ Order status updated to CANCELLED`);
+
+          // Send cancellation reply to user
+          await sendWhatsAppReply(
+            normalizedPhone,
+            `Order #${orderNumber} has been cancelled. No charges will be applied. If you have any questions, please contact support.`
+          );
+
+          // Create change log entry
+          await storage.createOrderChangeLog({
+            orderId,
+            merchantId,
+            changeType: "WHATSAPP_CANCELLED",
+            fieldName: "workflowStatus",
+            oldValue: "PENDING",
+            newValue: "CANCELLED",
+            actorUserId: userId,
+            actorName: "WhatsApp Cancellation",
+            actorType: "system",
+            metadata: { phoneNumber: normalizedPhone, waMessageBody: messageBody },
+          });
+        } else {
+          console.log(`        ❌ Failed to cancel order: ${result.error}`);
+          await sendWhatsAppReply(
+            normalizedPhone,
+            `❌ Sorry, there was an issue cancelling your order. Please try again or contact support.`
+          );
+        }
+      } else {
+        console.log(`        ❓ Unknown response - asking for clarification`);
+        // Send clarification request
+        await sendWhatsAppReply(
+          normalizedPhone,
+          `I didn't understand your response. Please reply with:\n✅ *confirm* - to confirm the order\n❌ *cancel* - to cancel the order`
+        );
+      }
+    } catch (error: any) {
+      console.error(`        ❌ Error processing WhatsApp response:`, error.message);
+    }
+  }
+
+  /**
+   * Send WhatsApp reply message to customer
+   */
+  async function sendWhatsAppReply(
+    phoneNumber: string,
+    messageText: string
+  ): Promise<boolean> {
+    try {
+      const phoneId = process.env.WHATSAPP_PHONE_NO_ID;
+      const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+
+      if (!phoneId || !accessToken) {
+        console.warn(`        ⚠️  Cannot send reply: Missing WHATSAPP_PHONE_NO_ID or WHATSAPP_ACCESS_TOKEN`);
+        return false;
+      }
+
+      // Ensure phone number is in correct format
+      const formattedPhone = phoneNumber.startsWith("+") ? phoneNumber : `+${phoneNumber}`;
+
+      const response = await fetch(
+        `https://graph.instagram.com/v18.0/${phoneId}/messages`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messaging_product: "whatsapp",
+            to: formattedPhone,
+            type: "text",
+            text: { body: messageText },
+          }),
+        }
+      );
+
+      const data = await response.json();
+      if (data.messages?.[0]?.id) {
+        console.log(`        ✅ Reply sent to ${formattedPhone}`);
+        return true;
+      } else {
+        console.error(`        ❌ Failed to send reply:`, data.error?.message || JSON.stringify(data));
+        return false;
+      }
+    } catch (error: any) {
+      console.error(`        ❌ Error sending WhatsApp reply:`, error.message);
+      return false;
+    }
+  }
   // ─────────────────────────────────────────────────────────────────────────
 
   // PostEx Webhook Route (no auth - public endpoint for PostEx to push status updates)
