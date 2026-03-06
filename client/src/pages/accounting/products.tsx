@@ -2,6 +2,9 @@ import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useLocation } from "wouter";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import ShopifyProducts from "@/pages/shopify-products";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -74,6 +77,9 @@ function formatPKR(amount: number | string): string {
 
 export default function AccountingProducts() {
   const { toast } = useToast();
+  const [location] = useLocation();
+  const searchParams = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+  const [activeTab, setActiveTab] = useState<string>(searchParams.get("tab") === "shopify" ? "shopify" : "normal");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [formData, setFormData] = useState<ProductFormData>(emptyForm);
@@ -298,7 +304,19 @@ export default function AccountingProducts() {
   const isPending = createMutation.isPending || updateMutation.isPending;
 
   return (
-    <div className="space-y-6" data-testid="accounting-products">
+    <div data-testid="accounting-products">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="normal" data-testid="tab-normal-products">Normal Products</TabsTrigger>
+          <TabsTrigger value="shopify" data-testid="tab-shopify-products">Shopify Products</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="shopify">
+          <ShopifyProducts />
+        </TabsContent>
+
+        <TabsContent value="normal">
+      <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight" data-testid="text-page-title">Products</h1>
@@ -678,6 +696,9 @@ export default function AccountingProducts() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
