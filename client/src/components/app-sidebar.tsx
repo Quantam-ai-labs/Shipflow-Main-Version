@@ -157,7 +157,6 @@ const allNavGroups: NavGroup[] = [
       { id: "ads-manager", title: "Campaigns", url: "/marketing/ads-manager", icon: Megaphone },
       { id: "live-campaigns", title: "Live Campaigns", url: "/marketing/live", icon: Activity },
       { id: "ads-profitability", title: "Profitability", url: "/marketing/profitability", icon: TrendingUp },
-      { id: "ai-intelligence", title: "AI Insights", url: "/marketing/intelligence", icon: Brain },
       { id: "whatsapp-hub", title: "WhatsApp", url: "/whatsapp", icon: MessageCircle },
     ],
   },

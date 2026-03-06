@@ -100,7 +100,6 @@ import MarketingDashboard from "@/pages/marketing/dashboard";
 import LiveCampaigns from "@/pages/marketing/live-campaigns";
 import AdsManager from "@/pages/marketing/ads-manager";
 import AdsProfitability from "@/pages/marketing/ads-profitability";
-import AIInsights from "@/pages/marketing/ai-insights";
 import AIAssistant from "@/pages/ai-assistant";
 import WhatsAppPage from "@/pages/whatsapp";
 import NotFound from "@/pages/not-found";
@@ -156,7 +155,6 @@ const routeToPageId: Record<string, string> = {
   "/marketing/live": "live-campaigns",
   "/marketing/ads-manager": "ads-manager",
   "/marketing/profitability": "ads-profitability",
-  "/marketing/intelligence": "ai-intelligence",
   "/whatsapp": "whatsapp-hub",
   "/accounting/settings": "preferences",
   "/settings/shopify": "settings-shopify",
@@ -265,7 +263,6 @@ function AppRoutes() {
       <Route path="/marketing/live">{() => <ProtectedRoute component={LiveCampaigns} path="/marketing/live" />}</Route>
       <Route path="/marketing/ads-manager">{() => <ProtectedRoute component={AdsManager} path="/marketing/ads-manager" />}</Route>
       <Route path="/marketing/profitability">{() => <ProtectedRoute component={AdsProfitability} path="/marketing/profitability" />}</Route>
-      <Route path="/marketing/intelligence">{() => <ProtectedRoute component={AIInsights} path="/marketing/intelligence" />}</Route>
       <Route path="/whatsapp">{() => <ProtectedRoute component={WhatsAppPage} path="/whatsapp" />}</Route>
       <Route path="/accounting/settings">{() => <ProtectedRoute component={AccountingSettings} path="/accounting/settings" />}</Route>
       <Route path="/settings/shopify"><Redirect to="/settings?tab=shopify" /></Route>
