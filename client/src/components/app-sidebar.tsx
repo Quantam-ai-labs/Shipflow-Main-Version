@@ -137,7 +137,6 @@ const allNavGroups: NavGroup[] = [
       { id: "customers", title: "Parties", url: "/accounting/parties", icon: UserCircle },
       { id: "sale-invoices", title: "Sales", url: "/accounting/sales", icon: Receipt },
       { id: "sale-orders", title: "Sale Orders", url: "/accounting/sale-orders", icon: BookOpen },
-      { id: "payment-ledger", title: "Payment Ledger", url: "/payment-ledger", icon: Receipt },
       { id: "settlements", title: "Settlements", url: "/accounting/settlements", icon: Scale },
       { id: "cash-accounts", title: "Cash Accounts", url: "/accounting/cash-accounts", icon: Landmark },
       { id: "opening-balances", title: "Opening Balances", url: "/accounting/opening-balances", icon: Calculator },

@@ -16,6 +16,7 @@ import {
   RefreshCcw,
   ArrowDownLeft,
   ArrowUpRight,
+  ScrollText,
 } from "lucide-react";
 import AccountingOverview from "@/pages/accounting/overview";
 import AccountingPnl from "@/pages/accounting/reports/pnl";
@@ -33,6 +34,7 @@ import ManageCheques from "@/pages/manage-cheques";
 import CodReconciliationPage from "@/pages/cod-reconciliation";
 import AccountingCodReceivable from "@/pages/accounting/cod-receivable";
 import AccountingCourierPayable from "@/pages/accounting/courier-payable";
+import PaymentLedgerPage from "@/pages/payment-ledger";
 
 const REPORT_TABS = [
   { id: "overview",          label: "Overview",          icon: LayoutDashboard, gradient: "from-slate-600 to-slate-700"      },
@@ -51,6 +53,7 @@ const REPORT_TABS = [
   { id: "cod-reconciliation",label: "COD Reconciliation",icon: RefreshCcw,       gradient: "from-green-600 to-emerald-700"    },
   { id: "cod-receivable",    label: "COD Receivable",    icon: ArrowDownLeft,    gradient: "from-lime-600 to-green-700"       },
   { id: "cod-payable",       label: "COD Payable",       icon: ArrowUpRight,     gradient: "from-red-500 to-rose-700"         },
+  { id: "payment-ledger",    label: "Payment Ledger",    icon: ScrollText,       gradient: "from-slate-500 to-zinc-600"       },
 ] as const;
 
 type ReportTabId = typeof REPORT_TABS[number]["id"];
@@ -116,6 +119,7 @@ export default function ReportsHub() {
         {activeTab === "cod-reconciliation" && <CodReconciliationPage />}
         {activeTab === "cod-receivable"     && <AccountingCodReceivable />}
         {activeTab === "cod-payable"        && <AccountingCourierPayable />}
+        {activeTab === "payment-ledger"     && <PaymentLedgerPage />}
       </div>
     </div>
   );
