@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -182,13 +182,13 @@ function EditDialog({ open, statusInfo, initial, onSave, onClose, isSaving }: Ed
   const [isActive, setIsActive] = useState(initial?.isActive ?? true);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  useState(() => {
+  useEffect(() => {
     if (open && initial) {
       setTemplateName(initial.templateName);
       setMessageBody(initial.messageBody);
       setIsActive(initial.isActive);
     }
-  });
+  }, [open, initial?.templateName, initial?.messageBody, initial?.isActive]);
 
   const insertVariable = (key: string) => {
     const el = textareaRef.current;
