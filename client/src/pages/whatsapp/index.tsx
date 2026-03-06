@@ -1,15 +1,17 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -92,6 +94,32 @@ const DEFAULT_MESSAGE_BODY = DEFAULT_MESSAGE_BODIES.DELIVERED;
 
 const defaultTemplateName = (status: string) =>
   status === "NEW" ? "order_confirmation" : "order_updates";
+
+const SYSTEM_TEMPLATE_NAMES: Record<string, string> = {
+  NEW: "order_confirmation",
+  BOOKED: "order_updates",
+};
+
+const SYSTEM_TEMPLATE_LABELS: Record<string, string> = {
+  NEW: "Order Confirmation",
+  BOOKED: "Order Updates",
+};
+
+const CUSTOM_TEMPLATE_LABELS: Record<string, string> = {
+  NEW: "Custom Order",
+  BOOKED: "Custom Template",
+};
+
+type TemplateType = "system" | "custom";
+
+function hasSystemOption(status: string): boolean {
+  return status === "NEW" || status === "BOOKED";
+}
+
+function getInitialTemplateType(status: string, templateName: string): TemplateType {
+  if (!hasSystemOption(status)) return "custom";
+  return templateName === SYSTEM_TEMPLATE_NAMES[status] ? "system" : "custom";
+}
 
 const WA_STATUSES = [
   { status: "NEW", label: "New Order", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" },
@@ -205,14 +233,32 @@ interface EditDialogProps {
   onClose: () => void;
   statusInfo: { status: string; label: string } | null;
   initial: { templateName: string; messageBody: string };
-  onSave: (templateName: string, messageBody: string) => void;
+  onSave: (templateName: string, messageBody: string | null) => void;
   isSaving: boolean;
 }
 
 function EditTemplateDialog({ open, onClose, statusInfo, initial, onSave, isSaving }: EditDialogProps) {
-  const [templateName, setTemplateName] = useState(initial.templateName);
+  const status = statusInfo?.status ?? "";
+  const showDropdown = hasSystemOption(status);
+
+  const [templateType, setTemplateType] = useState<TemplateType>(() =>
+    getInitialTemplateType(status, initial.templateName)
+  );
   const [messageBody, setMessageBody] = useState(initial.messageBody);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (open) {
+      setTemplateType(getInitialTemplateType(status, initial.templateName));
+      setMessageBody(initial.messageBody);
+    }
+  }, [open, status, initial.templateName, initial.messageBody]);
+
+  const isSystem = templateType === "system";
+  const fallback = DEFAULT_MESSAGE_BODIES[status] ?? DEFAULT_MESSAGE_BODY;
+  const previewBody = isSystem
+    ? DEFAULT_MESSAGE_BODIES[status] ?? DEFAULT_MESSAGE_BODY
+    : (messageBody.trim() || fallback);
 
   const insertChip = (key: string) => {
     const textarea = textareaRef.current;
@@ -230,11 +276,12 @@ function EditTemplateDialog({ open, onClose, statusInfo, initial, onSave, isSavi
     }, 0);
   };
 
-  const fallback = DEFAULT_MESSAGE_BODIES[statusInfo?.status ?? ""] ?? DEFAULT_MESSAGE_BODY;
-  const previewBody = messageBody.trim() || fallback;
-
   const handleSave = () => {
-    onSave(templateName.trim(), messageBody.trim() || fallback);
+    if (isSystem) {
+      onSave(SYSTEM_TEMPLATE_NAMES[status], null);
+    } else {
+      onSave("custom_message", messageBody.trim() || fallback);
+    }
   };
 
   return (
@@ -251,53 +298,77 @@ function EditTemplateDialog({ open, onClose, statusInfo, initial, onSave, isSavi
 
         <div className="flex gap-5 py-2">
           <div className="flex-1 min-w-0 space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Template Name</label>
-              <Input
-                data-testid="dialog-input-template-name"
-                value={templateName}
-                onChange={e => setTemplateName(e.target.value)}
-                placeholder={defaultTemplateName(statusInfo?.status ?? "")}
-              />
-              <p className="text-xs text-muted-foreground">
-                Must match an approved template in your WhatsApp Business account.
-              </p>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Message Body</label>
-              <div className="flex flex-wrap gap-1.5 p-2 bg-muted/50 rounded-md border">
-                <span className="text-xs text-muted-foreground self-center mr-1">Insert:</span>
-                {VARIABLE_CHIPS.map(chip => (
-                  <button
-                    key={chip.key}
-                    type="button"
-                    onClick={() => insertChip(chip.key)}
-                    className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300 border border-green-200 dark:border-green-800 hover:bg-green-200 dark:hover:bg-green-900 transition-colors font-mono"
-                    data-testid={`chip-${chip.key.replace(/[{}]/g, "")}`}
-                  >
-                    + {chip.label}
-                  </button>
-                ))}
+            {showDropdown && (
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Template Type</label>
+                <Select
+                  value={templateType}
+                  onValueChange={v => setTemplateType(v as TemplateType)}
+                >
+                  <SelectTrigger data-testid="dialog-select-template-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="system">
+                      {SYSTEM_TEMPLATE_LABELS[status]} (Meta Approved)
+                    </SelectItem>
+                    <SelectItem value="custom">
+                      {CUSTOM_TEMPLATE_LABELS[status] ?? "Custom Template"}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {isSystem
+                    ? `Uses the pre-approved "${SYSTEM_TEMPLATE_NAMES[status]}" template from your Meta Business account. No message body required.`
+                    : `Uses the "custom_message" template with a dynamic body you write below.`}
+                </p>
               </div>
-              <Textarea
-                ref={textareaRef}
-                data-testid="dialog-textarea-message-body"
-                value={messageBody}
-                onChange={e => setMessageBody(e.target.value)}
-                placeholder={fallback}
-                rows={6}
-                className="font-mono text-sm resize-y"
-              />
-              <p className="text-xs text-muted-foreground">
-                Leave blank to use the default template shown in the preview.
-              </p>
-            </div>
+            )}
+
+            {!isSystem && (
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Message Body</label>
+                <div className="flex flex-wrap gap-1.5 p-2 bg-muted/50 rounded-md border">
+                  <span className="text-xs text-muted-foreground self-center mr-1">Insert:</span>
+                  {VARIABLE_CHIPS.map(chip => (
+                    <button
+                      key={chip.key}
+                      type="button"
+                      onClick={() => insertChip(chip.key)}
+                      className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300 border border-green-200 dark:border-green-800 hover:bg-green-200 dark:hover:bg-green-900 transition-colors font-mono"
+                      data-testid={`chip-${chip.key.replace(/[{}]/g, "")}`}
+                    >
+                      + {chip.label}
+                    </button>
+                  ))}
+                </div>
+                <Textarea
+                  ref={textareaRef}
+                  data-testid="dialog-textarea-message-body"
+                  value={messageBody}
+                  onChange={e => setMessageBody(e.target.value)}
+                  placeholder={fallback}
+                  rows={6}
+                  className="font-mono text-sm resize-y"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Leave blank to use the default template shown in the preview.
+                </p>
+              </div>
+            )}
+
+            {isSystem && (
+              <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-3">
+                <p className="text-xs text-blue-700 dark:text-blue-400">
+                  This is a pre-approved Meta template. The message content is fixed in your WhatsApp Business account — no body needs to be configured here.
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="w-52 flex-shrink-0 flex flex-col gap-2">
             <p className="text-xs font-medium text-muted-foreground">Live preview</p>
-            <WhatsAppBubble message={previewMessage(previewBody, statusInfo?.label)} status={statusInfo?.status} />
+            <WhatsAppBubble message={previewMessage(previewBody, statusInfo?.label)} status={status} />
           </div>
         </div>
 
@@ -307,7 +378,7 @@ function EditTemplateDialog({ open, onClose, statusInfo, initial, onSave, isSavi
           </Button>
           <Button
             onClick={handleSave}
-            disabled={isSaving || !templateName.trim()}
+            disabled={isSaving}
             data-testid="dialog-button-save"
           >
             {isSaving ? "Saving..." : "Save Template"}
@@ -372,13 +443,13 @@ function TemplatesTab() {
     });
   };
 
-  const handleSave = (templateName: string, messageBody: string) => {
+  const handleSave = (templateName: string, messageBody: string | null) => {
     if (!editingStatus) return;
     const t = getTemplate(editingStatus);
     saveMutation.mutate({
       status: editingStatus,
       templateName,
-      messageBody,
+      messageBody: messageBody ?? null,
       isActive: t?.isActive ?? true,
     });
   };
