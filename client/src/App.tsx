@@ -84,7 +84,6 @@ import AccountingExpenses from "@/pages/accounting/expenses";
 import AccountingExpensesUnpaid from "@/pages/accounting/expenses-unpaid";
 import AccountingCodReceivable from "@/pages/accounting/cod-receivable";
 import AccountingCourierPayable from "@/pages/accounting/courier-payable";
-import AccountingSettlements from "@/pages/accounting/settlements";
 import AccountingPnl from "@/pages/accounting/reports/pnl";
 import AccountingBalanceSheet from "@/pages/accounting/reports/balance-sheet";
 import AccountingCashFlow from "@/pages/accounting/reports/cash-flow";
@@ -141,7 +140,6 @@ const routeToPageId: Record<string, string> = {
   "/accounting/expenses-unpaid": "needs-payment",
   "/accounting/cod-receivable": "cod-receivable",
   "/accounting/courier-payable": "courier-payable",
-  "/accounting/settlements": "settlements",
   "/accounting/reports/pnl": "profit-loss",
   "/accounting/reports/balance-sheet": "balance-snapshot",
   "/accounting/reports/cash-flow": "cash-flow",
@@ -250,7 +248,6 @@ function AppRoutes() {
       <Route path="/accounting/expenses-unpaid">{() => <ProtectedRoute component={AccountingExpensesUnpaid} path="/accounting/expenses-unpaid" />}</Route>
       <Route path="/accounting/cod-receivable">{() => <ProtectedRoute component={AccountingCodReceivable} path="/accounting/cod-receivable" />}</Route>
       <Route path="/accounting/courier-payable">{() => <ProtectedRoute component={AccountingCourierPayable} path="/accounting/courier-payable" />}</Route>
-      <Route path="/accounting/settlements">{() => <ProtectedRoute component={AccountingSettlements} path="/accounting/settlements" />}</Route>
       <Route path="/accounting/reports/pnl">{() => <ProtectedRoute component={AccountingPnl} path="/accounting/reports/pnl" />}</Route>
       <Route path="/accounting/reports/balance-sheet">{() => <ProtectedRoute component={AccountingBalanceSheet} path="/accounting/reports/balance-sheet" />}</Route>
       <Route path="/accounting/reports/cash-flow">{() => <ProtectedRoute component={AccountingCashFlow} path="/accounting/reports/cash-flow" />}</Route>
