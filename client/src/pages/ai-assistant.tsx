@@ -361,30 +361,34 @@ export default function MagicAI() {
               <div key={group.label}>
                 <p className="text-[10px] font-semibold text-violet-500/70 uppercase tracking-widest px-3 pt-3 pb-1">{group.label}</p>
                 {group.sessions.map(s => (
-                  <button
+                  <div
                     key={s.id}
-                    onClick={() => setActiveId(s.id)}
                     className={[
-                      "w-full text-left px-3 py-2 group flex items-start gap-2 transition-colors rounded-none",
+                      "w-full group flex items-start gap-2 transition-colors rounded-none",
                       s.id === activeId
                         ? "bg-violet-600/20 border-l-2 border-violet-500"
                         : "hover:bg-violet-900/20 border-l-2 border-transparent",
                     ].join(" ")}
                     data-testid={`session-${s.id}`}
                   >
-                    <MessageSquare className="w-3.5 h-3.5 text-violet-400 shrink-0 mt-0.5" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[11.5px] text-violet-100 truncate leading-tight">{s.title}</p>
-                      <p className="text-[10px] text-violet-500 mt-0.5">{timeAgo(s.updatedAt)}</p>
-                    </div>
+                    <button
+                      onClick={() => setActiveId(s.id)}
+                      className="flex-1 text-left px-3 py-2 flex items-start gap-2 min-w-0"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5 text-violet-400 shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[11.5px] text-violet-100 truncate leading-tight">{s.title}</p>
+                        <p className="text-[10px] text-violet-500 mt-0.5">{timeAgo(s.updatedAt)}</p>
+                      </div>
+                    </button>
                     <button
                       onClick={(e) => handleDeleteSession(s.id, e)}
-                      className="opacity-0 group-hover:opacity-100 text-violet-500 hover:text-red-400 transition-opacity shrink-0"
+                      className="opacity-0 group-hover:opacity-100 text-violet-500 hover:text-red-400 transition-opacity shrink-0 pr-2 pt-2"
                       data-testid={`delete-session-${s.id}`}
                     >
                       <Trash2 className="w-3 h-3" />
                     </button>
-                  </button>
+                  </div>
                 ))}
               </div>
             ))

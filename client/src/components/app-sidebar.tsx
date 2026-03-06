@@ -165,17 +165,7 @@ const allNavGroups: NavGroup[] = [
     title: "Reports",
     icon: BarChart3,
     items: [
-      { id: "overview", title: "Overview", url: "/accounting", icon: Wallet },
-      { id: "profit-loss", title: "Profit", url: "/accounting/reports/pnl", icon: TrendingUp },
-      { id: "cash-flow", title: "Cash", url: "/accounting/reports/cash-flow", icon: BarChart3 },
-      { id: "stock-report", title: "Stock", url: "/accounting/reports/stock", icon: Package },
-      { id: "balance-snapshot", title: "Balance Snapshot", url: "/accounting/reports/balance-sheet", icon: PieChart },
-      { id: "party-balances", title: "Party Balances", url: "/accounting/reports/party-balances", icon: Users },
-      { id: "trial-balance", title: "Trial Balance", url: "/accounting/trial-balance", icon: Scale },
-      { id: "shipments", title: "Shipments", url: "/shipments", icon: Truck },
-      { id: "courier-dues", title: "Courier Dues", url: "/courier-dues", icon: DollarSign },
-      { id: "product-analytics", title: "Product Analytics", url: "/product-analytics", icon: TrendingUp },
-      { id: "analytics-dashboard", title: "Analytics", url: "/analytics", icon: BarChart3 },
+      { id: "reports-hub", title: "Reports", url: "/reports", icon: BarChart3 },
     ],
   },
 ];
