@@ -338,6 +338,28 @@ export const insertWhatsappTemplateSchema = createInsertSchema(whatsappTemplates
 export type InsertWhatsappTemplate = z.infer<typeof insertWhatsappTemplateSchema>;
 export type WhatsappTemplate = typeof whatsappTemplates.$inferSelect;
 
+// ============================================
+// WHATSAPP INCOMING RESPONSES
+// ============================================
+export const whatsappResponses = pgTable("whatsapp_responses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  orderId: varchar("order_id").references(() => orders.id, { onDelete: "set null" }),
+  waMessageId: varchar("wa_message_id", { length: 255 }).notNull(),
+  fromPhone: varchar("from_phone", { length: 50 }).notNull(),
+  messageType: varchar("message_type", { length: 50 }).notNull().default("text"),
+  messageBody: text("message_body"),
+  rawPayload: jsonb("raw_payload"),
+  receivedAt: timestamp("received_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_whatsapp_responses_merchant").on(table.merchantId),
+  index("idx_whatsapp_responses_order").on(table.orderId),
+  index("idx_whatsapp_responses_phone").on(table.fromPhone),
+]);
+
+export const insertWhatsappResponseSchema = createInsertSchema(whatsappResponses).omit({ id: true, receivedAt: true });
+export type InsertWhatsappResponse = z.infer<typeof insertWhatsappResponseSchema>;
+export type WhatsappResponse = typeof whatsappResponses.$inferSelect;
 
 // ============================================
 // ORDER PAYMENTS (Prepaid / partial payment tracking)

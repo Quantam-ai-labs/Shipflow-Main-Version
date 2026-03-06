@@ -31,6 +31,7 @@ import {
   cashAccounts,
   parties,
   orderChangeLog,
+  whatsappResponses,
 } from "@shared/schema";
 import {
   and,
@@ -5305,6 +5306,101 @@ export async function registerRoutes(
     }
   });
 
+  // ─── WhatsApp Meta Webhook (public — no auth) ─────────────────────────────
+  // GET: Meta webhook verification challenge
+  app.get("/webhooks/whatsapp", (req: any, res) => {
+    const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN || "1sol_whatsapp_verify";
+    const mode = req.query["hub.mode"];
+    const token = req.query["hub.verify_token"];
+    const challenge = req.query["hub.challenge"];
+    if (mode === "subscribe" && token === verifyToken) {
+      console.log("[WhatsApp Webhook] Verified successfully");
+      res.status(200).send(challenge);
+    } else {
+      console.warn("[WhatsApp Webhook] Verification failed — token mismatch");
+      res.status(403).json({ error: "Forbidden" });
+    }
+  });
+
+  // POST: Receive incoming messages from customers
+  app.post("/webhooks/whatsapp", async (req: any, res) => {
+    try {
+      const body = req.body;
+      // Always acknowledge immediately to Meta
+      res.status(200).json({ status: "ok" });
+
+      if (body?.object !== "whatsapp_business_account") return;
+
+      for (const entry of body?.entry ?? []) {
+        for (const change of entry?.changes ?? []) {
+          if (change?.field !== "messages") continue;
+          const value = change.value;
+          const phoneNumberId: string = value?.metadata?.phone_number_id ?? "";
+
+          for (const message of value?.messages ?? []) {
+            const fromPhone: string = message.from ?? "";
+            const waMessageId: string = message.id ?? "";
+            const messageType: string = message.type ?? "text";
+            const messageBody: string =
+              message.text?.body ??
+              message.button?.text ??
+              message.interactive?.button_reply?.title ??
+              message.interactive?.list_reply?.title ??
+              "[non-text message]";
+
+            console.log(`[WhatsApp Webhook] Incoming from ${fromPhone}: "${messageBody}"`);
+
+            // Find the merchant by WHATSAPP_PHONE_NO_ID (env) — match phoneNumberId
+            const configuredPhoneId = process.env.WHATSAPP_PHONE_NO_ID ?? "";
+            if (phoneNumberId && configuredPhoneId && phoneNumberId !== configuredPhoneId) {
+              console.log(`[WhatsApp Webhook] Phone ID mismatch — skipping`);
+              continue;
+            }
+
+            // Find merchant — look up via a recent order from this phone number
+            const normalizedPhone = fromPhone.replace(/^\+/, "");
+            const [matchedOrder] = await db
+              .select({ id: orders.id, merchantId: orders.merchantId })
+              .from(orders)
+              .where(
+                and(
+                  or(
+                    eq(orders.customerPhone, normalizedPhone),
+                    eq(orders.customerPhone, `+${normalizedPhone}`),
+                    eq(orders.customerPhone, `0${normalizedPhone.slice(2)}`),
+                  ),
+                )
+              )
+              .orderBy(desc(orders.createdAt))
+              .limit(1);
+
+            if (!matchedOrder) {
+              console.log(`[WhatsApp Webhook] No order found for phone ${fromPhone} — saving without orderId`);
+              // Try to get any merchant as fallback for multi-tenant
+              // We still save the message without an orderId/merchantId linkage
+              continue;
+            }
+
+            await storage.saveWhatsappResponse({
+              merchantId: matchedOrder.merchantId,
+              orderId: matchedOrder.id,
+              waMessageId,
+              fromPhone: normalizedPhone,
+              messageType,
+              messageBody,
+              rawPayload: message,
+            });
+
+            console.log(`[WhatsApp Webhook] Saved response for order ${matchedOrder.id}`);
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error("[WhatsApp Webhook] Error:", err.message);
+    }
+  });
+  // ─────────────────────────────────────────────────────────────────────────
+
   // PostEx Webhook Route (no auth - public endpoint for PostEx to push status updates)
   app.post("/webhooks/postex/status-update", async (req: any, res) => {
     const webhookSecret = process.env.POSTEX_WEBHOOK_SECRET;
@@ -6204,6 +6300,19 @@ export async function registerRoutes(
       res.json(logs);
     } catch (error: any) {
       console.error("[WhatsApp Logs] Error fetching:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/orders/:orderId/whatsapp-responses", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { orderId } = req.params;
+      const responses = await storage.getWhatsappResponsesByOrder(merchantId, orderId);
+      res.json(responses);
+    } catch (error: any) {
+      console.error("[WhatsApp Responses] Error fetching:", error);
       res.status(500).json({ error: error.message });
     }
   });

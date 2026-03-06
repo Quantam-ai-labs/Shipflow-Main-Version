@@ -37,6 +37,8 @@ import {
   platformSettings,
   type PlatformSettings,
   type WhatsappTemplate,
+  whatsappResponses,
+  type WhatsappResponse, type InsertWhatsappResponse,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, or, ilike, sql, count, inArray, isNull, isNotNull, gte, lte } from "drizzle-orm";
@@ -216,6 +218,11 @@ export interface IStorage {
   getJourneyEvents(merchantId: string, campaignKey?: string): Promise<CampaignJourneyEvent[]>;
   createJourneyEvent(event: InsertCampaignJourneyEvent): Promise<CampaignJourneyEvent>;
   updateJourneyEventSnapshot(id: string, snapshotAfter: any, evaluatedAt: Date): Promise<CampaignJourneyEvent | undefined>;
+
+  // WhatsApp Responses
+  saveWhatsappResponse(data: InsertWhatsappResponse): Promise<WhatsappResponse>;
+  getWhatsappResponsesByOrder(merchantId: string, orderId: string): Promise<WhatsappResponse[]>;
+  getWhatsappResponsesByPhone(merchantId: string, phone: string): Promise<WhatsappResponse[]>;
 
   // Seed
   seedDemoData(): Promise<void>;
@@ -2010,6 +2017,23 @@ export class DatabaseStorage implements IStorage {
 
     const settings = await this.getPlatformSettings();
     return settings.globalOtpRequired;
+  }
+
+  async saveWhatsappResponse(data: InsertWhatsappResponse): Promise<WhatsappResponse> {
+    const [row] = await db.insert(whatsappResponses).values(data).returning();
+    return row;
+  }
+
+  async getWhatsappResponsesByOrder(merchantId: string, orderId: string): Promise<WhatsappResponse[]> {
+    return db.select().from(whatsappResponses)
+      .where(and(eq(whatsappResponses.merchantId, merchantId), eq(whatsappResponses.orderId, orderId)))
+      .orderBy(desc(whatsappResponses.receivedAt));
+  }
+
+  async getWhatsappResponsesByPhone(merchantId: string, phone: string): Promise<WhatsappResponse[]> {
+    return db.select().from(whatsappResponses)
+      .where(and(eq(whatsappResponses.merchantId, merchantId), eq(whatsappResponses.fromPhone, phone)))
+      .orderBy(desc(whatsappResponses.receivedAt));
   }
 
   async seedDemoData(): Promise<void> {
