@@ -2,7 +2,7 @@ import type { SendResult } from "./types";
 
 const LOG_PREFIX = "[WhatsApp]";
 const WHATSAPP_API_URL =
-  "https://graph.facebook.com/v22.0/967693413100547/messages";
+  `https://graph.facebook.com/v22.0/${process.env.WHATSAPP_PHONE_NO_ID}/messages`;
 const WHATSAPP_REQUEST_TIMEOUT_MS = 10_000;
 
 export function formatPhoneForWhatsApp(
