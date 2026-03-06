@@ -33,10 +33,8 @@ export function formatPhoneForWhatsApp(
 
 function sanitizeTemplateParam(text: string): string {
   return text
-    .replace(/\n{2,}/g, " | ")
-    .replace(/\n/g, " ")
-    .replace(/\t/g, " ")
-    .replace(/ {5,}/g, "    ")
+    .replace(/[\n\r\t]/g, " ")
+    .replace(/\s{2,}/g, " ")
     .trim();
 }
 
@@ -45,17 +43,20 @@ function buildTemplatePayload(
   templateName: string,
   messageText: string
 ): object {
+  console.log(`message text is: ${messageText}`)
+  const message: string = sanitizeTemplateParam(messageText)
+  console.log(`message after sanitize is: ${message}`)
   return {
     messaging_product: "whatsapp",
     to: formattedPhone,
     type: "template",
     template: {
-      name: "custom_message",
+      name: templateName,
       language: { code: "en" },
       components: [
         {
           type: "body",
-          parameters: [{ type: "text", text: sanitizeTemplateParam(messageText) }],
+          parameters: [{ type: "text", text: message }],
         },
       ],
     },
