@@ -1561,12 +1561,12 @@ export class DatabaseStorage implements IStorage {
       },
       {
         workflowStatus: "FULFILLED",
-        templateName: "order_updates",
+        templateName: "custom_message",
         messageBody: `Hello {customer_name},\n\nYour order #{order_number} of {item_name} is "shipped".\n\nThank you for shopping with lalaimports. We appreciate your trust!`,
       },
       {
         workflowStatus: "DELIVERED",
-        templateName: "order_updates",
+        templateName: "custom_message",
         messageBody: `Hello {customer_name},\n\nYour order #{order_number} of {item_name} is "delivered".\n\nThank you for shopping with lalaimports. We appreciate your trust!`,
       },
     ];
