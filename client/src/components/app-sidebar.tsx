@@ -81,6 +81,7 @@ import {
   Home,
   MessageCircle,
   Sparkles,
+  Pin,
   type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -166,6 +167,20 @@ const allPageIds = [
   "reports-hub",
   ...settingsItems.map(i => i.id),
 ];
+
+const standaloneNavItems: NavItem[] = [
+  { id: "reports-hub", title: "Reports", url: "/reports", icon: BarChart3 },
+  { id: "overview", title: "Overview", url: "/accounting", icon: LayoutDashboard },
+  { id: "ai-hub", title: "AI Assistant", url: "/ai", icon: Brain },
+  { id: "dashboard", title: "Home", url: "/dashboard", icon: Home },
+];
+
+const allPinnableItemsById: Record<string, NavItem> = Object.fromEntries([
+  ...orderItems,
+  ...allNavGroups.flatMap(g => g.items),
+  ...settingsItems,
+  ...standaloneNavItems,
+].map(i => [i.id, i]));
 
 const defaultPinnedPages = [
   "orders-all", "orders-new", "orders-pending", "orders-ready", "orders-booked", "orders-fulfilled",
@@ -348,6 +363,46 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
+        {pinnedPages.length > 0 && (
+          <SidebarGroup>
+            <div className="px-3 pb-1 flex items-center gap-1.5">
+              <Pin className="w-3 h-3 text-muted-foreground" />
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Pinned</span>
+            </div>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {pinnedPages.map((id) => {
+                  const item = allPinnableItemsById[id];
+                  if (!item) return null;
+                  const isActive = location === item.url || (item.url !== "/" && location.startsWith(item.url.split("?")[0] + "/"));
+                  return (
+                    <SidebarMenuItem key={id} className="group/pinned-item">
+                      <SidebarMenuButton asChild isActive={isActive} className="pr-1">
+                        <Link href={item.url} data-testid={`nav-pinned-${id}`}>
+                          <item.icon className="w-4 h-4 shrink-0" />
+                          <span className="flex-1 truncate">{item.title}</span>
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              updatePrefsMutation.mutate({ sidebarPinnedPages: pinnedPages.filter(p => p !== id) });
+                            }}
+                            className="opacity-0 group-hover/pinned-item:opacity-100 transition-opacity p-0.5 rounded hover:bg-destructive/20 hover:text-destructive ml-auto shrink-0"
+                            data-testid={`button-unpin-${id}`}
+                            title="Unpin"
+                          >
+                            <Pin className="w-3 h-3 fill-current" />
+                          </button>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
         {filteredOrderItems.length > 0 && (
           <SidebarGroup>
             <SidebarGroupContent>
@@ -370,17 +425,31 @@ export function AppSidebar() {
                       <SidebarMenuSub>
                         {filteredOrderItems.map((item) => {
                           const count = item.key && item.key !== "ALL" ? (counts?.[item.key] || 0) : 0;
+                          const isPinned = pinnedPages.includes(item.id);
                           return (
-                            <SidebarMenuSubItem key={item.key}>
+                            <SidebarMenuSubItem key={item.key} className="group/order-item">
                               <SidebarMenuSubButton asChild isActive={location === item.url}>
                                 <Link href={item.url} data-testid={`nav-pipeline-${item.key!.toLowerCase()}`}>
                                   <item.icon className="w-3.5 h-3.5" />
                                   <span className="flex-1">{item.title}</span>
                                   {count > 0 && (
-                                    <Badge variant="secondary" className="h-5 min-w-[20px] px-1.5 text-xs ml-auto">
+                                    <Badge variant="secondary" className="h-5 min-w-[20px] px-1.5 text-xs">
                                       {count}
                                     </Badge>
                                   )}
+                                  <button
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      const next = isPinned ? pinnedPages.filter(p => p !== item.id) : [...pinnedPages, item.id];
+                                      updatePrefsMutation.mutate({ sidebarPinnedPages: next });
+                                    }}
+                                    className={`transition-opacity p-0.5 rounded shrink-0 ${isPinned ? "opacity-100 text-primary" : "opacity-0 group-hover/order-item:opacity-60 text-muted-foreground"}`}
+                                    title={isPinned ? "Unpin" : "Pin to top"}
+                                    data-testid={`button-pin-${item.id}`}
+                                  >
+                                    <Pin className={`w-3 h-3 ${isPinned ? "fill-current" : ""}`} />
+                                  </button>
                                 </Link>
                               </SidebarMenuSubButton>
                             </SidebarMenuSubItem>
@@ -412,16 +481,32 @@ export function AppSidebar() {
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                         <SidebarMenuSub>
-                          {group.items.map((item) => (
-                            <SidebarMenuSubItem key={item.id}>
-                              <SidebarMenuSubButton asChild isActive={location === item.url || location.startsWith(item.url + "/")}>
-                                <Link href={item.url} data-testid={`nav-${item.id}`}>
-                                  <item.icon className="w-3.5 h-3.5" />
-                                  <span>{item.title}</span>
-                                </Link>
-                              </SidebarMenuSubButton>
-                            </SidebarMenuSubItem>
-                          ))}
+                          {group.items.map((item) => {
+                            const isPinned = pinnedPages.includes(item.id);
+                            return (
+                              <SidebarMenuSubItem key={item.id} className="group/nav-item">
+                                <SidebarMenuSubButton asChild isActive={location === item.url || location.startsWith(item.url + "/")}>
+                                  <Link href={item.url} data-testid={`nav-${item.id}`}>
+                                    <item.icon className="w-3.5 h-3.5" />
+                                    <span className="flex-1">{item.title}</span>
+                                    <button
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        const next = isPinned ? pinnedPages.filter(p => p !== item.id) : [...pinnedPages, item.id];
+                                        updatePrefsMutation.mutate({ sidebarPinnedPages: next });
+                                      }}
+                                      className={`transition-opacity p-0.5 rounded shrink-0 ${isPinned ? "opacity-100 text-primary" : "opacity-0 group-hover/nav-item:opacity-60 text-muted-foreground"}`}
+                                      title={isPinned ? "Unpin" : "Pin to top"}
+                                      data-testid={`button-pin-${item.id}`}
+                                    >
+                                      <Pin className={`w-3 h-3 ${isPinned ? "fill-current" : ""}`} />
+                                    </button>
+                                  </Link>
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                            );
+                          })}
                         </SidebarMenuSub>
                       </CollapsibleContent>
                     </SidebarMenuItem>
@@ -500,17 +585,16 @@ export function AppSidebar() {
             {isSimple ? <ToggleLeft className="w-4 h-4" /> : <ToggleRight className="w-4 h-4" />}
             {isSimple ? "Simple" : "Advanced"}
           </Button>
-          {isSimple && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-              onClick={() => setShowPagePicker(true)}
-              data-testid="button-customize-sidebar"
-            >
-              <SlidersHorizontal className="w-4 h-4" />
-            </Button>
-          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+            onClick={() => setShowPagePicker(true)}
+            data-testid="button-customize-sidebar"
+            title="Customize pinned pages"
+          >
+            <SlidersHorizontal className="w-4 h-4" />
+          </Button>
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -553,7 +637,7 @@ export function AppSidebar() {
             <DialogTitle>Customize Sidebar</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <p className="text-sm text-muted-foreground">Choose which pages appear in Simple mode.</p>
+            <p className="text-sm text-muted-foreground">Pinned pages appear at the top of the sidebar for quick access. In Simple mode, only pinned pages are shown.</p>
             {allNavGroups.map(group => (
               <div key={group.id}>
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">{group.title}</p>
