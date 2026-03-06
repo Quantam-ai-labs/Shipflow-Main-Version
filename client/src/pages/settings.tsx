@@ -8,6 +8,13 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -110,7 +117,14 @@ const DEFAULT_MESSAGE_BODIES: Record<string, string> = {
 const DEFAULT_MESSAGE_BODY = DEFAULT_MESSAGE_BODIES.DELIVERED;
 
 const defaultTemplateName = (status: string) =>
-  status === "NEW" ? "order_confirmation" : "order_updates";
+  status === "NEW" ? "order_confirmation" : "custom_message";
+
+const TEMPLATE_NAME_OPTIONS: Record<string, string[]> = {
+  NEW:       ["custom_message", "order_confirmation"],
+  BOOKED:    ["custom_message", "order_update"],
+  FULFILLED: ["custom_message"],
+  DELIVERED: ["custom_message"],
+};
 
 const WA_PREVIEW_VALUES: Record<string, string> = {
   customer_name: "Ali",
@@ -215,7 +229,16 @@ function EditDialog({ open, statusInfo, initial, onSave, onClose, isSaving }: Ed
           <div className="space-y-4">
             <div className="space-y-1.5">
               <Label>Template Name</Label>
-              <Input value={templateName} onChange={e => setTemplateName(e.target.value)} placeholder="e.g. order_updates" />
+              <Select value={templateName} onValueChange={setTemplateName}>
+                <SelectTrigger data-testid="select-template-name">
+                  <SelectValue placeholder="Select template name" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(TEMPLATE_NAME_OPTIONS[statusInfo?.status ?? ""] ?? ["custom_message"]).map(opt => (
+                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <p className="text-xs text-muted-foreground">Must match an approved Meta template name.</p>
             </div>
             <div className="space-y-1.5">
