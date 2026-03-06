@@ -43,7 +43,7 @@ function buildTemplatePayload(
     template: {
       name: "custom_message",
       language: { code: "en" },
-      components: [
+      components: [  
         {
           type: "body",
           parameters: [{ type: "text", text: messageText }],
