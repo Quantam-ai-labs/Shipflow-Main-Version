@@ -128,105 +128,7 @@ const WA_STATUSES = [
   { status: "DELIVERED", label: "Delivered", color: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" },
 ];
 
-const PREVIEW_VALUES: Record<string, string> = {
-  customer_name: "Ali",
-  order_number: "132",
-  item_name: "MacBook Pro 2019",
-  new_status: "Booked",
-  old_status: "New Order",
-  city: "Lahore",
-  address: "House 12, Block B, DHA",
-  total_amount: "Rs 2,500",
-  courier_name: "Leopards",
-  tracking_number: "LP123456",
-};
 
-function previewMessage(body: string, statusLabel?: string): string {
-  return body.replace(/\{(\w+)\}/g, (_, key) => {
-    if (key === "new_status" && statusLabel) return statusLabel;
-    return PREVIEW_VALUES[key] ?? `{${key}}`;
-  });
-}
-
-function WaTicks() {
-  return (
-    <svg width="14" height="10" viewBox="0 0 16 11" fill="none" className="flex-shrink-0">
-      <path d="M1 5.5L4.5 9L10.5 1" stroke="#53BDEB" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M6 9L12 1" stroke="#53BDEB" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  );
-}
-
-function WhatsAppBubble({ message, status }: { message: string; status?: string }) {
-  const timeStr = new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
-  const isNew = status === "NEW";
-
-  return (
-    <div className="flex flex-col rounded-xl overflow-hidden border border-[#222d35] shadow-lg h-full min-h-[300px]">
-      <div className="bg-[#1F2C34] flex items-center gap-2.5 px-3 py-2.5 flex-shrink-0">
-        <div className="w-8 h-8 rounded-full bg-green-600 flex items-center justify-center text-white font-bold text-xs select-none">L</div>
-        <div>
-          <p className="text-white text-xs font-semibold leading-tight">Lalaimports</p>
-          <p className="text-[#8696A0] text-[10px]">online</p>
-        </div>
-      </div>
-
-      <div className="flex-1 bg-[#0B141A] px-3 py-3 flex flex-col justify-end gap-2 overflow-auto">
-        <div className="flex justify-center mb-1">
-          <span className="bg-[#1F2C34] text-[#8696A0] text-[9px] px-2 py-0.5 rounded-full">Today</span>
-        </div>
-
-        {isNew ? (
-          <div className="flex justify-end">
-            <div className="w-[93%] shadow-md rounded-tl-xl rounded-tr-sm rounded-bl-xl overflow-hidden">
-              <div className="relative bg-[#005C4B] px-3 py-2.5">
-                <div className="absolute top-0 -right-1.5 w-0 h-0 border-t-[8px] border-t-[#005C4B] border-r-[8px] border-r-transparent" />
-                <p className="text-white text-[12px] font-bold mb-1.5">Confirmation Required</p>
-                <p className="text-white text-[11.5px] whitespace-pre-wrap leading-relaxed break-words">{message}</p>
-                <div className="flex items-center justify-end gap-1 mt-1.5">
-                  <span className="text-[#8696A0] text-[9px]">{timeStr}</span>
-                  <WaTicks />
-                </div>
-              </div>
-              <div className="border-t border-[#1A3830]">
-                <div className="flex items-center justify-center gap-1.5 py-2 bg-[#005C4B] border-b border-[#1A3830]">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#53BDEB" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                  <span className="text-[#53BDEB] text-[12px] font-medium">Confirm</span>
-                </div>
-                <div className="flex items-center justify-center gap-1.5 py-2 bg-[#005C4B]">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#53BDEB" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                  <span className="text-[#53BDEB] text-[12px] font-medium">Cancel</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="flex justify-end">
-            <div className="relative bg-[#005C4B] rounded-tl-xl rounded-tr-sm rounded-bl-xl rounded-br-xl px-3 py-2 max-w-[92%] shadow-md">
-              <div className="absolute top-0 -right-1.5 w-0 h-0 border-t-[8px] border-t-[#005C4B] border-r-[8px] border-r-transparent" />
-              <p className="text-white text-[11.5px] whitespace-pre-wrap leading-relaxed break-words">{message}</p>
-              <div className="flex items-center justify-end gap-1 mt-1">
-                <span className="text-[#8696A0] text-[9px]">{timeStr}</span>
-                <WaTicks />
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="bg-[#1F2C34] flex items-center gap-2 px-3 py-2 flex-shrink-0">
-        <div className="flex-1 bg-[#2A3942] rounded-full px-3 py-1.5">
-          <span className="text-[#8696A0] text-[10px]">Type a message</span>
-        </div>
-        <div className="w-7 h-7 rounded-full bg-[#00A884] flex items-center justify-center flex-shrink-0">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="white">
-            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-          </svg>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 interface EditDialogProps {
   open: boolean;
@@ -255,10 +157,8 @@ function EditTemplateDialog({ open, onClose, statusInfo, initial, onSave, isSavi
   }, [open, status, initial.templateName, initial.messageBody]);
 
   const isSystem = templateType === "system";
+  const showBody = !showDropdown || !isSystem;
   const fallback = DEFAULT_MESSAGE_BODIES[status] ?? DEFAULT_MESSAGE_BODY;
-  const previewBody = isSystem
-    ? DEFAULT_MESSAGE_BODIES[status] ?? DEFAULT_MESSAGE_BODY
-    : (messageBody.trim() || fallback);
 
   const insertChip = (key: string) => {
     const textarea = textareaRef.current;
@@ -284,92 +184,75 @@ function EditTemplateDialog({ open, onClose, statusInfo, initial, onSave, isSavi
     }
   };
 
+  const systemLabel = status === "NEW" ? "order_confirmation" : "order_update";
+
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>
-            {statusInfo ? `Edit WhatsApp Template — ${statusInfo.label}` : "Edit WhatsApp Template"}
+            {statusInfo ? `${statusInfo.label} — WhatsApp Template` : "WhatsApp Template"}
           </DialogTitle>
           <DialogDescription>
-            Configure the message sent when an order moves to this status. Variables are replaced with real order data when sent.
+            Select which template to send when this status is triggered.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex gap-5 py-2">
-          <div className="flex-1 min-w-0 space-y-4">
-            {showDropdown && (
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Template Type</label>
-                <Select
-                  value={templateType}
-                  onValueChange={v => setTemplateType(v as TemplateType)}
-                >
-                  <SelectTrigger data-testid="dialog-select-template-type">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="system">
-                      {SYSTEM_TEMPLATE_LABELS[status]} (Meta Approved)
-                    </SelectItem>
-                    <SelectItem value="custom">
-                      {CUSTOM_TEMPLATE_LABELS[status] ?? "Custom Template"}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+        <div className="space-y-4 py-1">
+          {showDropdown && (
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Template</label>
+              <Select
+                value={templateType}
+                onValueChange={v => setTemplateType(v as TemplateType)}
+              >
+                <SelectTrigger data-testid="dialog-select-template-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="system">{systemLabel}</SelectItem>
+                  <SelectItem value="custom">Custom Message</SelectItem>
+                </SelectContent>
+              </Select>
+              {isSystem && (
                 <p className="text-xs text-muted-foreground">
-                  {isSystem
-                    ? `Uses the pre-approved "${SYSTEM_TEMPLATE_NAMES[status]}" template from your Meta Business account. No message body required.`
-                    : `Uses the "custom_message" template with a dynamic body you write below.`}
+                  Uses the pre-approved <span className="font-mono">{systemLabel}</span> template from your Meta Business account.
                 </p>
-              </div>
-            )}
+              )}
+            </div>
+          )}
 
-            {!isSystem && (
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Message Body</label>
-                <div className="flex flex-wrap gap-1.5 p-2 bg-muted/50 rounded-md border">
-                  <span className="text-xs text-muted-foreground self-center mr-1">Insert:</span>
-                  {VARIABLE_CHIPS.map(chip => (
-                    <button
-                      key={chip.key}
-                      type="button"
-                      onClick={() => insertChip(chip.key)}
-                      className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300 border border-green-200 dark:border-green-800 hover:bg-green-200 dark:hover:bg-green-900 transition-colors font-mono"
-                      data-testid={`chip-${chip.key.replace(/[{}]/g, "")}`}
-                    >
-                      + {chip.label}
-                    </button>
-                  ))}
-                </div>
-                <Textarea
-                  ref={textareaRef}
-                  data-testid="dialog-textarea-message-body"
-                  value={messageBody}
-                  onChange={e => setMessageBody(e.target.value)}
-                  placeholder={fallback}
-                  rows={6}
-                  className="font-mono text-sm resize-y"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Leave blank to use the default template shown in the preview.
-                </p>
+          {showBody && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Message Body</label>
+              <div className="flex flex-wrap gap-1.5 p-2 bg-muted/50 rounded-md border">
+                <span className="text-xs text-muted-foreground self-center mr-1">Variables:</span>
+                {VARIABLE_CHIPS.map(chip => (
+                  <button
+                    key={chip.key}
+                    type="button"
+                    onClick={() => insertChip(chip.key)}
+                    className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300 border border-green-200 dark:border-green-800 hover:bg-green-200 dark:hover:bg-green-900 transition-colors font-mono"
+                    data-testid={`chip-${chip.key.replace(/[{}]/g, "")}`}
+                  >
+                    {chip.label}
+                  </button>
+                ))}
               </div>
-            )}
-
-            {isSystem && (
-              <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-3">
-                <p className="text-xs text-blue-700 dark:text-blue-400">
-                  This is a pre-approved Meta template. The message content is fixed in your WhatsApp Business account — no body needs to be configured here.
-                </p>
-              </div>
-            )}
-          </div>
-
-          <div className="w-52 flex-shrink-0 flex flex-col gap-2">
-            <p className="text-xs font-medium text-muted-foreground">Live preview</p>
-            <WhatsAppBubble message={previewMessage(previewBody, statusInfo?.label)} status={status} />
-          </div>
+              <Textarea
+                ref={textareaRef}
+                data-testid="dialog-textarea-message-body"
+                value={messageBody}
+                onChange={e => setMessageBody(e.target.value)}
+                placeholder={fallback}
+                rows={6}
+                className="font-mono text-sm resize-y"
+              />
+              <p className="text-xs text-muted-foreground">
+                Use variable chips above to insert dynamic order data.
+              </p>
+            </div>
+          )}
         </div>
 
         <DialogFooter>
@@ -381,7 +264,7 @@ function EditTemplateDialog({ open, onClose, statusInfo, initial, onSave, isSavi
             disabled={isSaving}
             data-testid="dialog-button-save"
           >
-            {isSaving ? "Saving..." : "Save Template"}
+            {isSaving ? "Saving..." : "Save"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -489,10 +372,12 @@ function TemplatesTab() {
                 const isActive = t?.isActive ?? true;
                 const templateName = t?.templateName ?? defaultTemplateName(status);
                 const messageBody = t?.messageBody;
+                const openEdit = () => { setEditingStatus(status); setEditOpen(true); };
                 return (
                   <div
                     key={status}
-                    className="flex items-center gap-3 px-4 py-3"
+                    className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-muted/40 transition-colors"
+                    onClick={openEdit}
                     data-testid={`whatsapp-template-row-${status.toLowerCase()}`}
                   >
                     <Badge className={`${color} border-0 text-xs shrink-0`}>{label}</Badge>
@@ -504,7 +389,7 @@ function TemplatesTab() {
                         <p className="text-xs text-muted-foreground italic">Default message</p>
                       )}
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-2 shrink-0" onClick={e => e.stopPropagation()}>
                       <Switch
                         checked={isActive}
                         onCheckedChange={v => handleToggle(status, v)}
@@ -514,7 +399,7 @@ function TemplatesTab() {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8"
-                        onClick={() => { setEditingStatus(status); setEditOpen(true); }}
+                        onClick={openEdit}
                         data-testid={`button-edit-whatsapp-${status.toLowerCase()}`}
                       >
                         <Pencil className="w-4 h-4" />
