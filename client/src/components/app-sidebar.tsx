@@ -118,12 +118,13 @@ const orderItems: NavItem[] = [
 const allNavGroups: NavGroup[] = [
   {
     id: "products",
-    title: "Products",
+    title: "Inventory",
     icon: ShoppingBag,
     items: [
       { id: "products", title: "Products", url: "/accounting/products", icon: ShoppingBag },
       { id: "stock-ledger", title: "Stock", url: "/stock-ledger", icon: BookOpen },
       { id: "add-stock", title: "Add Stock", url: "/accounting/stock-receipts", icon: ArrowDownLeft },
+      { id: "sale-orders", title: "Point of Sale", url: "/accounting/sale-orders", icon: ShoppingCart },
     ],
   },
   {
@@ -134,7 +135,6 @@ const allNavGroups: NavGroup[] = [
       { id: "money", title: "Transactions", url: "/accounting/transactions", icon: Receipt },
       { id: "expense-history", title: "Expenses", url: "/accounting/expenses", icon: Calculator },
       { id: "customers", title: "Parties", url: "/accounting/parties", icon: UserCircle },
-      { id: "sale-orders", title: "Point of Sale", url: "/accounting/sale-orders", icon: ShoppingCart },
       { id: "cash-accounts", title: "Cash Accounts", url: "/accounting/cash-accounts", icon: Landmark },
     ],
   },
