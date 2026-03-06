@@ -94,7 +94,6 @@ import AccountingSettings from "@/pages/accounting/settings";
 import AccountingTransactions from "@/pages/accounting/transactions";
 import OpeningBalancesPage from "@/pages/accounting/opening-balances";
 import MarketingDashboard from "@/pages/marketing/dashboard";
-import LiveCampaigns from "@/pages/marketing/live-campaigns";
 import AdsManager from "@/pages/marketing/ads-manager";
 import AdsProfitability from "@/pages/marketing/ads-profitability";
 import ReportsHub from "@/pages/reports";
@@ -149,7 +148,6 @@ const routeToPageId: Record<string, string> = {
   "/reports": "reports-hub",
   "/ai": "ai-hub",
   "/marketing": "ads-dashboard",
-  "/marketing/live": "live-campaigns",
   "/marketing/ads-manager": "ads-manager",
   "/marketing/profitability": "ads-profitability",
   "/whatsapp": "whatsapp-hub",
@@ -255,7 +253,6 @@ function AppRoutes() {
       <Route path="/reports">{() => <ProtectedRoute component={ReportsHub} path="/reports" />}</Route>
       <Route path="/ai">{() => <ProtectedRoute component={AIAssistant} path="/ai" />}</Route>
       <Route path="/marketing">{() => <ProtectedRoute component={MarketingDashboard} path="/marketing" />}</Route>
-      <Route path="/marketing/live">{() => <ProtectedRoute component={LiveCampaigns} path="/marketing/live" />}</Route>
       <Route path="/marketing/ads-manager">{() => <ProtectedRoute component={AdsManager} path="/marketing/ads-manager" />}</Route>
       <Route path="/marketing/profitability">{() => <ProtectedRoute component={AdsProfitability} path="/marketing/profitability" />}</Route>
       <Route path="/whatsapp">{() => <ProtectedRoute component={WhatsAppPage} path="/whatsapp" />}</Route>
