@@ -21,19 +21,8 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
   MessageCircle,
   Pencil,
-  Trash2,
   CheckCircle2,
   XCircle,
   Clock,
@@ -275,7 +264,6 @@ function EditTemplateDialog({ open, onClose, statusInfo, initial, onSave, isSavi
 function TemplatesTab() {
   const { toast } = useToast();
   const [editOpen, setEditOpen] = useState(false);
-  const [deleteStatus, setDeleteStatus] = useState<string | null>(null);
   const [editingStatus, setEditingStatus] = useState<string | null>(null);
 
   const { data: templates, isLoading } = useQuery<WhatsAppTemplate[]>({
@@ -292,17 +280,6 @@ function TemplatesTab() {
       toast({ title: "Template saved" });
     },
     onError: () => toast({ title: "Failed to save template", variant: "destructive" }),
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: async (status: string) =>
-      apiRequest("DELETE", `/api/whatsapp-templates/${status}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/whatsapp-templates"] });
-      setDeleteStatus(null);
-      toast({ title: "Reset to default" });
-    },
-    onError: () => toast({ title: "Failed to reset template", variant: "destructive" }),
   });
 
   const getTemplate = (status: string) =>
@@ -404,16 +381,6 @@ function TemplatesTab() {
                       >
                         <Pencil className="w-4 h-4" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-destructive hover:text-destructive"
-                        disabled={!t}
-                        onClick={() => setDeleteStatus(status)}
-                        data-testid={`button-delete-whatsapp-${status.toLowerCase()}`}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
                     </div>
                   </div>
                 );
@@ -432,27 +399,6 @@ function TemplatesTab() {
         isSaving={saveMutation.isPending}
       />
 
-      <AlertDialog open={!!deleteStatus} onOpenChange={v => { if (!v) setDeleteStatus(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Reset template?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will remove the custom configuration for{" "}
-              <strong>{WA_STATUSES.find(s => s.status === deleteStatus)?.label}</strong> and
-              revert to the default template name and message body for this status.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => deleteStatus && deleteMutation.mutate(deleteStatus)}
-              data-testid="button-confirm-delete-template"
-            >
-              Reset to Default
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </>
   );
 }

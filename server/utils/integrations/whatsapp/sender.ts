@@ -31,31 +31,24 @@ export function formatPhoneForWhatsApp(
   return cleaned;
 }
 
-const SYSTEM_TEMPLATES = new Set(["order_confirmation", "order_updates"]);
-
 function buildTemplatePayload(
   formattedPhone: string,
   templateName: string,
   messageText: string
 ): object {
-  const isSystem = SYSTEM_TEMPLATES.has(templateName);
   return {
     messaging_product: "whatsapp",
     to: formattedPhone,
     type: "template",
     template: {
-      name: templateName,
+      name: "custom_message",
       language: { code: "en" },
-      ...(isSystem
-        ? {}
-        : {
-            components: [
-              {
-                type: "body",
-                parameters: [{ type: "text", text: messageText }],
-              },
-            ],
-          }),
+      components: [
+        {
+          type: "body",
+          parameters: [{ type: "text", text: messageText }],
+        },
+      ],
     },
   };
 }
