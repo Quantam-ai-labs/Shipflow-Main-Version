@@ -31,6 +31,15 @@ export function formatPhoneForWhatsApp(
   return cleaned;
 }
 
+function sanitizeTemplateParam(text: string): string {
+  return text
+    .replace(/\n{2,}/g, " | ")
+    .replace(/\n/g, " ")
+    .replace(/\t/g, " ")
+    .replace(/ {5,}/g, "    ")
+    .trim();
+}
+
 function buildTemplatePayload(
   formattedPhone: string,
   templateName: string,
@@ -46,7 +55,7 @@ function buildTemplatePayload(
       components: [
         {
           type: "body",
-          parameters: [{ type: "text", text: messageText }],
+          parameters: [{ type: "text", text: sanitizeTemplateParam(messageText) }],
         },
       ],
     },
