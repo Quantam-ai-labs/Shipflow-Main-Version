@@ -204,6 +204,8 @@ function EditDialog({ open, statusInfo, initial, onSave, onClose, isSaving }: Ed
     }
   }, [open, initial?.templateName, initial?.messageBody, initial?.isActive]);
 
+  const isMetaBuiltin = templateName !== "custom_message";
+
   const insertVariable = (key: string) => {
     const el = textareaRef.current;
     if (!el) { setMessageBody(b => b + `{${key}}`); return; }
@@ -241,25 +243,34 @@ function EditDialog({ open, statusInfo, initial, onSave, onClose, isSaving }: Ed
               </Select>
               <p className="text-xs text-muted-foreground">Must match an approved Meta template name.</p>
             </div>
-            <div className="space-y-1.5">
-              <Label>Message Body</Label>
-              <Textarea
-                ref={textareaRef}
-                value={messageBody}
-                onChange={e => setMessageBody(e.target.value)}
-                rows={7}
-                placeholder="Write your message..."
-                className="font-mono text-sm resize-none"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Insert Variables</Label>
-              <div className="flex flex-wrap gap-1.5">
-                {VARIABLE_CHIPS.map(v => (
-                  <VariableChip key={v.key} label={v.label} varKey={v.key} onClick={insertVariable} />
-                ))}
+            {!isMetaBuiltin && (
+              <>
+                <div className="space-y-1.5">
+                  <Label>Message Body</Label>
+                  <Textarea
+                    ref={textareaRef}
+                    value={messageBody}
+                    onChange={e => setMessageBody(e.target.value)}
+                    rows={7}
+                    placeholder="Write your message..."
+                    className="font-mono text-sm resize-none"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Insert Variables</Label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {VARIABLE_CHIPS.map(v => (
+                      <VariableChip key={v.key} label={v.label} varKey={v.key} onClick={insertVariable} />
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+            {isMetaBuiltin && (
+              <div className="rounded-lg border border-dashed border-muted-foreground/30 bg-muted/30 p-4 text-sm text-muted-foreground">
+                This is a Meta built-in template. The message body is managed by Meta and cannot be edited here.
               </div>
-            </div>
+            )}
             <div className="flex items-center gap-2">
               <Switch checked={isActive} onCheckedChange={setIsActive} id="wa-active" />
               <Label htmlFor="wa-active">Enable for this status</Label>
@@ -267,14 +278,20 @@ function EditDialog({ open, statusInfo, initial, onSave, onClose, isSaving }: Ed
           </div>
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">Live Preview</Label>
-            <div className="rounded-xl bg-[#e5ddd5] dark:bg-[#0d1117] p-4 min-h-[200px]">
-              <WhatsAppBubble message={buildPreview(messageBody || DEFAULT_MESSAGE_BODY, statusInfo?.label)} status={statusInfo?.status} />
+            <div className="rounded-xl bg-[#e5ddd5] dark:bg-[#0d1117] p-4 min-h-[200px] flex items-center justify-center">
+              {isMetaBuiltin ? (
+                <p className="text-sm text-center text-gray-500 dark:text-gray-400 px-4">
+                  Preview not available for Meta built-in templates. The message is defined in your Meta Business Manager.
+                </p>
+              ) : (
+                <WhatsAppBubble message={buildPreview(messageBody || DEFAULT_MESSAGE_BODY, statusInfo?.label)} status={statusInfo?.status} />
+              )}
             </div>
           </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={() => onSave({ templateName, messageBody, isActive })} disabled={isSaving}>
+          <Button onClick={() => onSave({ templateName, messageBody: isMetaBuiltin ? "" : messageBody, isActive })} disabled={isSaving}>
             {isSaving ? "Saving..." : "Save Template"}
           </Button>
         </DialogFooter>
