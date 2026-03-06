@@ -5309,7 +5309,9 @@ export async function registerRoutes(
   // ─── WhatsApp Meta Webhook (public — no auth) ─────────────────────────────
   // GET: Meta webhook verification challenge
   app.get("/webhooks/whatsapp", (req: any, res) => {
-    const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN || "1sol_whatsapp_verify";
+    const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN;
+    if(!verifyToken)
+      return res.status(403).json({ error: "Forbidden" });
     const mode = req.query["hub.mode"];
     const token = req.query["hub.verify_token"];
     const challenge = req.query["hub.challenge"];
@@ -5325,6 +5327,7 @@ export async function registerRoutes(
   // POST: Receive incoming messages from customers
   app.post("/webhooks/whatsapp", async (req: any, res) => {
     try {
+      console.log("[WhatsApp Webhook] Received payload:", JSON.stringify(req.body, null, 2));
       const body = req.body;
       // Always acknowledge immediately to Meta
       res.status(200).json({ status: "ok" });
@@ -5357,33 +5360,48 @@ export async function registerRoutes(
               continue;
             }
 
-            // Find merchant — look up via a recent order from this phone number
-            const normalizedPhone = fromPhone.replace(/^\+/, "");
+            // Normalise the incoming phone into multiple formats to maximise match chances
+            const normalizedPhone = fromPhone.replace(/^\+/, ""); // e.g. "923001234567"
+            const withPlus = `+${normalizedPhone}`;               // "+923001234567"
+            const withLeadingZero = `0${normalizedPhone.slice(2)}`; // "03001234567"
+            const noCountryCode = normalizedPhone.slice(2);       // "3001234567"
+
             const [matchedOrder] = await db
               .select({ id: orders.id, merchantId: orders.merchantId })
               .from(orders)
               .where(
-                and(
-                  or(
-                    eq(orders.customerPhone, normalizedPhone),
-                    eq(orders.customerPhone, `+${normalizedPhone}`),
-                    eq(orders.customerPhone, `0${normalizedPhone.slice(2)}`),
-                  ),
+                or(
+                  eq(orders.customerPhone, normalizedPhone),
+                  eq(orders.customerPhone, withPlus),
+                  eq(orders.customerPhone, withLeadingZero),
+                  eq(orders.customerPhone, noCountryCode),
+                  ilike(orders.customerPhone, `%${noCountryCode}`),
                 )
               )
               .orderBy(desc(orders.createdAt))
               .limit(1);
 
-            if (!matchedOrder) {
-              console.log(`[WhatsApp Webhook] No order found for phone ${fromPhone} — saving without orderId`);
-              // Try to get any merchant as fallback for multi-tenant
-              // We still save the message without an orderId/merchantId linkage
+            let resolvedMerchantId: string | null = matchedOrder?.merchantId ?? null;
+            let resolvedOrderId: string | null = matchedOrder?.id ?? null;
+
+            if (!resolvedMerchantId) {
+              // Fallback: find the first available merchant (WhatsApp is env-configured per deployment)
+              const [fallbackMerchant] = await db
+                .select({ id: merchants.id })
+                .from(merchants)
+                .limit(1);
+              resolvedMerchantId = fallbackMerchant?.id ?? null;
+              console.log(`[WhatsApp Webhook] No order found for phone ${fromPhone} — saving under fallback merchant ${resolvedMerchantId ?? "none"}`);
+            }
+
+            if (!resolvedMerchantId) {
+              console.warn(`[WhatsApp Webhook] Could not resolve any merchant for phone ${fromPhone} — dropping message`);
               continue;
             }
 
             await storage.saveWhatsappResponse({
-              merchantId: matchedOrder.merchantId,
-              orderId: matchedOrder.id,
+              merchantId: resolvedMerchantId,
+              orderId: resolvedOrderId,
               waMessageId,
               fromPhone: normalizedPhone,
               messageType,
@@ -5391,7 +5409,11 @@ export async function registerRoutes(
               rawPayload: message,
             });
 
-            console.log(`[WhatsApp Webhook] Saved response for order ${matchedOrder.id}`);
+            if (resolvedOrderId) {
+              console.log(`[WhatsApp Webhook] Saved response for order ${resolvedOrderId}`);
+            } else {
+              console.log(`[WhatsApp Webhook] Saved unlinked response from ${fromPhone} under merchant ${resolvedMerchantId}`);
+            }
           }
         }
       }
