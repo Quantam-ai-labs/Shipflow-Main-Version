@@ -11,6 +11,11 @@ import {
   DollarSign,
   BarChart2,
   BarChart3,
+  BookOpen,
+  FileCheck,
+  RefreshCcw,
+  ArrowDownLeft,
+  ArrowUpRight,
 } from "lucide-react";
 import AccountingOverview from "@/pages/accounting/overview";
 import AccountingPnl from "@/pages/accounting/reports/pnl";
@@ -23,6 +28,11 @@ import Shipments from "@/pages/shipments";
 import CourierDuesPage from "@/pages/courier-dues";
 import ProductAnalyticsPage from "@/pages/product-analytics";
 import Analytics from "@/pages/analytics";
+import AccountingLedger from "@/pages/accounting/ledger";
+import ManageCheques from "@/pages/manage-cheques";
+import CodReconciliationPage from "@/pages/cod-reconciliation";
+import AccountingCodReceivable from "@/pages/accounting/cod-receivable";
+import AccountingCourierPayable from "@/pages/accounting/courier-payable";
 
 const REPORT_TABS = [
   { id: "overview",          label: "Overview",          icon: LayoutDashboard, gradient: "from-slate-600 to-slate-700"      },
@@ -36,6 +46,11 @@ const REPORT_TABS = [
   { id: "courier-dues",      label: "Courier Dues",      icon: DollarSign,       gradient: "from-orange-500 to-red-600"       },
   { id: "product-analytics", label: "Product Analytics", icon: BarChart2,        gradient: "from-teal-600 to-cyan-700"        },
   { id: "analytics",         label: "Analytics",         icon: BarChart3,        gradient: "from-fuchsia-600 to-violet-700"   },
+  { id: "ledger",            label: "Ledger",            icon: BookOpen,         gradient: "from-zinc-600 to-slate-700"       },
+  { id: "manage-cheques",    label: "Manage Cheques",    icon: FileCheck,        gradient: "from-cyan-600 to-teal-700"        },
+  { id: "cod-reconciliation",label: "COD Reconciliation",icon: RefreshCcw,       gradient: "from-green-600 to-emerald-700"    },
+  { id: "cod-receivable",    label: "COD Receivable",    icon: ArrowDownLeft,    gradient: "from-lime-600 to-green-700"       },
+  { id: "cod-payable",       label: "COD Payable",       icon: ArrowUpRight,     gradient: "from-red-500 to-rose-700"         },
 ] as const;
 
 type ReportTabId = typeof REPORT_TABS[number]["id"];
@@ -95,7 +110,12 @@ export default function ReportsHub() {
         {activeTab === "shipments"         && <Shipments />}
         {activeTab === "courier-dues"      && <CourierDuesPage />}
         {activeTab === "product-analytics" && <ProductAnalyticsPage />}
-        {activeTab === "analytics"         && <Analytics />}
+        {activeTab === "analytics"          && <Analytics />}
+        {activeTab === "ledger"             && <AccountingLedger />}
+        {activeTab === "manage-cheques"     && <ManageCheques />}
+        {activeTab === "cod-reconciliation" && <CodReconciliationPage />}
+        {activeTab === "cod-receivable"     && <AccountingCodReceivable />}
+        {activeTab === "cod-payable"        && <AccountingCourierPayable />}
       </div>
     </div>
   );
