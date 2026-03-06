@@ -69,7 +69,7 @@ export interface IStorage {
   updateCourierAccount(id: string, data: Partial<InsertCourierAccount>): Promise<CourierAccount | undefined>;
 
   // Orders - All scoped by merchantId
-  getOrders(merchantId: string, options?: { search?: string; searchOrderNumber?: string; searchTracking?: string; searchName?: string; searchPhone?: string; status?: string; courier?: string; city?: string; month?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number; workflowStatus?: string; pendingReasonType?: string; shipmentStatus?: string; excludeHeavyFields?: boolean; timezone?: string; filterTag?: string; filterStatuses?: string; minItems?: number; maxItems?: number; sortBy?: string; sortDir?: string }): Promise<{ orders: Order[]; total: number }>;
+  getOrders(merchantId: string, options?: { search?: string; searchOrderNumber?: string; searchTracking?: string; searchName?: string; searchPhone?: string; status?: string; courier?: string; city?: string; month?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number; workflowStatus?: string; pendingReasonType?: string; shipmentStatus?: string; excludeHeavyFields?: boolean; timezone?: string; filterTag?: string; filterStatuses?: string; minItems?: number; maxItems?: number; sortBy?: string; sortDir?: string; filterPayment?: string }): Promise<{ orders: Order[]; total: number }>;
   getUniqueCities(merchantId: string): Promise<string[]>;
   getUniqueStatuses(merchantId: string): Promise<string[]>;
   getOrderById(merchantId: string, id: string): Promise<Order | undefined>;
@@ -319,7 +319,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Orders - All scoped by merchantId
-  async getOrders(merchantId: string, options?: { search?: string; searchOrderNumber?: string; searchTracking?: string; searchName?: string; searchPhone?: string; status?: string; courier?: string; city?: string; month?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number; workflowStatus?: string; pendingReasonType?: string; shipmentStatus?: string; excludeHeavyFields?: boolean; timezone?: string; filterTag?: string; filterStatuses?: string; minItems?: number; maxItems?: number; sortBy?: string; sortDir?: string }): Promise<{ orders: Order[]; total: number }> {
+  async getOrders(merchantId: string, options?: { search?: string; searchOrderNumber?: string; searchTracking?: string; searchName?: string; searchPhone?: string; status?: string; courier?: string; city?: string; month?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number; workflowStatus?: string; pendingReasonType?: string; shipmentStatus?: string; excludeHeavyFields?: boolean; timezone?: string; filterTag?: string; filterStatuses?: string; minItems?: number; maxItems?: number; sortBy?: string; sortDir?: string; filterPayment?: string }): Promise<{ orders: Order[]; total: number }> {
     const page = options?.page || 1;
     const pageSize = options?.pageSize || 20;
     const offset = (page - 1) * pageSize;
@@ -465,6 +465,10 @@ export class DatabaseStorage implements IStorage {
 
     if (options?.maxItems !== undefined && options.maxItems > 0) {
       conditions.push(lte(orders.totalQuantity, options.maxItems));
+    }
+
+    if (options?.filterPayment && options.filterPayment !== "all") {
+      conditions.push(eq(orders.codPaymentStatus, options.filterPayment));
     }
 
     const whereClause = and(...conditions);

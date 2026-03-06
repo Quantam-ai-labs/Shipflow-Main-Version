@@ -426,6 +426,7 @@ export default function Pipeline() {
   const [allFilterCourierStatus, setAllFilterCourierStatus] = useState("all");
   const [allMinItems, setAllMinItems] = useState("");
   const [allMaxItems, setAllMaxItems] = useState("");
+  const [paymentFilter, setPaymentFilter] = useState("all");
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [allSortBy, setAllSortBy] = useState("orderDate");
   const [allSortDir, setAllSortDir] = useState<"asc" | "desc">("desc");
@@ -450,13 +451,14 @@ export default function Pipeline() {
     setAllFilterCourierStatus("all");
     setAllMinItems("");
     setAllMaxItems("");
+    setPaymentFilter("all");
     setShowAdvancedFilters(false);
     setAllSortBy("orderDate");
     setAllSortDir("desc");
   }, [activeTab]);
 
   const { data, isLoading, isFetching } = useQuery<{ orders: Order[]; total: number }>({
-    queryKey: ["/api/orders", { workflowStatus: activeTab, search: debouncedSearch, page, pageSize, pendingReasonType: activeTab === "PENDING" ? pendingReasonFilter : undefined, shipmentStatus: shipmentSubFilter !== "all" ? shipmentSubFilter : undefined, dateFrom: debouncedSearch ? undefined : dateParams.dateFrom, dateTo: debouncedSearch ? undefined : dateParams.dateTo, ...(activeTab === "ALL" ? { allOrderIds: debouncedAllOrderIds, allFilterTag: debouncedAllFilterTag, allFilterStatuses: allFilterStatuses.join(","), allFilterCourier, allFilterCourierStatus, allMinItems, allMaxItems, allSortBy, allSortDir } : {}) }],
+    queryKey: ["/api/orders", { workflowStatus: activeTab, search: debouncedSearch, page, pageSize, pendingReasonType: activeTab === "PENDING" ? pendingReasonFilter : undefined, shipmentStatus: shipmentSubFilter !== "all" ? shipmentSubFilter : undefined, paymentFilter, dateFrom: debouncedSearch ? undefined : dateParams.dateFrom, dateTo: debouncedSearch ? undefined : dateParams.dateTo, ...(activeTab === "ALL" ? { allOrderIds: debouncedAllOrderIds, allFilterTag: debouncedAllFilterTag, allFilterStatuses: allFilterStatuses.join(","), allFilterCourier, allFilterCourierStatus, allMinItems, allMaxItems, allSortBy, allSortDir } : {}) }],
     queryFn: async () => {
       const params = new URLSearchParams();
       params.set("workflowStatus", activeTab);
@@ -466,6 +468,7 @@ export default function Pipeline() {
       if (debouncedSearch) params.set("search", debouncedSearch);
       if (activeTab === "PENDING" && pendingReasonFilter !== "all") params.set("pendingReasonType", pendingReasonFilter);
       if (shipmentSubFilter !== "all") params.set("shipmentStatus", shipmentSubFilter);
+      if (paymentFilter !== "all") params.set("filterPayment", paymentFilter);
       if (!debouncedSearch && dateParams.dateFrom) params.set("dateFrom", dateParams.dateFrom);
       if (!debouncedSearch && dateParams.dateTo) params.set("dateTo", dateParams.dateTo);
       if (activeTab === "ALL") {
@@ -1116,6 +1119,7 @@ export default function Pipeline() {
               allFilterCourierStatus !== "all" ? "x" : "",
               allMinItems,
               allMaxItems,
+              paymentFilter !== "all" ? "x" : "",
             ].filter(Boolean).length;
             return (
               <Button
@@ -1254,6 +1258,22 @@ export default function Pipeline() {
               </div>
             </div>
 
+            {/* Payment filter */}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-muted-foreground">Payment</label>
+              <Select value={paymentFilter} onValueChange={v => { setPaymentFilter(v); setPage(1); }}>
+                <SelectTrigger className="h-8 w-[150px] text-sm" data-testid="filter-payment-select">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Payments</SelectItem>
+                  <SelectItem value="PAID">Prepaid</SelectItem>
+                  <SelectItem value="PARTIAL">Partially Paid</SelectItem>
+                  <SelectItem value="UNPAID">Unpaid</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* Clear button */}
             <Button
               variant="ghost"
@@ -1261,7 +1281,8 @@ export default function Pipeline() {
               className="h-8 text-xs text-muted-foreground"
               onClick={() => {
                 setAllFilterTag(""); setAllFilterStatuses([]); setAllFilterCourier("all");
-                setAllFilterCourierStatus("all"); setAllMinItems(""); setAllMaxItems(""); setPage(1);
+                setAllFilterCourierStatus("all"); setAllMinItems(""); setAllMaxItems("");
+                setPaymentFilter("all"); setPage(1);
               }}
               data-testid="button-clear-all-filters"
             >
@@ -1303,6 +1324,7 @@ export default function Pipeline() {
         if (allFilterCourierStatus !== "all") chips.push({ label: `Courier Status: ${UNIVERSAL_STATUS_LABELS[allFilterCourierStatus] || allFilterCourierStatus}`, clear: () => setAllFilterCourierStatus("all") });
         if (allMinItems) chips.push({ label: `Min Items: ${allMinItems}`, clear: () => setAllMinItems("") });
         if (allMaxItems) chips.push({ label: `Max Items: ${allMaxItems}`, clear: () => setAllMaxItems("") });
+        if (paymentFilter !== "all") chips.push({ label: `Payment: ${paymentFilter === "PAID" ? "Prepaid" : paymentFilter === "PARTIAL" ? "Partially Paid" : "Unpaid"}`, clear: () => setPaymentFilter("all") });
         if (chips.length === 0) return null;
         return (
           <div className="flex flex-wrap gap-1.5 px-4 py-2 border-b bg-background" data-testid="active-filter-chips">
@@ -1545,6 +1567,22 @@ export default function Pipeline() {
       {/* Shipment Status Sub-Tabs */}
       {SHIPMENT_SUB_TABS[activeTab] && (
         <div className="flex items-center gap-1.5 px-4 py-2 border-b bg-muted/30 flex-wrap" data-testid="shipment-sub-tabs">
+          {activeTab === "READY_TO_SHIP" && (
+            <>
+              <Select value={paymentFilter} onValueChange={v => { setPaymentFilter(v); setPage(1); }}>
+                <SelectTrigger className="h-7 w-[145px] text-xs" data-testid="filter-payment-rts-select">
+                  <SelectValue placeholder="All Payments" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Payments</SelectItem>
+                  <SelectItem value="PAID">Prepaid</SelectItem>
+                  <SelectItem value="PARTIAL">Partially Paid</SelectItem>
+                  <SelectItem value="UNPAID">Unpaid</SelectItem>
+                </SelectContent>
+              </Select>
+              <div className="h-4 w-px bg-border mx-1" />
+            </>
+          )}
           {SHIPMENT_SUB_TABS[activeTab].map(tab => {
             const isActive = shipmentSubFilter === tab.value;
             return (
