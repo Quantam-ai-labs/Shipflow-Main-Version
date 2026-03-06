@@ -41,7 +41,7 @@ function buildTemplatePayload(
     to: formattedPhone,
     type: "template",
     template: {
-      name: templateName,
+      name: "custom_message",
       language: { code: "en" },
       components: [
         {
