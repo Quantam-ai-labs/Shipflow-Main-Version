@@ -265,15 +265,16 @@ function WhatsAppTemplatesCard() {
   const [deletingStatus, setDeletingStatus] = useState<string | null>(null);
 
   const { data: templates, isLoading } = useQuery<WhatsAppTemplate[]>({
-    queryKey: ["/api/whatsapp/templates"],
+    queryKey: ["/api/whatsapp-templates"],
   });
 
   const saveMutation = useMutation({
     mutationFn: async (data: { workflowStatus: string; templateName: string; messageBody: string; isActive: boolean }) => {
-      return apiRequest("POST", "/api/whatsapp/templates", data);
+      const { workflowStatus, ...body } = data;
+      return apiRequest("PUT", `/api/whatsapp-templates/${workflowStatus}`, body);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/whatsapp/templates"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/whatsapp-templates"] });
       toast({ title: "Template saved", description: "WhatsApp template updated." });
       setEditingStatus(null);
     },
@@ -282,10 +283,10 @@ function WhatsAppTemplatesCard() {
 
   const deleteMutation = useMutation({
     mutationFn: async (workflowStatus: string) => {
-      return apiRequest("DELETE", `/api/whatsapp/templates/${workflowStatus}`);
+      return apiRequest("DELETE", `/api/whatsapp-templates/${workflowStatus}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/whatsapp/templates"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/whatsapp-templates"] });
       toast({ title: "Template reset", description: "Template reset to system default." });
       setDeletingStatus(null);
     },
@@ -294,9 +295,9 @@ function WhatsAppTemplatesCard() {
 
   const toggleMutation = useMutation({
     mutationFn: async ({ workflowStatus, isActive }: { workflowStatus: string; isActive: boolean }) => {
-      return apiRequest("PATCH", `/api/whatsapp/templates/${workflowStatus}/toggle`, { isActive });
+      return apiRequest("PATCH", `/api/whatsapp-templates/${workflowStatus}/toggle`, { isActive });
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/whatsapp/templates"] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/whatsapp-templates"] }),
     onError: () => toast({ title: "Error", description: "Failed to toggle notification.", variant: "destructive" }),
   });
 

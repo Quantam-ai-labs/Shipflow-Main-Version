@@ -6127,6 +6127,38 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/whatsapp-templates/:status/toggle", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const workflowStatus = req.params.status.toUpperCase();
+      const VALID_WA_STATUSES = ["NEW", "BOOKED", "FULFILLED", "DELIVERED"];
+      if (!VALID_WA_STATUSES.includes(workflowStatus)) {
+        return res.status(400).json({ error: "Invalid status" });
+      }
+      const { isActive } = req.body;
+      if (typeof isActive !== "boolean") {
+        return res.status(400).json({ error: "isActive must be a boolean" });
+      }
+      const existing = await storage.getWhatsAppTemplates(merchantId);
+      const template = existing.find(t => t.workflowStatus === workflowStatus);
+      if (!template) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+      const updated = await storage.upsertWhatsAppTemplate({
+        merchantId,
+        workflowStatus,
+        templateName: template.templateName,
+        messageBody: template.messageBody,
+        isActive,
+      });
+      res.json(updated);
+    } catch (error: any) {
+      console.error("[WhatsApp Templates] Error toggling:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.delete("/api/whatsapp-templates/:status", isAuthenticated, async (req, res) => {
     try {
       const merchantId = await requireMerchant(req, res);
