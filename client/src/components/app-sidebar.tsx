@@ -448,14 +448,6 @@ export function AppSidebar() {
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={location === "/accounting/settings"} data-testid="nav-preferences">
-                    <Link href="/accounting/settings">
-                      <Cog className="w-4 h-4" />
-                      <span>Preferences</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>

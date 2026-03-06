@@ -477,24 +477,12 @@ export default function Settings() {
     });
   };
 
-  const isPreferencesActive = location === "/accounting/settings";
-  const currentTab = isPreferencesActive
-    ? SETTINGS_TABS.find(t => t.id === "preferences")!
-    : (SETTINGS_TABS.find(t => t.id === activeTab) ?? SETTINGS_TABS[0]);
-
   return (
     <div className="min-h-full">
-      {/* Header strip */}
-      <div className="border-b bg-muted/20 px-6 pt-5 pb-5">
-        <div className="mb-5">
-          <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {currentTab.description} — {currentTab.label}
-          </p>
-        </div>
-
-        {/* Vibrant gradient tab cards */}
-        <div className="flex gap-2.5 overflow-x-auto pb-1 scrollbar-none" data-testid="settings-tab-nav">
+      {/* Tab card nav strip — no heading, just the cards */}
+      <div className="border-b bg-muted/20 px-6 py-4">
+        {/* overflow-visible so the scale on the active card isn't clipped */}
+        <div className="flex gap-3 overflow-x-auto py-2 scrollbar-none" style={{ overflowY: "visible" }} data-testid="settings-tab-nav">
           {SETTINGS_TABS.map(tab => {
             const Icon = tab.icon;
             const isActive = tab.href
@@ -515,21 +503,21 @@ export default function Settings() {
                 onClick={handleClick}
                 data-testid={`settings-tab-${tab.id}`}
                 className={[
-                  "relative flex-shrink-0 flex flex-col items-center justify-center gap-2",
-                  "px-3 py-3.5 rounded-2xl cursor-pointer select-none",
-                  "min-w-[82px] transition-all duration-200 ease-out overflow-hidden",
+                  "relative flex-shrink-0 flex flex-col items-center justify-center gap-2.5",
+                  "px-4 py-5 rounded-2xl cursor-pointer select-none",
+                  "min-w-[100px] transition-all duration-200 ease-out overflow-hidden",
                   `bg-gradient-to-br ${tab.gradient}`,
                   isActive
-                    ? "ring-[2.5px] ring-white/70 shadow-xl scale-[1.07] brightness-110"
-                    : "opacity-75 hover:opacity-95 hover:scale-[1.04] shadow-md",
+                    ? "ring-[2.5px] ring-white/70 shadow-2xl scale-[1.05] brightness-110"
+                    : "opacity-72 hover:opacity-95 hover:scale-[1.03] shadow-md",
                 ].join(" ")}
               >
                 <div
                   className="absolute inset-0 pointer-events-none"
                   style={{ backgroundImage: "repeating-linear-gradient(45deg,rgba(255,255,255,0.07) 0px,rgba(255,255,255,0.07) 1px,transparent 1px,transparent 9px)" }}
                 />
-                <Icon className="relative w-5 h-5 text-white drop-shadow-sm" />
-                <span className="relative text-[10.5px] font-bold text-white/95 text-center leading-tight whitespace-nowrap tracking-wide drop-shadow-sm">
+                <Icon className="relative w-6 h-6 text-white drop-shadow-sm" />
+                <span className="relative text-[11.5px] font-bold text-white/95 text-center leading-tight whitespace-nowrap tracking-wide drop-shadow-sm">
                   {tab.label}
                 </span>
               </button>
