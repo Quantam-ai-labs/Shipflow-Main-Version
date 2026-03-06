@@ -79,6 +79,7 @@ import {
   Brain,
   Home,
   MessageCircle,
+  Sparkles,
   type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -157,7 +158,6 @@ const allNavGroups: NavGroup[] = [
       { id: "live-campaigns", title: "Live Campaigns", url: "/marketing/live", icon: Activity },
       { id: "ads-profitability", title: "Profitability", url: "/marketing/profitability", icon: TrendingUp },
       { id: "ai-intelligence", title: "AI Insights", url: "/marketing/intelligence", icon: Brain },
-      { id: "ai-hub", title: "AI Hub", url: "/ai", icon: Brain },
       { id: "whatsapp-hub", title: "WhatsApp", url: "/whatsapp", icon: MessageCircle },
     ],
   },
@@ -324,14 +324,44 @@ export function AppSidebar() {
       <SidebarHeader className="p-4">
         <Link href="/dashboard">
           <div className="flex items-center gap-2 cursor-pointer">
-            <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
-              <Package className="w-5 h-5 text-primary-foreground" />
+            <div className="w-8 h-8 rounded-md bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center shadow-md">
+              <Sparkles className="w-4 h-4 text-white" />
             </div>
-            <span className="font-bold text-lg">✨ Magic AI</span>
+            <span
+              className="font-extrabold text-xl tracking-tight bg-gradient-to-r from-violet-400 via-fuchsia-400 to-indigo-400 bg-clip-text text-transparent"
+              style={{ fontFamily: "'Inter', sans-serif", letterSpacing: "-0.02em" }}
+            >
+              1SOL.AI
+            </span>
           </div>
         </Link>
       </SidebarHeader>
       <SidebarContent>
+        {/* Magic AI — standalone, above Home */}
+        <SidebarGroup className="pb-0">
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={location === "/ai"}
+                  className={[
+                    "relative overflow-hidden font-semibold",
+                    location === "/ai"
+                      ? "bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:from-violet-500 hover:to-indigo-500"
+                      : "hover:bg-violet-500/10 text-violet-400 hover:text-violet-300",
+                  ].join(" ")}
+                >
+                  <Link href="/ai" data-testid="nav-magic-ai">
+                    <Sparkles className="w-4 h-4" />
+                    <span>Magic AI</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
