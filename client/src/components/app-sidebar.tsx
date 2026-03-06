@@ -154,14 +154,6 @@ const allNavGroups: NavGroup[] = [
       { id: "whatsapp-hub", title: "WhatsApp", url: "/whatsapp", icon: MessageCircle },
     ],
   },
-  {
-    id: "reports",
-    title: "Reports",
-    icon: BarChart3,
-    items: [
-      { id: "reports-hub", title: "Reports", url: "/reports", icon: BarChart3 },
-    ],
-  },
 ];
 
 const settingsItems: NavItem[] = [
@@ -176,6 +168,7 @@ const settingsItems: NavItem[] = [
 const allPageIds = [
   ...orderItems.map(i => i.id),
   ...allNavGroups.flatMap(g => g.items.map(i => i.id)),
+  "reports-hub",
   ...settingsItems.map(i => i.id),
 ];
 
@@ -443,6 +436,23 @@ export function AppSidebar() {
             </SidebarGroup>
           );
         })}
+
+        {(!isSimple || pinnedPages.includes("reports-hub")) && (!hasPageRestrictions || allowedPages!.includes("reports-hub")) && (
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={location.startsWith("/reports")} data-testid="nav-reports-hub">
+                    <Link href="/reports">
+                      <BarChart3 className="w-4 h-4" />
+                      <span className="flex-1">Reports</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
         {canAccessSettings && (
           <SidebarGroup>
