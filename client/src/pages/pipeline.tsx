@@ -109,6 +109,8 @@ function CityAutocomplete({ value, onChange, cities, hasWarning, testId }: {
   const listRef = useRef<HTMLDivElement>(null);
   const [dropdownStyle, setDropdownStyle] = useState<{ top: number; left: number } | null>(null);
 
+  useEffect(() => { setQuery(value || ""); }, [value]);
+
   const filtered = useMemo(() => {
     if (!query) return cities.slice(0, 30);
     const q = query.toLowerCase();
@@ -145,7 +147,6 @@ function CityAutocomplete({ value, onChange, cities, hasWarning, testId }: {
     setQuery(name);
     setOpen(false);
     setHighlightedIndex(-1);
-    inputRef.current?.blur();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -189,7 +190,7 @@ function CityAutocomplete({ value, onChange, cities, hasWarning, testId }: {
           setQuery(e.target.value);
           setOpen(true);
         }}
-        onFocus={() => { setQuery(""); setOpen(true); }}
+        onFocus={() => setOpen(true)}
         onBlur={() => { setTimeout(() => setOpen(false), 150); }}
         onKeyDown={handleKeyDown}
         placeholder="Type city..."
