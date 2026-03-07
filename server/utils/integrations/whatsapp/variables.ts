@@ -26,6 +26,7 @@ export const WA_VARIABLE_CHIPS = [
   { key: "{city}", label: "City" },
   { key: "{address}", label: "Address" },
   { key: "{total_amount}", label: "Amount" },
+  { key: "{shipping_amount}", label: "Shipping" },
   { key: "{courier_name}", label: "Courier" },
   { key: "{tracking_number}", label: "Tracking No." },
 ] as const;
@@ -70,12 +71,15 @@ function buildItemLines(
 }
 
 const META_TEMPLATE_PARAMS: Record<string, (vars: Record<string, string>) => string[]> = {
-  order_confirmation: (vars) => [
-    vars.customer_name || "Customer",
-    vars.total_amount
-      ? `${vars.item_name || "your order"} | Total: Rs. ${vars.total_amount}`
-      : (vars.item_name || "your order"),
-  ],
+  order_confirmation: (vars) => {
+    const itemPart = vars.item_name || "your order";
+    const shippingPart = vars.shipping_amount ? ` | Shipping: Rs. ${vars.shipping_amount}` : "";
+    const totalPart = vars.total_amount ? ` | Total: Rs. ${vars.total_amount}` : "";
+    return [
+      vars.customer_name || "Customer",
+      `${itemPart}${shippingPart}${totalPart}`,
+    ];
+  },
   order_update: (vars) => [
     vars.customer_name || "Customer",
     vars.order_number || "N/A",
@@ -104,6 +108,13 @@ export function buildVarsFromParams(params: {
   itemSummary?: string | null;
   lineItems?: Array<{ name: string; quantity: number; price: number; variantTitle?: string | null; sku?: string | null }> | null;
 }): Record<string, string> {
+  const itemSubtotal =
+    params.lineItems && params.lineItems.length > 0
+      ? params.lineItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+      : 0;
+  const grandTotal = params.totalAmount ? Number(params.totalAmount) : 0;
+  const shippingCharge = grandTotal > 0 && itemSubtotal > 0 ? grandTotal - itemSubtotal : 0;
+
   return {
     customer_name: params.customerName || "Customer",
     order_number: params.orderNumber || "N/A",
@@ -112,7 +123,8 @@ export function buildVarsFromParams(params: {
     old_status: getStatusLabel(params.fromStatus),
     city: params.city || "",
     address: params.shippingAddress || "",
-    total_amount: params.totalAmount ? Number(params.totalAmount).toLocaleString("en-PK") : "",
+    total_amount: grandTotal > 0 ? grandTotal.toLocaleString("en-PK") : "",
+    shipping_amount: shippingCharge > 0 ? shippingCharge.toLocaleString("en-PK") : "",
     courier_name: params.courierName || "",
     tracking_number: params.courierTracking || "",
   };
