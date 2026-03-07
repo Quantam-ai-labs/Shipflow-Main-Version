@@ -362,6 +362,104 @@ function HoldCountdown({ holdUntil }: { holdUntil: string | Date }) {
   );
 }
 
+function TagComboInput({
+  value,
+  onChange,
+  chips,
+  onAdd,
+  allTags,
+  placeholder,
+  testId,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  chips: string[];
+  onAdd: (tag: string) => void;
+  allTags: string[];
+  placeholder?: string;
+  testId?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const isSelectingRef = useRef(false);
+
+  const suggestions = useMemo(() => {
+    const q = value.trim().toLowerCase();
+    return allTags
+      .filter(t => !chips.includes(t) && (q === "" || t.toLowerCase().includes(q)))
+      .slice(0, 40);
+  }, [value, allTags, chips]);
+
+  const commit = (tag: string) => {
+    const t = tag.trim().replace(/,+$/, "");
+    if (!t) return;
+    onAdd(t);
+    onChange("");
+    setOpen(false);
+    setHighlightedIndex(-1);
+  };
+
+  return (
+    <div className="relative">
+      <Input
+        ref={inputRef}
+        data-testid={testId}
+        placeholder={placeholder}
+        value={value}
+        autoComplete="off"
+        onChange={e => {
+          onChange(e.target.value);
+          setOpen(true);
+          setHighlightedIndex(-1);
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => {
+          if (isSelectingRef.current) return;
+          setTimeout(() => setOpen(false), 150);
+        }}
+        onKeyDown={e => {
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            setHighlightedIndex(i => Math.min(i + 1, suggestions.length - 1));
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            setHighlightedIndex(i => Math.max(i - 1, -1));
+          } else if (e.key === "Escape") {
+            setOpen(false);
+            setHighlightedIndex(-1);
+          } else if (e.key === "Enter" || e.key === ",") {
+            e.preventDefault();
+            if (highlightedIndex >= 0 && suggestions[highlightedIndex]) {
+              commit(suggestions[highlightedIndex]);
+            } else if (value.trim()) {
+              commit(value);
+            }
+          }
+        }}
+      />
+      {open && suggestions.length > 0 && (
+        <div
+          className="absolute z-50 left-0 right-0 mt-1 max-h-48 overflow-y-auto rounded-md border border-border bg-popover shadow-lg"
+          onMouseDown={() => { isSelectingRef.current = true; }}
+          onMouseUp={() => { isSelectingRef.current = false; }}
+        >
+          {suggestions.map((tag, i) => (
+            <div
+              key={tag}
+              className={`px-3 py-1.5 text-sm cursor-pointer ${i === highlightedIndex ? "bg-accent text-accent-foreground" : "hover:bg-accent hover:text-accent-foreground"}`}
+              onMouseEnter={() => setHighlightedIndex(i)}
+              onMouseDown={e => { e.preventDefault(); commit(tag); }}
+            >
+              {tag}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Pipeline() {
   const params = useParams<{ stage: string }>();
   const activeTab = STAGE_TO_STATUS[params.stage || "new"] || "NEW";
@@ -529,6 +627,14 @@ export default function Pipeline() {
   const orders = data?.orders || [];
   const total = data?.total || 0;
   const totalPages = Math.ceil(total / pageSize);
+
+  const allExistingTags = useMemo(() => {
+    const set = new Set<string>();
+    orders.forEach(o => {
+      if (Array.isArray(o.tags)) (o.tags as string[]).forEach(t => t && set.add(t));
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [orders]);
 
   const phoneNumbers = useMemo(() => {
     return orders
@@ -2976,19 +3082,14 @@ export default function Pipeline() {
           <div className="space-y-4 py-1">
             <div className="space-y-2">
               <label className="text-sm font-medium">Add Tags</label>
-              <Input
-                data-testid="input-add-tag"
-                placeholder="Type a tag and press Enter"
+              <TagComboInput
+                testId="input-add-tag"
+                placeholder="Type or select a tag, press Enter"
                 value={addTagInput}
-                onChange={e => setAddTagInput(e.target.value)}
-                onKeyDown={e => {
-                  if ((e.key === "Enter" || e.key === ",") && addTagInput.trim()) {
-                    e.preventDefault();
-                    const t = addTagInput.trim().replace(/,+$/, "");
-                    if (t && !addTagChips.includes(t)) setAddTagChips(prev => [...prev, t]);
-                    setAddTagInput("");
-                  }
-                }}
+                onChange={setAddTagInput}
+                chips={addTagChips}
+                allTags={allExistingTags}
+                onAdd={t => { if (!addTagChips.includes(t)) setAddTagChips(prev => [...prev, t]); }}
               />
               {addTagChips.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
@@ -3008,19 +3109,14 @@ export default function Pipeline() {
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Remove Tags</label>
-              <Input
-                data-testid="input-remove-tag"
-                placeholder="Type a tag and press Enter"
+              <TagComboInput
+                testId="input-remove-tag"
+                placeholder="Type or select a tag, press Enter"
                 value={removeTagInput}
-                onChange={e => setRemoveTagInput(e.target.value)}
-                onKeyDown={e => {
-                  if ((e.key === "Enter" || e.key === ",") && removeTagInput.trim()) {
-                    e.preventDefault();
-                    const t = removeTagInput.trim().replace(/,+$/, "");
-                    if (t && !removeTagChips.includes(t)) setRemoveTagChips(prev => [...prev, t]);
-                    setRemoveTagInput("");
-                  }
-                }}
+                onChange={setRemoveTagInput}
+                chips={removeTagChips}
+                allTags={allExistingTags}
+                onAdd={t => { if (!removeTagChips.includes(t)) setRemoveTagChips(prev => [...prev, t]); }}
               />
               {removeTagChips.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
