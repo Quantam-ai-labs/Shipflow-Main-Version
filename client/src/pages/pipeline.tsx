@@ -107,6 +107,7 @@ function CityAutocomplete({ value, onChange, cities, hasWarning, testId }: {
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const isSelectingRef = useRef(false);
   const [dropdownStyle, setDropdownStyle] = useState<{ top: number; left: number } | null>(null);
 
   useEffect(() => { setQuery(value || ""); }, [value]);
@@ -191,7 +192,13 @@ function CityAutocomplete({ value, onChange, cities, hasWarning, testId }: {
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
-        onBlur={() => { setTimeout(() => setOpen(false), 150); }}
+        onBlur={() => {
+          if (isSelectingRef.current) {
+            isSelectingRef.current = false;
+            return;
+          }
+          setTimeout(() => setOpen(false), 150);
+        }}
         onKeyDown={handleKeyDown}
         placeholder="Type city..."
         data-testid={testId}
@@ -207,6 +214,7 @@ function CityAutocomplete({ value, onChange, cities, hasWarning, testId }: {
               key={c.name}
               className={`px-2 py-1 text-xs cursor-pointer hover:bg-accent ${i === highlightedIndex ? "bg-accent font-medium" : ""} ${c.name === value ? "bg-primary/10 font-medium" : ""}`}
               onMouseDown={(e) => {
+                isSelectingRef.current = true;
                 e.preventDefault();
                 selectCity(c.name);
               }}
@@ -2255,7 +2263,11 @@ export default function Pipeline() {
       </Dialog>
       {/* Booking Confirmation Modal */}
       <Dialog open={bookingConfirmModal.open} onOpenChange={open => { if (!open) setBookingConfirmModal({ open: false, preview: null }); }}>
-        <DialogContent className="max-w-[100vw] w-screen h-screen max-h-screen rounded-none border-none p-0 flex flex-col [&>button]:z-50">
+        <DialogContent
+          className="max-w-[100vw] w-screen h-screen max-h-screen rounded-none border-none p-0 flex flex-col [&>button]:z-50"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+        >
           <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
             <DialogTitle>Confirm Booking via {selectedCourier === "leopards" ? "Leopards" : "PostEx"}</DialogTitle>
             <DialogDescription>Review and edit order details before booking. All fields are editable.</DialogDescription>
