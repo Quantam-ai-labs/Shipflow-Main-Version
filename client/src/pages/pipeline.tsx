@@ -1,5 +1,4 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
-import ReactDOM from "react-dom";
 import { AIInsightsBanner } from "@/components/ai-insights-banner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -203,18 +202,18 @@ function CityAutocomplete({ value, onChange, cities, hasWarning, testId }: {
         placeholder="Type city..."
         data-testid={testId}
       />
-      {open && filtered.length > 0 && dropdownStyle && ReactDOM.createPortal(
+      {open && filtered.length > 0 && dropdownStyle && (
         <div
           ref={listRef}
           className="fixed z-[9999] w-[220px] max-h-[200px] overflow-y-auto bg-popover border rounded-md shadow-lg"
           style={{ top: dropdownStyle.top, left: dropdownStyle.left }}
+          onMouseDown={(e) => e.preventDefault()}
         >
           {filtered.map((c, i) => (
             <div
               key={c.name}
               className={`px-2 py-1 text-xs cursor-pointer hover:bg-accent ${i === highlightedIndex ? "bg-accent font-medium" : ""} ${c.name === value ? "bg-primary/10 font-medium" : ""}`}
               onMouseDown={(e) => {
-                isSelectingRef.current = true;
                 e.preventDefault();
                 selectCity(c.name);
               }}
@@ -223,8 +222,7 @@ function CityAutocomplete({ value, onChange, cities, hasWarning, testId }: {
               {c.name}
             </div>
           ))}
-        </div>,
-        document.body
+        </div>
       )}
     </div>
   );
