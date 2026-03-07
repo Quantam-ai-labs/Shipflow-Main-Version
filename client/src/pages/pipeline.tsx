@@ -191,7 +191,7 @@ function CityAutocomplete({ value, onChange, cities, hasWarning, testId }: {
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
-        onBlur={() => { setTimeout(() => setOpen(false), 150); }}
+        onBlur={() => { setTimeout(() => { setOpen(false); if (query !== value) onChange(query); }, 150); }}
         onKeyDown={handleKeyDown}
         placeholder="Type city..."
         data-testid={testId}
