@@ -54,7 +54,7 @@ import Pipeline from "@/pages/pipeline";
 import OrderDetails from "@/pages/order-details";
 import Shipments from "@/pages/shipments";
 import Analytics from "@/pages/analytics";
-import CodReconciliation from "@/pages/cod-reconciliation";
+import CodReconciliationHub from "@/pages/cod-reconciliation-hub";
 import PaymentLedger from "@/pages/payment-ledger";
 import ManageCheques from "@/pages/manage-cheques";
 import Team from "@/pages/team";
@@ -217,7 +217,7 @@ function AppRoutes() {
       </Route>
       <Route path="/shipments">{() => <ProtectedRoute component={Shipments} path="/shipments" />}</Route>
       <Route path="/analytics">{() => <ProtectedRoute component={Analytics} path="/analytics" />}</Route>
-      <Route path="/cod-reconciliation">{() => <ProtectedRoute component={CodReconciliation} path="/cod-reconciliation" />}</Route>
+      <Route path="/cod-reconciliation">{() => <ProtectedRoute component={CodReconciliationHub} path="/cod-reconciliation" />}</Route>
       <Route path="/payment-ledger">{() => <ProtectedRoute component={PaymentLedger} path="/payment-ledger" />}</Route>
       <Route path="/manage-cheques">{() => <ProtectedRoute component={ManageCheques} path="/manage-cheques" />}</Route>
       <Route path="/team">{() => <ProtectedRoute component={Team} path="/team" />}</Route>
