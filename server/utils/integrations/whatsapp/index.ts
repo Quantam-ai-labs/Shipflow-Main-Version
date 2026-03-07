@@ -18,19 +18,11 @@ export { formatPhoneForWhatsApp } from "./sender";
 export type { SendResult, OrderNotificationParams } from "./types";
 
 const LOG_PREFIX = "[WhatsApp]";
-const IS_PRODUCTION = process.env.NODE_ENV === "production";
 
 export async function sendOrderStatusWhatsApp(
   params: OrderNotificationParams
 ): Promise<void> {
   if (!WA_NOTIFY_STATUSES.includes(params.toStatus)) return;
-
-  if (!IS_PRODUCTION) {
-    console.log(
-      `${LOG_PREFIX} [DEV] Skipping send for order ${params.orderNumber} (${params.toStatus}) — not in production`
-    );
-    return;
-  }
 
   try {
     const alreadySent = await db
