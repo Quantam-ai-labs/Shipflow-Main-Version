@@ -46,6 +46,14 @@ interface IntegrationsData {
     isConnected: boolean;
     shopDomain: string | null;
     lastSyncAt: string | null;
+    environment: string | null;
+    stores: Array<{
+      id: string;
+      shopDomain: string;
+      isConnected: boolean;
+      environment: string;
+      lastSyncAt: string | null;
+    }>;
   };
   couriers: Array<{
     id: string;
@@ -95,6 +103,7 @@ export default function ShopifySettings() {
   const [useLegacyAuth, setUseLegacyAuth] = useState(false);
   const [useManualAuth, setUseManualAuth] = useState(false);
   const [isOAuthRedirecting, setIsOAuthRedirecting] = useState(false);
+  const [shopifyEnvironment, setShopifyEnvironment] = useState<"development" | "production" | "all">("all");
   const [shopifySyncProgress, setShopifySyncProgress] = useState<ShopifySyncProgress>({
     status: 'idle',
     processed: 0,
@@ -222,7 +231,7 @@ export default function ShopifySettings() {
     } else {
       setIsOAuthRedirecting(true);
       try {
-        const res = await fetch(`/api/shopify/auth-url?shop=${encodeURIComponent(shop)}`, { credentials: 'include' });
+        const res = await fetch(`/api/shopify/auth-url?shop=${encodeURIComponent(shop)}&environment=${shopifyEnvironment}`, { credentials: 'include' });
         const result = await res.json();
         if (!res.ok) {
           throw new Error(result.message || "Failed to start Shopify authorization");
@@ -469,20 +478,43 @@ export default function ShopifySettings() {
             </div>
           ) : data?.shopify.isConnected ? (
             <div className="space-y-4">
-              <div className="flex items-center gap-6 flex-wrap text-sm">
-                <div>
-                  <span className="text-muted-foreground">Store:</span>{" "}
-                  <span className="font-medium">{data.shopify.shopDomain}</span>
+              {(data.shopify.stores || []).filter(s => s.isConnected).map(store => (
+                <div key={store.id} className="flex items-center gap-3 flex-wrap text-sm p-2 rounded-md bg-muted/40">
+                  <span className="font-medium">{store.shopDomain}</span>
+                  <Badge
+                    className={
+                      store.environment === "production" ? "bg-green-500/10 text-green-600 border-green-500/20" :
+                      store.environment === "development" ? "bg-blue-500/10 text-blue-600 border-blue-500/20" :
+                      "bg-secondary text-secondary-foreground"
+                    }
+                  >
+                    {store.environment === "all" ? "Both" : store.environment === "production" ? "Production" : "Development"}
+                  </Badge>
+                  {store.lastSyncAt && (
+                    <span className="text-muted-foreground">Last sync: {formatPkDateTime(store.lastSyncAt)}</span>
+                  )}
                 </div>
-                {data.shopify.lastSyncAt && (
-                  <div>
-                    <span className="text-muted-foreground">Last sync:</span>{" "}
-                    <span className="font-medium">
-                      {formatPkDateTime(data.shopify.lastSyncAt)}
-                    </span>
-                  </div>
-                )}
-              </div>
+              ))}
+              {!(data.shopify.stores || []).some(s => s.environment === "development") && (
+                <button
+                  type="button"
+                  className="text-xs text-blue-600 hover:underline"
+                  onClick={() => { setShopifyEnvironment("development"); setIsShopifyDialogOpen(true); }}
+                  data-testid="button-add-dev-store"
+                >
+                  + Connect Development store
+                </button>
+              )}
+              {!(data.shopify.stores || []).some(s => s.environment === "production") && (
+                <button
+                  type="button"
+                  className="text-xs text-green-600 hover:underline"
+                  onClick={() => { setShopifyEnvironment("production"); setIsShopifyDialogOpen(true); }}
+                  data-testid="button-add-prod-store"
+                >
+                  + Connect Production store
+                </button>
+              )}
               <div className="flex items-center gap-2 flex-wrap text-sm p-3 rounded-md border" data-testid="sync-from-date-section">
                 <Calendar className="w-4 h-4 shrink-0 text-muted-foreground" />
                 <span className="text-muted-foreground">Sync data from:</span>
@@ -853,6 +885,7 @@ export default function ShopifySettings() {
           setUseManualAuth(false);
           setUseLegacyAuth(false);
           setIsOAuthRedirecting(false);
+          setShopifyEnvironment("all");
         }
       }}>
         <DialogContent>
@@ -863,6 +896,31 @@ export default function ShopifySettings() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Environment</Label>
+              <div className="flex gap-2">
+                {(["development", "production", "all"] as const).map(env => (
+                  <button
+                    key={env}
+                    type="button"
+                    onClick={() => setShopifyEnvironment(env)}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${
+                      shopifyEnvironment === env
+                        ? env === "production" ? "bg-green-600 text-white border-green-600"
+                          : env === "development" ? "bg-blue-600 text-white border-blue-600"
+                          : "bg-secondary text-secondary-foreground border-border"
+                        : "bg-background text-muted-foreground border-border hover:bg-muted"
+                    }`}
+                    data-testid={`button-env-${env}`}
+                  >
+                    {env === "all" ? "Both" : env.charAt(0).toUpperCase() + env.slice(1)}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Choose which environment this store will be used for
+              </p>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="storeDomain">Store Domain</Label>
               <div className="flex items-center gap-2">

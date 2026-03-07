@@ -124,10 +124,12 @@ async function warmCourierCityCache() {
 function scheduleStartupRecovery() {
   setTimeout(async () => {
     try {
-      const connectedStores = await db
+      const currentEnv = process.env.NODE_ENV === 'production' ? 'production' : 'development';
+      const allConnected = await db
         .select()
         .from(shopifyStores)
         .where(eq(shopifyStores.isConnected, true));
+      const connectedStores = allConnected.filter(s => s.environment === currentEnv || s.environment === 'all');
 
       if (connectedStores.length === 0) return;
 

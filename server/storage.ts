@@ -62,6 +62,8 @@ export interface IStorage {
 
   // Shopify Stores
   getShopifyStore(merchantId: string): Promise<ShopifyStore | undefined>;
+  getShopifyStoreByEnvironment(merchantId: string, environment: string): Promise<ShopifyStore | undefined>;
+  getAllShopifyStores(merchantId: string): Promise<ShopifyStore[]>;
   createShopifyStore(store: InsertShopifyStore): Promise<ShopifyStore>;
   updateShopifyStore(id: string, data: Partial<InsertShopifyStore>): Promise<ShopifyStore | undefined>;
 
@@ -296,8 +298,31 @@ export class DatabaseStorage implements IStorage {
 
   // Shopify Stores
   async getShopifyStore(merchantId: string): Promise<ShopifyStore | undefined> {
-    const [store] = await db.select().from(shopifyStores).where(eq(shopifyStores.merchantId, merchantId));
+    const env = process.env.NODE_ENV === 'production' ? 'production' : 'development';
+    const stores = await db
+      .select()
+      .from(shopifyStores)
+      .where(
+        and(
+          eq(shopifyStores.merchantId, merchantId),
+          or(eq(shopifyStores.environment, env), eq(shopifyStores.environment, 'all'))
+        )
+      )
+      .orderBy(sql`CASE WHEN environment = ${env} THEN 0 ELSE 1 END`)
+      .limit(1);
+    return stores[0];
+  }
+
+  async getShopifyStoreByEnvironment(merchantId: string, environment: string): Promise<ShopifyStore | undefined> {
+    const [store] = await db
+      .select()
+      .from(shopifyStores)
+      .where(and(eq(shopifyStores.merchantId, merchantId), eq(shopifyStores.environment, environment)));
     return store;
+  }
+
+  async getAllShopifyStores(merchantId: string): Promise<ShopifyStore[]> {
+    return db.select().from(shopifyStores).where(eq(shopifyStores.merchantId, merchantId));
   }
 
   async createShopifyStore(store: InsertShopifyStore): Promise<ShopifyStore> {

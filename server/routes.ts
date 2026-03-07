@@ -4277,10 +4277,10 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
 
+      const allShopifyStores = await storage.getAllShopifyStores(merchantId);
       const shopifyStore = await storage.getShopifyStore(merchantId);
       const couriers = await storage.getCourierAccounts(merchantId);
 
-      // Filter out demo store in production if needed, or just return real data
       const isShopifyConnected = !!(
         shopifyStore?.isConnected &&
         shopifyStore?.accessToken &&
@@ -4292,6 +4292,14 @@ export async function registerRoutes(
           isConnected: isShopifyConnected,
           shopDomain: shopifyStore?.shopDomain || null,
           lastSyncAt: shopifyStore?.lastSyncAt || null,
+          environment: shopifyStore?.environment || null,
+          stores: allShopifyStores.map(s => ({
+            id: s.id,
+            shopDomain: s.shopDomain,
+            isConnected: !!(s.isConnected && s.accessToken && s.accessToken !== "demo-access-token"),
+            environment: s.environment || "all",
+            lastSyncAt: s.lastSyncAt || null,
+          })),
         },
         couriers: couriers.map((c) => {
           const settings = (c.settings as Record<string, any>) || {};
@@ -4978,6 +4986,9 @@ export async function registerRoutes(
         );
       }
 
+      const rawEnv = req.query.environment;
+      const shopifyEnvironment = (typeof rawEnv === "string" && ["development", "production", "all"].includes(rawEnv)) ? rawEnv : "all";
+
       const state = crypto.randomBytes(16).toString("hex");
       const credSource = usingMerchantCreds ? "merchant" : "env";
       oauthStateStore.set(state, {
@@ -4988,10 +4999,11 @@ export async function registerRoutes(
       });
       await storeOAuthStateInDb(state, { merchantId, shopDomain, credSource });
       console.log(
-        `[Shopify OAuth] Generated state ${state.substring(0, 8)}... for merchant ${merchantId}, stored in memory + DB`,
+        `[Shopify OAuth] Generated state ${state.substring(0, 8)}... for merchant ${merchantId}, environment=${shopifyEnvironment}, stored in memory + DB`,
       );
       (req.session as any).shopifyState = state;
       (req.session as any).shopDomain = shopDomain;
+      (req.session as any).shopifyEnvironment = shopifyEnvironment;
       (req.session as any).shopifyCredSource = usingMerchantCreds
         ? "merchant"
         : "env";
@@ -5214,7 +5226,10 @@ export async function registerRoutes(
 
       const encryptedToken = encryptToken(accessToken);
 
-      const existingStore = await storage.getShopifyStore(merchantId);
+      const shopifyEnvironment = (req.session as any).shopifyEnvironment || "all";
+      delete (req.session as any).shopifyEnvironment;
+
+      const existingStore = await storage.getShopifyStoreByEnvironment(merchantId, shopifyEnvironment);
 
       if (existingStore) {
         await storage.updateShopifyStore(existingStore.id, {
@@ -5222,6 +5237,7 @@ export async function registerRoutes(
           accessToken: encryptedToken,
           scopes: scope,
           isConnected: true,
+          environment: shopifyEnvironment,
           lastSyncAt: new Date(),
         });
       } else {
@@ -5231,6 +5247,7 @@ export async function registerRoutes(
           accessToken: encryptedToken,
           scopes: scope,
           isConnected: true,
+          environment: shopifyEnvironment,
         });
       }
 
