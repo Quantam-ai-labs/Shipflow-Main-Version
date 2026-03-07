@@ -107,7 +107,6 @@ function CityAutocomplete({ value, onChange, cities, hasWarning, testId }: {
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const justSelectedRef = useRef(false);
   const [dropdownStyle, setDropdownStyle] = useState<{ top: number; left: number } | null>(null);
 
   const filtered = useMemo(() => {
@@ -142,12 +141,10 @@ function CityAutocomplete({ value, onChange, cities, hasWarning, testId }: {
   }, [open, updateDropdownPosition]);
 
   const selectCity = (name: string) => {
-    justSelectedRef.current = true;
     onChange(name);
     setQuery(name);
     setOpen(false);
     setHighlightedIndex(-1);
-    setTimeout(() => { justSelectedRef.current = false; }, 300);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -191,7 +188,7 @@ function CityAutocomplete({ value, onChange, cities, hasWarning, testId }: {
           setQuery(e.target.value);
           setOpen(true);
         }}
-        onFocus={() => { if (!justSelectedRef.current) setQuery(""); setOpen(true); }}
+        onFocus={() => { inputRef.current?.select(); setOpen(true); }}
         onBlur={() => { setTimeout(() => setOpen(false), 150); }}
         onKeyDown={handleKeyDown}
         placeholder="Type city..."
