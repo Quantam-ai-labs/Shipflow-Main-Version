@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -287,13 +287,13 @@ function ManageAccessDialog({
   open,
   onClose,
 }: {
-  member: TeamMemberWithUser;
+  member: TeamMemberWithUser | null;
   open: boolean;
   onClose: () => void;
 }) {
   const { toast } = useToast();
   const allPageIds = PAGE_SECTIONS.flatMap(s => s.pages.map(p => p.id));
-  const currentPages = member.allowedPages === null || member.allowedPages === undefined ? allPageIds : member.allowedPages;
+  const currentPages = !member || member.allowedPages === null || member.allowedPages === undefined ? allPageIds : member.allowedPages;
   const [selected, setSelected] = useState<Set<string>>(new Set(currentPages));
   const isAllSelected = allPageIds.every(id => selected.has(id));
 
@@ -357,7 +357,7 @@ function ManageAccessDialog({
         <DialogHeader>
           <DialogTitle>Manage Page Access</DialogTitle>
           <DialogDescription>
-            Choose which pages <strong>{member.user?.firstName || member.user?.email}</strong> can access. Unchecked pages will be hidden from their sidebar.
+            Choose which pages <strong>{member?.user?.firstName || member?.user?.email}</strong> can access. Unchecked pages will be hidden from their sidebar.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
@@ -441,6 +441,8 @@ export default function Team() {
   const [revokeTarget, setRevokeTarget] = useState<Invite | null>(null);
   const [removeTarget, setRemoveTarget] = useState<TeamMemberWithUser | null>(null);
   const [accessTarget, setAccessTarget] = useState<TeamMemberWithUser | null>(null);
+  const accessTargetRef = useRef<TeamMemberWithUser | null>(null);
+  if (accessTarget) accessTargetRef.current = accessTarget;
 
   const { data, isLoading } = useQuery<TeamResponse>({
     queryKey: ["/api/team"],
@@ -1024,13 +1026,11 @@ export default function Team() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {accessTarget && (
-        <ManageAccessDialog
-          member={accessTarget}
-          open={!!accessTarget}
-          onClose={() => setAccessTarget(null)}
-        />
-      )}
+      <ManageAccessDialog
+        member={accessTargetRef.current!}
+        open={!!accessTarget}
+        onClose={() => setAccessTarget(null)}
+      />
     </div>
   );
 }

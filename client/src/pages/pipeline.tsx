@@ -2108,7 +2108,7 @@ export default function Pipeline() {
                                 {menuItems.map((item, idx) => (
                                   <DropdownMenuItem
                                     key={item.key}
-                                    onClick={item.action}
+                                    onClick={() => setTimeout(() => item.action(), 0)}
                                     disabled={item.disabled}
                                     className={`text-sm ${item.className || ''}`}
                                     data-testid={`menu-${item.key}-${order.id}`}
