@@ -182,14 +182,7 @@ const allPinnableItemsById: Record<string, NavItem> = Object.fromEntries([
   ...standaloneNavItems,
 ].map(i => [i.id, i]));
 
-const defaultPinnedPages = [
-  "orders-all", "orders-new", "orders-pending", "orders-ready", "orders-booked", "orders-fulfilled",
-  "products", "stock",
-  "money", "customers", "sale-orders", "cod-reconciliation", "payment-ledger",
-  "ads-dashboard", "ads-profitability",
-  "overview", "profit-loss", "shipments",
-  "settings-shopify", "settings-couriers", "settings-status-mapping", "team", "settings", "preferences",
-];
+const defaultPinnedPages: string[] = [];
 
 export function AppSidebar() {
   const [location] = useLocation();
@@ -240,7 +233,7 @@ export function AppSidebar() {
   });
 
   const sidebarMode = user?.sidebarMode || "advanced";
-  const pinnedPages: string[] = user?.sidebarPinnedPages?.length ? user.sidebarPinnedPages : defaultPinnedPages;
+  const pinnedPages: string[] = user?.sidebarPinnedPages ?? [];
   const allowedPages: string[] | null = user?.allowedPages || null;
   const hasPageRestrictions = allowedPages !== null && allowedPages.length > 0;
   const canAccessSettings = user?.isMerchantOwner || user?.teamRole === "manager" || user?.teamRole === "admin";
