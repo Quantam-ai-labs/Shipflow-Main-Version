@@ -126,6 +126,16 @@ const TEMPLATE_NAME_OPTIONS: Record<string, string[]> = {
   DELIVERED: ["custom_message"],
 };
 
+const META_BUILTIN_PREVIEWS: Record<string, { body: string; buttons?: string[] }> = {
+  order_confirmation: {
+    body: `Confirmation Required\nHello {customer_name},\n\nYour order of {item_name} is pending for Confirmation.\nPlease Reply with Confirm or Cancel.`,
+    buttons: ["Confirm", "Cancel"],
+  },
+  order_update: {
+    body: `Hello {customer_name},\n\nYour order #{order_number} status has been updated.\n\nThank you for shopping with us!`,
+  },
+};
+
 const WA_PREVIEW_VALUES: Record<string, string> = {
   customer_name: "Ali",
   order_number: "132",
@@ -278,12 +288,30 @@ function EditDialog({ open, statusInfo, initial, onSave, onClose, isSaving }: Ed
           </div>
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">Live Preview</Label>
-            <div className="rounded-xl bg-[#e5ddd5] dark:bg-[#0d1117] p-4 min-h-[200px] flex items-center justify-center">
-              {isMetaBuiltin ? (
-                <p className="text-sm text-center text-gray-500 dark:text-gray-400 px-4">
-                  Preview not available for Meta built-in templates. The message is defined in your Meta Business Manager.
-                </p>
-              ) : (
+            <div className="rounded-xl bg-[#e5ddd5] dark:bg-[#0d1117] p-4 min-h-[200px] flex flex-col justify-center gap-2">
+              {isMetaBuiltin ? (() => {
+                const preset = META_BUILTIN_PREVIEWS[templateName];
+                const previewMsg = preset
+                  ? buildPreview(preset.body, statusInfo?.label)
+                  : "This is a Meta built-in template. Preview reflects the approved template format.";
+                return (
+                  <>
+                    <WhatsAppBubble message={previewMsg} status={statusInfo?.status} />
+                    {preset?.buttons && (
+                      <div className="flex gap-2 justify-end mt-1">
+                        {preset.buttons.map(btn => (
+                          <div key={btn} className="px-3 py-1.5 rounded-full bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-xs font-medium text-blue-500 dark:text-blue-400 shadow-sm">
+                            {btn}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <p className="text-[10px] text-center text-gray-400 dark:text-gray-500 mt-1">
+                      Approximate preview — actual wording controlled by Meta
+                    </p>
+                  </>
+                );
+              })() : (
                 <WhatsAppBubble message={buildPreview(messageBody || DEFAULT_MESSAGE_BODY, statusInfo?.label)} status={statusInfo?.status} />
               )}
             </div>
