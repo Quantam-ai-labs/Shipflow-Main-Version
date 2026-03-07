@@ -7295,13 +7295,20 @@ export async function registerRoutes(
         error?: string;
       }> = [];
 
+      const allExistingJobs = await storage.getBookingJobsByOrderIds(merchantId, orderIds);
+      const courierLower = courier.toLowerCase();
+      const existingJobMap = new Map<string, typeof allExistingJobs[0]>();
+      for (const job of allExistingJobs) {
+        if (job.courierName.toLowerCase() !== courierLower) continue;
+        const current = existingJobMap.get(job.orderId);
+        if (!current || new Date(job.createdAt) > new Date(current.createdAt)) {
+          existingJobMap.set(job.orderId, job);
+        }
+      }
+
       const toBook: typeof fetchedOrders = [];
       for (const order of fetchedOrders) {
-        const existingJob = await storage.getBookingJob(
-          merchantId,
-          order.id,
-          courier,
-        );
+        const existingJob = existingJobMap.get(order.id);
         if (
           existingJob &&
           existingJob.status === "success" &&

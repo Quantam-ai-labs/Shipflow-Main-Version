@@ -6,7 +6,7 @@ import { startAutoSync } from "./services/autoSync";
 import { startCourierSyncScheduler } from "./services/courierSyncScheduler";
 import { startMarketingSyncScheduler } from "./services/metaAds";
 import { db } from "./db";
-import { shopifyStores, users } from "../shared/schema";
+import { shopifyStores, users, courierAccounts } from "../shared/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcrypt";
 
@@ -97,6 +97,30 @@ async function seedSuperAdmin() {
   }
 }
 
+async function warmCourierCityCache() {
+  try {
+    const { loadLeopardsCities, loadPostExCities } = await import("./services/couriers/booking");
+    const accounts = await db.select().from(courierAccounts);
+    let leopardsWarmed = 0;
+    let postexWarmed = 0;
+    for (const account of accounts) {
+      const name = account.courierName?.toLowerCase();
+      if (name === "leopards" && account.apiKey && account.apiSecret) {
+        await loadLeopardsCities(account.apiKey, account.apiSecret);
+        leopardsWarmed++;
+      } else if (name === "postex" && account.apiKey) {
+        await loadPostExCities(account.apiKey);
+        postexWarmed++;
+      }
+    }
+    if (leopardsWarmed + postexWarmed > 0) {
+      console.log(`[CityCache] Pre-warmed: ${leopardsWarmed} Leopards, ${postexWarmed} PostEx accounts`);
+    }
+  } catch (err: any) {
+    console.error("[CityCache] Warm-up failed:", err.message);
+  }
+}
+
 function scheduleStartupRecovery() {
   setTimeout(async () => {
     try {
@@ -170,6 +194,7 @@ function scheduleStartupRecovery() {
       startCourierSyncScheduler();
       startMarketingSyncScheduler();
       scheduleStartupRecovery();
+      warmCourierCityCache();
     },
   );
 })();

@@ -363,9 +363,9 @@ export async function bookLeopardsBatch(
 ): Promise<BookingResult[]> {
   const cities = await loadLeopardsCities(credentials.apiKey, credentials.apiPassword);
 
-  console.log(`[Leopards] Booking ${packets.length} packets with concurrency 3...`);
+  console.log(`[Leopards] Booking ${packets.length} packets with concurrency 8...`);
 
-  return runWithConcurrency(packets, (pkt) => bookLeopardsPacket(pkt, credentials, shipperInfo, cities), 3);
+  return runWithConcurrency(packets, (pkt) => bookLeopardsPacket(pkt, credentials, shipperInfo, cities), 8);
 }
 
 // ============================================
@@ -461,7 +461,7 @@ export async function bookPostExBulk(
   token: string,
   shipperInfo: { name: string; phone: string; address: string; city: string; pickupAddressCode?: string; storeAddressCode?: string }
 ): Promise<BookingResult[]> {
-  console.log(`[PostEx] Booking ${packets.length} packets with concurrency 3...`);
+  console.log(`[PostEx] Booking ${packets.length} packets with concurrency 8...`);
 
-  return runWithConcurrency(packets, (pkt) => bookPostExOrder(pkt, token, shipperInfo), 3);
+  return runWithConcurrency(packets, (pkt) => bookPostExOrder(pkt, token, shipperInfo), 8);
 }
