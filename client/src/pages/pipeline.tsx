@@ -3150,12 +3150,18 @@ export default function Pipeline() {
             </Button>
             <Button
               data-testid="btn-apply-tags"
-              disabled={(addTagChips.length === 0 && removeTagChips.length === 0) || bulkTagsMutation.isPending}
-              onClick={() => bulkTagsMutation.mutate({
-                orderIds: Array.from(selectedIds),
-                addTags: addTagChips,
-                removeTags: removeTagChips,
-              })}
+              disabled={(addTagChips.length === 0 && removeTagChips.length === 0 && !addTagInput.trim() && !removeTagInput.trim()) || bulkTagsMutation.isPending}
+              onClick={() => {
+                const pendingAdd = addTagInput.trim().replace(/,+$/, "");
+                const pendingRemove = removeTagInput.trim().replace(/,+$/, "");
+                const finalAdd = pendingAdd && !addTagChips.includes(pendingAdd) ? [...addTagChips, pendingAdd] : addTagChips;
+                const finalRemove = pendingRemove && !removeTagChips.includes(pendingRemove) ? [...removeTagChips, pendingRemove] : removeTagChips;
+                bulkTagsMutation.mutate({
+                  orderIds: Array.from(selectedIds),
+                  addTags: finalAdd,
+                  removeTags: finalRemove,
+                });
+              }}
             >
               {bulkTagsMutation.isPending && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
               Apply to {selectedIds.size} order{selectedIds.size !== 1 ? "s" : ""}
