@@ -94,7 +94,7 @@ import {
 } from "./services/shopifyWriteBack";
 import { leopardsService } from "./services/couriers/leopards";
 import { postexService } from "./services/couriers/postex";
-import { getCourierSyncMetrics, cleanupStaleManualSyncProgress, autoTransitionOrder } from "./services/courierSyncScheduler";
+import { getCourierSyncMetrics, cleanupStaleManualSyncProgress, autoTransitionOrder, getLastCourierSyncResult } from "./services/courierSyncScheduler";
 import { getShopifySyncMetrics } from "./services/autoSync";
 
 const oauthStateStore = new Map<
@@ -5764,6 +5764,26 @@ export async function registerRoutes(
           }
 
           console.log(`[PostEx Webhook] Updated order ${order.orderNumber}: ${order.shipmentStatus} -> ${normalizedStatus} (raw: ${rawStatus})`);
+
+          try {
+            const accounts = await storage.getCourierAccounts(merchantId);
+            const postexAccount = accounts.find((a: any) => a.name?.toLowerCase().includes('postex'));
+            if (postexAccount) {
+              const existingSettings = (postexAccount.settings as any) || {};
+              await storage.updateCourierAccount(postexAccount.id, {
+                settings: {
+                  ...existingSettings,
+                  lastWebhookActivity: {
+                    trackingNumber,
+                    rawStatus,
+                    normalizedStatus,
+                    orderNumber: order.orderNumber,
+                    receivedAt: new Date().toISOString(),
+                  },
+                },
+              });
+            }
+          } catch {}
         } catch (err: any) {
           console.error(`[PostEx Webhook] Error processing tracking ${trackingNumber}:`, err.message);
         }
@@ -5881,6 +5901,26 @@ export async function registerRoutes(
             }
 
             console.log(`[Leopards Webhook] Updated order ${order.orderNumber}: ${order.shipmentStatus} -> ${normalizedStatus} (raw: ${rawStatus})`);
+
+            try {
+              const accounts = await storage.getCourierAccounts(merchantId);
+              const leopardsAccount = accounts.find((a: any) => a.name?.toLowerCase().includes('leopard'));
+              if (leopardsAccount) {
+                const existingSettings = (leopardsAccount.settings as any) || {};
+                await storage.updateCourierAccount(leopardsAccount.id, {
+                  settings: {
+                    ...existingSettings,
+                    lastWebhookActivity: {
+                      trackingNumber: cnNumber,
+                      rawStatus,
+                      normalizedStatus,
+                      orderNumber: order.orderNumber,
+                      receivedAt: new Date().toISOString(),
+                    },
+                  },
+                });
+              }
+            } catch {}
           } catch (err: any) {
             console.error(`[Leopards Webhook] Error processing item:`, err.message);
           }
@@ -6795,6 +6835,41 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching PostEx webhook config:", error);
       res.status(500).json({ message: "Failed to fetch PostEx webhook config" });
+    }
+  });
+
+  app.get("/api/couriers/activity", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const accounts = await storage.getCourierAccounts(merchantId);
+      const lastSync = getLastCourierSyncResult(merchantId);
+      const metrics = getCourierSyncMetrics().get(merchantId);
+
+      const buildCourierActivity = (courierKey: string) => {
+        const account = accounts.find((a: any) => a.name?.toLowerCase().includes(courierKey));
+        const webhookActivity = account ? ((account.settings as any)?.lastWebhookActivity || null) : null;
+        return {
+          lastWebhook: webhookActivity,
+          lastSync: lastSync ? {
+            timestamp: lastSync.timestamp,
+            updated: lastSync.updated,
+            failed: lastSync.failed,
+            skipped: lastSync.skipped,
+            total: lastSync.total,
+          } : null,
+          syncOrdersProcessed: metrics?.ordersProcessed?.[courierKey as 'leopards' | 'postex'] ?? 0,
+        };
+      };
+
+      res.json({
+        leopards: buildCourierActivity('leopard'),
+        postex: buildCourierActivity('postex'),
+      });
+    } catch (error) {
+      console.error("Error fetching courier activity:", error);
+      res.status(500).json({ message: "Failed to fetch courier activity" });
     }
   });
 

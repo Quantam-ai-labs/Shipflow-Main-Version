@@ -14,7 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Truck, CheckCircle2, Settings, ExternalLink, Zap, Lock, Loader2, MapPin, RefreshCw, Copy, Webhook, Eye, EyeOff, Save, MessageSquare } from "lucide-react";
+import { Truck, CheckCircle2, Settings, ExternalLink, Zap, Lock, Loader2, MapPin, RefreshCw, Copy, Webhook, Eye, EyeOff, Save, MessageSquare, Activity, Radio, RotateCw } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -133,6 +133,17 @@ const COURIER_CONFIG: Record<string, {
     ],
   },
 };
+
+function formatTimeAgo(isoString: string): string {
+  const diff = Date.now() - new Date(isoString).getTime();
+  const mins = Math.floor(diff / 60_000);
+  const hrs = Math.floor(diff / 3_600_000);
+  const days = Math.floor(diff / 86_400_000);
+  if (diff < 60_000) return "just now";
+  if (mins < 60) return `${mins} min ago`;
+  if (hrs < 24) return `${hrs} hr ago`;
+  return `${days}d ago`;
+}
 
 export default function CouriersSettings() {
   const { toast } = useToast();
@@ -354,6 +365,23 @@ export default function CouriersSettings() {
   }>({
     queryKey: ["/api/couriers/leopards-webhook-config"],
     enabled: !!data?.couriers.find(c => c.name === 'leopards' && c.isActive),
+  });
+
+  const { data: courierActivity } = useQuery<{
+    leopards: {
+      lastWebhook: { trackingNumber: string; rawStatus: string; normalizedStatus: string; orderNumber: string; receivedAt: string } | null;
+      lastSync: { timestamp: string; updated: number; failed: number; skipped: number; total: number } | null;
+      syncOrdersProcessed: number;
+    };
+    postex: {
+      lastWebhook: { trackingNumber: string; rawStatus: string; normalizedStatus: string; orderNumber: string; receivedAt: string } | null;
+      lastSync: { timestamp: string; updated: number; failed: number; skipped: number; total: number } | null;
+      syncOrdersProcessed: number;
+    };
+  }>({
+    queryKey: ["/api/couriers/activity"],
+    refetchInterval: 30_000,
+    enabled: !!data,
   });
 
   const pollCourierProgress = async () => {
@@ -705,6 +733,71 @@ export default function CouriersSettings() {
                   </div>
                 )}
 
+                {courier.name === 'leopards' && status.connected && (
+                  <div className="mb-3 p-4 rounded-lg border bg-muted/30 space-y-3" data-testid="div-courier-activity-leopards">
+                    <div className="flex items-center gap-2">
+                      <Activity className="w-4 h-4 text-primary" />
+                      <span className="text-sm font-semibold">Activity Monitor</span>
+                      <span className="text-[10px] text-muted-foreground ml-auto">auto-refreshes every 30s</span>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-start gap-2.5">
+                        <Radio className="w-3.5 h-3.5 mt-0.5 shrink-0 text-muted-foreground" />
+                        <div className="flex-1 min-w-0" data-testid="text-leopards-last-webhook">
+                          <p className="text-xs font-medium text-muted-foreground mb-0.5">Last Push Event</p>
+                          {courierActivity?.leopards?.lastWebhook ? (
+                            <div>
+                              <p className="text-xs font-mono">
+                                #{courierActivity.leopards.lastWebhook.trackingNumber}
+                                <span className="text-muted-foreground mx-1">·</span>
+                                <span className="uppercase text-[10px]">{courierActivity.leopards.lastWebhook.rawStatus}</span>
+                                <span className="text-muted-foreground mx-1">→</span>
+                                <span className="text-green-500 dark:text-green-400">{courierActivity.leopards.lastWebhook.normalizedStatus.replace(/_/g, ' ')}</span>
+                              </p>
+                              <div className="flex items-center gap-1 mt-0.5">
+                                {(Date.now() - new Date(courierActivity.leopards.lastWebhook.receivedAt).getTime()) < 5 * 60_000 && (
+                                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
+                                )}
+                                <p className="text-[10px] text-muted-foreground">
+                                  Order {courierActivity.leopards.lastWebhook.orderNumber} · {formatTimeAgo(courierActivity.leopards.lastWebhook.receivedAt)}
+                                </p>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-xs text-muted-foreground italic">No push events received yet</p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-2.5">
+                        <RotateCw className="w-3.5 h-3.5 mt-0.5 shrink-0 text-muted-foreground" />
+                        <div className="flex-1 min-w-0" data-testid="text-leopards-last-sync">
+                          <p className="text-xs font-medium text-muted-foreground mb-0.5">Last API Sync</p>
+                          {courierActivity?.leopards?.lastSync ? (
+                            <div>
+                              <p className="text-xs">
+                                <span className="text-foreground">{courierActivity.leopards.syncOrdersProcessed} processed</span>
+                                <span className="text-muted-foreground mx-1">·</span>
+                                <span className="text-green-500 dark:text-green-400">{courierActivity.leopards.lastSync.updated} updated</span>
+                                {courierActivity.leopards.lastSync.failed > 0 && (
+                                  <>
+                                    <span className="text-muted-foreground mx-1">·</span>
+                                    <span className="text-red-500">{courierActivity.leopards.lastSync.failed} failed</span>
+                                  </>
+                                )}
+                              </p>
+                              <p className="text-[10px] text-muted-foreground mt-0.5">{formatTimeAgo(courierActivity.leopards.lastSync.timestamp as unknown as string)}</p>
+                            </div>
+                          ) : (
+                            <p className="text-xs text-muted-foreground italic">No sync recorded yet</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {courier.name === 'postex' && status.connected && (
                   <div className="mb-3 p-4 rounded-lg border bg-muted/30 space-y-4">
                     <div className="flex items-center gap-2">
@@ -794,6 +887,71 @@ export default function CouriersSettings() {
                     <p className="text-[10px] text-muted-foreground leading-relaxed italic">
                       Copy these values into your PostEx dashboard. This ensures only authorized updates are processed.
                     </p>
+                  </div>
+                )}
+
+                {courier.name === 'postex' && status.connected && (
+                  <div className="mb-3 p-4 rounded-lg border bg-muted/30 space-y-3" data-testid="div-courier-activity-postex">
+                    <div className="flex items-center gap-2">
+                      <Activity className="w-4 h-4 text-primary" />
+                      <span className="text-sm font-semibold">Activity Monitor</span>
+                      <span className="text-[10px] text-muted-foreground ml-auto">auto-refreshes every 30s</span>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-start gap-2.5">
+                        <Radio className="w-3.5 h-3.5 mt-0.5 shrink-0 text-muted-foreground" />
+                        <div className="flex-1 min-w-0" data-testid="text-postex-last-webhook">
+                          <p className="text-xs font-medium text-muted-foreground mb-0.5">Last Webhook Event</p>
+                          {courierActivity?.postex?.lastWebhook ? (
+                            <div>
+                              <p className="text-xs font-mono">
+                                #{courierActivity.postex.lastWebhook.trackingNumber}
+                                <span className="text-muted-foreground mx-1">·</span>
+                                <span className="text-[10px]">{courierActivity.postex.lastWebhook.rawStatus}</span>
+                                <span className="text-muted-foreground mx-1">→</span>
+                                <span className="text-green-500 dark:text-green-400">{courierActivity.postex.lastWebhook.normalizedStatus.replace(/_/g, ' ')}</span>
+                              </p>
+                              <div className="flex items-center gap-1 mt-0.5">
+                                {(Date.now() - new Date(courierActivity.postex.lastWebhook.receivedAt).getTime()) < 5 * 60_000 && (
+                                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
+                                )}
+                                <p className="text-[10px] text-muted-foreground">
+                                  Order {courierActivity.postex.lastWebhook.orderNumber} · {formatTimeAgo(courierActivity.postex.lastWebhook.receivedAt)}
+                                </p>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-xs text-muted-foreground italic">No webhook events received yet</p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-2.5">
+                        <RotateCw className="w-3.5 h-3.5 mt-0.5 shrink-0 text-muted-foreground" />
+                        <div className="flex-1 min-w-0" data-testid="text-postex-last-sync">
+                          <p className="text-xs font-medium text-muted-foreground mb-0.5">Last API Sync</p>
+                          {courierActivity?.postex?.lastSync ? (
+                            <div>
+                              <p className="text-xs">
+                                <span className="text-foreground">{courierActivity.postex.syncOrdersProcessed} processed</span>
+                                <span className="text-muted-foreground mx-1">·</span>
+                                <span className="text-green-500 dark:text-green-400">{courierActivity.postex.lastSync.updated} updated</span>
+                                {courierActivity.postex.lastSync.failed > 0 && (
+                                  <>
+                                    <span className="text-muted-foreground mx-1">·</span>
+                                    <span className="text-red-500">{courierActivity.postex.lastSync.failed} failed</span>
+                                  </>
+                                )}
+                              </p>
+                              <p className="text-[10px] text-muted-foreground mt-0.5">{formatTimeAgo(courierActivity.postex.lastSync.timestamp as unknown as string)}</p>
+                            </div>
+                          ) : (
+                            <p className="text-xs text-muted-foreground italic">No sync recorded yet</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
 
