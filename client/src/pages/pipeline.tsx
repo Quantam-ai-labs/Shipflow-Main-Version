@@ -107,10 +107,7 @@ function CityAutocomplete({ value, onChange, cities, hasWarning, testId }: {
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const valueRef = useRef(value);
   const [dropdownStyle, setDropdownStyle] = useState<{ top: number; left: number } | null>(null);
-
-  useEffect(() => { valueRef.current = value; setQuery(value || ""); }, [value]);
 
   const filtered = useMemo(() => {
     if (!query) return cities.slice(0, 30);
@@ -192,7 +189,7 @@ function CityAutocomplete({ value, onChange, cities, hasWarning, testId }: {
           setOpen(true);
         }}
         onFocus={() => { setQuery(""); setOpen(true); }}
-        onBlur={() => { setTimeout(() => { setOpen(false); setQuery(valueRef.current || ""); }, 150); }}
+        onBlur={() => { setTimeout(() => setOpen(false), 150); }}
         onKeyDown={handleKeyDown}
         placeholder="Type city..."
         data-testid={testId}
