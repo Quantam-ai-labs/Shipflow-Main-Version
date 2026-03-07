@@ -380,6 +380,33 @@ export default function Integrations() {
     enabled: !!data?.shopify?.isConnected,
   });
 
+  const { data: webhookActivity } = useQuery<{
+    lastEvent: { topic: string; status: string; receivedAt: string; error: string | null } | null;
+    last24h: { total: number; processed: number; failed: number; byTopic: Record<string, number> };
+  }>({
+    queryKey: ["/api/shopify/webhook-activity"],
+    enabled: !!data?.shopify?.isConnected,
+    refetchInterval: 30000,
+  });
+
+  const formatWebhookTimeAgo = (dateStr: string) => {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return `${Math.floor(hrs / 24)}d ago`;
+  };
+
+  const webhookTopicLabel = (topic: string) => {
+    if (topic === "orders/create") return "New Order";
+    if (topic === "orders/updated") return "Order Updated";
+    if (topic === "fulfillments/create") return "Fulfillment";
+    if (topic === "orders/cancelled") return "Cancelled";
+    return topic;
+  };
+
   const registerWebhooksMutation = useMutation({
     mutationFn: async () => {
       return apiRequest("POST", "/api/shopify/webhooks/register", {});
@@ -809,6 +836,59 @@ export default function Integrations() {
                     >
                       <RefreshCw className="w-3 h-3" />
                     </Button>
+                  )}
+                </div>
+              )}
+              {data?.shopify.isConnected && (
+                <div className="rounded-md border p-3 space-y-2" data-testid="shopify-webhook-activity">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-sm font-medium">
+                      <Activity className="w-3.5 h-3.5" />
+                      Webhook Activity
+                    </div>
+                    <span className="text-xs text-muted-foreground">Last 24h</span>
+                  </div>
+                  {!webhookActivity ? (
+                    <div className="space-y-1.5">
+                      <Skeleton className="h-3.5 w-full" />
+                      <Skeleton className="h-3.5 w-2/3" />
+                    </div>
+                  ) : webhookActivity.lastEvent ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 flex-wrap" data-testid="webhook-last-event">
+                        {Date.now() - new Date(webhookActivity.lastEvent.receivedAt).getTime() < 5 * 60 * 1000 && (
+                          <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse shrink-0" />
+                        )}
+                        <Badge variant="outline" className="text-xs font-normal">
+                          {webhookTopicLabel(webhookActivity.lastEvent.topic)}
+                        </Badge>
+                        {webhookActivity.lastEvent.status === "processed" ? (
+                          <Badge className="text-xs bg-green-500/10 text-green-600 border-green-500/20">processed</Badge>
+                        ) : webhookActivity.lastEvent.status === "failed" ? (
+                          <Badge className="text-xs bg-red-500/10 text-red-600 border-red-500/20">failed</Badge>
+                        ) : (
+                          <Badge className="text-xs bg-yellow-500/10 text-yellow-600 border-yellow-500/20">{webhookActivity.lastEvent.status}</Badge>
+                        )}
+                        <span className="text-xs text-muted-foreground ml-auto">
+                          {formatWebhookTimeAgo(webhookActivity.lastEvent.receivedAt)}
+                        </span>
+                      </div>
+                      {webhookActivity.lastEvent.error && (
+                        <p className="text-xs text-red-500 truncate" data-testid="webhook-error-message">{webhookActivity.lastEvent.error}</p>
+                      )}
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground pt-0.5 border-t flex-wrap" data-testid="webhook-24h-stats">
+                        <span><span className="font-medium text-foreground">{webhookActivity.last24h.total}</span> received</span>
+                        <span className="text-green-600"><span className="font-medium">{webhookActivity.last24h.processed}</span> processed</span>
+                        {webhookActivity.last24h.failed > 0 && (
+                          <span className="text-red-500"><span className="font-medium">{webhookActivity.last24h.failed}</span> failed</span>
+                        )}
+                        {Object.entries(webhookActivity.last24h.byTopic).map(([topic, n]) => (
+                          <span key={topic} className="text-muted-foreground/70">{webhookTopicLabel(topic)}: {n}</span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground" data-testid="webhook-no-events">No webhook events received yet</p>
                   )}
                 </div>
               )}

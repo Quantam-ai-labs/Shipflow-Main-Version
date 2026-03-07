@@ -35,6 +35,7 @@ import {
   workflowAuditLog,
   whatsappTemplates,
   bookingJobs,
+  shopifyWebhookEvents,
 } from "@shared/schema";
 import {
   and,
@@ -6215,6 +6216,68 @@ export async function registerRoutes(
       }
     },
   );
+
+  app.get("/api/shopify/webhook-activity", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+      const [lastEventRows, recentEvents] = await Promise.all([
+        db
+          .select()
+          .from(shopifyWebhookEvents)
+          .where(eq(shopifyWebhookEvents.merchantId, merchantId))
+          .orderBy(desc(shopifyWebhookEvents.receivedAt))
+          .limit(1),
+        db
+          .select({
+            topic: shopifyWebhookEvents.topic,
+            processingStatus: shopifyWebhookEvents.processingStatus,
+          })
+          .from(shopifyWebhookEvents)
+          .where(
+            and(
+              eq(shopifyWebhookEvents.merchantId, merchantId),
+              gte(shopifyWebhookEvents.receivedAt, since24h)
+            )
+          ),
+      ]);
+
+      const lastEvent = lastEventRows[0]
+        ? {
+            topic: lastEventRows[0].topic,
+            status: lastEventRows[0].processingStatus,
+            receivedAt: lastEventRows[0].receivedAt,
+            error: lastEventRows[0].errorMessage || null,
+          }
+        : null;
+
+      const byTopic: Record<string, number> = {};
+      let processed = 0;
+      let failed = 0;
+
+      for (const ev of recentEvents) {
+        byTopic[ev.topic] = (byTopic[ev.topic] || 0) + 1;
+        if (ev.processingStatus === "processed") processed++;
+        if (ev.processingStatus === "failed") failed++;
+      }
+
+      res.json({
+        lastEvent,
+        last24h: {
+          total: recentEvents.length,
+          processed,
+          failed,
+          byTopic,
+        },
+      });
+    } catch (error: any) {
+      console.error("Error fetching webhook activity:", error);
+      res.status(500).json({ message: error.message || "Failed to fetch webhook activity" });
+    }
+  });
 
   // ============================================
   // DATA HEALTH & SYNC LOG ENDPOINTS
