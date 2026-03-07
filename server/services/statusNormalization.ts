@@ -123,6 +123,22 @@ export const LEOPARDS_STATUS_MAP: Record<string, UniversalStatus> = {
   'return completed': 'RETURNED_TO_SHIPPER',
   'cancelled': 'CANCELLED',
   'shipment cancelled': 'CANCELLED',
+  'rc': 'BOOKED',
+  'ac': 'OUT_FOR_DELIVERY',
+  'dv': 'DELIVERED',
+  'pn1': 'DELIVERY_ATTEMPTED',
+  'pn2': 'DELIVERY_ATTEMPTED',
+  'ro': 'RETURN_IN_TRANSIT',
+  'rn1': 'RETURN_IN_TRANSIT',
+  'rn2': 'RETURN_IN_TRANSIT',
+  'rw': 'RETURNED_TO_ORIGIN',
+  'dw': 'RETURNED_TO_ORIGIN',
+  'rs': 'RETURNED_TO_SHIPPER',
+  'dr': 'DELIVERED',
+  'ar': 'ARRIVED_AT_DESTINATION',
+  'dp': 'IN_TRANSIT',
+  'nr': 'READY_FOR_RETURN',
+  'sp': 'PICKED_UP',
 };
 
 function keywordFallback(rawStatus: string): UniversalStatus | null {

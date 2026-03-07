@@ -5773,6 +5773,124 @@ export async function registerRoutes(
     }
   });
 
+  // Leopards Push API Webhook Route (no auth - public endpoint for Leopards to push status updates)
+  app.post("/webhooks/leopards/status-update", async (req: any, res) => {
+    const webhookSecret = process.env.LEOPARDS_WEBHOOK_SECRET;
+    if (!webhookSecret) {
+      console.warn("[Leopards Webhook] LEOPARDS_WEBHOOK_SECRET not configured — rejecting request");
+      res.status(403).json({ error: "Webhook not configured" });
+      return;
+    }
+
+    const headerToken = req.headers["x-webhook-secret"] || req.headers["authorization"];
+    if (headerToken !== webhookSecret && headerToken !== `Bearer ${webhookSecret}`) {
+      console.warn("[Leopards Webhook] Invalid webhook secret header — rejecting");
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    res.status(202).json([{ status: 1, errors: [] }]);
+
+    try {
+      const payload = req.body;
+      if (!payload || !Array.isArray(payload.data) || payload.data.length === 0) {
+        console.warn("[Leopards Webhook] Empty or invalid payload");
+        return;
+      }
+
+      console.log(`[Leopards Webhook] Received batch of ${payload.data.length} status updates`);
+
+      (async () => {
+        for (const item of payload.data) {
+          try {
+            const cnNumber = item.cn_number || item.cnNumber || item.CN_Number;
+            const rawStatus = item.status || item.Status;
+
+            if (!cnNumber || !rawStatus) {
+              console.warn("[Leopards Webhook] Missing cn_number or status in item:", JSON.stringify(item).slice(0, 200));
+              continue;
+            }
+
+            const matchingOrders = await db.select().from(orders)
+              .where(
+                and(
+                  eq(orders.courierTracking, cnNumber),
+                  sql`LOWER(${orders.courierName}) LIKE '%leopard%'`
+                )
+              );
+
+            if (matchingOrders.length > 1) {
+              console.warn(`[Leopards Webhook] Multiple orders found for CN ${cnNumber} across ${matchingOrders.length} merchants — skipping`);
+              continue;
+            }
+
+            if (matchingOrders.length === 0) {
+              console.warn(`[Leopards Webhook] No order found for CN number: ${cnNumber}`);
+              continue;
+            }
+
+            const order = matchingOrders[0];
+            const merchantId = order.merchantId;
+
+            let customMappings: Record<string, string> | undefined;
+            try {
+              const mappingRows = await storage.getCourierStatusMappings(merchantId, 'leopards');
+              if (mappingRows && mappingRows.length > 0) {
+                customMappings = {};
+                for (const m of mappingRows) {
+                  customMappings[m.courierStatus] = m.normalizedStatus;
+                }
+              }
+            } catch {}
+
+            const { normalizeStatus, isValidUniversalStatus } = await import("./services/statusNormalization");
+            const { normalizedStatus, mapped } = normalizeStatus(
+              rawStatus,
+              'leopards',
+              order.shipmentStatus,
+              undefined,
+              order.workflowStatus,
+              customMappings,
+            );
+
+            if (!mapped) {
+              try {
+                await storage.recordUnmappedStatus(merchantId, 'leopards', rawStatus, cnNumber);
+              } catch {}
+            }
+
+            if (!isValidUniversalStatus(normalizedStatus)) {
+              console.warn(`[Leopards Webhook] Invalid normalized status "${normalizedStatus}" for CN ${cnNumber}`);
+              continue;
+            }
+
+            if (normalizedStatus === order.shipmentStatus) {
+              console.log(`[Leopards Webhook] Status unchanged for ${cnNumber}: ${normalizedStatus}`);
+              continue;
+            }
+
+            await storage.updateOrder(merchantId, order.id, {
+              shipmentStatus: normalizedStatus,
+              courierRawStatus: rawStatus,
+              lastTrackingUpdate: new Date(),
+            });
+
+            const freshOrder = await storage.getOrderById(merchantId, order.id);
+            if (freshOrder) {
+              await autoTransitionOrder(merchantId, freshOrder, normalizedStatus, rawStatus);
+            }
+
+            console.log(`[Leopards Webhook] Updated order ${order.orderNumber}: ${order.shipmentStatus} -> ${normalizedStatus} (raw: ${rawStatus})`);
+          } catch (err: any) {
+            console.error(`[Leopards Webhook] Error processing item:`, err.message);
+          }
+        }
+      })();
+    } catch (error: any) {
+      console.error("[Leopards Webhook] Error:", error.message);
+    }
+  });
+
   // Shopify Webhook Routes (no auth - verified via HMAC)
   app.post("/webhooks/shopify/orders-create", async (req: any, res) => {
     res.status(200).json({ received: true });
@@ -6677,6 +6795,22 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching PostEx webhook config:", error);
       res.status(500).json({ message: "Failed to fetch PostEx webhook config" });
+    }
+  });
+
+  app.get("/api/couriers/leopards-webhook-config", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const pushApiUrl = `${req.protocol}://${req.get("host")}/webhooks/leopards/status-update`;
+      const secret = process.env.LEOPARDS_WEBHOOK_SECRET || "not-configured";
+      const pushApiHeader = `x-webhook-secret: ${secret}`;
+
+      res.json({ pushApiUrl, pushApiHeader });
+    } catch (error) {
+      console.error("Error fetching Leopards webhook config:", error);
+      res.status(500).json({ message: "Failed to fetch Leopards webhook config" });
     }
   });
 

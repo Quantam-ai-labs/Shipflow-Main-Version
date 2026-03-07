@@ -337,6 +337,7 @@ export default function CouriersSettings() {
   const [courierSyncProgress, setCourierSyncProgress] = useState<{ processed: number; total: number } | null>(null);
   const [syncingCourier, setSyncingCourier] = useState<string | null>(null);
   const [showWebhookSecret, setShowWebhookSecret] = useState(false);
+  const [showLeopardsSecret, setShowLeopardsSecret] = useState(false);
 
   const { data: webhookConfig, isLoading: isLoadingWebhookConfig } = useQuery<{
     webhookUrl: string;
@@ -345,6 +346,14 @@ export default function CouriersSettings() {
   }>({
     queryKey: ["/api/couriers/postex-webhook-config"],
     enabled: !!data?.couriers.find(c => c.name === 'postex' && c.isActive),
+  });
+
+  const { data: leopardsWebhookConfig } = useQuery<{
+    pushApiUrl: string;
+    pushApiHeader: string;
+  }>({
+    queryKey: ["/api/couriers/leopards-webhook-config"],
+    enabled: !!data?.couriers.find(c => c.name === 'leopards' && c.isActive),
   });
 
   const pollCourierProgress = async () => {
@@ -622,6 +631,77 @@ export default function CouriersSettings() {
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
                     <Lock className="w-3 h-3" />
                     <span>Using custom credentials</span>
+                  </div>
+                )}
+
+                {courier.name === 'leopards' && status.connected && (
+                  <div className="mb-3 p-4 rounded-lg border bg-muted/30 space-y-4">
+                    <div className="flex items-center gap-2">
+                      <Webhook className="w-4 h-4 text-primary" />
+                      <span className="text-sm font-semibold">Push API Configuration</span>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">Push API URL</Label>
+                        <div className="flex items-center gap-2">
+                          <code className="text-xs bg-muted px-2 py-1.5 rounded flex-1 truncate border" data-testid="text-leopards-push-url">
+                            {leopardsWebhookConfig?.pushApiUrl || "Loading..."}
+                          </code>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => {
+                              if (leopardsWebhookConfig?.pushApiUrl) {
+                                navigator.clipboard.writeText(leopardsWebhookConfig.pushApiUrl);
+                                toast({ title: "Copied", description: "Push API URL copied to clipboard." });
+                              }
+                            }}
+                            data-testid="button-copy-leopards-push-url"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">Push API Header</Label>
+                        <div className="flex items-center gap-2">
+                          <div className="relative flex-1">
+                            <code className="text-xs bg-muted px-2 py-1.5 rounded w-full block truncate border pr-8" data-testid="text-leopards-push-header">
+                              {showLeopardsSecret ? (leopardsWebhookConfig?.pushApiHeader || "not-configured") : "••••••••••••••••••••••••••••••••"}
+                            </code>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 absolute right-1 top-1/2 -translate-y-1/2"
+                              onClick={() => setShowLeopardsSecret(!showLeopardsSecret)}
+                            >
+                              {showLeopardsSecret ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                            </Button>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => {
+                              if (leopardsWebhookConfig?.pushApiHeader) {
+                                navigator.clipboard.writeText(leopardsWebhookConfig.pushApiHeader);
+                                toast({ title: "Copied", description: "Push API Header copied to clipboard." });
+                              }
+                            }}
+                            data-testid="button-copy-leopards-push-header"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="text-[10px] text-muted-foreground leading-relaxed italic">
+                      Copy these values into your Leopards E-Com Portal under Push API Management. Paste the URL in "Push API URL" and the full header string in "Push API Header".
+                    </p>
                   </div>
                 )}
 
