@@ -12,28 +12,42 @@ interface WebhookProcessResult {
 }
 
 export class WebhookHandler {
-  private webhookSecret: string;
+  private webhookSecrets: string[];
 
   constructor() {
-    this.webhookSecret = process.env.SHOPIFY_WEBHOOK_SECRET || process.env.SHOPIFY_APP_CLIENT_SECRET || '';
+    const candidates = [
+      process.env.SHOPIFY_WEBHOOK_SECRET,
+      process.env.SHOPIFY_APP_CLIENT_SECRET,
+      process.env.SHOPIFY_CLIENT_SECRET,
+      process.env.SHOPIFY_APP_SHARED_SECRET,
+      process.env.SHOPIFY_APP_SHARED_SECRET_2,
+    ];
+    this.webhookSecrets = candidates.filter((s): s is string => !!s);
   }
 
   verifyHmac(rawBody: Buffer, hmacHeader: string): boolean {
-    if (!this.webhookSecret || !hmacHeader) return false;
+    if (!this.webhookSecrets.length || !hmacHeader) return false;
 
-    const generatedHmac = crypto
-      .createHmac('sha256', this.webhookSecret)
-      .update(rawBody)
-      .digest('base64');
+    const hmacBuf = Buffer.from(hmacHeader, 'base64');
 
-    try {
-      return crypto.timingSafeEqual(
-        Buffer.from(hmacHeader, 'base64'),
-        Buffer.from(generatedHmac, 'base64')
-      );
-    } catch {
-      return false;
+    for (const secret of this.webhookSecrets) {
+      try {
+        const generated = crypto
+          .createHmac('sha256', secret)
+          .update(rawBody)
+          .digest('base64');
+        const generatedBuf = Buffer.from(generated, 'base64');
+        if (
+          hmacBuf.length === generatedBuf.length &&
+          crypto.timingSafeEqual(hmacBuf, generatedBuf)
+        ) {
+          return true;
+        }
+      } catch {
+        // try next secret
+      }
     }
+    return false;
   }
 
   computePayloadHash(rawBody: Buffer): string {
