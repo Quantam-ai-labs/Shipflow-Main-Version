@@ -116,6 +116,11 @@ const orderItems: NavItem[] = [
   { id: "orders-cancelled", title: "Cancelled", url: "/orders/cancelled", icon: XCircle, key: "CANCELLED" },
 ];
 
+const logisticsItems: NavItem[] = [
+  { id: "shipments", title: "Shipments", url: "/shipments", icon: Package },
+  { id: "cod-reconciliation", title: "COD Reconciliation", url: "/cod-reconciliation", icon: Receipt },
+];
+
 const allNavGroups: NavGroup[] = [
   {
     id: "products",
@@ -163,6 +168,7 @@ const settingsItems: NavItem[] = [
 
 const allPageIds = [
   ...orderItems.map(i => i.id),
+  ...logisticsItems.map(i => i.id),
   ...allNavGroups.flatMap(g => g.items.map(i => i.id)),
   "reports-hub",
   ...settingsItems.map(i => i.id),
@@ -177,6 +183,7 @@ const standaloneNavItems: NavItem[] = [
 
 const allPinnableItemsById: Record<string, NavItem> = Object.fromEntries([
   ...orderItems,
+  ...logisticsItems,
   ...allNavGroups.flatMap(g => g.items),
   ...settingsItems,
   ...standaloneNavItems,
@@ -293,6 +300,14 @@ export function AppSidebar() {
     : isSimple
     ? orderItems.filter(i => pinnedPages.includes(i.id))
     : orderItems;
+
+  const filteredLogisticsItems = hasPageRestrictions
+    ? logisticsItems.filter(i => allowedPages!.includes(i.id))
+    : isSimple
+    ? logisticsItems.filter(i => pinnedPages.includes(i.id))
+    : logisticsItems;
+
+  const isLogisticsRouteActive = location === "/shipments" || location === "/cod-reconciliation";
 
   const totalOrderCount = counts
     ? Object.values(counts).reduce((sum, c) => sum + (c || 0), 0)
@@ -438,6 +453,56 @@ export function AppSidebar() {
                                       updatePrefsMutation.mutate({ sidebarPinnedPages: next });
                                     }}
                                     className={`transition-opacity p-0.5 rounded shrink-0 ${isPinned ? "opacity-100 text-primary" : "opacity-0 group-hover/order-item:opacity-60 text-muted-foreground"}`}
+                                    title={isPinned ? "Unpin" : "Pin to top"}
+                                    data-testid={`button-pin-${item.id}`}
+                                  >
+                                    <Pin className={`w-3 h-3 ${isPinned ? "fill-current" : ""}`} />
+                                  </button>
+                                </Link>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          );
+                        })}
+                      </SidebarMenuSub>
+                    </CollapsibleContent>
+                  </SidebarMenuItem>
+                </Collapsible>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {filteredLogisticsItems.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <Collapsible defaultOpen={isLogisticsRouteActive} asChild className="group/logistics-collapsible">
+                  <SidebarMenuItem>
+                    <CollapsibleTrigger asChild>
+                      <SidebarMenuButton data-testid="nav-logistics-toggle" tooltip="Logistics">
+                        <Truck className="w-4 h-4" />
+                        <span className="flex-1">Logistics</span>
+                        <ChevronRight className="w-4 h-4 ml-1 transition-transform duration-200 group-data-[state=open]/logistics-collapsible:rotate-90" />
+                      </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <SidebarMenuSub>
+                        {filteredLogisticsItems.map((item) => {
+                          const isPinned = pinnedPages.includes(item.id);
+                          return (
+                            <SidebarMenuSubItem key={item.id} className="group/logistics-item">
+                              <SidebarMenuSubButton asChild isActive={location === item.url}>
+                                <Link href={item.url} data-testid={`nav-${item.id}`}>
+                                  <item.icon className="w-3.5 h-3.5" />
+                                  <span className="flex-1">{item.title}</span>
+                                  <button
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      const next = isPinned ? pinnedPages.filter(p => p !== item.id) : [...pinnedPages, item.id];
+                                      updatePrefsMutation.mutate({ sidebarPinnedPages: next });
+                                    }}
+                                    className={`transition-opacity p-0.5 rounded shrink-0 ${isPinned ? "opacity-100 text-primary" : "opacity-0 group-hover/logistics-item:opacity-60 text-muted-foreground"}`}
                                     title={isPinned ? "Unpin" : "Pin to top"}
                                     data-testid={`button-pin-${item.id}`}
                                   >

@@ -7,12 +7,10 @@ import {
   PieChart,
   Users,
   Scale,
-  Truck,
   DollarSign,
   BarChart2,
   BarChart3,
   BookOpen,
-  RefreshCcw,
 } from "lucide-react";
 import AccountingOverview from "@/pages/accounting/overview";
 import AccountingPnl from "@/pages/accounting/reports/pnl";
@@ -21,12 +19,10 @@ import AccountingStockReport from "@/pages/accounting/reports/stock";
 import AccountingBalanceSheet from "@/pages/accounting/reports/balance-sheet";
 import AccountingPartyBalances from "@/pages/accounting/reports/party-balances";
 import AccountingTrialBalance from "@/pages/accounting/trial-balance";
-import Shipments from "@/pages/shipments";
 import CourierDuesPage from "@/pages/courier-dues";
 import ProductAnalyticsPage from "@/pages/product-analytics";
 import Analytics from "@/pages/analytics";
 import AccountingLedger from "@/pages/accounting/ledger";
-import CodReconciliationHub from "@/pages/cod-reconciliation-hub";
 
 const REPORT_TABS = [
   { id: "overview",          label: "Overview",          icon: LayoutDashboard, gradient: "from-slate-600 to-slate-700"      },
@@ -36,12 +32,10 @@ const REPORT_TABS = [
   { id: "balance",           label: "Balance Sheet",     icon: PieChart,         gradient: "from-violet-600 to-purple-700"    },
   { id: "party-balances",    label: "Party Balances",    icon: Users,            gradient: "from-pink-600 to-rose-700"        },
   { id: "trial-balance",     label: "Trial Balance",     icon: Scale,            gradient: "from-indigo-600 to-indigo-700"    },
-  { id: "shipments",         label: "Shipments",         icon: Truck,            gradient: "from-sky-600 to-blue-700"         },
   { id: "courier-dues",      label: "Courier Dues",      icon: DollarSign,       gradient: "from-orange-500 to-red-600"       },
   { id: "product-analytics", label: "Product Analytics", icon: BarChart2,        gradient: "from-teal-600 to-cyan-700"        },
   { id: "analytics",         label: "Analytics",         icon: BarChart3,        gradient: "from-fuchsia-600 to-violet-700"   },
   { id: "ledger",            label: "Ledger",            icon: BookOpen,         gradient: "from-zinc-600 to-slate-700"       },
-  { id: "cod-reconciliation", label: "COD Reconciliation", icon: RefreshCcw, gradient: "from-green-600 to-emerald-700" },
 ] as const;
 
 type ReportTabId = typeof REPORT_TABS[number]["id"];
@@ -98,12 +92,10 @@ export default function ReportsHub() {
         {activeTab === "balance"           && <AccountingBalanceSheet />}
         {activeTab === "party-balances"    && <AccountingPartyBalances />}
         {activeTab === "trial-balance"     && <AccountingTrialBalance />}
-        {activeTab === "shipments"         && <Shipments />}
         {activeTab === "courier-dues"      && <CourierDuesPage />}
         {activeTab === "product-analytics" && <ProductAnalyticsPage />}
         {activeTab === "analytics"          && <Analytics />}
         {activeTab === "ledger"              && <AccountingLedger />}
-        {activeTab === "cod-reconciliation" && <CodReconciliationHub />}
       </div>
     </div>
   );
