@@ -48,6 +48,7 @@ import {
   Users,
   BarChart2,
   Cog,
+  Reply,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -126,13 +127,17 @@ const TEMPLATE_NAME_OPTIONS: Record<string, string[]> = {
   DELIVERED: ["custom_message"],
 };
 
-const META_BUILTIN_PREVIEWS: Record<string, { body: string; buttons?: string[] }> = {
+const META_BUILTIN_PREVIEWS: Record<string, { header: string; body: string; footer: string; buttons?: string[] }> = {
   order_confirmation: {
-    body: `Confirmation Required\nHello {customer_name},\n\nYour order of {item_name} is pending for Confirmation.\nPlease Reply with Confirm or Cancel.`,
+    header: "Confirmation Required",
+    body: "Hello {customer_name}\n\nYour order of {item_name} is pending for Confirmation.",
+    footer: "Please Reply with Confirm or Cancel.",
     buttons: ["Confirm", "Cancel"],
   },
   order_update: {
-    body: `Hello {customer_name},\n\nYour order #{order_number} status has been updated.\n\nThank you for shopping with us!`,
+    header: "Order Update",
+    body: "Hello {customer_name}\n\nYour order #{order_number} status has been updated to {new_status}.",
+    footer: "Thank you for shopping with us!",
   },
 };
 
@@ -174,6 +179,48 @@ function WhatsAppBubble({ message, status }: { message: string; status?: string 
           <span className="text-[10px] text-gray-500 dark:text-gray-400">9:41 AM</span>
           <WaTicks />
         </div>
+      </div>
+    </div>
+  );
+}
+
+function WhatsAppTemplateCard({
+  header,
+  body,
+  footer,
+  buttons,
+}: {
+  header: string;
+  body: string;
+  footer: string;
+  buttons?: string[];
+}) {
+  const now = new Date();
+  const time = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return (
+    <div className="w-full max-w-[320px] mx-auto">
+      <div className="bg-white dark:bg-gray-800 rounded-t-xl rounded-bl-xl shadow overflow-hidden">
+        <div className="px-4 pt-4 pb-3">
+          <p className="font-bold text-[14px] text-gray-900 dark:text-gray-100 leading-snug mb-1">{header}</p>
+          <p className="text-[13px] text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">{body}</p>
+          <p className="text-[12px] text-gray-400 dark:text-gray-400 mt-2 leading-snug">{footer}</p>
+          <div className="flex justify-end mt-1.5">
+            <span className="text-[11px] text-gray-400 dark:text-gray-500">{time}</span>
+          </div>
+        </div>
+        {buttons && buttons.length > 0 && (
+          <div className="border-t border-gray-200 dark:border-gray-700">
+            {buttons.map((btn, i) => (
+              <div key={btn}>
+                {i > 0 && <div className="border-t border-gray-200 dark:border-gray-700" />}
+                <div className="flex items-center justify-center gap-1.5 py-2.5 cursor-default">
+                  <Reply className="w-4 h-4 text-[#00a5f4]" />
+                  <span className="text-[13px] font-medium text-[#00a5f4]">{btn}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -291,25 +338,25 @@ function EditDialog({ open, statusInfo, initial, onSave, onClose, isSaving }: Ed
             <div className="rounded-xl bg-[#e5ddd5] dark:bg-[#0d1117] p-4 min-h-[200px] flex flex-col justify-center gap-2">
               {isMetaBuiltin ? (() => {
                 const preset = META_BUILTIN_PREVIEWS[templateName];
-                const previewMsg = preset
-                  ? buildPreview(preset.body, statusInfo?.label)
-                  : "This is a Meta built-in template. Preview reflects the approved template format.";
+                if (preset) {
+                  return (
+                    <>
+                      <WhatsAppTemplateCard
+                        header={buildPreview(preset.header, statusInfo?.label)}
+                        body={buildPreview(preset.body, statusInfo?.label)}
+                        footer={preset.footer}
+                        buttons={preset.buttons}
+                      />
+                      <p className="text-[10px] text-center text-gray-400 dark:text-gray-500">
+                        Approximate preview — actual wording controlled by Meta
+                      </p>
+                    </>
+                  );
+                }
                 return (
-                  <>
-                    <WhatsAppBubble message={previewMsg} status={statusInfo?.status} />
-                    {preset?.buttons && (
-                      <div className="flex gap-2 justify-end mt-1">
-                        {preset.buttons.map(btn => (
-                          <div key={btn} className="px-3 py-1.5 rounded-full bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-xs font-medium text-blue-500 dark:text-blue-400 shadow-sm">
-                            {btn}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    <p className="text-[10px] text-center text-gray-400 dark:text-gray-500 mt-1">
-                      Approximate preview — actual wording controlled by Meta
-                    </p>
-                  </>
+                  <p className="text-sm text-center text-gray-500 dark:text-gray-400 px-4">
+                    This is a Meta built-in template. The message is defined in your Meta Business Manager.
+                  </p>
                 );
               })() : (
                 <WhatsAppBubble message={buildPreview(messageBody || DEFAULT_MESSAGE_BODY, statusInfo?.label)} status={statusInfo?.status} />
