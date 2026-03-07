@@ -1,5 +1,6 @@
 import { db } from "../../../db";
 import { orderChangeLog } from "@shared/schema";
+import { eq, and, sql } from "drizzle-orm";
 import { storage } from "../../../storage";
 import {
   buildVarsFromParams,
@@ -24,6 +25,26 @@ export async function sendOrderStatusWhatsApp(
   if (!WA_NOTIFY_STATUSES.includes(params.toStatus)) return;
 
   try {
+    const alreadySent = await db
+      .select({ id: orderChangeLog.id })
+      .from(orderChangeLog)
+      .where(
+        and(
+          eq(orderChangeLog.orderId, params.orderId),
+          eq(orderChangeLog.changeType, "WHATSAPP_SENT"),
+          sql`${orderChangeLog.metadata}->>'success' = 'true'`,
+          sql`${orderChangeLog.metadata}->>'toStatus' = ${params.toStatus}`
+        )
+      )
+      .limit(1);
+
+    if (alreadySent.length > 0) {
+      console.log(
+        `${LOG_PREFIX} Skip order ${params.orderNumber}: WhatsApp already sent successfully for status "${params.toStatus}"`
+      );
+      return;
+    }
+
     const { templateName, messageBody } =
       await storage.getWhatsAppTemplateForStatus(
         params.merchantId,
