@@ -359,7 +359,16 @@ function EditDialog({ open, statusInfo, initial, onSave, onClose, isSaving }: Ed
                   </p>
                 );
               })() : (
-                <WhatsAppBubble message={buildPreview(messageBody || DEFAULT_MESSAGE_BODY, statusInfo?.label)} status={statusInfo?.status} />
+                <>
+                  <WhatsAppTemplateCard
+                    header={`Hello ${WA_PREVIEW_VALUES.customer_name}`}
+                    body={buildPreview(messageBody || DEFAULT_MESSAGE_BODY, statusInfo?.label)}
+                    footer="Thank you for shopping with us!"
+                  />
+                  <p className="text-[10px] text-center text-gray-400 dark:text-gray-500">
+                    Hello and Thank You lines are added automatically by Meta
+                  </p>
+                </>
               )}
             </div>
           </div>
