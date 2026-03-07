@@ -145,6 +145,7 @@ function CityAutocomplete({ value, onChange, cities, hasWarning, testId }: {
     setQuery(name);
     setOpen(false);
     setHighlightedIndex(-1);
+    inputRef.current?.blur();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -188,7 +189,7 @@ function CityAutocomplete({ value, onChange, cities, hasWarning, testId }: {
           setQuery(e.target.value);
           setOpen(true);
         }}
-        onFocus={() => { inputRef.current?.select(); setOpen(true); }}
+        onFocus={() => { setQuery(""); setOpen(true); }}
         onBlur={() => { setTimeout(() => setOpen(false), 150); }}
         onKeyDown={handleKeyDown}
         placeholder="Type city..."
