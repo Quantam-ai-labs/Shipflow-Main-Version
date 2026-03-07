@@ -72,7 +72,9 @@ function buildItemLines(
 const META_TEMPLATE_PARAMS: Record<string, (vars: Record<string, string>) => string[]> = {
   order_confirmation: (vars) => [
     vars.customer_name || "Customer",
-    vars.item_name || "your order",
+    vars.total_amount
+      ? `${vars.item_name || "your order"} | Total: Rs. ${vars.total_amount}`
+      : (vars.item_name || "your order"),
   ],
   order_update: (vars) => [
     vars.customer_name || "Customer",

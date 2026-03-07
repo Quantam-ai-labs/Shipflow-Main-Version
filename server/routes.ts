@@ -5554,7 +5554,7 @@ export async function registerRoutes(
           merchantId,
           orderId,
           toStatus: "CANCELLED",
-          action: "whatsapp_cancel",
+          action: "robo_cancel",
           actorUserId: userId,
           actorName: "WhatsApp Cancellation",
           actorType: "system",
