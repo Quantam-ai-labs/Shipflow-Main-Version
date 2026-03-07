@@ -42,11 +42,19 @@ function sanitizeTemplateParam(text: string): string {
 function buildTemplatePayload(
   formattedPhone: string,
   templateName: string,
-  messageText: string
+  messageText: string,
+  templateParams?: string[]
 ): object {
-  console.log(`message text is: ${messageText}`)
-  const message: string = sanitizeTemplateParam(messageText)
-  console.log(`message after sanitize is: ${message}`)
+  let bodyParameters: object[];
+  if (templateParams && templateParams.length > 0) {
+    bodyParameters = templateParams.map(p => ({ type: "text", text: sanitizeTemplateParam(p) }));
+    console.log(`[WhatsApp] Using ${templateParams.length} structured params for template "${templateName}":`, templateParams);
+  } else {
+    const message = sanitizeTemplateParam(messageText);
+    console.log(`message text is: ${messageText}`);
+    console.log(`message after sanitize is: ${message}`);
+    bodyParameters = [{ type: "text", text: message }];
+  }
   return {
     messaging_product: "whatsapp",
     to: formattedPhone,
@@ -57,7 +65,7 @@ function buildTemplatePayload(
       components: [
         {
           type: "body",
-          parameters: [{ type: "text", text: message }],
+          parameters: bodyParameters,
         },
       ],
     },
@@ -69,8 +77,9 @@ export async function sendWhatsAppApiRequest(params: {
   templateName: string;
   messageText: string;
   orderNumber: string;
+  templateParams?: string[];
 }): Promise<SendResult> {
-  const { formattedPhone, templateName, messageText, orderNumber } = params;
+  const { formattedPhone, templateName, messageText, orderNumber, templateParams } = params;
 
   const token = process.env.WHATSAPP_ACCESS_TOKEN;
   if (!token) {
@@ -80,7 +89,7 @@ export async function sendWhatsAppApiRequest(params: {
     return { success: false, error: "WHATSAPP_ACCESS_TOKEN not configured" };
   }
 
-  const payload = buildTemplatePayload(formattedPhone, templateName, messageText);
+  const payload = buildTemplatePayload(formattedPhone, templateName, messageText, templateParams);
 
   let response: Response;
   try {

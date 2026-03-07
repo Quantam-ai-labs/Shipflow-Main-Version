@@ -69,6 +69,26 @@ function buildItemLines(
   return itemSummary || "your order";
 }
 
+const META_TEMPLATE_PARAMS: Record<string, (vars: Record<string, string>) => string[]> = {
+  order_confirmation: (vars) => [
+    vars.customer_name || "Customer",
+    vars.item_name || "your order",
+  ],
+  order_update: (vars) => [
+    vars.customer_name || "Customer",
+    vars.order_number || "N/A",
+    vars.new_status || "updated",
+  ],
+};
+
+export function buildTemplateParams(
+  templateName: string,
+  vars: Record<string, string>
+): string[] | null {
+  const builder = META_TEMPLATE_PARAMS[templateName];
+  return builder ? builder(vars) : null;
+}
+
 export function buildVarsFromParams(params: {
   customerName: string;
   orderNumber: string;

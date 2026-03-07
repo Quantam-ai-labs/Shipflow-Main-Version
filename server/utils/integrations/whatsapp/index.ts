@@ -3,6 +3,7 @@ import { orderChangeLog } from "@shared/schema";
 import { storage } from "../../../storage";
 import {
   buildVarsFromParams,
+  buildTemplateParams,
   interpolateMessageBody,
   getStatusLabel,
   WA_NOTIFY_STATUSES,
@@ -55,6 +56,8 @@ export async function sendOrderStatusWhatsApp(
     const vars = buildVarsFromParams(params);
     const messageText = interpolateMessageBody(messageBody, vars, params.toStatus);
 
+    const templateParams = buildTemplateParams(templateName, vars);
+
     const fromLabel = getStatusLabel(params.fromStatus);
     const toLabel = getStatusLabel(params.toStatus);
 
@@ -66,7 +69,11 @@ export async function sendOrderStatusWhatsApp(
     );
     console.log(`${LOG_PREFIX}   To:       ${formattedPhone}`);
     console.log(`${LOG_PREFIX}   Template: "${templateName}"`);
-    console.log(`${LOG_PREFIX}   Message:  "${messageText}"`);
+    if (templateParams) {
+      console.log(`${LOG_PREFIX}   Params:   ${JSON.stringify(templateParams)}`);
+    } else {
+      console.log(`${LOG_PREFIX}   Message:  "${messageText}"`);
+    }
     console.log(
       `${LOG_PREFIX} ────────────────────────────────────────────────────`
     );
@@ -76,6 +83,7 @@ export async function sendOrderStatusWhatsApp(
       templateName,
       messageText,
       orderNumber: params.orderNumber,
+      templateParams: templateParams ?? undefined,
     });
 
     await db.insert(orderChangeLog).values({
