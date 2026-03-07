@@ -32,6 +32,9 @@ import {
   parties,
   orderChangeLog,
   whatsappResponses,
+  workflowAuditLog,
+  whatsappTemplates,
+  bookingJobs,
 } from "@shared/schema";
 import {
   and,
@@ -9970,6 +9973,52 @@ export async function registerRoutes(
         res.json({ onboardingStep: nextStep });
       } catch (error) {
         res.status(500).json({ message: "Failed to advance onboarding" });
+      }
+    },
+  );
+
+  app.delete(
+    "/api/admin/merchants/:id",
+    isAuthenticated,
+    async (req, res) => {
+      try {
+        const adminId = await requireSuperAdmin(req, res);
+        if (!adminId) return;
+
+        const targetMerchantId = req.params.id;
+        const [merchant] = await db.select().from(merchants).where(eq(merchants.id, targetMerchantId));
+        if (!merchant) return res.status(404).json({ message: "Merchant not found" });
+
+        // Get all order IDs for this merchant
+        const merchantOrders = await db.select({ id: orders.id }).from(orders).where(eq(orders.merchantId, targetMerchantId));
+        const orderIds = merchantOrders.map(o => o.id);
+
+        // Delete in FK-safe order
+        if (orderIds.length > 0) {
+          await db.delete(orderChangeLog).where(inArray(orderChangeLog.orderId, orderIds));
+          await db.delete(workflowAuditLog).where(inArray(workflowAuditLog.orderId, orderIds));
+        }
+        await db.delete(bookingJobs).where(eq(bookingJobs.merchantId, targetMerchantId));
+        await db.delete(orders).where(eq(orders.merchantId, targetMerchantId));
+        await db.delete(shopifyStores).where(eq(shopifyStores.merchantId, targetMerchantId));
+        await db.delete(courierAccounts).where(eq(courierAccounts.merchantId, targetMerchantId));
+        await db.delete(teamMembers).where(eq(teamMembers.merchantId, targetMerchantId));
+        await db.delete(whatsappTemplates).where(eq(whatsappTemplates.merchantId, targetMerchantId));
+        await db.delete(users).where(eq(users.merchantId, targetMerchantId));
+        await db.delete(merchants).where(eq(merchants.id, targetMerchantId));
+
+        await db.insert(adminActionLogs).values({
+          adminUserId: adminId,
+          actionType: "DELETE_MERCHANT",
+          targetMerchantId,
+          details: `Deleted merchant "${merchant.name}" (${targetMerchantId})`,
+        });
+
+        console.log(`[Admin] Merchant ${targetMerchantId} ("${merchant.name}") deleted by ${adminId}`);
+        res.json({ success: true, deleted: targetMerchantId });
+      } catch (error: any) {
+        console.error("[Admin] Delete merchant error:", error.message);
+        res.status(500).json({ message: "Failed to delete merchant" });
       }
     },
   );
