@@ -190,8 +190,8 @@ function CityAutocomplete({ value, onChange, cities, hasWarning, testId }: {
           setQuery(e.target.value);
           setOpen(true);
         }}
-        onFocus={() => setOpen(true)}
-        onBlur={() => { setTimeout(() => { setOpen(false); if (query !== value) onChange(query); }, 150); }}
+        onFocus={() => { setQuery(""); setOpen(true); }}
+        onBlur={() => { setTimeout(() => { setOpen(false); setQuery(value || ""); }, 150); }}
         onKeyDown={handleKeyDown}
         placeholder="Type city..."
         data-testid={testId}
