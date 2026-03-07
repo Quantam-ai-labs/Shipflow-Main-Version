@@ -114,7 +114,6 @@ export const shopifyStores = pgTable("shopify_stores", {
   accessToken: text("access_token"), // Encrypted
   scopes: text("scopes"),
   isConnected: boolean("is_connected").default(false),
-  environment: varchar("environment", { length: 20 }).notNull().default("all"),
   lastSyncAt: timestamp("last_sync_at"),
   webhookSubscriptions: jsonb("webhook_subscriptions"),
   webhookStatus: varchar("webhook_status", { length: 30 }).default("NOT_REGISTERED"),

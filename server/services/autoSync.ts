@@ -1,6 +1,6 @@
 import { db } from '../db';
 import { shopifyStores, merchants } from '../../shared/schema';
-import { eq, or } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { autoMoveStalePending } from './workflowTransition';
 
 const SYNC_INTERVAL_MS = 300_000;
@@ -109,14 +109,10 @@ async function runAutoSync() {
   isSyncing = true;
 
   try {
-    const currentEnv = process.env.NODE_ENV === 'production' ? 'production' : 'development';
     const connectedStores = await db
       .select()
       .from(shopifyStores)
-      .where(
-        eq(shopifyStores.isConnected, true)
-      )
-      .then(stores => stores.filter(s => s.environment === currentEnv || s.environment === 'all'));
+      .where(eq(shopifyStores.isConnected, true));
 
     if (connectedStores.length === 0) {
       isSyncing = false;
