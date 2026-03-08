@@ -158,7 +158,7 @@ function MatchIndicator({ type }: { type: string }) {
 }
 
 type StatusFilter = "ALL" | "ACTIVE" | "PAUSED" | "ARCHIVED";
-type OrderTypeForCalc = "total" | "dispatched" | "delivered" | "delivered_plus_dispatch75";
+type OrderTypeForCalc = "total" | "dispatched" | "delivered" | "delivered_plus_dispatch75" | "total_minus_40" | "total_minus_25";
 
 export default function AdsProfitability() {
   const { toast } = useToast();
@@ -298,12 +298,14 @@ export default function AdsProfitability() {
   const delCharges = parseFloat(deliveryCharges) || 0;
   const packExp = parseFloat(packingExpense) || 0;
 
-  const orderTypeLabel = orderTypeForCalc === "total" ? "Total Orders" : orderTypeForCalc === "dispatched" ? "Dispatched" : orderTypeForCalc === "delivered" ? "Delivered" : "Del + (Disp−25%)";
+  const orderTypeLabel = orderTypeForCalc === "total" ? "Total Orders" : orderTypeForCalc === "dispatched" ? "Dispatched" : orderTypeForCalc === "delivered" ? "Delivered" : orderTypeForCalc === "delivered_plus_dispatch75" ? "Del + (Disp−25%)" : orderTypeForCalc === "total_minus_40" ? "Total − 40%" : "Total − 25%";
 
   function getOrderCount(orders: CampaignData["orders"]): number {
     if (orderTypeForCalc === "dispatched") return orders.dispatched;
     if (orderTypeForCalc === "delivered") return orders.delivered;
     if (orderTypeForCalc === "delivered_plus_dispatch75") return orders.delivered + Math.round(orders.fulfilled * 0.75);
+    if (orderTypeForCalc === "total_minus_40") return Math.round(orders.total * 0.6);
+    if (orderTypeForCalc === "total_minus_25") return Math.round(orders.total * 0.75);
     return orders.total;
   }
 
@@ -614,6 +616,8 @@ export default function AdsProfitability() {
                     <SelectItem value="dispatched">Dispatched</SelectItem>
                     <SelectItem value="delivered">Delivered</SelectItem>
                     <SelectItem value="delivered_plus_dispatch75">Delivered + (Dispatched − 25%)</SelectItem>
+                    <SelectItem value="total_minus_40">Total − 40%</SelectItem>
+                    <SelectItem value="total_minus_25">Total − 25%</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1007,7 +1011,7 @@ export default function AdsProfitability() {
               <p><span className="font-medium text-foreground">Packing Expense</span> — Any packaging cost per order (boxes, tape, labels, etc.). Deducted from each order's profit calculation.</p>
               <p><span className="font-medium text-foreground">Date Range</span> — Filters both ad spend (from Facebook insights) and Shopify orders to the selected date range. Use presets like "Last 7 days" or "Last 30 days" for quick selection, or choose a custom range from the calendar. Set to "All dates" to include everything.</p>
               <p><span className="font-medium text-foreground">Campaign Status</span> — Filter which campaigns are shown: All, Active only, Paused only, or Archived only.</p>
-              <p><span className="font-medium text-foreground">Orders Used in CPA & Profit</span> — Choose which order count to use in CPA and Net Profit formulas: Total Orders (all orders), Dispatched (all shipped out), Delivered (confirmed delivery), or Del + (Disp−25%) which adds Delivered count plus 75% of Fulfilled-only orders (excludes already delivered/returned from the 75% portion).</p>
+              <p><span className="font-medium text-foreground">Orders Used in CPA & Profit</span> — Choose which order count to use in CPA and Net Profit formulas: Total Orders (all orders), Dispatched (all shipped out), Delivered (confirmed delivery), Del + (Disp−25%) which adds Delivered count plus 75% of Fulfilled-only orders, Total − 40% (60% of total orders, accounting for 40% drop-off), or Total − 25% (75% of total orders, accounting for 25% drop-off).</p>
             </div>
           </div>
 
