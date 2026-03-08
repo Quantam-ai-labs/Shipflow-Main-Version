@@ -314,7 +314,14 @@ export default function CouriersSettings() {
     const config = COURIER_CONFIG[selectedCourier];
     if (!config) return;
 
-    const missingRequired = config.fields.filter(f => f.required && !courierFormData[f.key]);
+    const connectedCourier = data?.couriers.find(c => c.name === selectedCourier);
+    const alreadyConnected = !!connectedCourier?.hasDbCredentials;
+
+    const missingRequired = config.fields.filter(f => {
+      if (!f.required) return false;
+      if (f.type === "password" && alreadyConnected) return false;
+      return !courierFormData[f.key];
+    });
     if (missingRequired.length > 0) {
       toast({
         title: "Missing Credentials",
@@ -324,44 +331,36 @@ export default function CouriersSettings() {
       return;
     }
 
+    const settingsKeys = config.fields
+      .filter(f => f.type !== "password" && f.key !== "accountNumber")
+      .map(f => f.key);
+    const settings = Object.fromEntries(
+      settingsKeys.map(k => [k, courierFormData[k] || ""])
+    );
+
     saveCourierMutation.mutate({
       courierName: selectedCourier,
       apiKey: courierFormData.apiKey || undefined,
       apiSecret: courierFormData.apiSecret || undefined,
       accountNumber: courierFormData.accountNumber || undefined,
       useEnvCredentials: false,
-      settings: {
-        ...(courierFormData.shipperId ? { shipperId: courierFormData.shipperId } : {}),
-        ...(courierFormData.shipperCity ? { shipperCity: courierFormData.shipperCity } : {}),
-        ...(courierFormData.shipperAddress ? { shipperAddress: courierFormData.shipperAddress } : {}),
-        ...(courierFormData.pickupAddressCode ? { pickupAddressCode: courierFormData.pickupAddressCode } : {}),
-        ...(courierFormData.storeAddressCode ? { storeAddressCode: courierFormData.storeAddressCode } : {}),
-      },
+      settings,
     });
   };
 
   const openCourierDialog = (courierName: string) => {
     setSelectedCourier(courierName);
-    setCourierFormData({});
     const connectedCourier = data?.couriers.find(c => c.name === courierName);
+    const initialData: Record<string, string> = {};
     if (connectedCourier?.settings) {
       const s = connectedCourier.settings as Record<string, any>;
-      if (s.shipperId) {
-        setCourierFormData(prev => ({ ...prev, shipperId: s.shipperId }));
-      }
-      if (s.shipperCity) {
-        setCourierFormData(prev => ({ ...prev, shipperCity: s.shipperCity }));
-      }
-      if (s.shipperAddress) {
-        setCourierFormData(prev => ({ ...prev, shipperAddress: s.shipperAddress }));
-      }
-      if (s.pickupAddressCode) {
-        setCourierFormData(prev => ({ ...prev, pickupAddressCode: s.pickupAddressCode }));
-      }
-      if (s.storeAddressCode) {
-        setCourierFormData(prev => ({ ...prev, storeAddressCode: s.storeAddressCode }));
-      }
+      Object.entries(s).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== "") {
+          initialData[k] = String(v);
+        }
+      });
     }
+    setCourierFormData(initialData);
     setIsCourierDialogOpen(true);
   };
 
@@ -375,26 +374,36 @@ export default function CouriersSettings() {
 
         let autoPickup = "";
         let autoStore = "";
+        let autoReturnCity = "";
+        let autoReturnAddress = "";
         for (const addr of data.addresses) {
           const code = String(addr.addressCode || "").trim();
           const type = (addr.addressType || "").toLowerCase();
           if ((type.includes("pickup") || type.includes("return")) && !autoPickup) {
             autoPickup = code;
+            if (!autoReturnCity) autoReturnCity = addr.cityName || "";
+            if (!autoReturnAddress) autoReturnAddress = addr.address || "";
           }
           if (type.includes("default") && !autoStore) {
             autoStore = code;
           }
         }
-        if (!autoPickup && data.addresses.length > 0) autoPickup = String(data.addresses[0].addressCode || "").trim();
+        if (!autoPickup && data.addresses.length > 0) {
+          autoPickup = String(data.addresses[0].addressCode || "").trim();
+          if (!autoReturnCity) autoReturnCity = data.addresses[0].cityName || "";
+          if (!autoReturnAddress) autoReturnAddress = data.addresses[0].address || "";
+        }
         if (!autoStore && data.addresses.length > 0) autoStore = String(data.addresses[0].addressCode || "").trim();
 
         setCourierFormData(prev => ({
           ...prev,
           pickupAddressCode: autoPickup || prev.pickupAddressCode || "",
           storeAddressCode: autoStore || prev.storeAddressCode || "",
+          returnCity: autoReturnCity || prev.returnCity || "",
+          returnAddress: autoReturnAddress || prev.returnAddress || "",
         }));
 
-        toast({ title: "Addresses Synced", description: `Found ${data.addresses.length} address(es). Pickup="${autoPickup}", Store="${autoStore}" auto-assigned.` });
+        toast({ title: "Addresses Synced", description: `Found ${data.addresses.length} address(es). Pickup, Store, and Return auto-assigned.` });
       } else {
         toast({ title: "Failed", description: data.message || "Could not fetch addresses from PostEx.", variant: "destructive" });
       }
@@ -1239,22 +1248,27 @@ export default function CouriersSettings() {
           {selectedCourier && COURIER_CONFIG[selectedCourier] && (
             <div className="space-y-4 py-2">
               <div className="space-y-3">
-                {COURIER_CONFIG[selectedCourier].fields.map((field) => (
-                  <div key={field.key} className="space-y-2">
-                    <Label htmlFor={`courier-${field.key}`}>
-                      {field.label}
-                      {field.required && <span className="text-destructive ml-1">*</span>}
-                    </Label>
-                    <Input
-                      id={`courier-${field.key}`}
-                      type={field.type}
-                      placeholder={field.placeholder}
-                      value={courierFormData[field.key] || ""}
-                      onChange={(e) => setCourierFormData(prev => ({ ...prev, [field.key]: e.target.value }))}
-                      data-testid={`input-courier-${field.key}`}
-                    />
-                  </div>
-                ))}
+                {COURIER_CONFIG[selectedCourier].fields.map((field) => {
+                  const connectedCourier = data?.couriers.find(c => c.name === selectedCourier);
+                  const alreadySaved = field.type === "password" && !!connectedCourier?.hasDbCredentials;
+                  return (
+                    <div key={field.key} className="space-y-2">
+                      <Label htmlFor={`courier-${field.key}`}>
+                        {field.label}
+                        {field.required && !alreadySaved && <span className="text-destructive ml-1">*</span>}
+                        {alreadySaved && <span className="text-xs text-muted-foreground ml-1 font-normal">(saved)</span>}
+                      </Label>
+                      <Input
+                        id={`courier-${field.key}`}
+                        type={field.type}
+                        placeholder={alreadySaved ? "Leave blank to keep current" : field.placeholder}
+                        value={courierFormData[field.key] || ""}
+                        onChange={(e) => setCourierFormData(prev => ({ ...prev, [field.key]: e.target.value }))}
+                        data-testid={`input-courier-${field.key}`}
+                      />
+                    </div>
+                  );
+                })}
               </div>
 
               {selectedCourier === 'leopards' && (
@@ -1355,6 +1369,18 @@ export default function CouriersSettings() {
                                 data-testid={`button-use-store-${idx}`}
                               >
                                 Use as Store
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant={isPickup ? "default" : "outline"}
+                                onClick={() => setCourierFormData(prev => ({
+                                  ...prev,
+                                  returnCity: addr.cityName || "",
+                                  returnAddress: addr.address || "",
+                                }))}
+                                data-testid={`button-use-return-${idx}`}
+                              >
+                                Use as Return
                               </Button>
                             </div>
                           </div>
