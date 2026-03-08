@@ -36,6 +36,8 @@ export const merchants = pgTable("merchants", {
   otpRequired: boolean("otp_required").default(true),
   issuePresetStatuses: jsonb("issue_preset_statuses").default([]),
   bookingRemarks: text("booking_remarks"),
+  warehousePin: varchar("warehouse_pin", { length: 6 }),
+  warehousePinHash: varchar("warehouse_pin_hash", { length: 128 }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

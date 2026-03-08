@@ -82,6 +82,7 @@ import {
   MessageCircle,
   Sparkles,
   Pin,
+  ClipboardList,
   type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -118,6 +119,7 @@ const orderItems: NavItem[] = [
 
 const logisticsItems: NavItem[] = [
   { id: "shipments", title: "Shipments", url: "/shipments", icon: Package },
+  { id: "loadsheet", title: "Loadsheet", url: "/loadsheet", icon: ClipboardList },
   { id: "cod-reconciliation", title: "COD Reconciliation", url: "/cod-reconciliation", icon: Receipt },
 ];
 

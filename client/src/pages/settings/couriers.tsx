@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Truck, CheckCircle2, Settings, ExternalLink, Zap, Lock, Loader2, MapPin, RefreshCw, Copy, Webhook, Eye, EyeOff, Save, MessageSquare, Activity, Radio, RotateCw } from "lucide-react";
+import { Truck, CheckCircle2, Settings, ExternalLink, Zap, Lock, Loader2, MapPin, RefreshCw, Copy, Webhook, Eye, EyeOff, Save, MessageSquare, Activity, Radio, RotateCw, Warehouse, QrCode, KeyRound } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -153,10 +153,59 @@ export default function CouriersSettings() {
   const [postexAddresses, setPostexAddresses] = useState<any[]>([]);
   const [fetchingAddresses, setFetchingAddresses] = useState(false);
   const [bookingRemarksValue, setBookingRemarksValue] = useState("");
+  const [isWarehousePinDialogOpen, setIsWarehousePinDialogOpen] = useState(false);
+  const [newPin, setNewPin] = useState("");
+  const qrCanvasRef = useRef<HTMLCanvasElement>(null);
 
   const { data, isLoading } = useQuery<IntegrationsData>({
     queryKey: ["/api/integrations"],
   });
+
+  const { data: warehousePinStatus } = useQuery<{ isSet: boolean; slug: string }>({
+    queryKey: ["/api/settings/warehouse-pin"],
+  });
+
+  const setWarehousePinMutation = useMutation({
+    mutationFn: async (pin: string) => {
+      const res = await apiRequest("POST", "/api/settings/warehouse-pin", { pin });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/warehouse-pin"] });
+      setNewPin(data.pin || newPin);
+      toast({ title: "Warehouse PIN Set", description: "Share the PIN and URL with your warehouse staff." });
+      drawQrCode(data.pin || newPin, warehousePinStatus?.slug || "");
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed to set PIN", description: err?.message || "Try again.", variant: "destructive" });
+    },
+  });
+
+  function generateRandomPin() {
+    return String(Math.floor(100000 + Math.random() * 900000));
+  }
+
+  async function drawQrCode(pin: string, slug: string) {
+    if (!qrCanvasRef.current || !slug) return;
+    try {
+      const QRCode = (await import("qrcode")).default;
+      const url = `${window.location.origin}/warehouse/${slug}`;
+      await QRCode.toCanvas(qrCanvasRef.current, url, { width: 160, margin: 1 });
+    } catch {}
+  }
+
+  useEffect(() => {
+    if (isWarehousePinDialogOpen && warehousePinStatus?.slug) {
+      if (!newPin) setNewPin(generateRandomPin());
+      setTimeout(() => drawQrCode(newPin, warehousePinStatus.slug), 100);
+    }
+  }, [isWarehousePinDialogOpen]);
+
+  useEffect(() => {
+    if (isWarehousePinDialogOpen && warehousePinStatus?.slug && newPin) {
+      drawQrCode(newPin, warehousePinStatus.slug);
+    }
+  }, [newPin]);
 
   const { data: bookingRemarksData, isLoading: isLoadingRemarks } = useQuery<{ bookingRemarks: string }>({
     queryKey: ["/api/settings/booking-remarks"],
@@ -1004,6 +1053,140 @@ export default function CouriersSettings() {
           );
         })}
       </div>
+
+      <Card data-testid="card-warehouse-access">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Warehouse className="w-4 h-4" />
+                Warehouse Access
+              </CardTitle>
+              <CardDescription>
+                Let warehouse staff scan and submit loadsheets via mobile — no portal login needed
+              </CardDescription>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setNewPin(generateRandomPin());
+                setIsWarehousePinDialogOpen(true);
+              }}
+              data-testid="button-set-warehouse-pin"
+            >
+              <KeyRound className="w-3.5 h-3.5 mr-1.5" />
+              {warehousePinStatus?.isSet ? "Reset PIN" : "Set PIN"}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-3 text-sm">
+            {warehousePinStatus?.isSet ? (
+              <>
+                <CheckCircle2 className="w-4 h-4 text-green-500" />
+                <span className="text-muted-foreground">
+                  Warehouse PIN is active. Staff can log in at{" "}
+                  <span className="font-mono text-foreground">/warehouse/{warehousePinStatus.slug}</span>
+                </span>
+              </>
+            ) : (
+              <>
+                <Lock className="w-4 h-4 text-muted-foreground" />
+                <span className="text-muted-foreground">No PIN set — warehouse app is locked</span>
+              </>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Dialog open={isWarehousePinDialogOpen} onOpenChange={setIsWarehousePinDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Warehouse className="w-4 h-4" />
+              Set Warehouse PIN
+            </DialogTitle>
+            <DialogDescription>
+              Share this PIN and URL with your warehouse staff
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="flex items-center gap-3">
+              <div className="flex-1">
+                <Label className="text-xs text-muted-foreground mb-1.5 block">PIN (4-6 digits)</Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={newPin}
+                    onChange={(e) => setNewPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    maxLength={6}
+                    placeholder="e.g. 123456"
+                    className="font-mono text-xl tracking-widest text-center"
+                    data-testid="input-warehouse-pin"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setNewPin(generateRandomPin())}
+                    data-testid="button-regenerate-pin"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { navigator.clipboard.writeText(newPin); toast({ title: "PIN copied" }); }}
+                    data-testid="button-copy-pin"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {warehousePinStatus?.slug && (
+              <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+                <p className="text-xs text-muted-foreground font-medium">Warehouse URL</p>
+                <div className="flex items-center gap-2">
+                  <code className="text-xs bg-muted px-2 py-1 rounded flex-1 truncate">
+                    {window.location.origin}/warehouse/{warehousePinStatus.slug}
+                  </code>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}/warehouse/${warehousePinStatus.slug}`);
+                      toast({ title: "URL copied" });
+                    }}
+                    data-testid="button-copy-warehouse-url"
+                  >
+                    <Copy className="w-3 h-3" />
+                  </Button>
+                </div>
+                <div className="flex items-center gap-3 pt-1">
+                  <canvas ref={qrCanvasRef} className="rounded border" />
+                  <div className="text-xs text-muted-foreground space-y-1">
+                    <p className="flex items-center gap-1"><QrCode className="w-3 h-3" /> Scan QR to open on mobile</p>
+                    <p>Or share the link + PIN</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsWarehousePinDialogOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => setWarehousePinMutation.mutate(newPin)}
+              disabled={newPin.length < 4 || setWarehousePinMutation.isPending}
+              data-testid="button-save-warehouse-pin"
+            >
+              {setWarehousePinMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              Save PIN
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isCourierDialogOpen} onOpenChange={(open) => {
         setIsCourierDialogOpen(open);

@@ -9129,6 +9129,263 @@ export async function registerRoutes(
   );
 
   // ============================================
+  // WAREHOUSE / LOADSHEET APIS
+  // ============================================
+
+  const WAREHOUSE_JWT_SECRET = process.env.SESSION_SECRET || "warehouse-secret-1sol";
+
+  function signWarehouseToken(merchantId: string): string {
+    const jwt = require("jsonwebtoken");
+    return jwt.sign({ merchantId, isWarehouse: true }, WAREHOUSE_JWT_SECRET, { expiresIn: "12h" });
+  }
+
+  function verifyWarehouseToken(token: string): { merchantId: string } | null {
+    try {
+      const jwt = require("jsonwebtoken");
+      const payload = jwt.verify(token, WAREHOUSE_JWT_SECRET) as any;
+      if (!payload.isWarehouse) return null;
+      return { merchantId: payload.merchantId };
+    } catch {
+      return null;
+    }
+  }
+
+  function warehouseAuth(req: Request, res: Response, next: NextFunction) {
+    const auth = req.headers.authorization;
+    if (!auth || !auth.startsWith("Bearer ")) {
+      return res.status(401).json({ message: "Warehouse authentication required" });
+    }
+    const token = auth.slice(7);
+    const payload = verifyWarehouseToken(token);
+    if (!payload) {
+      return res.status(401).json({ message: "Invalid or expired warehouse token" });
+    }
+    (req as any).warehouseMerchantId = payload.merchantId;
+    next();
+  }
+
+  app.get("/api/warehouse/merchant-info/:slug", async (req, res) => {
+    try {
+      const merchant = await storage.getMerchantBySlug(req.params.slug);
+      if (!merchant || !merchant.isActive) {
+        return res.status(404).json({ message: "Merchant not found" });
+      }
+      res.json({ name: merchant.name, logoUrl: merchant.logoUrl, slug: merchant.slug });
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to fetch merchant info" });
+    }
+  });
+
+  app.post("/api/warehouse/login", async (req, res) => {
+    try {
+      const { merchantSlug, pin } = req.body;
+      if (!merchantSlug || !pin) {
+        return res.status(400).json({ message: "merchantSlug and pin are required" });
+      }
+      const merchant = await storage.getMerchantBySlug(merchantSlug);
+      if (!merchant || !merchant.isActive) {
+        return res.status(401).json({ message: "Invalid credentials" });
+      }
+      if (!merchant.warehousePinHash) {
+        return res.status(401).json({ message: "Warehouse access not configured for this merchant" });
+      }
+      const valid = await bcrypt.compare(String(pin), merchant.warehousePinHash);
+      if (!valid) {
+        return res.status(401).json({ message: "Incorrect PIN" });
+      }
+      const token = signWarehouseToken(merchant.id);
+      res.json({ success: true, token, merchantName: merchant.name });
+    } catch (error: any) {
+      res.status(500).json({ message: "Login failed" });
+    }
+  });
+
+  app.get("/api/warehouse/booked-shipments", warehouseAuth, async (req, res) => {
+    try {
+      const merchantId = (req as any).warehouseMerchantId as string;
+      const bookedOrders = await db
+        .select({
+          id: orders.id,
+          orderNumber: orders.orderNumber,
+          courierTracking: orders.courierTracking,
+          customerName: orders.customerName,
+          city: orders.city,
+          totalAmount: orders.totalAmount,
+          courierName: orders.courierName,
+        })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.merchantId, merchantId),
+            eq(orders.workflowStatus, "BOOKED"),
+            isNotNull(orders.courierTracking)
+          )
+        );
+      res.json({ shipments: bookedOrders, total: bookedOrders.length });
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to fetch booked shipments" });
+    }
+  });
+
+  app.post("/api/warehouse/generate-loadsheet", warehouseAuth, async (req, res) => {
+    try {
+      const merchantId = (req as any).warehouseMerchantId as string;
+      const { trackingNumbers } = req.body;
+      if (!Array.isArray(trackingNumbers) || trackingNumbers.length === 0) {
+        return res.status(400).json({ message: "No tracking numbers provided" });
+      }
+      const merchant = await storage.getMerchant(merchantId);
+      if (!merchant) return res.status(400).json({ message: "Merchant not found" });
+
+      const fetchedOrders = await db
+        .select()
+        .from(orders)
+        .where(
+          and(
+            eq(orders.merchantId, merchantId),
+            inArray(orders.courierTracking, trackingNumbers),
+            eq(orders.workflowStatus, "BOOKED")
+          )
+        );
+
+      if (fetchedOrders.length === 0) {
+        return res.status(400).json({ message: "No valid BOOKED orders found for provided tracking numbers" });
+      }
+
+      const batchId = crypto.randomUUID();
+      const courierNames = [...new Set(fetchedOrders.map((o) => o.courierName || "Unknown"))];
+      const courierLabel = courierNames.length === 1 ? courierNames[0] : "Mixed";
+
+      const batch = await storage.createShipmentBatch({
+        merchantId,
+        createdByUserId: "warehouse",
+        courierName: courierLabel,
+        batchType: "LOADSHEET",
+        status: "COMPLETED",
+        totalSelectedCount: fetchedOrders.length,
+        successCount: fetchedOrders.length,
+        failedCount: 0,
+        notes: `Warehouse loadsheet for ${fetchedOrders.length} order(s)`,
+      });
+
+      const loadsheetItems: Array<{ orderNumber: string; trackingNumber: string; consigneeName: string; consigneeCity: string; consigneePhone: string; codAmount: number; status: string }> = [];
+
+      for (const order of fetchedOrders) {
+        loadsheetItems.push({
+          orderNumber: order.orderNumber || "N/A",
+          trackingNumber: order.courierTracking || "N/A",
+          consigneeName: order.customerName || "N/A",
+          consigneeCity: order.city || "N/A",
+          consigneePhone: order.customerPhone || "N/A",
+          codAmount: Number(order.totalAmount || 0),
+          status: "BOOKED",
+        });
+        await storage.createShipmentBatchItem({
+          batchId: batch.id,
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          bookingStatus: "SUCCESS",
+          trackingNumber: order.courierTracking,
+          consigneeName: order.customerName,
+          consigneePhone: order.customerPhone,
+          consigneeCity: order.city,
+          codAmount: order.totalAmount,
+        });
+      }
+
+      const { generateBatchLoadsheetPdf } = await import("./services/pdfGenerator");
+      const pdfPath = await generateBatchLoadsheetPdf({
+        batchId: batch.id,
+        courierName: courierLabel,
+        createdBy: "warehouse",
+        createdAt: new Date().toISOString(),
+        merchantName: merchant.name || "Merchant",
+        totalCount: fetchedOrders.length,
+        successCount: fetchedOrders.length,
+        failedCount: 0,
+        items: loadsheetItems,
+      });
+
+      await storage.updateShipmentBatch(batch.id, { pdfBatchPath: pdfPath });
+
+      const { bulkTransitionOrders } = await import("./services/orderWorkflow");
+      await bulkTransitionOrders({
+        merchantId,
+        orderIds: fetchedOrders.map((o) => o.id),
+        toStatus: "FULFILLED",
+        action: "loadsheet_generation",
+        actorUserId: "warehouse",
+        actorName: "Warehouse Scanner",
+        actorType: "system",
+        reason: `Warehouse loadsheet (batch: ${batch.id})`,
+        extraData: { loadsheetBatchId: batch.id, fulfilledAt: new Date() } as any,
+      });
+
+      res.json({ success: true, batchId: batch.id, pdfUrl: `/api/print/batch/${batch.id}.pdf`, totalOrders: fetchedOrders.length });
+    } catch (error: any) {
+      console.error("Error generating warehouse loadsheet:", error);
+      res.status(500).json({ message: "Failed to generate loadsheet" });
+    }
+  });
+
+  app.get("/api/loadsheet/booked-shipments", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const bookedOrders = await db
+        .select({
+          id: orders.id,
+          orderNumber: orders.orderNumber,
+          courierTracking: orders.courierTracking,
+          customerName: orders.customerName,
+          city: orders.city,
+          totalAmount: orders.totalAmount,
+          courierName: orders.courierName,
+        })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.merchantId, merchantId),
+            eq(orders.workflowStatus, "BOOKED"),
+            isNotNull(orders.courierTracking)
+          )
+        );
+      res.json({ shipments: bookedOrders, total: bookedOrders.length });
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to fetch booked shipments" });
+    }
+  });
+
+  app.get("/api/settings/warehouse-pin", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const merchant = await storage.getMerchant(merchantId);
+      if (!merchant) return res.status(404).json({ message: "Merchant not found" });
+      res.json({ isSet: !!merchant.warehousePinHash, slug: merchant.slug });
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to fetch warehouse PIN status" });
+    }
+  });
+
+  app.post("/api/settings/warehouse-pin", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { pin } = req.body;
+      if (!pin || !/^\d{4,6}$/.test(String(pin))) {
+        return res.status(400).json({ message: "PIN must be 4-6 digits" });
+      }
+      const pinStr = String(pin);
+      const hash = await bcrypt.hash(pinStr, 10);
+      await storage.updateMerchant(merchantId, { warehousePin: pinStr, warehousePinHash: hash } as any);
+      res.json({ success: true, pin: pinStr });
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to set warehouse PIN" });
+    }
+  });
+
+  // ============================================
   // ONBOARDING ROUTES
   // ============================================
   const ONBOARDING_ORDER = [

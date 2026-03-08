@@ -100,6 +100,8 @@ import ReportsHub from "@/pages/reports";
 import AIAssistant from "@/pages/ai-assistant";
 import WhatsAppPage from "@/pages/whatsapp";
 import NotFound from "@/pages/not-found";
+import LoadsheetPage from "@/pages/loadsheet";
+import WarehousePage from "@/pages/warehouse";
 
 function OnboardingBanner() {
   return (
@@ -157,6 +159,7 @@ const routeToPageId: Record<string, string> = {
   "/settings/status-mapping": "settings-status-mapping",
   "/settings/marketing": "settings-marketing",
   "/settings": "settings",
+  "/loadsheet": "loadsheet",
 };
 
 function getPageIdForRoute(path: string): string | null {
@@ -257,6 +260,8 @@ function AppRoutes() {
       <Route path="/marketing/profitability">{() => <ProtectedRoute component={AdsProfitability} path="/marketing/profitability" />}</Route>
       <Route path="/whatsapp">{() => <ProtectedRoute component={WhatsAppPage} path="/whatsapp" />}</Route>
       <Route path="/accounting/settings">{() => <ProtectedRoute component={AccountingSettings} path="/accounting/settings" />}</Route>
+      <Route path="/loadsheet">{() => <ProtectedRoute component={LoadsheetPage} path="/loadsheet" />}</Route>
+      <Route path="/warehouse/:slug" component={WarehousePage} />
       <Route path="/settings/shopify"><Redirect to="/settings?tab=shopify" /></Route>
       <Route path="/settings/couriers"><Redirect to="/settings?tab=couriers" /></Route>
       <Route path="/settings/status-mapping"><Redirect to="/settings?tab=mapping" /></Route>
@@ -448,6 +453,15 @@ function MainApp() {
     return (
       <Switch>
         <Route path="/merchant-setup/:token" component={MerchantSetup} />
+      </Switch>
+    );
+  }
+
+  // Warehouse PWA is publicly accessible (PIN-gated on the page itself)
+  if (location.startsWith("/warehouse/")) {
+    return (
+      <Switch>
+        <Route path="/warehouse/:slug" component={WarehousePage} />
       </Switch>
     );
   }
