@@ -7937,6 +7937,125 @@ export async function registerRoutes(
           await storage.updateShipmentBatch(batch.id, {
             pdfBatchPath: batchLoadsheetPath,
           });
+
+          // Pre-generate AWB PDF in background so first download is instant
+          try {
+            const successResults = bgResults.filter((r) => r.success && r.trackingNumber);
+            if (successResults.length === 0) return;
+
+            const freshBatch = await storage.getShipmentBatchById(merchantId, batch.id);
+            const alreadyCached = (freshBatch?.pdfBatchMeta as any)?.cachedAwbPath;
+            if (alreadyCached) return; // already cached, skip
+
+            const items = await storage.getShipmentBatchItems(batch.id);
+            const bookedItems = items.filter((item) => item.bookingStatus === "BOOKED" && item.trackingNumber);
+            if (bookedItems.length === 0) return;
+
+            const courierNorm = normalizeCourierName(batch.courierName || "");
+            const { savePdf } = await import("./services/pdfGenerator");
+
+            const CONCURRENCY = 5;
+            async function runBatchedAWB<T, R>(xs: T[], fn: (x: T) => Promise<R>): Promise<R[]> {
+              const out: R[] = [];
+              for (let i = 0; i < xs.length; i += CONCURRENCY) {
+                const chunk = xs.slice(i, i + CONCURRENCY);
+                out.push(...await Promise.all(chunk.map(fn)));
+              }
+              return out;
+            }
+
+            let pdfBuffer: Buffer | null = null;
+
+            if (courierNorm === "postex") {
+              const { generatePostExCustomSlip } = await import("./services/courierSlips");
+              const refreshedMerchant = await storage.getMerchant(merchantId);
+              const orderContexts = await runBatchedAWB(bookedItems, async (item) => {
+                const order = await storage.getOrderById(merchantId, item.orderId);
+                if (!order) return null;
+                const lineItems = Array.isArray(order.lineItems) ? order.lineItems : [];
+                const itemsSummary = lineItems.length > 0
+                  ? lineItems.map((li: any) => { const v = li.variantTitle || li.variant_title; return `${li.title || li.name || "Item"}${v ? ` - ${v}` : ""} x ${li.quantity || 1}`; }).join(" || ")
+                  : (order.itemSummary || "Order items");
+                return {
+                  trackingNumber: item.trackingNumber || order.courierTracking || "",
+                  orderNumber: item.orderNumber || order.orderNumber,
+                  customerName: item.consigneeName || order.customerName,
+                  customerPhone: item.consigneePhone || order.customerPhone || "",
+                  city: item.consigneeCity || order.city || "",
+                  shippingAddress: order.shippingAddress || "",
+                  codAmount: parseFloat(String(item.codAmount || order.totalAmount)) || 0,
+                  merchantName: refreshedMerchant?.name || "",
+                  merchantAddress: refreshedMerchant?.address || "",
+                  itemsSummary,
+                  totalQuantity: order.totalQuantity || 1,
+                  remarks: order.notes || "",
+                  bookedAt: order.createdAt ? new Date(order.createdAt).toLocaleDateString("en-GB") : new Date().toLocaleDateString("en-GB"),
+                } as import("./services/courierSlips").PostExOrderContext;
+              });
+              const validContexts = orderContexts.filter((r): r is import("./services/courierSlips").PostExOrderContext => r !== null);
+              if (validContexts.length > 0) {
+                pdfBuffer = await generatePostExCustomSlip(validContexts);
+              }
+            } else if (courierNorm === "leopards") {
+              const leopardsCreds = await getCourierCredentials(merchantId, "leopards");
+              if (leopardsCreds?.apiKey && leopardsCreds?.apiSecret) {
+                const { fetchLeopardsSlipData, fetchLeopardsSlip, combinePdfs } = await import("./services/courierSlips");
+                const { generateAirwayBillPdfBuffer } = await import("./services/pdfGenerator");
+                const allBills: import("./services/pdfGenerator").AirwayBillData[] = [];
+                const fallbackPdfBuffers: Buffer[] = [];
+
+                for (let i = 0; i < bookedItems.length; i += CONCURRENCY) {
+                  const chunk = bookedItems.slice(i, i + CONCURRENCY);
+                  const chunkResults = await Promise.all(chunk.map(async (item) => {
+                    const order = await storage.getOrderById(merchantId, item.orderId);
+                    const bulkLineItems = Array.isArray(order?.lineItems) ? order.lineItems : [];
+                    const bulkItemsSummary = bulkLineItems.length > 0
+                      ? bulkLineItems.map((li: any) => { const v = li.variantTitle || li.variant_title; return `${li.title || li.name || "Item"}${v ? ` - ${v}` : ""} x ${li.quantity || 1}`; }).join(" || ")
+                      : (order?.itemSummary || "Order items");
+                    const bulkOrderCtx = { itemsSummary: bulkItemsSummary, quantity: order?.totalQuantity || 1 };
+                    const dataResult = await fetchLeopardsSlipData("", {
+                      apiKey: leopardsCreds.apiKey!,
+                      apiPassword: leopardsCreds.apiSecret!,
+                      trackingNumber: item.trackingNumber!,
+                    }, bulkOrderCtx);
+                    if (dataResult.success && dataResult.bills) return { type: "bills" as const, bills: dataResult.bills };
+                    const fallbackResult = await fetchLeopardsSlip(item.slipUrl || "", {
+                      apiKey: leopardsCreds.apiKey!,
+                      apiPassword: leopardsCreds.apiSecret!,
+                      trackingNumber: item.trackingNumber!,
+                    }, bulkOrderCtx);
+                    if (fallbackResult?.success && fallbackResult.pdfBuffer) return { type: "pdf" as const, pdfBuffer: fallbackResult.pdfBuffer };
+                    return { type: "skip" as const };
+                  }));
+                  for (const r of chunkResults) {
+                    if (r.type === "bills") allBills.push(...r.bills);
+                    else if (r.type === "pdf") fallbackPdfBuffers.push(r.pdfBuffer);
+                  }
+                }
+
+                if (allBills.length > 0 || fallbackPdfBuffers.length > 0) {
+                  if (allBills.length > 0 && fallbackPdfBuffers.length === 0) {
+                    pdfBuffer = await generateAirwayBillPdfBuffer(allBills);
+                  } else if (allBills.length === 0) {
+                    pdfBuffer = await combinePdfs(fallbackPdfBuffers);
+                  } else {
+                    const billsPdf = await generateAirwayBillPdfBuffer(allBills);
+                    pdfBuffer = await combinePdfs([billsPdf, ...fallbackPdfBuffers]);
+                  }
+                }
+              }
+            }
+
+            if (pdfBuffer) {
+              const awbPath = await savePdf(pdfBuffer, `batch_awb_${batch.id.substring(0, 8)}`);
+              const latestBatch = await storage.getShipmentBatchById(merchantId, batch.id);
+              const existingMeta = (latestBatch?.pdfBatchMeta as any) || {};
+              await storage.updateShipmentBatch(batch.id, { pdfBatchMeta: { ...existingMeta, cachedAwbPath: awbPath } });
+              console.log(`[Booking] Pre-generated AWB PDF for batch ${batch.id.substring(0, 8)}: ${awbPath}`);
+            }
+          } catch (awbErr) {
+            console.warn("[Booking] Background AWB pre-generation failed (non-critical):", (awbErr as any)?.message);
+          }
         } catch (pdfErr) {
           console.error("[Booking] Background PDF/print record error:", pdfErr);
         }

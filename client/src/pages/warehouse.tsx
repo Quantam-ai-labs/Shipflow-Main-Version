@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams } from "wouter";
-import { Loader2, CheckCircle2, XCircle, Package, ClipboardList, Trash2, LogOut, RefreshCw } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, Package, ClipboardList, Trash2, LogOut, RefreshCw, Keyboard, Camera } from "lucide-react";
 
 interface BookedShipment {
   id: string;
@@ -64,7 +64,11 @@ export default function WarehousePage() {
   const [generating, setGenerating] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
 
+  const [scanMode, setScanMode] = useState<"camera" | "manual">("camera");
+  const [manualInput, setManualInput] = useState("");
+
   const videoRef = useRef<HTMLVideoElement>(null);
+  const manualInputRef = useRef<HTMLInputElement>(null);
   const readerRef = useRef<any>(null);
   const scanResultTimeout = useRef<ReturnType<typeof setTimeout>>();
   const lastScannedRef = useRef<string>("");
@@ -188,10 +192,15 @@ export default function WarehousePage() {
 
   useEffect(() => {
     if (screen === "scanning") {
-      startCamera();
+      if (scanMode === "camera") {
+        startCamera();
+      } else {
+        stopCamera();
+        setTimeout(() => manualInputRef.current?.focus(), 100);
+      }
     }
     return () => stopCamera();
-  }, [screen]);
+  }, [screen, scanMode]);
 
   useEffect(() => {
     if (readerRef.current) {
@@ -365,24 +374,86 @@ export default function WarehousePage() {
         </div>
       </div>
 
-      <div className="relative bg-black mx-3 rounded-2xl overflow-hidden" style={{ height: "45vh" }}>
-        <video ref={videoRef} className="w-full h-full object-cover" autoPlay playsInline muted data-testid="warehouse-camera" />
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="w-52 h-28 rounded-lg border-2 border-blue-400 opacity-80" />
-        </div>
-        {scanResult && (
-          <div className={`absolute bottom-3 left-3 right-3 rounded-xl p-3 flex items-center gap-2 text-sm font-medium backdrop-blur-sm ${
-            scanResult.status === "valid"
-              ? "bg-green-500/80 text-white"
-              : "bg-red-500/80 text-white"
-          }`} data-testid="warehouse-scan-result">
-            {scanResult.status === "valid"
-              ? <CheckCircle2 className="w-4 h-4 shrink-0" />
-              : <XCircle className="w-4 h-4 shrink-0" />}
-            <span className="truncate">{scanResult.message}</span>
+      {scanMode === "camera" ? (
+        <div className="relative bg-black mx-3 rounded-2xl overflow-hidden" style={{ height: "45vh" }}>
+          <video ref={videoRef} className="w-full h-full object-cover" autoPlay playsInline muted data-testid="warehouse-camera" />
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="w-52 h-28 rounded-lg border-2 border-blue-400 opacity-80" />
           </div>
-        )}
-      </div>
+          <button
+            onClick={() => setScanMode("manual")}
+            className="absolute top-3 right-3 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800/80 text-slate-200 text-xs font-medium backdrop-blur-sm active:bg-slate-700"
+            data-testid="button-switch-manual"
+          >
+            <Keyboard className="w-3.5 h-3.5" />
+            Manual
+          </button>
+          {scanResult && (
+            <div className={`absolute bottom-3 left-3 right-3 rounded-xl p-3 flex items-center gap-2 text-sm font-medium backdrop-blur-sm ${
+              scanResult.status === "valid"
+                ? "bg-green-500/80 text-white"
+                : "bg-red-500/80 text-white"
+            }`} data-testid="warehouse-scan-result">
+              {scanResult.status === "valid"
+                ? <CheckCircle2 className="w-4 h-4 shrink-0" />
+                : <XCircle className="w-4 h-4 shrink-0" />}
+              <span className="truncate">{scanResult.message}</span>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="mx-3 rounded-2xl bg-slate-900 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium text-slate-200">Manual / USB Entry</p>
+            <button
+              onClick={() => setScanMode("camera")}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-xs font-medium active:bg-slate-700"
+              data-testid="button-switch-camera"
+            >
+              <Camera className="w-3.5 h-3.5" />
+              Camera
+            </button>
+          </div>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleScan(manualInput);
+              setManualInput("");
+            }}
+            className="flex gap-2"
+          >
+            <input
+              ref={manualInputRef}
+              value={manualInput}
+              onChange={(e) => setManualInput(e.target.value)}
+              placeholder="Type or scan tracking number..."
+              autoComplete="off"
+              autoFocus
+              className="flex-1 bg-slate-800 text-white placeholder:text-slate-500 rounded-xl px-4 py-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+              data-testid="input-manual-tracking"
+            />
+            <button
+              type="submit"
+              className="px-4 py-3 rounded-xl bg-blue-600 text-white text-sm font-semibold active:bg-blue-700 disabled:opacity-40"
+              data-testid="button-manual-add"
+            >
+              Add
+            </button>
+          </form>
+          {scanResult && (
+            <div className={`rounded-xl p-3 flex items-center gap-2 text-sm font-medium ${
+              scanResult.status === "valid"
+                ? "bg-green-500/20 text-green-300"
+                : "bg-red-500/20 text-red-300"
+            }`} data-testid="warehouse-scan-result-manual">
+              {scanResult.status === "valid"
+                ? <CheckCircle2 className="w-4 h-4 shrink-0" />
+                : <XCircle className="w-4 h-4 shrink-0" />}
+              <span className="truncate">{scanResult.message}</span>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="flex-1 flex flex-col px-3 pt-3 pb-4 space-y-2 overflow-hidden">
         <div className="flex items-center justify-between">
