@@ -51,7 +51,7 @@ interface BookedShipment {
   courierName: string;
 }
 
-type ScanStatus = "valid" | "duplicate" | "not_found" | "dispatched";
+type ScanStatus = "valid" | "duplicate" | "not_found" | "dispatched" | "wrong_courier";
 
 interface ScannedItem {
   id: string;
@@ -181,6 +181,7 @@ export default function LoadsheetPage() {
   const [scanMode, setScanMode] = useState<"usb" | "camera">("usb");
   const [scanInput, setScanInput] = useState("");
   const [scannedItems, setScannedItems] = useState<ScannedItem[]>([]);
+  const [lockedCourier, setLockedCourier] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<ScanFeedback | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -322,7 +323,8 @@ export default function LoadsheetPage() {
   const showFeedback = useCallback((fb: ScanFeedback) => {
     setFeedback(fb);
     clearTimeout(feedbackTimeout.current);
-    feedbackTimeout.current = setTimeout(() => setFeedback(null), 2500);
+    const duration = fb.status === "wrong_courier" || fb.status === "not_found" ? 4000 : 2500;
+    feedbackTimeout.current = setTimeout(() => setFeedback(null), duration);
   }, []);
 
   const handleScan = useCallback((raw: string) => {
@@ -337,7 +339,13 @@ export default function LoadsheetPage() {
     const shipment = shipmentMapRef.current.get(value);
     if (!shipment) {
       playBeep(false);
-      showFeedback({ status: "not_found", message: "Tracking number not found in booked orders" });
+      showFeedback({ status: "not_found", message: `CN not found: "${value}" — not in booked orders or already fulfilled` });
+      return;
+    }
+    // Enforce single-courier loadsheet
+    if (lockedCourier && shipment.courierName !== lockedCourier) {
+      playBeep(false);
+      showFeedback({ status: "wrong_courier", message: `Wrong courier — this loadsheet is locked to ${lockedCourier}. "${value}" belongs to ${shipment.courierName}.` });
       return;
     }
     playBeep(true);
@@ -352,8 +360,9 @@ export default function LoadsheetPage() {
       scannedAt: new Date(),
     };
     setScannedItems((prev) => [item, ...prev]);
+    if (!lockedCourier) setLockedCourier(shipment.courierName);
     showFeedback({ status: "valid", message: "Added to loadsheet", orderNumber: shipment.orderNumber, customerName: shipment.customerName });
-  }, [scannedItems, showFeedback]);
+  }, [scannedItems, lockedCourier, showFeedback]);
 
   useEffect(() => {
     if (scanMode === "usb") {
@@ -388,7 +397,11 @@ export default function LoadsheetPage() {
   }
 
   const removeItem = (trackingNumber: string) => {
-    setScannedItems((prev) => prev.filter((i) => i.trackingNumber !== trackingNumber));
+    setScannedItems((prev) => {
+      const next = prev.filter((i) => i.trackingNumber !== trackingNumber);
+      if (next.length === 0) setLockedCourier(null);
+      return next;
+    });
   };
 
   const totalCOD = scannedItems.reduce((sum, i) => sum + i.codAmount, 0);
@@ -397,18 +410,22 @@ export default function LoadsheetPage() {
     mutationFn: async () => {
       const orderIds = scannedItems.map((i) => i.id);
       const res = await apiRequest("POST", "/api/orders/generate-loadsheet", { orderIds });
-      return res.json();
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to generate loadsheet");
+      return data;
     },
     onSuccess: (data) => {
       if (data.pdfUrl) window.open(data.pdfUrl, "_blank");
-      toast({ title: "Loadsheet Generated", description: `${scannedItems.length} shipments added. PDF opened.` });
+      toast({ title: "Loadsheet Generated", description: `${scannedItems.length} shipments. ${data.transitioned ?? 0} orders moved to Fulfilled. PDF opened.` });
       setScannedItems([]);
+      setLockedCourier(null);
       queryClient.invalidateQueries({ queryKey: ["/api/loadsheet/booked-shipments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/shipment-batches", "loadsheet"] });
       refetch();
     },
-    onError: () => {
-      toast({ title: "Failed to generate loadsheet", variant: "destructive" });
+    onError: (err: any) => {
+      const msg = err?.message || "Failed to generate loadsheet";
+      toast({ title: "Loadsheet Failed", description: msg, variant: "destructive" });
     },
   });
 
@@ -461,7 +478,15 @@ export default function LoadsheetPage() {
             <Card>
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm font-medium">Scan Shipments</CardTitle>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-sm font-medium">Scan Shipments</CardTitle>
+                    {lockedCourier && (
+                      <Badge variant="secondary" className="text-xs gap-1" data-testid="badge-locked-courier">
+                        <Truck className="w-3 h-3" />
+                        {lockedCourier}
+                      </Badge>
+                    )}
+                  </div>
                   <div className="flex items-center gap-1">
                     <Button
                       variant={scanMode === "usb" ? "default" : "outline"}

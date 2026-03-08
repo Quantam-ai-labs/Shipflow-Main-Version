@@ -439,6 +439,51 @@ export async function fetchPostExSlipBulk(
   }
 }
 
+async function withRetry<T>(fn: () => Promise<T>, retries = 3, delayMs = 1000): Promise<T> {
+  let lastError: any;
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+      if (attempt < retries) {
+        await new Promise(r => setTimeout(r, delayMs * attempt));
+      }
+    }
+  }
+  throw lastError;
+}
+
+export async function generatePostExLoadSheet(
+  trackingNumbers: string[],
+  apiToken: string,
+  pickupAddress = "",
+): Promise<Buffer> {
+  return withRetry(async () => {
+    const res = await fetch(
+      "https://api.postex.pk/services/integration/api/order/v2/generate-load-sheet",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", token: apiToken },
+        body: JSON.stringify({ trackingNumbers, pickupAddress }),
+      },
+    );
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`PostEx generate-load-sheet HTTP ${res.status}: ${text}`);
+    }
+    const contentType = res.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      const data = await res.json();
+      throw new Error(`PostEx generate-load-sheet returned error: ${JSON.stringify(data)}`);
+    }
+    const arrayBuffer = await res.arrayBuffer();
+    const buf = Buffer.from(arrayBuffer);
+    if (buf.length < 100) throw new Error("PostEx generate-load-sheet returned empty response");
+    return buf;
+  });
+}
+
 export async function combinePdfs(pdfBuffers: Buffer[]): Promise<Buffer> {
   const mergedDoc = await PDFDocument.create();
 

@@ -383,3 +383,72 @@ export interface LeopardsPaymentResult {
 
 
 export const leopardsService = new LeopardsService();
+
+async function withRetry<T>(fn: () => Promise<T>, retries = 3, delayMs = 1000): Promise<T> {
+  let lastError: any;
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+      if (attempt < retries) {
+        await new Promise(r => setTimeout(r, delayMs * attempt));
+      }
+    }
+  }
+  throw lastError;
+}
+
+export async function generateLeopardsLoadSheet(
+  cnNumbers: string[],
+  creds: { apiKey: string; apiPassword: string },
+): Promise<Buffer> {
+  const baseUrl = "https://merchantapi.leopardscourier.com/api";
+
+  const loadSheetId: string = await withRetry(async () => {
+    const res = await fetch(`${baseUrl}/generateLoadSheet/format/json/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        api_key: creds.apiKey,
+        api_password: creds.apiPassword,
+        cn_numbers: cnNumbers,
+        courier_name: "Leopards",
+        courier_code: "LCS",
+      }),
+    });
+    if (!res.ok) throw new Error(`Leopards generateLoadSheet HTTP ${res.status}`);
+    const data = await res.json();
+    if (String(data.status) !== "1" || !data.load_sheet_id) {
+      throw new Error(`Leopards generateLoadSheet failed: ${JSON.stringify(data.error || data)}`);
+    }
+    return String(data.load_sheet_id);
+  });
+
+  console.log(`[Leopards] Generated load sheet ID: ${loadSheetId}`);
+
+  const pdfBuffer: Buffer = await withRetry(async () => {
+    const res = await fetch(`${baseUrl}/downloadLoadSheet/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        api_key: creds.apiKey,
+        api_password: creds.apiPassword,
+        load_sheet_id: Number(loadSheetId),
+        response_type: "PDF",
+      }),
+    });
+    if (!res.ok) throw new Error(`Leopards downloadLoadSheet HTTP ${res.status}`);
+    const contentType = res.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      const data = await res.json();
+      throw new Error(`Leopards downloadLoadSheet returned JSON error: ${JSON.stringify(data)}`);
+    }
+    const arrayBuffer = await res.arrayBuffer();
+    const buf = Buffer.from(arrayBuffer);
+    if (buf.length < 100) throw new Error("Leopards downloadLoadSheet returned empty/tiny response");
+    return buf;
+  });
+
+  return pdfBuffer;
+}

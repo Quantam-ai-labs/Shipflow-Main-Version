@@ -19,6 +19,7 @@ interface ScannedItem {
   customerName: string;
   city: string;
   codAmount: number;
+  courierName: string;
 }
 
 type Screen = "pin" | "scanning" | "done";
@@ -59,6 +60,7 @@ export default function WarehousePage() {
   const [shipmentMap, setShipmentMap] = useState<Map<string, BookedShipment>>(new Map());
   const [totalBooked, setTotalBooked] = useState(0);
   const [scannedItems, setScannedItems] = useState<ScannedItem[]>([]);
+  const [lockedCourier, setLockedCourier] = useState<string | null>(null);
   const [scanResult, setScanResult] = useState<ScanResult>(null);
   const [loadingShipments, setLoadingShipments] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -168,7 +170,13 @@ export default function WarehousePage() {
     const shipment = shipmentMap.get(value);
     if (!shipment) {
       playBeep(false);
-      showResult({ status: "not_found", message: "Not found in booked orders" });
+      showResult({ status: "not_found", message: `CN not found: "${value}" — not in booked orders` });
+      return;
+    }
+    // Enforce single-courier loadsheet
+    if (lockedCourier && shipment.courierName !== lockedCourier) {
+      playBeep(false);
+      showResult({ status: "not_found", message: `Wrong courier — locked to ${lockedCourier}. This CN is ${shipment.courierName}.` });
       return;
     }
     playBeep(true);
@@ -179,10 +187,12 @@ export default function WarehousePage() {
       customerName: shipment.customerName,
       city: shipment.city,
       codAmount: Number(shipment.totalAmount || 0),
+      courierName: shipment.courierName,
     };
     setScannedItems((prev) => [item, ...prev]);
+    if (!lockedCourier) setLockedCourier(shipment.courierName);
     showResult({ status: "valid", message: `${shipment.orderNumber} — ${shipment.customerName}`, item });
-  }, [scannedItems, shipmentMap]);
+  }, [scannedItems, shipmentMap, lockedCourier]);
 
   function showResult(result: ScanResult) {
     setScanResult(result);
@@ -243,10 +253,15 @@ export default function WarehousePage() {
       const data = await res.json();
       if (res.ok && data.pdfUrl) {
         setPdfUrl(data.pdfUrl);
+        setLockedCourier(null);
         setScreen("done");
         stopCamera();
+      } else {
+        showResult({ status: "not_found", message: data.message || "Failed to generate loadsheet" });
       }
-    } catch {}
+    } catch (err: any) {
+      showResult({ status: "not_found", message: "Connection error. Please retry." });
+    }
     setGenerating(false);
   }
 
@@ -345,7 +360,7 @@ export default function WarehousePage() {
           </a>
         )}
         <button
-          onClick={() => { setScannedItems([]); setPdfUrl(null); setScreen("scanning"); loadShipments(token!); startCamera(); }}
+          onClick={() => { setScannedItems([]); setPdfUrl(null); setLockedCourier(null); setScreen("scanning"); loadShipments(token!); startCamera(); }}
           className="text-slate-400 text-sm underline"
           data-testid="button-new-loadsheet"
         >
@@ -359,7 +374,14 @@ export default function WarehousePage() {
     <div className="min-h-screen bg-slate-950 text-white flex flex-col select-none">
       <div className="flex items-center justify-between px-4 pt-4 pb-2">
         <div>
-          <p className="font-semibold text-sm">{merchantName}</p>
+          <div className="flex items-center gap-2">
+            <p className="font-semibold text-sm">{merchantName}</p>
+            {lockedCourier && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-600/30 text-blue-300 text-xs font-medium" data-testid="badge-locked-courier">
+                🚚 {lockedCourier}
+              </span>
+            )}
+          </div>
           <p className="text-slate-400 text-xs">
             {loadingShipments ? "Loading..." : `${totalBooked} booked · ${scannedItems.length} scanned`}
           </p>

@@ -9042,7 +9042,7 @@ export async function registerRoutes(
   );
 
   // ============================================
-  // LOADSHEET GENERATION (from Booked tab)
+  // LOADSHEET GENERATION (from Loadsheet scanner page)
   // ============================================
   app.post(
     "/api/orders/generate-loadsheet",
@@ -9062,10 +9062,7 @@ export async function registerRoutes(
           return res.status(400).json({ message: "Merchant not found" });
 
         const userId = getSessionUserId(req) || "system";
-        const fetchedOrders = await storage.getOrdersByIds(
-          merchantId,
-          orderIds,
-        );
+        const fetchedOrders = await storage.getOrdersByIds(merchantId, orderIds);
 
         if (fetchedOrders.length === 0) {
           return res.status(400).json({ message: "No orders found" });
@@ -9081,20 +9078,47 @@ export async function registerRoutes(
         );
 
         if (bookedOrders.length === 0) {
-          return res
-            .status(400)
-            .json({
-              message:
-                "No booked orders with tracking numbers found in selection",
-            });
+          return res.status(400).json({ message: "No booked orders with tracking numbers found in selection" });
         }
 
-        const batchId = crypto.randomUUID();
-        const courierNames = [
-          ...new Set(bookedOrders.map((o) => o.courierName || "Unknown")),
-        ];
-        const courierLabel =
-          courierNames.length === 1 ? courierNames[0] : "Mixed";
+        // Enforce single-courier loadsheet
+        const courierNorms = [...new Set(bookedOrders.map((o) => normalizeCourierName(o.courierName || "")))];
+        if (courierNorms.length > 1) {
+          return res.status(400).json({
+            message: `All shipments must be from the same courier. Found: ${courierNorms.join(", ")}. Please generate a separate loadsheet per courier.`,
+          });
+        }
+        const courierNorm = courierNorms[0];
+        const courierLabel = bookedOrders[0].courierName || courierNorm;
+        const trackingNumbers = bookedOrders.map((o) => o.courierTracking!);
+
+        // Call courier API to generate loadsheet PDF
+        const creds = await getCourierCredentials(merchantId, courierNorm);
+        if (!creds?.apiKey) {
+          return res.status(400).json({ message: `No credentials configured for courier: ${courierLabel}` });
+        }
+
+        let pdfBuffer: Buffer;
+        let courierLoadsheetId: string | undefined;
+
+        if (courierNorm === "leopards") {
+          if (!creds.apiSecret) {
+            return res.status(400).json({ message: "Leopards API password not configured" });
+          }
+          const { generateLeopardsLoadSheet } = await import("./services/couriers/leopards");
+          console.log(`[Loadsheet] Calling Leopards generateLoadSheet for ${trackingNumbers.length} shipments`);
+          pdfBuffer = await generateLeopardsLoadSheet(trackingNumbers, { apiKey: creds.apiKey, apiPassword: creds.apiSecret });
+        } else if (courierNorm === "postex") {
+          const { generatePostExLoadSheet } = await import("./services/courierSlips");
+          console.log(`[Loadsheet] Calling PostEx generate-load-sheet for ${trackingNumbers.length} shipments`);
+          pdfBuffer = await generatePostExLoadSheet(trackingNumbers, creds.apiKey);
+        } else {
+          return res.status(400).json({ message: `Loadsheet generation via courier API is not supported for: ${courierLabel}` });
+        }
+
+        // Save PDF and create batch record
+        const { savePdf } = await import("./services/pdfGenerator");
+        const pdfPath = await savePdf(pdfBuffer, `loadsheet_${courierNorm}`);
 
         const batch = await storage.createShipmentBatch({
           merchantId,
@@ -9105,31 +9129,12 @@ export async function registerRoutes(
           totalSelectedCount: bookedOrders.length,
           successCount: bookedOrders.length,
           failedCount: 0,
-          notes: `Loadsheet generated for ${bookedOrders.length} order(s)`,
+          notes: `Loadsheet generated for ${bookedOrders.length} order(s)${courierLoadsheetId ? ` (courier LS ID: ${courierLoadsheetId})` : ""}`,
+          pdfBatchPath: pdfPath,
+          pdfBatchMeta: courierLoadsheetId ? { courierLoadsheetId } : undefined,
         });
 
-        const loadsheetItems: Array<{
-          orderNumber: string;
-          trackingNumber: string;
-          consigneeName: string;
-          consigneeCity: string;
-          consigneePhone: string;
-          codAmount: number;
-          status: string;
-        }> = [];
-
         for (const order of bookedOrders) {
-          const itemData = {
-            orderNumber: order.orderNumber || "N/A",
-            trackingNumber: order.courierTracking || "N/A",
-            consigneeName: order.customerName || "N/A",
-            consigneeCity: order.city || "N/A",
-            consigneePhone: order.customerPhone || "N/A",
-            codAmount: Number(order.totalAmount || 0),
-            status: "BOOKED",
-          };
-          loadsheetItems.push(itemData);
-
           await storage.createShipmentBatchItem({
             batchId: batch.id,
             orderId: order.id,
@@ -9142,14 +9147,8 @@ export async function registerRoutes(
             codAmount: order.totalAmount,
           });
 
-          const existingShipments = await storage.getShipmentsByOrderId(
-            merchantId,
-            order.id,
-          );
-          const matchingShipment = existingShipments.find(
-            (s) => s.trackingNumber === order.courierTracking,
-          );
-
+          const existingShipments = await storage.getShipmentsByOrderId(merchantId, order.id);
+          const matchingShipment = existingShipments.find((s) => s.trackingNumber === order.courierTracking);
           const loadsheetRecord = {
             batchId: batch.id,
             generatedAt: new Date().toISOString(),
@@ -9183,48 +9182,22 @@ export async function registerRoutes(
           }
         }
 
-        const { generateBatchLoadsheetPdf } = await import(
-          "./services/pdfGenerator"
-        );
-        const pdfPath = await generateBatchLoadsheetPdf({
-          batchId: batch.id,
-          courierName: courierLabel,
-          createdBy: userId,
-          createdAt: new Date().toISOString(),
-          merchantName:
-            merchant.businessName || merchant.displayName || "Merchant",
-          totalCount: bookedOrders.length,
-          successCount: bookedOrders.length,
-          failedCount: 0,
-          items: loadsheetItems,
-        });
-
-        await storage.updateShipmentBatch(batch.id, {
-          pdfBatchPath: pdfPath,
-        });
-
+        // Transition BOOKED orders to FULFILLED
         const bookedOnlyOrders = bookedOrders.filter(o => o.workflowStatus === "BOOKED");
         let transitioned = 0;
         let transitionSkipped = 0;
-
         if (bookedOnlyOrders.length > 0) {
-          const bookedIds = bookedOnlyOrders.map(o => o.id);
           const now = new Date();
           const result = await bulkTransitionOrders({
             merchantId,
-            orderIds: bookedIds,
+            orderIds: bookedOnlyOrders.map(o => o.id),
             toStatus: "FULFILLED",
             action: "loadsheet_generation",
             actorUserId: userId,
             actorName: "Loadsheet Generator",
             actorType: "system",
-            reason: `Loadsheet generated (batch: ${batch.id})`,
-            extraData: {
-              loadsheetBatchId: batch.id,
-              loadsheetGeneratedAt: now,
-              fulfilledAt: now,
-              fulfilledBy: userId,
-            } as any,
+            reason: `Loadsheet generated via ${courierLabel} API (batch: ${batch.id})`,
+            extraData: { loadsheetBatchId: batch.id, loadsheetGeneratedAt: now, fulfilledAt: now, fulfilledBy: userId } as any,
           });
           transitioned = result.updated;
           transitionSkipped = result.skipped;
@@ -9240,9 +9213,10 @@ export async function registerRoutes(
           transitioned,
           transitionSkipped,
         });
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error generating loadsheet:", error);
-        res.status(500).json({ message: "Failed to generate loadsheet" });
+        const msg = error?.message || "Failed to generate loadsheet";
+        res.status(503).json({ message: `Loadsheet generation failed: ${msg}. Please retry.` });
       }
     },
   );
@@ -9371,34 +9345,54 @@ export async function registerRoutes(
         return res.status(400).json({ message: "No valid BOOKED orders found for provided tracking numbers" });
       }
 
-      const batchId = crypto.randomUUID();
-      const courierNames = [...new Set(fetchedOrders.map((o) => o.courierName || "Unknown"))];
-      const courierLabel = courierNames.length === 1 ? courierNames[0] : "Mixed";
+      // Enforce single-courier loadsheet
+      const courierNormsWh = [...new Set(fetchedOrders.map((o) => normalizeCourierName(o.courierName || "")))];
+      if (courierNormsWh.length > 1) {
+        return res.status(400).json({
+          message: `All shipments must be from the same courier. Found: ${courierNormsWh.join(", ")}. Generate a separate loadsheet per courier.`,
+        });
+      }
+      const courierNormWh = courierNormsWh[0];
+      const courierLabelWh = fetchedOrders[0].courierName || courierNormWh;
+      const trackingNums = fetchedOrders.map((o) => o.courierTracking!);
+
+      // Call courier API
+      const whCreds = await getCourierCredentials(merchantId, courierNormWh);
+      if (!whCreds?.apiKey) {
+        return res.status(400).json({ message: `No credentials configured for courier: ${courierLabelWh}` });
+      }
+
+      let whPdfBuffer: Buffer;
+      if (courierNormWh === "leopards") {
+        if (!whCreds.apiSecret) return res.status(400).json({ message: "Leopards API password not configured" });
+        const { generateLeopardsLoadSheet } = await import("./services/couriers/leopards");
+        console.log(`[Warehouse Loadsheet] Calling Leopards for ${trackingNums.length} shipments`);
+        whPdfBuffer = await generateLeopardsLoadSheet(trackingNums, { apiKey: whCreds.apiKey, apiPassword: whCreds.apiSecret });
+      } else if (courierNormWh === "postex") {
+        const { generatePostExLoadSheet } = await import("./services/courierSlips");
+        console.log(`[Warehouse Loadsheet] Calling PostEx for ${trackingNums.length} shipments`);
+        whPdfBuffer = await generatePostExLoadSheet(trackingNums, whCreds.apiKey);
+      } else {
+        return res.status(400).json({ message: `Loadsheet generation via courier API is not supported for: ${courierLabelWh}` });
+      }
+
+      const { savePdf } = await import("./services/pdfGenerator");
+      const whPdfPath = await savePdf(whPdfBuffer, `wh_loadsheet_${courierNormWh}`);
 
       const batch = await storage.createShipmentBatch({
         merchantId,
         createdByUserId: "warehouse",
-        courierName: courierLabel,
+        courierName: courierLabelWh,
         batchType: "LOADSHEET",
         status: "COMPLETED",
         totalSelectedCount: fetchedOrders.length,
         successCount: fetchedOrders.length,
         failedCount: 0,
         notes: `Warehouse loadsheet for ${fetchedOrders.length} order(s)`,
+        pdfBatchPath: whPdfPath,
       });
 
-      const loadsheetItems: Array<{ orderNumber: string; trackingNumber: string; consigneeName: string; consigneeCity: string; consigneePhone: string; codAmount: number; status: string }> = [];
-
       for (const order of fetchedOrders) {
-        loadsheetItems.push({
-          orderNumber: order.orderNumber || "N/A",
-          trackingNumber: order.courierTracking || "N/A",
-          consigneeName: order.customerName || "N/A",
-          consigneeCity: order.city || "N/A",
-          consigneePhone: order.customerPhone || "N/A",
-          codAmount: Number(order.totalAmount || 0),
-          status: "BOOKED",
-        });
         await storage.createShipmentBatchItem({
           batchId: batch.id,
           orderId: order.id,
@@ -9412,21 +9406,6 @@ export async function registerRoutes(
         });
       }
 
-      const { generateBatchLoadsheetPdf } = await import("./services/pdfGenerator");
-      const pdfPath = await generateBatchLoadsheetPdf({
-        batchId: batch.id,
-        courierName: courierLabel,
-        createdBy: "warehouse",
-        createdAt: new Date().toISOString(),
-        merchantName: merchant.name || "Merchant",
-        totalCount: fetchedOrders.length,
-        successCount: fetchedOrders.length,
-        failedCount: 0,
-        items: loadsheetItems,
-      });
-
-      await storage.updateShipmentBatch(batch.id, { pdfBatchPath: pdfPath });
-
       const { bulkTransitionOrders } = await import("./services/orderWorkflow");
       await bulkTransitionOrders({
         merchantId,
@@ -9436,14 +9415,15 @@ export async function registerRoutes(
         actorUserId: "warehouse",
         actorName: "Warehouse Scanner",
         actorType: "system",
-        reason: `Warehouse loadsheet (batch: ${batch.id})`,
+        reason: `Warehouse loadsheet via ${courierLabelWh} API (batch: ${batch.id})`,
         extraData: { loadsheetBatchId: batch.id, fulfilledAt: new Date() } as any,
       });
 
       res.json({ success: true, batchId: batch.id, pdfUrl: `/api/print/batch/${batch.id}.pdf`, totalOrders: fetchedOrders.length });
     } catch (error: any) {
       console.error("Error generating warehouse loadsheet:", error);
-      res.status(500).json({ message: "Failed to generate loadsheet" });
+      const msg = error?.message || "Failed to generate loadsheet";
+      res.status(503).json({ message: `Loadsheet generation failed: ${msg}. Please retry.` });
     }
   });
 
