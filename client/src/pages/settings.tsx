@@ -118,17 +118,17 @@ const DEFAULT_MESSAGE_BODIES: Record<string, string> = {
 const DEFAULT_MESSAGE_BODY = DEFAULT_MESSAGE_BODIES.DELIVERED;
 
 const defaultTemplateName = (status: string) =>
-  status === "NEW" ? "order_confirmation" : "custom_message";
+  status === "NEW" ? "order_confirmation_2" : "custom_message";
 
 const TEMPLATE_NAME_OPTIONS: Record<string, string[]> = {
-  NEW:       ["custom_message", "order_confirmation"],
+  NEW:       ["custom_message", "order_confirmation_2"],
   BOOKED:    ["custom_message", "order_update"],
   FULFILLED: ["custom_message"],
   DELIVERED: ["custom_message"],
 };
 
 const META_BUILTIN_PREVIEWS: Record<string, { header: string; body: string; footer: string; buttons?: string[] }> = {
-  order_confirmation: {
+  order_confirmation_2: {
     header: "Confirmation Required",
     body: "Hello {customer_name}\n\nYour order of {item_name} is pending for Confirmation.",
     footer: "Please Reply with Confirm or Cancel.",

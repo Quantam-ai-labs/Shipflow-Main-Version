@@ -1558,7 +1558,7 @@ export class DatabaseStorage implements IStorage {
     const WA_DEFAULTS: { workflowStatus: string; templateName: string; messageBody: string }[] = [
       {
         workflowStatus: "NEW",
-        templateName: "order_confirmation",
+        templateName: "order_confirmation_2",
         messageBody: `Hello {customer_name},\n\nYour order #{order_number} of {item_name} is pending for Confirmation.\nPlease Reply with Confirm or Cancel.`,
       },
       {
@@ -1617,7 +1617,7 @@ export class DatabaseStorage implements IStorage {
     if (template && template.isActive && template.templateName) {
       return { templateName: template.templateName, messageBody: template.messageBody ?? null };
     }
-    const defaultName = workflowStatus === "NEW" ? "order_confirmation" : "order_updates";
+    const defaultName = workflowStatus === "NEW" ? "order_confirmation_2" : "order_updates";
     return { templateName: defaultName, messageBody: null };
   }
 

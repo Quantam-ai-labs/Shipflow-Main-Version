@@ -82,10 +82,10 @@ const DEFAULT_MESSAGE_BODIES: Record<string, string> = {
 const DEFAULT_MESSAGE_BODY = DEFAULT_MESSAGE_BODIES.DELIVERED;
 
 const defaultTemplateName = (status: string) =>
-  status === "NEW" ? "order_confirmation" : "order_updates";
+  status === "NEW" ? "order_confirmation_2" : "order_updates";
 
 const SYSTEM_TEMPLATE_NAMES: Record<string, string> = {
-  NEW: "order_confirmation",
+  NEW: "order_confirmation_2",
   BOOKED: "order_updates",
 };
 
@@ -173,7 +173,7 @@ function EditTemplateDialog({ open, onClose, statusInfo, initial, onSave, isSavi
     }
   };
 
-  const systemLabel = status === "NEW" ? "order_confirmation" : "order_update";
+  const systemLabel = status === "NEW" ? "order_confirmation_2" : "order_update";
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
