@@ -458,14 +458,19 @@ export async function generatePostExLoadSheet(
   trackingNumbers: string[],
   apiToken: string,
   pickupAddress = "",
+  returnCity = "",
+  returnAddress = "",
 ): Promise<Buffer> {
   return withRetry(async () => {
+    const body: Record<string, any> = { trackingNumbers, pickupAddress };
+    if (returnCity) body.returnCity = returnCity;
+    if (returnAddress) body.returnAddress = returnAddress;
     const res = await fetch(
       "https://api.postex.pk/services/integration/api/order/v2/generate-load-sheet",
       {
         method: "POST",
         headers: { "Content-Type": "application/json", token: apiToken },
-        body: JSON.stringify({ trackingNumbers, pickupAddress }),
+        body: JSON.stringify(body),
       },
     );
     if (!res.ok) {

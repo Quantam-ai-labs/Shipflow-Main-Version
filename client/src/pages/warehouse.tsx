@@ -66,6 +66,14 @@ export default function WarehousePage() {
   const [generating, setGenerating] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
 
+  // ---- Dispatch setup state ----
+  const [availableCouriers, setAvailableCouriers] = useState<Array<{ name: string; norm: string; displayName: string }>>([]);
+  const [selectedCourier, setSelectedCourier] = useState<string | null>(null);
+  const [riderName, setRiderName] = useState("");
+  const [riderCode, setRiderCode] = useState("");
+  const [returnCity, setReturnCity] = useState("");
+  const [returnAddress, setReturnAddress] = useState("");
+
   const [scanMode, setScanMode] = useState<"camera" | "manual">("camera");
   const [manualInput, setManualInput] = useState("");
 
@@ -80,9 +88,22 @@ export default function WarehousePage() {
     if (token) {
       setScreen("scanning");
       loadShipments(token);
+      fetchCouriers(token);
     }
     fetchMerchantName();
   }, []);
+
+  async function fetchCouriers(authToken: string) {
+    try {
+      const res = await fetch("/api/warehouse/couriers", {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAvailableCouriers(data.couriers || []);
+      }
+    } catch {}
+  }
 
   async function fetchMerchantName() {
     try {
@@ -138,6 +159,7 @@ export default function WarehousePage() {
       setMerchantName(data.merchantName);
       setScreen("scanning");
       loadShipments(data.token);
+      fetchCouriers(data.token);
     } catch {
       setLoginError("Connection error. Try again.");
       playBeep(false);
@@ -241,19 +263,34 @@ export default function WarehousePage() {
     }
   }
 
+  const isLeopards = selectedCourier ? selectedCourier.toLowerCase() === "leopards" : false;
+  const isPostEx = selectedCourier ? selectedCourier.toLowerCase() === "postex" : false;
+
   async function generateLoadsheet() {
     if (!token || scannedItems.length === 0) return;
+    if (isLeopards && (!riderName.trim() || !riderCode.trim())) {
+      showResult({ status: "not_found", message: "Rider name and rider code are required for Leopards loadsheet" });
+      return;
+    }
     setGenerating(true);
     try {
       const res = await fetch("/api/warehouse/generate-loadsheet", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ trackingNumbers: scannedItems.map((i) => i.trackingNumber) }),
+        body: JSON.stringify({
+          trackingNumbers: scannedItems.map((i) => i.trackingNumber),
+          riderName: riderName.trim(),
+          riderCode: riderCode.trim(),
+          returnCity: returnCity.trim(),
+          returnAddress: returnAddress.trim(),
+        }),
       });
       const data = await res.json();
       if (res.ok && data.pdfUrl) {
         setPdfUrl(data.pdfUrl);
         setLockedCourier(null);
+        setSelectedCourier(null);
+        setRiderName(""); setRiderCode(""); setReturnCity(""); setReturnAddress("");
         setScreen("done");
         stopCamera();
       } else {
@@ -360,7 +397,11 @@ export default function WarehousePage() {
           </a>
         )}
         <button
-          onClick={() => { setScannedItems([]); setPdfUrl(null); setLockedCourier(null); setScreen("scanning"); loadShipments(token!); startCamera(); }}
+          onClick={() => {
+            setScannedItems([]); setPdfUrl(null); setLockedCourier(null);
+            setSelectedCourier(null); setRiderName(""); setRiderCode(""); setReturnCity(""); setReturnAddress("");
+            setScreen("scanning"); loadShipments(token!); startCamera();
+          }}
           className="text-slate-400 text-sm underline"
           data-testid="button-new-loadsheet"
         >
@@ -396,8 +437,92 @@ export default function WarehousePage() {
         </div>
       </div>
 
+      {/* ---- Dispatch Setup: Courier + fields ---- */}
+      <div className="mx-3 mb-2 rounded-2xl bg-slate-900 p-3 space-y-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-slate-400 text-xs shrink-0">Courier:</span>
+          {availableCouriers.length === 0 ? (
+            <span className="text-slate-500 text-xs">No couriers configured</span>
+          ) : (
+            availableCouriers.map((c) => (
+              <button
+                key={c.name}
+                type="button"
+                onClick={() => {
+                  const newSel = selectedCourier === c.name ? null : c.name;
+                  if (scannedItems.length > 0 && newSel !== selectedCourier) {
+                    setScannedItems([]);
+                  }
+                  setSelectedCourier(newSel);
+                  setLockedCourier(newSel ? c.displayName : null);
+                  setRiderName(""); setRiderCode(""); setReturnCity(""); setReturnAddress("");
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
+                  selectedCourier === c.name
+                    ? "bg-blue-600 text-white"
+                    : "bg-slate-800 text-slate-300 active:bg-slate-700"
+                }`}
+                data-testid={`button-select-courier-${c.name}`}
+              >
+                {c.displayName}
+              </button>
+            ))
+          )}
+        </div>
+
+        {isLeopards && (
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <p className="text-xs text-slate-400 mb-1">Rider Name <span className="text-red-400">*</span></p>
+              <input
+                value={riderName}
+                onChange={(e) => setRiderName(e.target.value)}
+                placeholder="e.g. Mohsin Mazhar"
+                className="w-full bg-slate-800 text-white placeholder:text-slate-500 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                data-testid="input-rider-name"
+              />
+            </div>
+            <div>
+              <p className="text-xs text-slate-400 mb-1">Rider Code <span className="text-red-400">*</span></p>
+              <input
+                value={riderCode}
+                onChange={(e) => setRiderCode(e.target.value)}
+                placeholder="e.g. 40001"
+                className="w-full bg-slate-800 text-white placeholder:text-slate-500 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                data-testid="input-rider-code"
+              />
+            </div>
+          </div>
+        )}
+
+        {isPostEx && (
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <p className="text-xs text-slate-400 mb-1">Return City</p>
+              <input
+                value={returnCity}
+                onChange={(e) => setReturnCity(e.target.value)}
+                placeholder="e.g. Karachi"
+                className="w-full bg-slate-800 text-white placeholder:text-slate-500 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                data-testid="input-return-city"
+              />
+            </div>
+            <div>
+              <p className="text-xs text-slate-400 mb-1">Return Address</p>
+              <input
+                value={returnAddress}
+                onChange={(e) => setReturnAddress(e.target.value)}
+                placeholder="Warehouse address"
+                className="w-full bg-slate-800 text-white placeholder:text-slate-500 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                data-testid="input-return-address"
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
       {scanMode === "camera" ? (
-        <div className="relative bg-black mx-3 rounded-2xl overflow-hidden" style={{ height: "45vh" }}>
+        <div className="relative bg-black mx-3 rounded-2xl overflow-hidden" style={{ height: "40vh" }}>
           <video ref={videoRef} className="w-full h-full object-cover" autoPlay playsInline muted data-testid="warehouse-camera" />
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="w-52 h-28 rounded-lg border-2 border-blue-400 opacity-80" />

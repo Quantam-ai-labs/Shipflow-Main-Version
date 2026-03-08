@@ -402,6 +402,7 @@ async function withRetry<T>(fn: () => Promise<T>, retries = 3, delayMs = 1000): 
 export async function generateLeopardsLoadSheet(
   cnNumbers: string[],
   creds: { apiKey: string; apiPassword: string },
+  riderInfo: { riderName: string; riderCode: string },
 ): Promise<Buffer> {
   const baseUrl = "https://merchantapi.leopardscourier.com/api";
 
@@ -413,8 +414,8 @@ export async function generateLeopardsLoadSheet(
         api_key: creds.apiKey,
         api_password: creds.apiPassword,
         cn_numbers: cnNumbers,
-        courier_name: "Leopards",
-        courier_code: "LCS",
+        courier_name: riderInfo.riderName,
+        courier_code: riderInfo.riderCode,
       }),
     });
     if (!res.ok) throw new Error(`Leopards generateLoadSheet HTTP ${res.status}`);

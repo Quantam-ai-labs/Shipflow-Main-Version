@@ -184,6 +184,13 @@ export default function LoadsheetPage() {
   const [lockedCourier, setLockedCourier] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<ScanFeedback | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
+
+  // ---- Dispatch setup state ----
+  const [selectedCourier, setSelectedCourier] = useState<string | null>(null);
+  const [riderName, setRiderName] = useState("");
+  const [riderCode, setRiderCode] = useState("");
+  const [returnCity, setReturnCity] = useState("");
+  const [returnAddress, setReturnAddress] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const readerRef = useRef<any>(null);
@@ -202,6 +209,14 @@ export default function LoadsheetPage() {
 
   const [downloadingBatchAwb, setDownloadingBatchAwb] = useState<Set<string>>(new Set());
   const [downloadingBatchPdf, setDownloadingBatchPdf] = useState<Set<string>>(new Set());
+
+  // ---- Courier integrations query (for courier selector) ----
+  const { data: integrationsData } = useQuery<{
+    couriers: Array<{ id: string; name: string; isActive: boolean }>;
+  }>({ queryKey: ["/api/integrations"] });
+  const configuredCouriers = (integrationsData?.couriers ?? []).filter((c) => c.isActive);
+  const COURIER_DISPLAY: Record<string, string> = { leopards: "Leopards", postex: "PostEx" };
+  const courierDisplayName = (name: string) => COURIER_DISPLAY[name.toLowerCase()] ?? (name.charAt(0).toUpperCase() + name.slice(1));
 
   // ---- Booked shipments query (no date filter — all booked) ----
   const { data, isLoading, refetch } = useQuery<{ shipments: BookedShipment[]; total: number }>({
@@ -399,17 +414,41 @@ export default function LoadsheetPage() {
   const removeItem = (trackingNumber: string) => {
     setScannedItems((prev) => {
       const next = prev.filter((i) => i.trackingNumber !== trackingNumber);
-      if (next.length === 0) setLockedCourier(null);
+      if (next.length === 0) setLockedCourier(selectedCourier ? lockedCourier : null);
       return next;
     });
   };
 
+  const handleCourierSelect = (courierName: string | null) => {
+    if (scannedItems.length > 0 && courierName !== selectedCourier) {
+      setScannedItems([]);
+      toast({ title: "Session cleared", description: "Scanned items cleared — courier changed." });
+    }
+    setSelectedCourier(courierName);
+    setLockedCourier(courierName ? courierDisplayName(courierName) : null);
+    setRiderName("");
+    setRiderCode("");
+    setReturnCity("");
+    setReturnAddress("");
+  };
+
   const totalCOD = scannedItems.reduce((sum, i) => sum + i.codAmount, 0);
+  const isLeopards = selectedCourier ? selectedCourier.toLowerCase() === "leopards" : false;
+  const isPostEx = selectedCourier ? selectedCourier.toLowerCase() === "postex" : false;
 
   const generateMutation = useMutation({
     mutationFn: async () => {
+      if (isLeopards && (!riderName.trim() || !riderCode.trim())) {
+        throw new Error("Rider name and rider code are required for Leopards loadsheet");
+      }
       const orderIds = scannedItems.map((i) => i.id);
-      const res = await apiRequest("POST", "/api/orders/generate-loadsheet", { orderIds });
+      const res = await apiRequest("POST", "/api/orders/generate-loadsheet", {
+        orderIds,
+        riderName: riderName.trim(),
+        riderCode: riderCode.trim(),
+        returnCity: returnCity.trim(),
+        returnAddress: returnAddress.trim(),
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to generate loadsheet");
       return data;
@@ -419,6 +458,11 @@ export default function LoadsheetPage() {
       toast({ title: "Loadsheet Generated", description: `${scannedItems.length} shipments. ${data.transitioned ?? 0} orders moved to Fulfilled. PDF opened.` });
       setScannedItems([]);
       setLockedCourier(null);
+      setSelectedCourier(null);
+      setRiderName("");
+      setRiderCode("");
+      setReturnCity("");
+      setReturnAddress("");
       queryClient.invalidateQueries({ queryKey: ["/api/loadsheet/booked-shipments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/shipment-batches", "loadsheet"] });
       refetch();
@@ -510,10 +554,98 @@ export default function LoadsheetPage() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-3">
+                {/* ---- Courier selector + dispatch fields ---- */}
+                <div className="space-y-2 pb-2 border-b border-border/50">
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-medium text-muted-foreground w-16 shrink-0">Courier</label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {configuredCouriers.length === 0 ? (
+                        <span className="text-xs text-muted-foreground">No couriers configured</span>
+                      ) : (
+                        configuredCouriers.map((c) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => handleCourierSelect(selectedCourier === c.name ? null : c.name)}
+                            className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${
+                              selectedCourier === c.name
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "bg-transparent text-muted-foreground border-border hover:border-primary/50 hover:text-foreground"
+                            }`}
+                            data-testid={`button-select-courier-${c.name}`}
+                          >
+                            {courierDisplayName(c.name)}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  {isLeopards && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium">
+                          Rider Name <span className="text-destructive">*</span>
+                        </label>
+                        <Input
+                          value={riderName}
+                          onChange={(e) => setRiderName(e.target.value)}
+                          placeholder="e.g. Mohsin Mazhar"
+                          className="h-8 text-xs"
+                          data-testid="input-rider-name"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium">
+                          Rider Code <span className="text-destructive">*</span>
+                        </label>
+                        <Input
+                          value={riderCode}
+                          onChange={(e) => setRiderCode(e.target.value)}
+                          placeholder="e.g. 40001"
+                          className="h-8 text-xs"
+                          data-testid="input-rider-code"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {isPostEx && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-muted-foreground">Return City</label>
+                        <Input
+                          value={returnCity}
+                          onChange={(e) => setReturnCity(e.target.value)}
+                          placeholder="e.g. Karachi"
+                          className="h-8 text-xs"
+                          data-testid="input-return-city"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-muted-foreground">Return Address</label>
+                        <Input
+                          value={returnAddress}
+                          onChange={(e) => setReturnAddress(e.target.value)}
+                          placeholder="Warehouse address"
+                          className="h-8 text-xs"
+                          data-testid="input-return-address"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {!selectedCourier && (
+                    <p className="text-xs text-muted-foreground italic">Select a courier above to begin scanning</p>
+                  )}
+                </div>
+
                 {scanMode === "usb" ? (
                   <div className="space-y-2">
                     <p className="text-xs text-muted-foreground">
-                      Focus the field below and scan with your barcode/QR scanner or type a tracking number
+                      {selectedCourier
+                        ? "Focus the field below and scan with your barcode/QR scanner or type a tracking number"
+                        : "Select a courier above first"}
                     </p>
                     <form
                       onSubmit={(e) => {
@@ -527,13 +659,14 @@ export default function LoadsheetPage() {
                         ref={inputRef}
                         value={scanInput}
                         onChange={(e) => setScanInput(e.target.value)}
-                        placeholder="Scan or type tracking number..."
+                        placeholder={selectedCourier ? "Scan or type tracking number..." : "Select a courier first..."}
                         autoFocus
                         autoComplete="off"
+                        disabled={!selectedCourier}
                         data-testid="input-scan"
                         className="font-mono text-sm"
                       />
-                      <Button type="submit" size="sm" data-testid="button-scan-submit">Add</Button>
+                      <Button type="submit" size="sm" disabled={!selectedCourier} data-testid="button-scan-submit">Add</Button>
                     </form>
                   </div>
                 ) : (
