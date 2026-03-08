@@ -25,12 +25,12 @@ export async function sendOrderStatusWhatsApp(
 ): Promise<void> {
   if (!(WA_NOTIFY_STATUSES as readonly string[]).includes(params.toStatus)) return;
 
-  if (!IS_PRODUCTION) {
-    console.log(
-      `${LOG_PREFIX} [DEV] Skipping send for order ${params.orderNumber} (${params.toStatus}) — not in production`
-    );
-    return;
-  }
+  // if (!IS_PRODUCTION) {
+  //   console.log(
+  //     `${LOG_PREFIX} [DEV] Skipping send for order ${params.orderNumber} (${params.toStatus}) — not in production`
+  //   );
+  //   return;
+  // }
 
   try {
     const alreadySent = await db
