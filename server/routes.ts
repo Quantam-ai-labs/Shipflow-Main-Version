@@ -9098,10 +9098,8 @@ export async function registerRoutes(
           return res.status(400).json({ message: `No credentials configured for courier: ${courierLabel}` });
         }
 
-        // Extract dispatch metadata from request body
-        const { riderName, riderCode, returnCity, returnAddress } = req.body as {
-          riderName?: string; riderCode?: string; returnCity?: string; returnAddress?: string;
-        };
+        // Read dispatch metadata from courier integration settings (DB)
+        const settings = (creds as any).settings || {};
 
         let pdfBuffer: Buffer;
         let courierLoadsheetId: string | undefined;
@@ -9110,15 +9108,17 @@ export async function registerRoutes(
           if (!creds.apiSecret) {
             return res.status(400).json({ message: "Leopards API password not configured" });
           }
-          if (!riderName?.trim() || !riderCode?.trim()) {
-            return res.status(400).json({ message: "Rider name and rider code are required for Leopards loadsheet" });
+          const riderName = settings.riderName?.trim() || "";
+          const riderCode = settings.riderCode?.trim() || "";
+          if (!riderName || !riderCode) {
+            return res.status(400).json({ message: "Rider name and rider code must be configured in Leopards courier settings before generating a loadsheet" });
           }
           const { generateLeopardsLoadSheet } = await import("./services/couriers/leopards");
           console.log(`[Loadsheet] Calling Leopards generateLoadSheet for ${trackingNumbers.length} shipments — rider: ${riderName} (${riderCode})`);
           pdfBuffer = await generateLeopardsLoadSheet(
             trackingNumbers,
             { apiKey: creds.apiKey, apiPassword: creds.apiSecret },
-            { riderName: riderName.trim(), riderCode: riderCode.trim() },
+            { riderName, riderCode },
           );
         } else if (courierNorm === "postex") {
           const { generatePostExLoadSheet } = await import("./services/courierSlips");
@@ -9127,8 +9127,8 @@ export async function registerRoutes(
             trackingNumbers,
             creds.apiKey,
             "",
-            returnCity?.trim() || "",
-            returnAddress?.trim() || "",
+            settings.returnCity?.trim() || "",
+            settings.returnAddress?.trim() || "",
           );
         } else {
           return res.status(400).json({ message: `Loadsheet generation via courier API is not supported for: ${courierLabel}` });
@@ -9401,21 +9401,23 @@ export async function registerRoutes(
         return res.status(400).json({ message: `No credentials configured for courier: ${courierLabelWh}` });
       }
 
-      // Extract dispatch metadata
-      const whRider = req.body as { riderName?: string; riderCode?: string; returnCity?: string; returnAddress?: string };
+      // Read dispatch metadata from courier integration settings (DB)
+      const whSettings = (whCreds as any).settings || {};
 
       let whPdfBuffer: Buffer;
       if (courierNormWh === "leopards") {
         if (!whCreds.apiSecret) return res.status(400).json({ message: "Leopards API password not configured" });
-        if (!whRider.riderName?.trim() || !whRider.riderCode?.trim()) {
-          return res.status(400).json({ message: "Rider name and rider code are required for Leopards loadsheet" });
+        const whRiderName = whSettings.riderName?.trim() || "";
+        const whRiderCode = whSettings.riderCode?.trim() || "";
+        if (!whRiderName || !whRiderCode) {
+          return res.status(400).json({ message: "Rider name and rider code must be configured in Leopards courier settings before generating a loadsheet" });
         }
         const { generateLeopardsLoadSheet } = await import("./services/couriers/leopards");
-        console.log(`[Warehouse Loadsheet] Calling Leopards for ${trackingNums.length} shipments — rider: ${whRider.riderName} (${whRider.riderCode})`);
+        console.log(`[Warehouse Loadsheet] Calling Leopards for ${trackingNums.length} shipments — rider: ${whRiderName} (${whRiderCode})`);
         whPdfBuffer = await generateLeopardsLoadSheet(
           trackingNums,
           { apiKey: whCreds.apiKey, apiPassword: whCreds.apiSecret },
-          { riderName: whRider.riderName.trim(), riderCode: whRider.riderCode.trim() },
+          { riderName: whRiderName, riderCode: whRiderCode },
         );
       } else if (courierNormWh === "postex") {
         const { generatePostExLoadSheet } = await import("./services/courierSlips");
@@ -9424,8 +9426,8 @@ export async function registerRoutes(
           trackingNums,
           whCreds.apiKey,
           "",
-          whRider.returnCity?.trim() || "",
-          whRider.returnAddress?.trim() || "",
+          whSettings.returnCity?.trim() || "",
+          whSettings.returnAddress?.trim() || "",
         );
       } else {
         return res.status(400).json({ message: `Loadsheet generation via courier API is not supported for: ${courierLabelWh}` });

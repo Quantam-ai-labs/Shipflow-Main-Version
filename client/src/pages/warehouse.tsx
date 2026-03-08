@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams } from "wouter";
-import { Loader2, CheckCircle2, XCircle, Package, ClipboardList, Trash2, LogOut, RefreshCw, Keyboard, Camera } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, Package, ClipboardList, Trash2, LogOut, RefreshCw, Keyboard, Camera, Truck, ChevronRight, ArrowLeft } from "lucide-react";
 
 interface BookedShipment {
   id: string;
@@ -22,7 +22,13 @@ interface ScannedItem {
   courierName: string;
 }
 
-type Screen = "pin" | "scanning" | "done";
+interface AvailableCourier {
+  name: string;
+  norm: string;
+  displayName: string;
+}
+
+type Screen = "pin" | "courier" | "scanning" | "done";
 
 type ScanResult = {
   status: "valid" | "duplicate" | "not_found";
@@ -66,13 +72,8 @@ export default function WarehousePage() {
   const [generating, setGenerating] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
 
-  // ---- Dispatch setup state ----
-  const [availableCouriers, setAvailableCouriers] = useState<Array<{ name: string; norm: string; displayName: string }>>([]);
-  const [selectedCourier, setSelectedCourier] = useState<string | null>(null);
-  const [riderName, setRiderName] = useState("");
-  const [riderCode, setRiderCode] = useState("");
-  const [returnCity, setReturnCity] = useState("");
-  const [returnAddress, setReturnAddress] = useState("");
+  const [availableCouriers, setAvailableCouriers] = useState<AvailableCourier[]>([]);
+  const [selectedCourier, setSelectedCourier] = useState<AvailableCourier | null>(null);
 
   const [scanMode, setScanMode] = useState<"camera" | "manual">("camera");
   const [manualInput, setManualInput] = useState("");
@@ -86,9 +87,8 @@ export default function WarehousePage() {
 
   useEffect(() => {
     if (token) {
-      setScreen("scanning");
+      fetchCouriers(token).then(() => setScreen("courier"));
       loadShipments(token);
-      fetchCouriers(token);
     }
     fetchMerchantName();
   }, []);
@@ -157,9 +157,9 @@ export default function WarehousePage() {
       localStorage.setItem(`wh_token_${slug}`, data.token);
       setToken(data.token);
       setMerchantName(data.merchantName);
-      setScreen("scanning");
+      await fetchCouriers(data.token);
       loadShipments(data.token);
-      fetchCouriers(data.token);
+      setScreen("courier");
     } catch {
       setLoginError("Connection error. Try again.");
       playBeep(false);
@@ -172,6 +172,8 @@ export default function WarehousePage() {
     setToken(null);
     setPin("");
     setScannedItems([]);
+    setSelectedCourier(null);
+    setLockedCourier(null);
     setScreen("pin");
     stopCamera();
   }
@@ -195,7 +197,6 @@ export default function WarehousePage() {
       showResult({ status: "not_found", message: `CN not found: "${value}" — not in booked orders` });
       return;
     }
-    // Enforce single-courier loadsheet
     if (lockedCourier && shipment.courierName !== lockedCourier) {
       playBeep(false);
       showResult({ status: "not_found", message: `Wrong courier — locked to ${lockedCourier}. This CN is ${shipment.courierName}.` });
@@ -263,40 +264,25 @@ export default function WarehousePage() {
     }
   }
 
-  const isLeopards = selectedCourier ? selectedCourier.toLowerCase() === "leopards" : false;
-  const isPostEx = selectedCourier ? selectedCourier.toLowerCase() === "postex" : false;
-
   async function generateLoadsheet() {
     if (!token || scannedItems.length === 0) return;
-    if (isLeopards && (!riderName.trim() || !riderCode.trim())) {
-      showResult({ status: "not_found", message: "Rider name and rider code are required for Leopards loadsheet" });
-      return;
-    }
     setGenerating(true);
     try {
       const res = await fetch("/api/warehouse/generate-loadsheet", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          trackingNumbers: scannedItems.map((i) => i.trackingNumber),
-          riderName: riderName.trim(),
-          riderCode: riderCode.trim(),
-          returnCity: returnCity.trim(),
-          returnAddress: returnAddress.trim(),
-        }),
+        body: JSON.stringify({ trackingNumbers: scannedItems.map((i) => i.trackingNumber) }),
       });
       const data = await res.json();
       if (res.ok && data.pdfUrl) {
         setPdfUrl(data.pdfUrl);
         setLockedCourier(null);
-        setSelectedCourier(null);
-        setRiderName(""); setRiderCode(""); setReturnCity(""); setReturnAddress("");
         setScreen("done");
         stopCamera();
       } else {
         showResult({ status: "not_found", message: data.message || "Failed to generate loadsheet" });
       }
-    } catch (err: any) {
+    } catch {
       showResult({ status: "not_found", message: "Connection error. Please retry." });
     }
     setGenerating(false);
@@ -304,6 +290,7 @@ export default function WarehousePage() {
 
   const totalCOD = scannedItems.reduce((s, i) => s + i.codAmount, 0);
 
+  // ---- PIN Screen ----
   if (screen === "pin") {
     return (
       <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 select-none">
@@ -322,9 +309,7 @@ export default function WarehousePage() {
                 <div
                   key={i}
                   className={`w-4 h-4 rounded-full border-2 transition-colors ${
-                    i < pin.length
-                      ? "bg-blue-400 border-blue-400"
-                      : "border-slate-600"
+                    i < pin.length ? "bg-blue-400 border-blue-400" : "border-slate-600"
                   }`}
                   data-testid={`pin-dot-${i}`}
                 />
@@ -375,6 +360,66 @@ export default function WarehousePage() {
     );
   }
 
+  // ---- Courier Selection Screen ----
+  if (screen === "courier") {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex flex-col select-none">
+        <div className="flex items-center justify-between px-4 pt-5 pb-3">
+          <div>
+            <p className="font-semibold text-base">{merchantName}</p>
+            <p className="text-slate-400 text-xs">{loadingShipments ? "Loading shipments..." : `${totalBooked} shipments ready`}</p>
+          </div>
+          <button onClick={logout} className="p-2 rounded-lg bg-slate-800 active:bg-slate-700" data-testid="button-logout-courier">
+            <LogOut className="w-4 h-4 text-slate-300" />
+          </button>
+        </div>
+
+        <div className="flex-1 flex flex-col px-4 pt-4 pb-8">
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold">Select Courier</h2>
+            <p className="text-slate-400 text-sm mt-1">Choose the courier for this dispatch session</p>
+          </div>
+
+          {availableCouriers.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center gap-3 text-slate-500">
+              <Truck className="w-10 h-10 opacity-30" />
+              <p className="text-sm">No couriers configured</p>
+              <p className="text-xs text-slate-600">Add a courier in Settings → Couriers</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {availableCouriers.map((c) => (
+                <button
+                  key={c.name}
+                  type="button"
+                  onClick={() => {
+                    setSelectedCourier(c);
+                    setLockedCourier(c.displayName);
+                    setScannedItems([]);
+                    setScanMode("camera");
+                    setScreen("scanning");
+                  }}
+                  className="w-full flex items-center gap-4 bg-slate-900 hover:bg-slate-800 active:bg-slate-800 rounded-2xl px-5 py-5 transition-colors text-left"
+                  data-testid={`button-select-courier-${c.name}`}
+                >
+                  <div className="w-12 h-12 rounded-xl bg-blue-600/20 flex items-center justify-center shrink-0">
+                    <Truck className="w-6 h-6 text-blue-400" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-semibold text-base">{c.displayName}</p>
+                    <p className="text-slate-400 text-sm mt-0.5">Tap to start scanning</p>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-slate-500 shrink-0" />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ---- Done Screen ----
   if (screen === "done") {
     return (
       <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 text-center space-y-5">
@@ -398,9 +443,12 @@ export default function WarehousePage() {
         )}
         <button
           onClick={() => {
-            setScannedItems([]); setPdfUrl(null); setLockedCourier(null);
-            setSelectedCourier(null); setRiderName(""); setRiderCode(""); setReturnCity(""); setReturnAddress("");
-            setScreen("scanning"); loadShipments(token!); startCamera();
+            setScannedItems([]);
+            setPdfUrl(null);
+            setLockedCourier(null);
+            setSelectedCourier(null);
+            setScreen("courier");
+            loadShipments(token!);
           }}
           className="text-slate-400 text-sm underline"
           data-testid="button-new-loadsheet"
@@ -411,19 +459,33 @@ export default function WarehousePage() {
     );
   }
 
+  // ---- Scanning Screen ----
   return (
     <div className="min-h-screen bg-slate-950 text-white flex flex-col select-none">
       <div className="flex items-center justify-between px-4 pt-4 pb-2">
         <div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setScannedItems([]);
+                setLockedCourier(null);
+                setSelectedCourier(null);
+                stopCamera();
+                setScreen("courier");
+              }}
+              className="p-1 -ml-1 rounded-lg active:bg-slate-800"
+              data-testid="button-back-to-courier"
+            >
+              <ArrowLeft className="w-4 h-4 text-slate-400" />
+            </button>
             <p className="font-semibold text-sm">{merchantName}</p>
-            {lockedCourier && (
+            {selectedCourier && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-600/30 text-blue-300 text-xs font-medium" data-testid="badge-locked-courier">
-                🚚 {lockedCourier}
+                <Truck className="w-3 h-3" /> {selectedCourier.displayName}
               </span>
             )}
           </div>
-          <p className="text-slate-400 text-xs">
+          <p className="text-slate-400 text-xs pl-6">
             {loadingShipments ? "Loading..." : `${totalBooked} booked · ${scannedItems.length} scanned`}
           </p>
         </div>
@@ -437,92 +499,8 @@ export default function WarehousePage() {
         </div>
       </div>
 
-      {/* ---- Dispatch Setup: Courier + fields ---- */}
-      <div className="mx-3 mb-2 rounded-2xl bg-slate-900 p-3 space-y-2">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-slate-400 text-xs shrink-0">Courier:</span>
-          {availableCouriers.length === 0 ? (
-            <span className="text-slate-500 text-xs">No couriers configured</span>
-          ) : (
-            availableCouriers.map((c) => (
-              <button
-                key={c.name}
-                type="button"
-                onClick={() => {
-                  const newSel = selectedCourier === c.name ? null : c.name;
-                  if (scannedItems.length > 0 && newSel !== selectedCourier) {
-                    setScannedItems([]);
-                  }
-                  setSelectedCourier(newSel);
-                  setLockedCourier(newSel ? c.displayName : null);
-                  setRiderName(""); setRiderCode(""); setReturnCity(""); setReturnAddress("");
-                }}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
-                  selectedCourier === c.name
-                    ? "bg-blue-600 text-white"
-                    : "bg-slate-800 text-slate-300 active:bg-slate-700"
-                }`}
-                data-testid={`button-select-courier-${c.name}`}
-              >
-                {c.displayName}
-              </button>
-            ))
-          )}
-        </div>
-
-        {isLeopards && (
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <p className="text-xs text-slate-400 mb-1">Rider Name <span className="text-red-400">*</span></p>
-              <input
-                value={riderName}
-                onChange={(e) => setRiderName(e.target.value)}
-                placeholder="e.g. Mohsin Mazhar"
-                className="w-full bg-slate-800 text-white placeholder:text-slate-500 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                data-testid="input-rider-name"
-              />
-            </div>
-            <div>
-              <p className="text-xs text-slate-400 mb-1">Rider Code <span className="text-red-400">*</span></p>
-              <input
-                value={riderCode}
-                onChange={(e) => setRiderCode(e.target.value)}
-                placeholder="e.g. 40001"
-                className="w-full bg-slate-800 text-white placeholder:text-slate-500 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                data-testid="input-rider-code"
-              />
-            </div>
-          </div>
-        )}
-
-        {isPostEx && (
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <p className="text-xs text-slate-400 mb-1">Return City</p>
-              <input
-                value={returnCity}
-                onChange={(e) => setReturnCity(e.target.value)}
-                placeholder="e.g. Karachi"
-                className="w-full bg-slate-800 text-white placeholder:text-slate-500 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                data-testid="input-return-city"
-              />
-            </div>
-            <div>
-              <p className="text-xs text-slate-400 mb-1">Return Address</p>
-              <input
-                value={returnAddress}
-                onChange={(e) => setReturnAddress(e.target.value)}
-                placeholder="Warehouse address"
-                className="w-full bg-slate-800 text-white placeholder:text-slate-500 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                data-testid="input-return-address"
-              />
-            </div>
-          </div>
-        )}
-      </div>
-
       {scanMode === "camera" ? (
-        <div className="relative bg-black mx-3 rounded-2xl overflow-hidden" style={{ height: "40vh" }}>
+        <div className="relative bg-black mx-3 rounded-2xl overflow-hidden" style={{ height: "45vh" }}>
           <video ref={videoRef} className="w-full h-full object-cover" autoPlay playsInline muted data-testid="warehouse-camera" />
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="w-52 h-28 rounded-lg border-2 border-blue-400 opacity-80" />
@@ -537,9 +515,7 @@ export default function WarehousePage() {
           </button>
           {scanResult && (
             <div className={`absolute bottom-3 left-3 right-3 rounded-xl p-3 flex items-center gap-2 text-sm font-medium backdrop-blur-sm ${
-              scanResult.status === "valid"
-                ? "bg-green-500/80 text-white"
-                : "bg-red-500/80 text-white"
+              scanResult.status === "valid" ? "bg-green-500/80 text-white" : "bg-red-500/80 text-white"
             }`} data-testid="warehouse-scan-result">
               {scanResult.status === "valid"
                 ? <CheckCircle2 className="w-4 h-4 shrink-0" />
@@ -581,7 +557,7 @@ export default function WarehousePage() {
             />
             <button
               type="submit"
-              className="px-4 py-3 rounded-xl bg-blue-600 text-white text-sm font-semibold active:bg-blue-700 disabled:opacity-40"
+              className="px-4 py-3 rounded-xl bg-blue-600 text-white text-sm font-semibold active:bg-blue-700"
               data-testid="button-manual-add"
             >
               Add
@@ -589,9 +565,7 @@ export default function WarehousePage() {
           </form>
           {scanResult && (
             <div className={`rounded-xl p-3 flex items-center gap-2 text-sm font-medium ${
-              scanResult.status === "valid"
-                ? "bg-green-500/20 text-green-300"
-                : "bg-red-500/20 text-red-300"
+              scanResult.status === "valid" ? "bg-green-500/20 text-green-300" : "bg-red-500/20 text-red-300"
             }`} data-testid="warehouse-scan-result-manual">
               {scanResult.status === "valid"
                 ? <CheckCircle2 className="w-4 h-4 shrink-0" />
@@ -625,7 +599,11 @@ export default function WarehousePage() {
                 <div className="text-right shrink-0">
                   <p className="text-xs font-medium">Rs {item.codAmount.toLocaleString()}</p>
                 </div>
-                <button onClick={() => setScannedItems((p) => p.filter((i) => i.trackingNumber !== item.trackingNumber))} className="ml-1 text-slate-600 active:text-red-400" data-testid={`wh-remove-${item.trackingNumber}`}>
+                <button
+                  onClick={() => setScannedItems((p) => p.filter((i) => i.trackingNumber !== item.trackingNumber))}
+                  className="ml-1 text-slate-600 active:text-red-400"
+                  data-testid={`wh-remove-${item.trackingNumber}`}
+                >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
               </div>

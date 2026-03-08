@@ -187,10 +187,6 @@ export default function LoadsheetPage() {
 
   // ---- Dispatch setup state ----
   const [selectedCourier, setSelectedCourier] = useState<string | null>(null);
-  const [riderName, setRiderName] = useState("");
-  const [riderCode, setRiderCode] = useState("");
-  const [returnCity, setReturnCity] = useState("");
-  const [returnAddress, setReturnAddress] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const readerRef = useRef<any>(null);
@@ -426,29 +422,14 @@ export default function LoadsheetPage() {
     }
     setSelectedCourier(courierName);
     setLockedCourier(courierName ? courierDisplayName(courierName) : null);
-    setRiderName("");
-    setRiderCode("");
-    setReturnCity("");
-    setReturnAddress("");
   };
 
   const totalCOD = scannedItems.reduce((sum, i) => sum + i.codAmount, 0);
-  const isLeopards = selectedCourier ? selectedCourier.toLowerCase() === "leopards" : false;
-  const isPostEx = selectedCourier ? selectedCourier.toLowerCase() === "postex" : false;
 
   const generateMutation = useMutation({
     mutationFn: async () => {
-      if (isLeopards && (!riderName.trim() || !riderCode.trim())) {
-        throw new Error("Rider name and rider code are required for Leopards loadsheet");
-      }
       const orderIds = scannedItems.map((i) => i.id);
-      const res = await apiRequest("POST", "/api/orders/generate-loadsheet", {
-        orderIds,
-        riderName: riderName.trim(),
-        riderCode: riderCode.trim(),
-        returnCity: returnCity.trim(),
-        returnAddress: returnAddress.trim(),
-      });
+      const res = await apiRequest("POST", "/api/orders/generate-loadsheet", { orderIds });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to generate loadsheet");
       return data;
@@ -459,10 +440,6 @@ export default function LoadsheetPage() {
       setScannedItems([]);
       setLockedCourier(null);
       setSelectedCourier(null);
-      setRiderName("");
-      setRiderCode("");
-      setReturnCity("");
-      setReturnAddress("");
       queryClient.invalidateQueries({ queryKey: ["/api/loadsheet/booked-shipments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/shipment-batches", "loadsheet"] });
       refetch();
@@ -580,60 +557,6 @@ export default function LoadsheetPage() {
                       )}
                     </div>
                   </div>
-
-                  {isLeopards && (
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1">
-                        <label className="text-xs font-medium">
-                          Rider Name <span className="text-destructive">*</span>
-                        </label>
-                        <Input
-                          value={riderName}
-                          onChange={(e) => setRiderName(e.target.value)}
-                          placeholder="e.g. Mohsin Mazhar"
-                          className="h-8 text-xs"
-                          data-testid="input-rider-name"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs font-medium">
-                          Rider Code <span className="text-destructive">*</span>
-                        </label>
-                        <Input
-                          value={riderCode}
-                          onChange={(e) => setRiderCode(e.target.value)}
-                          placeholder="e.g. 40001"
-                          className="h-8 text-xs"
-                          data-testid="input-rider-code"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {isPostEx && (
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1">
-                        <label className="text-xs font-medium text-muted-foreground">Return City</label>
-                        <Input
-                          value={returnCity}
-                          onChange={(e) => setReturnCity(e.target.value)}
-                          placeholder="e.g. Karachi"
-                          className="h-8 text-xs"
-                          data-testid="input-return-city"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs font-medium text-muted-foreground">Return Address</label>
-                        <Input
-                          value={returnAddress}
-                          onChange={(e) => setReturnAddress(e.target.value)}
-                          placeholder="Warehouse address"
-                          className="h-8 text-xs"
-                          data-testid="input-return-address"
-                        />
-                      </div>
-                    </div>
-                  )}
 
                   {!selectedCourier && (
                     <p className="text-xs text-muted-foreground italic">Select a courier above to begin scanning</p>
