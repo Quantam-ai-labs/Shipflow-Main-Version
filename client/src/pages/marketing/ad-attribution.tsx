@@ -40,6 +40,7 @@ import {
   Loader2,
   ExternalLink,
   Megaphone,
+  History,
 } from "lucide-react";
 import { SiFacebook } from "react-icons/si";
 
@@ -118,6 +119,22 @@ export default function AdAttribution() {
     },
   });
 
+  const backfillMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/marketing/backfill-utm"),
+    onSuccess: async (result: any) => {
+      toast({
+        title: "Backfill complete",
+        description: `${result.updated} historical orders updated with UTM data. ${result.skipped} had no UTM params.`,
+      });
+      if (result.updated > 0) {
+        resolveMutation.mutate();
+      }
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
   function copyTemplate() {
     navigator.clipboard.writeText(UTM_TEMPLATE);
     setCopied(true);
@@ -142,8 +159,18 @@ export default function AdAttribution() {
           <Button
             variant="outline"
             size="sm"
+            onClick={() => backfillMutation.mutate()}
+            disabled={backfillMutation.isPending || resolveMutation.isPending}
+            data-testid="button-backfill-utm"
+          >
+            {backfillMutation.isPending ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <History className="w-3.5 h-3.5 mr-1.5" />}
+            Backfill Historical
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => resolveMutation.mutate()}
-            disabled={resolveMutation.isPending}
+            disabled={resolveMutation.isPending || backfillMutation.isPending}
             data-testid="button-resolve-attribution"
           >
             {resolveMutation.isPending ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 mr-1.5" />}
@@ -193,7 +220,7 @@ export default function AdAttribution() {
                 </ol>
               </div>
               <p className="text-xs text-muted-foreground bg-yellow-500/10 border border-yellow-500/20 rounded px-3 py-2">
-                <strong className="text-yellow-400">Note:</strong> Only orders placed after UTMs are configured will be tracked. Click <strong className="text-foreground">Match Orders</strong> above after your first sale comes in to run the matching.
+                <strong className="text-yellow-400">For past orders:</strong> If you already had UTM params set up on previous ads, click <strong className="text-foreground">Backfill Historical</strong> above — it will scan all existing orders for UTM data and match them to campaigns automatically. Orders placed before UTM params were ever added to your ads cannot be attributed.
               </p>
             </CardContent>
           </CollapsibleContent>

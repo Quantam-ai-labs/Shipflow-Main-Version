@@ -104,7 +104,7 @@ interface ShopifyOrdersResponse {
   orders: ShopifyOrder[];
 }
 
-function parseUtmParams(url: string | null): {
+export function parseUtmParams(url: string | null): {
   utmSource: string | null;
   utmMedium: string | null;
   utmCampaign: string | null;

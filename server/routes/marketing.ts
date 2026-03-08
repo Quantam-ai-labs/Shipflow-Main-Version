@@ -1,6 +1,6 @@
 import { Express, Response } from "express";
 import { db } from "../db";
-import { eq, and, sql, gte, lte, inArray } from "drizzle-orm";
+import { eq, and, sql, gte, lte, inArray, isNull, isNotNull } from "drizzle-orm";
 import { z } from "zod";
 import { toMerchantStartOfDay, toMerchantEndOfDay, DEFAULT_TIMEZONE } from "../utils/timezone";
 import { adCampaigns, adAccounts, adCreatives, adInsights, teamMembers, merchants, adProfitabilityEntries, orders, products, insertCampaignJourneyEventSchema, campaignJourneyEvents } from "@shared/schema";
@@ -21,6 +21,7 @@ import {
 import { encryptToken } from "../services/encryption";
 import { generateChatResponse, generateDashboardInsights, generateQuickStrategy } from "../services/aiInsights";
 import { attributeOrdersToCampaigns, getAttributionSummary } from "../services/adAttribution";
+import { parseUtmParams } from "../services/shopify";
 
 function isAuthenticated(req: any, res: Response, next: Function) {
   if (!req.session?.userId) {
@@ -951,6 +952,44 @@ export function registerMarketingRoutes(app: Express) {
     } catch (error: any) {
       console.error("AI strategy error:", error);
       res.status(500).json({ error: "Failed to generate strategy" });
+    }
+  });
+
+  app.post("/api/marketing/backfill-utm", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const ordersToBackfill = await db
+        .select({ id: orders.id, landingSite: orders.landingSite })
+        .from(orders)
+        .where(and(eq(orders.merchantId, merchantId), isNull(orders.utmSource), isNotNull(orders.landingSite)));
+
+      let updated = 0;
+      let skipped = 0;
+
+      for (const order of ordersToBackfill) {
+        const utmData = parseUtmParams(order.landingSite);
+        if (utmData.utmSource || utmData.utmCampaign || utmData.fbClickId) {
+          await db
+            .update(orders)
+            .set({
+              utmSource: utmData.utmSource,
+              utmMedium: utmData.utmMedium,
+              utmCampaign: utmData.utmCampaign,
+              utmContent: utmData.utmContent,
+              utmTerm: utmData.utmTerm,
+              fbClickId: utmData.fbClickId,
+            })
+            .where(eq(orders.id, order.id));
+          updated++;
+        } else {
+          skipped++;
+        }
+      }
+
+      res.json({ updated, skipped, total: ordersToBackfill.length });
+    } catch (error: any) {
+      console.error("[Attribution] Error backfilling UTM data:", error.message);
+      res.status(500).json({ error: error.message });
     }
   });
 
