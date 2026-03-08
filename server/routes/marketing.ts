@@ -1019,4 +1019,276 @@ export function registerMarketingRoutes(app: Express) {
       res.status(500).json({ error: error.message });
     }
   });
+
+  // ── Revenue Truth endpoints ─────────────────────────────────────────────────
+
+  app.get("/api/marketing/revenue-truth/roas", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const { dateFrom, dateTo } = getDateRange(req);
+      const merchant = await storage.getMerchant(merchantId);
+      const tz = (merchant as any)?.timezone || DEFAULT_TIMEZONE;
+      const fromTs = toMerchantStartOfDay(dateFrom, tz);
+      const toTs = toMerchantEndOfDay(dateTo, tz);
+
+      const campaignRows = await db.execute(sql`
+        SELECT
+          c.campaign_id,
+          c.name AS campaign_name,
+          c.effective_status AS status,
+          c.objective,
+          COUNT(DISTINCT o.id)::int AS our_orders,
+          COALESCE(SUM(o.total_amount::numeric), 0)::float AS our_revenue
+        FROM ad_campaigns c
+        LEFT JOIN orders o
+          ON o.attributed_campaign_id = c.campaign_id
+          AND o.merchant_id = ${merchantId}
+          AND o.created_at >= ${fromTs}
+          AND o.created_at <= ${toTs}
+        WHERE c.merchant_id = ${merchantId}
+        GROUP BY c.campaign_id, c.name, c.effective_status, c.objective
+        ORDER BY our_revenue DESC
+      `);
+
+      const insightRows = await db.execute(sql`
+        SELECT
+          entity_id AS campaign_id,
+          SUM(spend::numeric)::float AS fb_spend,
+          SUM(purchase_value::numeric)::float AS fb_revenue,
+          SUM(purchases)::int AS fb_purchases
+        FROM ad_insights
+        WHERE merchant_id = ${merchantId}
+          AND level = 'campaign'
+          AND date >= ${dateFrom}
+          AND date <= ${dateTo}
+        GROUP BY entity_id
+      `);
+
+      const insightsMap = new Map<string, any>();
+      for (const row of insightRows.rows as any[]) {
+        insightsMap.set(row.campaign_id, row);
+      }
+
+      const campaigns = (campaignRows.rows as any[]).map((c) => {
+        const fb = insightsMap.get(c.campaign_id) ?? {};
+        const fbSpend = parseFloat(fb.fb_spend ?? 0);
+        const fbRevenue = parseFloat(fb.fb_revenue ?? 0);
+        const ourRevenue = parseFloat(c.our_revenue ?? 0);
+        return {
+          campaignId: c.campaign_id,
+          campaignName: c.campaign_name,
+          status: c.status,
+          objective: c.objective,
+          ourOrders: parseInt(c.our_orders ?? 0),
+          ourRevenue,
+          ourRoas: fbSpend > 0 ? +(ourRevenue / fbSpend).toFixed(2) : null,
+          fbSpend,
+          fbRevenue,
+          fbPurchases: parseInt(fb.fb_purchases ?? 0),
+          fbRoas: fbSpend > 0 ? +(fbRevenue / fbSpend).toFixed(2) : null,
+          delta: fbSpend > 0 && ourRevenue > 0
+            ? +((ourRevenue - fbRevenue) / fbRevenue * 100).toFixed(1)
+            : null,
+        };
+      });
+
+      const totalFbSpend = campaigns.reduce((s, c) => s + c.fbSpend, 0);
+      const totalOurRevenue = campaigns.reduce((s, c) => s + c.ourRevenue, 0);
+      const totalFbRevenue = campaigns.reduce((s, c) => s + c.fbRevenue, 0);
+      const totalOurOrders = campaigns.reduce((s, c) => s + c.ourOrders, 0);
+
+      res.json({
+        campaigns,
+        totals: {
+          fbSpend: +totalFbSpend.toFixed(2),
+          ourRevenue: +totalOurRevenue.toFixed(2),
+          fbRevenue: +totalFbRevenue.toFixed(2),
+          ourOrders: totalOurOrders,
+          ourRoas: totalFbSpend > 0 ? +(totalOurRevenue / totalFbSpend).toFixed(2) : null,
+          fbRoas: totalFbSpend > 0 ? +(totalFbRevenue / totalFbSpend).toFixed(2) : null,
+        },
+      });
+    } catch (error: any) {
+      console.error("[RevenueTruth] ROAS error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/marketing/revenue-truth/products", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const { dateFrom, dateTo } = getDateRange(req);
+      const merchant = await storage.getMerchant(merchantId);
+      const tz = (merchant as any)?.timezone || DEFAULT_TIMEZONE;
+      const fromTs = toMerchantStartOfDay(dateFrom, tz);
+      const toTs = toMerchantEndOfDay(dateTo, tz);
+
+      const productRows = await db.execute(sql`
+        SELECT
+          o.attributed_campaign_id AS campaign_id,
+          c.name AS campaign_name,
+          c.effective_status AS campaign_status,
+          o.utm_content AS ad_id,
+          cr.name AS ad_name,
+          item->>'title' AS product_title,
+          SUM((item->>'quantity')::int)::int AS total_quantity,
+          ROUND(SUM((item->>'price')::numeric * (item->>'quantity')::int), 2)::float AS total_revenue,
+          COUNT(DISTINCT o.id)::int AS order_count
+        FROM orders o
+        CROSS JOIN jsonb_array_elements(o.line_items) AS item
+        LEFT JOIN ad_campaigns c
+          ON c.campaign_id = o.attributed_campaign_id
+          AND c.merchant_id = o.merchant_id
+        LEFT JOIN ad_creatives cr
+          ON cr.ad_id = o.utm_content
+          AND cr.merchant_id = o.merchant_id
+        WHERE o.merchant_id = ${merchantId}
+          AND o.attributed_campaign_id IS NOT NULL
+          AND o.line_items IS NOT NULL
+          AND jsonb_typeof(o.line_items) = 'array'
+          AND o.created_at >= ${fromTs}
+          AND o.created_at <= ${toTs}
+        GROUP BY
+          o.attributed_campaign_id, c.name, c.effective_status,
+          o.utm_content, cr.name, item->>'title'
+        ORDER BY o.attributed_campaign_id, total_revenue DESC
+      `);
+
+      const campaignMap = new Map<string, any>();
+      for (const row of productRows.rows as any[]) {
+        const cid = row.campaign_id;
+        if (!campaignMap.has(cid)) {
+          campaignMap.set(cid, {
+            campaignId: cid,
+            campaignName: row.campaign_name ?? `Campaign ${cid}`,
+            campaignStatus: row.campaign_status,
+            totalRevenue: 0,
+            totalOrders: 0,
+            products: [],
+          });
+        }
+        const camp = campaignMap.get(cid);
+        camp.products.push({
+          title: row.product_title,
+          quantity: parseInt(row.total_quantity),
+          revenue: parseFloat(row.total_revenue),
+          orderCount: parseInt(row.order_count),
+        });
+        camp.totalRevenue += parseFloat(row.total_revenue);
+        camp.totalOrders += parseInt(row.order_count);
+      }
+
+      const campaigns = Array.from(campaignMap.values()).map((c) => ({
+        ...c,
+        totalRevenue: +c.totalRevenue.toFixed(2),
+        products: c.products.map((p: any) => ({
+          ...p,
+          percentage: c.totalRevenue > 0 ? +(p.revenue / c.totalRevenue * 100).toFixed(1) : 0,
+        })),
+      }));
+
+      res.json({ campaigns });
+    } catch (error: any) {
+      console.error("[RevenueTruth] Products error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/marketing/revenue-truth/dark", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const { dateFrom, dateTo } = getDateRange(req);
+      const merchant = await storage.getMerchant(merchantId);
+      const tz = (merchant as any)?.timezone || DEFAULT_TIMEZONE;
+      const fromTs = toMerchantStartOfDay(dateFrom, tz);
+      const toTs = toMerchantEndOfDay(dateTo, tz);
+
+      const summaryRows = await db.execute(sql`
+        SELECT
+          COUNT(*)::int AS total_orders,
+          COALESCE(SUM(total_amount::numeric), 0)::float AS total_revenue,
+          COUNT(CASE WHEN utm_source IS NULL THEN 1 END)::int AS unattributed_orders,
+          COALESCE(SUM(CASE WHEN utm_source IS NULL THEN total_amount::numeric END), 0)::float AS unattributed_revenue,
+          COUNT(CASE WHEN utm_source IS NOT NULL THEN 1 END)::int AS attributed_orders,
+          COALESCE(SUM(CASE WHEN utm_source IS NOT NULL THEN total_amount::numeric END), 0)::float AS attributed_revenue
+        FROM orders
+        WHERE merchant_id = ${merchantId}
+          AND created_at >= ${fromTs}
+          AND created_at <= ${toTs}
+      `);
+
+      const sourceRows = await db.execute(sql`
+        SELECT
+          CASE
+            WHEN utm_source IS NOT NULL THEN 'Attributed (FB Ads)'
+            WHEN fb_click_id IS NOT NULL THEN 'Facebook (No UTM)'
+            WHEN referring_site ILIKE '%facebook%' OR referring_site ILIKE '%fb.com%' OR landing_site ILIKE '%facebook%' THEN 'Facebook Organic'
+            WHEN referring_site ILIKE '%google%' OR referring_site ILIKE '%googleadservices%' THEN 'Google'
+            WHEN referring_site ILIKE '%instagram%' THEN 'Instagram'
+            WHEN referring_site ILIKE '%tiktok%' OR referring_site ILIKE '%tik-tok%' THEN 'TikTok'
+            WHEN referring_site IS NULL OR referring_site = '' THEN 'Direct / Unknown'
+            ELSE 'Other'
+          END AS source,
+          COUNT(*)::int AS orders,
+          COALESCE(SUM(total_amount::numeric), 0)::float AS revenue
+        FROM orders
+        WHERE merchant_id = ${merchantId}
+          AND created_at >= ${fromTs}
+          AND created_at <= ${toTs}
+        GROUP BY source
+        ORDER BY revenue DESC
+      `);
+
+      const recentRows = await db.execute(sql`
+        SELECT
+          id,
+          order_number,
+          total_amount::float AS total_amount,
+          referring_site,
+          landing_site,
+          utm_source,
+          fb_click_id,
+          created_at
+        FROM orders
+        WHERE merchant_id = ${merchantId}
+          AND utm_source IS NULL
+          AND created_at >= ${fromTs}
+          AND created_at <= ${toTs}
+        ORDER BY created_at DESC
+        LIMIT 50
+      `);
+
+      const summary = summaryRows.rows[0] as any;
+      res.json({
+        summary: {
+          totalOrders: summary.total_orders,
+          totalRevenue: +parseFloat(summary.total_revenue).toFixed(2),
+          attributedOrders: summary.attributed_orders,
+          attributedRevenue: +parseFloat(summary.attributed_revenue).toFixed(2),
+          unattributedOrders: summary.unattributed_orders,
+          unattributedRevenue: +parseFloat(summary.unattributed_revenue).toFixed(2),
+          attributionRate: summary.total_orders > 0
+            ? +(summary.attributed_orders / summary.total_orders * 100).toFixed(1)
+            : 0,
+        },
+        bySource: (sourceRows.rows as any[]).map((r) => ({
+          source: r.source,
+          orders: r.orders,
+          revenue: +parseFloat(r.revenue).toFixed(2),
+        })),
+        recentUnattributed: (recentRows.rows as any[]).map((r) => ({
+          id: r.id,
+          orderNumber: r.order_number,
+          totalAmount: parseFloat(r.total_amount),
+          referringSite: r.referring_site,
+          landingSite: r.landing_site,
+          hasFbClick: !!r.fb_click_id,
+          createdAt: r.created_at,
+        })),
+      });
+    } catch (error: any) {
+      console.error("[RevenueTruth] Dark traffic error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
 }

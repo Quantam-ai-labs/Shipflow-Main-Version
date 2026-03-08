@@ -97,6 +97,7 @@ import MarketingDashboard from "@/pages/marketing/dashboard";
 import AdsManager from "@/pages/marketing/ads-manager";
 import AdsProfitability from "@/pages/marketing/ads-profitability";
 import AdAttribution from "@/pages/marketing/ad-attribution";
+import RevenueTruth from "@/pages/marketing/revenue-truth";
 import ReportsHub from "@/pages/reports";
 import AIAssistant from "@/pages/ai-assistant";
 import WhatsAppPage from "@/pages/whatsapp";
@@ -154,6 +155,7 @@ const routeToPageId: Record<string, string> = {
   "/marketing/ads-manager": "ads-manager",
   "/marketing/profitability": "ads-profitability",
   "/marketing/attribution": "ads-attribution",
+  "/marketing/revenue-truth": "revenue-truth",
   "/whatsapp": "whatsapp-hub",
   "/accounting/settings": "preferences",
   "/settings/shopify": "settings-shopify",
@@ -261,6 +263,7 @@ function AppRoutes() {
       <Route path="/marketing/ads-manager">{() => <ProtectedRoute component={AdsManager} path="/marketing/ads-manager" />}</Route>
       <Route path="/marketing/profitability">{() => <ProtectedRoute component={AdsProfitability} path="/marketing/profitability" />}</Route>
       <Route path="/marketing/attribution">{() => <ProtectedRoute component={AdAttribution} path="/marketing/attribution" />}</Route>
+      <Route path="/marketing/revenue-truth">{() => <ProtectedRoute component={RevenueTruth} path="/marketing/revenue-truth" />}</Route>
       <Route path="/whatsapp">{() => <ProtectedRoute component={WhatsAppPage} path="/whatsapp" />}</Route>
       <Route path="/accounting/settings">{() => <ProtectedRoute component={AccountingSettings} path="/accounting/settings" />}</Route>
       <Route path="/loadsheet">{() => <ProtectedRoute component={LoadsheetPage} path="/loadsheet" />}</Route>
