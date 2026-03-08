@@ -225,9 +225,6 @@ export function registerMarketingRoutes(app: Express) {
         if (merchant?.facebookAccessToken && merchant?.facebookAdAccountId) {
           hasCredentials = true;
           credentialSource = "merchant";
-        } else if (process.env.FACEBOOK_ACCESS_TOKEN && process.env.FACEBOOK_AD_ACCOUNT_ID) {
-          hasCredentials = true;
-          credentialSource = "environment";
         }
       } catch {}
 
@@ -318,9 +315,6 @@ export function registerMarketingRoutes(app: Express) {
         if (merchant?.facebookAccessToken && merchant?.facebookAdAccountId) {
           hasCredentials = true;
           credentialSource = "merchant";
-        } else if (process.env.FACEBOOK_ACCESS_TOKEN && process.env.FACEBOOK_AD_ACCOUNT_ID) {
-          hasCredentials = true;
-          credentialSource = "environment";
         }
       } catch {}
       res.json({ lastSync, hasCredentials, credentialSource });

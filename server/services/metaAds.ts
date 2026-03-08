@@ -22,15 +22,7 @@ export async function getCredentialsForMerchant(merchantId: string): Promise<Met
     };
   }
 
-  const accessToken = process.env.FACEBOOK_ACCESS_TOKEN;
-  const adAccountId = process.env.FACEBOOK_AD_ACCOUNT_ID;
-  if (!accessToken || !adAccountId) {
-    throw new Error("Facebook credentials not configured. Go to Settings > Marketing to add your Facebook App credentials.");
-  }
-  return {
-    accessToken,
-    adAccountId: adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`,
-  };
+  throw new Error("Facebook credentials not configured. Go to Settings > Marketing to add your Facebook App credentials.");
 }
 
 export async function testFacebookConnection(creds: MetaApiOptions): Promise<{ success: boolean; accountName?: string; error?: string }> {
