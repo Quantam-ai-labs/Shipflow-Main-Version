@@ -72,12 +72,11 @@ function buildItemLines(
 
 const META_TEMPLATE_PARAMS: Record<string, (vars: Record<string, string>) => string[]> = {
   order_confirmation_2: (vars) => {
-    const itemPart = vars.item_name || "your order";
-    const shippingPart = vars.shipping_amount ? ` | Shipping: Rs. ${vars.shipping_amount}` : "";
-    const totalPart = vars.total_amount ? ` | Total: Rs. ${vars.total_amount}` : "";
     return [
       vars.customer_name || "Customer",
-      `${itemPart}${shippingPart}${totalPart}`,
+      vars.order_number || "N/A",
+      vars.item_name || "your order",
+      vars.total_amount ? `${vars.total_amount}` : "N/A",
     ];
   },
   order_update: (vars) => [

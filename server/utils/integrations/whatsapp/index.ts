@@ -12,7 +12,16 @@ import {
 import { formatPhoneForWhatsApp, sendWhatsAppApiRequest } from "./sender";
 import type { OrderNotificationParams } from "./types";
 
-export { WA_VARIABLE_CHIPS, DEFAULT_MESSAGE_BODY, DEFAULT_MESSAGE_BODIES, getDefaultMessageBody, interpolateMessageBody, STATUS_LABELS, getStatusLabel, WA_NOTIFY_STATUSES } from "./variables";
+export {
+  WA_VARIABLE_CHIPS,
+  DEFAULT_MESSAGE_BODY,
+  DEFAULT_MESSAGE_BODIES,
+  getDefaultMessageBody,
+  interpolateMessageBody,
+  STATUS_LABELS,
+  getStatusLabel,
+  WA_NOTIFY_STATUSES,
+} from "./variables";
 export type { WaNotifyStatus } from "./variables";
 export { formatPhoneForWhatsApp } from "./sender";
 export type { SendResult, OrderNotificationParams } from "./types";
@@ -21,16 +30,17 @@ const LOG_PREFIX = "[WhatsApp]";
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
 
 export async function sendOrderStatusWhatsApp(
-  params: OrderNotificationParams
+  params: OrderNotificationParams,
 ): Promise<void> {
-  if (!(WA_NOTIFY_STATUSES as readonly string[]).includes(params.toStatus)) return;
+  if (!(WA_NOTIFY_STATUSES as readonly string[]).includes(params.toStatus))
+    return;
 
-  // if (!IS_PRODUCTION) {
-  //   console.log(
-  //     `${LOG_PREFIX} [DEV] Skipping send for order ${params.orderNumber} (${params.toStatus}) — not in production`
-  //   );
-  //   return;
-  // }
+  if (!IS_PRODUCTION) {
+    console.log(
+      `${LOG_PREFIX} [DEV] Skipping send for order ${params.orderNumber} (${params.toStatus}) — not in production`,
+    );
+    return;
+  }
 
   try {
     const alreadySent = await db
@@ -41,14 +51,14 @@ export async function sendOrderStatusWhatsApp(
           eq(orderChangeLog.orderId, params.orderId),
           eq(orderChangeLog.changeType, "WHATSAPP_SENT"),
           sql`${orderChangeLog.metadata}->>'success' = 'true'`,
-          sql`${orderChangeLog.metadata}->>'toStatus' = ${params.toStatus}`
-        )
+          sql`${orderChangeLog.metadata}->>'toStatus' = ${params.toStatus}`,
+        ),
       )
       .limit(1);
 
     if (alreadySent.length > 0) {
       console.log(
-        `${LOG_PREFIX} Skip order ${params.orderNumber}: WhatsApp already sent successfully for status "${params.toStatus}"`
+        `${LOG_PREFIX} Skip order ${params.orderNumber}: WhatsApp already sent successfully for status "${params.toStatus}"`,
       );
       return;
     }
@@ -56,13 +66,13 @@ export async function sendOrderStatusWhatsApp(
     const { templateName, messageBody } =
       await storage.getWhatsAppTemplateForStatus(
         params.merchantId,
-        params.toStatus
+        params.toStatus,
       );
 
     const formattedPhone = formatPhoneForWhatsApp(params.customerPhone);
     if (!formattedPhone) {
       console.warn(
-        `${LOG_PREFIX} Skip order ${params.orderNumber}: invalid/missing phone "${params.customerPhone}"`
+        `${LOG_PREFIX} Skip order ${params.orderNumber}: invalid/missing phone "${params.customerPhone}"`,
       );
       await db.insert(orderChangeLog).values({
         orderId: params.orderId,
@@ -83,7 +93,11 @@ export async function sendOrderStatusWhatsApp(
     }
 
     const vars = buildVarsFromParams(params);
-    const messageText = interpolateMessageBody(messageBody, vars, params.toStatus);
+    const messageText = interpolateMessageBody(
+      messageBody,
+      vars,
+      params.toStatus,
+    );
 
     const templateParams = buildTemplateParams(templateName, vars);
 
@@ -91,20 +105,22 @@ export async function sendOrderStatusWhatsApp(
     const toLabel = getStatusLabel(params.toStatus);
 
     console.log(
-      `${LOG_PREFIX} ─── Sending notification ──────────────────────────`
+      `${LOG_PREFIX} ─── Sending notification ──────────────────────────`,
     );
     console.log(
-      `${LOG_PREFIX}   Order:    #${params.orderNumber} (${fromLabel} → ${toLabel})`
+      `${LOG_PREFIX}   Order:    #${params.orderNumber} (${fromLabel} → ${toLabel})`,
     );
     console.log(`${LOG_PREFIX}   To:       ${formattedPhone}`);
     console.log(`${LOG_PREFIX}   Template: "${templateName}"`);
     if (templateParams) {
-      console.log(`${LOG_PREFIX}   Params:   ${JSON.stringify(templateParams)}`);
+      console.log(
+        `${LOG_PREFIX}   Params:   ${JSON.stringify(templateParams)}`,
+      );
     } else {
       console.log(`${LOG_PREFIX}   Message:  "${messageText}"`);
     }
     console.log(
-      `${LOG_PREFIX} ────────────────────────────────────────────────────`
+      `${LOG_PREFIX} ────────────────────────────────────────────────────`,
     );
 
     const result = await sendWhatsAppApiRequest({
@@ -135,7 +151,7 @@ export async function sendOrderStatusWhatsApp(
   } catch (err: any) {
     console.error(
       `${LOG_PREFIX} Unexpected error for order ${params.orderId}:`,
-      err.message || err
+      err.message || err,
     );
   }
 }
