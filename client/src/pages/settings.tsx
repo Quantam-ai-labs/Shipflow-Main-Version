@@ -130,8 +130,8 @@ const TEMPLATE_NAME_OPTIONS: Record<string, string[]> = {
 const META_BUILTIN_PREVIEWS: Record<string, { header: string; body: string; footer: string; buttons?: string[] }> = {
   order_confirmation_2: {
     header: "",
-    body: "Assalam o Alaikum {customer_name} !\nYour Order from Lala Import #{order_number} of\n{item_simple}\nWith a total amount of {total_amount}/-\nis pending for confirmation. Please press confirm or cancel.",
-    footer: "Thank you",
+    body: "Assalam o Alaikum {customer_name} !\nYour Order from Lala Import #{order_number} of\n{item_simple}\nWith a total amount of {total_amount}/-\nis pending for confirmation. Please press confirm or cancel.\nThank you",
+    footer: "",
     buttons: ["Confirm", "Cancel"],
   },
   order_update: {
