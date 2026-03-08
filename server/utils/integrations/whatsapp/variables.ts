@@ -72,11 +72,13 @@ function buildItemLines(
 
 const META_TEMPLATE_PARAMS: Record<string, (vars: Record<string, string>) => string[]> = {
   order_confirmation_2: (vars) => {
+    const orderNum = vars.order_number || "N/A";
+    const item = vars.item_name || "your order";
+    const total = vars.total_amount ? `${vars.total_amount}/-` : "";
+    const body = `Your Order from Lala Import #${orderNum} of\n${item}${total ? `\nWith a total amount of ${total}` : ""}\nis pending for confirmation. Please press confirm or cancel.`;
     return [
       vars.customer_name || "Customer",
-      vars.order_number || "N/A",
-      vars.item_name || "your order",
-      vars.total_amount ? `${vars.total_amount}` : "N/A",
+      body,
     ];
   },
   order_update: (vars) => [
