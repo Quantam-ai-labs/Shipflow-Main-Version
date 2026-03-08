@@ -23,7 +23,7 @@ const IS_PRODUCTION = process.env.NODE_ENV === "production";
 export async function sendOrderStatusWhatsApp(
   params: OrderNotificationParams
 ): Promise<void> {
-  if (!WA_NOTIFY_STATUSES.includes(params.toStatus)) return;
+  if (!(WA_NOTIFY_STATUSES as readonly string[]).includes(params.toStatus)) return;
 
   if (!IS_PRODUCTION) {
     console.log(
