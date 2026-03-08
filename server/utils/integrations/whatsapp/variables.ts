@@ -20,8 +20,7 @@ export function getStatusLabel(status: string): string {
 export const WA_VARIABLE_CHIPS = [
   { key: "{customer_name}", label: "Customer Name" },
   { key: "{order_number}", label: "Order No." },
-  { key: "{item_name}", label: "Item Name (with price)" },
-  { key: "{item_simple}", label: "Item Name (no price)" },
+  { key: "{item_name}", label: "Item Name" },
   { key: "{new_status}", label: "New Status" },
   { key: "{old_status}", label: "Old Status" },
   { key: "{city}", label: "City" },
@@ -33,7 +32,7 @@ export const WA_VARIABLE_CHIPS = [
 ] as const;
 
 export const DEFAULT_MESSAGE_BODIES: Record<string, string> = {
-  NEW: `Assalam o Alaikum {customer_name} !\n Your Order from Lala Import #{order_number} of\n{item_simple}\nWith a total amount of {total_amount}/-\nis pending for confirmation. Please press confirm or cancel. \nThank you`,
+  NEW: `Hello {customer_name},\n\nYour order #{order_number} has been received!\n\n{item_name}\n\nTotal: Rs. {total_amount}\n\nPlease reply *Confirm* or *Cancel*.`,
   BOOKED: `Hello {customer_name},\n\nYour order #{order_number} has been booked with {courier_name}.\n\n{item_name}\n\nTotal: Rs. {total_amount}\nTracking: {tracking_number}\n\nThank you for shopping with us!`,
   FULFILLED: `Hello {customer_name},\n\nYour order #{order_number} is on its way!\n\n{item_name}\n\nTracking: {tracking_number} ({courier_name})\n\nThank you for shopping with us!`,
   DELIVERED: `Hello {customer_name},\n\nYour order #{order_number} has been delivered.\n\n{item_name}\n\nTotal: Rs. {total_amount}\n\nThank you for shopping with us!`,
@@ -73,11 +72,12 @@ function buildItemLines(
 
 const META_TEMPLATE_PARAMS: Record<string, (vars: Record<string, string>) => string[]> = {
   order_confirmation_2: (vars) => {
+    const itemPart = vars.item_name || "your order";
+    const shippingPart = vars.shipping_amount ? ` | Shipping: Rs. ${vars.shipping_amount}` : "";
+    const totalPart = vars.total_amount ? ` | Total: Rs. ${vars.total_amount}` : "";
     return [
       vars.customer_name || "Customer",
-      vars.order_number || "N/A",
-      vars.item_simple || vars.item_name || "your order",
-      vars.total_amount || "0",
+      `${itemPart}${shippingPart}${totalPart}`,
     ];
   },
   order_update: (vars) => [
@@ -115,19 +115,10 @@ export function buildVarsFromParams(params: {
   const grandTotal = params.totalAmount ? Number(params.totalAmount) : 0;
   const shippingCharge = grandTotal > 0 && itemSubtotal > 0 ? grandTotal - itemSubtotal : 0;
 
-  const itemSimple =
-    params.lineItems && params.lineItems.length > 0
-      ? params.lineItems.map(item => {
-          const variant = item.variantTitle ? ` - ${item.variantTitle}` : "";
-          return `${item.name}${variant}`;
-        }).join(", ")
-      : params.itemSummary || "your order";
-
   return {
     customer_name: params.customerName || "Customer",
     order_number: params.orderNumber || "N/A",
     item_name: buildItemLines(params.lineItems, params.itemSummary),
-    item_simple: itemSimple,
     new_status: getStatusLabel(params.toStatus),
     old_status: getStatusLabel(params.fromStatus),
     city: params.city || "",

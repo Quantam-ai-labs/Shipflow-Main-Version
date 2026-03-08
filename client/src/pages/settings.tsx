@@ -129,9 +129,9 @@ const TEMPLATE_NAME_OPTIONS: Record<string, string[]> = {
 
 const META_BUILTIN_PREVIEWS: Record<string, { header: string; body: string; footer: string; buttons?: string[] }> = {
   order_confirmation_2: {
-    header: "",
-    body: "Assalam o Alaikum {customer_name} !\nYour Order from Lala Import #{order_number} of\n{item_simple}\nWith a total amount of {total_amount}/-\nis pending for confirmation. Please press confirm or cancel.\nThank you",
-    footer: "",
+    header: "Confirmation Required",
+    body: "Hello {customer_name}\n\nYour order of {item_name} is pending for Confirmation.",
+    footer: "Please Reply with Confirm or Cancel.",
     buttons: ["Confirm", "Cancel"],
   },
   order_update: {
@@ -142,15 +142,14 @@ const META_BUILTIN_PREVIEWS: Record<string, { header: string; body: string; foot
 };
 
 const WA_PREVIEW_VALUES: Record<string, string> = {
-  customer_name: "Arjad",
-  order_number: "12544",
-  item_name: "Jumper Cable Pro",
-  item_simple: "Jumper Cable Pro - Black",
+  customer_name: "Ali",
+  order_number: "132",
+  item_name: "MacBook Pro 2019",
   new_status: "Delivered",
   old_status: "Shipped",
   city: "Lahore",
   address: "House 12, Block B, DHA",
-  total_amount: "2,356",
+  total_amount: "Rs 2,500",
   courier_name: "Leopards",
   tracking_number: "LP123456",
 };

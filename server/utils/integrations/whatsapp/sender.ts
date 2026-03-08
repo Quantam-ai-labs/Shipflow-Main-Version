@@ -34,8 +34,8 @@ export function formatPhoneForWhatsApp(
 function sanitizeTemplateParam(text: string): string {
   return text
     .replace(/[\u200B-\u200D\uFEFF]/g, "") // remove zero-width chars
-    .replace(/[\r\n\t]/g, " ")             // remove newlines/tabs (Meta API disallows them)
-    .replace(/\s+/g, " ")                  // collapse whitespace
+    .replace(/[\r\n\t]/g, " ")             // remove newlines/tabs
+    .replace(/\s+/g, " ")                  // collapse ALL whitespace
     .trim();
 }
 
