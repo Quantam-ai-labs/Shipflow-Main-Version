@@ -1112,10 +1112,9 @@ export default function CouriersSettings() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <div className="flex items-center gap-3">
-              <div className="flex-1">
-                <Label className="text-xs text-muted-foreground mb-1.5 block">PIN (4-6 digits)</Label>
-                <div className="flex gap-2">
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1.5 block">PIN (4-6 digits)</Label>
+              <div className="flex gap-2">
                   <Input
                     value={newPin}
                     onChange={(e) => setNewPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
@@ -1141,7 +1140,6 @@ export default function CouriersSettings() {
                     <Copy className="w-3.5 h-3.5" />
                   </Button>
                 </div>
-              </div>
             </div>
 
             {warehousePinStatus?.slug && (
@@ -1164,10 +1162,10 @@ export default function CouriersSettings() {
                     <Copy className="w-3 h-3" />
                   </Button>
                 </div>
-                <div className="flex items-center gap-3 pt-1">
+                <div className="flex flex-col items-center gap-2 pt-1">
                   <canvas ref={qrCanvasRef} className="rounded border" />
-                  <div className="text-xs text-muted-foreground space-y-1">
-                    <p className="flex items-center gap-1"><QrCode className="w-3 h-3" /> Scan QR to open on mobile</p>
+                  <div className="text-xs text-muted-foreground text-center space-y-0.5">
+                    <p className="flex items-center justify-center gap-1"><QrCode className="w-3 h-3" /> Scan QR to open on mobile</p>
                     <p>Or share the link + PIN</p>
                   </div>
                 </div>
