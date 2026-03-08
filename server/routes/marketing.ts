@@ -845,6 +845,102 @@ export function registerMarketingRoutes(app: Express) {
     }
   });
 
+  app.get("/api/marketing/profitability/product-order-stats", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const { dateFrom, dateTo, productIds } = req.query;
+
+      if (!productIds || typeof productIds !== "string") {
+        return res.json({ stats: [] });
+      }
+
+      const productIdList = productIds.split(",").map((s: string) => s.trim()).filter(Boolean);
+      if (productIdList.length === 0) return res.json({ stats: [] });
+
+      const productRows = await db
+        .select({
+          id: products.id,
+          title: products.title,
+          imageUrl: products.imageUrl,
+          shopifyProductId: products.shopifyProductId,
+          variants: products.variants,
+        })
+        .from(products)
+        .where(and(
+          eq(products.merchantId, merchantId),
+          inArray(products.id, productIdList),
+        ));
+
+      const productDetailsMap = new Map<string, { title: string; imageUrl: string | null; salePrice: number; costPrice: number; shopifyProductId: string }>();
+      const shopifyProductIdToDbId = new Map<string, string>();
+
+      for (const p of productRows) {
+        const variants = p.variants as any[];
+        let salePrice = 0, costPrice = 0;
+        if (variants && Array.isArray(variants) && variants.length > 0) {
+          salePrice = parseFloat(variants[0].price || "0");
+          costPrice = parseFloat(variants[0].cost || "0");
+        }
+        productDetailsMap.set(p.id, { title: p.title, imageUrl: p.imageUrl, salePrice, costPrice, shopifyProductId: p.shopifyProductId });
+        shopifyProductIdToDbId.set(p.shopifyProductId, p.id);
+      }
+
+      const merchantRow = await db.select().from(merchants).where(eq(merchants.id, merchantId)).limit(1);
+      const tz = (merchantRow[0] as any)?.timezone || DEFAULT_TIMEZONE;
+
+      const orderConditions: any[] = [eq(orders.merchantId, merchantId)];
+      if (dateFrom) orderConditions.push(sql`${orders.orderDate} >= ${toMerchantStartOfDay(dateFrom as string, tz)}`);
+      if (dateTo) orderConditions.push(sql`${orders.orderDate} <= ${toMerchantEndOfDay(dateTo as string, tz)}`);
+
+      const allOrders = await db
+        .select({ lineItems: orders.lineItems, workflowStatus: orders.workflowStatus })
+        .from(orders)
+        .where(and(...orderConditions));
+
+      const orderStats = new Map<string, { total: number; dispatched: number; fulfilled: number; delivered: number }>();
+      for (const id of productIdList) {
+        orderStats.set(id, { total: 0, dispatched: 0, fulfilled: 0, delivered: 0 });
+      }
+
+      for (const order of allOrders) {
+        const items = order.lineItems as any[];
+        if (!items || !Array.isArray(items)) continue;
+
+        const matched = new Set<string>();
+        for (const item of items) {
+          const dbId = shopifyProductIdToDbId.get(String(item.productId));
+          if (dbId && orderStats.has(dbId)) matched.add(dbId);
+        }
+
+        for (const dbId of matched) {
+          const s = orderStats.get(dbId)!;
+          s.total++;
+          const ws = order.workflowStatus;
+          if (ws === "FULFILLED" || ws === "DELIVERED" || ws === "RETURN") s.dispatched++;
+          if (ws === "FULFILLED") s.fulfilled++;
+          if (ws === "DELIVERED") s.delivered++;
+        }
+      }
+
+      const result = productIdList.map(id => {
+        const details = productDetailsMap.get(id);
+        const stats = orderStats.get(id) ?? { total: 0, dispatched: 0, fulfilled: 0, delivered: 0 };
+        return {
+          productId: id,
+          title: details?.title ?? "Unknown",
+          imageUrl: details?.imageUrl ?? null,
+          salePrice: details?.salePrice ?? 0,
+          costPrice: details?.costPrice ?? 0,
+          orders: stats,
+        };
+      });
+
+      res.json({ stats: result });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.post("/api/marketing/profitability/rematch", isAuthenticated, async (req: any, res) => {
     try {
       const merchantId = await getMerchantId(req);

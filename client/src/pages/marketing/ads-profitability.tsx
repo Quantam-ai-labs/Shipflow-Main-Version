@@ -66,6 +66,7 @@ import {
   ArrowUpCircle,
   Eye,
   AlertTriangle,
+  Plus,
 } from "lucide-react";
 import type { Product, CampaignJourneyEvent } from "@shared/schema";
 import CampaignJourney, { isEvidenceReady } from "./campaign-journey";
@@ -87,6 +88,28 @@ interface CampaignData {
     salePrice: number;
     costPrice: number;
   } | null;
+  orders: {
+    total: number;
+    dispatched: number;
+    fulfilled: number;
+    delivered: number;
+  };
+}
+
+interface AdditionalProduct {
+  id: string;
+  title: string;
+  imageUrl: string | null;
+  salePrice: number;
+  costPrice: number;
+}
+
+interface ProductOrderStat {
+  productId: string;
+  title: string;
+  imageUrl: string | null;
+  salePrice: number;
+  costPrice: number;
   orders: {
     total: number;
     dispatched: number;
@@ -167,7 +190,9 @@ export default function AdsProfitability() {
   const [deliveryCharges, setDeliveryCharges] = useState<string>("0");
   const [packingExpense, setPackingExpense] = useState<string>("0");
   const [manualOverrides, setManualOverrides] = useState<Record<string, string>>({});
+  const [multiProductOverrides, setMultiProductOverrides] = useState<Record<string, string[]>>({});
   const [openCombobox, setOpenCombobox] = useState<string | null>(null);
+  const [openAddCombobox, setOpenAddCombobox] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [orderTypeForCalc, setOrderTypeForCalc] = useState<OrderTypeForCalc>("total");
@@ -226,6 +251,7 @@ export default function AdsProfitability() {
         if (parsed.dateRangeFrom && parsed.dateRangeTo) {
           setDateRange({ from: new Date(parsed.dateRangeFrom), to: new Date(parsed.dateRangeTo) });
         }
+        if (parsed.multiProductOverrides) setMultiProductOverrides(parsed.multiProductOverrides);
       }
     } catch {}
   }, []);
@@ -239,9 +265,10 @@ export default function AdsProfitability() {
         dollarRate, deliveryCharges, packingExpense, statusFilter, orderTypeForCalc,
         dateRangeFrom: dateRange?.from?.toISOString() || null,
         dateRangeTo: dateRange?.to?.toISOString() || null,
+        multiProductOverrides,
       })
     );
-  }, [dollarRate, deliveryCharges, packingExpense, statusFilter, dateRange, orderTypeForCalc]);
+  }, [dollarRate, deliveryCharges, packingExpense, statusFilter, dateRange, orderTypeForCalc, multiProductOverrides]);
 
   const { data: calcData, isLoading } = useQuery<{ campaigns: CampaignData[] }>({
     queryKey: ["/api/marketing/profitability/calculator", dateParams.dateFrom, dateParams.dateTo],
@@ -263,6 +290,33 @@ export default function AdsProfitability() {
       return res.json();
     },
   });
+
+  const allAdditionalProductIds = useMemo(() => {
+    return [...new Set(Object.values(multiProductOverrides).flat())];
+  }, [multiProductOverrides]);
+
+  const { data: productStatsData } = useQuery<{ stats: ProductOrderStat[] }>({
+    queryKey: ["/api/marketing/profitability/product-order-stats", dateParams.dateFrom, dateParams.dateTo, allAdditionalProductIds.join(",")],
+    queryFn: async () => {
+      if (allAdditionalProductIds.length === 0) return { stats: [] };
+      const params = new URLSearchParams();
+      if (dateParams.dateFrom) params.set("dateFrom", dateParams.dateFrom);
+      if (dateParams.dateTo) params.set("dateTo", dateParams.dateTo);
+      params.set("productIds", allAdditionalProductIds.join(","));
+      const res = await fetch(`/api/marketing/profitability/product-order-stats?${params}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch product stats");
+      return res.json();
+    },
+    enabled: allAdditionalProductIds.length > 0,
+  });
+
+  const productOrderStats = useMemo(() => {
+    const map: Record<string, { total: number; dispatched: number; fulfilled: number; delivered: number }> = {};
+    for (const stat of productStatsData?.stats ?? []) {
+      map[stat.productId] = stat.orders;
+    }
+    return map;
+  }, [productStatsData]);
 
   const matchMutation = useMutation({
     mutationFn: async ({ campaignId, productId }: { campaignId: string; productId: string | null }) => {
@@ -346,6 +400,60 @@ export default function AdsProfitability() {
       }
     }
 
+    const additionalIds = multiProductOverrides[c.campaignId] ?? [];
+    const additionalProducts: AdditionalProduct[] = additionalIds.map(id => {
+      const p = productsList.find(x => x.id === id);
+      if (!p) return null;
+      const variants = (p.variants as any[]) ?? [];
+      let salePrice = 0, costPrice = 0;
+      if (variants.length > 0) {
+        salePrice = parseFloat(variants[0].price || "0");
+        costPrice = parseFloat(variants[0].cost || "0");
+      }
+      return { id, title: p.title, imageUrl: p.imageUrl, salePrice, costPrice };
+    }).filter((x): x is AdditionalProduct => x !== null);
+
+    if (additionalProducts.length > 0 && product) {
+      let totalRevenue = product.salePrice * c.orders.total;
+      let totalCost = product.costPrice * c.orders.total;
+      let totalOrdersCount = c.orders.total;
+      let totalDispatched = c.orders.dispatched;
+      let totalFulfilled = c.orders.fulfilled;
+      let totalDelivered = c.orders.delivered;
+
+      for (const ap of additionalProducts) {
+        const apStats = productOrderStats[ap.id] ?? { total: 0, dispatched: 0, fulfilled: 0, delivered: 0 };
+        totalRevenue += ap.salePrice * apStats.total;
+        totalCost += ap.costPrice * apStats.total;
+        totalOrdersCount += apStats.total;
+        totalDispatched += apStats.dispatched;
+        totalFulfilled += apStats.fulfilled;
+        totalDelivered += apStats.delivered;
+      }
+
+      const blendedSalePrice = totalOrdersCount > 0 ? totalRevenue / totalOrdersCount : product.salePrice;
+      const blendedCostPrice = totalOrdersCount > 0 ? totalCost / totalOrdersCount : product.costPrice;
+      const combinedOrders = { total: totalOrdersCount, dispatched: totalDispatched, fulfilled: totalFulfilled, delivered: totalDelivered };
+      const selectedOrdersCount = getOrderCount(combinedOrders);
+      const cpa = selectedOrdersCount > 0 ? (c.adSpend / selectedOrdersCount) * dRate : 0;
+      const profitMargin = blendedSalePrice - blendedCostPrice - cpa - delCharges - packExp;
+      const netProfit = selectedOrdersCount > 0 ? profitMargin * selectedOrdersCount : -(c.adSpend * dRate);
+
+      return {
+        ...c,
+        product: { ...product, salePrice: blendedSalePrice, costPrice: blendedCostPrice },
+        primaryProduct: product,
+        matchType,
+        cpa,
+        profitMargin,
+        netProfit,
+        selectedOrders: selectedOrdersCount,
+        orders: combinedOrders,
+        additionalProducts,
+        isMultiProduct: true as const,
+      };
+    }
+
     const salePrice = product?.salePrice ?? 0;
     const costPrice = product?.costPrice ?? 0;
     const selectedOrders = getOrderCount(c.orders);
@@ -356,11 +464,14 @@ export default function AdsProfitability() {
     return {
       ...c,
       product,
+      primaryProduct: product,
       matchType,
       cpa,
       profitMargin,
       netProfit,
       selectedOrders,
+      additionalProducts: [] as AdditionalProduct[],
+      isMultiProduct: false as const,
     };
   });
 
@@ -379,12 +490,7 @@ export default function AdsProfitability() {
       if (group.length === 1) return group[0];
       const first = group[0];
       const mergedAdSpend = group.reduce((s, r) => s + r.adSpend, 0);
-      const mergedOrders = {
-        total: group.reduce((s, r) => s + r.orders.total, 0),
-        dispatched: group.reduce((s, r) => s + r.orders.dispatched, 0),
-        fulfilled: group.reduce((s, r) => s + r.orders.fulfilled, 0),
-        delivered: group.reduce((s, r) => s + r.orders.delivered, 0),
-      };
+      const mergedOrders = first.orders;
       const statusOrder: Record<string, number> = { ACTIVE: 0, PAUSED: 1, ARCHIVED: 2 };
       const bestStatus = group.reduce((best, r) => (statusOrder[r.status] ?? 3) < (statusOrder[best] ?? 3) ? r.status : best, group[0].status);
       const bestMatch = group.some(r => r.matchType === "auto") ? "auto" as const : group.some(r => r.matchType === "name") ? "name" as const : group.some(r => r.matchType === "manual") ? "manual" as const : "unmatched" as const;
@@ -406,6 +512,9 @@ export default function AdsProfitability() {
         cpa,
         profitMargin,
         netProfit,
+        additionalProducts: first.additionalProducts,
+        isMultiProduct: first.isMultiProduct,
+        primaryProduct: first.primaryProduct,
       };
     });
   })();
@@ -429,6 +538,28 @@ export default function AdsProfitability() {
       setManualOverrides(prev => ({ ...prev, [campaignId]: productId }));
       matchMutation.mutate({ campaignId, productId });
     }
+  };
+
+  const handleAddProduct = (campaignId: string, productId: string) => {
+    setMultiProductOverrides(prev => {
+      const existing = prev[campaignId] ?? [];
+      if (existing.includes(productId)) return prev;
+      return { ...prev, [campaignId]: [...existing, productId] };
+    });
+    setOpenAddCombobox(null);
+  };
+
+  const handleRemoveAdditionalProduct = (campaignId: string, productId: string) => {
+    setMultiProductOverrides(prev => {
+      const existing = prev[campaignId] ?? [];
+      const updated = existing.filter(id => id !== productId);
+      if (updated.length === 0) {
+        const n = { ...prev };
+        delete n[campaignId];
+        return n;
+      }
+      return { ...prev, [campaignId]: updated };
+    });
   };
 
   function handleSignalClick(campaignId: string, campaignName: string, signal: Signal) {
@@ -702,95 +833,165 @@ export default function AdsProfitability() {
                         </div>
                       </div>
                     </td>
-                    <td className="border border-border px-2 py-1 text-xs overflow-hidden truncate">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <MatchIndicator type={row.matchType} />
-                        <Popover
-                          open={openCombobox === row.campaignId}
-                          onOpenChange={(open) => setOpenCombobox(open ? row.campaignId : null)}
-                        >
-                          <PopoverTrigger asChild>
-                            {row.product ? (
+                    <td className="border border-border px-2 py-1 text-xs overflow-hidden">
+                      <div className="flex flex-col gap-0.5 min-w-0">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <MatchIndicator type={row.matchType} />
+                          <Popover
+                            open={openCombobox === row.campaignId}
+                            onOpenChange={(open) => setOpenCombobox(open ? row.campaignId : null)}
+                          >
+                            <PopoverTrigger asChild>
+                              {row.primaryProduct ? (
+                                <button
+                                  className="flex items-center gap-1.5 min-w-0 group cursor-pointer rounded px-1 py-0.5 -mx-1 hover:bg-accent transition-colors"
+                                  data-testid={`button-product-${row.campaignId}`}
+                                >
+                                  <Avatar className="h-5 w-5 rounded flex-shrink-0">
+                                    <AvatarImage src={row.primaryProduct.imageUrl || undefined} alt={row.primaryProduct.title} />
+                                    <AvatarFallback className="rounded text-[8px]">
+                                      {row.primaryProduct.title.charAt(0)}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <span className="text-xs truncate" data-testid={`text-product-${row.campaignId}`}>
+                                    {row.primaryProduct.title}
+                                  </span>
+                                </button>
+                              ) : (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-6 text-[11px] justify-between font-normal text-muted-foreground"
+                                  data-testid={`button-select-product-${row.campaignId}`}
+                                >
+                                  <Search className="w-3 h-3 mr-1" />
+                                  Select...
+                                </Button>
+                              )}
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[280px] p-0" align="start">
+                              <Command>
+                                <CommandInput placeholder="Type product name..." data-testid={`input-search-product-${row.campaignId}`} />
+                                <CommandList>
+                                  <CommandEmpty>No products found.</CommandEmpty>
+                                  <CommandGroup>
+                                    {row.primaryProduct && (
+                                      <CommandItem
+                                        value="__clear__"
+                                        onSelect={() => {
+                                          handleProductOverride(row.campaignId, "none");
+                                          setOpenCombobox(null);
+                                        }}
+                                        className="text-muted-foreground"
+                                        data-testid={`button-clear-product-${row.campaignId}`}
+                                      >
+                                        <X className="w-3.5 h-3.5 mr-2" />
+                                        Clear selection
+                                      </CommandItem>
+                                    )}
+                                    {productsList.map((p) => (
+                                      <CommandItem
+                                        key={p.id}
+                                        value={p.title}
+                                        onSelect={() => {
+                                          handleProductOverride(row.campaignId, p.id);
+                                          setOpenCombobox(null);
+                                        }}
+                                        data-testid={`option-product-${row.campaignId}-${p.id}`}
+                                      >
+                                        <Avatar className="h-6 w-6 rounded flex-shrink-0">
+                                          <AvatarImage src={p.imageUrl || undefined} alt={p.title} />
+                                          <AvatarFallback className="rounded text-[9px]">
+                                            {p.title.charAt(0)}
+                                          </AvatarFallback>
+                                        </Avatar>
+                                        <span className="truncate">{p.title}</span>
+                                        {row.primaryProduct?.id === p.id && (
+                                          <Check className="w-3.5 h-3.5 ml-auto text-green-500 flex-shrink-0" />
+                                        )}
+                                      </CommandItem>
+                                    ))}
+                                  </CommandGroup>
+                                </CommandList>
+                              </Command>
+                            </PopoverContent>
+                          </Popover>
+                        </div>
+                        {row.additionalProducts.map(ap => (
+                          <div key={ap.id} className="flex items-center gap-1 min-w-0 pl-5">
+                            <Avatar className="h-4 w-4 rounded flex-shrink-0">
+                              <AvatarImage src={ap.imageUrl || undefined} alt={ap.title} />
+                              <AvatarFallback className="rounded text-[7px]">{ap.title.charAt(0)}</AvatarFallback>
+                            </Avatar>
+                            <span className="text-[10px] truncate text-muted-foreground flex-1">{ap.title}</span>
+                            <button
+                              onClick={() => handleRemoveAdditionalProduct(row.campaignId, ap.id)}
+                              className="text-muted-foreground hover:text-red-500 transition-colors flex-shrink-0 ml-1"
+                              data-testid={`button-remove-product-${row.campaignId}-${ap.id}`}
+                            >
+                              <X className="w-2.5 h-2.5" />
+                            </button>
+                          </div>
+                        ))}
+                        {row.primaryProduct && (
+                          <Popover
+                            open={openAddCombobox === row.campaignId}
+                            onOpenChange={(open) => setOpenAddCombobox(open ? row.campaignId : null)}
+                          >
+                            <PopoverTrigger asChild>
                               <button
-                                className="flex items-center gap-1.5 min-w-0 group cursor-pointer rounded px-1 py-0.5 -mx-1 hover:bg-accent transition-colors"
-                                data-testid={`button-product-${row.campaignId}`}
+                                className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors pl-5 mt-0.5"
+                                data-testid={`button-add-product-${row.campaignId}`}
                               >
-                                <Avatar className="h-5 w-5 rounded flex-shrink-0">
-                                  <AvatarImage src={row.product.imageUrl || undefined} alt={row.product.title} />
-                                  <AvatarFallback className="rounded text-[8px]">
-                                    {row.product.title.charAt(0)}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <span className="text-xs truncate" data-testid={`text-product-${row.campaignId}`}>
-                                  {row.product.title}
-                                </span>
+                                <Plus className="w-2.5 h-2.5" />
+                                Add product
                               </button>
-                            ) : (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-6 text-[11px] justify-between font-normal text-muted-foreground"
-                                data-testid={`button-select-product-${row.campaignId}`}
-                              >
-                                <Search className="w-3 h-3 mr-1" />
-                                Select...
-                              </Button>
-                            )}
-                          </PopoverTrigger>
-                          <PopoverContent className="w-[280px] p-0" align="start">
-                            <Command>
-                              <CommandInput placeholder="Type product name..." data-testid={`input-search-product-${row.campaignId}`} />
-                              <CommandList>
-                                <CommandEmpty>No products found.</CommandEmpty>
-                                <CommandGroup>
-                                  {row.product && (
-                                    <CommandItem
-                                      value="__clear__"
-                                      onSelect={() => {
-                                        handleProductOverride(row.campaignId, "none");
-                                        setOpenCombobox(null);
-                                      }}
-                                      className="text-muted-foreground"
-                                      data-testid={`button-clear-product-${row.campaignId}`}
-                                    >
-                                      <X className="w-3.5 h-3.5 mr-2" />
-                                      Clear selection
-                                    </CommandItem>
-                                  )}
-                                  {productsList.map((p) => (
-                                    <CommandItem
-                                      key={p.id}
-                                      value={p.title}
-                                      onSelect={() => {
-                                        handleProductOverride(row.campaignId, p.id);
-                                        setOpenCombobox(null);
-                                      }}
-                                      data-testid={`option-product-${row.campaignId}-${p.id}`}
-                                    >
-                                      <Avatar className="h-6 w-6 rounded flex-shrink-0">
-                                        <AvatarImage src={p.imageUrl || undefined} alt={p.title} />
-                                        <AvatarFallback className="rounded text-[9px]">
-                                          {p.title.charAt(0)}
-                                        </AvatarFallback>
-                                      </Avatar>
-                                      <span className="truncate">{p.title}</span>
-                                      {row.product?.id === p.id && (
-                                        <Check className="w-3.5 h-3.5 ml-auto text-green-500 flex-shrink-0" />
-                                      )}
-                                    </CommandItem>
-                                  ))}
-                                </CommandGroup>
-                              </CommandList>
-                            </Command>
-                          </PopoverContent>
-                        </Popover>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[280px] p-0" align="start">
+                              <Command>
+                                <CommandInput placeholder="Search product..." data-testid={`input-add-product-${row.campaignId}`} />
+                                <CommandList>
+                                  <CommandEmpty>No products found.</CommandEmpty>
+                                  <CommandGroup>
+                                    {productsList
+                                      .filter(p => p.id !== row.primaryProduct?.id && !row.additionalProducts.some(ap => ap.id === p.id))
+                                      .map(p => (
+                                        <CommandItem
+                                          key={p.id}
+                                          value={p.title}
+                                          onSelect={() => handleAddProduct(row.campaignId, p.id)}
+                                          data-testid={`option-add-product-${row.campaignId}-${p.id}`}
+                                        >
+                                          <Avatar className="h-6 w-6 rounded flex-shrink-0">
+                                            <AvatarImage src={p.imageUrl || undefined} alt={p.title} />
+                                            <AvatarFallback className="rounded text-[9px]">{p.title.charAt(0)}</AvatarFallback>
+                                          </Avatar>
+                                          <span className="truncate">{p.title}</span>
+                                        </CommandItem>
+                                      ))}
+                                  </CommandGroup>
+                                </CommandList>
+                              </Command>
+                            </PopoverContent>
+                          </Popover>
+                        )}
                       </div>
                     </td>
                     <td className="border border-border px-2 py-1 text-xs text-right tabular-nums whitespace-nowrap" data-testid={`text-sale-price-${row.campaignId}`}>
-                      {row.product ? formatCurrency(row.product.salePrice) : "—"}
+                      {row.product ? (
+                        <div>
+                          {row.isMultiProduct && <div className="text-[9px] text-muted-foreground">Blended avg</div>}
+                          {formatCurrency(row.product.salePrice)}
+                        </div>
+                      ) : "—"}
                     </td>
                     <td className="border border-border px-2 py-1 text-xs text-right tabular-nums whitespace-nowrap" data-testid={`text-cost-price-${row.campaignId}`}>
-                      {row.product ? formatCurrency(row.product.costPrice) : "—"}
+                      {row.product ? (
+                        <div>
+                          {row.isMultiProduct && <div className="text-[9px] text-muted-foreground">Blended avg</div>}
+                          {formatCurrency(row.product.costPrice)}
+                        </div>
+                      ) : "—"}
                     </td>
                     <td className="border border-border px-2 py-1 text-xs text-right tabular-nums font-medium whitespace-nowrap" data-testid={`text-ad-spend-${row.campaignId}`}>
                       {formatUsd(row.adSpend)}
