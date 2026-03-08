@@ -104,6 +104,32 @@ interface ShopifyOrdersResponse {
   orders: ShopifyOrder[];
 }
 
+function parseUtmParams(url: string | null): {
+  utmSource: string | null;
+  utmMedium: string | null;
+  utmCampaign: string | null;
+  utmContent: string | null;
+  utmTerm: string | null;
+  fbClickId: string | null;
+} {
+  const empty = { utmSource: null, utmMedium: null, utmCampaign: null, utmContent: null, utmTerm: null, fbClickId: null };
+  if (!url) return empty;
+  try {
+    const fullUrl = url.startsWith('http') ? url : `https://placeholder.com${url.startsWith('/') ? url : '/' + url}`;
+    const params = new URL(fullUrl).searchParams;
+    return {
+      utmSource: params.get('utm_source'),
+      utmMedium: params.get('utm_medium'),
+      utmCampaign: params.get('utm_campaign'),
+      utmContent: params.get('utm_content'),
+      utmTerm: params.get('utm_term'),
+      fbClickId: params.get('fbclid'),
+    };
+  } catch {
+    return empty;
+  }
+}
+
 export class ShopifyService {
   private config: ShopifyConfig;
   private hostMismatch: boolean = false;
@@ -1002,6 +1028,9 @@ export class ShopifyService {
     const referringSite = shopifyOrder.referring_site || null;
     const browserIp = shopifyOrder.browser_ip || shopifyOrder.client_details?.browser_ip || null;
 
+    const utmParams = parseUtmParams(landingSite);
+
+
     let shipmentStatus = 'Unfulfilled';
     if (shopifyOrder.cancelled_at) {
       shipmentStatus = 'CANCELLED';
@@ -1050,6 +1079,12 @@ export class ShopifyService {
       landingSite,
       referringSite,
       browserIp,
+      utmSource: utmParams.utmSource,
+      utmMedium: utmParams.utmMedium,
+      utmCampaign: utmParams.utmCampaign,
+      utmContent: utmParams.utmContent,
+      utmTerm: utmParams.utmTerm,
+      fbClickId: utmParams.fbClickId,
       rawShopifyData: shopifyOrder as unknown as Record<string, any>,
       orderSource: shopifyOrder.source_name || null,
     };

@@ -83,6 +83,7 @@ import {
   Sparkles,
   Pin,
   ClipboardList,
+  Target,
   type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -153,6 +154,7 @@ const allNavGroups: NavGroup[] = [
       { id: "ads-dashboard", title: "Dashboard", url: "/marketing", icon: BarChart3 },
       { id: "ads-manager", title: "Campaigns", url: "/marketing/ads-manager", icon: Megaphone },
       { id: "ads-profitability", title: "Profitability", url: "/marketing/profitability", icon: TrendingUp },
+      { id: "ads-attribution", title: "Attribution", url: "/marketing/attribution", icon: Target },
       { id: "whatsapp-hub", title: "WhatsApp", url: "/whatsapp", icon: MessageCircle },
     ],
   },

@@ -20,6 +20,7 @@ import {
 } from "../services/metaAds";
 import { encryptToken } from "../services/encryption";
 import { generateChatResponse, generateDashboardInsights, generateQuickStrategy } from "../services/aiInsights";
+import { attributeOrdersToCampaigns, getAttributionSummary } from "../services/adAttribution";
 
 function isAuthenticated(req: any, res: Response, next: Function) {
   if (!req.session?.userId) {
@@ -950,6 +951,33 @@ export function registerMarketingRoutes(app: Express) {
     } catch (error: any) {
       console.error("AI strategy error:", error);
       res.status(500).json({ error: "Failed to generate strategy" });
+    }
+  });
+
+  app.post("/api/marketing/resolve-attribution", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const result = await attributeOrdersToCampaigns(merchantId);
+      res.json(result);
+    } catch (error: any) {
+      console.error("[Attribution] Error resolving attribution:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/marketing/attribution/summary", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const { dateFrom, dateTo } = req.query;
+      const summary = await getAttributionSummary(
+        merchantId,
+        dateFrom as string | undefined,
+        dateTo as string | undefined,
+      );
+      res.json(summary);
+    } catch (error: any) {
+      console.error("[Attribution] Error fetching summary:", error.message);
+      res.status(500).json({ error: error.message });
     }
   });
 }
