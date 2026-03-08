@@ -192,7 +192,10 @@ export default function AdsProfitability() {
   const [manualOverrides, setManualOverrides] = useState<Record<string, string>>({});
   const [multiProductOverrides, setMultiProductOverrides] = useState<Record<string, string[]>>({});
   const [openCombobox, setOpenCombobox] = useState<string | null>(null);
-  const [openAddCombobox, setOpenAddCombobox] = useState<string | null>(null);
+  const [multiSelectDialog, setMultiSelectDialog] = useState<string | null>(null);
+  const [tempSelection, setTempSelection] = useState<string[]>([]);
+  const [productSearch, setProductSearch] = useState("");
+  const [collectionTab, setCollectionTab] = useState<"products" | "collections">("products");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [orderTypeForCalc, setOrderTypeForCalc] = useState<OrderTypeForCalc>("total");
@@ -290,6 +293,11 @@ export default function AdsProfitability() {
       return res.json();
     },
   });
+
+  const { data: collectionsData } = useQuery<{ collections: { id: string; title: string; productsCount: number; productDbIds: string[] }[] }>({
+    queryKey: ["/api/marketing/profitability/shopify-collections"],
+  });
+  const collectionsList = collectionsData?.collections ?? [];
 
   const allAdditionalProductIds = useMemo(() => {
     return [...new Set(Object.values(multiProductOverrides).flat())];
@@ -540,26 +548,40 @@ export default function AdsProfitability() {
     }
   };
 
-  const handleAddProduct = (campaignId: string, productId: string) => {
-    setMultiProductOverrides(prev => {
-      const existing = prev[campaignId] ?? [];
-      if (existing.includes(productId)) return prev;
-      return { ...prev, [campaignId]: [...existing, productId] };
-    });
-    setOpenAddCombobox(null);
+  const openMultiSelectDialog = (campaignId: string, primaryProductId: string | null) => {
+    const existing = multiProductOverrides[campaignId] ?? [];
+    setTempSelection(existing);
+    setProductSearch("");
+    setCollectionTab("products");
+    setMultiSelectDialog(campaignId);
   };
 
-  const handleRemoveAdditionalProduct = (campaignId: string, productId: string) => {
+  const handleApplyMultiSelect = (campaignId: string) => {
     setMultiProductOverrides(prev => {
-      const existing = prev[campaignId] ?? [];
-      const updated = existing.filter(id => id !== productId);
-      if (updated.length === 0) {
+      if (tempSelection.length === 0) {
         const n = { ...prev };
         delete n[campaignId];
         return n;
       }
-      return { ...prev, [campaignId]: updated };
+      return { ...prev, [campaignId]: tempSelection };
     });
+    setMultiSelectDialog(null);
+  };
+
+  const toggleProductInTempSelection = (productId: string) => {
+    setTempSelection(prev =>
+      prev.includes(productId) ? prev.filter(id => id !== productId) : [...prev, productId]
+    );
+  };
+
+  const toggleCollectionInTempSelection = (col: { productDbIds: string[] }, primaryProductId: string | null) => {
+    const colIds = col.productDbIds.filter(id => id !== primaryProductId);
+    const allSelected = colIds.every(id => tempSelection.includes(id));
+    if (allSelected) {
+      setTempSelection(prev => prev.filter(id => !colIds.includes(id)));
+    } else {
+      setTempSelection(prev => [...new Set([...prev, ...colIds])]);
+    }
   };
 
   function handleSignalClick(campaignId: string, campaignName: string, signal: Signal) {
@@ -917,63 +939,25 @@ export default function AdsProfitability() {
                             </PopoverContent>
                           </Popover>
                         </div>
-                        {row.additionalProducts.map(ap => (
-                          <div key={ap.id} className="flex items-center gap-1 min-w-0 pl-5">
-                            <Avatar className="h-4 w-4 rounded flex-shrink-0">
-                              <AvatarImage src={ap.imageUrl || undefined} alt={ap.title} />
-                              <AvatarFallback className="rounded text-[7px]">{ap.title.charAt(0)}</AvatarFallback>
-                            </Avatar>
-                            <span className="text-[10px] truncate text-muted-foreground flex-1">{ap.title}</span>
+                        {row.primaryProduct && (
+                          <div className="flex items-center gap-1.5 pl-5 mt-0.5">
+                            {row.additionalProducts.length > 0 && (
+                              <span className="text-[10px] text-blue-500 font-medium">
+                                +{row.additionalProducts.length} more (blended)
+                              </span>
+                            )}
                             <button
-                              onClick={() => handleRemoveAdditionalProduct(row.campaignId, ap.id)}
-                              className="text-muted-foreground hover:text-red-500 transition-colors flex-shrink-0 ml-1"
-                              data-testid={`button-remove-product-${row.campaignId}-${ap.id}`}
+                              onClick={() => openMultiSelectDialog(row.campaignId, row.primaryProduct?.id ?? null)}
+                              className="flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                              data-testid={`button-manage-products-${row.campaignId}`}
                             >
-                              <X className="w-2.5 h-2.5" />
+                              {row.additionalProducts.length > 0 ? (
+                                <><Pencil className="w-2.5 h-2.5" /> Edit</>
+                              ) : (
+                                <><Plus className="w-2.5 h-2.5" /> Add products</>
+                              )}
                             </button>
                           </div>
-                        ))}
-                        {row.primaryProduct && (
-                          <Popover
-                            open={openAddCombobox === row.campaignId}
-                            onOpenChange={(open) => setOpenAddCombobox(open ? row.campaignId : null)}
-                          >
-                            <PopoverTrigger asChild>
-                              <button
-                                className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors pl-5 mt-0.5"
-                                data-testid={`button-add-product-${row.campaignId}`}
-                              >
-                                <Plus className="w-2.5 h-2.5" />
-                                Add product
-                              </button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-[280px] p-0" align="start">
-                              <Command>
-                                <CommandInput placeholder="Search product..." data-testid={`input-add-product-${row.campaignId}`} />
-                                <CommandList>
-                                  <CommandEmpty>No products found.</CommandEmpty>
-                                  <CommandGroup>
-                                    {productsList
-                                      .filter(p => p.id !== row.primaryProduct?.id && !row.additionalProducts.some(ap => ap.id === p.id))
-                                      .map(p => (
-                                        <CommandItem
-                                          key={p.id}
-                                          value={p.title}
-                                          onSelect={() => handleAddProduct(row.campaignId, p.id)}
-                                          data-testid={`option-add-product-${row.campaignId}-${p.id}`}
-                                        >
-                                          <Avatar className="h-6 w-6 rounded flex-shrink-0">
-                                            <AvatarImage src={p.imageUrl || undefined} alt={p.title} />
-                                            <AvatarFallback className="rounded text-[9px]">{p.title.charAt(0)}</AvatarFallback>
-                                          </Avatar>
-                                          <span className="truncate">{p.title}</span>
-                                        </CommandItem>
-                                      ))}
-                                  </CommandGroup>
-                                </CommandList>
-                              </Command>
-                            </PopoverContent>
-                          </Popover>
                         )}
                       </div>
                     </td>
@@ -1195,6 +1179,161 @@ export default function AdsProfitability() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Multi-product select dialog */}
+      {(() => {
+        const dialogRow = multiSelectDialog ? mergedRows.find(r => r.campaignId === multiSelectDialog) : null;
+        if (!dialogRow) return null;
+        const primaryId = dialogRow.primaryProduct?.id ?? null;
+        const filteredProducts = productsList.filter(p =>
+          p.id !== primaryId &&
+          p.title.toLowerCase().includes(productSearch.toLowerCase())
+        );
+        const totalSelected = tempSelection.length;
+        return (
+          <Dialog open={!!multiSelectDialog} onOpenChange={(open) => { if (!open) setMultiSelectDialog(null); }}>
+            <DialogContent className="max-w-lg max-h-[85vh] flex flex-col" data-testid="dialog-multi-product">
+              <DialogHeader>
+                <DialogTitle className="text-base">Manage Products for Campaign</DialogTitle>
+                <p className="text-xs text-muted-foreground truncate">{dialogRow.campaignName}</p>
+              </DialogHeader>
+
+              <div className="flex border-b mb-2">
+                <button
+                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${collectionTab === "products" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+                  onClick={() => setCollectionTab("products")}
+                  data-testid="tab-products"
+                >
+                  Products
+                </button>
+                {collectionsList.length > 0 && (
+                  <button
+                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${collectionTab === "collections" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+                    onClick={() => setCollectionTab("collections")}
+                    data-testid="tab-collections"
+                  >
+                    Collections ({collectionsList.length})
+                  </button>
+                )}
+              </div>
+
+              {collectionTab === "products" && (
+                <div className="flex flex-col gap-2 min-h-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                      <Input
+                        value={productSearch}
+                        onChange={(e) => setProductSearch(e.target.value)}
+                        placeholder="Search products..."
+                        className="pl-8 h-8 text-sm"
+                        data-testid="input-multiselect-search"
+                      />
+                    </div>
+                    <button
+                      className="text-xs text-muted-foreground hover:text-foreground transition-colors whitespace-nowrap"
+                      onClick={() => {
+                        const allIds = filteredProducts.map(p => p.id);
+                        const allSelected = allIds.every(id => tempSelection.includes(id));
+                        if (allSelected) {
+                          setTempSelection(prev => prev.filter(id => !allIds.includes(id)));
+                        } else {
+                          setTempSelection(prev => [...new Set([...prev, ...allIds])]);
+                        }
+                      }}
+                      data-testid="button-select-all"
+                    >
+                      {filteredProducts.every(p => tempSelection.includes(p.id)) && filteredProducts.length > 0 ? "Deselect All" : "Select All"}
+                    </button>
+                  </div>
+
+                  {primaryId && (
+                    <div className="flex items-center gap-2 px-2 py-1.5 rounded bg-muted/40 border border-border/50">
+                      <div className="w-4 h-4 rounded border-2 border-primary bg-primary flex items-center justify-center flex-shrink-0">
+                        <Check className="w-2.5 h-2.5 text-primary-foreground" />
+                      </div>
+                      <Avatar className="h-5 w-5 rounded flex-shrink-0">
+                        <AvatarImage src={dialogRow.primaryProduct?.imageUrl || undefined} />
+                        <AvatarFallback className="rounded text-[7px]">{dialogRow.primaryProduct?.title.charAt(0)}</AvatarFallback>
+                      </Avatar>
+                      <span className="text-xs text-muted-foreground truncate flex-1">{dialogRow.primaryProduct?.title}</span>
+                      <span className="text-[10px] text-muted-foreground">Primary</span>
+                    </div>
+                  )}
+
+                  <div className="overflow-y-auto flex-1 space-y-0.5 pr-1" style={{ maxHeight: "340px" }}>
+                    {filteredProducts.length === 0 && (
+                      <p className="text-sm text-muted-foreground text-center py-8">No products found</p>
+                    )}
+                    {filteredProducts.map(p => {
+                      const checked = tempSelection.includes(p.id);
+                      return (
+                        <button
+                          key={p.id}
+                          onClick={() => toggleProductInTempSelection(p.id)}
+                          className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-left transition-colors hover:bg-accent ${checked ? "bg-accent/50" : ""}`}
+                          data-testid={`checkbox-product-${p.id}`}
+                        >
+                          <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${checked ? "border-primary bg-primary" : "border-muted-foreground/40"}`}>
+                            {checked && <Check className="w-2.5 h-2.5 text-primary-foreground" />}
+                          </div>
+                          <Avatar className="h-5 w-5 rounded flex-shrink-0">
+                            <AvatarImage src={p.imageUrl || undefined} alt={p.title} />
+                            <AvatarFallback className="rounded text-[7px]">{p.title.charAt(0)}</AvatarFallback>
+                          </Avatar>
+                          <span className="text-xs truncate flex-1">{p.title}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {collectionTab === "collections" && (
+                <div className="overflow-y-auto flex-1 space-y-2 pr-1" style={{ maxHeight: "400px" }}>
+                  {collectionsList.map(col => {
+                    const colIds = col.productDbIds.filter(id => id !== primaryId);
+                    const selectedCount = colIds.filter(id => tempSelection.includes(id)).length;
+                    const allSelected = colIds.length > 0 && selectedCount === colIds.length;
+                    return (
+                      <button
+                        key={col.id}
+                        onClick={() => toggleCollectionInTempSelection(col, primaryId)}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left transition-colors hover:bg-accent ${allSelected ? "border-primary bg-accent/50" : "border-border"}`}
+                        data-testid={`button-collection-${col.id}`}
+                      >
+                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${allSelected ? "border-primary bg-primary" : selectedCount > 0 ? "border-primary bg-primary/20" : "border-muted-foreground/40"}`}>
+                          {allSelected && <Check className="w-3 h-3 text-primary-foreground" />}
+                          {!allSelected && selectedCount > 0 && <div className="w-2 h-2 rounded-sm bg-primary" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{col.title}</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {col.productsCount} products
+                            {selectedCount > 0 && ` · ${selectedCount} selected`}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              <DialogFooter className="flex items-center justify-between border-t pt-3 mt-1">
+                <span className="text-xs text-muted-foreground" data-testid="text-selected-count">
+                  {totalSelected > 0 ? `${totalSelected} additional product${totalSelected === 1 ? "" : "s"} selected` : "No additional products"}
+                </span>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setMultiSelectDialog(null)}>Cancel</Button>
+                  <Button size="sm" onClick={() => handleApplyMultiSelect(multiSelectDialog!)} data-testid="button-apply-multiselect">
+                    Apply
+                  </Button>
+                </div>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
 
       <Card data-testid="card-column-guide">
         <CardHeader>

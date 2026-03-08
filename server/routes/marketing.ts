@@ -5,6 +5,7 @@ import { z } from "zod";
 import { toMerchantStartOfDay, toMerchantEndOfDay, DEFAULT_TIMEZONE } from "../utils/timezone";
 import { adCampaigns, adAccounts, adCreatives, adInsights, teamMembers, merchants, adProfitabilityEntries, orders, products, insertCampaignJourneyEventSchema, campaignJourneyEvents } from "@shared/schema";
 import { storage } from "../storage";
+import { decryptToken } from "../services/encryption";
 import {
   fullSync,
   quickSyncToday,
@@ -938,6 +939,67 @@ export function registerMarketingRoutes(app: Express) {
       res.json({ stats: result });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/marketing/profitability/shopify-collections", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+
+      const store = await storage.getShopifyStore(merchantId);
+      if (!store || !store.isConnected || !store.accessToken) {
+        return res.json({ collections: [] });
+      }
+
+      const shopDomain = store.shopDomain;
+      const plainToken = decryptToken(store.accessToken);
+      const headers: Record<string, string> = plainToken.includes(":")
+        ? { "Authorization": `Basic ${Buffer.from(plainToken).toString("base64")}` }
+        : { "X-Shopify-Access-Token": plainToken };
+
+      const fetchShopify = async (path: string) => {
+        const r = await fetch(`https://${shopDomain}/admin/api/2025-01${path}`, { headers });
+        if (!r.ok) return null;
+        return r.json();
+      };
+
+      const [customData, smartData] = await Promise.all([
+        fetchShopify("/custom_collections.json?limit=250&fields=id,title,products_count"),
+        fetchShopify("/smart_collections.json?limit=250&fields=id,title,products_count"),
+      ]);
+
+      const rawCollections = [
+        ...(customData?.custom_collections ?? []),
+        ...(smartData?.smart_collections ?? []),
+      ];
+
+      const allProductRows = await db
+        .select({ id: products.id, shopifyProductId: products.shopifyProductId })
+        .from(products)
+        .where(eq(products.merchantId, merchantId));
+
+      const shopifyToDb = new Map(allProductRows.map(p => [p.shopifyProductId, p.id]));
+
+      const collectionsWithProducts = await Promise.all(
+        rawCollections.map(async (col: any) => {
+          const productData = await fetchShopify(`/products.json?collection_id=${col.id}&fields=id&limit=250`);
+          const shopifyProductIds = (productData?.products ?? []).map((p: any) => String(p.id));
+          const productDbIds = shopifyProductIds
+            .map((sid: string) => shopifyToDb.get(sid))
+            .filter(Boolean) as string[];
+          return {
+            id: String(col.id),
+            title: col.title,
+            productsCount: productDbIds.length,
+            productDbIds,
+          };
+        })
+      );
+
+      res.json({ collections: collectionsWithProducts.filter(c => c.productsCount > 0) });
+    } catch (error: any) {
+      console.error("[Collections] Error:", error.message);
+      res.json({ collections: [] });
     }
   });
 
