@@ -33,7 +33,7 @@ Preferred communication style: Simple, everyday language.
 - **Batch Import & API-Only Sync**: Asynchronous, resumable background jobs for large Shopify order imports and incremental sync.
 - **Print & Logs System**: Generates native courier airway bills and batch loadsheets. Includes a picklist PDF generation feature aggregating line items from selected orders.
 - **CSV Export**: Client-side CSV export available on all major data pages.
-- **Webhook Resilience**: Immediate 200 responses and a webhook health check API.
+- **Webhook Resilience**: Immediate 200 responses, webhook health check API, and per-merchant HMAC verification using DB-stored `shopifyAppClientSecret` (with env var fallback). Debug endpoint at `GET /api/shopify/webhooks/debug`.
 - **Ads Profitability Calculator**: Tracks Facebook/Meta campaign profitability, auto-syncs campaign data, and provides financial metrics with product matching and campaign journey tracking.
 - **AI Marketing Intelligence**: AI-powered analytics with auto-generated insights and a conversational chat interface.
 - **Universal AI Assistant**: Dedicated AI page with alerts, chat, voice input/output, and multi-language support. Insights are cached server-side.

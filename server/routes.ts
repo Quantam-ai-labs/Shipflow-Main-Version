@@ -6150,7 +6150,8 @@ export async function registerRoutes(
         return;
       }
 
-      if (!webhookHandler.verifyHmac(rawBody, hmac)) {
+      const hmacValid = await webhookHandler.verifyHmacForShop(rawBody, hmac, shopDomain);
+      if (!hmacValid) {
         console.warn("[Webhook] HMAC verification failed for orders/create");
         return;
       }
@@ -6178,7 +6179,8 @@ export async function registerRoutes(
         return;
       }
 
-      if (!webhookHandler.verifyHmac(rawBody, hmac)) {
+      const hmacValid = await webhookHandler.verifyHmacForShop(rawBody, hmac, shopDomain);
+      if (!hmacValid) {
         console.warn("[Webhook] HMAC verification failed for orders/updated");
         return;
       }
@@ -6206,7 +6208,8 @@ export async function registerRoutes(
         return;
       }
 
-      if (!webhookHandler.verifyHmac(rawBody, hmac)) {
+      const hmacValid = await webhookHandler.verifyHmacForShop(rawBody, hmac, shopDomain);
+      if (!hmacValid) {
         console.warn(
           "[Webhook] HMAC verification failed for fulfillments/create",
         );

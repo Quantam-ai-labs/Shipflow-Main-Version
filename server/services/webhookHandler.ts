@@ -12,8 +12,8 @@ interface WebhookProcessResult {
 }
 
 export class WebhookHandler {
-  private webhookSecrets: string[];
-  private secretLabels: string[];
+  private fallbackSecrets: string[];
+  private fallbackLabels: string[];
 
   constructor() {
     const envKeys = [
@@ -23,60 +23,118 @@ export class WebhookHandler {
       'SHOPIFY_APP_SHARED_SECRET',
       'SHOPIFY_APP_SHARED_SECRET_2',
     ];
-    this.webhookSecrets = [];
-    this.secretLabels = [];
+    this.fallbackSecrets = [];
+    this.fallbackLabels = [];
     for (const key of envKeys) {
       const val = process.env[key];
       if (val) {
-        this.webhookSecrets.push(val);
-        this.secretLabels.push(key);
+        this.fallbackSecrets.push(val);
+        this.fallbackLabels.push(key);
       }
     }
 
-    const masked = this.secretLabels.map((label, i) => {
-      const s = this.webhookSecrets[i];
+    const masked = this.fallbackLabels.map((label, i) => {
+      const s = this.fallbackSecrets[i];
       return `${label}=${s.slice(0, 4)}...${s.slice(-4)} (${s.length} chars)`;
     });
-    console.log(`[WebhookHandler] Initialized with ${this.webhookSecrets.length} secrets: ${masked.join(', ') || 'NONE'}`);
+    console.log(`[WebhookHandler] Initialized with ${this.fallbackSecrets.length} fallback env secrets: ${masked.join(', ') || 'NONE'}`);
   }
 
-  verifyHmac(rawBody: Buffer, hmacHeader: string): boolean {
-    if (!this.webhookSecrets.length || !hmacHeader) {
-      console.warn(`[WebhookHandler] HMAC verify skipped: ${this.webhookSecrets.length} secrets loaded, hmacHeader=${hmacHeader ? 'present' : 'missing'}`);
+  private tryHmac(rawBody: Buffer, hmacHeader: string, secret: string): boolean {
+    try {
+      const generated = crypto
+        .createHmac('sha256', secret)
+        .update(rawBody)
+        .digest('base64');
+      const hmacBuf = Buffer.from(hmacHeader, 'base64');
+      const generatedBuf = Buffer.from(generated, 'base64');
+      return (
+        hmacBuf.length === generatedBuf.length &&
+        crypto.timingSafeEqual(hmacBuf, generatedBuf)
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  async verifyHmacForShop(rawBody: Buffer, hmacHeader: string, shopDomain: string): Promise<boolean> {
+    if (!hmacHeader) {
+      console.warn(`[WebhookHandler] HMAC verify skipped: hmacHeader missing`);
       return false;
     }
 
-    const hmacBuf = Buffer.from(hmacHeader, 'base64');
+    const normalizedDomain = shopDomain?.toLowerCase().trim() || '';
 
-    for (let i = 0; i < this.webhookSecrets.length; i++) {
-      const secret = this.webhookSecrets[i];
-      try {
-        const generated = crypto
-          .createHmac('sha256', secret)
-          .update(rawBody)
-          .digest('base64');
-        const generatedBuf = Buffer.from(generated, 'base64');
-        if (
-          hmacBuf.length === generatedBuf.length &&
-          crypto.timingSafeEqual(hmacBuf, generatedBuf)
-        ) {
-          return true;
+    const { decryptToken } = await import('./encryption');
+    const { merchants } = await import('../../shared/schema');
+    const { shopifyStores } = await import('../../shared/schema');
+    const { db } = await import('../db');
+    const { eq, and } = await import('drizzle-orm');
+
+    try {
+      const [store] = await db.select({ merchantId: shopifyStores.merchantId })
+        .from(shopifyStores)
+        .where(and(
+          eq(shopifyStores.shopDomain, normalizedDomain),
+          eq(shopifyStores.isConnected, true)
+        ))
+        .limit(1);
+
+      if (store) {
+        const [merchant] = await db.select({ shopifyAppClientSecret: merchants.shopifyAppClientSecret })
+          .from(merchants)
+          .where(eq(merchants.id, store.merchantId))
+          .limit(1);
+
+        if (merchant?.shopifyAppClientSecret) {
+          const dbSecret = decryptToken(merchant.shopifyAppClientSecret);
+          if (this.tryHmac(rawBody, hmacHeader, dbSecret)) {
+            console.log(`[WebhookHandler] HMAC verified using DB secret for ${normalizedDomain}`);
+            return true;
+          }
+          console.warn(`[WebhookHandler] HMAC failed for ${normalizedDomain}: DB secret did not match (no fallback when merchant secret is configured), header=${hmacHeader.slice(0, 8)}..., bodyLen=${rawBody.length}`);
+          return false;
         }
-      } catch {
+
+        console.warn(`[WebhookHandler] No DB secret stored for merchant of ${normalizedDomain}, trying fallback env secrets...`);
+      } else {
+        console.warn(`[WebhookHandler] No connected store found for ${normalizedDomain}, trying fallback env secrets...`);
+      }
+    } catch (err: any) {
+      console.warn(`[WebhookHandler] DB lookup error for ${normalizedDomain}: ${err.message}, trying fallback env secrets...`);
+    }
+
+    for (const secret of this.fallbackSecrets) {
+      if (this.tryHmac(rawBody, hmacHeader, secret)) {
+        console.log(`[WebhookHandler] HMAC verified using fallback env secret for ${normalizedDomain}`);
+        return true;
       }
     }
 
-    console.warn(`[WebhookHandler] HMAC failed: tried ${this.webhookSecrets.length} secrets (${this.secretLabels.join(', ')}), header=${hmacHeader.slice(0, 8)}..., bodyLen=${rawBody.length}`);
+    console.warn(`[WebhookHandler] HMAC failed for ${normalizedDomain}: tried ${this.fallbackSecrets.length} env fallbacks (${this.fallbackLabels.join(', ')}), header=${hmacHeader.slice(0, 8)}..., bodyLen=${rawBody.length}`);
     return false;
   }
 
-  getSecretsDiagnostics(): { count: number; configured: { name: string; masked: string }[] } {
+  verifyHmac(rawBody: Buffer, hmacHeader: string): boolean {
+    if (!this.fallbackSecrets.length || !hmacHeader) {
+      return false;
+    }
+    for (const secret of this.fallbackSecrets) {
+      if (this.tryHmac(rawBody, hmacHeader, secret)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  getSecretsDiagnostics(): { count: number; configured: { name: string; masked: string }[]; note: string } {
     return {
-      count: this.webhookSecrets.length,
-      configured: this.secretLabels.map((label, i) => {
-        const s = this.webhookSecrets[i];
+      count: this.fallbackSecrets.length,
+      configured: this.fallbackLabels.map((label, i) => {
+        const s = this.fallbackSecrets[i];
         return { name: label, masked: `${s.slice(0, 4)}...${s.slice(-4)} (${s.length} chars)` };
       }),
+      note: "Primary HMAC verification uses the merchant's shopifyAppClientSecret from the DB. Env vars are fallbacks only.",
     };
   }
 
