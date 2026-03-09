@@ -71,7 +71,7 @@ function ProductBar({ title, percentage, revenue, quantity }: { title: string; p
       </div>
       <div className="h-1.5 bg-muted rounded-full overflow-hidden">
         <div
-          className="h-full bg-violet-500 rounded-full"
+          className="h-full bg-primary rounded-full"
           style={{ width: `${Math.min(percentage, 100)}%` }}
         />
       </div>
@@ -104,19 +104,19 @@ function TrueRoasTab({ dateRange }: { dateRange: DateRange | undefined }) {
       {totals && (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           {[
-            { label: "Total Spend", value: PKR(totals.fbSpend), icon: DollarSign, color: "text-red-400" },
-            { label: "Our Revenue", value: PKR(totals.ourRevenue), icon: TrendingUp, color: "text-green-400" },
-            { label: "Our Real ROAS", value: roasStr(totals.ourRoas), icon: BarChart2, color: "text-violet-400" },
-            { label: "FB Claimed Revenue", value: PKR(totals.fbRevenue), icon: Eye, color: "text-blue-400" },
-            { label: "FB Reported ROAS", value: roasStr(totals.fbRoas), icon: BarChart2, color: "text-blue-400" },
+            { label: "Total Spend", value: PKR(totals.fbSpend), icon: DollarSign },
+            { label: "Our Revenue", value: PKR(totals.ourRevenue), icon: TrendingUp },
+            { label: "Our Real ROAS", value: roasStr(totals.ourRoas), icon: BarChart2 },
+            { label: "FB Claimed Revenue", value: PKR(totals.fbRevenue), icon: Eye },
+            { label: "FB Reported ROAS", value: roasStr(totals.fbRoas), icon: BarChart2 },
           ].map((s) => (
             <Card key={s.label}>
               <CardContent className="p-4">
                 <div className="flex items-center gap-2 mb-1">
-                  <s.icon className={`w-3.5 h-3.5 ${s.color}`} />
+                  <s.icon className="w-3.5 h-3.5 text-muted-foreground" />
                   <span className="text-xs text-muted-foreground">{s.label}</span>
                 </div>
-                <p className="text-lg font-bold">{s.value}</p>
+                <p className="text-lg font-semibold">{s.value}</p>
               </CardContent>
             </Card>
           ))}
@@ -331,14 +331,14 @@ function DarkTrafficTab({ dateRange }: { dateRange: DateRange | undefined }) {
   if (isLoading) return <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>;
 
   const sourceColors: Record<string, string> = {
-    "Attributed (FB Ads)": "bg-green-500",
-    "Facebook Organic": "bg-blue-500",
-    "Facebook (No UTM)": "bg-blue-400",
-    "Google": "bg-yellow-500",
-    "Instagram": "bg-pink-500",
-    "TikTok": "bg-cyan-500",
+    "Attributed (FB Ads)": "bg-chart-2",
+    "Facebook Organic": "bg-chart-1",
+    "Facebook (No UTM)": "bg-chart-1/70",
+    "Google": "bg-chart-3",
+    "Instagram": "bg-chart-5",
+    "TikTok": "bg-chart-4",
     "Direct / Unknown": "bg-muted-foreground",
-    "Other": "bg-violet-500",
+    "Other": "bg-muted-foreground/60",
   };
 
   const totalRev = summary?.totalRevenue ?? 1;
@@ -353,18 +353,18 @@ function DarkTrafficTab({ dateRange }: { dateRange: DateRange | undefined }) {
       {summary && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
-            { label: "Total Orders", value: summary.totalOrders, icon: ShoppingCart, color: "text-blue-400" },
-            { label: "Attributed Orders", value: summary.attributedOrders, icon: BarChart2, color: "text-green-400" },
-            { label: "Attribution Rate", value: `${summary.attributionRate}%`, icon: TrendingUp, color: "text-violet-400" },
-            { label: "Unattributed Revenue", value: PKR(summary.unattributedRevenue), icon: AlertCircle, color: "text-red-400" },
+            { label: "Total Orders", value: summary.totalOrders, icon: ShoppingCart },
+            { label: "Attributed Orders", value: summary.attributedOrders, icon: BarChart2 },
+            { label: "Attribution Rate", value: `${summary.attributionRate}%`, icon: TrendingUp },
+            { label: "Unattributed Revenue", value: PKR(summary.unattributedRevenue), icon: AlertCircle },
           ].map((s) => (
             <Card key={s.label}>
               <CardContent className="p-4">
                 <div className="flex items-center gap-2 mb-1">
-                  <s.icon className={`w-3.5 h-3.5 ${s.color}`} />
+                  <s.icon className="w-3.5 h-3.5 text-muted-foreground" />
                   <span className="text-xs text-muted-foreground">{s.label}</span>
                 </div>
-                <p className="text-lg font-bold">{s.value}</p>
+                <p className="text-lg font-semibold">{s.value}</p>
               </CardContent>
             </Card>
           ))}
@@ -382,7 +382,7 @@ function DarkTrafficTab({ dateRange }: { dateRange: DateRange | undefined }) {
           <CardContent className="space-y-3">
             {bySource.map((s: any) => {
               const pctVal = totalRev > 0 ? (s.revenue / totalRev * 100) : 0;
-              const color = sourceColors[s.source] ?? "bg-violet-500";
+              const color = sourceColors[s.source] ?? "bg-muted-foreground";
               return (
                 <div key={s.source} className="space-y-1" data-testid={`source-${s.source.replace(/\s+/g, "-").toLowerCase()}`}>
                   <div className="flex items-center justify-between text-xs">

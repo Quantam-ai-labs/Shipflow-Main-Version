@@ -514,18 +514,16 @@ export default function LoadsheetPage() {
                       size="sm"
                       onClick={() => setScanMode("usb")}
                       data-testid="button-mode-usb"
-                      className="h-7 text-xs gap-1"
                     >
-                      <Keyboard className="w-3 h-3" /> USB
+                      <Keyboard className="w-3 h-3 mr-1" /> USB
                     </Button>
                     <Button
                       variant={scanMode === "camera" ? "default" : "outline"}
                       size="sm"
                       onClick={() => setScanMode("camera")}
                       data-testid="button-mode-camera"
-                      className="h-7 text-xs gap-1"
                     >
-                      <Camera className="w-3 h-3" /> Camera
+                      <Camera className="w-3 h-3 mr-1" /> Camera
                     </Button>
                   </div>
                 </div>
@@ -540,19 +538,16 @@ export default function LoadsheetPage() {
                         <span className="text-xs text-muted-foreground">No couriers configured</span>
                       ) : (
                         configuredCouriers.map((c) => (
-                          <button
+                          <Button
                             key={c.id}
                             type="button"
+                            size="sm"
+                            variant={selectedCourier === c.name ? "default" : "outline"}
                             onClick={() => handleCourierSelect(selectedCourier === c.name ? null : c.name)}
-                            className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${
-                              selectedCourier === c.name
-                                ? "bg-primary text-primary-foreground border-primary"
-                                : "bg-transparent text-muted-foreground border-border hover:border-primary/50 hover:text-foreground"
-                            }`}
                             data-testid={`button-select-courier-${c.name}`}
                           >
                             {courierDisplayName(c.name)}
-                          </button>
+                          </Button>
                         ))
                       )}
                     </div>

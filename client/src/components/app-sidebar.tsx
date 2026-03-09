@@ -330,37 +330,24 @@ export function AppSidebar() {
 
   return (
     <Sidebar>
-      <SidebarHeader className="p-4">
+      <SidebarHeader className="p-3 pb-2">
         <Link href="/dashboard">
           <div className="flex items-center gap-2 cursor-pointer">
-            <div className="w-8 h-8 rounded-md bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center shadow-md">
-              <Sparkles className="w-4 h-4 text-white" />
+            <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center">
+              <Sparkles className="w-3.5 h-3.5 text-primary-foreground" />
             </div>
-            <span
-              className="font-extrabold text-xl tracking-tight bg-gradient-to-r from-violet-400 via-fuchsia-400 to-indigo-400 bg-clip-text text-transparent"
-              style={{ fontFamily: "'Inter', sans-serif", letterSpacing: "-0.02em" }}
-            >
+            <span className="font-bold text-lg tracking-tight text-foreground">
               1SOL.AI
             </span>
           </div>
         </Link>
       </SidebarHeader>
       <SidebarContent>
-        {/* Magic AI — standalone, above Home */}
-        <SidebarGroup className="pb-0">
+        <SidebarGroup className="py-1">
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  isActive={location === "/ai"}
-                  className={[
-                    "relative overflow-hidden font-semibold",
-                    location === "/ai"
-                      ? "bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:from-violet-500 hover:to-indigo-500"
-                      : "hover:bg-violet-500/10 text-violet-400 hover:text-violet-300",
-                  ].join(" ")}
-                >
+                <SidebarMenuButton asChild isActive={location === "/ai"}>
                   <Link href="/ai" data-testid="nav-magic-ai">
                     <Sparkles className="w-4 h-4" />
                     <span>Magic AI</span>
@@ -371,7 +358,7 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup>
+        <SidebarGroup className="py-1">
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
@@ -387,10 +374,10 @@ export function AppSidebar() {
         </SidebarGroup>
 
         {pinnedPages.length > 0 && (
-          <SidebarGroup>
+          <SidebarGroup className="py-1">
             <div className="px-3 pb-1 flex items-center gap-1.5">
-              <Pin className="w-3 h-3 text-muted-foreground" />
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Pinned</span>
+              <Pin className="w-3 h-3 text-muted-foreground/60" />
+              <span className="text-[10px] font-medium text-muted-foreground/60 uppercase tracking-widest">Pinned</span>
             </div>
             <SidebarGroupContent>
               <SidebarMenu>
@@ -410,7 +397,7 @@ export function AppSidebar() {
                               e.stopPropagation();
                               updatePrefsMutation.mutate({ sidebarPinnedPages: pinnedPages.filter(p => p !== id) });
                             }}
-                            className="opacity-0 group-hover/pinned-item:opacity-100 transition-opacity p-0.5 rounded hover:bg-destructive/20 hover:text-destructive ml-auto shrink-0"
+                            className="invisible group-hover/pinned-item:visible p-0.5 rounded text-muted-foreground ml-auto shrink-0"
                             data-testid={`button-unpin-${id}`}
                             title="Unpin"
                           >
@@ -427,7 +414,7 @@ export function AppSidebar() {
         )}
 
         {filteredOrderItems.length > 0 && (
-          <SidebarGroup>
+          <SidebarGroup className="py-1">
             <SidebarGroupContent>
               <SidebarMenu>
                 <Collapsible defaultOpen={isOrdersRouteActive} asChild className="group/orders-collapsible">
@@ -488,7 +475,7 @@ export function AppSidebar() {
         )}
 
         {filteredLogisticsItems.length > 0 && (
-          <SidebarGroup>
+          <SidebarGroup className="py-1">
             <SidebarGroupContent>
               <SidebarMenu>
                 <Collapsible defaultOpen={isLogisticsRouteActive} asChild className="group/logistics-collapsible">
@@ -540,7 +527,7 @@ export function AppSidebar() {
         {filteredGroups.map((group) => {
           const isGroupActive = group.items.some(i => location === i.url || location.startsWith(i.url + "/"));
           return (
-            <SidebarGroup key={group.id}>
+            <SidebarGroup key={group.id} className="py-1">
               <SidebarGroupContent>
                 <SidebarMenu>
                   <Collapsible defaultOpen={isGroupActive} asChild className="group/nav-group">
@@ -591,7 +578,7 @@ export function AppSidebar() {
         })}
 
         {(!isSimple || pinnedPages.includes("reports-hub")) && (!hasPageRestrictions || allowedPages!.includes("reports-hub")) && (
-          <SidebarGroup>
+          <SidebarGroup className="py-1">
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem>
@@ -608,7 +595,7 @@ export function AppSidebar() {
         )}
 
         {canAccessSettings && (
-          <SidebarGroup>
+          <SidebarGroup className="py-1">
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem>
@@ -630,7 +617,7 @@ export function AppSidebar() {
         )}
 
         {user?.role === "SUPER_ADMIN" && (
-          <SidebarGroup>
+          <SidebarGroup className="py-1">
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem>
@@ -646,41 +633,41 @@ export function AppSidebar() {
           </SidebarGroup>
         )}
       </SidebarContent>
-      <SidebarFooter className="p-3 space-y-2">
-        <div className="flex items-center gap-2">
+      <SidebarFooter className="p-2 space-y-1 border-t border-sidebar-border">
+        <div className="flex items-center gap-1">
           <Button
             variant="ghost"
             size="sm"
-            className="flex-1 justify-start gap-2 h-8 text-xs text-muted-foreground hover:text-foreground"
+            className="flex-1 justify-start gap-2 text-xs text-muted-foreground"
             onClick={toggleMode}
             data-testid="button-toggle-sidebar-mode"
           >
-            {isSimple ? <ToggleLeft className="w-4 h-4" /> : <ToggleRight className="w-4 h-4" />}
+            {isSimple ? <ToggleLeft className="w-3.5 h-3.5" /> : <ToggleRight className="w-3.5 h-3.5" />}
             {isSimple ? "Simple" : "Advanced"}
           </Button>
           <Button
             variant="ghost"
-            size="sm"
-            className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+            size="icon"
+            className="text-muted-foreground"
             onClick={() => setShowPagePicker(true)}
             data-testid="button-customize-sidebar"
             title="Customize pinned pages"
           >
-            <SlidersHorizontal className="w-4 h-4" />
+            <SlidersHorizontal className="w-3.5 h-3.5" />
           </Button>
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="flex items-center gap-2 w-full p-2 rounded-md hover:bg-sidebar-accent transition-colors" data-testid="nav-user-menu">
-              <Avatar className="h-8 w-8">
+            <button className="flex items-center gap-2 w-full p-2 rounded-md hover-elevate transition-colors" data-testid="nav-user-menu">
+              <Avatar className="h-7 w-7">
                 <AvatarImage src={undefined} />
-                <AvatarFallback className="text-xs">{getUserInitials()}</AvatarFallback>
+                <AvatarFallback className="text-[10px] bg-muted text-muted-foreground">{getUserInitials()}</AvatarFallback>
               </Avatar>
               <div className="flex-1 text-left min-w-0">
                 <p className="text-sm font-medium truncate">{getUserDisplayName()}</p>
-                <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+                <p className="text-[11px] text-muted-foreground truncate">{user?.email}</p>
               </div>
-              <ChevronUp className="w-4 h-4 text-muted-foreground" />
+              <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">

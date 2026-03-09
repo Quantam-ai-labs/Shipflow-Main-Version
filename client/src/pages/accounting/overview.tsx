@@ -70,8 +70,6 @@ function SummaryCard({
   amount,
   subtitle,
   icon: Icon,
-  iconBgColor,
-  iconColor,
   isLoading,
   testId,
 }: {
@@ -79,8 +77,8 @@ function SummaryCard({
   amount: string;
   subtitle: string;
   icon: React.ComponentType<{ className?: string }>;
-  iconBgColor: string;
-  iconColor: string;
+  iconBgColor?: string;
+  iconColor?: string;
   isLoading?: boolean;
   testId: string;
 }) {
@@ -92,9 +90,7 @@ function SummaryCard({
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted-foreground">{title}</p>
-            <div className={`w-10 h-10 rounded-lg ${iconBgColor} flex items-center justify-center`}>
-              <Icon className={`w-5 h-5 ${iconColor}`} />
-            </div>
+            <Icon className="w-5 h-5 text-muted-foreground" />
           </div>
           <p className="text-2xl font-bold" data-testid={`text-${testId}`}>
             {amount}
@@ -120,10 +116,10 @@ export default function AccountingOverview() {
   return (
     <div className="space-y-6" data-testid="accounting-overview">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight" data-testid="text-page-title">
+        <h1 className="text-2xl font-semibold" data-testid="text-page-title">
           Accounting Overview
         </h1>
-        <p className="text-muted-foreground mt-2">
+        <p className="text-sm text-muted-foreground mt-1">
           Track your business finances at a glance
         </p>
       </div>
@@ -227,7 +223,7 @@ export default function AccountingOverview() {
 
       <Card data-testid="recent-activity-card">
         <CardHeader>
-          <CardTitle className="text-lg">Recent Activity</CardTitle>
+          <CardTitle className="text-base font-semibold">Recent Activity</CardTitle>
         </CardHeader>
         <CardContent>
           {isMovementsLoading ? (
@@ -249,19 +245,11 @@ export default function AccountingOverview() {
                     data-testid={`activity-item-${movement.id}`}
                   >
                     <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <div
-                        className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
-                          isInflow
-                            ? "bg-green-500/10"
-                            : "bg-red-500/10"
-                        }`}
-                      >
-                        {isInflow ? (
-                          <ArrowDownLeft className="w-5 h-5 text-green-500" />
-                        ) : (
-                          <ArrowUpRight className="w-5 h-5 text-red-500" />
-                        )}
-                      </div>
+                      {isInflow ? (
+                        <ArrowDownLeft className="w-4 h-4 text-muted-foreground shrink-0" />
+                      ) : (
+                        <ArrowUpRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                      )}
                       <div className="min-w-0 flex-1">
                         <p className="font-medium text-sm truncate" data-testid={`activity-description-${movement.id}`}>
                           {movement.description}

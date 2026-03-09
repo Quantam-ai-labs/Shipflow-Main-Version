@@ -51,7 +51,7 @@ export default function SupportDashboardPage() {
         ) : (
           <Badge
             variant={stats?.connected ? "default" : "secondary"}
-            className={stats?.connected ? "bg-green-500 hover:bg-green-600 text-white gap-1.5" : "gap-1.5"}
+            className="gap-1.5"
             data-testid="status-connection"
           >
             {stats?.connected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
@@ -65,7 +65,7 @@ export default function SupportDashboardPage() {
           title="Messages Sent"
           subtitle="Last 30 days"
           value={stats?.messagesSent}
-          icon={<MessageCircle className="w-5 h-5 text-blue-500" />}
+          icon={<MessageCircle className="w-5 h-5 text-muted-foreground" />}
           isLoading={isLoading}
           testId="stat-messages-sent"
         />
@@ -73,7 +73,7 @@ export default function SupportDashboardPage() {
           title="Delivered"
           subtitle="Successfully sent"
           value={stats?.delivered}
-          icon={<CheckCircle2 className="w-5 h-5 text-green-500" />}
+          icon={<CheckCircle2 className="w-5 h-5 text-muted-foreground" />}
           isLoading={isLoading}
           testId="stat-delivered"
         />
@@ -81,7 +81,7 @@ export default function SupportDashboardPage() {
           title="Failed"
           subtitle="Send errors"
           value={stats?.failed}
-          icon={<XCircle className="w-5 h-5 text-red-500" />}
+          icon={<XCircle className="w-5 h-5 text-muted-foreground" />}
           isLoading={isLoading}
           testId="stat-failed"
         />
@@ -89,7 +89,7 @@ export default function SupportDashboardPage() {
           title="Active Conversations"
           subtitle="All time contacts"
           value={stats?.activeConversations}
-          icon={<Users className="w-5 h-5 text-purple-500" />}
+          icon={<Users className="w-5 h-5 text-muted-foreground" />}
           isLoading={isLoading}
           testId="stat-conversations"
         />
@@ -183,7 +183,7 @@ function StatCard({
             )}
             <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
           </div>
-          <div className="p-2 bg-muted rounded-lg">{icon}</div>
+          <div className="p-2 bg-muted rounded-md">{icon}</div>
         </div>
       </CardContent>
     </Card>

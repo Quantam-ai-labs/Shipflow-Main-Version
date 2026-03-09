@@ -336,16 +336,8 @@ export default function AdsManager() {
   const activeColumns = ALL_COLUMNS.filter(c => visibleColumns.includes(c.key));
 
   const statusBadge = (status: string) => {
-    const colors: Record<string, string> = {
-      ACTIVE: "bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300",
-      PAUSED: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/50 dark:text-yellow-300",
-      DELETED: "bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300",
-      ARCHIVED: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
-      WITH_ISSUES: "bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300",
-      IN_PROCESS: "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300",
-    };
     return (
-      <Badge className={`text-[10px] font-medium ${colors[status] || colors.ARCHIVED}`} data-testid="badge-status">
+      <Badge variant="secondary" className="text-[10px] font-medium" data-testid="badge-status">
         {status}
       </Badge>
     );
@@ -695,7 +687,6 @@ export default function AdsManager() {
                     <Button
                       variant="outline"
                       size="icon"
-                      className="h-7 w-7"
                       onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                       disabled={currentPage === 1}
                       data-testid="button-prev-page"
@@ -708,7 +699,6 @@ export default function AdsManager() {
                     <Button
                       variant="outline"
                       size="icon"
-                      className="h-7 w-7"
                       onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                       disabled={currentPage === totalPages}
                       data-testid="button-next-page"

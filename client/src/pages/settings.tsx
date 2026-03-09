@@ -79,15 +79,15 @@ interface MerchantSettings {
 
 
 const SETTINGS_TABS = [
-  { id: "profile",       label: "Profile",        icon: Building2,      gradient: "from-violet-500 to-purple-700",  href: null,                   description: "Business & security" },
-  { id: "shopify",       label: "Shopify",        icon: Store,          gradient: "from-orange-400 to-amber-600",   href: null,                   description: "Store integration" },
-  { id: "couriers",      label: "Couriers",       icon: Truck,          gradient: "from-teal-400 to-cyan-600",      href: null,                   description: "Delivery partners" },
-  { id: "whatsapp",      label: "WhatsApp",       icon: MessageCircle,  gradient: "from-green-400 to-emerald-600",  href: null,                   description: "API & webhook" },
-  { id: "notifications", label: "Notifications",  icon: Bell,           gradient: "from-blue-400 to-indigo-600",    href: null,                   description: "Email alerts" },
-  { id: "mapping",       label: "Status Mapping", icon: ArrowLeftRight, gradient: "from-rose-400 to-red-600",       href: null,                   description: "Courier statuses" },
-  { id: "marketing",     label: "Marketing",      icon: BarChart2,      gradient: "from-fuchsia-400 to-pink-600",   href: null,                   description: "Ad integrations" },
-  { id: "team",          label: "Team",           icon: Users,          gradient: "from-slate-400 to-gray-600",     href: null,                   description: "Users & roles" },
-  { id: "accounting",    label: "Accounting",     icon: Cog,            gradient: "from-amber-500 to-orange-700",   href: null,                   description: "Accounting settings" },
+  { id: "profile",       label: "Profile",        icon: Building2 },
+  { id: "shopify",       label: "Shopify",        icon: Store },
+  { id: "couriers",      label: "Couriers",       icon: Truck },
+  { id: "whatsapp",      label: "WhatsApp",       icon: MessageCircle },
+  { id: "notifications", label: "Notifications",  icon: Bell },
+  { id: "mapping",       label: "Status Mapping", icon: ArrowLeftRight },
+  { id: "marketing",     label: "Marketing",      icon: BarChart2 },
+  { id: "team",          label: "Team",           icon: Users },
+  { id: "accounting",    label: "Accounting",     icon: Cog },
 ];
 
 export default function Settings() {
@@ -166,40 +166,27 @@ export default function Settings() {
 
   return (
     <div className="min-h-full">
-      {/* Tab card nav strip — no heading, just the cards */}
-      <div className="border-b bg-muted/20 px-6 py-4">
-        <div className="flex gap-3 overflow-x-auto scrollbar-none" data-testid="settings-tab-nav">
+      <div className="border-b px-6">
+        <div className="flex gap-1 overflow-x-auto scrollbar-none" data-testid="settings-tab-nav">
           {SETTINGS_TABS.map(tab => {
             const Icon = tab.icon;
             const isActive = tab.id === activeTab;
 
-            const handleClick = () => {
-              setActiveTab(tab.id);
-            };
-
             return (
               <button
                 key={tab.id}
-                onClick={handleClick}
+                onClick={() => setActiveTab(tab.id)}
                 data-testid={`settings-tab-${tab.id}`}
                 className={[
-                  "relative flex-shrink-0 flex flex-col items-center justify-center gap-2.5",
-                  "px-4 py-5 rounded-2xl cursor-pointer select-none",
-                  "min-w-[100px] transition-all duration-200 ease-out overflow-hidden",
-                  `bg-gradient-to-br ${tab.gradient}`,
+                  "flex-shrink-0 flex items-center gap-2 px-4 py-3 text-sm font-medium",
+                  "border-b-2 transition-colors whitespace-nowrap",
                   isActive
-                    ? "ring-inset ring-[3px] ring-white/80 shadow-2xl brightness-110"
-                    : "opacity-75 hover:opacity-95 shadow-md",
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground",
                 ].join(" ")}
               >
-                <div
-                  className="absolute inset-0 pointer-events-none"
-                  style={{ backgroundImage: "repeating-linear-gradient(45deg,rgba(255,255,255,0.07) 0px,rgba(255,255,255,0.07) 1px,transparent 1px,transparent 9px)" }}
-                />
-                <Icon className="relative w-6 h-6 text-white drop-shadow-sm" />
-                <span className="relative text-[11.5px] font-bold text-white/95 text-center leading-tight whitespace-nowrap tracking-wide drop-shadow-sm">
-                  {tab.label}
-                </span>
+                <Icon className="w-4 h-4" />
+                {tab.label}
               </button>
             );
           })}

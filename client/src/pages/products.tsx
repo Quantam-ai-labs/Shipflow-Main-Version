@@ -105,22 +105,22 @@ function PurchaseSummary({ productId }: { productId: string }) {
 
   const totalQty = purchases.reduce((sum, p) => sum + (p.quantity || 1), 0);
 
-  const STATUS_CARD_CONFIG: { key: string; label: string; border: string; text: string; bg: string }[] = [
-    { key: 'NEW', label: 'New', border: 'border-l-slate-400', text: 'text-slate-700 dark:text-slate-300', bg: 'bg-slate-50 dark:bg-slate-900' },
-    { key: 'PENDING', label: 'Pending', border: 'border-l-yellow-400', text: 'text-yellow-700 dark:text-yellow-300', bg: 'bg-yellow-50 dark:bg-yellow-900/30' },
-    { key: 'HOLD', label: 'Hold', border: 'border-l-orange-400', text: 'text-orange-700 dark:text-orange-300', bg: 'bg-orange-50 dark:bg-orange-900/30' },
-    { key: 'READY_TO_SHIP', label: 'Ready', border: 'border-l-cyan-400', text: 'text-cyan-700 dark:text-cyan-300', bg: 'bg-cyan-50 dark:bg-cyan-900/30' },
-    { key: 'BOOKED', label: 'Booked', border: 'border-l-blue-400', text: 'text-blue-700 dark:text-blue-300', bg: 'bg-blue-50 dark:bg-blue-900/30' },
-    { key: 'FULFILLED', label: 'Fulfilled', border: 'border-l-indigo-400', text: 'text-indigo-700 dark:text-indigo-300', bg: 'bg-indigo-50 dark:bg-indigo-900/30' },
-    { key: 'DELIVERED', label: 'Delivered', border: 'border-l-green-500', text: 'text-green-700 dark:text-green-300', bg: 'bg-green-50 dark:bg-green-900/30' },
-    { key: 'RETURN', label: 'Return', border: 'border-l-red-400', text: 'text-red-700 dark:text-red-300', bg: 'bg-red-50 dark:bg-red-900/30' },
-    { key: 'CANCELLED', label: 'Cancelled', border: 'border-l-rose-400', text: 'text-rose-700 dark:text-rose-300', bg: 'bg-rose-50 dark:bg-rose-900/30' },
+  const STATUS_CARD_CONFIG: { key: string; label: string; text: string; bg: string }[] = [
+    { key: 'NEW', label: 'New', text: 'text-slate-700 dark:text-slate-300', bg: 'bg-slate-50 dark:bg-slate-900' },
+    { key: 'PENDING', label: 'Pending', text: 'text-yellow-700 dark:text-yellow-300', bg: 'bg-yellow-50 dark:bg-yellow-900/30' },
+    { key: 'HOLD', label: 'Hold', text: 'text-orange-700 dark:text-orange-300', bg: 'bg-orange-50 dark:bg-orange-900/30' },
+    { key: 'READY_TO_SHIP', label: 'Ready', text: 'text-cyan-700 dark:text-cyan-300', bg: 'bg-cyan-50 dark:bg-cyan-900/30' },
+    { key: 'BOOKED', label: 'Booked', text: 'text-blue-700 dark:text-blue-300', bg: 'bg-blue-50 dark:bg-blue-900/30' },
+    { key: 'FULFILLED', label: 'Fulfilled', text: 'text-indigo-700 dark:text-indigo-300', bg: 'bg-indigo-50 dark:bg-indigo-900/30' },
+    { key: 'DELIVERED', label: 'Delivered', text: 'text-green-700 dark:text-green-300', bg: 'bg-green-50 dark:bg-green-900/30' },
+    { key: 'RETURN', label: 'Return', text: 'text-red-700 dark:text-red-300', bg: 'bg-red-50 dark:bg-red-900/30' },
+    { key: 'CANCELLED', label: 'Cancelled', text: 'text-rose-700 dark:text-rose-300', bg: 'bg-rose-50 dark:bg-rose-900/30' },
   ].filter(s => (statusQty[s.key] || 0) > 0);
 
   return (
     <div className="space-y-3" data-testid="purchase-summary-wrapper">
       <div className="grid grid-cols-3 sm:grid-cols-4 gap-2" data-testid="status-qty-cards">
-        <div className="border-l-4 border-l-primary rounded-md p-2.5 bg-muted/40 flex flex-col gap-0.5" data-testid="card-status-total">
+        <div className="rounded-md p-2.5 bg-muted/40 border flex flex-col gap-0.5" data-testid="card-status-total">
           <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Total</span>
           <span className="text-xl font-bold leading-none">{totalQty.toLocaleString()}</span>
           <span className="text-[10px] text-muted-foreground">units ordered</span>
@@ -128,7 +128,7 @@ function PurchaseSummary({ productId }: { productId: string }) {
         {STATUS_CARD_CONFIG.map(s => (
           <div
             key={s.key}
-            className={`border-l-4 ${s.border} rounded-md p-2.5 ${s.bg} flex flex-col gap-0.5`}
+            className={`rounded-md p-2.5 ${s.bg} border flex flex-col gap-0.5`}
             data-testid={`card-status-${s.key}`}
           >
             <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">{s.label}</span>

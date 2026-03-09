@@ -25,17 +25,17 @@ import Analytics from "@/pages/analytics";
 import AccountingLedger from "@/pages/accounting/ledger";
 
 const REPORT_TABS = [
-  { id: "overview",          label: "Overview",          icon: LayoutDashboard, gradient: "from-slate-600 to-slate-700"      },
-  { id: "pnl",               label: "Profit & Loss",     icon: TrendingUp,       gradient: "from-emerald-600 to-green-700"    },
-  { id: "cash-flow",         label: "Cash Flow",         icon: Waves,            gradient: "from-blue-600 to-cyan-700"        },
-  { id: "stock",             label: "Stock Report",      icon: Package,          gradient: "from-amber-500 to-orange-600"     },
-  { id: "balance",           label: "Balance Sheet",     icon: PieChart,         gradient: "from-violet-600 to-purple-700"    },
-  { id: "party-balances",    label: "Party Balances",    icon: Users,            gradient: "from-pink-600 to-rose-700"        },
-  { id: "trial-balance",     label: "Trial Balance",     icon: Scale,            gradient: "from-indigo-600 to-indigo-700"    },
-  { id: "courier-dues",      label: "Courier Dues",      icon: DollarSign,       gradient: "from-orange-500 to-red-600"       },
-  { id: "product-analytics", label: "Product Analytics", icon: BarChart2,        gradient: "from-teal-600 to-cyan-700"        },
-  { id: "analytics",         label: "Analytics",         icon: BarChart3,        gradient: "from-fuchsia-600 to-violet-700"   },
-  { id: "ledger",            label: "Ledger",            icon: BookOpen,         gradient: "from-zinc-600 to-slate-700"       },
+  { id: "overview",          label: "Overview",          icon: LayoutDashboard },
+  { id: "pnl",               label: "Profit & Loss",     icon: TrendingUp },
+  { id: "cash-flow",         label: "Cash Flow",         icon: Waves },
+  { id: "stock",             label: "Stock Report",      icon: Package },
+  { id: "balance",           label: "Balance Sheet",     icon: PieChart },
+  { id: "party-balances",    label: "Party Balances",    icon: Users },
+  { id: "trial-balance",     label: "Trial Balance",     icon: Scale },
+  { id: "courier-dues",      label: "Courier Dues",      icon: DollarSign },
+  { id: "product-analytics", label: "Product Analytics", icon: BarChart2 },
+  { id: "analytics",         label: "Analytics",         icon: BarChart3 },
+  { id: "ledger",            label: "Ledger",            icon: BookOpen },
 ] as const;
 
 type ReportTabId = typeof REPORT_TABS[number]["id"];
@@ -48,9 +48,8 @@ export default function ReportsHub() {
 
   return (
     <div className="min-h-full" data-testid="page-reports">
-      {/* Tab card nav strip */}
-      <div className="border-b bg-muted/20 px-6 py-4">
-        <div className="flex gap-3 overflow-x-auto scrollbar-none" data-testid="reports-tab-nav">
+      <div className="border-b px-4 md:px-6">
+        <div className="flex gap-1 overflow-x-auto scrollbar-none py-1" data-testid="reports-tab-nav">
           {REPORT_TABS.map(tab => {
             const Icon = tab.icon;
             const isActive = tab.id === activeTab;
@@ -60,23 +59,16 @@ export default function ReportsHub() {
                 onClick={() => setLocation(`/reports?tab=${tab.id}`)}
                 data-testid={`reports-tab-${tab.id}`}
                 className={[
-                  "relative flex-shrink-0 flex flex-col items-center justify-center gap-2.5",
-                  "px-4 py-5 rounded-2xl cursor-pointer select-none",
-                  "min-w-[110px] transition-all duration-200 ease-out overflow-hidden",
-                  `bg-gradient-to-br ${tab.gradient}`,
+                  "flex-shrink-0 flex items-center gap-1.5",
+                  "px-3 py-2 rounded-md cursor-pointer select-none",
+                  "text-sm font-medium transition-colors whitespace-nowrap",
                   isActive
-                    ? "ring-inset ring-[3px] ring-white/80 shadow-2xl brightness-110"
-                    : "opacity-75 hover:opacity-95 shadow-md",
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted",
                 ].join(" ")}
               >
-                <div
-                  className="absolute inset-0 pointer-events-none"
-                  style={{ backgroundImage: "repeating-linear-gradient(45deg,rgba(255,255,255,0.07) 0px,rgba(255,255,255,0.07) 1px,transparent 1px,transparent 9px)" }}
-                />
-                <Icon className="relative w-6 h-6 text-white drop-shadow-sm" />
-                <span className="relative text-[11px] font-bold text-white/95 text-center leading-tight whitespace-nowrap tracking-wide drop-shadow-sm">
-                  {tab.label}
-                </span>
+                <Icon className="w-4 h-4" />
+                <span>{tab.label}</span>
               </button>
             );
           })}

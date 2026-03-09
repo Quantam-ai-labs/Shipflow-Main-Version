@@ -234,7 +234,7 @@ export default function PaymentLedgerPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold" data-testid="text-ledger-title">Payment Ledger</h1>
+          <h1 className="text-2xl font-semibold" data-testid="text-ledger-title">Payment Ledger</h1>
           <p className="text-muted-foreground">Per-shipment financial breakdown: COD collected vs courier charges vs amount paid.</p>
         </div>
         <div className="flex flex-col items-end gap-2">
@@ -282,9 +282,7 @@ export default function PaymentLedgerPage() {
                   </>
                 )}
               </div>
-              <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                <Wallet className="w-5 h-5 text-blue-500" />
-              </div>
+              <Wallet className="w-5 h-5 text-muted-foreground" />
             </div>
           </CardContent>
         </Card>
@@ -297,7 +295,7 @@ export default function PaymentLedgerPage() {
                   <Skeleton className="h-8 w-28 mt-1" />
                 ) : (
                   <>
-                    <p className="text-2xl font-bold text-red-500" data-testid="text-total-deductions">Rs {summary?.totalDeductions ?? "0"}</p>
+                    <p className="text-2xl font-bold" data-testid="text-total-deductions">Rs {summary?.totalDeductions ?? "0"}</p>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
                       <span>Fee: Rs {summary?.totalTxnFee ?? "0"}</span>
                       <span>Tax: Rs {summary?.totalTxnTax ?? "0"}</span>
@@ -305,9 +303,7 @@ export default function PaymentLedgerPage() {
                   </>
                 )}
               </div>
-              <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
-                <TrendingDown className="w-5 h-5 text-red-500" />
-              </div>
+              <TrendingDown className="w-5 h-5 text-muted-foreground" />
             </div>
           </CardContent>
         </Card>
@@ -320,7 +316,7 @@ export default function PaymentLedgerPage() {
                   <Skeleton className="h-8 w-28 mt-1" />
                 ) : (
                   <>
-                    <p className="text-2xl font-bold text-green-500" data-testid="text-total-net">Rs {summary?.totalNetPaid ?? "0"}</p>
+                    <p className="text-2xl font-bold" data-testid="text-total-net">Rs {summary?.totalNetPaid ?? "0"}</p>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
                       <span>{summary?.syncedCount ?? 0} synced</span>
                       {(summary?.unsyncedCount ?? 0) > 0 && (
@@ -330,9 +326,7 @@ export default function PaymentLedgerPage() {
                   </>
                 )}
               </div>
-              <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
-                <ArrowDownRight className="w-5 h-5 text-green-500" />
-              </div>
+              <ArrowDownRight className="w-5 h-5 text-muted-foreground" />
             </div>
           </CardContent>
         </Card>
@@ -369,8 +363,7 @@ export default function PaymentLedgerPage() {
 
       <Card>
         <CardHeader className="pb-4">
-          <CardTitle className="text-lg font-semibold flex items-center gap-2">
-            <Receipt className="w-5 h-5" />
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
             Shipment Financial Breakdown
             {data?.total !== undefined && (
               <Badge variant="secondary" className="ml-2">{data.total} records</Badge>

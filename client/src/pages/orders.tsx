@@ -384,7 +384,7 @@ export default function Orders() {
       
       <div className="flex items-center justify-between gap-4 p-4 border-b bg-background sticky top-0 z-10">
         <div className="flex items-center gap-3">
-          <h1 className="text-xl font-bold" data-testid="heading-orders">Orders</h1>
+          <h1 className="text-lg font-semibold" data-testid="heading-orders">Orders</h1>
           {data?.total !== undefined && (
             <Badge variant="secondary" className="font-normal">
               {data.total.toLocaleString()} total
@@ -540,7 +540,7 @@ export default function Orders() {
           </div>
         ) : (
           <table className="w-full text-sm border-collapse" data-testid="table-orders">
-            <thead className="sticky top-0 bg-muted/90 backdrop-blur-sm z-10">
+            <thead className="sticky top-0 bg-muted z-10">
               <tr className="border-b">
                 <th className="p-2 pl-4 w-[40px]">
                   <Checkbox
@@ -647,7 +647,7 @@ export default function Orders() {
                 orders.map((order, idx) => (
                   <tr 
                     key={order.id} 
-                    className={`border-b border-border/50 hover:bg-muted/30 transition-colors ${idx % 2 === 0 ? "bg-background" : "bg-muted/10"}`}
+                    className="border-b border-border/50 hover:bg-muted/30 transition-colors"
                     data-testid={`table-row-order-${order.id}`}
                   >
                     <td className="p-2 pl-4">

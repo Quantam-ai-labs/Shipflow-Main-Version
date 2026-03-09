@@ -332,8 +332,8 @@ export default function CodReconciliationPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold" data-testid="text-cod-title">COD Reconciliation</h1>
-          <p className="text-muted-foreground">Track and reconcile Cash on Delivery payments from couriers.</p>
+          <h1 className="text-2xl font-semibold" data-testid="text-cod-title">COD Reconciliation</h1>
+          <p className="text-sm text-muted-foreground">Track and reconcile Cash on Delivery payments from couriers.</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {selectedRecords.length > 0 && (
@@ -382,7 +382,7 @@ export default function CodReconciliationPage() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="bg-gradient-to-br from-amber-500/5 to-amber-500/10 border-amber-500/20">
+        <Card>
           <CardContent className="p-6">
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -396,13 +396,11 @@ export default function CodReconciliationPage() {
                   </>
                 )}
               </div>
-              <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
-                <Clock className="w-5 h-5 text-amber-500" />
-              </div>
+              <Clock className="w-5 h-5 text-muted-foreground" />
             </div>
           </CardContent>
         </Card>
-        <Card className="bg-gradient-to-br from-green-500/5 to-green-500/10 border-green-500/20">
+        <Card>
           <CardContent className="p-6">
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -416,13 +414,11 @@ export default function CodReconciliationPage() {
                   </>
                 )}
               </div>
-              <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
-                <CheckCircle2 className="w-5 h-5 text-green-500" />
-              </div>
+              <CheckCircle2 className="w-5 h-5 text-muted-foreground" />
             </div>
           </CardContent>
         </Card>
-        <Card className="bg-gradient-to-br from-red-500/5 to-red-500/10 border-red-500/20">
+        <Card>
           <CardContent className="p-6">
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -433,9 +429,7 @@ export default function CodReconciliationPage() {
                   <p className="text-2xl font-bold" data-testid="text-disputed-amount">PKR {summary?.totalDisputed ?? "0"}</p>
                 )}
               </div>
-              <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
-                <AlertCircle className="w-5 h-5 text-red-500" />
-              </div>
+              <AlertCircle className="w-5 h-5 text-muted-foreground" />
             </div>
           </CardContent>
         </Card>
@@ -473,8 +467,7 @@ export default function CodReconciliationPage() {
 
       <Card>
         <CardHeader className="pb-4">
-          <CardTitle className="text-lg font-semibold flex items-center gap-2">
-            <DollarSign className="w-5 h-5" />
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
             COD Records
             {data?.total !== undefined && (
               <Badge variant="secondary" className="ml-2">

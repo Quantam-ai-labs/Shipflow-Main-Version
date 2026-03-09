@@ -67,10 +67,10 @@ function formatPKR(amount: number | string): string {
 }
 
 const TXN_TYPE_CONFIG: Record<string, { label: string; color: string; icon: any }> = {
-  MONEY_IN: { label: "Money In", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200", icon: ArrowDownLeft },
-  MONEY_OUT: { label: "Money Out", color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200", icon: ArrowUpRight },
-  TRANSFER: { label: "Transfer", color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200", icon: ArrowLeftRight },
-  REVERSAL: { label: "Reversal", color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200", icon: RotateCcw },
+  MONEY_IN: { label: "Money In", color: "", icon: ArrowDownLeft },
+  MONEY_OUT: { label: "Money Out", color: "", icon: ArrowUpRight },
+  TRANSFER: { label: "Transfer", color: "", icon: ArrowLeftRight },
+  REVERSAL: { label: "Reversal", color: "", icon: RotateCcw },
 };
 
 export default function TransactionsPage() {
@@ -230,7 +230,7 @@ export default function TransactionsPage() {
     <div className="p-4 md:p-6 space-y-6 max-w-6xl">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold" data-testid="text-page-title">Money</h1>
+          <h1 className="text-2xl font-semibold" data-testid="text-page-title">Money</h1>
           <p className="text-sm text-muted-foreground mt-1">Manage all financial transactions with double-entry ledger</p>
         </div>
       </div>
@@ -239,31 +239,31 @@ export default function TransactionsPage() {
         <Button
           data-testid="button-money-in"
           variant="outline"
-          className="h-20 flex flex-col gap-1 border-green-200 hover:bg-green-50 dark:border-green-800 dark:hover:bg-green-950"
+          className="h-20 flex flex-col gap-1"
           onClick={() => openCreateDialog("MONEY_IN")}
         >
-          <ArrowDownLeft className="h-6 w-6 text-green-600" />
-          <span className="font-semibold text-green-700 dark:text-green-300">Money In</span>
+          <ArrowDownLeft className="h-5 w-5 text-muted-foreground" />
+          <span className="font-semibold">Money In</span>
           <span className="text-xs text-muted-foreground">Party pays you</span>
         </Button>
         <Button
           data-testid="button-money-out"
           variant="outline"
-          className="h-20 flex flex-col gap-1 border-red-200 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-950"
+          className="h-20 flex flex-col gap-1"
           onClick={() => openCreateDialog("MONEY_OUT")}
         >
-          <ArrowUpRight className="h-6 w-6 text-red-600" />
-          <span className="font-semibold text-red-700 dark:text-red-300">Money Out</span>
+          <ArrowUpRight className="h-5 w-5 text-muted-foreground" />
+          <span className="font-semibold">Money Out</span>
           <span className="text-xs text-muted-foreground">You pay a party</span>
         </Button>
         <Button
           data-testid="button-transfer"
           variant="outline"
-          className="h-20 flex flex-col gap-1 border-blue-200 hover:bg-blue-50 dark:border-blue-800 dark:hover:bg-blue-950"
+          className="h-20 flex flex-col gap-1"
           onClick={() => openCreateDialog("TRANSFER")}
         >
-          <ArrowLeftRight className="h-6 w-6 text-blue-600" />
-          <span className="font-semibold text-blue-700 dark:text-blue-300">Transfer</span>
+          <ArrowLeftRight className="h-5 w-5 text-muted-foreground" />
+          <span className="font-semibold">Transfer</span>
           <span className="text-xs text-muted-foreground">Between accounts or parties</span>
         </Button>
       </div>
@@ -385,7 +385,6 @@ export default function TransactionsPage() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-7 w-7"
                             data-testid={`button-view-${txn.id}`}
                             onClick={() => { setSelectedTxnId(txn.id); setDetailDialogOpen(true); }}
                           >
@@ -395,7 +394,6 @@ export default function TransactionsPage() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-7 w-7 text-yellow-600 hover:text-yellow-700"
                               data-testid={`button-reverse-${txn.id}`}
                               onClick={() => { setReverseTxnId(txn.id); setReverseDialogOpen(true); }}
                             >

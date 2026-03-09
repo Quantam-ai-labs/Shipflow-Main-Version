@@ -17,7 +17,7 @@ export default function Landing() {
   return (
     <div className="min-h-screen bg-background">
       {/* Navigation */}
-      <nav className="fixed top-0 left-0 right-0 z-50 border-b bg-background/80 backdrop-blur-md">
+      <nav className="fixed top-0 left-0 right-0 z-50 border-b bg-background">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16 gap-4">
             <div className="flex items-center gap-2">
@@ -91,10 +91,9 @@ export default function Landing() {
               </div>
             </div>
             <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-tr from-primary/20 via-transparent to-primary/10 rounded-2xl" />
-              <Card className="relative overflow-hidden border-2">
+              <Card className="relative border">
                 <CardContent className="p-0">
-                  <div className="bg-gradient-to-br from-muted/50 to-muted p-8">
+                  <div className="bg-muted/50 p-8">
                     <div className="space-y-4">
                       <div className="flex items-center justify-between p-4 bg-background rounded-lg border">
                         <div className="flex items-center gap-3">

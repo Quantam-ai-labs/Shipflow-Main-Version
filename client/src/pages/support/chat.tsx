@@ -93,8 +93,8 @@ function formatChatTime(dateStr: string) {
 
 function StatusTicks({ status }: { status: string | null }) {
   if (status === "read") return <CheckCheck className="w-3.5 h-3.5 text-blue-400 inline-block ml-1" />;
-  if (status === "delivered") return <CheckCheck className="w-3.5 h-3.5 text-white/60 inline-block ml-1" />;
-  if (status === "sent") return <Check className="w-3.5 h-3.5 text-white/60 inline-block ml-1" />;
+  if (status === "delivered") return <CheckCheck className="w-3.5 h-3.5 text-muted-foreground inline-block ml-1" />;
+  if (status === "sent") return <Check className="w-3.5 h-3.5 text-muted-foreground inline-block ml-1" />;
   return null;
 }
 
@@ -130,9 +130,9 @@ function renderFormattedText(text: string) {
 function MessageTypeIcon({ type }: { type: string | null }) {
   switch (type) {
     case "image": return <ImageIcon className="w-3 h-3 inline mr-1" />;
-    case "sticker": return <span className="mr-1">🎨</span>;
+    case "sticker": return <ImageIcon className="w-3 h-3 inline mr-1" />;
     case "audio": case "voice": return <Mic className="w-3 h-3 inline mr-1" />;
-    case "video": return <span className="mr-1">🎬</span>;
+    case "video": return <FileText className="w-3 h-3 inline mr-1" />;
     case "document": return <FileText className="w-3 h-3 inline mr-1" />;
     case "location": return <MapPin className="w-3 h-3 inline mr-1" />;
     case "contacts": return <Users className="w-3 h-3 inline mr-1" />;
@@ -168,14 +168,14 @@ function PinScreen({ onSuccess }: { onSuccess: () => void }) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#111b21] p-4">
+    <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <div className="w-full max-w-sm space-y-6">
         <div className="text-center space-y-2">
-          <div className="w-16 h-16 bg-[#00a884] rounded-full flex items-center justify-center mx-auto">
-            <Lock className="w-8 h-8 text-white" />
+          <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center mx-auto">
+            <Lock className="w-8 h-8 text-primary-foreground" />
           </div>
-          <h1 className="text-2xl font-bold text-white">Support Chat</h1>
-          <p className="text-[#8696a0] text-sm">Enter your PIN to access the chat inbox</p>
+          <h1 className="text-2xl font-bold text-foreground">Support Chat</h1>
+          <p className="text-muted-foreground text-sm">Enter your PIN to access the chat inbox</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input
@@ -185,11 +185,11 @@ function PinScreen({ onSuccess }: { onSuccess: () => void }) {
             onChange={(e) => setPin(e.target.value)}
             maxLength={8}
             autoFocus
-            className="text-center text-xl tracking-widest h-12 bg-[#2a3942] border-0 text-white placeholder:text-[#8696a0]"
+            className="text-center text-xl tracking-widest"
             data-testid="input-pin"
           />
-          {error && <p className="text-red-400 text-sm text-center" data-testid="text-pin-error">{error}</p>}
-          <Button type="submit" className="w-full bg-[#00a884] hover:bg-[#00c49a] text-white" disabled={loading || pin.length < 4} data-testid="button-submit-pin">
+          {error && <p className="text-destructive text-sm text-center" data-testid="text-pin-error">{error}</p>}
+          <Button type="submit" className="w-full" disabled={loading || pin.length < 4} data-testid="button-submit-pin">
             {loading ? "Verifying..." : "Enter Chat"}
           </Button>
         </form>
@@ -390,63 +390,58 @@ export default function SupportChatPage() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#111b21]">
-      {/* Left sidebar */}
-      <div className="w-[380px] border-r border-[#222d35] flex flex-col shrink-0 bg-[#111b21]">
-        {/* Sidebar header */}
-        <div className="h-14 bg-[#202c33] flex items-center px-4 gap-3">
-          <div className="w-9 h-9 bg-[#00a884] rounded-full flex items-center justify-center">
-            <MessageCircle className="w-5 h-5 text-white" />
+    <div className="flex h-full overflow-hidden bg-background">
+      <div className="w-[380px] border-r border-border flex flex-col shrink-0 bg-background">
+        <div className="h-14 bg-card border-b border-border flex items-center px-4 gap-3">
+          <div className="w-9 h-9 bg-primary rounded-full flex items-center justify-center">
+            <MessageCircle className="w-5 h-5 text-primary-foreground" />
           </div>
-          <h2 className="font-semibold text-[#e9edef] text-sm flex-1">Chats</h2>
+          <h2 className="font-semibold text-foreground text-sm flex-1">Chats</h2>
           {totalUnread > 0 && (
-            <Badge className="bg-[#00a884] text-white text-xs px-2 py-0.5 rounded-full" data-testid="badge-total-unread">
+            <Badge variant="default" className="text-xs rounded-full" data-testid="badge-total-unread">
               {totalUnread}
             </Badge>
           )}
-          <button
+          <Button
+            size="icon"
+            variant="ghost"
             onClick={() => setShowFilters(!showFilters)}
-            className={cn(
-              "p-1.5 rounded-full transition-colors",
-              showFilters ? "bg-[#00a884]/20 text-[#00a884]" : "text-[#aebac1] hover:text-[#e9edef]"
-            )}
+            className={cn(showFilters && "text-primary")}
             data-testid="button-toggle-filters"
           >
             <Filter className="w-5 h-5" />
-          </button>
+          </Button>
         </div>
 
-        {/* Search */}
-        <div className="px-3 py-2 bg-[#111b21]">
+        <div className="px-3 py-2">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8696a0]" />
-            <input
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
               placeholder="Search by name, phone, or order..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-3 py-2 rounded-lg bg-[#202c33] text-[#e9edef] text-sm placeholder:text-[#8696a0] border-0 outline-none focus:ring-1 focus:ring-[#00a884]/50"
+              className="pl-10 pr-8"
               data-testid="input-search-conversations"
             />
             {search && (
-              <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8696a0] hover:text-[#e9edef]">
+              <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                 <X className="w-4 h-4" />
               </button>
             )}
           </div>
         </div>
 
-        {/* Label filter pills */}
         {showFilters && (
-          <div className="px-3 pb-2 flex gap-1.5 overflow-x-auto scrollbar-none">
+          <div className="px-3 pb-2 flex gap-1.5 flex-wrap">
             {LABEL_FILTERS.map(f => (
               <button
                 key={f.value}
                 onClick={() => setLabelFilter(f.value)}
                 className={cn(
-                  "px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-all",
+                  "px-3 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-all border",
                   labelFilter === f.value
-                    ? "bg-[#00a884] text-white"
-                    : "bg-[#202c33] text-[#8696a0] hover:bg-[#2a3942] hover:text-[#e9edef]"
+                    ? "bg-primary text-primary-foreground border-transparent"
+                    : "bg-card text-muted-foreground border-border hover-elevate"
                 )}
                 data-testid={`filter-${f.value}`}
               >
@@ -459,10 +454,9 @@ export default function SupportChatPage() {
           </div>
         )}
 
-        {/* Conversation list */}
         <ScrollArea className="flex-1">
           {filtered.length === 0 ? (
-            <div className="p-8 text-center text-[#8696a0] text-sm">
+            <div className="p-8 text-center text-muted-foreground text-sm">
               <MessageCircle className="w-12 h-12 mx-auto opacity-20 mb-3" />
               {search ? "No conversations match your search" : "No conversations yet"}
             </div>
@@ -475,36 +469,36 @@ export default function SupportChatPage() {
                   key={conv.id}
                   onClick={() => setSelectedConvId(conv.id)}
                   className={cn(
-                    "w-full px-3 py-3 text-left transition-colors flex items-center gap-3",
-                    isSelected ? "bg-[#2a3942]" : "hover:bg-[#202c33]"
+                    "w-full px-3 py-3 text-left transition-colors flex items-center gap-3 border-b border-border",
+                    isSelected ? "bg-accent" : "hover-elevate"
                   )}
                   data-testid={`button-conversation-${conv.id}`}
                 >
                   <div className="relative shrink-0">
                     <div className={cn(
-                      "w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold text-lg",
-                      labelInfo ? labelInfo.color : "bg-[#00a884]"
+                      "w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-base",
+                      labelInfo ? labelInfo.color : "bg-primary"
                     )}>
                       {(conv.contactName ?? conv.contactPhone).charAt(0).toUpperCase()}
                     </div>
                     {conv.unreadCount > 0 && (
-                      <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-[#00a884] rounded-full text-white text-[10px] flex items-center justify-center font-bold">
+                      <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-primary rounded-full text-primary-foreground text-[10px] flex items-center justify-center font-bold">
                         {conv.unreadCount > 9 ? "9+" : conv.unreadCount}
                       </span>
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
-                      <span className={cn("text-sm truncate", conv.unreadCount > 0 ? "font-bold text-[#e9edef]" : "text-[#e9edef]")} data-testid={`text-contact-${conv.id}`}>
+                      <span className={cn("text-sm truncate", conv.unreadCount > 0 ? "font-bold text-foreground" : "text-foreground")} data-testid={`text-contact-${conv.id}`}>
                         {conv.contactName || `+${conv.contactPhone}`}
                       </span>
-                      <span className={cn("text-xs whitespace-nowrap", conv.unreadCount > 0 ? "text-[#00a884] font-medium" : "text-[#8696a0]")}>
+                      <span className={cn("text-xs whitespace-nowrap", conv.unreadCount > 0 ? "text-primary font-medium" : "text-muted-foreground")}>
                         {formatChatTime(conv.lastMessageAt)}
                       </span>
                     </div>
-                    <div className="flex items-center gap-1 mt-0.5">
+                    <div className="flex items-center gap-1 mt-0.5 flex-wrap">
                       {conv.orderNumber && (
-                        <span className="text-[10px] text-[#8696a0] bg-[#202c33] px-1.5 py-0.5 rounded font-mono">
+                        <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-mono">
                           #{conv.orderNumber}
                         </span>
                       )}
@@ -514,12 +508,12 @@ export default function SupportChatPage() {
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center justify-between mt-0.5">
-                      <p className={cn("text-xs truncate flex-1", conv.unreadCount > 0 ? "text-[#d1d7db]" : "text-[#8696a0]")}>
+                    <div className="flex items-center justify-between gap-1 mt-0.5">
+                      <p className={cn("text-xs truncate flex-1", conv.unreadCount > 0 ? "text-foreground" : "text-muted-foreground")}>
                         {conv.lastMessage || "No messages"}
                       </p>
                       {conv.assignedToName && (
-                        <span className="text-[10px] text-[#8696a0] ml-2 flex items-center gap-0.5 shrink-0">
+                        <span className="text-[10px] text-muted-foreground ml-2 flex items-center gap-0.5 shrink-0">
                           <UserPlus className="w-2.5 h-2.5" />
                           {conv.assignedToName.split(" ")[0]}
                         </span>
@@ -533,44 +527,42 @@ export default function SupportChatPage() {
         </ScrollArea>
       </div>
 
-      {/* Main chat area */}
       <div className="flex-1 flex flex-col min-w-0">
         {!selectedConv ? (
-          <div className="flex-1 flex items-center justify-center bg-[#222e35]">
+          <div className="flex-1 flex items-center justify-center bg-card">
             <div className="text-center space-y-3">
-              <div className="w-24 h-24 bg-[#2a3942] rounded-full flex items-center justify-center mx-auto">
-                <MessageCircle className="w-12 h-12 text-[#8696a0]" />
+              <div className="w-24 h-24 bg-muted rounded-full flex items-center justify-center mx-auto">
+                <MessageCircle className="w-12 h-12 text-muted-foreground" />
               </div>
-              <h3 className="text-xl font-light text-[#e9edef]">WhatsApp Support</h3>
-              <p className="text-sm text-[#8696a0] max-w-sm">Select a conversation from the sidebar to start chatting with your customers</p>
+              <h3 className="text-xl font-light text-foreground">WhatsApp Support</h3>
+              <p className="text-sm text-muted-foreground max-w-sm">Select a conversation from the sidebar to start chatting with your customers</p>
             </div>
           </div>
         ) : (
           <>
-            {/* Chat header */}
-            <div className="h-14 bg-[#202c33] flex items-center px-4 gap-3 border-b border-[#222d35]">
+            <div className="h-14 bg-card flex items-center px-4 gap-3 border-b border-border">
               <div className={cn(
                 "w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold shrink-0",
-                getLabelInfo(selectedConv.label)?.color || "bg-[#00a884]"
+                getLabelInfo(selectedConv.label)?.color || "bg-primary"
               )}>
                 {(selectedConv.contactName ?? selectedConv.contactPhone).charAt(0).toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-medium text-sm text-[#e9edef]" data-testid="text-selected-contact">
+                <p className="font-medium text-sm text-foreground" data-testid="text-selected-contact">
                   {selectedConv.contactName || `+${selectedConv.contactPhone}`}
                 </p>
-                <div className="flex items-center gap-2 text-xs text-[#8696a0]">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
                   <Phone className="w-3 h-3" />
                   <span>+{selectedConv.contactPhone}</span>
                   {selectedConv.orderNumber && (
                     <>
-                      <span>•</span>
+                      <span>·</span>
                       <span className="font-mono">#{selectedConv.orderNumber}</span>
                     </>
                   )}
                   {selectedConv.assignedToName && (
                     <>
-                      <span>•</span>
+                      <span>·</span>
                       <UserPlus className="w-3 h-3" />
                       <span>{selectedConv.assignedToName}</span>
                     </>
@@ -578,25 +570,23 @@ export default function SupportChatPage() {
                 </div>
               </div>
 
-              {/* Actions menu */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button className="p-2 rounded-full text-[#aebac1] hover:text-[#e9edef] hover:bg-[#2a3942] transition-colors" data-testid="button-chat-menu">
+                  <Button size="icon" variant="ghost" data-testid="button-chat-menu">
                     <MoreVertical className="w-5 h-5" />
-                  </button>
+                  </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56 bg-[#233138] border-[#3b4a54] text-[#e9edef]">
+                <DropdownMenuContent align="end" className="w-56">
                   <DropdownMenuSub>
-                    <DropdownMenuSubTrigger className="focus:bg-[#2a3942]">
+                    <DropdownMenuSubTrigger>
                       <Tag className="w-4 h-4 mr-2" />
                       Label
                     </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="bg-[#233138] border-[#3b4a54] text-[#e9edef]">
+                    <DropdownMenuSubContent>
                       {LABELS.map(l => (
                         <DropdownMenuItem
                           key={l.value}
                           onClick={() => labelMutation.mutate({ convId: selectedConv.id, label: l.value })}
-                          className="focus:bg-[#2a3942]"
                           data-testid={`label-${l.value}`}
                         >
                           <span className={cn("w-3 h-3 rounded-full mr-2", l.color)} />
@@ -604,10 +594,10 @@ export default function SupportChatPage() {
                           {selectedConv.label === l.value && <Check className="w-4 h-4 ml-auto" />}
                         </DropdownMenuItem>
                       ))}
-                      <DropdownMenuSeparator className="bg-[#3b4a54]" />
+                      <DropdownMenuSeparator />
                       <DropdownMenuItem
                         onClick={() => labelMutation.mutate({ convId: selectedConv.id, label: null })}
-                        className="focus:bg-[#2a3942] text-[#8696a0]"
+                        className="text-muted-foreground"
                         data-testid="label-clear"
                       >
                         <X className="w-4 h-4 mr-2" />
@@ -617,11 +607,11 @@ export default function SupportChatPage() {
                   </DropdownMenuSub>
 
                   <DropdownMenuSub>
-                    <DropdownMenuSubTrigger className="focus:bg-[#2a3942]">
+                    <DropdownMenuSubTrigger>
                       <UserPlus className="w-4 h-4 mr-2" />
                       Assign to
                     </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="bg-[#233138] border-[#3b4a54] text-[#e9edef]">
+                    <DropdownMenuSubContent>
                       {teamMembers.map(tm => (
                         <DropdownMenuItem
                           key={tm.userId}
@@ -630,20 +620,19 @@ export default function SupportChatPage() {
                             userId: tm.userId,
                             userName: `${tm.user.firstName} ${tm.user.lastName}`.trim()
                           })}
-                          className="focus:bg-[#2a3942]"
                           data-testid={`assign-${tm.userId}`}
                         >
-                          <div className="w-6 h-6 rounded-full bg-[#00a884] flex items-center justify-center text-white text-xs font-bold mr-2">
+                          <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold mr-2">
                             {tm.user.firstName.charAt(0)}
                           </div>
                           {tm.user.firstName} {tm.user.lastName}
                           {selectedConv.assignedToUserId === tm.userId && <Check className="w-4 h-4 ml-auto" />}
                         </DropdownMenuItem>
                       ))}
-                      <DropdownMenuSeparator className="bg-[#3b4a54]" />
+                      <DropdownMenuSeparator />
                       <DropdownMenuItem
                         onClick={() => assignMutation.mutate({ convId: selectedConv.id, userId: null, userName: null })}
-                        className="focus:bg-[#2a3942] text-[#8696a0]"
+                        className="text-muted-foreground"
                         data-testid="assign-clear"
                       >
                         <X className="w-4 h-4 mr-2" />
@@ -652,10 +641,10 @@ export default function SupportChatPage() {
                     </DropdownMenuSubContent>
                   </DropdownMenuSub>
 
-                  <DropdownMenuSeparator className="bg-[#3b4a54]" />
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onClick={() => deleteMutation.mutate(selectedConv.id)}
-                    className="text-red-400 focus:bg-[#2a3942] focus:text-red-400"
+                    className="text-destructive focus:text-destructive"
                     data-testid="button-delete-conversation"
                   >
                     <Trash2 className="w-4 h-4 mr-2" />
@@ -665,15 +654,11 @@ export default function SupportChatPage() {
               </DropdownMenu>
             </div>
 
-            {/* Messages area with WhatsApp wallpaper */}
-            <ScrollArea className="flex-1" style={{
-              backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23182229' fill-opacity='0.6'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E\")",
-              backgroundColor: "#0b141a",
-            }}>
+            <ScrollArea className="flex-1 bg-muted/30">
               <div className="px-[8%] py-4 space-y-1">
                 {messages.filter(m => m.messageType !== "reaction").length === 0 ? (
                   <div className="text-center py-8">
-                    <span className="bg-[#182229] text-[#8696a0] text-xs px-4 py-2 rounded-lg inline-block">
+                    <span className="bg-card text-muted-foreground text-xs px-4 py-2 rounded-md inline-block border border-border">
                       No messages yet — start the conversation
                     </span>
                   </div>
@@ -681,7 +666,7 @@ export default function SupportChatPage() {
                   messagesByDate.map(group => (
                     <div key={group.date}>
                       <div className="flex justify-center my-3">
-                        <span className="bg-[#182229] text-[#8696a0] text-[11px] px-3 py-1 rounded-md shadow-sm">
+                        <span className="bg-card text-muted-foreground text-[11px] px-3 py-1 rounded-md border border-border">
                           {formatDateHeader(group.date)}
                         </span>
                       </div>
@@ -699,16 +684,13 @@ export default function SupportChatPage() {
                           >
                             <div className="relative max-w-[65%]">
                               <div className={cn(
-                                "relative px-3 py-1.5 rounded-lg text-sm shadow-sm",
+                                "relative px-3 py-1.5 rounded-md text-sm border",
                                 isOutbound
-                                  ? "bg-[#005c4b] text-[#e9edef] rounded-tr-none"
-                                  : "bg-[#202c33] text-[#e9edef] rounded-tl-none"
+                                  ? "bg-primary/10 dark:bg-primary/20 text-foreground border-primary/20 rounded-tr-none"
+                                  : "bg-card text-foreground border-border rounded-tl-none"
                               )}>
                                 {isButtonReply && (
-                                  <div className={cn(
-                                    "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium mb-1",
-                                    isOutbound ? "bg-[#00a884]/20 text-[#00a884]" : "bg-[#00a884]/20 text-[#00a884]"
-                                  )}>
+                                  <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium mb-1 bg-primary/10 text-primary">
                                     <Reply className="w-3 h-3" />
                                     {msg.text}
                                   </div>
@@ -723,33 +705,31 @@ export default function SupportChatPage() {
                                   "flex items-center gap-1 mt-0.5",
                                   isOutbound ? "justify-end" : ""
                                 )}>
-                                  <span className="text-[10px] text-[#ffffff99]">
+                                  <span className="text-[10px] text-muted-foreground">
                                     {format(new Date(msg.createdAt), "HH:mm")}
                                   </span>
                                   {isOutbound && <StatusTicks status={msg.status} />}
                                 </div>
                               </div>
 
-                              {/* Reactions on message */}
                               {msgReactions.length > 0 && (
                                 <div className={cn("flex gap-0.5 mt-[-8px]", isOutbound ? "justify-end pr-2" : "pl-2")}>
                                   {msgReactions.map(r => (
-                                    <span key={r.id} className="bg-[#182229] border border-[#3b4a54] rounded-full px-1.5 py-0.5 text-sm shadow-sm">
+                                    <span key={r.id} className="bg-card border border-border rounded-full px-1.5 py-0.5 text-sm">
                                       {r.reactionEmoji}
                                     </span>
                                   ))}
                                 </div>
                               )}
 
-                              {/* Hover action: react with emoji */}
                               {!isOutbound && msg.waMessageId && (
-                                <div className="absolute top-1 right-[-32px] opacity-0 group-hover:opacity-100 transition-opacity">
+                                <div className="absolute top-1 right-[-32px] invisible group-hover:visible transition-opacity">
                                   <EmojiPicker
                                     onSelect={(emoji) => reactMutation.mutate({ convId: selectedConv.id, emoji, waMessageId: msg.waMessageId! })}
                                     trigger={
-                                      <button className="p-1 rounded-full bg-[#202c33] hover:bg-[#2a3942] text-[#8696a0] hover:text-[#e9edef] shadow-md transition-colors" data-testid={`react-${msg.id}`}>
+                                      <Button size="icon" variant="ghost" className="h-7 w-7" data-testid={`react-${msg.id}`}>
                                         <Smile className="w-4 h-4" />
-                                      </button>
+                                      </Button>
                                     }
                                     side="right"
                                   />
@@ -766,22 +746,20 @@ export default function SupportChatPage() {
               </div>
             </ScrollArea>
 
-            {/* Input area */}
-            <div className="bg-[#202c33] px-4 py-2 border-t border-[#222d35]">
-              {/* Formatting toolbar */}
+            <div className="bg-card px-4 py-2 border-t border-border">
               <div className="flex items-center gap-1 mb-1.5">
-                <button onClick={() => insertFormatting("*", "*")} className="p-1.5 rounded text-[#8696a0] hover:text-[#e9edef] hover:bg-[#2a3942] transition-colors" title="Bold" data-testid="button-format-bold">
+                <Button size="icon" variant="ghost" onClick={() => insertFormatting("*", "*")} title="Bold" data-testid="button-format-bold" className="h-7 w-7">
                   <Bold className="w-4 h-4" />
-                </button>
-                <button onClick={() => insertFormatting("_", "_")} className="p-1.5 rounded text-[#8696a0] hover:text-[#e9edef] hover:bg-[#2a3942] transition-colors" title="Italic" data-testid="button-format-italic">
+                </Button>
+                <Button size="icon" variant="ghost" onClick={() => insertFormatting("_", "_")} title="Italic" data-testid="button-format-italic" className="h-7 w-7">
                   <Italic className="w-4 h-4" />
-                </button>
-                <button onClick={() => insertFormatting("~", "~")} className="p-1.5 rounded text-[#8696a0] hover:text-[#e9edef] hover:bg-[#2a3942] transition-colors" title="Strikethrough" data-testid="button-format-strike">
+                </Button>
+                <Button size="icon" variant="ghost" onClick={() => insertFormatting("~", "~")} title="Strikethrough" data-testid="button-format-strike" className="h-7 w-7">
                   <Strikethrough className="w-4 h-4" />
-                </button>
-                <button onClick={() => insertFormatting("```", "```")} className="p-1.5 rounded text-[#8696a0] hover:text-[#e9edef] hover:bg-[#2a3942] transition-colors" title="Code" data-testid="button-format-code">
+                </Button>
+                <Button size="icon" variant="ghost" onClick={() => insertFormatting("```", "```")} title="Code" data-testid="button-format-code" className="h-7 w-7">
                   <Code className="w-4 h-4" />
-                </button>
+                </Button>
               </div>
 
               <div className="flex items-end gap-2">
@@ -791,9 +769,9 @@ export default function SupportChatPage() {
                     inputRef.current?.focus();
                   }}
                   trigger={
-                    <button className="p-2 rounded-full text-[#8696a0] hover:text-[#e9edef] hover:bg-[#2a3942] transition-colors shrink-0 mb-0.5" data-testid="button-emoji-picker">
-                      <Smile className="w-6 h-6" />
-                    </button>
+                    <Button size="icon" variant="ghost" className="shrink-0 mb-0.5" data-testid="button-emoji-picker">
+                      <Smile className="w-5 h-5" />
+                    </Button>
                   }
                   side="top"
                   align="start"
@@ -805,23 +783,19 @@ export default function SupportChatPage() {
                   onChange={(e) => setMessageText(e.target.value)}
                   onKeyDown={handleKeyDown}
                   rows={1}
-                  className="flex-1 resize-none bg-[#2a3942] text-[#e9edef] rounded-lg px-3 py-2.5 text-sm placeholder:text-[#8696a0] border-0 outline-none focus:ring-1 focus:ring-[#00a884]/30 max-h-[120px] min-h-[40px]"
+                  className="flex-1 resize-none bg-muted text-foreground rounded-md px-3 py-2.5 text-sm placeholder:text-muted-foreground border border-border outline-none focus:ring-1 focus:ring-ring max-h-[120px] min-h-[40px]"
                   style={{ height: "auto", overflow: messageText.split("\n").length > 3 ? "auto" : "hidden" }}
                   data-testid="input-message"
                 />
-                <button
+                <Button
+                  size="icon"
                   onClick={() => handleSend()}
                   disabled={!messageText.trim() || sendMutation.isPending}
-                  className={cn(
-                    "p-2.5 rounded-full transition-colors shrink-0 mb-0.5",
-                    messageText.trim()
-                      ? "bg-[#00a884] text-white hover:bg-[#00c49a]"
-                      : "text-[#8696a0] cursor-not-allowed"
-                  )}
+                  className="shrink-0 mb-0.5"
                   data-testid="button-send-message"
                 >
                   <Send className="w-5 h-5" />
-                </button>
+                </Button>
               </div>
             </div>
           </>

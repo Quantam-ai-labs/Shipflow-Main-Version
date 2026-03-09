@@ -227,20 +227,20 @@ const roleLabels: Record<string, string> = {
 function getRoleBadge(role: string, isMerchantOwner?: boolean) {
   if (isMerchantOwner) {
     return (
-      <Badge className="bg-amber-500/10 text-amber-600 border-amber-500/20">
+      <Badge variant="secondary">
         <Crown className="w-3 h-3 mr-1" />
         Owner
       </Badge>
     );
   }
 
-  const roleConfig: Record<string, { color: string; icon: React.ElementType }> = {
-    manager: { color: "bg-blue-500/10 text-blue-600 border-blue-500/20", icon: Shield },
-    customer_support: { color: "bg-green-500/10 text-green-600 border-green-500/20", icon: Headphones },
-    accountant: { color: "bg-amber-500/10 text-amber-600 border-amber-500/20", icon: Calculator },
-    logistics_manager: { color: "bg-teal-500/10 text-teal-600 border-teal-500/20", icon: Truck },
-    admin: { color: "bg-blue-500/10 text-blue-600 border-blue-500/20", icon: Shield },
-    agent: { color: "bg-green-500/10 text-green-600 border-green-500/20", icon: Headphones },
+  const roleConfig: Record<string, { icon: React.ElementType }> = {
+    manager: { icon: Shield },
+    customer_support: { icon: Headphones },
+    accountant: { icon: Calculator },
+    logistics_manager: { icon: Truck },
+    admin: { icon: Shield },
+    agent: { icon: Headphones },
   };
 
   const config = roleConfig[role] || roleConfig.customer_support;
@@ -248,7 +248,7 @@ function getRoleBadge(role: string, isMerchantOwner?: boolean) {
   const label = roleLabels[role] || role;
 
   return (
-    <Badge className={config.color}>
+    <Badge variant="outline">
       <Icon className="w-3 h-3 mr-1" />
       {label}
     </Badge>
@@ -257,15 +257,15 @@ function getRoleBadge(role: string, isMerchantOwner?: boolean) {
 
 function getInviteStatusBadge(invite: Invite) {
   if (invite.status === "accepted") {
-    return <Badge className="bg-green-500/10 text-green-600 border-green-500/20"><CheckCircle className="w-3 h-3 mr-1" />Accepted</Badge>;
+    return <Badge variant="secondary"><CheckCircle className="w-3 h-3 mr-1" />Accepted</Badge>;
   }
   if (invite.status === "revoked") {
-    return <Badge className="bg-red-500/10 text-red-600 border-red-500/20"><XCircle className="w-3 h-3 mr-1" />Revoked</Badge>;
+    return <Badge variant="destructive"><XCircle className="w-3 h-3 mr-1" />Revoked</Badge>;
   }
   if (invite.expiresAt && new Date(invite.expiresAt) < new Date()) {
-    return <Badge className="bg-orange-500/10 text-orange-600 border-orange-500/20"><AlertTriangle className="w-3 h-3 mr-1" />Expired</Badge>;
+    return <Badge variant="outline"><AlertTriangle className="w-3 h-3 mr-1" />Expired</Badge>;
   }
-  return <Badge className="bg-yellow-500/10 text-yellow-600 border-yellow-500/20"><Clock className="w-3 h-3 mr-1" />Pending</Badge>;
+  return <Badge variant="outline"><Clock className="w-3 h-3 mr-1" />Pending</Badge>;
 }
 
 function timeAgo(dateStr: string): string {
@@ -696,9 +696,9 @@ export default function Team() {
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <Card>
-          <CardContent className="p-6 flex items-center gap-4">
-            <div className="w-12 h-12 rounded-lg bg-blue-500/10 flex items-center justify-center">
-              <Shield className="w-6 h-6 text-blue-500" />
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center">
+              <Shield className="w-5 h-5 text-muted-foreground" />
             </div>
             <div>
               <p className="text-2xl font-bold" data-testid="text-manager-count">{members.filter((m) => m.role === "manager" || m.role === "admin").length}</p>
@@ -707,9 +707,9 @@ export default function Team() {
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-6 flex items-center gap-4">
-            <div className="w-12 h-12 rounded-lg bg-green-500/10 flex items-center justify-center">
-              <Headphones className="w-6 h-6 text-green-500" />
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center">
+              <Headphones className="w-5 h-5 text-muted-foreground" />
             </div>
             <div>
               <p className="text-2xl font-bold" data-testid="text-support-count">{members.filter((m) => m.role === "customer_support" || m.role === "agent").length}</p>
@@ -718,9 +718,9 @@ export default function Team() {
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-6 flex items-center gap-4">
-            <div className="w-12 h-12 rounded-lg bg-amber-500/10 flex items-center justify-center">
-              <Calculator className="w-6 h-6 text-amber-500" />
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center">
+              <Calculator className="w-5 h-5 text-muted-foreground" />
             </div>
             <div>
               <p className="text-2xl font-bold" data-testid="text-accountant-count">{members.filter((m) => m.role === "accountant").length}</p>
@@ -729,9 +729,9 @@ export default function Team() {
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-6 flex items-center gap-4">
-            <div className="w-12 h-12 rounded-lg bg-teal-500/10 flex items-center justify-center">
-              <Truck className="w-6 h-6 text-teal-500" />
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center">
+              <Truck className="w-5 h-5 text-muted-foreground" />
             </div>
             <div>
               <p className="text-2xl font-bold" data-testid="text-logistics-count">{members.filter((m) => m.role === "logistics_manager").length}</p>

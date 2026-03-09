@@ -167,7 +167,7 @@ export default function FinancialDashboard() {
     <div className="space-y-6" data-testid="financial-dashboard">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold" data-testid="text-financial-title">Financial Overview</h1>
+          <h1 className="text-2xl font-semibold" data-testid="text-financial-title">Financial Overview</h1>
           <p className="text-sm text-muted-foreground">
             Track revenue, expenses, stock, and courier dues
           </p>
@@ -212,9 +212,7 @@ export default function FinancialDashboard() {
                     <p className="text-2xl font-bold" data-testid="text-revenue">{formatPKR(revenue)}</p>
                     <p className="text-xs text-muted-foreground">{data?.revenue?.deliveredOrders || 0} delivered orders</p>
                   </div>
-                  <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center">
-                    <TrendingUp className="w-5 h-5 text-green-500" />
-                  </div>
+                  <TrendingUp className="w-5 h-5 text-muted-foreground" />
                 </div>
               </CardContent>
             </Card>
@@ -227,9 +225,7 @@ export default function FinancialDashboard() {
                     <p className="text-2xl font-bold" data-testid="text-expenses">{formatPKR(expenses)}</p>
                     <p className="text-xs text-muted-foreground">{data?.expenses?.count || 0} expense entries</p>
                   </div>
-                  <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center">
-                    <TrendingDown className="w-5 h-5 text-red-500" />
-                  </div>
+                  <TrendingDown className="w-5 h-5 text-muted-foreground" />
                 </div>
               </CardContent>
             </Card>
@@ -244,9 +240,7 @@ export default function FinancialDashboard() {
                     </p>
                     <p className="text-xs text-muted-foreground">{isProfit ? "Positive" : "Negative"} margin</p>
                   </div>
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isProfit ? "bg-green-500/10" : "bg-red-500/10"}`}>
-                    <DollarSign className={`w-5 h-5 ${isProfit ? "text-green-500" : "text-red-500"}`} />
-                  </div>
+                  <DollarSign className="w-5 h-5 text-muted-foreground" />
                 </div>
               </CardContent>
             </Card>
@@ -259,9 +253,7 @@ export default function FinancialDashboard() {
                     <p className="text-2xl font-bold" data-testid="text-outstanding-dues">{formatPKR(pendingDues)}</p>
                     <p className="text-xs text-muted-foreground">Pending courier payables</p>
                   </div>
-                  <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
-                    <Truck className="w-5 h-5 text-amber-500" />
-                  </div>
+                  <Truck className="w-5 h-5 text-muted-foreground" />
                 </div>
               </CardContent>
             </Card>
@@ -272,8 +264,7 @@ export default function FinancialDashboard() {
       <div className="grid lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Receipt className="w-5 h-5" />
+            <CardTitle className="text-base font-semibold">
               Monthly Expenses
             </CardTitle>
           </CardHeader>
@@ -317,8 +308,7 @@ export default function FinancialDashboard() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <DollarSign className="w-5 h-5" />
+            <CardTitle className="text-base font-semibold">
               Expense Breakdown
             </CardTitle>
           </CardHeader>
@@ -363,8 +353,7 @@ export default function FinancialDashboard() {
       <div className="grid lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Package className="w-5 h-5" />
+            <CardTitle className="text-base font-semibold">
               Stock Overview
             </CardTitle>
           </CardHeader>
@@ -376,12 +365,10 @@ export default function FinancialDashboard() {
                 <Skeleton className="h-16 w-full" />
               </div>
             ) : (
-              <div className="space-y-4" data-testid="stock-overview">
-                <div className="flex items-center justify-between gap-4 p-3 rounded-md bg-green-500/5 border border-green-500/10">
+              <div className="space-y-3" data-testid="stock-overview">
+                <div className="flex items-center justify-between gap-4 p-3 rounded-md border">
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg bg-green-500/10 flex items-center justify-center">
-                      <ArrowDownLeft className="w-4 h-4 text-green-500" />
-                    </div>
+                    <ArrowDownLeft className="w-4 h-4 text-muted-foreground" />
                     <div>
                       <p className="font-medium text-sm">Incoming Stock</p>
                       <p className="text-xs text-muted-foreground">{stockIncoming?.totalQty || 0} units</p>
@@ -390,11 +377,9 @@ export default function FinancialDashboard() {
                   <p className="font-semibold text-sm" data-testid="text-stock-incoming-value">{formatPKR(stockIncoming?.totalValue || "0")}</p>
                 </div>
 
-                <div className="flex items-center justify-between gap-4 p-3 rounded-md bg-blue-500/5 border border-blue-500/10">
+                <div className="flex items-center justify-between gap-4 p-3 rounded-md border">
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                      <ArrowUpRight className="w-4 h-4 text-blue-500" />
-                    </div>
+                    <ArrowUpRight className="w-4 h-4 text-muted-foreground" />
                     <div>
                       <p className="font-medium text-sm">Outgoing Stock</p>
                       <p className="text-xs text-muted-foreground">{stockOutgoing?.totalQty || 0} units</p>
@@ -403,11 +388,9 @@ export default function FinancialDashboard() {
                   <p className="font-semibold text-sm" data-testid="text-stock-outgoing-value">{formatPKR(stockOutgoing?.totalValue || "0")}</p>
                 </div>
 
-                <div className="flex items-center justify-between gap-4 p-3 rounded-md bg-amber-500/5 border border-amber-500/10">
+                <div className="flex items-center justify-between gap-4 p-3 rounded-md border">
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg bg-amber-500/10 flex items-center justify-center">
-                      <RotateCcw className="w-4 h-4 text-amber-500" />
-                    </div>
+                    <RotateCcw className="w-4 h-4 text-muted-foreground" />
                     <div>
                       <p className="font-medium text-sm">Returns</p>
                       <p className="text-xs text-muted-foreground">{stockReturn?.totalQty || 0} units</p>
@@ -422,8 +405,7 @@ export default function FinancialDashboard() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Truck className="w-5 h-5" />
+            <CardTitle className="text-base font-semibold">
               Courier Dues Summary
             </CardTitle>
           </CardHeader>
@@ -451,12 +433,12 @@ export default function FinancialDashboard() {
                         <p className="font-medium text-sm">{courier}</p>
                         <div className="flex items-center gap-1.5">
                           {pendingCount > 0 && (
-                            <Badge variant="outline" className="text-xs bg-amber-500/10 text-amber-600 border-amber-500/20">
+                            <Badge variant="secondary" className="text-xs">
                               {pendingCount} pending
                             </Badge>
                           )}
                           {settledCount > 0 && (
-                            <Badge variant="outline" className="text-xs bg-green-500/10 text-green-600 border-green-500/20">
+                            <Badge variant="secondary" className="text-xs">
                               {settledCount} settled
                             </Badge>
                           )}
@@ -481,8 +463,7 @@ export default function FinancialDashboard() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Receipt className="w-5 h-5" />
+          <CardTitle className="text-base font-semibold">
             Recent Expenses
           </CardTitle>
         </CardHeader>
@@ -498,9 +479,7 @@ export default function FinancialDashboard() {
               {(data?.expenses?.recent || []).slice(0, 5).map((expense, i) => (
                 <div key={expense.id || i} className="flex items-center justify-between gap-4 p-3 rounded-md border" data-testid={`recent-expense-${expense.id || i}`}>
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-9 h-9 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0">
-                      <Receipt className="w-4 h-4 text-red-500" />
-                    </div>
+                    <Receipt className="w-4 h-4 text-muted-foreground shrink-0" />
                     <div className="min-w-0">
                       <p className="font-medium text-sm truncate">{expense.description || "Expense"}</p>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">

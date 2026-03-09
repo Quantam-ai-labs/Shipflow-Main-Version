@@ -507,15 +507,15 @@ export default function WarehousePage() {
           </div>
           <button
             onClick={() => setScanMode("manual")}
-            className="absolute top-3 right-3 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800/80 text-slate-200 text-xs font-medium backdrop-blur-sm active:bg-slate-700"
+            className="absolute top-3 right-3 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 text-slate-200 text-xs font-medium active:bg-slate-700"
             data-testid="button-switch-manual"
           >
             <Keyboard className="w-3.5 h-3.5" />
             Manual
           </button>
           {scanResult && (
-            <div className={`absolute bottom-3 left-3 right-3 rounded-xl p-3 flex items-center gap-2 text-sm font-medium backdrop-blur-sm ${
-              scanResult.status === "valid" ? "bg-green-500/80 text-white" : "bg-red-500/80 text-white"
+            <div className={`absolute bottom-3 left-3 right-3 rounded-xl p-3 flex items-center gap-2 text-sm font-medium ${
+              scanResult.status === "valid" ? "bg-green-600 text-white" : "bg-red-600 text-white"
             }`} data-testid="warehouse-scan-result">
               {scanResult.status === "valid"
                 ? <CheckCircle2 className="w-4 h-4 shrink-0" />

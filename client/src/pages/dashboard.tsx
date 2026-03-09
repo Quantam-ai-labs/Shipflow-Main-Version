@@ -113,14 +113,11 @@ function StatCard({
   if (isLoading) {
     return (
       <Card>
-        <CardContent className="p-6">
-          <div className="flex items-start justify-between gap-4">
-            <div className="space-y-2 flex-1">
-              <Skeleton className="h-4 w-24" />
-              <Skeleton className="h-8 w-16" />
-              <Skeleton className="h-3 w-20" />
-            </div>
-            <Skeleton className="h-10 w-10 rounded-lg" />
+        <CardContent className="p-4">
+          <div className="space-y-2">
+            <Skeleton className="h-3 w-20" />
+            <Skeleton className="h-7 w-16" />
+            <Skeleton className="h-3 w-24" />
           </div>
         </CardContent>
       </Card>
@@ -129,19 +126,19 @@ function StatCard({
 
   return (
     <Card>
-      <CardContent className="p-6">
-        <div className="flex items-start justify-between gap-4">
-          <div className="space-y-1">
-            <p className="text-sm text-muted-foreground">{title}</p>
-            <p className="text-2xl font-bold">{value}</p>
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-1 min-w-0">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{title}</p>
+            <p className="text-2xl font-semibold">{value}</p>
             {trend !== undefined && (
               <div className="flex items-center gap-1 text-xs">
                 {trend >= 0 ? (
-                  <TrendingUp className="w-3 h-3 text-green-500" />
+                  <TrendingUp className="w-3 h-3 text-green-600 dark:text-green-400" />
                 ) : (
-                  <TrendingDown className="w-3 h-3 text-red-500" />
+                  <TrendingDown className="w-3 h-3 text-red-600 dark:text-red-400" />
                 )}
-                <span className={trend >= 0 ? "text-green-600" : "text-red-600"}>
+                <span className={trend >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
                   {trend >= 0 ? "+" : ""}{trend}%
                 </span>
                 <span className="text-muted-foreground">{trendLabel}</span>
@@ -151,7 +148,7 @@ function StatCard({
               <p className="text-xs text-muted-foreground">{subtitle}</p>
             )}
           </div>
-          <div className={`w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center ${iconColor}`}>
+          <div className={`${iconColor} opacity-60`}>
             <Icon className="w-5 h-5" />
           </div>
         </div>
@@ -553,8 +550,7 @@ function OrderSearchSection() {
     <Card>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between gap-2">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Search className="w-5 h-5" />
+          <CardTitle className="text-sm font-medium">
             Order Search
           </CardTitle>
           {hasAnyInput && (
@@ -638,14 +634,14 @@ function OrderSearchSection() {
                   const stageOrders = groupedResults[stage];
                   return (
                     <div key={stage} data-testid={`search-group-${stage}`}>
-                      <div className="sticky top-0 z-10 bg-muted/80 backdrop-blur-sm px-4 py-1.5 border-b flex items-center gap-2">
+                      <div className="sticky top-0 z-10 bg-muted px-4 py-1.5 border-b flex items-center gap-2">
                         <Badge className={`text-[10px] ${WORKFLOW_STAGE_COLORS[stage] || ""}`}>
                           {WORKFLOW_STAGE_LABELS[stage] || stage}
                         </Badge>
                         <span className="text-xs text-muted-foreground">{stageOrders.length} order{stageOrders.length !== 1 ? "s" : ""}</span>
                       </div>
                       <table className="w-full text-sm">
-                        <thead className="bg-muted/30">
+                        <thead>
                           <tr className="border-b">
                             <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Order</th>
                             <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Customer</th>
@@ -933,12 +929,12 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Dashboard</h1>
-          <p className="text-muted-foreground">Welcome back! Here's your logistics overview.</p>
+          <h1 className="text-xl font-semibold">Dashboard</h1>
+          <p className="text-sm text-muted-foreground">Your logistics overview</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Button onClick={handleRefresh} variant="outline" size="sm" data-testid="button-refresh-dashboard">
@@ -970,8 +966,8 @@ export default function Dashboard() {
 
         return (
           <div className="space-y-3">
-            <h2 className="text-lg font-semibold" data-testid="section-order-overview">Order Overview</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide" data-testid="section-order-overview">Order Overview</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
               <StatCard
                 title="Total Orders"
                 value={countsLoading ? "—" : total.toLocaleString()}
@@ -985,7 +981,7 @@ export default function Dashboard() {
                 title="Dispatched"
                 value={countsLoading ? "—" : dispatched.toLocaleString()}
                 icon={Send}
-                iconColor="text-blue-500"
+                iconColor="text-muted-foreground"
                 subtitle={countsLoading ? undefined : fmtCod(dispatchedCod)}
                 isLoading={countsLoading}
               />
@@ -993,7 +989,7 @@ export default function Dashboard() {
                 title="Delivered"
                 value={countsLoading ? "—" : delivered.toLocaleString()}
                 icon={CheckCircle2}
-                iconColor="text-green-500"
+                iconColor="text-muted-foreground"
                 subtitle={countsLoading ? undefined : fmtCod(deliveredCod)}
                 isLoading={countsLoading}
               />
@@ -1001,7 +997,7 @@ export default function Dashboard() {
                 title="Pending"
                 value={countsLoading ? "—" : pending.toLocaleString()}
                 icon={Clock}
-                iconColor="text-amber-500"
+                iconColor="text-muted-foreground"
                 subtitle={countsLoading ? undefined : fmtCod(pendingCod)}
                 isLoading={countsLoading}
               />
@@ -1009,7 +1005,7 @@ export default function Dashboard() {
                 title="Cancelled"
                 value={countsLoading ? "—" : cancelled.toLocaleString()}
                 icon={Ban}
-                iconColor="text-red-500"
+                iconColor="text-muted-foreground"
                 subtitle={countsLoading ? undefined : fmtCod(cancelledCod)}
                 isLoading={countsLoading}
               />
@@ -1035,78 +1031,48 @@ export default function Dashboard() {
 
         return (
           <div className="space-y-3">
-            <h2 className="text-lg font-semibold" data-testid="section-performance-metrics">Performance Metrics</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-              <Card data-testid="card-fulfillment-ratio">
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-1">
-                      <p className="text-sm text-muted-foreground">Fulfillment Ratio</p>
-                      <p className="text-2xl font-bold">{countsLoading ? "—" : `${fulfillmentRatio}%`}</p>
-                      <p className="text-xs text-muted-foreground">{dispatched} dispatched / {total} total</p>
-                    </div>
-                    <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500">
-                      <BarChart3 className="w-5 h-5" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card data-testid="card-cancellation-ratio">
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-1">
-                      <p className="text-sm text-muted-foreground">Cancellation Ratio</p>
-                      <p className="text-2xl font-bold">{countsLoading ? "—" : `${cancellationRatio}%`}</p>
-                      <p className="text-xs text-muted-foreground">{cancelled} cancelled / {total} total</p>
-                    </div>
-                    <div className="w-10 h-10 rounded-lg bg-orange-500/10 flex items-center justify-center text-orange-500">
-                      <X className="w-5 h-5" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card data-testid="card-delivery-ratio">
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-1">
-                      <p className="text-sm text-muted-foreground">Delivery Ratio</p>
-                      <p className="text-2xl font-bold">{countsLoading ? "—" : `${deliveryRatio}%`}</p>
-                      <p className="text-xs text-muted-foreground">{delivered} delivered / {dispatched} dispatched</p>
-                    </div>
-                    <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center text-green-500">
-                      <Target className="w-5 h-5" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card data-testid="card-pending-ratio">
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-1">
-                      <p className="text-sm text-muted-foreground">Pending Ratio</p>
-                      <p className="text-2xl font-bold">{countsLoading ? "—" : `${pendingRatio}%`}</p>
-                      <p className="text-xs text-muted-foreground">{fulfilled} fulfilled / {dispatched} dispatched</p>
-                    </div>
-                    <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-500">
-                      <Clock className="w-5 h-5" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card data-testid="card-return-ratio">
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-1">
-                      <p className="text-sm text-muted-foreground">Return Ratio</p>
-                      <p className="text-2xl font-bold">{countsLoading ? "—" : `${returnRatio}%`}</p>
-                      <p className="text-xs text-muted-foreground">{returned} returned / {dispatched} dispatched</p>
-                    </div>
-                    <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center text-red-500">
-                      <RotateCcw className="w-5 h-5" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+            <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide" data-testid="section-performance-metrics">Performance Metrics</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+              <StatCard
+                title="Fulfillment Ratio"
+                value={countsLoading ? "—" : `${fulfillmentRatio}%`}
+                icon={BarChart3}
+                iconColor="text-muted-foreground"
+                subtitle={`${dispatched} dispatched / ${total} total`}
+                isLoading={countsLoading}
+              />
+              <StatCard
+                title="Cancellation Ratio"
+                value={countsLoading ? "—" : `${cancellationRatio}%`}
+                icon={X}
+                iconColor="text-muted-foreground"
+                subtitle={`${cancelled} cancelled / ${total} total`}
+                isLoading={countsLoading}
+              />
+              <StatCard
+                title="Delivery Ratio"
+                value={countsLoading ? "—" : `${deliveryRatio}%`}
+                icon={Target}
+                iconColor="text-muted-foreground"
+                subtitle={`${delivered} delivered / ${dispatched} dispatched`}
+                isLoading={countsLoading}
+              />
+              <StatCard
+                title="Pending Ratio"
+                value={countsLoading ? "—" : `${pendingRatio}%`}
+                icon={Clock}
+                iconColor="text-muted-foreground"
+                subtitle={`${fulfilled} fulfilled / ${dispatched} dispatched`}
+                isLoading={countsLoading}
+              />
+              <StatCard
+                title="Return Ratio"
+                value={countsLoading ? "—" : `${returnRatio}%`}
+                icon={RotateCcw}
+                iconColor="text-muted-foreground"
+                subtitle={`${returned} returned / ${dispatched} dispatched`}
+                isLoading={countsLoading}
+              />
             </div>
           </div>
         );
@@ -1114,36 +1080,37 @@ export default function Dashboard() {
 
       {/* Status Breakdown */}
       <Card>
-        <CardContent className="p-4">
+        <CardContent className="p-3">
           {countsLoading ? (
             <div className="flex gap-2 flex-wrap">
               {Array.from({ length: 6 }).map((_, i) => (
-                <Skeleton key={i} className="h-8 w-24 rounded-full" />
+                <Skeleton key={i} className="h-6 w-20 rounded-md" />
               ))}
             </div>
           ) : workflowCounts ? (
-            <div className="flex gap-2 flex-wrap" data-testid="status-breakdown-chips">
+            <div className="flex gap-1.5 flex-wrap" data-testid="status-breakdown-chips">
               {[
-                { key: 'NEW', label: 'New', color: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300' },
-                { key: 'PENDING', label: 'Pending', color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' },
-                { key: 'HOLD', label: 'Hold', color: 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300' },
-                { key: 'READY_TO_SHIP', label: 'Ready to Ship', color: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900 dark:text-cyan-300' },
-                { key: 'BOOKED', label: 'Booked', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300' },
-                { key: 'FULFILLED', label: 'Fulfilled', color: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300' },
-                { key: 'DELIVERED', label: 'Delivered', color: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' },
-                { key: 'RETURN', label: 'Return', color: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' },
-                { key: 'CANCELLED', label: 'Cancelled', color: 'bg-red-100 text-red-600 dark:bg-red-900/50 dark:text-red-400' },
+                { key: 'NEW', label: 'New' },
+                { key: 'PENDING', label: 'Pending' },
+                { key: 'HOLD', label: 'Hold' },
+                { key: 'READY_TO_SHIP', label: 'Ready to Ship' },
+                { key: 'BOOKED', label: 'Booked' },
+                { key: 'FULFILLED', label: 'Fulfilled' },
+                { key: 'DELIVERED', label: 'Delivered' },
+                { key: 'RETURN', label: 'Return' },
+                { key: 'CANCELLED', label: 'Cancelled' },
               ]
                 .filter(s => (workflowCounts[s.key] || 0) > 0)
                 .map(s => (
                   <Link key={s.key} href={`/orders?workflowStatus=${s.key}`}>
-                    <span
-                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium cursor-pointer hover:opacity-80 transition-opacity ${s.color}`}
+                    <Badge
+                      variant="secondary"
+                      className="cursor-pointer text-xs"
                       data-testid={`chip-dashboard-${s.key}`}
                     >
                       {s.label}
-                      <span className="font-bold">{(workflowCounts[s.key] || 0).toLocaleString()}</span>
-                    </span>
+                      <span className="font-semibold ml-1">{(workflowCounts[s.key] || 0).toLocaleString()}</span>
+                    </Badge>
                   </Link>
                 ))}
             </div>
@@ -1152,22 +1119,17 @@ export default function Dashboard() {
       </Card>
 
       {/* COD Pending Card */}
-      <Card className="bg-gradient-to-r from-primary/5 to-primary/10 border-primary/20">
-        <CardContent className="p-6">
+      <Card>
+        <CardContent className="p-4">
           <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-lg bg-primary/20 flex items-center justify-center">
-                <AlertCircle className="w-6 h-6 text-primary" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">COD Pending Collection</p>
-                <p className="text-2xl font-bold">PKR {stats?.codPending ?? "0"}</p>
-              </div>
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">COD Pending Collection</p>
+              <p className="text-2xl font-semibold mt-1">PKR {stats?.codPending ?? "0"}</p>
             </div>
             <Link href="/cod">
-              <Button variant="outline" data-testid="button-view-cod">
+              <Button variant="outline" size="sm" data-testid="button-view-cod">
                 View Details
-                <ArrowUpRight className="w-4 h-4 ml-2" />
+                <ArrowUpRight className="w-3.5 h-3.5 ml-1.5" />
               </Button>
             </Link>
           </div>
@@ -1176,50 +1138,44 @@ export default function Dashboard() {
 
       {/* Recent Orders */}
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-4 pb-4">
-          <CardTitle className="text-lg font-semibold">Recent Orders</CardTitle>
+        <CardHeader className="flex flex-row items-center justify-between gap-4 pb-2">
+          <CardTitle className="text-sm font-medium">Recent Orders</CardTitle>
           <Link href="/orders">
             <Button variant="ghost" size="sm" data-testid="button-view-all-orders">
               View All
-              <ArrowUpRight className="w-4 h-4 ml-1" />
+              <ArrowUpRight className="w-3.5 h-3.5 ml-1" />
             </Button>
           </Link>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           {ordersLoading ? (
-            <div className="space-y-4">
+            <div className="divide-y">
               {[1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="flex items-center justify-between p-4 rounded-lg border">
-                  <div className="flex items-center gap-4">
-                    <Skeleton className="h-10 w-10 rounded-full" />
-                    <div className="space-y-2">
-                      <Skeleton className="h-4 w-24" />
-                      <Skeleton className="h-3 w-32" />
+                <div key={i} className="flex items-center justify-between px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <div className="space-y-1.5">
+                      <Skeleton className="h-4 w-20" />
+                      <Skeleton className="h-3 w-28" />
                     </div>
                   </div>
-                  <Skeleton className="h-6 w-20" />
+                  <Skeleton className="h-5 w-16" />
                 </div>
               ))}
             </div>
           ) : recentOrders && recentOrders.length > 0 ? (
-            <div className="space-y-3">
+            <div className="divide-y">
               {recentOrders.map((order) => (
                 <Link key={order.id} href={`/orders/detail/${order.id}`}>
-                  <div className="flex items-center justify-between p-4 rounded-lg border hover-elevate cursor-pointer transition-colors" data-testid={`order-row-${order.id}`}>
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-                        <Package className="w-5 h-5 text-muted-foreground" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-sm">{String(order.orderNumber || '').replace(/^#/, '')}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {order.customerName} • {order.city}
-                        </p>
-                      </div>
+                  <div className="flex items-center justify-between px-4 py-3 hover-elevate cursor-pointer" data-testid={`order-row-${order.id}`}>
+                    <div>
+                      <p className="font-medium text-sm">{String(order.orderNumber || '').replace(/^#/, '')}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {order.customerName} • {order.city}
+                      </p>
                     </div>
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-3">
                       <div className="text-right hidden sm:block">
-                        <p className="font-medium text-sm">PKR {order.totalAmount}</p>
+                        <p className="text-sm font-medium">PKR {order.totalAmount}</p>
                         <p className="text-xs text-muted-foreground capitalize">{order.paymentMethod}</p>
                       </div>
                       {getStatusBadge(order.shipmentStatus || "Unfulfilled")}
@@ -1229,10 +1185,10 @@ export default function Dashboard() {
               ))}
             </div>
           ) : (
-            <div className="text-center py-12">
-              <Package className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
-              <h3 className="font-medium mb-1">No orders yet</h3>
-              <p className="text-sm text-muted-foreground">
+            <div className="text-center py-10 px-4">
+              <Package className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
+              <p className="text-sm font-medium mb-0.5">No orders yet</p>
+              <p className="text-xs text-muted-foreground">
                 Orders from your Shopify store will appear here
               </p>
             </div>

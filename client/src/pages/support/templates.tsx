@@ -191,14 +191,14 @@ function Section({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border rounded-xl overflow-hidden">
+    <div className="border rounded-md overflow-hidden">
       <button
         type="button"
-        className="w-full flex items-center gap-3 px-4 py-3 bg-card hover:bg-muted/30 transition-colors text-left"
+        className="w-full flex items-center gap-3 px-4 py-3 bg-card hover-elevate transition-colors text-left"
         onClick={() => setOpen(o => !o)}
         data-testid={`section-toggle-${title.toLowerCase().replace(/\s+/g, "-")}`}
       >
-        <span className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 ${labelColor}`}>
+        <span className="w-7 h-7 rounded-md flex items-center justify-center bg-muted text-muted-foreground text-xs font-bold shrink-0">
           {label}
         </span>
         <div className="flex-1">
@@ -300,9 +300,9 @@ function TemplateEditor({
   return (
     <div className="p-6 max-w-6xl mx-auto">
       {preset && (
-        <div className="flex items-center gap-2 mb-5 bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 rounded-lg px-4 py-2.5">
-          <FileText className="w-4 h-4 text-violet-600 dark:text-violet-400" />
-          <span className="text-sm text-violet-700 dark:text-violet-300">Using preset: <strong>{preset.name}</strong></span>
+        <div className="flex items-center gap-2 mb-5 bg-muted border rounded-md px-4 py-2.5">
+          <FileText className="w-4 h-4 text-muted-foreground" />
+          <span className="text-sm text-muted-foreground">Using preset: <strong className="text-foreground">{preset.name}</strong></span>
         </div>
       )}
 
@@ -398,7 +398,7 @@ function TemplateEditor({
                     key={chip}
                     type="button"
                     onClick={() => insertVar(chip)}
-                    className="text-xs px-2 py-0.5 rounded border border-violet-200 dark:border-violet-800 bg-white dark:bg-background hover:bg-violet-50 dark:hover:bg-violet-900/20 text-violet-700 dark:text-violet-300 font-mono transition-colors"
+                    className="text-xs px-2 py-0.5 rounded border bg-background hover-elevate font-mono transition-colors text-muted-foreground"
                     data-testid={`chip-var-${chip.replace(/[{}]/g, "")}`}
                   >
                     + {chip}
@@ -423,9 +423,9 @@ function TemplateEditor({
                   <div className="bg-muted/40 rounded-lg border divide-y text-xs">
                     {[...new Set(body.match(/\{\{(\w+)\}\}/g) ?? [])].map((v, i) => (
                       <div key={v} className="flex items-center gap-2 px-3 py-1.5">
-                        <span className="font-mono bg-white dark:bg-background border rounded px-1.5 py-0.5 text-muted-foreground w-8 text-center">{`{{${i + 1}}}`}</span>
+                        <span className="font-mono bg-background border rounded px-1.5 py-0.5 text-muted-foreground w-8 text-center">{`{{${i + 1}}}`}</span>
                         <span className="text-muted-foreground">→</span>
-                        <span className="font-mono text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30 border border-violet-200 dark:border-violet-800 rounded-full px-2 py-0.5">{v}</span>
+                        <span className="font-mono text-foreground bg-muted border rounded-full px-2 py-0.5">{v}</span>
                         <span className="text-muted-foreground">{getVariableNames(v)[0] ?? ""}</span>
                       </div>
                     ))}
@@ -492,7 +492,6 @@ function TemplateEditor({
               onClick={() => onSave({ name, language, category, headerType, headerText, body, footer, buttons })}
               disabled={isSaving || !name.trim()}
               data-testid="button-submit-approval"
-              className="bg-violet-600 hover:bg-violet-700 text-white"
             >
               {isSaving ? "Saving..." : "Submit for Approval"}
             </Button>
@@ -657,7 +656,6 @@ function AutomationDialog({
               onClick={handleSave}
               disabled={isSaving || !title.trim()}
               data-testid="button-create-automation"
-              className="bg-violet-600 hover:bg-violet-700 text-white"
             >
               {isSaving ? "Saving..." : editData ? "Save Changes" : "Create Automation"}
             </Button>
@@ -686,11 +684,11 @@ function AutomationCard({
   const vars = getVariableNames(automation.messageText);
 
   return (
-    <div className="border rounded-xl p-5 bg-card space-y-3" data-testid={`card-automation-${automation.id}`}>
+    <div className="border rounded-md p-5 bg-card space-y-3" data-testid={`card-automation-${automation.id}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3">
-          <div className="w-10 h-10 rounded-xl bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center shrink-0">
-            <ShoppingCart className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+          <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center shrink-0">
+            <ShoppingCart className="w-5 h-5 text-muted-foreground" />
           </div>
           <div>
             <p className="font-bold text-sm">{automation.title}</p>
@@ -941,8 +939,7 @@ export default function SupportTemplatesPage() {
 
       {/* ── TEMPLATES TAB ── */}
       {activeTab === "templates" && (
-        <div className="border rounded-xl bg-card overflow-hidden">
-          {/* Header */}
+        <div className="border rounded-md bg-card overflow-hidden">
           <div className="flex items-start justify-between p-6 border-b">
             <div>
               <h1 className="text-lg font-bold tracking-tight" data-testid="text-page-title">Shopify Message Templates</h1>
@@ -967,7 +964,6 @@ export default function SupportTemplatesPage() {
               <Button
                 onClick={() => { setEditorPreset(null); setEditorOpen(true); }}
                 data-testid="button-new-template"
-                className="bg-violet-600 hover:bg-violet-700 text-white"
               >
                 <Plus className="w-4 h-4 mr-2" />
                 New Template
@@ -984,7 +980,7 @@ export default function SupportTemplatesPage() {
                   key={preset.id}
                   type="button"
                   onClick={() => { setEditorPreset(preset); setEditorOpen(true); }}
-                  className="text-left p-4 rounded-xl border bg-background hover:bg-muted/30 transition-colors"
+                  className="text-left p-4 rounded-md border bg-background hover-elevate transition-colors"
                   data-testid={`card-preset-${preset.id}`}
                 >
                   <div className="flex items-start justify-between gap-2 mb-1.5">
@@ -992,16 +988,12 @@ export default function SupportTemplatesPage() {
                       <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
                       <span className="font-semibold text-sm">{preset.name}</span>
                     </div>
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium border shrink-0 ${
-                      preset.category === "UTILITY"
-                        ? "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800"
-                        : "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/20 dark:text-orange-300 dark:border-orange-800"
-                    }`}>{preset.category}</span>
+                    <Badge variant="outline" className="text-xs shrink-0">{preset.category}</Badge>
                   </div>
                   <p className="text-xs text-muted-foreground mb-2.5">{preset.description}</p>
                   <div className="flex flex-wrap gap-1.5">
                     {preset.chips.map(c => (
-                      <span key={c} className="text-xs px-2 py-0.5 rounded-full font-mono bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300 border border-violet-200 dark:border-violet-800">
+                      <span key={c} className="text-xs px-2 py-0.5 rounded-full font-mono bg-muted text-muted-foreground border">
                         {c}
                       </span>
                     ))}
@@ -1034,13 +1026,7 @@ export default function SupportTemplatesPage() {
                       <p className="font-semibold text-sm truncate">{tpl.name}</p>
                       <p className="text-xs text-muted-foreground">{tpl.language} | {tpl.category.toUpperCase()}</p>
                     </div>
-                    <Badge className={`text-xs shrink-0 ${
-                      tpl.status === "approved"
-                        ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800"
-                        : tpl.status === "rejected"
-                        ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800"
-                        : "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800"
-                    }`}>
+                    <Badge variant={tpl.status === "approved" ? "secondary" : tpl.status === "rejected" ? "destructive" : "outline"} className="text-xs shrink-0">
                       {tpl.status.toUpperCase()}
                     </Badge>
                     <button
@@ -1072,7 +1058,6 @@ export default function SupportTemplatesPage() {
             <Button
               onClick={() => { setEditingAutomation(null); setAutoDialogOpen(true); }}
               data-testid="button-create-automation"
-              className="bg-violet-600 hover:bg-violet-700 text-white"
             >
               <Plus className="w-4 h-4 mr-2" />
               Create Automation
@@ -1082,7 +1067,7 @@ export default function SupportTemplatesPage() {
           {/* Automation list */}
           {autoLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-44 rounded-xl" />)}
+              {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-44 rounded-md" />)}
             </div>
           ) : automations.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 gap-4">
@@ -1096,7 +1081,6 @@ export default function SupportTemplatesPage() {
               <Button
                 onClick={() => { setEditingAutomation(null); setAutoDialogOpen(true); }}
                 data-testid="button-create-automation-empty"
-                className="bg-violet-600 hover:bg-violet-700 text-white"
               >
                 <Plus className="w-4 h-4 mr-2" />
                 Create Automation
@@ -1131,7 +1115,7 @@ export default function SupportTemplatesPage() {
 
       {/* ── MESSAGE LOGS TAB ── */}
       {activeTab === "logs" && (
-        <div className="border rounded-xl bg-card overflow-hidden">
+        <div className="border rounded-md bg-card overflow-hidden">
           <div className="flex items-start justify-between p-6 border-b">
             <div>
               <h1 className="text-lg font-bold tracking-tight" data-testid="text-logs-title">Message Logs</h1>
@@ -1226,14 +1210,14 @@ export default function SupportTemplatesPage() {
                           </td>
                           <td className="px-4 py-3">
                             {isSuccess ? (
-                              <Badge className="bg-emerald-500/15 text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/20" data-testid={`badge-status-${log.id}`}>
+                              <Badge variant="secondary" data-testid={`badge-status-${log.id}`}>
                                 <CheckCircle2 className="w-3 h-3 mr-1" />
                                 Sent
                               </Badge>
                             ) : (
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <Badge variant="destructive" className="cursor-default bg-red-500/15 text-red-500 border-red-500/30 hover:bg-red-500/20" data-testid={`badge-status-${log.id}`}>
+                                  <Badge variant="destructive" className="cursor-default" data-testid={`badge-status-${log.id}`}>
                                     <XCircle className="w-3 h-3 mr-1" />
                                     Failed
                                   </Badge>

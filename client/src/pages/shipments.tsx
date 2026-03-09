@@ -441,7 +441,6 @@ export default function Shipments() {
                   <Button
                     variant={issuesActive ? "default" : "outline"}
                     size="sm"
-                    className={issuesActive ? "bg-amber-600 hover:bg-amber-700 text-white" : ""}
                     onClick={() => {
                       if (savedIssueStatuses.length === 0) {
                         setIssuesSelection([]);

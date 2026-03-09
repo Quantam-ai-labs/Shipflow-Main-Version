@@ -27,10 +27,7 @@ import {
   ShoppingCart,
   TrendingUp,
   Eye,
-  MousePointer,
   Target,
-  ArrowUpRight,
-  ArrowDownRight,
   Loader2,
 } from "lucide-react";
 import {
@@ -128,12 +125,12 @@ export default function MarketingDashboard() {
   });
 
   const kpiCards = [
-    { title: "Total Spend", value: summary ? formatCurrency(summary.totalSpend) : "-", icon: DollarSign, color: "text-red-500" },
-    { title: "Total Revenue", value: summary ? formatCurrency(summary.totalRevenue) : "-", icon: ShoppingCart, color: "text-green-500" },
-    { title: "ROAS", value: summary ? `${summary.roas.toFixed(2)}x` : "-", icon: TrendingUp, color: "text-blue-500" },
-    { title: "CPA", value: summary ? formatCurrency(summary.cpa) : "-", icon: Target, color: "text-orange-500" },
-    { title: "Purchases", value: summary ? formatNumber(summary.totalPurchases) : "-", icon: ShoppingCart, color: "text-purple-500" },
-    { title: "Impressions", value: summary ? formatNumber(summary.totalImpressions) : "-", icon: Eye, color: "text-cyan-500" },
+    { title: "Total Spend", value: summary ? formatCurrency(summary.totalSpend) : "-", icon: DollarSign },
+    { title: "Total Revenue", value: summary ? formatCurrency(summary.totalRevenue) : "-", icon: ShoppingCart },
+    { title: "ROAS", value: summary ? `${summary.roas.toFixed(2)}x` : "-", icon: TrendingUp },
+    { title: "CPA", value: summary ? formatCurrency(summary.cpa) : "-", icon: Target },
+    { title: "Purchases", value: summary ? formatNumber(summary.totalPurchases) : "-", icon: ShoppingCart },
+    { title: "Impressions", value: summary ? formatNumber(summary.totalImpressions) : "-", icon: Eye },
   ];
 
   const chartData = dailyData?.map((d: any) => ({
@@ -201,7 +198,7 @@ export default function MarketingDashboard() {
               ) : (
                 <>
                   <div className="flex items-center gap-1.5 mb-1">
-                    <card.icon className={`w-3.5 h-3.5 ${card.color}`} />
+                    <card.icon className="w-3.5 h-3.5 text-muted-foreground" />
                     <span className="text-[11px] text-muted-foreground font-medium">{card.title}</span>
                   </div>
                   <div className="text-lg font-bold" data-testid={`text-kpi-value-${i}`}>{card.value}</div>
@@ -356,7 +353,8 @@ export default function MarketingDashboard() {
                       <TableCell className="text-sm text-right">{c.ctr.toFixed(2)}%</TableCell>
                       <TableCell className="text-center">
                         <Badge
-                          className={`text-[10px] ${c.status === "ACTIVE" ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"}`}
+                          variant="secondary"
+                          className="text-[10px]"
                           data-testid={`badge-campaign-status-${i}`}
                         >
                           {c.status}

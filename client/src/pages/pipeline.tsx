@@ -1270,7 +1270,7 @@ export default function Pipeline() {
         </div>
 
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          {total > 0 && <span className="font-extrabold text-[#ffffff] bg-[#00000000]">{total.toLocaleString()} orders</span>}
+          {total > 0 && <span className="font-medium">{total.toLocaleString()} orders</span>}
           <Button
             variant="outline"
             size="sm"
@@ -2411,32 +2411,31 @@ export default function Pipeline() {
                 {allOrders.length > 0 && (
                   <div className="overflow-x-auto overflow-y-auto border border-border flex-1 min-h-0">
                     <table className="w-full text-sm border-collapse">
-                      <thead className="bg-emerald-700 dark:bg-emerald-800 sticky top-0 z-10">
+                      <thead className="bg-muted sticky top-0 z-10">
                         <tr>
-                          <th className="px-2 py-2 text-left w-10 border border-emerald-600 dark:border-emerald-700 text-white">
+                          <th className="px-2 py-2 text-left w-10 border-b">
                             <Checkbox
                               checked={allChecked}
                               onCheckedChange={(checked) => {
                                 if (checked) setPreviewChecked(new Set(allValidIds));
                                 else setPreviewChecked(new Set());
                               }}
-                              className="border-white/60 data-[state=checked]:bg-white data-[state=checked]:text-emerald-700"
                               data-testid="checkbox-preview-all"
                             />
                           </th>
-                          <th className="px-2 py-2 text-left font-semibold w-8 border border-emerald-600 dark:border-emerald-700 text-white text-xs">#</th>
-                          <th className="px-2 py-2 text-left font-semibold w-24 border border-emerald-600 dark:border-emerald-700 text-white text-xs">Order</th>
-                          <th className="px-2 py-2 text-left font-semibold min-w-[140px] border border-emerald-600 dark:border-emerald-700 text-white text-xs">Name</th>
-                          <th className="px-2 py-2 text-left font-semibold min-w-[100px] border border-emerald-600 dark:border-emerald-700 text-white text-xs">Phone</th>
-                          <th className="px-2 py-2 text-left font-semibold min-w-[350px] border border-emerald-600 dark:border-emerald-700 text-white text-xs">Address</th>
-                          <th className="px-2 py-2 text-left font-semibold min-w-[90px] border border-emerald-600 dark:border-emerald-700 text-white text-xs">City</th>
-                          <th className="px-2 py-2 text-left font-semibold min-w-[110px] border border-emerald-600 dark:border-emerald-700 text-white text-xs">Courier City</th>
-                          <th className="px-2 py-2 text-left font-semibold w-20 border border-emerald-600 dark:border-emerald-700 text-white text-xs">COD</th>
-                          <th className="px-2 py-2 text-left font-semibold w-20 border border-emerald-600 dark:border-emerald-700 text-white text-xs">Gram</th>
-                          <th className="px-2 py-2 text-left font-semibold w-16 border border-emerald-600 dark:border-emerald-700 text-white text-xs">Pcs</th>
-                          <th className="px-2 py-2 text-left font-semibold min-w-[110px] border border-emerald-600 dark:border-emerald-700 text-white text-xs">Type</th>
-                          <th className="px-2 py-2 text-center font-semibold w-10 border border-emerald-600 dark:border-emerald-700" title="City Match Status">
-                            <CheckCircle2 className="w-4 h-4 mx-auto text-white/80" />
+                          <th className="px-2 py-2 text-left font-medium w-8 border-b text-muted-foreground text-xs">#</th>
+                          <th className="px-2 py-2 text-left font-medium w-24 border-b text-muted-foreground text-xs">Order</th>
+                          <th className="px-2 py-2 text-left font-medium min-w-[140px] border-b text-muted-foreground text-xs">Name</th>
+                          <th className="px-2 py-2 text-left font-medium min-w-[100px] border-b text-muted-foreground text-xs">Phone</th>
+                          <th className="px-2 py-2 text-left font-medium min-w-[350px] border-b text-muted-foreground text-xs">Address</th>
+                          <th className="px-2 py-2 text-left font-medium min-w-[90px] border-b text-muted-foreground text-xs">City</th>
+                          <th className="px-2 py-2 text-left font-medium min-w-[110px] border-b text-muted-foreground text-xs">Courier City</th>
+                          <th className="px-2 py-2 text-left font-medium w-20 border-b text-muted-foreground text-xs">COD</th>
+                          <th className="px-2 py-2 text-left font-medium w-20 border-b text-muted-foreground text-xs">Gram</th>
+                          <th className="px-2 py-2 text-left font-medium w-16 border-b text-muted-foreground text-xs">Pcs</th>
+                          <th className="px-2 py-2 text-left font-medium min-w-[110px] border-b text-muted-foreground text-xs">Type</th>
+                          <th className="px-2 py-2 text-center font-medium w-10 border-b" title="City Match Status">
+                            <CheckCircle2 className="w-4 h-4 mx-auto text-muted-foreground" />
                           </th>
                         </tr>
                       </thead>
@@ -3010,7 +3009,7 @@ export default function Pipeline() {
             <AlertDialogCancel data-testid="button-cancel-confirm-dismiss">Go Back</AlertDialogCancel>
             <AlertDialogAction
               data-testid="button-cancel-confirm-proceed"
-              className="bg-red-600 hover:bg-red-700"
+              className="bg-destructive text-destructive-foreground"
               disabled={cancelBookingMutation.isPending || cancelShopifyMutation.isPending}
               onClick={() => {
                 if (!cancelConfirm) return;

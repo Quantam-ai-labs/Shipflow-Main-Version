@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
 import {
   Send,
   Mic,
@@ -119,15 +120,15 @@ function groupSessionsByDate(sessions: ChatSession[]) {
 }
 
 const SEVERITY_CONFIG = {
-  critical: { icon: AlertTriangle, bar: "bg-red-500", badge: "bg-red-500/20 text-red-400 border-red-500/30", dot: "bg-red-500" },
-  warning:  { icon: AlertCircle,   bar: "bg-amber-500", badge: "bg-amber-500/20 text-amber-400 border-amber-500/30", dot: "bg-amber-500" },
-  info:     { icon: Info,          bar: "bg-blue-500",  badge: "bg-blue-500/20 text-blue-400 border-blue-500/30",  dot: "bg-blue-500" },
+  critical: { icon: AlertTriangle, bar: "bg-destructive", dot: "bg-destructive" },
+  warning:  { icon: AlertCircle,   bar: "bg-muted-foreground", dot: "bg-muted-foreground" },
+  info:     { icon: Info,          bar: "bg-primary", dot: "bg-primary" },
 };
 
 const CATEGORY_CONFIG: Record<string, { icon: typeof Bot; color: string }> = {
-  campaigns:  { icon: Target,   color: "text-blue-400" },
-  operations: { icon: Truck,    color: "text-green-400" },
-  strategy:   { icon: Lightbulb, color: "text-amber-400" },
+  campaigns:  { icon: Target,   color: "text-muted-foreground" },
+  operations: { icon: Truck,    color: "text-muted-foreground" },
+  strategy:   { icon: Lightbulb, color: "text-muted-foreground" },
 };
 
 const SUGGESTED_EN = [
@@ -148,24 +149,24 @@ const SUGGESTED_UR = [
 
 function formatMsg(content: string) {
   return content.split("\n").map((line, i) => {
-    if (line.startsWith("### ")) return <h3 key={i} className="font-bold text-sm mt-3 mb-1 text-violet-300">{line.slice(4)}</h3>;
-    if (line.startsWith("## "))  return <h2 key={i} className="font-bold text-base mt-3 mb-1 text-violet-200">{line.slice(3)}</h2>;
+    if (line.startsWith("### ")) return <h3 key={i} className="font-bold text-sm mt-3 mb-1 text-foreground">{line.slice(4)}</h3>;
+    if (line.startsWith("## "))  return <h2 key={i} className="font-bold text-base mt-3 mb-1 text-foreground">{line.slice(3)}</h2>;
     if (line.startsWith("- **") || line.startsWith("* **")) {
       const parts = line.replace(/^[-*]\s+/, "").split("**");
-      return <li key={i} className="ml-4 text-sm leading-relaxed list-disc">{parts.map((p, j) => j % 2 === 1 ? <strong key={j} className="text-violet-200">{p}</strong> : p)}</li>;
+      return <li key={i} className="ml-4 text-sm leading-relaxed list-disc">{parts.map((p, j) => j % 2 === 1 ? <strong key={j} className="text-foreground font-semibold">{p}</strong> : p)}</li>;
     }
     if (line.startsWith("- ") || line.startsWith("* ")) return <li key={i} className="ml-4 text-sm leading-relaxed list-disc">{line.slice(2)}</li>;
     if (line.match(/^\d+\.\s/)) return <li key={i} className="ml-4 text-sm leading-relaxed list-decimal">{line.replace(/^\d+\.\s+/, "")}</li>;
     if (line.trim() === "") return <br key={i} />;
-    const bold = line.split("**").map((p, j) => j % 2 === 1 ? <strong key={j} className="text-violet-200">{p}</strong> : p);
+    const bold = line.split("**").map((p, j) => j % 2 === 1 ? <strong key={j} className="text-foreground font-semibold">{p}</strong> : p);
     return <p key={i} className="text-sm leading-relaxed">{bold}</p>;
   });
 }
 
 function TrendIcon({ trend }: { trend?: string }) {
-  if (trend === "up")   return <TrendingUp className="h-3 w-3 text-green-400 shrink-0" />;
-  if (trend === "down") return <TrendingDown className="h-3 w-3 text-red-400 shrink-0" />;
-  return <Minus className="h-3 w-3 text-violet-400 shrink-0" />;
+  if (trend === "up")   return <TrendingUp className="h-3 w-3 text-green-500 dark:text-green-400 shrink-0" />;
+  if (trend === "down") return <TrendingDown className="h-3 w-3 text-red-500 dark:text-red-400 shrink-0" />;
+  return <Minus className="h-3 w-3 text-muted-foreground shrink-0" />;
 }
 
 function timeAgo(dateStr: string) {
@@ -327,24 +328,23 @@ export default function MagicAI() {
   const sessionGroups = groupSessionsByDate(sessions);
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] overflow-hidden rounded-xl border border-violet-900/40 bg-[#07050f]" data-testid="page-magic-ai">
+    <div className="flex h-[calc(100vh-4rem)] overflow-hidden border border-border bg-background" data-testid="page-magic-ai">
 
       {/* ── LEFT: Chat History Panel ── */}
-      <div className="w-60 flex-shrink-0 flex flex-col bg-[#0f0a1e] border-r border-violet-900/40">
-        {/* Header */}
-        <div className="p-3 border-b border-violet-900/40">
+      <div className="w-60 flex-shrink-0 flex flex-col bg-muted/50 dark:bg-card border-r border-border">
+        <div className="p-3 border-b border-border">
           <div className="flex items-center gap-2 mb-3">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center">
-              <Sparkles className="w-4 h-4 text-white" />
+            <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center">
+              <Sparkles className="w-4 h-4 text-primary-foreground" />
             </div>
-            <span className="font-extrabold text-sm bg-gradient-to-r from-violet-400 via-fuchsia-400 to-indigo-400 bg-clip-text text-transparent tracking-tight">
+            <span className="font-semibold text-sm text-foreground">
               Magic AI
             </span>
           </div>
           <Button
             onClick={handleNewChat}
             size="sm"
-            className="w-full bg-violet-600 hover:bg-violet-500 text-white text-xs font-medium rounded-lg gap-1.5"
+            className="w-full gap-1.5"
             data-testid="btn-new-chat"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -352,22 +352,21 @@ export default function MagicAI() {
           </Button>
         </div>
 
-        {/* Session List */}
-        <div className="flex-1 overflow-y-auto py-2 scrollbar-none">
+        <div className="flex-1 overflow-y-auto py-2">
           {sessionGroups.length === 0 ? (
-            <p className="text-[11px] text-violet-500 text-center mt-6 px-3">No conversations yet</p>
+            <p className="text-[11px] text-muted-foreground text-center mt-6 px-3">No conversations yet</p>
           ) : (
             sessionGroups.map(group => (
               <div key={group.label}>
-                <p className="text-[10px] font-semibold text-violet-500/70 uppercase tracking-widest px-3 pt-3 pb-1">{group.label}</p>
+                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-widest px-3 pt-3 pb-1">{group.label}</p>
                 {group.sessions.map(s => (
                   <div
                     key={s.id}
                     className={[
-                      "w-full group flex items-start gap-2 transition-colors rounded-none",
+                      "w-full group flex items-start gap-2 transition-colors",
                       s.id === activeId
-                        ? "bg-violet-600/20 border-l-2 border-violet-500"
-                        : "hover:bg-violet-900/20 border-l-2 border-transparent",
+                        ? "bg-accent border-l-2 border-primary"
+                        : "hover-elevate border-l-2 border-transparent",
                     ].join(" ")}
                     data-testid={`session-${s.id}`}
                   >
@@ -375,15 +374,15 @@ export default function MagicAI() {
                       onClick={() => setActiveId(s.id)}
                       className="flex-1 text-left px-3 py-2 flex items-start gap-2 min-w-0"
                     >
-                      <MessageSquare className="w-3.5 h-3.5 text-violet-400 shrink-0 mt-0.5" />
+                      <MessageSquare className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-[11.5px] text-violet-100 truncate leading-tight">{s.title}</p>
-                        <p className="text-[10px] text-violet-500 mt-0.5">{timeAgo(s.updatedAt)}</p>
+                        <p className="text-[11.5px] text-foreground truncate leading-tight">{s.title}</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">{timeAgo(s.updatedAt)}</p>
                       </div>
                     </button>
                     <button
                       onClick={(e) => handleDeleteSession(s.id, e)}
-                      className="opacity-0 group-hover:opacity-100 text-violet-500 hover:text-red-400 transition-opacity shrink-0 pr-2 pt-2"
+                      className="invisible group-hover:visible text-muted-foreground hover:text-destructive transition-colors shrink-0 pr-2 pt-2"
                       data-testid={`delete-session-${s.id}`}
                     >
                       <Trash2 className="w-3 h-3" />
@@ -398,21 +397,20 @@ export default function MagicAI() {
 
       {/* ── CENTER: Chat Area ── */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Chat toolbar */}
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-violet-900/30 bg-[#0b0818]">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-violet-400" />
-            <span className="text-sm font-semibold text-violet-100">
+        <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-border bg-background">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Sparkles className="w-4 h-4 text-primary" />
+            <span className="text-sm font-semibold text-foreground">
               {activeSession?.title ?? "New conversation"}
             </span>
             {messages.length > 0 && (
-              <Badge className="text-[9px] bg-violet-600/30 text-violet-300 border-violet-600/40 px-1.5 py-0">
+              <Badge variant="secondary" className="text-[9px] px-1.5 py-0">
                 {messages.length} msgs
               </Badge>
             )}
           </div>
           <Select value={language} onValueChange={(v) => setLanguage(v as "en" | "ur")}>
-            <SelectTrigger className="h-7 w-[110px] bg-violet-900/30 border-violet-700/40 text-violet-200 text-xs" data-testid="trigger-language">
+            <SelectTrigger className="w-[110px] text-xs" data-testid="trigger-language">
               <Globe className="h-3 w-3 mr-1" />
               <SelectValue />
             </SelectTrigger>
@@ -423,18 +421,17 @@ export default function MagicAI() {
           </Select>
         </div>
 
-        {/* Messages */}
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4" data-testid="chat-messages">
           {messages.length === 0 && (
             <div className="flex flex-col items-center justify-center h-full text-center space-y-5">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-600/30 to-indigo-600/30 border border-violet-500/30 flex items-center justify-center">
-                <Sparkles className="h-8 w-8 text-violet-400" />
+              <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-border flex items-center justify-center">
+                <Sparkles className="h-8 w-8 text-primary" />
               </div>
               <div>
-                <p className="font-semibold text-violet-100">
+                <p className="font-semibold text-foreground">
                   {language === "ur" ? "کچھ بھی پوچھیں" : "Ask me anything"}
                 </p>
-                <p className="text-xs text-violet-400 mt-1">
+                <p className="text-xs text-muted-foreground mt-1">
                   {language === "ur" ? "آرڈرز، شپمنٹس، ریونیو اور مزید" : "Orders, shipments, revenue, campaigns — all your business data"}
                 </p>
               </div>
@@ -443,7 +440,7 @@ export default function MagicAI() {
                   <button
                     key={i}
                     onClick={() => handleSuggested(q)}
-                    className="text-xs px-3 py-1.5 rounded-full border border-violet-700/50 bg-violet-900/20 text-violet-300 hover:bg-violet-700/30 hover:text-violet-100 transition-colors"
+                    className="text-xs px-3 py-1.5 rounded-full border border-border bg-muted/50 text-muted-foreground hover-elevate transition-colors"
                     data-testid={`suggested-${i}`}
                   >
                     {q}
@@ -460,24 +457,24 @@ export default function MagicAI() {
               data-testid={`msg-${msg.role}`}
             >
               {msg.role === "assistant" && (
-                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center shrink-0 mt-0.5">
-                  <Sparkles className="w-3.5 h-3.5 text-white" />
+                <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center shrink-0 mt-0.5">
+                  <Sparkles className="w-3.5 h-3.5 text-primary-foreground" />
                 </div>
               )}
               <div className={[
                 "max-w-[78%] rounded-2xl px-4 py-3 text-sm",
                 msg.role === "user"
-                  ? "bg-gradient-to-br from-violet-600 to-indigo-600 text-white rounded-tr-sm"
-                  : "bg-[#1a1030] border border-violet-900/40 text-violet-100 rounded-tl-sm",
+                  ? "bg-primary text-primary-foreground rounded-tr-sm"
+                  : "bg-card border border-border text-foreground rounded-tl-sm",
               ].join(" ")}>
                 {msg.role === "user"
                   ? <p>{msg.content}</p>
-                  : <div className="space-y-0.5">{formatMsg(msg.content)}</div>
+                  : <div className="space-y-0.5 text-secondary-foreground">{formatMsg(msg.content)}</div>
                 }
               </div>
               {msg.role === "user" && (
-                <div className="w-7 h-7 rounded-lg bg-violet-800/40 border border-violet-700/30 flex items-center justify-center shrink-0 mt-0.5">
-                  <User className="w-3.5 h-3.5 text-violet-300" />
+                <div className="w-7 h-7 rounded-md bg-muted border border-border flex items-center justify-center shrink-0 mt-0.5">
+                  <User className="w-3.5 h-3.5 text-muted-foreground" />
                 </div>
               )}
             </div>
@@ -485,30 +482,29 @@ export default function MagicAI() {
 
           {chatMutation.isPending && (
             <div className="flex gap-3 justify-start" data-testid="typing-indicator">
-              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center shrink-0">
-                <Sparkles className="w-3.5 h-3.5 text-white" />
+              <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center shrink-0">
+                <Sparkles className="w-3.5 h-3.5 text-primary-foreground" />
               </div>
-              <div className="bg-[#1a1030] border border-violet-900/40 rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-2">
+              <div className="bg-card border border-border rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-2">
                 <div className="flex gap-1">
                   {[0, 1, 2].map(i => (
-                    <div key={i} className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: `${i * 150}ms` }} />
+                    <div key={i} className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: `${i * 150}ms` }} />
                   ))}
                 </div>
-                <span className="text-xs text-violet-400">Thinking...</span>
+                <span className="text-xs text-muted-foreground">Thinking...</span>
               </div>
             </div>
           )}
           <div ref={chatEndRef} />
         </div>
 
-        {/* Input Bar */}
-        <div className="border-t border-violet-900/30 p-3 bg-[#0b0818]" data-testid="chat-input-area">
+        <div className="border-t border-border p-3 bg-background" data-testid="chat-input-area">
           <div className="flex gap-2 items-end">
             {hasSpeech && (
               <Button
                 variant="ghost"
                 size="icon"
-                className={`h-9 w-9 shrink-0 rounded-lg ${isListening ? "bg-red-500/20 text-red-400 hover:bg-red-500/30" : "text-violet-400 hover:bg-violet-800/40"}`}
+                className={isListening ? "shrink-0 text-destructive" : "shrink-0 text-muted-foreground"}
                 onClick={isListening ? stopListening : startListening}
                 data-testid="btn-voice"
               >
@@ -521,7 +517,7 @@ export default function MagicAI() {
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKey}
               placeholder={language === "ur" ? "اپنا سوال یہاں لکھیں..." : "Ask about your orders, revenue, campaigns..."}
-              className="flex-1 min-h-[40px] max-h-[120px] resize-none bg-[#1a1030] border-violet-800/40 text-violet-100 placeholder:text-violet-500 text-sm rounded-xl focus-visible:ring-violet-500/50"
+              className="flex-1 min-h-[40px] max-h-[120px] resize-none text-sm rounded-xl"
               rows={1}
               disabled={chatMutation.isPending}
               data-testid="input-chat"
@@ -530,39 +526,38 @@ export default function MagicAI() {
               onClick={handleSend}
               disabled={!input.trim() || chatMutation.isPending}
               size="icon"
-              className="h-9 w-9 shrink-0 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-40"
+              className="shrink-0"
               data-testid="btn-send"
             >
               {chatMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </Button>
           </div>
-          <p className="text-[10px] text-violet-600 mt-1.5 text-center">Enter to send · Shift+Enter for new line</p>
+          <p className="text-[10px] text-muted-foreground mt-1.5 text-center">Enter to send · Shift+Enter for new line</p>
         </div>
       </div>
 
       {/* ── RIGHT: Insights Panel ── */}
-      <div className="w-72 flex-shrink-0 flex flex-col bg-[#0d0a1a] border-l border-violet-900/40">
-        {/* Panel tabs */}
-        <div className="flex border-b border-violet-900/40">
+      <div className="w-72 flex-shrink-0 flex flex-col bg-muted/30 dark:bg-card border-l border-border">
+        <div className="flex border-b border-border">
           <button
             onClick={() => setRightTab("alerts")}
             className={[
               "flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-colors",
-              rightTab === "alerts" ? "text-violet-300 border-b-2 border-violet-500 bg-violet-900/20" : "text-violet-500 hover:text-violet-300",
+              rightTab === "alerts" ? "text-foreground border-b-2 border-primary bg-accent/50" : "text-muted-foreground",
             ].join(" ")}
             data-testid="tab-alerts"
           >
             <AlertTriangle className="w-3.5 h-3.5" />
             Alerts
             {alerts.length > 0 && (
-              <span className="bg-red-500 text-white text-[9px] rounded-full w-4 h-4 flex items-center justify-center">{alerts.length}</span>
+              <span className="bg-destructive text-destructive-foreground text-[9px] rounded-full w-4 h-4 flex items-center justify-center">{alerts.length}</span>
             )}
           </button>
           <button
             onClick={() => setRightTab("insights")}
             className={[
               "flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-colors",
-              rightTab === "insights" ? "text-violet-300 border-b-2 border-violet-500 bg-violet-900/20" : "text-violet-500 hover:text-violet-300",
+              rightTab === "insights" ? "text-foreground border-b-2 border-primary bg-accent/50" : "text-muted-foreground",
             ].join(" ")}
             data-testid="tab-insights"
           >
@@ -571,35 +566,36 @@ export default function MagicAI() {
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto scrollbar-none">
+        <div className="flex-1 overflow-y-auto">
 
-          {/* ── ALERTS TAB ── */}
           {rightTab === "alerts" && (
             <div className="p-3 space-y-2">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] text-violet-500 uppercase tracking-widest font-semibold">Critical Alerts</span>
-                <button
+              <div className="flex items-center justify-between gap-1 mb-1">
+                <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-medium">Critical Alerts</span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
                   onClick={() => alertsQuery.refetch()}
                   disabled={alertsQuery.isFetching}
-                  className="text-violet-500 hover:text-violet-300 transition-colors"
                   data-testid="btn-refresh-alerts"
                 >
                   <RefreshCw className={`w-3 h-3 ${alertsQuery.isFetching ? "animate-spin" : ""}`} />
-                </button>
+                </Button>
               </div>
               {alertsQuery.data?.generatedAt && (
-                <p className="text-[10px] text-violet-600 flex items-center gap-1">
+                <p className="text-[10px] text-muted-foreground flex items-center gap-1">
                   <Clock className="w-2.5 h-2.5" />
                   {timeAgo(alertsQuery.data.generatedAt)}
                 </p>
               )}
               {alertsQuery.isLoading && [1,2,3].map(i => (
-                <div key={i} className="h-14 rounded-lg bg-violet-900/20 animate-pulse" />
+                <div key={i} className="h-14 rounded-md bg-muted animate-pulse" />
               ))}
               {!alertsQuery.isLoading && alerts.length === 0 && (
                 <div className="text-center py-8">
-                  <Sparkles className="w-6 h-6 text-violet-600 mx-auto mb-2" />
-                  <p className="text-xs text-violet-500">No active alerts</p>
+                  <Sparkles className="w-6 h-6 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-xs text-muted-foreground">No active alerts</p>
                 </div>
               )}
               {alerts.map(alert => {
@@ -607,20 +603,20 @@ export default function MagicAI() {
                 const cfg = SEVERITY_CONFIG[sev];
                 const Icon = cfg.icon;
                 return (
-                  <div key={alert.key} className="rounded-lg bg-[#1a1030] border border-violet-900/30 overflow-hidden" data-testid={`alert-${alert.key}`}>
-                    <div className={`h-0.5 ${cfg.bar}`} />
+                  <div key={alert.key} className="rounded-md bg-card border border-border overflow-visible" data-testid={`alert-${alert.key}`}>
+                    <div className={`h-0.5 ${cfg.bar} rounded-t-md`} />
                     <div className="p-2.5">
                       <div className="flex items-start gap-2">
-                        <Icon className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${sev === "critical" ? "text-red-400" : sev === "warning" ? "text-amber-400" : "text-blue-400"}`} />
+                        <Icon className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${sev === "critical" ? "text-destructive" : "text-muted-foreground"}`} />
                         <div className="flex-1 min-w-0">
-                          <p className="text-[11px] font-semibold text-violet-100 leading-tight">{alert.title}</p>
-                          <p className="text-[10px] text-violet-400 mt-0.5 leading-relaxed">{alert.summary}</p>
+                          <p className="text-[11px] font-semibold text-foreground leading-tight">{alert.title}</p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">{alert.summary}</p>
                           {alert.metrics.length > 0 && (
                             <div className="mt-1.5 space-y-0.5">
                               {alert.metrics.slice(0, 2).map((m, i) => (
                                 <div key={i} className="flex items-center gap-1 text-[10px]">
-                                  <span className="text-violet-500">{m.label}:</span>
-                                  <span className="text-violet-200 font-medium">{m.value}</span>
+                                  <span className="text-muted-foreground">{m.label}:</span>
+                                  <span className="text-foreground font-medium">{m.value}</span>
                                 </div>
                               ))}
                             </div>
@@ -634,51 +630,51 @@ export default function MagicAI() {
             </div>
           )}
 
-          {/* ── INSIGHTS TAB ── */}
           {rightTab === "insights" && (
             <div className="p-3 space-y-2">
-              {/* Weekly Strategy */}
               <button
                 onClick={() => setShowStrategy(s => !s)}
-                className="w-full flex items-center gap-2 p-2.5 rounded-lg bg-gradient-to-r from-violet-900/40 to-indigo-900/40 border border-violet-700/30 hover:border-violet-600/50 transition-all text-left"
+                className="w-full flex items-center gap-2 p-2.5 rounded-md bg-accent border border-border hover-elevate transition-all text-left"
                 data-testid="btn-weekly-strategy"
               >
-                <Zap className="w-3.5 h-3.5 text-violet-400 shrink-0" />
-                <span className="text-xs text-violet-200 font-medium">Weekly Strategy</span>
-                {showStrategy ? <ChevronUp className="w-3 h-3 text-violet-500 ml-auto" /> : <ChevronDown className="w-3 h-3 text-violet-500 ml-auto" />}
+                <Zap className="w-3.5 h-3.5 text-primary shrink-0" />
+                <span className="text-xs text-foreground font-medium">Weekly Strategy</span>
+                {showStrategy ? <ChevronUp className="w-3 h-3 text-muted-foreground ml-auto" /> : <ChevronDown className="w-3 h-3 text-muted-foreground ml-auto" />}
               </button>
 
               {showStrategy && (
-                <div className="rounded-lg bg-[#1a1030] border border-violet-900/30 p-3">
+                <div className="rounded-md bg-card border border-border p-3">
                   {strategyQuery.isLoading ? (
-                    <div className="space-y-2">{[1,2,3,4].map(i => <div key={i} className="h-2.5 rounded bg-violet-900/40 animate-pulse" />)}</div>
+                    <div className="space-y-2">{[1,2,3,4].map(i => <div key={i} className="h-2.5 rounded bg-muted animate-pulse" />)}</div>
                   ) : strategyQuery.data ? (
-                    <div className="text-[11px] text-violet-300 leading-relaxed space-y-1">{formatMsg(strategyQuery.data.strategy)}</div>
+                    <div className="text-[11px] text-secondary-foreground leading-relaxed space-y-1">{formatMsg(strategyQuery.data.strategy)}</div>
                   ) : (
-                    <p className="text-[11px] text-violet-500">Loading strategy...</p>
+                    <p className="text-[11px] text-muted-foreground">Loading strategy...</p>
                   )}
                 </div>
               )}
 
-              <div className="flex items-center justify-between pt-1">
-                <span className="text-[10px] text-violet-500 uppercase tracking-widest font-semibold">Marketing Insights</span>
-                <button
+              <div className="flex items-center justify-between gap-1 pt-1">
+                <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-medium">Marketing Insights</span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
                   onClick={() => insightsQuery.refetch()}
                   disabled={insightsQuery.isFetching}
-                  className="text-violet-500 hover:text-violet-300 transition-colors"
                   data-testid="btn-refresh-insights"
                 >
                   <RefreshCw className={`w-3 h-3 ${insightsQuery.isFetching ? "animate-spin" : ""}`} />
-                </button>
+                </Button>
               </div>
 
               {insightsQuery.isLoading && [1,2,3].map(i => (
-                <div key={i} className="h-16 rounded-lg bg-violet-900/20 animate-pulse" />
+                <div key={i} className="h-16 rounded-md bg-muted animate-pulse" />
               ))}
               {!insightsQuery.isLoading && marketingInsights.length === 0 && (
                 <div className="text-center py-8">
-                  <BarChart3 className="w-6 h-6 text-violet-600 mx-auto mb-2" />
-                  <p className="text-xs text-violet-500">Sync marketing data to see insights</p>
+                  <BarChart3 className="w-6 h-6 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-xs text-muted-foreground">Sync marketing data to see insights</p>
                 </div>
               )}
               {marketingInsights.map(insight => {
@@ -686,16 +682,16 @@ export default function MagicAI() {
                 const Icon = cfg.icon;
                 const expanded = expandedInsights.has(insight.key);
                 return (
-                  <div key={insight.key} className="rounded-lg bg-[#1a1030] border border-violet-900/30 p-2.5" data-testid={`insight-${insight.key}`}>
+                  <div key={insight.key} className="rounded-md bg-card border border-border p-2.5" data-testid={`insight-${insight.key}`}>
                     <div className="flex items-center gap-1.5 mb-1.5">
                       <Icon className={`w-3 h-3 shrink-0 ${cfg.color}`} />
-                      <p className="text-[11px] font-semibold text-violet-100 flex-1 min-w-0 leading-tight">{insight.title}</p>
+                      <p className="text-[11px] font-semibold text-foreground flex-1 min-w-0 leading-tight">{insight.title}</p>
                     </div>
-                    <p className={`text-[10.5px] text-violet-400 leading-relaxed ${expanded ? "" : "line-clamp-2"}`}>{insight.summary}</p>
+                    <p className={`text-[10.5px] text-muted-foreground leading-relaxed ${expanded ? "" : "line-clamp-2"}`}>{insight.summary}</p>
                     {insight.summary.length > 100 && (
                       <button
                         onClick={() => setExpandedInsights(prev => { const s = new Set(prev); expanded ? s.delete(insight.key) : s.add(insight.key); return s; })}
-                        className="text-[10px] text-violet-500 hover:text-violet-300 mt-0.5 flex items-center gap-0.5"
+                        className="text-[10px] text-muted-foreground hover:text-foreground mt-0.5 flex items-center gap-0.5"
                       >
                         {expanded ? <><ChevronUp className="w-2.5 h-2.5" />Less</> : <><ChevronDown className="w-2.5 h-2.5" />More</>}
                       </button>
@@ -705,8 +701,8 @@ export default function MagicAI() {
                         {insight.metrics.slice(0, 4).map((m, i) => (
                           <div key={i} className="flex items-center gap-1 text-[10px]">
                             <TrendIcon trend={m.trend} />
-                            <span className="text-violet-400 truncate">{m.label}:</span>
-                            <span className="text-violet-200 font-medium shrink-0">{m.value}</span>
+                            <span className="text-muted-foreground truncate">{m.label}:</span>
+                            <span className="text-foreground font-medium shrink-0">{m.value}</span>
                           </div>
                         ))}
                       </div>

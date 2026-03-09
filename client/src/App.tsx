@@ -377,7 +377,7 @@ function AuthenticatedLayout() {
           <AppSidebar />
           <div className="flex flex-col flex-1 overflow-hidden">
             <ImpersonationBanner />
-            <header className="flex items-center justify-between gap-4 p-3 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            <header className="flex items-center justify-between gap-4 px-4 py-2.5 border-b bg-background">
               <SidebarTrigger data-testid="button-sidebar-toggle" />
               <div className="flex items-center gap-2">
                 <GlobalRefreshButton />

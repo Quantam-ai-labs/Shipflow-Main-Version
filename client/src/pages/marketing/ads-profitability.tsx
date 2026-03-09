@@ -132,11 +132,7 @@ function formatUsd(val: number): string {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const color =
-    status === "ACTIVE" ? "bg-green-500/10 text-green-600 border-green-500/20" :
-    status === "PAUSED" ? "bg-yellow-500/10 text-yellow-600 border-yellow-500/20" :
-    "bg-zinc-500/10 text-zinc-500 border-zinc-500/20";
-  return <Badge className={`text-[8px] px-1 py-0 leading-tight ${color}`}>{status}</Badge>;
+  return <Badge variant="secondary" className="text-[8px] px-1 py-0 leading-tight">{status}</Badge>;
 }
 
 function MatchIndicator({ type }: { type: string }) {
@@ -1010,7 +1006,7 @@ export default function AdsProfitability() {
                   </tr>
                 ))}
                 {mergedRows.length > 0 && (
-                  <tr className="bg-emerald-700/10 dark:bg-emerald-900/30 font-semibold">
+                  <tr className="bg-muted/50 font-semibold">
                     <td className="border border-border px-2 py-1.5 text-xs"></td>
                     <td className="border border-border px-2 py-1.5 text-xs font-semibold">Totals</td>
                     <td className="border border-border px-2 py-1.5 text-xs"></td>
@@ -1110,11 +1106,7 @@ export default function AdsProfitability() {
               <div>
                 <Label className="text-muted-foreground text-xs">Selected Signal</Label>
                 <div className="mt-1">
-                  <Badge className={`text-xs ${
-                    signalModal.signal === "Scale" ? "bg-green-500/10 text-green-600 border-green-500/20" :
-                    signalModal.signal === "Watch" ? "bg-amber-500/10 text-amber-600 border-amber-500/20" :
-                    "bg-red-500/10 text-red-600 border-red-500/20"
-                  }`} data-testid="badge-signal-selected">
+                  <Badge variant="secondary" className="text-xs" data-testid="badge-signal-selected">
                     {signalModal.signal}
                   </Badge>
                 </div>
@@ -1128,9 +1120,9 @@ export default function AdsProfitability() {
                 const metrics = campaignMetricsForJourney.find(m => m.campaignId === signalModal.campaignId);
                 if (metrics && !isEvidenceReady(metrics)) {
                   return (
-                    <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-md" data-testid="warning-low-evidence">
-                      <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-                      <p className="text-xs text-amber-700 dark:text-amber-400">
+                    <div className="flex items-start gap-2 p-3 bg-muted rounded-md border" data-testid="warning-low-evidence">
+                      <AlertTriangle className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                      <p className="text-xs text-muted-foreground">
                         Low evidence: new campaigns should usually stay Watch until threshold.
                       </p>
                     </div>

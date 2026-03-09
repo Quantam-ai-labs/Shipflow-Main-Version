@@ -1,14 +1,11 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   BarChart3,
   TrendingUp,
   Package,
-  Truck,
   CheckCircle2,
-  MapPin,
   Download,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -138,71 +135,55 @@ export default function Analytics() {
       {/* Overview Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
-          <CardContent className="p-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Total Orders</p>
-                {isLoading ? (
-                  <Skeleton className="h-8 w-16 mt-1" />
-                ) : (
-                  <p className="text-2xl font-bold">{overview?.totalOrders ?? 0}</p>
-                )}
-              </div>
-              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Package className="w-5 h-5 text-primary" />
-              </div>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-1.5 mb-1">
+              <Package className="w-3.5 h-3.5 text-muted-foreground" />
+              <p className="text-xs text-muted-foreground font-medium">Total Orders</p>
             </div>
+            {isLoading ? (
+              <Skeleton className="h-7 w-16" />
+            ) : (
+              <p className="text-xl font-bold">{overview?.totalOrders ?? 0}</p>
+            )}
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Delivered</p>
-                {isLoading ? (
-                  <Skeleton className="h-8 w-16 mt-1" />
-                ) : (
-                  <p className="text-2xl font-bold">{overview?.totalDelivered ?? 0}</p>
-                )}
-              </div>
-              <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center">
-                <CheckCircle2 className="w-5 h-5 text-green-500" />
-              </div>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-1.5 mb-1">
+              <CheckCircle2 className="w-3.5 h-3.5 text-muted-foreground" />
+              <p className="text-xs text-muted-foreground font-medium">Delivered</p>
             </div>
+            {isLoading ? (
+              <Skeleton className="h-7 w-16" />
+            ) : (
+              <p className="text-xl font-bold">{overview?.totalDelivered ?? 0}</p>
+            )}
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Delivery Rate</p>
-                {isLoading ? (
-                  <Skeleton className="h-8 w-16 mt-1" />
-                ) : (
-                  <p className="text-2xl font-bold">{overview?.deliveryRate ?? 0}%</p>
-                )}
-              </div>
-              <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                <TrendingUp className="w-5 h-5 text-blue-500" />
-              </div>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-1.5 mb-1">
+              <TrendingUp className="w-3.5 h-3.5 text-muted-foreground" />
+              <p className="text-xs text-muted-foreground font-medium">Delivery Rate</p>
             </div>
+            {isLoading ? (
+              <Skeleton className="h-7 w-16" />
+            ) : (
+              <p className="text-xl font-bold">{overview?.deliveryRate ?? 0}%</p>
+            )}
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Total Revenue</p>
-                {isLoading ? (
-                  <Skeleton className="h-8 w-24 mt-1" />
-                ) : (
-                  <p className="text-2xl font-bold">PKR {overview?.totalRevenue ?? "0"}</p>
-                )}
-              </div>
-              <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
-                <BarChart3 className="w-5 h-5 text-amber-500" />
-              </div>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-1.5 mb-1">
+              <BarChart3 className="w-3.5 h-3.5 text-muted-foreground" />
+              <p className="text-xs text-muted-foreground font-medium">Total Revenue</p>
             </div>
+            {isLoading ? (
+              <Skeleton className="h-7 w-24" />
+            ) : (
+              <p className="text-xl font-bold">PKR {overview?.totalRevenue ?? "0"}</p>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -211,11 +192,8 @@ export default function Analytics() {
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Orders Trend */}
         <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <TrendingUp className="w-5 h-5" />
-              Orders Trend
-            </CardTitle>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Orders Trend</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -273,11 +251,8 @@ export default function Analytics() {
 
         {/* Courier Performance */}
         <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Truck className="w-5 h-5" />
-              Courier Performance
-            </CardTitle>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Courier Performance</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -318,11 +293,8 @@ export default function Analytics() {
       {/* City Breakdown */}
       <div className="grid lg:grid-cols-2 gap-6">
         <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <MapPin className="w-5 h-5" />
-              Orders by City
-            </CardTitle>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Orders by City</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -363,11 +335,8 @@ export default function Analytics() {
 
         {/* Top Cities Table */}
         <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <MapPin className="w-5 h-5" />
-              Top Cities by Orders
-            </CardTitle>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Top Cities by Orders</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -377,23 +346,18 @@ export default function Analytics() {
                 ))}
               </div>
             ) : cityBreakdown.length > 0 ? (
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {cityBreakdown.slice(0, 6).map((city, index) => (
-                  <div key={city.city} className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium"
-                        style={{ backgroundColor: `${COLORS[index % COLORS.length]}20`, color: COLORS[index % COLORS.length] }}
-                      >
-                        {index + 1}
-                      </div>
+                  <div key={city.city} className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-xs text-muted-foreground font-medium w-4 text-right tabular-nums">{index + 1}</span>
                       <div>
-                        <p className="font-medium">{city.city}</p>
+                        <p className="text-sm font-medium">{city.city}</p>
                         <p className="text-xs text-muted-foreground">{city.orders} orders</p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="font-medium">PKR {city.revenue}</p>
+                      <p className="text-sm font-medium tabular-nums">PKR {city.revenue}</p>
                       <p className="text-xs text-muted-foreground">{city.delivered} delivered</p>
                     </div>
                   </div>

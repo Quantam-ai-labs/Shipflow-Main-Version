@@ -23,6 +23,18 @@ Preferred communication style: Simple, everyday language.
 - Settings feature a collapsible sidebar.
 - Order details adopt a Shopify-like layout.
 
+### Design System (UI Overhaul — Completed)
+- **Font**: Inter (Google Fonts), system fallback stack.
+- **Theme Variables**: Clean neutral palette defined in `client/src/index.css`. Light: pure white bg, near-white cards, light borders. Dark: deep bg (`220 10% 6%`), dark cards, subtle borders.
+- **Primary Color**: Muted blue (`220 60% 50%` light / `220 60% 55%` dark) — used sparingly for CTAs only.
+- **Border Radius**: `0.375rem` (6px) for a crisp feel.
+- **Shadows**: None (`0 0 #0000`) — flat design throughout.
+- **No Glassmorphism**: No `backdrop-blur`, no frosted glass effects anywhere. Header uses solid `bg-background`.
+- **Icon Colors**: All decorative stat card icons use `text-muted-foreground`. Semantic indicators (trend up/down, success/error, severity) retain meaningful colors.
+- **Badges**: Use `variant="secondary"` or `variant="outline"` instead of hardcoded colored backgrounds.
+- **Chart Colors**: Use CSS chart tokens (`--chart-1` through `--chart-5`) instead of hardcoded Tailwind colors.
+- **Consistency**: Same visual language across all pages — dashboard, pipeline, chat, AI, settings, accounting, marketing.
+
 ### Key Features
 - **Merchant & Team Management**: Core tenant management, team invites, and role-based access. Super Admin functionalities include impersonation, cross-tenant team management, and user deletion.
 - **Shopify Integration**: OAuth-based access, encrypted tokens, webhook processing for orders and fulfillments, historical data import, bi-directional write-back, and configurable "Robo-Tags" for order automation.

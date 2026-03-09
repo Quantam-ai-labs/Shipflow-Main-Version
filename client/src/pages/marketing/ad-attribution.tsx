@@ -52,23 +52,14 @@ function formatCurrency(val: number) {
 
 function StatusBadge({ status }: { status: string }) {
   const s = status?.toUpperCase();
-  if (s === "ACTIVE") return <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-[10px]">ACTIVE</Badge>;
-  if (s === "PAUSED") return <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30 text-[10px]">PAUSED</Badge>;
-  if (s === "ARCHIVED") return <Badge className="bg-zinc-500/20 text-zinc-400 border-zinc-500/30 text-[10px]">ARCHIVED</Badge>;
+  if (s === "ACTIVE") return <Badge variant="secondary" className="text-[10px]">ACTIVE</Badge>;
+  if (s === "PAUSED") return <Badge variant="outline" className="text-[10px]">PAUSED</Badge>;
+  if (s === "ARCHIVED") return <Badge variant="outline" className="text-[10px]">ARCHIVED</Badge>;
   return <Badge variant="outline" className="text-[10px]">{s || "UNKNOWN"}</Badge>;
 }
 
 function WorkflowBadge({ status }: { status: string }) {
-  const colors: Record<string, string> = {
-    DELIVERED: "bg-green-500/20 text-green-400 border-green-500/30",
-    FULFILLED: "bg-blue-500/20 text-blue-400 border-blue-500/30",
-    BOOKED: "bg-violet-500/20 text-violet-400 border-violet-500/30",
-    CANCELLED: "bg-red-500/20 text-red-400 border-red-500/30",
-    RETURN: "bg-orange-500/20 text-orange-400 border-orange-500/30",
-    NEW: "bg-zinc-500/20 text-zinc-400 border-zinc-500/30",
-    PENDING: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
-  };
-  return <Badge className={`text-[10px] ${colors[status] ?? "bg-zinc-500/20 text-zinc-400"}`}>{status}</Badge>;
+  return <Badge variant="secondary" className="text-[10px]">{status}</Badge>;
 }
 
 export default function AdAttribution() {
@@ -181,13 +172,13 @@ export default function AdAttribution() {
 
       {/* UTM Setup Guide */}
       <Collapsible open={guideOpen} onOpenChange={setGuideOpen}>
-        <Card className="border-blue-500/20 bg-blue-500/5">
+        <Card className="border-border bg-muted/30">
           <CollapsibleTrigger asChild>
             <CardHeader className="cursor-pointer pb-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Info className="w-4 h-4 text-blue-400" />
-                  <CardTitle className="text-sm font-medium text-blue-300">How to set up ad tracking — UTM Parameters</CardTitle>
+                  <Info className="w-4 h-4 text-muted-foreground" />
+                  <CardTitle className="text-sm font-medium">How to set up ad tracking — UTM Parameters</CardTitle>
                 </div>
                 <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${guideOpen ? "rotate-180" : ""}`} />
               </div>
@@ -234,31 +225,27 @@ export default function AdAttribution() {
             label: "Total Orders",
             value: isLoading ? null : data?.totalOrders ?? 0,
             icon: ShoppingCart,
-            color: "text-blue-400",
           },
           {
             label: "Attributed Orders",
             value: isLoading ? null : data?.attributedOrders ?? 0,
             icon: Target,
-            color: "text-green-400",
           },
           {
             label: "Attribution Rate",
             value: isLoading ? null : `${(data?.attributionRate ?? 0).toFixed(1)}%`,
             icon: BarChart2,
-            color: "text-violet-400",
           },
           {
             label: "Attributed Revenue",
             value: isLoading ? null : formatCurrency(data?.attributedRevenue ?? 0),
             icon: DollarSign,
-            color: "text-yellow-400",
           },
         ].map((stat) => (
           <Card key={stat.label}>
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-1">
-                <stat.icon className={`w-4 h-4 ${stat.color}`} />
+                <stat.icon className="w-4 h-4 text-muted-foreground" />
                 <span className="text-xs text-muted-foreground">{stat.label}</span>
               </div>
               {isLoading ? (
