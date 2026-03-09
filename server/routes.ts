@@ -7560,28 +7560,6 @@ export async function registerRoutes(
         return res.status(400).json({ error: "WhatsApp credentials not configured" });
       }
 
-      const waApiUrl = `https://graph.facebook.com/v22.0/${phoneNumberId}/messages`;
-      const waPayload = {
-        messaging_product: "whatsapp",
-        to: conv.contactPhone,
-        type: "text",
-        text: { body: text.trim() },
-      };
-
-      let messageId: string | undefined;
-      try {
-        const waRes = await fetch(waApiUrl, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-          body: JSON.stringify(waPayload),
-          signal: AbortSignal.timeout(10000),
-        });
-        if (waRes.ok) {
-          const waData = await waRes.json() as any;
-          messageId = waData?.messages?.[0]?.id;
-        }
-      } catch (_) {}
-
       await storage.upsertConversation({
         merchantId,
         contactPhone: conv.contactPhone,
@@ -7596,11 +7574,37 @@ export async function registerRoutes(
         direction: "outbound",
         senderName: "Agent",
         text: text.trim(),
-        waMessageId: messageId,
         status: "sent",
       });
 
       res.json(msg);
+
+      const waApiUrl = `https://graph.facebook.com/v22.0/${phoneNumberId}/messages`;
+      const waPayload = {
+        messaging_product: "whatsapp",
+        to: conv.contactPhone,
+        type: "text",
+        text: { body: text.trim() },
+      };
+      try {
+        const waRes = await fetch(waApiUrl, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify(waPayload),
+          signal: AbortSignal.timeout(15000),
+        });
+        if (waRes.ok) {
+          const waData = await waRes.json() as any;
+          const waMessageId = waData?.messages?.[0]?.id;
+          if (waMessageId) {
+            await storage.updateWaMessageStatus(msg.id, "sent", waMessageId);
+          }
+        } else {
+          await storage.updateWaMessageStatus(msg.id, "failed");
+        }
+      } catch (_) {
+        await storage.updateWaMessageStatus(msg.id, "failed");
+      }
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

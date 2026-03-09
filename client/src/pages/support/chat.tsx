@@ -212,7 +212,8 @@ export default function SupportChatPage() {
   const { data: conversations = [] } = useQuery<Conversation[]>({
     queryKey: ["/api/support/conversations"],
     enabled: hasAccess,
-    refetchInterval: 5000,
+    refetchInterval: 10000,
+    staleTime: 5000,
   });
 
   const { data: messages = [] } = useQuery<Message[]>({
@@ -223,7 +224,8 @@ export default function SupportChatPage() {
       return resp.json();
     },
     enabled: hasAccess && !!selectedConvId,
-    refetchInterval: 3000,
+    refetchInterval: 8000,
+    staleTime: 4000,
   });
 
   const { data: teamData } = useQuery<{ members: TeamMember[]; total: number }>({
@@ -232,32 +234,52 @@ export default function SupportChatPage() {
   });
   const teamMembers = teamData?.members ?? [];
 
+  const prevMsgCountRef = useRef(0);
   const scrollToBottom = useCallback(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, []);
 
-  useEffect(scrollToBottom, [selectedConvId, messages, scrollToBottom]);
+  useEffect(() => {
+    const count = messages.length;
+    if (count !== prevMsgCountRef.current) {
+      prevMsgCountRef.current = count;
+      scrollToBottom();
+    }
+  }, [messages.length, scrollToBottom]);
 
   useEffect(() => {
-    if (selectedConvId) {
-      const conv = conversations.find(c => c.id === selectedConvId);
-      if (conv && conv.unreadCount > 0) {
-        apiRequest("PATCH", `/api/support/conversations/${selectedConvId}/read`, {}).catch(() => {});
-        queryClient.invalidateQueries({ queryKey: ["/api/support/conversations"] });
-      }
-    }
-  }, [selectedConvId, conversations, queryClient]);
+    prevMsgCountRef.current = 0;
+    scrollToBottom();
+  }, [selectedConvId, scrollToBottom]);
 
+  const markingReadRef = useRef(false);
+  const selectedUnread = conversations.find(c => c.id === selectedConvId)?.unreadCount ?? 0;
+  useEffect(() => {
+    if (selectedConvId && selectedUnread > 0 && !markingReadRef.current) {
+      markingReadRef.current = true;
+      apiRequest("PATCH", `/api/support/conversations/${selectedConvId}/read`, {}).then(() => {
+        queryClient.invalidateQueries({ queryKey: ["/api/support/conversations"] });
+      }).catch(() => {}).finally(() => {
+        markingReadRef.current = false;
+      });
+    }
+  }, [selectedConvId, selectedUnread, queryClient]);
+
+  const lastSentTextRef = useRef("");
   const sendMutation = useMutation({
-    mutationFn: async (text: string) =>
-      apiRequest("POST", `/api/support/conversations/${selectedConvId}/messages`, { text }),
+    mutationFn: async (text: string) => {
+      lastSentTextRef.current = text;
+      return apiRequest("POST", `/api/support/conversations/${selectedConvId}/messages`, { text });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/support/conversations", selectedConvId, "messages"] });
       queryClient.invalidateQueries({ queryKey: ["/api/support/conversations"] });
-      setMessageText("");
       inputRef.current?.focus();
+    },
+    onError: () => {
+      setMessageText(lastSentTextRef.current);
     },
   });
 
@@ -310,8 +332,10 @@ export default function SupportChatPage() {
 
   const handleSend = (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!messageText.trim() || !selectedConvId) return;
-    sendMutation.mutate(messageText.trim());
+    if (!messageText.trim() || !selectedConvId || sendMutation.isPending) return;
+    const text = messageText.trim();
+    setMessageText("");
+    sendMutation.mutate(text);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

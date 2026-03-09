@@ -247,6 +247,7 @@ export interface IStorage {
   deleteConversation(id: string): Promise<void>;
   getWaMessages(conversationId: string): Promise<WaMessage[]>;
   createWaMessage(data: { conversationId: string; direction: string; senderName?: string | null; text?: string | null; waMessageId?: string | null; status?: string | null; messageType?: string | null; mediaUrl?: string | null; reactionEmoji?: string | null; referenceMessageId?: string | null }): Promise<WaMessage>;
+  updateWaMessageStatus(messageId: string, status: string, waMessageId?: string): Promise<void>;
   updateConversationLabel(merchantId: string, convId: string, label: string | null): Promise<void>;
   updateConversationAssignment(merchantId: string, convId: string, userId: string | null, userName: string | null): Promise<void>;
   markConversationRead(merchantId: string, convId: string): Promise<void>;
@@ -2140,6 +2141,12 @@ export class DatabaseStorage implements IStorage {
       referenceMessageId: data.referenceMessageId,
     }).returning();
     return row;
+  }
+
+  async updateWaMessageStatus(messageId: string, status: string, waMessageId?: string): Promise<void> {
+    const updates: Record<string, any> = { status };
+    if (waMessageId) updates.waMessageId = waMessageId;
+    await db.update(waMessages).set(updates).where(eq(waMessages.id, messageId));
   }
 
   async updateConversationLabel(merchantId: string, convId: string, label: string | null): Promise<void> {

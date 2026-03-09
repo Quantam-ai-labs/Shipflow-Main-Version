@@ -857,26 +857,31 @@ export default function SupportTemplatesPage() {
     }
   };
 
-  // Message Logs
   const { data: messageLogs = [], isLoading: logsLoading } = useQuery<WaMessageLog[]>({
     queryKey: ["/api/whatsapp-logs"],
     enabled: activeTab === "logs",
+    staleTime: 10000,
   });
 
+  const [retryingIds, setRetryingIds] = useState<Set<string>>(new Set());
   const retryMutation = useMutation({
     mutationFn: async (logId: string) => {
+      setRetryingIds(prev => new Set(prev).add(logId));
       const res = await apiRequest("POST", `/api/whatsapp-logs/${logId}/retry`);
-      return await res.json();
+      return { logId, data: await res.json() };
     },
-    onSuccess: (data: any) => {
+    onSuccess: (result: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/whatsapp-logs"] });
-      if (data?.success) {
+      if (result.data?.success) {
         toast({ title: "Message resent successfully" });
       } else {
-        toast({ title: data?.error || "Retry failed", variant: "destructive" });
+        toast({ title: result.data?.error || "Retry failed", variant: "destructive" });
       }
     },
     onError: (err: any) => toast({ title: err?.message || "Retry failed", variant: "destructive" }),
+    onSettled: (_data, _err, logId) => {
+      setRetryingIds(prev => { const next = new Set(prev); next.delete(logId); return next; });
+    },
   });
 
   // ── Template Editor full-page mode ──
@@ -1256,11 +1261,11 @@ export default function SupportTemplatesPage() {
                                 variant="outline"
                                 size="sm"
                                 onClick={() => retryMutation.mutate(log.id)}
-                                disabled={retryMutation.isPending}
+                                disabled={retryingIds.has(log.id)}
                                 data-testid={`button-retry-${log.id}`}
                                 className="h-7 text-xs gap-1.5"
                               >
-                                {retryMutation.isPending ? (
+                                {retryingIds.has(log.id) ? (
                                   <Loader2 className="w-3 h-3 animate-spin" />
                                 ) : (
                                   <RotateCcw className="w-3 h-3" />
