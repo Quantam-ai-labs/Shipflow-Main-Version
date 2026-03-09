@@ -38,7 +38,7 @@ export async function sendOrderStatusWhatsApp(
 
   if (params.merchantId !== LALA_IMPORT_MERCHANT_ID) {
     console.log(
-      `${LOG_PREFIX} Skipping order ${params.orderNumber} — merchant not Lala Import`,
+      `${LOG_PREFIX} Skipping order ${params} — merchant not Lala Import`,
     );
     return;
   }
