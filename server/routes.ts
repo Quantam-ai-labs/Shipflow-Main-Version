@@ -6846,7 +6846,7 @@ export async function registerRoutes(
       if (!VALID_WA_STATUSES.includes(workflowStatus)) {
         return res.status(400).json({ error: "Invalid status. Must be one of: NEW, BOOKED, FULFILLED, DELIVERED" });
       }
-      const { templateName, messageBody, isActive } = req.body;
+      const { templateName, messageBody, isActive, delayMinutes } = req.body;
       if (!templateName || typeof templateName !== "string" || templateName.trim().length === 0) {
         return res.status(400).json({ error: "templateName is required" });
       }
@@ -6856,6 +6856,7 @@ export async function registerRoutes(
         templateName: templateName.trim(),
         messageBody: messageBody ? String(messageBody).trim() : null,
         isActive: isActive !== false,
+        delayMinutes: typeof delayMinutes === "number" ? Math.max(0, delayMinutes) : 0,
       });
       res.json(template);
     } catch (error: any) {

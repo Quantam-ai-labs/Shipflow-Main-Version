@@ -162,7 +162,7 @@ export interface IStorage {
 
   // WhatsApp Templates
   getWhatsAppTemplates(merchantId: string): Promise<WhatsappTemplate[]>;
-  upsertWhatsAppTemplate(data: { merchantId: string; workflowStatus: string; templateName: string; messageBody?: string | null; isActive: boolean }): Promise<WhatsappTemplate>;
+  upsertWhatsAppTemplate(data: { merchantId: string; workflowStatus: string; templateName: string; messageBody?: string | null; isActive: boolean; delayMinutes?: number }): Promise<WhatsappTemplate>;
   deleteWhatsAppTemplate(merchantId: string, workflowStatus: string): Promise<void>;
   getWhatsAppTemplateForStatus(merchantId: string, workflowStatus: string): Promise<{ templateName: string; messageBody: string | null }>;
 
@@ -1605,13 +1605,14 @@ export class DatabaseStorage implements IStorage {
     return existing;
   }
 
-  async upsertWhatsAppTemplate(data: { merchantId: string; workflowStatus: string; templateName: string; messageBody?: string | null; isActive: boolean }): Promise<WhatsappTemplate> {
+  async upsertWhatsAppTemplate(data: { merchantId: string; workflowStatus: string; templateName: string; messageBody?: string | null; isActive: boolean; delayMinutes?: number }): Promise<WhatsappTemplate> {
     const now = new Date();
+    const delayMins = typeof data.delayMinutes === "number" ? data.delayMinutes : 0;
     const [result] = await db.insert(whatsappTemplates)
-      .values({ ...data, updatedAt: now })
+      .values({ ...data, delayMinutes: delayMins, updatedAt: now })
       .onConflictDoUpdate({
         target: [whatsappTemplates.merchantId, whatsappTemplates.workflowStatus],
-        set: { templateName: data.templateName, messageBody: data.messageBody ?? null, isActive: data.isActive, updatedAt: now },
+        set: { templateName: data.templateName, messageBody: data.messageBody ?? null, isActive: data.isActive, delayMinutes: delayMins, updatedAt: now },
       })
       .returning();
     return result;

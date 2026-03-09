@@ -347,6 +347,7 @@ export const whatsappTemplates = pgTable("whatsapp_templates", {
   templateName: varchar("template_name", { length: 255 }).notNull().default("status_notify"),
   messageBody: text("message_body"),
   isActive: boolean("is_active").default(true).notNull(),
+  delayMinutes: integer("delay_minutes").default(0).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
