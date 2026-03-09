@@ -34,7 +34,7 @@ export async function sendOrderStatusWhatsApp(
 ): Promise<void> {
   if (!(WA_NOTIFY_STATUSES as readonly string[]).includes(params.toStatus))
     return;
-   console.log(
+  console.log(
         `${LOG_PREFIX} Skipping order ${params} — merchant not Lala Import`,
       );
 
