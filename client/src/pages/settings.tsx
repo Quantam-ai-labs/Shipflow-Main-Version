@@ -47,6 +47,7 @@ import {
   Users,
   BarChart2,
   Cog,
+  MessageCircle,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -60,6 +61,7 @@ import SettingsMarketing from "./settings/marketing";
 import Team from "./team";
 import AccountingSettings from "./accounting/settings";
 import OpeningBalancesPage from "./accounting/opening-balances";
+import SettingsWhatsApp from "./settings/whatsapp";
 
 interface MerchantSettings {
   id: string;
@@ -80,6 +82,7 @@ const SETTINGS_TABS = [
   { id: "profile",       label: "Profile",        icon: Building2,      gradient: "from-violet-500 to-purple-700",  href: null,                   description: "Business & security" },
   { id: "shopify",       label: "Shopify",        icon: Store,          gradient: "from-orange-400 to-amber-600",   href: null,                   description: "Store integration" },
   { id: "couriers",      label: "Couriers",       icon: Truck,          gradient: "from-teal-400 to-cyan-600",      href: null,                   description: "Delivery partners" },
+  { id: "whatsapp",      label: "WhatsApp",       icon: MessageCircle,  gradient: "from-green-400 to-emerald-600",  href: null,                   description: "API & webhook" },
   { id: "notifications", label: "Notifications",  icon: Bell,           gradient: "from-blue-400 to-indigo-600",    href: null,                   description: "Email alerts" },
   { id: "mapping",       label: "Status Mapping", icon: ArrowLeftRight, gradient: "from-rose-400 to-red-600",       href: null,                   description: "Courier statuses" },
   { id: "marketing",     label: "Marketing",      icon: BarChart2,      gradient: "from-fuchsia-400 to-pink-600",   href: null,                   description: "Ad integrations" },
@@ -355,6 +358,8 @@ export default function Settings() {
             </Card>
           </div>
         )}
+
+        {activeTab === "whatsapp" && <SettingsWhatsApp />}
 
         {activeTab === "mapping" && <SettingsStatusMapping />}
 
