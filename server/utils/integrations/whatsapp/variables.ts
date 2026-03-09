@@ -76,30 +76,11 @@ function buildItemLines(
   return itemSummary || "your order";
 }
 
-const META_TEMPLATE_PARAMS: Record<string, (vars: Record<string, string>) => string[]> = {
-  order_confirmation_2: (vars) => {
-    const orderNum = vars.order_number || "N/A";
-    const item = vars.items || vars.item_name || "your order";
-    const total = vars.order_total || vars.total_amount;
-    const body = `Your Order from Lala Import #${orderNum} of\n${item}${total ? `\nWith a total amount of ${total}/-` : ""}\nis pending for confirmation. Please press confirm or cancel.`;
-    return [
-      vars.name || vars.customer_name || "Customer",
-      body,
-    ];
-  },
-  order_update: (vars) => [
-    vars.name || vars.customer_name || "Customer",
-    vars.order_number || "N/A",
-    vars.new_status || "updated",
-  ],
-};
-
 export function buildTemplateParams(
-  templateName: string,
-  vars: Record<string, string>
+  _templateName: string,
+  _vars: Record<string, string>
 ): string[] | null {
-  const builder = META_TEMPLATE_PARAMS[templateName];
-  return builder ? builder(vars) : null;
+  return null;
 }
 
 export function buildVarsFromParams(params: {

@@ -28,20 +28,12 @@ export { formatPhoneForWhatsApp } from "./sender";
 export type { SendResult, OrderNotificationParams } from "./types";
 
 const LOG_PREFIX = "[WhatsApp]";
-const IS_PRODUCTION = process.env.NODE_ENV === "production";
 
 export async function sendOrderStatusWhatsApp(
   params: OrderNotificationParams,
 ): Promise<void> {
   if (!(WA_NOTIFY_STATUSES as readonly string[]).includes(params.toStatus))
     return;
-
-  // if (!IS_PRODUCTION) {
-  //   console.log(
-  //     `${LOG_PREFIX} [DEV] Skipping send for order ${params.orderNumber} (${params.toStatus}) — not in production`,
-  //   );
-  //   return;
-  // }
 
   const merchant = await storage.getMerchant(params.merchantId);
   if (!merchant) {
@@ -66,195 +58,181 @@ export async function sendOrderStatusWhatsApp(
     }
   }
 
+  const formattedPhone = formatPhoneForWhatsApp(params.customerPhone);
+  if (!formattedPhone) {
+    console.warn(
+      `${LOG_PREFIX} Skip order ${params.orderNumber}: invalid/missing phone "${params.customerPhone}"`,
+    );
+    await db.insert(orderChangeLog).values({
+      orderId: params.orderId,
+      merchantId: params.merchantId,
+      changeType: "WHATSAPP_SENT",
+      newValue: "failed",
+      actorType: "system",
+      actorName: "WhatsApp",
+      metadata: {
+        success: false,
+        toStatus: params.toStatus,
+        phone: null,
+        error: `Invalid or missing phone: ${params.customerPhone}`,
+      },
+    });
+    return;
+  }
+
   try {
-    const alreadySent = await db
-      .select({ id: orderChangeLog.id })
-      .from(orderChangeLog)
-      .where(
-        and(
-          eq(orderChangeLog.orderId, params.orderId),
-          eq(orderChangeLog.changeType, "WHATSAPP_SENT"),
-          sql`${orderChangeLog.metadata}->>'success' = 'true'`,
-          sql`${orderChangeLog.metadata}->>'toStatus' = ${params.toStatus}`,
-        ),
-      )
-      .limit(1);
-
-    if (alreadySent.length > 0) {
-      console.log(
-        `${LOG_PREFIX} Skip order ${params.orderNumber}: WhatsApp already sent successfully for status "${params.toStatus}"`,
-      );
+    const automations = await storage.getWaAutomationsByTrigger(params.merchantId, params.toStatus);
+    if (automations.length === 0) {
+      console.log(`${LOG_PREFIX} No active automations for status "${params.toStatus}" on order ${params.orderNumber}, skipping`);
       return;
     }
-
-    const { templateName, messageBody } =
-      await storage.getWhatsAppTemplateForStatus(
-        params.merchantId,
-        params.toStatus,
-      );
-
-    const formattedPhone = formatPhoneForWhatsApp(params.customerPhone);
-    if (!formattedPhone) {
-      console.warn(
-        `${LOG_PREFIX} Skip order ${params.orderNumber}: invalid/missing phone "${params.customerPhone}"`,
-      );
-      await db.insert(orderChangeLog).values({
-        orderId: params.orderId,
-        merchantId: params.merchantId,
-        changeType: "WHATSAPP_SENT",
-        newValue: "failed",
-        actorType: "system",
-        actorName: "WhatsApp",
-        metadata: {
-          success: false,
-          toStatus: params.toStatus,
-          phone: null,
-          templateName,
-          error: `Invalid or missing phone: ${params.customerPhone}`,
-        },
-      });
-      return;
-    }
-
-    const vars = buildVarsFromParams(params);
-    const messageText = interpolateMessageBody(
-      messageBody,
-      vars,
-      params.toStatus,
-    );
-
-    const templateParams = buildTemplateParams(templateName, vars);
-
-    const fromLabel = getStatusLabel(params.fromStatus);
-    const toLabel = getStatusLabel(params.toStatus);
-
-    console.log(
-      `${LOG_PREFIX} ─── Sending notification ──────────────────────────`,
-    );
-    console.log(
-      `${LOG_PREFIX}   Order:    #${params.orderNumber} (${fromLabel} → ${toLabel})`,
-    );
-    console.log(`${LOG_PREFIX}   To:       ${formattedPhone}`);
-    console.log(`${LOG_PREFIX}   Template: "${templateName}"`);
-    if (templateParams) {
-      console.log(
-        `${LOG_PREFIX}   Params:   ${JSON.stringify(templateParams)}`,
-      );
-    } else {
-      console.log(`${LOG_PREFIX}   Message:  "${messageText}"`);
-    }
-    console.log(
-      `${LOG_PREFIX} ────────────────────────────────────────────────────`,
-    );
 
     const [merchantRow] = await db.select({
       waPhoneNumberId: merchants.waPhoneNumberId,
       waAccessToken: merchants.waAccessToken,
     }).from(merchants).where(eq(merchants.id, params.merchantId)).limit(1);
 
-    const result = await sendWhatsAppApiRequest({
-      formattedPhone,
-      templateName,
-      messageText,
-      orderNumber: params.orderNumber,
-      templateParams: templateParams ?? undefined,
-      phoneNumberId: merchantRow?.waPhoneNumberId ?? undefined,
-      accessToken: merchantRow?.waAccessToken ?? undefined,
-    });
+    const vars = buildVarsFromParams(params);
+    const fromLabel = getStatusLabel(params.fromStatus);
+    const toLabel = getStatusLabel(params.toStatus);
 
-    if (result.success) {
-      try {
-        const conv = await storage.upsertConversation({
-          merchantId: params.merchantId,
-          contactPhone: formattedPhone,
-          contactName: params.customerName,
-          orderId: params.orderId,
-          orderNumber: params.orderNumber,
-          lastMessage: messageText.slice(0, 200),
-        });
-        await storage.createWaMessage({
-          conversationId: conv.id,
-          direction: "outbound",
-          senderName: "System",
-          text: messageText,
-          waMessageId: result.messageId,
-          status: "sent",
-        });
-      } catch (convErr: any) {
-        console.warn(`${LOG_PREFIX} Failed to upsert conversation for order ${params.orderNumber}:`, convErr.message);
+    for (const automation of automations) {
+      const fireAutomation = async () => {
+        try {
+          const alreadySent = await db
+            .select({ id: orderChangeLog.id })
+            .from(orderChangeLog)
+            .where(
+              and(
+                eq(orderChangeLog.orderId, params.orderId),
+                eq(orderChangeLog.changeType, "WHATSAPP_SENT"),
+                sql`${orderChangeLog.metadata}->>'success' = 'true'`,
+                sql`${orderChangeLog.metadata}->>'toStatus' = ${params.toStatus}`,
+                sql`${orderChangeLog.metadata}->>'automationId' = ${automation.id}`,
+              ),
+            )
+            .limit(1);
+
+          if (alreadySent.length > 0) {
+            console.log(
+              `${LOG_PREFIX} Skip automation "${automation.title}" for order ${params.orderNumber}: already sent successfully`,
+            );
+            return;
+          }
+
+          const msgText = automation.messageText
+            ? interpolateMessageBody(automation.messageText, vars, params.toStatus)
+            : null;
+          const tmplName = automation.templateName || null;
+          const templateParams = tmplName ? buildTemplateParams(tmplName, vars) : null;
+          const effectiveTemplateName = tmplName || "custom_message";
+
+          console.log(
+            `${LOG_PREFIX} ─── Automation: "${automation.title}" ──────────────────`,
+          );
+          console.log(
+            `${LOG_PREFIX}   Order:    #${params.orderNumber} (${fromLabel} → ${toLabel})`,
+          );
+          console.log(`${LOG_PREFIX}   To:       ${formattedPhone}`);
+          console.log(`${LOG_PREFIX}   Template: "${effectiveTemplateName}"`);
+          if (templateParams) {
+            console.log(
+              `${LOG_PREFIX}   Params:   ${JSON.stringify(templateParams)}`,
+            );
+          } else if (msgText) {
+            console.log(`${LOG_PREFIX}   Message:  "${msgText.slice(0, 100)}..."`);
+          }
+          console.log(
+            `${LOG_PREFIX} ────────────────────────────────────────────────────`,
+          );
+
+          const result = await sendWhatsAppApiRequest({
+            formattedPhone,
+            templateName: effectiveTemplateName,
+            messageText: msgText || "",
+            orderNumber: params.orderNumber,
+            templateParams: templateParams ?? undefined,
+            phoneNumberId: merchantRow?.waPhoneNumberId ?? undefined,
+            accessToken: merchantRow?.waAccessToken ?? undefined,
+          });
+
+          if (result.success) {
+            console.log(`${LOG_PREFIX} Automation "${automation.title}" sent successfully for order ${params.orderNumber}`);
+            try {
+              const conv = await storage.upsertConversation({
+                merchantId: params.merchantId,
+                contactPhone: formattedPhone,
+                contactName: params.customerName,
+                orderId: params.orderId,
+                orderNumber: params.orderNumber,
+                lastMessage: (msgText || effectiveTemplateName).slice(0, 200),
+              });
+              await storage.createWaMessage({
+                conversationId: conv.id,
+                direction: "outbound",
+                senderName: "System",
+                text: msgText || `[Template: ${effectiveTemplateName}]`,
+                waMessageId: result.messageId,
+                status: "sent",
+              });
+            } catch (convErr: any) {
+              console.warn(`${LOG_PREFIX} Failed to upsert conversation for order ${params.orderNumber}:`, convErr.message);
+            }
+          } else {
+            console.error(`${LOG_PREFIX} Automation "${automation.title}" failed for order ${params.orderNumber}: ${result.error}`);
+          }
+
+          await db.insert(orderChangeLog).values({
+            orderId: params.orderId,
+            merchantId: params.merchantId,
+            changeType: "WHATSAPP_SENT",
+            newValue: result.success ? "sent" : "failed",
+            actorType: "system",
+            actorName: "WhatsApp",
+            metadata: {
+              success: result.success,
+              toStatus: params.toStatus,
+              phone: result.phone ?? formattedPhone,
+              templateName: effectiveTemplateName,
+              automationId: automation.id,
+              automationTitle: automation.title,
+              messageId: result.messageId,
+              messageText: msgText,
+              error: result.error,
+            },
+          });
+        } catch (e: any) {
+          console.error(`${LOG_PREFIX} Automation "${automation.title}" error for order ${params.orderNumber}:`, e.message);
+          await db.insert(orderChangeLog).values({
+            orderId: params.orderId,
+            merchantId: params.merchantId,
+            changeType: "WHATSAPP_SENT",
+            newValue: "failed",
+            actorType: "system",
+            actorName: "WhatsApp",
+            metadata: {
+              success: false,
+              toStatus: params.toStatus,
+              phone: formattedPhone,
+              automationId: automation.id,
+              automationTitle: automation.title,
+              error: e.message,
+            },
+          });
+        }
+      };
+
+      if (automation.delayMinutes > 0) {
+        console.log(`${LOG_PREFIX} Scheduling automation "${automation.title}" for order ${params.orderNumber} with ${automation.delayMinutes}min delay`);
+        setTimeout(fireAutomation, automation.delayMinutes * 60 * 1000);
+      } else {
+        await fireAutomation();
       }
     }
-
-    await db.insert(orderChangeLog).values({
-      orderId: params.orderId,
-      merchantId: params.merchantId,
-      changeType: "WHATSAPP_SENT",
-      newValue: result.success ? "sent" : "failed",
-      actorType: "system",
-      actorName: "WhatsApp",
-      metadata: {
-        success: result.success,
-        toStatus: params.toStatus,
-        phone: result.phone ?? formattedPhone,
-        templateName,
-        messageId: result.messageId,
-        messageText,
-        error: result.error,
-      },
-    });
   } catch (err: any) {
     console.error(
       `${LOG_PREFIX} Unexpected error for order ${params.orderId}:`,
       err.message || err,
     );
-  }
-
-  // Fire any active WA automations matching this status
-  try {
-    const automations = await storage.getWaAutomationsByTrigger(params.merchantId, params.toStatus);
-    if (automations.length > 0) {
-      const [merchantRow] = await db.select({
-        waPhoneNumberId: merchants.waPhoneNumberId,
-        waAccessToken: merchants.waAccessToken,
-      }).from(merchants).where(eq(merchants.id, params.merchantId)).limit(1);
-
-      const formattedPhone = formatPhoneForWhatsApp(params.customerPhone);
-      if (!formattedPhone) return;
-
-      const vars = buildVarsFromParams(params);
-
-      for (const automation of automations) {
-        const fireAutomation = async () => {
-          try {
-            const msgText = automation.messageText
-              ? interpolateMessageBody(automation.messageText, vars, params.toStatus)
-              : null;
-            const tmplName = automation.templateName || null;
-            const templateParams = tmplName ? buildTemplateParams(tmplName, vars) : null;
-
-            await sendWhatsAppApiRequest({
-              formattedPhone,
-              templateName: tmplName || "custom_message",
-              messageText: msgText || "",
-              orderNumber: params.orderNumber,
-              templateParams: templateParams ?? undefined,
-              phoneNumberId: merchantRow?.waPhoneNumberId ?? undefined,
-              accessToken: merchantRow?.waAccessToken ?? undefined,
-            });
-            console.log(`${LOG_PREFIX} Automation "${automation.title}" fired for order ${params.orderNumber}`);
-          } catch (e: any) {
-            console.error(`${LOG_PREFIX} Automation "${automation.title}" failed:`, e.message);
-          }
-        };
-
-        if (automation.delayMinutes > 0) {
-          setTimeout(fireAutomation, automation.delayMinutes * 60 * 1000);
-        } else {
-          await fireAutomation();
-        }
-      }
-    }
-  } catch (autoErr: any) {
-    console.error(`${LOG_PREFIX} Error firing automations for order ${params.orderId}:`, autoErr.message);
   }
 }

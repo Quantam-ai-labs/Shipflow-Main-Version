@@ -3,7 +3,7 @@ import {
   merchants, teamMembers, shopifyStores, courierAccounts,
   orders, shipments, shipmentEvents, remarks, codReconciliation, syncLogs, workflowAuditLog, bookingJobs,
   shipmentBatches, shipmentBatchItems, shipmentPrintRecords, orderPayments, orderChangeLog,
-  shopifyWebhookEvents, cancellationJobs, cancellationJobItems, whatsappTemplates,
+  shopifyWebhookEvents, cancellationJobs, cancellationJobItems,
   type Merchant, type InsertMerchant,
   type TeamMember, type InsertTeamMember,
   type ShopifyStore, type InsertShopifyStore,
@@ -36,7 +36,6 @@ import {
   type CampaignJourneyEvent, type InsertCampaignJourneyEvent,
   platformSettings,
   type PlatformSettings,
-  type WhatsappTemplate,
   whatsappResponses,
   type WhatsappResponse, type InsertWhatsappResponse,
   waConversations, waMessages,
@@ -163,12 +162,6 @@ export interface IStorage {
   // Order Change Log
   createOrderChangeLog(entry: InsertOrderChangeLog): Promise<OrderChangeLog>;
   getOrderChangeLog(merchantId: string, orderId: string): Promise<OrderChangeLog[]>;
-
-  // WhatsApp Templates
-  getWhatsAppTemplates(merchantId: string): Promise<WhatsappTemplate[]>;
-  upsertWhatsAppTemplate(data: { merchantId: string; workflowStatus: string; templateName: string; messageBody?: string | null; isActive: boolean; delayMinutes?: number }): Promise<WhatsappTemplate>;
-  deleteWhatsAppTemplate(merchantId: string, workflowStatus: string): Promise<void>;
-  getWhatsAppTemplateForStatus(merchantId: string, workflowStatus: string): Promise<{ templateName: string; messageBody: string | null }>;
 
   // WA Meta Templates
   getWaMetaTemplates(merchantId: string): Promise<WaMetaTemplate[]>;
@@ -1580,79 +1573,6 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(orderChangeLog).where(
       and(eq(orderChangeLog.merchantId, merchantId), eq(orderChangeLog.orderId, orderId))
     ).orderBy(desc(orderChangeLog.createdAt));
-  }
-
-  // WhatsApp Templates
-  async getWhatsAppTemplates(merchantId: string): Promise<WhatsappTemplate[]> {
-    const existing = await db.select().from(whatsappTemplates)
-      .where(eq(whatsappTemplates.merchantId, merchantId))
-      .orderBy(whatsappTemplates.workflowStatus);
-
-    const WA_DEFAULTS: { workflowStatus: string; templateName: string; messageBody: string }[] = [
-      {
-        workflowStatus: "NEW",
-        templateName: "order_confirmation_2",
-        messageBody: `Assalam o Alaikum {customer_name}!\n\nYour Order from Lala Import #{order_number} of\n{item_name}\nWith a total amount of {total_amount}/-\nis pending for confirmation. Please press confirm or cancel.\n\nThank you`,
-      },
-      {
-        workflowStatus: "BOOKED",
-        templateName: "order_updates",
-        messageBody: `Hello {customer_name},\n\nYour order #{order_number} of {item_name} is "booked".\n\nThank you for shopping with lalaimports. We appreciate your trust!`,
-      },
-      {
-        workflowStatus: "FULFILLED",
-        templateName: "custom_message",
-        messageBody: `Hello {customer_name},\n\nYour order #{order_number} of {item_name} is "shipped".\n\nThank you for shopping with lalaimports. We appreciate your trust!`,
-      },
-      {
-        workflowStatus: "DELIVERED",
-        templateName: "custom_message",
-        messageBody: `Hello {customer_name},\n\nYour order #{order_number} of {item_name} is "delivered".\n\nThank you for shopping with lalaimports. We appreciate your trust!`,
-      },
-    ];
-
-    const existingStatuses = new Set(existing.map(t => t.workflowStatus));
-    const missing = WA_DEFAULTS.filter(d => !existingStatuses.has(d.workflowStatus));
-
-    if (missing.length > 0) {
-      await db.insert(whatsappTemplates)
-        .values(missing.map(d => ({ merchantId, ...d, isActive: true })))
-        .onConflictDoNothing();
-      return db.select().from(whatsappTemplates)
-        .where(eq(whatsappTemplates.merchantId, merchantId))
-        .orderBy(whatsappTemplates.workflowStatus);
-    }
-
-    return existing;
-  }
-
-  async upsertWhatsAppTemplate(data: { merchantId: string; workflowStatus: string; templateName: string; messageBody?: string | null; isActive: boolean; delayMinutes?: number }): Promise<WhatsappTemplate> {
-    const now = new Date();
-    const delayMins = typeof data.delayMinutes === "number" ? data.delayMinutes : 0;
-    const [result] = await db.insert(whatsappTemplates)
-      .values({ ...data, delayMinutes: delayMins, updatedAt: now })
-      .onConflictDoUpdate({
-        target: [whatsappTemplates.merchantId, whatsappTemplates.workflowStatus],
-        set: { templateName: data.templateName, messageBody: data.messageBody ?? null, isActive: data.isActive, delayMinutes: delayMins, updatedAt: now },
-      })
-      .returning();
-    return result;
-  }
-
-  async deleteWhatsAppTemplate(merchantId: string, workflowStatus: string): Promise<void> {
-    await db.delete(whatsappTemplates)
-      .where(and(eq(whatsappTemplates.merchantId, merchantId), eq(whatsappTemplates.workflowStatus, workflowStatus)));
-  }
-
-  async getWhatsAppTemplateForStatus(merchantId: string, workflowStatus: string): Promise<{ templateName: string; messageBody: string | null }> {
-    const [template] = await db.select({ templateName: whatsappTemplates.templateName, messageBody: whatsappTemplates.messageBody, isActive: whatsappTemplates.isActive })
-      .from(whatsappTemplates)
-      .where(and(eq(whatsappTemplates.merchantId, merchantId), eq(whatsappTemplates.workflowStatus, workflowStatus)));
-    if (template && template.isActive && template.templateName) {
-      return { templateName: template.templateName, messageBody: template.messageBody ?? null };
-    }
-    const defaultName = workflowStatus === "NEW" ? "order_confirmation_2" : "order_updates";
-    return { templateName: defaultName, messageBody: null };
   }
 
   async getWaMetaTemplates(merchantId: string): Promise<WaMetaTemplate[]> {
