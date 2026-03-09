@@ -329,16 +329,16 @@ export default function CodReconciliationPage() {
   };
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-lg font-semibold" data-testid="text-cod-title">COD Reconciliation</h1>
-          <p className="text-xs text-muted-foreground">Track and reconcile Cash on Delivery payments from couriers.</p>
+          <h1 className="text-2xl font-semibold" data-testid="text-cod-title">COD Reconciliation</h1>
+          <p className="text-sm text-muted-foreground">Track and reconcile Cash on Delivery payments from couriers.</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {selectedRecords.length > 0 && (
-            <Button size="sm" onClick={() => setIsReconcileDialogOpen(true)} data-testid="button-reconcile-selected">
-              <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />
+            <Button onClick={() => setIsReconcileDialogOpen(true)} data-testid="button-reconcile-selected">
+              <CheckCircle2 className="w-4 h-4 mr-2" />
               Reconcile ({selectedRecords.length})
             </Button>
           )}
@@ -350,16 +350,16 @@ export default function CodReconciliationPage() {
               disabled={syncPaymentsMutation.isPending}
               data-testid="button-sync-payments"
             >
-              <CloudDownload className={`w-3.5 h-3.5 mr-1.5 ${syncPaymentsMutation.isPending ? 'animate-pulse' : ''}`} />
+              <CloudDownload className={`w-4 h-4 mr-2 ${syncPaymentsMutation.isPending ? 'animate-pulse' : ''}`} />
               {syncPaymentsMutation.isPending ? 'Syncing...' : 'Sync Payments'}
             </Button>
             {syncPaymentsMutation.isPending && codSyncProgress && (
-              <div className="w-40 space-y-0.5" data-testid="cod-sync-progress">
-                <Progress value={codSyncProgress.total > 0 ? (codSyncProgress.processed / codSyncProgress.total) * 100 : undefined} className="h-1.5" />
-                <p className="text-[10px] text-muted-foreground text-right">
+              <div className="w-48 space-y-1" data-testid="cod-sync-progress">
+                <Progress value={codSyncProgress.total > 0 ? (codSyncProgress.processed / codSyncProgress.total) * 100 : undefined} className="h-2" />
+                <p className="text-xs text-muted-foreground text-right">
                   {codSyncProgress.total > 0
-                    ? `${codSyncProgress.processed}/${codSyncProgress.total}`
-                    : "Starting..."}
+                    ? `Syncing ${codSyncProgress.processed} of ${codSyncProgress.total} records...`
+                    : "Starting sync..."}
                 </p>
               </div>
             )}
@@ -371,283 +371,319 @@ export default function CodReconciliationPage() {
             disabled={generateMutation.isPending}
             data-testid="button-generate-cod"
           >
-            <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${generateMutation.isPending ? 'animate-spin' : ''}`} />
-            {generateMutation.isPending ? 'Generating...' : 'Sync COD'}
+            <RefreshCw className={`w-4 h-4 mr-2 ${generateMutation.isPending ? 'animate-spin' : ''}`} />
+            {generateMutation.isPending ? 'Generating...' : 'Sync COD Records'}
           </Button>
           <Button variant="outline" size="sm" onClick={handleExport} data-testid="button-export-cod">
-            <Download className="w-3.5 h-3.5 mr-1.5" />
+            <Download className="w-4 h-4 mr-2" />
             Export
           </Button>
         </div>
       </div>
 
-      <div className="flex items-center gap-6 py-2 border-b" data-testid="metrics-strip">
-        <div className="min-w-0">
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Pending</p>
-          {isLoading ? (
-            <Skeleton className="h-5 w-20 mt-0.5" />
-          ) : (
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-sm font-semibold" data-testid="text-pending-amount">PKR {summary?.totalPending ?? "0"}</span>
-              <span className="text-[10px] text-muted-foreground">{summary?.pendingCount ?? 0}</span>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm text-muted-foreground">Pending Collection</p>
+                {isLoading ? (
+                  <Skeleton className="h-8 w-28 mt-1" />
+                ) : (
+                  <>
+                    <p className="text-2xl font-bold" data-testid="text-pending-amount">PKR {summary?.totalPending ?? "0"}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{summary?.pendingCount ?? 0} orders</p>
+                  </>
+                )}
+              </div>
+              <Clock className="w-5 h-5 text-muted-foreground" />
             </div>
-          )}
-        </div>
-        <div className="min-w-0">
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Received</p>
-          {isLoading ? (
-            <Skeleton className="h-5 w-20 mt-0.5" />
-          ) : (
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-sm font-semibold" data-testid="text-received-amount">PKR {summary?.totalReceived ?? "0"}</span>
-              <span className="text-[10px] text-muted-foreground">{summary?.receivedCount ?? 0}</span>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm text-muted-foreground">Total Received</p>
+                {isLoading ? (
+                  <Skeleton className="h-8 w-28 mt-1" />
+                ) : (
+                  <>
+                    <p className="text-2xl font-bold" data-testid="text-received-amount">PKR {summary?.totalReceived ?? "0"}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{summary?.receivedCount ?? 0} orders</p>
+                  </>
+                )}
+              </div>
+              <CheckCircle2 className="w-5 h-5 text-muted-foreground" />
             </div>
-          )}
-        </div>
-        <div className="min-w-0">
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Disputed</p>
-          {isLoading ? (
-            <Skeleton className="h-5 w-20 mt-0.5" />
-          ) : (
-            <span className="text-sm font-semibold" data-testid="text-disputed-amount">PKR {summary?.totalDisputed ?? "0"}</span>
-          )}
-        </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm text-muted-foreground">Disputed</p>
+                {isLoading ? (
+                  <Skeleton className="h-8 w-28 mt-1" />
+                ) : (
+                  <p className="text-2xl font-bold" data-testid="text-disputed-amount">PKR {summary?.totalDisputed ?? "0"}</p>
+                )}
+              </div>
+              <AlertCircle className="w-5 h-5 text-muted-foreground" />
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-          <Input
-            placeholder="Search tracking, order, courier..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 h-8 text-xs"
-            data-testid="input-search-cod"
-          />
-        </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[140px] h-8 text-xs" data-testid="select-cod-status">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            {statusOptions.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-col lg:flex-row gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by tracking number, order, or courier..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-10"
+                data-testid="input-search-cod"
+              />
+            </div>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[160px]" data-testid="select-cod-status">
+                <Filter className="w-4 h-4 mr-2" />
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                {statusOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
 
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-muted-foreground">COD Records</span>
+      <Card>
+        <CardHeader className="pb-4">
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
+            COD Records
             {data?.total !== undefined && (
-              <span className="text-[10px] text-muted-foreground">{data.total} records</span>
+              <Badge variant="secondary" className="ml-2">
+                {data.total} records
+              </Badge>
             )}
-          </div>
-        </div>
-        {isLoading ? (
-          <div className="space-y-2 py-2">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <Skeleton key={i} className="h-6 w-full" />
-            ))}
-          </div>
-        ) : records.length > 0 ? (
-          <>
-            <div className="overflow-x-auto border rounded-md">
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead className="w-[36px] py-1.5">
-                      <Checkbox
-                        checked={allPendingSelected}
-                        onCheckedChange={handleSelectAll}
-                        disabled={pendingRecords.length === 0}
-                        data-testid="checkbox-select-all"
-                      />
-                    </TableHead>
-                    <TableHead className="text-[10px] uppercase tracking-wider py-1.5">Tracking #</TableHead>
-                    <TableHead className="text-[10px] uppercase tracking-wider py-1.5">Courier</TableHead>
-                    <TableHead className="text-[10px] uppercase tracking-wider py-1.5 text-right">COD</TableHead>
-                    <TableHead className="text-[10px] uppercase tracking-wider py-1.5 text-right">Fee</TableHead>
-                    <TableHead className="text-[10px] uppercase tracking-wider py-1.5 text-right">Net</TableHead>
-                    <TableHead className="text-[10px] uppercase tracking-wider py-1.5">Status</TableHead>
-                    <TableHead className="text-[10px] uppercase tracking-wider py-1.5">Payment</TableHead>
-                    <TableHead className="text-[10px] uppercase tracking-wider py-1.5">Ref</TableHead>
-                    <TableHead className="text-[10px] uppercase tracking-wider py-1.5">Synced</TableHead>
-                    <TableHead className="w-[36px] py-1.5"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {records.map((record) => {
-                    const isExpanded = expandedRow === record.id;
-                    const hasFinancials = record.transactionFee || record.transactionTax ||
-                      record.upfrontPayment || record.reservePayment || record.balancePayment;
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {isLoading ? (
+            <div className="p-4 space-y-4">
+              {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+                <div key={i} className="flex items-center gap-4">
+                  <Skeleton className="h-4 w-4" />
+                  <Skeleton className="h-4 w-28" />
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-4 w-24 flex-1" />
+                  <Skeleton className="h-6 w-20" />
+                </div>
+              ))}
+            </div>
+          ) : records.length > 0 ? (
+            <>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[50px]">
+                        <Checkbox
+                          checked={allPendingSelected}
+                          onCheckedChange={handleSelectAll}
+                          disabled={pendingRecords.length === 0}
+                          data-testid="checkbox-select-all"
+                        />
+                      </TableHead>
+                      <TableHead>Tracking #</TableHead>
+                      <TableHead>Courier</TableHead>
+                      <TableHead className="text-right">COD Amount</TableHead>
+                      <TableHead className="text-right">Courier Fee</TableHead>
+                      <TableHead className="text-right">Net Amount</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Courier Payment</TableHead>
+                      <TableHead>Payment Ref</TableHead>
+                      <TableHead>Last Synced</TableHead>
+                      <TableHead className="w-[50px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {records.map((record) => {
+                      const isExpanded = expandedRow === record.id;
+                      const hasFinancials = record.transactionFee || record.transactionTax ||
+                        record.upfrontPayment || record.reservePayment || record.balancePayment;
 
-                    return (
-                      <>
-                        <TableRow
-                          key={record.id}
-                          data-testid={`cod-row-${record.id}`}
-                          className={isExpanded ? "border-b-0" : ""}
-                        >
-                          <TableCell className="py-1">
-                            <Checkbox
-                              checked={selectedRecords.includes(record.id)}
-                              onCheckedChange={(checked) => handleSelectRecord(record.id, !!checked)}
-                              disabled={record.status !== "pending"}
-                              data-testid={`checkbox-${record.id}`}
-                            />
-                          </TableCell>
-                          <TableCell className="font-mono text-xs py-1">
-                            {record.trackingNumber || "-"}
-                          </TableCell>
-                          <TableCell className="capitalize text-xs py-1">{record.courierName}</TableCell>
-                          <TableCell className="text-right text-xs font-medium py-1">
-                            {Number(record.codAmount).toLocaleString()}
-                          </TableCell>
-                          <TableCell className="text-right text-xs text-muted-foreground py-1">
-                            {formatPKR(record.courierFee)}
-                          </TableCell>
-                          <TableCell className="text-right text-xs font-medium py-1">
-                            {formatPKR(record.netAmount)}
-                          </TableCell>
-                          <TableCell className="py-1">{getStatusBadge(record.status || "pending")}</TableCell>
-                          <TableCell className="py-1">
-                            {getCourierPaymentBadge(record.courierPaymentStatus)}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground text-xs py-1">
-                            <div className="flex items-center gap-1">
-                              <span className="truncate max-w-[100px]">{record.courierPaymentRef || record.courierSettlementRef || "-"}</span>
-                              {record.courierSlipLink && (
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <a
-                                      href={record.courierSlipLink}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-muted-foreground hover-elevate"
-                                      data-testid={`link-slip-${record.id}`}
-                                    >
-                                      <ExternalLink className="w-3 h-3" />
-                                    </a>
-                                  </TooltipTrigger>
-                                  <TooltipContent>View payment slip</TooltipContent>
-                                </Tooltip>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-muted-foreground text-[10px] py-1 whitespace-nowrap">
-                            {record.lastSyncedAt
-                              ? formatPkDateTime24(record.lastSyncedAt)
-                              : "-"}
-                          </TableCell>
-                          <TableCell className="py-1">
-                            {hasFinancials && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => setExpandedRow(isExpanded ? null : record.id)}
-                                data-testid={`button-expand-${record.id}`}
-                              >
-                                <Receipt className="w-3.5 h-3.5" />
-                              </Button>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                        {isExpanded && hasFinancials && (
-                          <TableRow key={`${record.id}-details`} className="bg-muted/30">
-                            <TableCell colSpan={11} className="py-1.5">
-                              <div className="px-3 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 text-xs">
-                                <div>
-                                  <span className="text-muted-foreground block text-[10px]">Txn Fee</span>
-                                  <span className="font-medium">{formatPKR(record.transactionFee)}</span>
-                                </div>
-                                <div>
-                                  <span className="text-muted-foreground block text-[10px]">Txn Tax</span>
-                                  <span className="font-medium">{formatPKR(record.transactionTax)}</span>
-                                </div>
-                                <div>
-                                  <span className="text-muted-foreground block text-[10px]">Reversal Fee</span>
-                                  <span className="font-medium">{formatPKR(record.reversalFee)}</span>
-                                </div>
-                                <div>
-                                  <span className="text-muted-foreground block text-[10px]">Reversal Tax</span>
-                                  <span className="font-medium">{formatPKR(record.reversalTax)}</span>
-                                </div>
-                                <div>
-                                  <span className="text-muted-foreground block text-[10px]">Upfront</span>
-                                  <span className="font-medium">{formatPKR(record.upfrontPayment)}</span>
-                                </div>
-                                <div>
-                                  <span className="text-muted-foreground block text-[10px]">Reserve</span>
-                                  <span className="font-medium">{formatPKR(record.reservePayment)}</span>
-                                </div>
-                                <div>
-                                  <span className="text-muted-foreground block text-[10px]">Balance</span>
-                                  <span className="font-medium">{formatPKR(record.balancePayment)}</span>
-                                </div>
-                                {record.courierSettlementDate && (
-                                  <div>
-                                    <span className="text-muted-foreground block text-[10px]">Settlement</span>
-                                    <span className="font-medium">
-                                      {formatPkDate(record.courierSettlementDate)}
-                                    </span>
-                                  </div>
+                      return (
+                        <>
+                          <TableRow
+                            key={record.id}
+                            data-testid={`cod-row-${record.id}`}
+                            className={isExpanded ? "border-b-0" : ""}
+                          >
+                            <TableCell>
+                              <Checkbox
+                                checked={selectedRecords.includes(record.id)}
+                                onCheckedChange={(checked) => handleSelectRecord(record.id, !!checked)}
+                                disabled={record.status !== "pending"}
+                                data-testid={`checkbox-${record.id}`}
+                              />
+                            </TableCell>
+                            <TableCell className="font-mono text-sm">
+                              {record.trackingNumber || "-"}
+                            </TableCell>
+                            <TableCell className="capitalize">{record.courierName}</TableCell>
+                            <TableCell className="text-right font-medium">
+                              PKR {Number(record.codAmount).toLocaleString()}
+                            </TableCell>
+                            <TableCell className="text-right text-muted-foreground">
+                              {formatPKR(record.courierFee)}
+                            </TableCell>
+                            <TableCell className="text-right font-medium">
+                              {formatPKR(record.netAmount)}
+                            </TableCell>
+                            <TableCell>{getStatusBadge(record.status || "pending")}</TableCell>
+                            <TableCell>
+                              {getCourierPaymentBadge(record.courierPaymentStatus)}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground text-sm">
+                              <div className="flex items-center gap-1">
+                                <span>{record.courierPaymentRef || record.courierSettlementRef || "-"}</span>
+                                {record.courierSlipLink && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <a
+                                        href={record.courierSlipLink}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-muted-foreground hover-elevate"
+                                        data-testid={`link-slip-${record.id}`}
+                                      >
+                                        <ExternalLink className="w-3.5 h-3.5" />
+                                      </a>
+                                    </TooltipTrigger>
+                                    <TooltipContent>View payment slip</TooltipContent>
+                                  </Tooltip>
                                 )}
                               </div>
                             </TableCell>
+                            <TableCell className="text-muted-foreground text-xs">
+                              {record.lastSyncedAt
+                                ? formatPkDateTime24(record.lastSyncedAt)
+                                : "-"}
+                            </TableCell>
+                            <TableCell>
+                              {hasFinancials && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => setExpandedRow(isExpanded ? null : record.id)}
+                                  data-testid={`button-expand-${record.id}`}
+                                >
+                                  <Receipt className="w-4 h-4" />
+                                </Button>
+                              )}
+                            </TableCell>
                           </TableRow>
-                        )}
-                      </>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between py-2">
-                <p className="text-xs text-muted-foreground">
-                  {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, data?.total ?? 0)} of {data?.total}
-                </p>
-                <div className="flex items-center gap-1.5">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setPage(page - 1)}
-                    disabled={page === 1}
-                  >
-                    <ChevronLeft className="w-3.5 h-3.5" />
-                  </Button>
-                  <span className="text-xs text-muted-foreground">
-                    {page}/{totalPages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setPage(page + 1)}
-                    disabled={page >= totalPages}
-                  >
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </Button>
-                </div>
+                          {isExpanded && hasFinancials && (
+                            <TableRow key={`${record.id}-details`} className="bg-muted/30">
+                              <TableCell colSpan={11}>
+                                <div className="py-2 px-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4 text-sm">
+                                  <div>
+                                    <span className="text-muted-foreground block text-xs">Txn Fee</span>
+                                    <span className="font-medium">{formatPKR(record.transactionFee)}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground block text-xs">Txn Tax</span>
+                                    <span className="font-medium">{formatPKR(record.transactionTax)}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground block text-xs">Reversal Fee</span>
+                                    <span className="font-medium">{formatPKR(record.reversalFee)}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground block text-xs">Reversal Tax</span>
+                                    <span className="font-medium">{formatPKR(record.reversalTax)}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground block text-xs">Upfront Payment</span>
+                                    <span className="font-medium">{formatPKR(record.upfrontPayment)}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground block text-xs">Reserve Payment</span>
+                                    <span className="font-medium">{formatPKR(record.reservePayment)}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground block text-xs">Balance Payment</span>
+                                    <span className="font-medium">{formatPKR(record.balancePayment)}</span>
+                                  </div>
+                                  {record.courierSettlementDate && (
+                                    <div>
+                                      <span className="text-muted-foreground block text-xs">Settlement Date</span>
+                                      <span className="font-medium">
+                                        {formatPkDate(record.courierSettlementDate)}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
               </div>
-            )}
-          </>
-        ) : (
-          <div className="text-center py-10">
-            <DollarSign className="w-8 h-8 text-muted-foreground/50 mx-auto mb-2" />
-            <h3 className="text-sm font-medium mb-0.5">No COD records found</h3>
-            <p className="text-xs text-muted-foreground">
-              {search || statusFilter !== "all"
-                ? "Try adjusting your filters"
-                : "COD records will appear here when deliveries are completed"}
-            </p>
-          </div>
-        )}
-      </div>
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between p-4 border-t">
+                  <p className="text-sm text-muted-foreground">
+                    Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, data?.total ?? 0)} of {data?.total} records
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage(page - 1)}
+                      disabled={page === 1}
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </Button>
+                    <span className="text-sm">
+                      Page {page} of {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage(page + 1)}
+                      disabled={page >= totalPages}
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="text-center py-16">
+              <DollarSign className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
+              <h3 className="font-medium mb-1">No COD records found</h3>
+              <p className="text-sm text-muted-foreground">
+                {search || statusFilter !== "all"
+                  ? "Try adjusting your filters"
+                  : "COD records will appear here when deliveries are completed"}
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Dialog open={isReconcileDialogOpen} onOpenChange={setIsReconcileDialogOpen}>
         <DialogContent>
@@ -657,24 +693,23 @@ export default function CodReconciliationPage() {
               Mark {selectedRecords.length} record(s) as received. Optionally add a settlement reference.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3 py-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="settlementRef" className="text-xs">Settlement Reference (Optional)</Label>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="settlementRef">Settlement Reference (Optional)</Label>
               <Input
                 id="settlementRef"
                 placeholder="e.g., Bank transfer ref or courier settlement ID"
                 value={settlementRef}
                 onChange={(e) => setSettlementRef(e.target.value)}
-                className="h-8 text-xs"
                 data-testid="input-settlement-ref"
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setIsReconcileDialogOpen(false)}>
+            <Button variant="outline" onClick={() => setIsReconcileDialogOpen(false)}>
               Cancel
             </Button>
-            <Button size="sm" onClick={handleReconcile} disabled={reconcileMutation.isPending} data-testid="button-confirm-reconcile">
+            <Button onClick={handleReconcile} disabled={reconcileMutation.isPending} data-testid="button-confirm-reconcile">
               {reconcileMutation.isPending ? "Processing..." : "Confirm Reconciliation"}
             </Button>
           </DialogFooter>

@@ -296,18 +296,18 @@ function ActivityTimeline({ auditLog, changeLog }: { auditLog: any[] | undefined
   const hasMore = timeline.length > COLLAPSED_COUNT;
 
   return (
-    <div>
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <h3 className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-          <History className="w-3.5 h-3.5" />
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+        <CardTitle className="text-lg flex items-center gap-2">
+          <History className="w-5 h-5" />
           Activity History
-        </h3>
-        <span className="text-[10px] text-muted-foreground">{timeline.length}</span>
-      </div>
-      <div>
+        </CardTitle>
+        <Badge variant="secondary" className="text-xs">{timeline.length}</Badge>
+      </CardHeader>
+      <CardContent>
         <div className="relative" data-testid="audit-log-list">
-          <div className="absolute left-3 top-0 bottom-0 w-px bg-border" />
-          <div className="space-y-2.5">
+          <div className="absolute left-4 top-0 bottom-0 w-px bg-border" />
+          <div className="space-y-4">
             {visible.map((entry: any, idx: number) => {
               const Icon = getActivityIcon(entry);
               const colorCls = getActivityColor(entry);
@@ -316,13 +316,13 @@ function ActivityTimeline({ auditLog, changeLog }: { auditLog: any[] | undefined
               const timeStr = entry.createdAt ? formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true }) : "";
 
               return (
-                <div key={`${entry._type}-${entry.id || idx}`} className="flex items-start gap-2.5 relative" data-testid={`activity-entry-${idx}`}>
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 z-10 ${colorCls}`}>
-                    <Icon className="w-3 h-3" />
+                <div key={`${entry._type}-${entry.id || idx}`} className="flex items-start gap-3 relative" data-testid={`activity-entry-${idx}`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 z-10 ${colorCls}`}>
+                    <Icon className="w-3.5 h-3.5" />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-xs font-medium">{label}</span>
+                  <div className="flex-1 min-w-0 pt-0.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-medium">{label}</span>
                       {actorDisplay && (
                         <span className="text-xs text-muted-foreground flex items-center gap-1">
                           <UserCircle className="w-3 h-3" />
@@ -374,7 +374,7 @@ function ActivityTimeline({ auditLog, changeLog }: { auditLog: any[] | undefined
                     {entry.reason && entry._type === "status" && (
                       <p className="text-xs text-muted-foreground mt-0.5 break-words">{entry.reason}</p>
                     )}
-                    <p className="text-[10px] text-muted-foreground/60">{timeStr}</p>
+                    <p className="text-xs text-muted-foreground/60 mt-0.5">{timeStr}</p>
                   </div>
                 </div>
               );
@@ -385,25 +385,25 @@ function ActivityTimeline({ auditLog, changeLog }: { auditLog: any[] | undefined
           <Button
             variant="ghost"
             size="sm"
-            className="w-full mt-2 text-xs"
+            className="w-full mt-3"
             onClick={() => setExpanded(!expanded)}
             data-testid="button-toggle-activity"
           >
             {expanded ? (
               <>
-                <ChevronUp className="w-3.5 h-3.5 mr-1" />
+                <ChevronUp className="w-4 h-4 mr-1" />
                 Show Less
               </>
             ) : (
               <>
-                <ChevronDown className="w-3.5 h-3.5 mr-1" />
+                <ChevronDown className="w-4 h-4 mr-1" />
                 Show All ({timeline.length})
               </>
             )}
           </Button>
         )}
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -462,19 +462,19 @@ function CourierTrackingJourney({ orderId, order }: { orderId: string; order: Or
   if (!hasCourier) {
     return (
       <Card>
-        <CardHeader className="px-4 py-3">
-          <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <Truck className="w-4 h-4" />
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Truck className="w-5 h-5" />
             Shipment Tracking
           </CardTitle>
         </CardHeader>
-        <CardContent className="px-4 pb-4">
-          <div className="text-center py-6">
-            <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center mx-auto mb-2">
-              <Truck className="w-5 h-5 text-muted-foreground/40" />
+        <CardContent>
+          <div className="text-center py-8">
+            <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto mb-3">
+              <Truck className="w-6 h-6 text-muted-foreground/40" />
             </div>
-            <p className="text-xs font-medium">No courier assigned yet</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
+            <p className="text-sm font-medium">No courier assigned yet</p>
+            <p className="text-xs text-muted-foreground mt-1">
               Book this order with a courier to see tracking updates.
             </p>
           </div>
@@ -496,11 +496,11 @@ function CourierTrackingJourney({ orderId, order }: { orderId: string; order: Or
 
   return (
     <Card>
-      <CardHeader className="px-4 py-3 pb-2">
+      <CardHeader className="pb-2">
         <div className="flex items-center justify-between gap-2 flex-wrap">
-          <div className="flex items-center gap-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Truck className="w-4 h-4" />
+          <div className="flex items-center gap-3">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Truck className="w-5 h-5" />
               Tracking
             </CardTitle>
           </div>
@@ -523,9 +523,9 @@ function CourierTrackingJourney({ orderId, order }: { orderId: string; order: Or
           </div>
         </div>
       </CardHeader>
-      <CardContent className="px-4 pb-4 space-y-3">
+      <CardContent className="space-y-4">
         {tracking?.rawStatus && currentStage && (
-          <div className={`flex items-center gap-2.5 rounded-md px-2.5 py-2 ${currentStage.lightBg}`} data-testid="tracking-current-status">
+          <div className={`flex items-center gap-3 rounded-md px-3 py-2.5 ${currentStage.lightBg}`} data-testid="tracking-current-status">
             <CircleDot className={`w-4 h-4 shrink-0 ${currentStage.color}`} />
             <div className="flex-1 min-w-0">
               <p className={`text-sm font-medium ${currentStage.color}`}>{tracking.rawStatus}</p>
@@ -962,17 +962,17 @@ export default function OrderDetails() {
 
   if (isLoading) {
     return (
-      <div className="space-y-3">
-        <div className="flex items-center gap-3">
-          <Skeleton className="h-9 w-9" />
-          <Skeleton className="h-6 w-40" />
+      <div className="space-y-6">
+        <div className="flex items-center gap-4">
+          <Skeleton className="h-10 w-10" />
+          <Skeleton className="h-8 w-48" />
         </div>
-        <div className="grid lg:grid-cols-3 gap-3">
-          <div className="lg:col-span-2 space-y-3">
-            <Skeleton className="h-56 w-full" />
-            <Skeleton className="h-40 w-full" />
+        <div className="grid lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-6">
+            <Skeleton className="h-64 w-full" />
+            <Skeleton className="h-48 w-full" />
           </div>
-          <Skeleton className="h-80 w-full" />
+          <Skeleton className="h-96 w-full" />
         </div>
       </div>
     );
@@ -980,10 +980,10 @@ export default function OrderDetails() {
 
   if (!order) {
     return (
-      <div className="text-center py-12">
-        <Package className="w-10 h-10 text-muted-foreground/50 mx-auto mb-3" />
-        <h3 className="text-sm font-medium mb-1">Order not found</h3>
-        <p className="text-xs text-muted-foreground mb-3">
+      <div className="text-center py-16">
+        <Package className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
+        <h3 className="font-medium mb-1">Order not found</h3>
+        <p className="text-sm text-muted-foreground mb-4">
           The order you're looking for doesn't exist or has been deleted.
         </p>
         <Button variant="outline" onClick={() => window.history.back()} data-testid="button-back-orders-error">
@@ -998,15 +998,16 @@ export default function OrderDetails() {
   const lineItems = order.lineItems as Array<{ name: string; quantity: number; price: string; sku?: string; image?: string | null; variantTitle?: string | null; productId?: string | null }> | null;
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-        <div className="flex items-center gap-3">
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" data-testid="button-back-orders" onClick={() => window.history.back()}>
-              <ArrowLeft className="w-4 h-4" />
+              <ArrowLeft className="w-5 h-5" />
             </Button>
           <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-lg font-semibold">Order {String(order.orderNumber).replace(/^#/, '')}</h1>
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="text-xl font-semibold">Order {String(order.orderNumber).replace(/^#/, '')}</h1>
               {(order as any).orderSource === "shopify_draft_order" && (
                 <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-green-100 dark:bg-green-900 border border-green-300 dark:border-green-700" title="Custom Order" data-testid="badge-draft-order">
                   <PenLine className="w-3 h-3 text-green-700 dark:text-green-300" />
@@ -1065,11 +1066,12 @@ export default function OrderDetails() {
         </div>
       )}
 
-      <div className="grid lg:grid-cols-3 gap-3">
-        <div className="lg:col-span-2 space-y-3">
+      <div className="grid lg:grid-cols-3 gap-4">
+        {/* Main Content */}
+        <div className="lg:col-span-2 space-y-4">
           <Card>
-            <CardHeader className="px-4 py-3 flex flex-row items-center justify-between gap-2 space-y-0">
-              <CardTitle className="text-sm font-medium flex items-center gap-2 flex-wrap">
+            <CardHeader className="pb-3 flex flex-row items-center justify-between gap-2 space-y-0">
+              <CardTitle className="text-lg flex items-center gap-2 flex-wrap">
                 Order Summary
                 {isLocked && (
                   <Badge variant="outline" className="text-xs gap-1" data-testid="badge-locked-summary">
@@ -1084,7 +1086,7 @@ export default function OrderDetails() {
                 </Button>
               )}
             </CardHeader>
-            <CardContent className="px-4 pb-4 space-y-2.5">
+            <CardContent className="space-y-3">
               {isEditingSummary ? (
                 <>
                   <div className="space-y-2">
@@ -1182,18 +1184,18 @@ export default function OrderDetails() {
               ) : (
                 <>
                   {lineItems && lineItems.length > 0 ? (
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       {lineItems.map((item, index) => (
-                        <div key={index} className="flex items-center gap-2.5 py-0.5" data-testid={`line-item-${index}`}>
-                          <div className="w-9 h-9 rounded-md border bg-muted flex items-center justify-center overflow-hidden shrink-0">
+                        <div key={index} className="flex items-center gap-3 py-1" data-testid={`line-item-${index}`}>
+                          <div className="w-12 h-12 rounded-md border bg-muted flex items-center justify-center overflow-hidden shrink-0">
                             {item.image ? (
                               <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
                             ) : (
-                              <Package className="w-4 h-4 text-muted-foreground" />
+                              <Package className="w-5 h-5 text-muted-foreground" />
                             )}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="font-medium text-xs leading-tight">{item.name}</p>
+                            <p className="font-medium text-sm leading-tight">{item.name}</p>
                             {item.variantTitle && (
                               <p className="text-xs text-muted-foreground">{item.variantTitle}</p>
                             )}
@@ -1202,10 +1204,10 @@ export default function OrderDetails() {
                             )}
                           </div>
                           <div className="text-right shrink-0">
-                            <p className="text-xs font-medium">PKR {Number(item.price).toLocaleString()}</p>
-                            <p className="text-[10px] text-muted-foreground">x {item.quantity}</p>
+                            <p className="text-sm font-medium">PKR {Number(item.price).toLocaleString()}</p>
+                            <p className="text-xs text-muted-foreground">x {item.quantity}</p>
                           </div>
-                          <p className="text-xs font-semibold shrink-0 w-20 text-right">PKR {(Number(item.price) * item.quantity).toLocaleString()}</p>
+                          <p className="text-sm font-semibold shrink-0 w-24 text-right">PKR {(Number(item.price) * item.quantity).toLocaleString()}</p>
                         </div>
                       ))}
                     </div>
@@ -1213,7 +1215,7 @@ export default function OrderDetails() {
                     <p className="text-sm text-muted-foreground">No line items</p>
                   )}
                   <Separator />
-                  <div className="space-y-1 text-xs">
+                  <div className="space-y-1.5 text-sm">
                     <div className="flex justify-between gap-2">
                       <span className="text-muted-foreground">Subtotal</span>
                       <span data-testid="text-subtotal">PKR {Number(order.subtotalAmount || 0).toLocaleString()}</span>
@@ -1229,19 +1231,19 @@ export default function OrderDetails() {
                       </div>
                     )}
                     <Separator />
-                    <div className="flex justify-between gap-2 font-semibold text-sm">
+                    <div className="flex justify-between gap-2 font-semibold text-base">
                       <span>Total</span>
                       <span data-testid="text-total">PKR {Number(order.totalAmount).toLocaleString()}</span>
                     </div>
                   </div>
                   <Separator />
-                  <div className="flex items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center justify-between gap-2 text-sm">
                     <span className="text-muted-foreground">Payment</span>
                     <Badge variant="outline" className="capitalize">
                       {order.paymentMethod || "COD"}
                     </Badge>
                   </div>
-                  <div className="flex items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center justify-between gap-2 text-sm">
                     <span className="text-muted-foreground">Status</span>
                     <Badge
                       className={
@@ -1261,20 +1263,21 @@ export default function OrderDetails() {
           {/* Courier Tracking Journey */}
           <CourierTrackingJourney orderId={id!} order={order} />
 
+          {/* Remarks */}
           <Card>
-            <CardHeader className="px-4 py-3">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <MessageSquare className="w-4 h-4" />
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <MessageSquare className="w-5 h-5" />
                 Remarks
               </CardTitle>
             </CardHeader>
-            <CardContent className="px-4 pb-4 space-y-3">
+            <CardContent className="space-y-4">
               <div className="flex gap-2">
                 <Textarea
                   placeholder="Add a remark about this order..."
                   value={newRemark}
                   onChange={(e) => setNewRemark(e.target.value)}
-                  className="min-h-[60px]"
+                  className="min-h-[80px]"
                   data-testid="input-remark"
                 />
               </div>
@@ -1300,11 +1303,11 @@ export default function OrderDetails() {
                 </Button>
               </div>
               <Separator />
-              <div className="space-y-2.5">
+              <div className="space-y-4">
                 {order.remarks && order.remarks.length > 0 ? (
                   order.remarks.map((remark) => (
-                    <div key={remark.id} className="flex gap-2.5">
-                      <Avatar className="h-6 w-6">
+                    <div key={remark.id} className="flex gap-3">
+                      <Avatar className="h-8 w-8">
                         <AvatarFallback className="bg-primary/10 text-primary text-xs">
                           U
                         </AvatarFallback>
@@ -1323,7 +1326,7 @@ export default function OrderDetails() {
                     </div>
                   ))
                 ) : (
-                  <p className="text-xs text-muted-foreground text-center py-3">
+                  <p className="text-sm text-muted-foreground text-center py-4">
                     No remarks yet. Add one above.
                   </p>
                 )}
@@ -1334,22 +1337,22 @@ export default function OrderDetails() {
           {/* WhatsApp Customer Responses */}
           {(waResponses && waResponses.length > 0) && (
             <Card data-testid="card-whatsapp-responses">
-              <CardHeader className="px-4 py-3">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <MessageCircle className="w-3.5 h-3.5 text-green-500" />
-                  WhatsApp Responses
-                  <span className="text-[10px] text-muted-foreground">{waResponses.length}</span>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <MessageCircle className="w-4 h-4 text-green-500" />
+                  Customer WhatsApp Responses
+                  <Badge variant="secondary" className="text-xs ml-1">{waResponses.length}</Badge>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="px-4 pb-4 space-y-2.5">
+              <CardContent className="space-y-3">
                 {waResponses.map((resp: any) => (
                   <div
                     key={resp.id}
-                    className="flex gap-2.5 items-start p-2.5 rounded-md bg-muted/40 border"
+                    className="flex gap-3 items-start p-3 rounded-lg bg-muted/40 border"
                     data-testid={`wa-response-${resp.id}`}
                   >
-                    <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="white">
+                    <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="white">
                         <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
                       </svg>
                     </div>
@@ -1384,11 +1387,12 @@ export default function OrderDetails() {
           <ActivityTimeline auditLog={auditLog} changeLog={order?.changeLog} />
         </div>
 
-        <div className="space-y-3">
+        {/* Sidebar */}
+        <div className="space-y-4">
           <Card>
-            <CardHeader className="px-4 py-3 flex flex-row items-center justify-between gap-2 space-y-0">
-              <CardTitle className="text-sm font-medium flex items-center gap-2 flex-wrap">
-                <User className="w-4 h-4" />
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+              <CardTitle className="text-lg flex items-center gap-2 flex-wrap">
+                <User className="w-5 h-5" />
                 Customer
                 {isLocked && (
                   <Badge variant="outline" className="text-xs gap-1" data-testid="badge-locked-customer">
@@ -1403,38 +1407,38 @@ export default function OrderDetails() {
                 </Button>
               )}
             </CardHeader>
-            <CardContent className="px-4 pb-4 space-y-2.5">
+            <CardContent className="space-y-3">
               {isEditingCustomer ? (
                 <>
-                  <div className="space-y-1.5">
-                    <div className="space-y-0.5">
-                      <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Name</label>
+                  <div className="space-y-2">
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Name</label>
                       <Input value={editCustomerName} onChange={(e) => setEditCustomerName(e.target.value)} data-testid="input-edit-customer-name" />
                     </div>
-                    <div className="space-y-0.5">
-                      <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Phone</label>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Phone</label>
                       <Input value={editCustomerPhone} onChange={(e) => setEditCustomerPhone(e.target.value)} data-testid="input-edit-customer-phone" />
                     </div>
-                    <div className="space-y-0.5">
-                      <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Email</label>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Email</label>
                       <Input value={editCustomerEmail} onChange={(e) => setEditCustomerEmail(e.target.value)} data-testid="input-edit-customer-email" />
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-0.5">
-                        <label className="text-[11px] text-muted-foreground uppercase tracking-wider">City</label>
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">City</label>
                         <Input value={editCity} onChange={(e) => setEditCity(e.target.value)} data-testid="input-edit-city" />
                       </div>
-                      <div className="space-y-0.5">
-                        <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Province</label>
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">Province</label>
                         <Input value={editProvince} onChange={(e) => setEditProvince(e.target.value)} data-testid="input-edit-province" />
                       </div>
                     </div>
-                    <div className="space-y-0.5">
-                      <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Postal Code</label>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Postal Code</label>
                       <Input value={editPostalCode} onChange={(e) => setEditPostalCode(e.target.value)} data-testid="input-edit-postal-code" />
                     </div>
-                    <div className="space-y-0.5">
-                      <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Shipping Address</label>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Shipping Address</label>
                       <Textarea value={editShippingAddress} onChange={(e) => setEditShippingAddress(e.target.value)} className="min-h-[60px]" data-testid="input-edit-shipping-address" />
                     </div>
                   </div>
@@ -1449,28 +1453,28 @@ export default function OrderDetails() {
                 </>
               ) : (
                 <>
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-2">
-                      <User className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                      <span className="text-xs font-medium" data-testid="text-customer-name">{order.customerName}</span>
+                  <div className="space-y-2.5">
+                    <div className="flex items-center gap-2.5">
+                      <User className="w-4 h-4 text-muted-foreground shrink-0" />
+                      <span className="text-sm font-medium" data-testid="text-customer-name">{order.customerName}</span>
                     </div>
                     {order.customerPhone && (
-                      <div className="flex items-center gap-2">
-                        <Phone className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                        <span className="text-xs" data-testid="text-customer-phone">{order.customerPhone}</span>
+                      <div className="flex items-center gap-2.5">
+                        <Phone className="w-4 h-4 text-muted-foreground shrink-0" />
+                        <span className="text-sm" data-testid="text-customer-phone">{order.customerPhone}</span>
                       </div>
                     )}
                     {order.customerEmail && (
-                      <div className="flex items-center gap-2">
-                        <Mail className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                        <span className="text-xs truncate" data-testid="text-customer-email">{order.customerEmail}</span>
+                      <div className="flex items-center gap-2.5">
+                        <Mail className="w-4 h-4 text-muted-foreground shrink-0" />
+                        <span className="text-sm truncate" data-testid="text-customer-email">{order.customerEmail}</span>
                       </div>
                     )}
                   </div>
                   <Separator />
-                  <div className="space-y-1">
-                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Shipping Address</p>
-                    <div className="text-xs space-y-0.5">
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Shipping Address</p>
+                    <div className="text-sm space-y-0.5">
                       <p data-testid="text-customer-name-address">{order.customerName}</p>
                       {order.shippingAddress && <p className="text-muted-foreground" data-testid="text-shipping-address">{order.shippingAddress}</p>}
                       <p className="text-muted-foreground" data-testid="text-customer-location">{order.city}{order.province ? `, ${order.province}` : ""}</p>
@@ -1486,16 +1490,16 @@ export default function OrderDetails() {
           {/* Customer Order History */}
           {customerHistoryData && customerHistoryData.orderCount > 1 && (
             <Card data-testid="card-customer-history">
-              <CardHeader className="px-4 py-3 pb-2">
-                <CardTitle className="text-xs font-medium flex items-center gap-2">
-                  <History className="w-3.5 h-3.5" />
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <History className="w-4 h-4" />
                   Order History
                   <Badge className="text-[10px] px-1.5 py-0 bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 border-blue-200 dark:border-blue-700">
                     {customerHistoryData.orderCount} orders
                   </Badge>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="px-4 pb-4 pt-0">
+              <CardContent className="pt-0">
                 <div className="space-y-1.5 max-h-[240px] overflow-y-auto">
                   {customerHistoryData.orders
                     .filter((o: any) => String(o.id) !== String(id))
@@ -1533,10 +1537,11 @@ export default function OrderDetails() {
             </Card>
           )}
 
+          {/* Payments */}
           <Card>
-            <CardHeader className="px-4 py-3">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <CreditCard className="w-4 h-4" />
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <CreditCard className="w-5 h-5" />
                 Payments
                 {paymentData?.codPaymentStatus && paymentData.codPaymentStatus !== "UNPAID" && (
                   <Badge
@@ -1552,8 +1557,8 @@ export default function OrderDetails() {
                 )}
               </CardTitle>
             </CardHeader>
-            <CardContent className="px-4 pb-4 space-y-2.5">
-              <div className="space-y-1 text-xs">
+            <CardContent className="space-y-3">
+              <div className="space-y-1.5 text-sm">
                 <div className="flex justify-between gap-2">
                   <span className="text-muted-foreground">Total Amount</span>
                   <span className="font-medium" data-testid="text-payment-total">
@@ -1687,14 +1692,15 @@ export default function OrderDetails() {
             </CardContent>
           </Card>
 
+          {/* Tags */}
           <Card>
-            <CardHeader className="px-4 py-3">
-              <CardTitle className="text-sm font-medium flex items-center gap-2" data-testid="text-tags-title">
-                <Tag className="w-4 h-4" />
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2" data-testid="text-tags-title">
+                <Tag className="w-5 h-5" />
                 Tags
               </CardTitle>
             </CardHeader>
-            <CardContent className="px-4 pb-4 space-y-2.5">
+            <CardContent className="space-y-3">
               {(() => {
                 const tags = Array.isArray(order.tags) ? (order.tags as string[]) : [];
                 const tc = tagConfig || { confirm: "Robo-Confirm", pending: "Robo-Pending", cancel: "Robo-Cancel" };
@@ -1766,14 +1772,14 @@ export default function OrderDetails() {
 
           {order.courierTracking && (
             <Card>
-              <CardHeader className="px-4 py-3">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <Printer className="w-4 h-4" />
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Printer className="w-5 h-5" />
                   Shipping & Print
                 </CardTitle>
               </CardHeader>
-              <CardContent className="px-4 pb-4 space-y-3">
-                <div className="space-y-1 text-xs">
+              <CardContent className="space-y-4">
+                <div className="space-y-1.5 text-sm">
                   <div className="flex justify-between gap-2">
                     <span className="text-muted-foreground">Courier</span>
                     <span className="font-medium capitalize" data-testid="text-print-courier">{order.courierName || "-"}</span>

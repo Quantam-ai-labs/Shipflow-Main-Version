@@ -64,7 +64,7 @@ export function ProductImagesCell({ lineItems, orderId }: ProductImagesCellProps
         {visible.map((item, i) => (
           <div key={i} className="flex items-center gap-1 flex-shrink-0">
             <div
-              className="w-6 h-6 rounded border border-border bg-muted/50 overflow-hidden flex-shrink-0 group-hover:border-primary/50 transition-colors"
+              className="w-7 h-7 rounded border border-border bg-muted/50 overflow-hidden flex-shrink-0 group-hover:border-primary/50 transition-colors"
             >
               {item.image ? (
                 <img
@@ -75,7 +75,7 @@ export function ProductImagesCell({ lineItems, orderId }: ProductImagesCellProps
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
-                  <Package className="w-3 h-3 text-muted-foreground" />
+                  <Package className="w-3.5 h-3.5 text-muted-foreground" />
                 </div>
               )}
             </div>
@@ -90,7 +90,7 @@ export function ProductImagesCell({ lineItems, orderId }: ProductImagesCellProps
           </div>
         ))}
         {remaining > 0 && (
-          <div className="w-6 h-6 rounded border border-border bg-muted/50 flex items-center justify-center flex-shrink-0 group-hover:border-primary/50 transition-colors">
+          <div className="w-7 h-7 rounded border border-border bg-muted/50 flex items-center justify-center flex-shrink-0 group-hover:border-primary/50 transition-colors">
             <span className="text-[10px] font-medium text-muted-foreground">+{remaining}</span>
           </div>
         )}

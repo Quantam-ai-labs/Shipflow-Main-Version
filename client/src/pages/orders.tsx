@@ -102,12 +102,12 @@ function getStatusBadge(status: string | null, hasCourierTracking: boolean, rawS
   const postBookedStages = ['BOOKED', 'FULFILLED', 'DELIVERED', 'RETURN'];
   const isPostBooked = workflowStatus && postBookedStages.includes(workflowStatus);
   if (!hasCourierTracking && isPostBooked && (!status || status === 'Unfulfilled' || status === 'pending' || status === 'BOOKED' || status === 'Awaiting Pickup')) {
-    return <span className="text-muted-foreground text-[10px]" data-testid="badge-status-none">—</span>;
+    return <span className="text-muted-foreground text-xs" data-testid="badge-status-none">—</span>;
   }
   const displayStatus = (!hasCourierTracking && (!status || status === 'pending')) ? 'Unfulfilled' : (status || 'Unfulfilled');
   const colorClass = getStatusColor(displayStatus);
   const label = getStatusLabel(displayStatus);
-  return <Badge className={`${colorClass} text-[10px] font-medium px-1.5 py-0`} data-testid={`badge-status-${displayStatus.toLowerCase().replace(/\s+/g, '-')}`} title={rawStatus ? `Courier: ${rawStatus}` : undefined}>{label}</Badge>;
+  return <Badge className={`${colorClass} text-xs font-medium`} data-testid={`badge-status-${displayStatus.toLowerCase().replace(/\s+/g, '-')}`} title={rawStatus ? `Courier: ${rawStatus}` : undefined}>{label}</Badge>;
 }
 
 interface OrdersResponse {
@@ -195,6 +195,7 @@ export default function Orders() {
     });
   }, [orders, allCurrentPageSelected]);
 
+  // Fetch unique cities from the backend for filter dropdown
   const { data: citiesData } = useQuery<{ cities: string[] }>({
     queryKey: ["/api/orders/cities"],
     queryFn: async () => {
@@ -372,36 +373,41 @@ export default function Orders() {
   return (
     <div className="h-full flex flex-col">
       {showMissingDataWarning && (
-        <div className="mx-3 mt-2 px-3 py-1.5 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-md flex items-center gap-2 text-xs" data-testid="banner-missing-customer-data">
-          <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-          <span className="text-amber-800 dark:text-amber-200">Customer data missing.</span>
-          <Link href="/settings/shopify" className="underline text-amber-700 dark:text-amber-300">Update Shopify permissions</Link>
+        <div className="mx-4 mt-4 p-3 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg flex items-start gap-3" data-testid="banner-missing-customer-data">
+          <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+          <div className="text-sm">
+            <span className="font-medium text-amber-800 dark:text-amber-200">Customer data missing for some orders.</span>{" "}
+            <Link href="/settings/shopify" className="underline text-amber-700 dark:text-amber-300">Update Shopify permissions</Link> and re-sync.
+          </div>
         </div>
       )}
       
-      <div className="flex items-center justify-between gap-3 px-3 py-1.5 border-b bg-background sticky top-0 z-20">
-        <div className="flex items-center gap-2">
-          <h1 className="text-sm font-semibold" data-testid="heading-orders">Orders</h1>
+      <div className="flex items-center justify-between gap-4 p-4 border-b bg-background sticky top-0 z-10">
+        <div className="flex items-center gap-3">
+          <h1 className="text-lg font-semibold" data-testid="heading-orders">Orders</h1>
           {data?.total !== undefined && (
-            <span className="text-xs text-muted-foreground tabular-nums">{data.total.toLocaleString()}</span>
+            <Badge variant="secondary" className="font-normal">
+              {data.total.toLocaleString()} total
+            </Badge>
           )}
-          {isFetching && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
+          {isFetching && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
         </div>
         
-        <div className="flex items-center gap-1.5 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
           <div className="relative">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
-              placeholder="Search..."
+              placeholder="Search orders..."
               value={search}
               onChange={(e) => handleSearchChange(e.target.value)}
-              className="pl-7 w-[150px] h-7 text-xs"
+              className="pl-8 w-[180px] h-9"
               data-testid="input-search-orders"
             />
           </div>
           
           <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
-            <SelectTrigger className="w-[140px] h-7 text-xs" data-testid="select-status-filter">
+            <SelectTrigger className="w-[180px] h-9" data-testid="select-status-filter">
+              <Filter className="w-4 h-4 mr-1" />
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
@@ -414,7 +420,8 @@ export default function Orders() {
           </Select>
           
           <Select value={courierFilter} onValueChange={(v) => { setCourierFilter(v); setPage(1); }}>
-            <SelectTrigger className="w-[110px] h-7 text-xs" data-testid="select-courier-filter">
+            <SelectTrigger className="w-[130px] h-9" data-testid="select-courier-filter">
+              <Truck className="w-4 h-4 mr-1" />
               <SelectValue placeholder="Courier" />
             </SelectTrigger>
             <SelectContent>
@@ -423,106 +430,119 @@ export default function Orders() {
               ))}
             </SelectContent>
           </Select>
-
-          <DateRangePicker
-            dateRange={dateRange}
-            onDateRangeChange={(range) => { setDateRange(range); setPage(1); }}
-          />
           
           {hasActiveFilters && (
-            <Button variant="ghost" size="sm" onClick={clearAllFilters} className="h-7 text-xs text-muted-foreground px-2">
-              <X className="w-3 h-3 mr-0.5" /> Clear
+            <Button variant="ghost" size="sm" onClick={clearAllFilters} className="h-9 text-muted-foreground">
+              <X className="w-4 h-4 mr-1" /> Clear
             </Button>
           )}
           
-          <div className="h-4 w-px bg-border mx-0.5" />
+          <div className="h-6 w-px bg-border mx-1" />
           
           <Button 
-            variant="ghost" 
-            size="icon" 
+            variant="outline" 
+            size="sm" 
             onClick={() => syncCourierStatusMutation.mutate()}
             disabled={syncCourierStatusMutation.isPending}
+            className="h-9"
             data-testid="button-sync-courier-status"
-            title="Sync Courier Status"
           >
             {syncCourierStatusMutation.isPending ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
             ) : (
-              <Truck className="w-3.5 h-3.5" />
+              <Truck className="w-4 h-4 mr-2" />
             )}
+            Sync Status
           </Button>
           
           <Button 
-            variant="ghost" 
-            size="icon" 
+            variant="outline" 
+            size="sm" 
             onClick={() => syncOrdersMutation.mutate()}
             disabled={syncOrdersMutation.isPending}
+            className="h-9"
             data-testid="button-sync-orders"
-            title="Sync Orders"
           >
             {syncOrdersMutation.isPending ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
             ) : (
-              <RefreshCw className="w-3.5 h-3.5" />
+              <RefreshCw className="w-4 h-4 mr-2" />
             )}
+            Sync Orders
           </Button>
 
           {syncStatus?.autoSyncEnabled && (
-            <div className="flex items-center gap-1 text-[10px] text-muted-foreground" data-testid="status-auto-sync">
-              <span className="relative flex h-1.5 w-1.5">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground" data-testid="status-auto-sync">
+              <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
               </span>
               {syncStatus.lastSync?.error ? (
                 <span className="text-destructive">Error</span>
               ) : (
                 <span>Live</span>
               )}
+              {syncStatus.lastSync?.timestamp && !syncStatus.lastSync.error && (
+                <span className="hidden sm:inline">
+                  {(() => {
+                    const secs = Math.round((Date.now() - new Date(syncStatus.lastSync.timestamp).getTime()) / 1000);
+                    if (isNaN(secs) || secs < 0) return '';
+                    return secs < 60 ? `${secs}s ago` : `${Math.round(secs / 60)}m ago`;
+                  })()}
+                </span>
+              )}
             </div>
           )}
           
-          <Button variant="ghost" size="icon" onClick={handleExport} disabled={isExporting} data-testid="button-export-orders" title={selectedIds.size > 0 ? `Export ${selectedIds.size} selected` : "Export"}>
-            {isExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+          <Button variant="outline" size="sm" onClick={handleExport} className="h-9" disabled={isExporting} data-testid="button-export-orders">
+            {isExporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+            {selectedIds.size > 0 ? `Export Selected (${selectedIds.size})` : "Export"}
           </Button>
         </div>
       </div>
 
+      <div className="px-4 py-2 border-b bg-muted/30 flex items-center gap-2 flex-wrap">
+        <DateRangePicker
+          dateRange={dateRange}
+          onDateRangeChange={(range) => { setDateRange(range); setPage(1); }}
+        />
+      </div>
+
       {selectedIds.size > 0 && (
-        <div className="px-3 py-1 border-b bg-primary/5 flex items-center justify-between gap-2" data-testid="selection-indicator">
-          <span className="text-xs text-muted-foreground" data-testid="text-selection-count">
-            {selectedIds.size} selected
+        <div className="px-4 py-2 border-b bg-primary/10 flex items-center justify-between gap-2" data-testid="selection-indicator">
+          <span className="text-sm font-medium" data-testid="text-selection-count">
+            {selectedIds.size} order{selectedIds.size !== 1 ? "s" : ""} selected
           </span>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setSelectedIds(new Set())}
-            className="h-6 text-xs px-2"
             data-testid="button-clear-selection"
           >
-            <X className="w-3 h-3 mr-0.5" />
-            Clear
+            <X className="w-4 h-4 mr-1" />
+            Clear selection
           </Button>
         </div>
       )}
 
       <div className="flex-1 overflow-auto">
         {isLoading ? (
-          <div className="p-3 space-y-1">
+          <div className="p-4 space-y-2">
             {Array.from({ length: 20 }).map((_, i) => (
-              <div key={`skeleton-${i}`} className="flex items-center gap-3 py-1">
-                <Skeleton className="h-4 w-16" />
-                <Skeleton className="h-4 w-20" />
-                <Skeleton className="h-4 w-24 flex-1" />
-                <Skeleton className="h-4 w-16" />
-                <Skeleton className="h-4 w-14" />
+              <div key={`skeleton-${i}`} className="flex items-center gap-4 py-2">
+                <Skeleton className="h-6 w-20" />
+                <Skeleton className="h-6 w-24" />
+                <Skeleton className="h-6 w-28 flex-1" />
+                <Skeleton className="h-6 w-24" />
+                <Skeleton className="h-6 w-20" />
               </div>
             ))}
           </div>
         ) : (
-          <table className="w-full text-xs border-collapse" data-testid="table-orders">
-            <thead className="sticky top-0 bg-muted/80 z-10">
+          <table className="w-full text-sm border-collapse" data-testid="table-orders">
+            <thead className="sticky top-0 bg-muted z-10">
               <tr className="border-b">
-                <th className="py-1 px-1.5 pl-3 w-[32px]">
+                <th className="p-2 pl-4 w-[40px]">
                   <Checkbox
                     checked={allCurrentPageSelected}
                     onCheckedChange={toggleSelectAll}
@@ -530,16 +550,16 @@ export default function Orders() {
                     data-testid="checkbox-select-all"
                   />
                 </th>
-                <th className="py-1 px-1.5 text-left w-[90px]">
+                <th className="text-left p-2 w-[120px]">
                   <div className="flex items-center gap-1">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Status</span>
+                    <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status</span>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <button className={`p-0.5 rounded hover:bg-muted ${statusFilter !== "all" ? "text-primary" : "text-muted-foreground"}`} data-testid="filter-status-dropdown">
-                          <Filter className="w-2.5 h-2.5" />
+                          <Filter className="w-3 h-3" />
                         </button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="start" className="w-[180px] max-h-[300px] overflow-y-auto">
+                      <DropdownMenuContent align="start" className="w-[200px] max-h-[300px] overflow-y-auto">
                         <DropdownMenuItem 
                           onSelect={() => { setStatusFilter("all"); setPage(1); }}
                           className={statusFilter === "all" ? "bg-muted font-medium" : ""}
@@ -568,17 +588,17 @@ export default function Orders() {
                     </DropdownMenu>
                   </div>
                 </th>
-                <th className="py-1 px-1.5 text-left w-[80px] text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Order</th>
-                <th className="py-1 px-1.5 text-left w-[100px]">
+                <th className="text-left p-2 w-[100px] text-xs font-semibold uppercase tracking-wide text-muted-foreground">Order ID</th>
+                <th className="text-left p-2 w-[120px]">
                   <div className="flex items-center gap-1">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">City</span>
+                    <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">City</span>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <button className={`p-0.5 rounded hover:bg-muted ${cityFilter ? "text-primary" : "text-muted-foreground"}`} data-testid="filter-city-dropdown">
-                          <Filter className="w-2.5 h-2.5" />
+                          <Filter className="w-3 h-3" />
                         </button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="start" className="w-[160px] max-h-[300px] overflow-y-auto">
+                      <DropdownMenuContent align="start" className="w-[180px] max-h-[300px] overflow-y-auto">
                         <DropdownMenuItem 
                           onSelect={() => { setCityFilter(""); setPage(1); }} 
                           className={!cityFilter ? "bg-muted font-medium" : ""}
@@ -600,36 +620,37 @@ export default function Orders() {
                     </DropdownMenu>
                   </div>
                 </th>
-                <th className="py-1 px-1.5 text-left w-[150px] text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Customer</th>
-                <th className="py-1 px-1.5 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Address</th>
-                <th className="py-1 px-1.5 text-center w-[36px] text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Qty</th>
-                <th className="py-1 px-1.5 text-right w-[70px] text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Amount</th>
-                <th className="py-1 px-1.5 text-left w-[110px] text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Tags</th>
-                <th className="py-1 px-1.5 text-left w-[120px] text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Remark</th>
-                <th className="w-[28px]"></th>
+                <th className="text-left p-2 w-[160px] text-xs font-semibold uppercase tracking-wide text-muted-foreground">Name</th>
+                <th className="text-left p-2 w-[120px] text-xs font-semibold uppercase tracking-wide text-muted-foreground">Phone</th>
+                <th className="text-left p-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Address</th>
+                <th className="text-center p-2 w-[50px] text-xs font-semibold uppercase tracking-wide text-muted-foreground">Qty</th>
+                <th className="text-right p-2 w-[90px] text-xs font-semibold uppercase tracking-wide text-muted-foreground">Amount</th>
+                <th className="text-left p-2 w-[140px] text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tags</th>
+                <th className="text-left p-2 w-[160px] text-xs font-semibold uppercase tracking-wide text-muted-foreground">Remark</th>
+                <th className="w-[40px]"></th>
               </tr>
             </thead>
             <tbody>
               {orders.length === 0 ? (
                 <tr key="empty-row">
-                  <td colSpan={11} className="text-center py-8">
-                    <Package className="w-8 h-8 mx-auto text-muted-foreground opacity-30 mb-2" />
-                    <p className="text-xs text-muted-foreground">No orders found</p>
+                  <td colSpan={12} className="text-center py-12">
+                    <Package className="w-10 h-10 mx-auto text-muted-foreground opacity-40 mb-3" />
+                    <p className="text-muted-foreground">No orders found</p>
                     {hasActiveFilters && (
-                      <Button variant="ghost" onClick={clearAllFilters} className="mt-1 text-xs text-primary h-7">
+                      <Button variant="ghost" onClick={clearAllFilters} className="mt-2 text-primary">
                         Clear all filters
                       </Button>
                     )}
                   </td>
                 </tr>
               ) : (
-                orders.map((order) => (
+                orders.map((order, idx) => (
                   <tr 
                     key={order.id} 
-                    className="border-b border-border/40 hover:bg-muted/20 transition-colors"
+                    className="border-b border-border/50 hover:bg-muted/30 transition-colors"
                     data-testid={`table-row-order-${order.id}`}
                   >
-                    <td className="py-1 px-1.5 pl-3">
+                    <td className="p-2 pl-4">
                       <Checkbox
                         checked={selectedIds.has(order.id)}
                         onCheckedChange={() => toggleSelect(order.id)}
@@ -637,83 +658,83 @@ export default function Orders() {
                         data-testid={`checkbox-order-${order.id}`}
                       />
                     </td>
-                    <td className="py-1 px-1.5">
+                    <td className="p-2">
                       {getStatusBadge(order.shipmentStatus, !!order.courierTracking, (order as any).courierRawStatus, order.workflowStatus)}
                     </td>
-                    <td className="py-1 px-1.5">
+                    <td className="p-2">
                       <Link 
                         href={`/orders/${order.id}`} 
-                        className="font-medium text-primary hover:underline text-xs"
+                        className="font-medium text-primary hover:underline"
                         data-testid={`link-order-${order.id}`}
                       >
                         {String(order.orderNumber || '').replace(/^#/, '')}
                       </Link>
                     </td>
-                    <td className="py-1 px-1.5 text-muted-foreground truncate max-w-[100px]">
-                      {order.city || <span className="text-muted-foreground/40">-</span>}
+                    <td className="p-2 text-muted-foreground">
+                      {order.city || <span className="text-muted-foreground/50">-</span>}
                     </td>
-                    <td className="py-1 px-1.5 truncate max-w-[150px]" title={`${order.customerName}${order.customerPhone ? ` · ${order.customerPhone}` : ''}`}>
-                      <span className="font-medium">{order.customerName}</span>
-                      {order.customerPhone && (
-                        <span className="text-muted-foreground ml-1 text-[10px] font-mono">{order.customerPhone}</span>
-                      )}
+                    <td className="p-2 font-medium truncate max-w-[160px]" title={order.customerName}>
+                      {order.customerName}
                     </td>
-                    <td className="py-1 px-1.5 text-muted-foreground truncate max-w-[180px]" title={order.shippingAddress || ""}>
-                      {order.shippingAddress || <span className="text-muted-foreground/40">-</span>}
+                    <td className="p-2 text-muted-foreground font-mono text-xs">
+                      {order.customerPhone || <span className="text-muted-foreground/50">-</span>}
                     </td>
-                    <td className="py-1 px-1.5 text-center tabular-nums">
+                    <td className="p-2 text-muted-foreground text-xs truncate max-w-[200px]" title={order.shippingAddress || ""}>
+                      {order.shippingAddress || <span className="text-muted-foreground/50">-</span>}
+                    </td>
+                    <td className="p-2 text-center font-medium">
                       {order.totalQuantity || 1}
                     </td>
-                    <td className="py-1 px-1.5 text-right font-medium tabular-nums">
+                    <td className="p-2 text-right font-medium tabular-nums">
                       {Number(order.totalAmount).toLocaleString()}
                     </td>
-                    <td className="py-1 px-1.5">
+                    <td className="p-2">
                       {order.tags && order.tags.length > 0 ? (
-                        <div className="flex flex-wrap gap-0.5">
+                        <div className="flex flex-wrap gap-1">
                           {order.tags.slice(0, 2).map((tag, i) => (
                             <Badge 
                               key={`${order.id}-tag-${i}`} 
                               variant="secondary" 
-                              className="text-[9px] py-0 px-1 font-normal"
+                              className="text-[10px] py-0 px-1.5 font-normal"
                             >
                               {tag}
                             </Badge>
                           ))}
                           {order.tags.length > 2 && (
-                            <span className="text-[9px] text-muted-foreground">+{order.tags.length - 2}</span>
+                            <span className="text-[10px] text-muted-foreground">+{order.tags.length - 2}</span>
                           )}
                         </div>
                       ) : (
-                        <span className="text-muted-foreground/40">-</span>
+                        <span className="text-muted-foreground/50 text-xs">-</span>
                       )}
                     </td>
-                    <td className="py-1 px-1.5">
+                    <td className="p-2">
                       <button 
                         onClick={() => openRemarkDialog(order)}
-                        className="text-[11px] text-left hover:bg-muted/50 p-0.5 rounded cursor-pointer w-full truncate block"
+                        className="text-xs text-left hover:bg-muted p-1 rounded cursor-pointer w-full min-h-[24px] truncate block"
                         title={order.remark || "Add remark"}
                         data-testid={`button-remark-${order.id}`}
                       >
-                        {order.remark || <span className="text-muted-foreground/40 italic">Add...</span>}
+                        {order.remark || <span className="text-muted-foreground/50 italic">Add...</span>}
                       </button>
                     </td>
-                    <td className="py-1 px-1.5 pr-2">
+                    <td className="p-2 pr-4">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-6 w-6" data-testid={`button-order-menu-${order.id}`}>
-                            <MoreVertical className="w-3 h-3" />
+                          <Button variant="ghost" size="icon" className="h-7 w-7" data-testid={`button-order-menu-${order.id}`}>
+                            <MoreVertical className="w-4 h-4" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem asChild>
                             <Link href={`/orders/${order.id}`} className="cursor-pointer">
-                              <Eye className="w-3.5 h-3.5 mr-2" />
+                              <Eye className="w-4 h-4 mr-2" />
                               View Details
                             </Link>
                           </DropdownMenuItem>
                           {order.courierTracking && (
                             <DropdownMenuItem>
-                              <Truck className="w-3.5 h-3.5 mr-2" />
+                              <Truck className="w-4 h-4 mr-2" />
                               Track: {order.courierTracking}
                             </DropdownMenuItem>
                           )}
@@ -729,35 +750,33 @@ export default function Orders() {
       </div>
 
       {totalPages > 1 && (
-        <div className="flex items-center justify-between px-3 py-1.5 border-t bg-background sticky bottom-0">
-          <span className="text-[11px] text-muted-foreground tabular-nums">
-            {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, data?.total ?? 0)} of {data?.total?.toLocaleString()}
-          </span>
-          <div className="flex items-center gap-1">
+        <div className="flex items-center justify-between p-3 border-t bg-background sticky bottom-0">
+          <p className="text-sm text-muted-foreground">
+            Showing {(page - 1) * pageSize + 1}-{Math.min(page * pageSize, data?.total ?? 0)} of {data?.total?.toLocaleString()}
+          </p>
+          <div className="flex items-center gap-2">
             <Button
-              variant="ghost"
+              variant="outline"
               size="sm"
               onClick={() => setPage(page - 1)}
               disabled={page === 1}
-              className="h-6 text-xs px-2"
               data-testid="button-prev-page"
             >
-              <ChevronLeft className="w-3 h-3 mr-0.5" />
+              <ChevronLeft className="w-4 h-4 mr-1" />
               Prev
             </Button>
-            <span className="text-[11px] text-muted-foreground tabular-nums px-1">
-              {page}/{totalPages}
+            <span className="text-sm text-muted-foreground px-2">
+              Page {page} of {totalPages}
             </span>
             <Button
-              variant="ghost"
+              variant="outline"
               size="sm"
               onClick={() => setPage(page + 1)}
               disabled={page >= totalPages}
-              className="h-6 text-xs px-2"
               data-testid="button-next-page"
             >
               Next
-              <ChevronRight className="w-3 h-3 ml-0.5" />
+              <ChevronRight className="w-4 h-4 ml-1" />
             </Button>
           </div>
         </div>

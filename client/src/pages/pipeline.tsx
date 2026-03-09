@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
+import { AIInsightsBanner } from "@/components/ai-insights-banner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -1191,10 +1192,13 @@ export default function Pipeline() {
 
   return (
     <div className="h-full flex flex-col -m-4 md:-m-6">
+      <div className="px-4 pt-3">
+        <AIInsightsBanner section="pipeline" />
+      </div>
       {/* Header + Toolbar */}
-      <div className="flex items-center justify-between gap-2 px-3 py-2 border-b flex-wrap">
+      <div className="flex items-center justify-between gap-3 px-4 py-3 border-b flex-wrap">
         <div className="flex items-center gap-3 flex-wrap">
-          <h1 className="text-sm font-semibold mr-1" data-testid="text-page-title">{STAGE_TITLES[activeTab] || "Orders"}</h1>
+          <h1 className="text-lg font-semibold mr-2" data-testid="text-page-title">{STAGE_TITLES[activeTab] || "Orders"}</h1>
           {activeTab === "ALL" ? (
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -1294,11 +1298,11 @@ export default function Pipeline() {
 
       {/* Advanced Filter Panel — All Orders only */}
       {activeTab === "ALL" && showAdvancedFilters && (
-        <div className="px-3 py-2 border-b bg-muted/30 space-y-2" data-testid="advanced-filter-panel">
-          <div className="flex flex-wrap gap-2 items-end">
+        <div className="px-4 py-3 border-b bg-muted/30 space-y-3" data-testid="advanced-filter-panel">
+          <div className="flex flex-wrap gap-3 items-end">
             {/* Tag filter */}
-            <div className="flex flex-col gap-0.5">
-              <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1"><Tag className="w-3 h-3" />Tag</label>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-muted-foreground flex items-center gap-1"><Tag className="w-3 h-3" />Tag</label>
               <Input
                 placeholder="e.g. leopards"
                 value={allFilterTag}
@@ -1309,8 +1313,8 @@ export default function Pipeline() {
             </div>
 
             {/* Courier filter */}
-            <div className="flex flex-col gap-0.5">
-              <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Courier</label>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-muted-foreground">Courier</label>
               <Select value={allFilterCourier} onValueChange={v => { setAllFilterCourier(v); setPage(1); }}>
                 <SelectTrigger className="h-8 w-[130px] text-sm" data-testid="filter-courier-select">
                   <SelectValue />
@@ -1325,8 +1329,8 @@ export default function Pipeline() {
             </div>
 
             {/* Courier status filter */}
-            <div className="flex flex-col gap-0.5">
-              <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Courier Status</label>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-muted-foreground">Courier Status</label>
               <Select value={allFilterCourierStatus} onValueChange={v => { setAllFilterCourierStatus(v); setPage(1); }}>
                 <SelectTrigger className="h-8 w-[160px] text-sm" data-testid="filter-courier-status-select">
                   <SelectValue />
@@ -1341,8 +1345,8 @@ export default function Pipeline() {
             </div>
 
             {/* Items range */}
-            <div className="flex flex-col gap-0.5">
-              <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Items</label>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-muted-foreground">Items</label>
               <div className="flex items-center gap-1.5">
                 <Input
                   type="number"
@@ -1367,8 +1371,8 @@ export default function Pipeline() {
             </div>
 
             {/* Payment filter */}
-            <div className="flex flex-col gap-0.5">
-              <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Payment</label>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-muted-foreground">Payment</label>
               <Select value={paymentFilter} onValueChange={v => { setPaymentFilter(v); setPage(1); }}>
                 <SelectTrigger className="h-8 w-[150px] text-sm" data-testid="filter-payment-select">
                   <SelectValue />
@@ -1400,8 +1404,8 @@ export default function Pipeline() {
 
           {/* Status multi-toggle */}
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Workflow Status</label>
-            <div className="flex flex-wrap gap-1" data-testid="filter-status-toggles">
+            <label className="text-xs font-medium text-muted-foreground">Workflow Status</label>
+            <div className="flex flex-wrap gap-1.5" data-testid="filter-status-toggles">
               {Object.entries(WORKFLOW_STATUS_LABELS).map(([key, label]) => {
                 const isActive = allFilterStatuses.includes(key);
                 return (
@@ -1435,7 +1439,7 @@ export default function Pipeline() {
         if (paymentFilter !== "all") chips.push({ label: `Payment: ${paymentFilter === "PAID" ? "Prepaid" : paymentFilter === "PARTIAL" ? "Partially Paid" : "Unpaid"}`, clear: () => setPaymentFilter("all") });
         if (chips.length === 0) return null;
         return (
-          <div className="flex flex-wrap gap-1 px-3 py-1.5 border-b bg-background" data-testid="active-filter-chips">
+          <div className="flex flex-wrap gap-1.5 px-4 py-2 border-b bg-background" data-testid="active-filter-chips">
             {chips.map((chip, i) => (
               <span key={i} className="inline-flex items-center gap-1 bg-primary/10 text-primary text-xs px-2 py-0.5 rounded-full font-medium">
                 {chip.label}
@@ -1448,10 +1452,27 @@ export default function Pipeline() {
         );
       })()}
 
+      {/* Selection Indicator */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 px-4 py-2 bg-blue-50 dark:bg-blue-950 border-b border-blue-200 dark:border-blue-800" data-testid="selection-indicator-bar">
+          <span className="text-sm font-medium text-blue-700 dark:text-blue-300" data-testid="text-selection-count">
+            {selectedIds.size} order{selectedIds.size !== 1 ? "s" : ""} selected
+          </span>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="text-xs text-blue-600 dark:text-blue-400"
+            onClick={() => setSelectedIds(new Set())}
+            data-testid="button-clear-selection"
+          >
+            Clear selection
+          </Button>
+        </div>
+      )}
       {/* Bulk Actions Bar */}
       {selectedIds.size > 0 && (
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-primary/5 border-b" data-testid="bulk-actions-bar">
-          <span className="text-xs font-medium">{selectedIds.size} selected</span>
+        <div className="flex items-center gap-3 px-4 py-2.5 bg-primary/5 border-b" data-testid="bulk-actions-bar">
+          <span className="text-sm font-medium">{selectedIds.size} selected</span>
           <div className="h-4 w-px bg-border" />
 
           {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "HOLD" || activeTab === "ALL") && (
@@ -1648,16 +1669,16 @@ export default function Pipeline() {
       )}
       {/* Expired Holds Banner */}
       {activeTab === "HOLD" && expiredHolds > 0 && (
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-red-50 dark:bg-red-950 border-b border-red-200 dark:border-red-800" data-testid="banner-expired-holds">
-          <AlertCircle className="w-3.5 h-3.5 text-red-600 shrink-0" />
-          <span className="text-xs text-red-700 dark:text-red-300 font-medium">
+        <div className="flex items-center gap-3 px-4 py-2.5 bg-red-50 dark:bg-red-950 border-b border-red-200 dark:border-red-800" data-testid="banner-expired-holds">
+          <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+          <span className="text-sm text-red-700 dark:text-red-300 font-medium">
             {expiredHolds} hold{expiredHolds > 1 ? "s" : ""} expired - action required
           </span>
         </div>
       )}
       {/* Shipment Status Sub-Tabs */}
       {SHIPMENT_SUB_TABS[activeTab] && (
-        <div className="flex items-center gap-1 px-3 py-1.5 border-b bg-muted/30 flex-wrap" data-testid="shipment-sub-tabs">
+        <div className="flex items-center gap-1.5 px-4 py-2 border-b bg-muted/30 flex-wrap" data-testid="shipment-sub-tabs">
           {activeTab === "READY_TO_SHIP" && (
             <>
               <Select value={paymentFilter} onValueChange={v => { setPaymentFilter(v); setPage(1); }}>
@@ -1708,27 +1729,27 @@ export default function Pipeline() {
             ))}
           </div>
         ) : orders.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
+          <div className="flex flex-col items-center justify-center py-20 text-center">
             {activeTab === "NEW" ? (
               <>
-                <CheckCircle2 className="w-10 h-10 text-green-400 mb-3" />
-                <h3 className="text-sm font-medium mb-0.5">Inbox Zero</h3>
-                <p className="text-muted-foreground text-xs">All new orders have been processed</p>
+                <CheckCircle2 className="w-16 h-16 text-green-400 mb-4" />
+                <h3 className="text-lg font-medium mb-1">Inbox Zero</h3>
+                <p className="text-muted-foreground text-sm">All new orders have been processed</p>
               </>
             ) : (
               <>
-                <Package className="w-10 h-10 text-muted-foreground/30 mb-3" />
-                <h3 className="text-sm font-medium mb-0.5">No orders</h3>
-                <p className="text-muted-foreground text-xs">No orders in this stage</p>
+                <Package className="w-16 h-16 text-muted-foreground/30 mb-4" />
+                <h3 className="text-lg font-medium mb-1">No orders</h3>
+                <p className="text-muted-foreground text-sm">No orders in this stage</p>
               </>
             )}
           </div>
         ) : (
-          <table className="w-full text-xs">
+          <table className="w-full text-sm">
             <thead className="bg-muted sticky top-0 z-10">
               <tr className="border-b">
                 {activeTab !== "CANCELLED" && activeTab !== "DELIVERED" && activeTab !== "RETURN" && (
-                  <th className="w-8 px-2 py-1.5 text-left">
+                  <th className="w-10 px-3 py-2 text-left">
                     <Checkbox
                       checked={allCurrentPageSelected}
                       onCheckedChange={toggleSelectAll}
@@ -1737,77 +1758,77 @@ export default function Pipeline() {
                   </th>
                 )}
                 {activeTab === "ALL" ? (
-                  <th className="px-2 py-1.5 text-left text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
+                  <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">
                     <button className="flex items-center gap-1 hover:text-foreground transition-colors" onClick={() => { if (allSortBy === "orderNumber") setAllSortDir(d => d === "asc" ? "desc" : "asc"); else { setAllSortBy("orderNumber"); setAllSortDir("desc"); } setPage(1); }} data-testid="sort-order-number">
                       Order
-                      {allSortBy === "orderNumber" ? (allSortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : <ChevronsUpDown className="w-3 h-3 opacity-40" />}
+                      {allSortBy === "orderNumber" ? (allSortDir === "asc" ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />) : <ChevronsUpDown className="w-3.5 h-3.5 opacity-40" />}
                     </button>
                   </th>
                 ) : (
-                  <th className="px-2 py-1.5 text-left text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Order</th>
+                  <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Order</th>
                 )}
-                <th className="px-2 py-1.5 text-left text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Customer</th>
-                <th className="px-2 py-1.5 text-left text-[10px] uppercase tracking-wider font-semibold text-muted-foreground hidden md:table-cell">City</th>
-                <th className="px-1 py-1.5 text-center text-[10px] uppercase tracking-wider font-semibold text-muted-foreground w-[32px]" data-testid="header-history">#</th>
+                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Customer</th>
+                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground hidden md:table-cell">City</th>
+                <th className="px-2 py-2.5 text-center font-medium text-muted-foreground w-[40px]" data-testid="header-history">#</th>
                 {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "ALL" || activeTab === "READY_TO_SHIP" || activeTab === "HOLD") && (
-                  <th className="px-2 py-1.5 text-left text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Address</th>
+                  <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Address</th>
                 )}
-                <th className="px-2 py-1.5 text-left text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Products</th>
+                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Products</th>
                 {activeTab === "ALL" ? (
-                  <th className="px-2 py-1.5 text-left text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
+                  <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">
                     <button className="flex items-center gap-1 hover:text-foreground transition-colors" onClick={() => { if (allSortBy === "totalAmount") setAllSortDir(d => d === "asc" ? "desc" : "asc"); else { setAllSortBy("totalAmount"); setAllSortDir("desc"); } setPage(1); }} data-testid="sort-amount">
-                      Amount
-                      {allSortBy === "totalAmount" ? (allSortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : <ChevronsUpDown className="w-3 h-3 opacity-40" />}
+                      Amount (PKR)
+                      {allSortBy === "totalAmount" ? (allSortDir === "asc" ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />) : <ChevronsUpDown className="w-3.5 h-3.5 opacity-40" />}
                     </button>
                   </th>
                 ) : (
-                  <th className="px-2 py-1.5 text-left text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Amount</th>
+                  <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Amount (PKR)</th>
                 )}
                 {activeTab === "ALL" ? (
-                  <th className="px-2 py-1.5 text-center text-[10px] uppercase tracking-wider font-semibold text-muted-foreground hidden lg:table-cell w-[32px]">
+                  <th className="px-3 py-2.5 text-center font-medium text-muted-foreground hidden lg:table-cell w-[40px]">
                     <button className="flex items-center gap-1 hover:text-foreground transition-colors" onClick={() => { if (allSortBy === "totalQuantity") setAllSortDir(d => d === "asc" ? "desc" : "asc"); else { setAllSortBy("totalQuantity"); setAllSortDir("desc"); } setPage(1); }} data-testid="sort-items">
-                      Qty
-                      {allSortBy === "totalQuantity" ? (allSortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : <ChevronsUpDown className="w-3 h-3 opacity-40" />}
+                      Items
+                      {allSortBy === "totalQuantity" ? (allSortDir === "asc" ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />) : <ChevronsUpDown className="w-3.5 h-3.5 opacity-40" />}
                     </button>
                   </th>
                 ) : (
-                  <th className="px-2 py-1.5 text-center text-[10px] uppercase tracking-wider font-semibold text-muted-foreground hidden lg:table-cell w-[32px]">Qty</th>
+                  <th className="px-3 py-2.5 text-center font-medium text-muted-foreground hidden lg:table-cell w-[40px]">Items</th>
                 )}
-                <th className="px-2 py-1.5 text-left text-[10px] uppercase tracking-wider font-semibold text-muted-foreground hidden md:table-cell max-w-[100px]" data-testid="header-tags">Tags</th>
+                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground hidden md:table-cell max-w-[100px]" data-testid="header-tags">Tags</th>
                 {activeTab === "ALL" && (
-                  <th className="px-2 py-1.5 text-left text-[10px] uppercase tracking-wider font-semibold text-muted-foreground" data-testid="header-workflow-status">
+                  <th className="px-3 py-2.5 text-left font-medium text-muted-foreground" data-testid="header-workflow-status">
                     <button className="flex items-center gap-1 hover:text-foreground transition-colors" onClick={() => { if (allSortBy === "workflowStatus") setAllSortDir(d => d === "asc" ? "desc" : "asc"); else { setAllSortBy("workflowStatus"); setAllSortDir("desc"); } setPage(1); }} data-testid="sort-status">
                       Status
-                      {allSortBy === "workflowStatus" ? (allSortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : <ChevronsUpDown className="w-3 h-3 opacity-40" />}
+                      {allSortBy === "workflowStatus" ? (allSortDir === "asc" ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />) : <ChevronsUpDown className="w-3.5 h-3.5 opacity-40" />}
                     </button>
                   </th>
                 )}
                 {activeTab === "PENDING" && (
-                  <th className="px-2 py-1.5 text-left text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Reason</th>
+                  <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Reason</th>
                 )}
                 {activeTab === "HOLD" && (
-                  <th className="px-2 py-1.5 text-left text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Hold Until</th>
+                  <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Hold Until</th>
                 )}
                 {(activeTab === "BOOKED" || activeTab === "FULFILLED" || activeTab === "DELIVERED" || activeTab === "RETURN" || activeTab === "ALL") && (
                   <>
                     {activeTab === "ALL" ? (
-                      <th className="px-2 py-1.5 text-left text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
+                      <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">
                         <button className="flex items-center gap-1 hover:text-foreground transition-colors" onClick={() => { if (allSortBy === "courierName") setAllSortDir(d => d === "asc" ? "desc" : "asc"); else { setAllSortBy("courierName"); setAllSortDir("desc"); } setPage(1); }} data-testid="sort-courier">
                           Courier
-                          {allSortBy === "courierName" ? (allSortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : <ChevronsUpDown className="w-3 h-3 opacity-40" />}
+                          {allSortBy === "courierName" ? (allSortDir === "asc" ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />) : <ChevronsUpDown className="w-3.5 h-3.5 opacity-40" />}
                         </button>
                       </th>
                     ) : (
-                      <th className="px-2 py-1.5 text-left text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Courier</th>
+                      <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Courier</th>
                     )}
-                    <th className="px-2 py-1.5 text-left text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Status</th>
+                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Courier Status</th>
                   </>
                 )}
                 {activeTab === "CANCELLED" && (
-                  <th className="px-2 py-1.5 text-left text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Reason</th>
+                  <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Reason</th>
                 )}
-                <th className="px-2 py-1.5 text-left text-[10px] uppercase tracking-wider font-semibold text-muted-foreground" data-testid="header-remark">Remark</th>
-                <th className="px-2 py-1.5 text-right text-[10px] uppercase tracking-wider font-semibold text-muted-foreground w-[70px]"></th>
+                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground" data-testid="header-remark">Remark</th>
+                <th className="px-3 py-2 text-right font-medium text-muted-foreground">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -1820,7 +1841,7 @@ export default function Pipeline() {
                   data-testid={`order-row-${order.id}`}
                 >
                   {activeTab !== "CANCELLED" && activeTab !== "DELIVERED" && activeTab !== "RETURN" && (activeTab !== "ALL" || (order.workflowStatus !== "CANCELLED" && order.workflowStatus !== "DELIVERED" && order.workflowStatus !== "RETURN")) && (
-                    <td className="px-2 py-1">
+                    <td className="px-3 py-1.5">
                       <Checkbox
                         checked={selectedIds.has(order.id)}
                         onCheckedChange={() => toggleSelect(order.id)}
@@ -1829,11 +1850,11 @@ export default function Pipeline() {
                     </td>
                   )}
                   {activeTab === "ALL" && (order.workflowStatus === "CANCELLED" || order.workflowStatus === "DELIVERED" || order.workflowStatus === "RETURN") && (
-                    <td className="px-2 py-1" />
+                    <td className="px-3 py-1.5" />
                   )}
-                  <td className="px-2 py-1">
+                  <td className="px-3 py-1.5">
                     <div className="flex items-center gap-1.5">
-                      <Link href={`/orders/detail/${order.id}`} className="font-medium text-xs hover:underline" data-testid={`link-order-${order.id}`}>
+                      <Link href={`/orders/detail/${order.id}`} className="font-medium text-sm hover:underline" data-testid={`link-order-${order.id}`}>
                         {String(order.orderNumber || '').replace(/^#/, '')}
                       </Link>
                       {order.orderSource === "shopify_draft_order" && (
@@ -1851,56 +1872,56 @@ export default function Pipeline() {
                       </div>
                     )}
                   </td>
-                  <td className="px-2 py-1">
+                  <td className="px-3 py-1.5">
                     {editingOrder === order.id && (activeTab === "ALL" || activeTab === "NEW" || activeTab === "PENDING" || activeTab === "READY_TO_SHIP" || activeTab === "BOOKED" || activeTab === "FULFILLED") ? (
                       <div className="space-y-1">
                         <Input
                           value={editName}
                           onChange={e => setEditName(e.target.value)}
                           placeholder="Name"
-                          className="h-6 text-xs"
+                          className="h-7 text-xs"
                           data-testid={`input-edit-name-${order.id}`}
                         />
                         <Input
                           value={editPhone}
                           onChange={e => setEditPhone(e.target.value)}
                           placeholder="Phone"
-                          className="h-6 text-xs"
+                          className="h-7 text-xs"
                           data-testid={`input-edit-phone-${order.id}`}
                         />
                         <Input
                           value={editAddress}
                           onChange={e => setEditAddress(e.target.value)}
                           placeholder="Address"
-                          className="h-6 text-xs"
+                          className="h-7 text-xs"
                           data-testid={`input-edit-address-${order.id}`}
                         />
                         <Input
                           value={editCity}
                           onChange={e => setEditCity(e.target.value)}
                           placeholder="City"
-                          className="h-6 text-xs"
+                          className="h-7 text-xs"
                           data-testid={`input-edit-city-${order.id}`}
                         />
                         <div className="flex gap-1">
-                          <Button size="sm" className="h-5 text-[10px] px-1.5" onClick={() => {
+                          <Button size="sm" className="h-6 text-xs px-2" onClick={() => {
                             customerUpdateMutation.mutate({
                               orderId: order.id,
                               data: { customerName: editName, customerPhone: editPhone, shippingAddress: editAddress, city: editCity }
                             });
                           }} data-testid={`button-save-edit-${order.id}`}>Save</Button>
-                          <Button size="sm" variant="ghost" className="h-5 text-[10px] px-1.5" onClick={() => setEditingOrder(null)}>Cancel</Button>
+                          <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={() => setEditingOrder(null)}>Cancel</Button>
                         </div>
                       </div>
                     ) : (
                       <div>
-                        <div className="font-medium text-xs truncate max-w-[110px]" title={order.customerName}>{order.customerName && order.customerName.length > 15 ? order.customerName.slice(0, 13) + ".." : order.customerName}</div>
-                        <div className="text-[11px] text-muted-foreground">{order.customerPhone || "No phone"}</div>
+                        <div className="font-medium text-sm truncate max-w-[120px]" title={order.customerName}>{order.customerName && order.customerName.length > 15 ? order.customerName.slice(0, 13) + ".." : order.customerName}</div>
+                        <div className="text-xs text-muted-foreground">{order.customerPhone || "No phone"}</div>
                       </div>
                     )}
                   </td>
-                  <td className="px-2 py-1 hidden md:table-cell text-xs truncate max-w-[90px]" title={order.city || ""}>{order.city && order.city.length > 15 ? order.city.slice(0, 13) + ".." : (order.city || "-")}</td>
-                  <td className="px-1 py-1 text-center w-[32px]" data-testid={`cell-history-${order.id}`}>
+                  <td className="px-3 py-1.5 hidden md:table-cell text-sm truncate max-w-[100px]" title={order.city || ""}>{order.city && order.city.length > 15 ? order.city.slice(0, 13) + ".." : (order.city || "-")}</td>
+                  <td className="px-1 py-1.5 text-center w-[40px]" data-testid={`cell-history-${order.id}`}>
                     {(() => {
                       const hist = order.customerPhone && customerHistory ? customerHistory[order.customerPhone] : null;
                       const count = hist?.orderCount || 0;
@@ -1925,7 +1946,7 @@ export default function Pipeline() {
                     })()}
                   </td>
                   {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "ALL" || activeTab === "READY_TO_SHIP" || activeTab === "HOLD") && (
-                    <td className="px-2 py-1 max-w-[200px]" data-testid={`cell-address-${order.id}`}>
+                    <td className="px-3 py-1.5 max-w-[220px]" data-testid={`cell-address-${order.id}`}>
                       {editingAddressId === order.id ? (
                         <div className="flex flex-col gap-1">
                           <textarea
@@ -1964,27 +1985,29 @@ export default function Pipeline() {
                       )}
                     </td>
                   )}
-                  <td className="px-2 py-1" data-testid={`cell-products-${order.id}`}>
+                  <td className="px-3 py-1.5" data-testid={`cell-products-${order.id}`}>
                     <ProductImagesCell lineItems={order.lineItems as any} orderId={order.id} />
                   </td>
-                  <td className="px-2 py-1">
-                    <div className="font-medium text-xs">{Number(order.totalAmount).toLocaleString()}</div>
+                  <td className="px-3 py-1.5">
+                    <div className="font-medium text-sm">{Number(order.totalAmount).toLocaleString()}</div>
                     {order.codPaymentStatus === "PAID" ? (
-                      <Badge className="text-[10px] px-1 py-0 leading-4 bg-green-500/10 text-green-600 border-green-500/20" data-testid={`badge-prepaid-${order.id}`}>Prepaid</Badge>
+                      <Badge className="text-xs bg-green-500/10 text-green-600 border-green-500/20" data-testid={`badge-prepaid-${order.id}`}>Prepaid</Badge>
                     ) : order.codPaymentStatus === "PARTIALLY_PAID" ? (
-                      <span className="text-[10px] text-amber-600">COD: {Number(order.codRemaining ?? order.totalAmount).toLocaleString()}</span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs text-amber-600">COD: {Number(order.codRemaining ?? order.totalAmount).toLocaleString()}</span>
+                      </div>
                     ) : (
-                      <div className="text-[10px] text-muted-foreground capitalize">{order.paymentMethod}</div>
+                      <div className="text-xs text-muted-foreground capitalize">{order.paymentMethod}</div>
                     )}
                   </td>
-                  <td className="px-2 py-1 hidden lg:table-cell text-center w-[32px]">
-                    <span className="text-xs font-medium">{order.totalQuantity || 1}</span>
+                  <td className="px-3 py-1.5 hidden lg:table-cell text-center w-[40px]">
+                    <span className="text-sm font-medium">{order.totalQuantity || 1}</span>
                   </td>
-                  <td className="px-2 py-1 hidden md:table-cell max-w-[100px]" data-testid={`cell-tags-${order.id}`}>
+                  <td className="px-3 py-1.5 hidden md:table-cell max-w-[120px]" data-testid={`cell-tags-${order.id}`}>
                     {(() => {
                       const allTags = Array.isArray(order.tags) ? (order.tags as string[]) : [];
-                      const displayTags = allTags.slice(0, 2);
-                      const overflow = allTags.length - 2;
+                      const displayTags = allTags.slice(0, 3);
+                      const overflow = allTags.length - 3;
                       return (
                         <div className="flex flex-wrap gap-0.5">
                           {displayTags.map(tag => {
@@ -2007,7 +2030,7 @@ export default function Pipeline() {
 
                   {/* Workflow status badge for ALL view */}
                   {activeTab === "ALL" && (
-                    <td className="px-2 py-1" data-testid={`cell-workflow-status-${order.id}`}>
+                    <td className="px-3 py-1.5" data-testid={`cell-workflow-status-${order.id}`}>
                       <Badge className={`text-[10px] px-1.5 py-0 leading-4 ${WORKFLOW_STATUS_COLORS[order.workflowStatus || ""] || "bg-slate-100 text-slate-700"}`}>
                         {WORKFLOW_STATUS_LABELS[order.workflowStatus || ""] || order.workflowStatus || "Unknown"}
                       </Badge>
@@ -2016,7 +2039,7 @@ export default function Pipeline() {
 
                   {/* Pending-specific columns */}
                   {activeTab === "PENDING" && (
-                    <td className="px-2 py-1">
+                    <td className="px-3 py-1.5">
                       <Badge variant="secondary" className="text-xs" data-testid={`badge-pending-reason-${order.id}`}>
                         {PENDING_REASON_TYPES.find(r => r.value === order.pendingReasonType)?.label || order.pendingReasonType || "Unknown"}
                       </Badge>
@@ -2025,7 +2048,7 @@ export default function Pipeline() {
 
                   {/* Hold-specific columns */}
                   {activeTab === "HOLD" && (
-                    <td className="px-2 py-1">
+                    <td className="px-3 py-1.5">
                       {order.holdUntil ? (
                         <div>
                           <div className="text-xs">{formatPkDateTime(order.holdUntil)}</div>
@@ -2038,11 +2061,11 @@ export default function Pipeline() {
                   {/* Courier columns for booked/fulfilled/delivered/return */}
                   {(activeTab === "BOOKED" || activeTab === "FULFILLED" || activeTab === "DELIVERED" || activeTab === "RETURN" || activeTab === "ALL") && (
                     <>
-                      <td className="px-2 py-1">
+                      <td className="px-3 py-1.5">
                         <div className="text-xs font-medium">{order.courierName || "-"}</div>
-                        <div className="text-[10px] text-muted-foreground">{order.courierTracking || "-"}</div>
+                        <div className="text-xs text-muted-foreground">{order.courierTracking || "-"}</div>
                       </td>
-                      <td className="px-2 py-1">
+                      <td className="px-3 py-1.5">
                         {order.shipmentStatus ? (
                           <Badge className={`text-xs ${UNIVERSAL_STATUS_COLORS[order.shipmentStatus || ""] || "bg-slate-100 text-slate-700"}`}
                             data-testid={`badge-status-${order.id}`}
@@ -2058,7 +2081,7 @@ export default function Pipeline() {
 
                   {/* Cancelled-specific columns */}
                   {activeTab === "CANCELLED" && (
-                    <td className="px-2 py-1">
+                    <td className="px-3 py-1.5">
                       <div className="text-xs text-muted-foreground">{order.cancelReason || "No reason given"}</div>
                       {order.cancelledAt && (
                         <div className="text-xs text-muted-foreground/70">{formatPkDateTime(order.cancelledAt)}</div>
@@ -2067,7 +2090,7 @@ export default function Pipeline() {
                   )}
 
                   {/* Remark column */}
-                  <td className="px-2 py-1 max-w-[120px]" data-testid={`cell-remark-${order.id}`}>
+                  <td className="px-3 py-1.5 max-w-[150px]" data-testid={`cell-remark-${order.id}`}>
                     <button
                       className="text-left w-full cursor-pointer hover:opacity-80"
                       onClick={() => openRemarkDialog(order)}
@@ -2084,7 +2107,7 @@ export default function Pipeline() {
                   </td>
 
                   {/* Action buttons */}
-                  <td className="px-2 py-1 text-right w-[70px]">
+                  <td className="px-3 py-1.5 text-right">
                     {(() => {
                       const et = effectiveTab(activeTab, order);
                       const hasEdit = et === "NEW" || et === "PENDING" || et === "READY_TO_SHIP" || et === "BOOKED" || et === "FULFILLED";
@@ -2156,9 +2179,9 @@ export default function Pipeline() {
                       }
 
                       return (
-                        <div className="flex items-center justify-end gap-0">
+                        <div className="flex items-center justify-end gap-0.5">
                           {hasEdit && (
-                            <Button size="icon" variant="ghost" className="h-7 w-7"
+                            <Button size="icon" variant="ghost"
                               onClick={() => {
                                 setEditingOrder(order.id);
                                 setEditName(order.customerName || "");
@@ -2168,17 +2191,17 @@ export default function Pipeline() {
                               }}
                               title="Edit"
                               data-testid={`button-edit-${order.id}`}>
-                              <Edit3 className="w-3.5 h-3.5" />
+                              <Edit3 className="w-4 h-4" />
                             </Button>
                           )}
                           {menuItems.length > 0 && (
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
-                                <Button size="icon" variant="ghost" className="h-7 w-7" data-testid={`button-actions-${order.id}`}>
-                                  <MoreHorizontal className="w-3.5 h-3.5" />
+                                <Button size="icon" variant="ghost" data-testid={`button-actions-${order.id}`}>
+                                  <MoreHorizontal className="w-4 h-4" />
                                 </Button>
                               </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="w-44">
+                              <DropdownMenuContent align="end" className="w-48">
                                 {menuItems.map((item, idx) => (
                                   <DropdownMenuItem
                                     key={item.key}
@@ -2206,8 +2229,8 @@ export default function Pipeline() {
       </div>
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between px-3 py-1 border-t bg-background">
-          <div className="text-[10px] text-muted-foreground" data-testid="text-total-orders">
+        <div className="flex items-center justify-between px-4 py-1.5 border-t bg-background">
+          <div className="text-xs text-muted-foreground" data-testid="text-total-orders">
             {shipmentSubFilter !== "all" ? `${orders.length} of ${total}` : total} orders
           </div>
           <div className="flex items-center gap-1">

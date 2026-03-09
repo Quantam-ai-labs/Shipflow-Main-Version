@@ -330,35 +330,42 @@ export function AppSidebar() {
 
   return (
     <Sidebar>
-      <SidebarHeader className="px-3 py-2">
+      <SidebarHeader className="p-3 pb-2">
         <Link href="/dashboard">
-          <div className="flex items-center gap-1.5 cursor-pointer">
-            <div className="w-5 h-5 rounded bg-primary flex items-center justify-center">
-              <Sparkles className="w-3 h-3 text-primary-foreground" />
+          <div className="flex items-center gap-2 cursor-pointer">
+            <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center">
+              <Sparkles className="w-3.5 h-3.5 text-primary-foreground" />
             </div>
-            <span className="font-semibold text-sm tracking-tight text-foreground">
+            <span className="font-bold text-lg tracking-tight text-foreground">
               1SOL.AI
             </span>
           </div>
         </Link>
       </SidebarHeader>
       <SidebarContent>
-        <SidebarGroup className="py-0.5">
+        <SidebarGroup className="py-1">
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={location === "/ai"}>
                   <Link href="/ai" data-testid="nav-magic-ai">
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span className="text-xs">Magic AI</span>
+                    <Sparkles className="w-4 h-4" />
+                    <span>Magic AI</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup className="py-1">
+          <SidebarGroupContent>
+            <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={location === "/dashboard"}>
                   <Link href="/dashboard" data-testid="nav-dashboard">
-                    <Home className="w-3.5 h-3.5" />
-                    <span className="text-xs">Home</span>
+                    <Home className="w-4 h-4" />
+                    <span>Home</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -367,10 +374,10 @@ export function AppSidebar() {
         </SidebarGroup>
 
         {pinnedPages.length > 0 && (
-          <SidebarGroup className="py-0.5">
-            <div className="px-3 pb-0.5 flex items-center gap-1">
-              <Pin className="w-2.5 h-2.5 text-muted-foreground/50" />
-              <span className="text-[10px] font-medium text-muted-foreground/50 uppercase tracking-widest">Pinned</span>
+          <SidebarGroup className="py-1">
+            <div className="px-3 pb-1 flex items-center gap-1.5">
+              <Pin className="w-3 h-3 text-muted-foreground/60" />
+              <span className="text-[10px] font-medium text-muted-foreground/60 uppercase tracking-widest">Pinned</span>
             </div>
             <SidebarGroupContent>
               <SidebarMenu>
@@ -382,8 +389,8 @@ export function AppSidebar() {
                     <SidebarMenuItem key={id} className="group/pinned-item">
                       <SidebarMenuButton asChild isActive={isActive} className="pr-1">
                         <Link href={item.url} data-testid={`nav-pinned-${id}`}>
-                          <item.icon className="w-3.5 h-3.5 shrink-0" />
-                          <span className="flex-1 truncate text-xs">{item.title}</span>
+                          <item.icon className="w-4 h-4 shrink-0" />
+                          <span className="flex-1 truncate">{item.title}</span>
                           <button
                             onClick={(e) => {
                               e.preventDefault();
@@ -394,7 +401,7 @@ export function AppSidebar() {
                             data-testid={`button-unpin-${id}`}
                             title="Unpin"
                           >
-                            <Pin className="w-2.5 h-2.5 fill-current" />
+                            <Pin className="w-3 h-3 fill-current" />
                           </button>
                         </Link>
                       </SidebarMenuButton>
@@ -407,19 +414,21 @@ export function AppSidebar() {
         )}
 
         {filteredOrderItems.length > 0 && (
-          <SidebarGroup className="py-0.5">
+          <SidebarGroup className="py-1">
             <SidebarGroupContent>
               <SidebarMenu>
                 <Collapsible defaultOpen={isOrdersRouteActive} asChild className="group/orders-collapsible">
                   <SidebarMenuItem>
                     <CollapsibleTrigger asChild>
                       <SidebarMenuButton data-testid="nav-orders-toggle" tooltip="Orders">
-                        <Package className="w-3.5 h-3.5" />
-                        <span className="flex-1 text-xs">Orders</span>
+                        <Package className="w-4 h-4" />
+                        <span className="flex-1">Orders</span>
                         {totalOrderCount > 0 && (
-                          <span className="text-[10px] tabular-nums text-muted-foreground">{totalOrderCount}</span>
+                          <Badge variant="secondary" className="h-5 min-w-[20px] px-1.5 text-xs">
+                            {totalOrderCount}
+                          </Badge>
                         )}
-                        <ChevronRight className="w-3 h-3 ml-0.5 transition-transform duration-200 group-data-[state=open]/orders-collapsible:rotate-90" />
+                        <ChevronRight className="w-4 h-4 ml-1 transition-transform duration-200 group-data-[state=open]/orders-collapsible:rotate-90" />
                       </SidebarMenuButton>
                     </CollapsibleTrigger>
                     <CollapsibleContent>
@@ -431,10 +440,12 @@ export function AppSidebar() {
                             <SidebarMenuSubItem key={item.key} className="group/order-item">
                               <SidebarMenuSubButton asChild isActive={location === item.url}>
                                 <Link href={item.url} data-testid={`nav-pipeline-${item.key!.toLowerCase()}`}>
-                                  <item.icon className="w-3 h-3" />
-                                  <span className="flex-1 text-xs">{item.title}</span>
+                                  <item.icon className="w-3.5 h-3.5" />
+                                  <span className="flex-1">{item.title}</span>
                                   {count > 0 && (
-                                    <span className="text-[10px] tabular-nums text-muted-foreground">{count}</span>
+                                    <Badge variant="secondary" className="h-5 min-w-[20px] px-1.5 text-xs">
+                                      {count}
+                                    </Badge>
                                   )}
                                   <button
                                     onClick={(e) => {
@@ -447,7 +458,7 @@ export function AppSidebar() {
                                     title={isPinned ? "Unpin" : "Pin to top"}
                                     data-testid={`button-pin-${item.id}`}
                                   >
-                                    <Pin className={`w-2.5 h-2.5 ${isPinned ? "fill-current" : ""}`} />
+                                    <Pin className={`w-3 h-3 ${isPinned ? "fill-current" : ""}`} />
                                   </button>
                                 </Link>
                               </SidebarMenuSubButton>
@@ -464,16 +475,16 @@ export function AppSidebar() {
         )}
 
         {filteredLogisticsItems.length > 0 && (
-          <SidebarGroup className="py-0.5">
+          <SidebarGroup className="py-1">
             <SidebarGroupContent>
               <SidebarMenu>
                 <Collapsible defaultOpen={isLogisticsRouteActive} asChild className="group/logistics-collapsible">
                   <SidebarMenuItem>
                     <CollapsibleTrigger asChild>
                       <SidebarMenuButton data-testid="nav-logistics-toggle" tooltip="Logistics">
-                        <Truck className="w-3.5 h-3.5" />
-                        <span className="flex-1 text-xs">Logistics</span>
-                        <ChevronRight className="w-3 h-3 ml-0.5 transition-transform duration-200 group-data-[state=open]/logistics-collapsible:rotate-90" />
+                        <Truck className="w-4 h-4" />
+                        <span className="flex-1">Logistics</span>
+                        <ChevronRight className="w-4 h-4 ml-1 transition-transform duration-200 group-data-[state=open]/logistics-collapsible:rotate-90" />
                       </SidebarMenuButton>
                     </CollapsibleTrigger>
                     <CollapsibleContent>
@@ -484,8 +495,8 @@ export function AppSidebar() {
                             <SidebarMenuSubItem key={item.id} className="group/logistics-item">
                               <SidebarMenuSubButton asChild isActive={location === item.url}>
                                 <Link href={item.url} data-testid={`nav-${item.id}`}>
-                                  <item.icon className="w-3 h-3" />
-                                  <span className="flex-1 text-xs">{item.title}</span>
+                                  <item.icon className="w-3.5 h-3.5" />
+                                  <span className="flex-1">{item.title}</span>
                                   <button
                                     onClick={(e) => {
                                       e.preventDefault();
@@ -497,7 +508,7 @@ export function AppSidebar() {
                                     title={isPinned ? "Unpin" : "Pin to top"}
                                     data-testid={`button-pin-${item.id}`}
                                   >
-                                    <Pin className={`w-2.5 h-2.5 ${isPinned ? "fill-current" : ""}`} />
+                                    <Pin className={`w-3 h-3 ${isPinned ? "fill-current" : ""}`} />
                                   </button>
                                 </Link>
                               </SidebarMenuSubButton>
@@ -516,16 +527,16 @@ export function AppSidebar() {
         {filteredGroups.map((group) => {
           const isGroupActive = group.items.some(i => location === i.url || location.startsWith(i.url + "/"));
           return (
-            <SidebarGroup key={group.id} className="py-0.5">
+            <SidebarGroup key={group.id} className="py-1">
               <SidebarGroupContent>
                 <SidebarMenu>
                   <Collapsible defaultOpen={isGroupActive} asChild className="group/nav-group">
                     <SidebarMenuItem>
                       <CollapsibleTrigger asChild>
                         <SidebarMenuButton data-testid={`nav-${group.id}-toggle`} tooltip={group.title}>
-                          <group.icon className="w-3.5 h-3.5" />
-                          <span className="flex-1 text-xs">{group.title}</span>
-                          <ChevronRight className="w-3 h-3 ml-auto transition-transform duration-200 group-data-[state=open]/nav-group:rotate-90" />
+                          <group.icon className="w-4 h-4" />
+                          <span className="flex-1">{group.title}</span>
+                          <ChevronRight className="w-4 h-4 ml-auto transition-transform duration-200 group-data-[state=open]/nav-group:rotate-90" />
                         </SidebarMenuButton>
                       </CollapsibleTrigger>
                       <CollapsibleContent>
@@ -536,8 +547,8 @@ export function AppSidebar() {
                               <SidebarMenuSubItem key={item.id} className="group/nav-item">
                                 <SidebarMenuSubButton asChild isActive={location === item.url || location.startsWith(item.url + "/")}>
                                   <Link href={item.url} data-testid={`nav-${item.id}`}>
-                                    <item.icon className="w-3 h-3" />
-                                    <span className="flex-1 text-xs">{item.title}</span>
+                                    <item.icon className="w-3.5 h-3.5" />
+                                    <span className="flex-1">{item.title}</span>
                                     <button
                                       onClick={(e) => {
                                         e.preventDefault();
@@ -549,7 +560,7 @@ export function AppSidebar() {
                                       title={isPinned ? "Unpin" : "Pin to top"}
                                       data-testid={`button-pin-${item.id}`}
                                     >
-                                      <Pin className={`w-2.5 h-2.5 ${isPinned ? "fill-current" : ""}`} />
+                                      <Pin className={`w-3 h-3 ${isPinned ? "fill-current" : ""}`} />
                                     </button>
                                   </Link>
                                 </SidebarMenuSubButton>
@@ -567,14 +578,14 @@ export function AppSidebar() {
         })}
 
         {(!isSimple || pinnedPages.includes("reports-hub")) && (!hasPageRestrictions || allowedPages!.includes("reports-hub")) && (
-          <SidebarGroup className="py-0.5">
+          <SidebarGroup className="py-1">
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild isActive={location.startsWith("/reports")} data-testid="nav-reports-hub">
                     <Link href="/reports">
-                      <BarChart3 className="w-3.5 h-3.5" />
-                      <span className="flex-1 text-xs">Reports</span>
+                      <BarChart3 className="w-4 h-4" />
+                      <span className="flex-1">Reports</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -584,18 +595,18 @@ export function AppSidebar() {
         )}
 
         {canAccessSettings && (
-          <SidebarGroup className="py-0.5">
+          <SidebarGroup className="py-1">
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild isActive={location.startsWith("/settings")} data-testid="nav-settings-toggle">
                     <Link href="/settings">
-                      <Settings className="w-3.5 h-3.5" />
-                      <span className="flex-1 text-xs">Settings</span>
+                      <Settings className="w-4 h-4" />
+                      <span className="flex-1">Settings</span>
                       {(unmappedCount?.count ?? 0) > 0 && (
-                        <span className="text-[10px] tabular-nums text-destructive font-medium" data-testid="badge-unmapped-statuses">
+                        <Badge variant="destructive" className="text-[10px] px-1.5 py-0 min-w-[18px] justify-center" data-testid="badge-unmapped-statuses">
                           {unmappedCount!.count}
-                        </span>
+                        </Badge>
                       )}
                     </Link>
                   </SidebarMenuButton>
@@ -606,14 +617,14 @@ export function AppSidebar() {
         )}
 
         {user?.role === "SUPER_ADMIN" && (
-          <SidebarGroup className="py-0.5">
+          <SidebarGroup className="py-1">
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild isActive={location === "/admin"}>
                     <Link href="/admin" data-testid="nav-admin">
-                      <Shield className="w-3.5 h-3.5" />
-                      <span className="text-xs">Control Room</span>
+                      <Shield className="w-4 h-4" />
+                      <span>Control Room</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -622,16 +633,16 @@ export function AppSidebar() {
           </SidebarGroup>
         )}
       </SidebarContent>
-      <SidebarFooter className="px-2 py-1.5 space-y-0.5 border-t border-sidebar-border">
-        <div className="flex items-center gap-0.5">
+      <SidebarFooter className="p-2 space-y-1 border-t border-sidebar-border">
+        <div className="flex items-center gap-1">
           <Button
             variant="ghost"
             size="sm"
-            className="flex-1 justify-start gap-1.5 text-[11px] text-muted-foreground"
+            className="flex-1 justify-start gap-2 text-xs text-muted-foreground"
             onClick={toggleMode}
             data-testid="button-toggle-sidebar-mode"
           >
-            {isSimple ? <ToggleLeft className="w-3 h-3" /> : <ToggleRight className="w-3 h-3" />}
+            {isSimple ? <ToggleLeft className="w-3.5 h-3.5" /> : <ToggleRight className="w-3.5 h-3.5" />}
             {isSimple ? "Simple" : "Advanced"}
           </Button>
           <Button
@@ -642,27 +653,28 @@ export function AppSidebar() {
             data-testid="button-customize-sidebar"
             title="Customize pinned pages"
           >
-            <SlidersHorizontal className="w-3 h-3" />
+            <SlidersHorizontal className="w-3.5 h-3.5" />
           </Button>
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="flex items-center gap-1.5 w-full p-1.5 rounded-md hover-elevate transition-colors" data-testid="nav-user-menu">
-              <Avatar className="h-6 w-6">
+            <button className="flex items-center gap-2 w-full p-2 rounded-md hover-elevate transition-colors" data-testid="nav-user-menu">
+              <Avatar className="h-7 w-7">
                 <AvatarImage src={undefined} />
-                <AvatarFallback className="text-[9px] bg-muted text-muted-foreground">{getUserInitials()}</AvatarFallback>
+                <AvatarFallback className="text-[10px] bg-muted text-muted-foreground">{getUserInitials()}</AvatarFallback>
               </Avatar>
               <div className="flex-1 text-left min-w-0">
-                <p className="text-xs font-medium truncate">{getUserDisplayName()}</p>
+                <p className="text-sm font-medium truncate">{getUserDisplayName()}</p>
+                <p className="text-[11px] text-muted-foreground truncate">{user?.email}</p>
               </div>
-              <ChevronUp className="w-3 h-3 text-muted-foreground" />
+              <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuItem asChild>
               <Link href="/settings" className="cursor-pointer" data-testid="nav-user-settings">
-                <Settings className="w-3.5 h-3.5 mr-1.5" />
-                <span className="text-xs">Settings</span>
+                <Settings className="w-4 h-4 mr-2" />
+                Settings
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
@@ -672,8 +684,8 @@ export function AppSidebar() {
               className="text-destructive focus:text-destructive"
               data-testid="nav-logout"
             >
-              <LogOut className="w-3.5 h-3.5 mr-1.5" />
-              <span className="text-xs">{isLoggingOut ? "Signing out..." : "Sign out"}</span>
+              <LogOut className="w-4 h-4 mr-2" />
+              {isLoggingOut ? "Signing out..." : "Sign out"}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
