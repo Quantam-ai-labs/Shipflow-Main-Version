@@ -443,6 +443,9 @@ export const waConversations = pgTable("wa_conversations", {
   lastMessage: text("last_message"),
   lastMessageAt: timestamp("last_message_at").defaultNow(),
   unreadCount: integer("unread_count").default(0).notNull(),
+  label: varchar("label", { length: 50 }),
+  assignedToUserId: varchar("assigned_to_user_id"),
+  assignedToName: varchar("assigned_to_name", { length: 255 }),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   index("idx_wa_conversations_merchant").on(table.merchantId),
@@ -464,6 +467,10 @@ export const waMessages = pgTable("wa_messages", {
   text: text("text"),
   waMessageId: varchar("wa_message_id", { length: 255 }),
   status: varchar("status", { length: 20 }).default("sent"),
+  messageType: varchar("message_type", { length: 20 }).default("text"),
+  mediaUrl: text("media_url"),
+  reactionEmoji: varchar("reaction_emoji", { length: 10 }),
+  referenceMessageId: varchar("reference_message_id", { length: 255 }),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   index("idx_wa_messages_conversation").on(table.conversationId),

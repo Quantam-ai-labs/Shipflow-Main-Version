@@ -5554,13 +5554,52 @@ export async function registerRoutes(
           for (const message of messages) {
             const fromPhone = (message.from ?? "").replace(/^\+/, "");
             const waMessageId = message.id ?? "";
-            const messageType = message.type ?? "text";
-            const messageBody =
-              message.text?.body ??
-              message.button?.text ??
-              message.interactive?.button_reply?.title ??
-              message.interactive?.list_reply?.title ??
-              "[non-text message]";
+            const rawType = message.type ?? "text";
+
+            let msgType = "text";
+            let messageBody = "[non-text message]";
+            let mediaUrl: string | null = null;
+            let reactionEmoji: string | null = null;
+            let referenceMessageId: string | null = null;
+
+            if (rawType === "text") {
+              messageBody = message.text?.body ?? "";
+              msgType = "text";
+            } else if (rawType === "button") {
+              messageBody = message.button?.text ?? "";
+              msgType = "button_reply";
+            } else if (rawType === "interactive") {
+              messageBody = message.interactive?.button_reply?.title ?? message.interactive?.list_reply?.title ?? "";
+              msgType = "button_reply";
+            } else if (rawType === "reaction") {
+              reactionEmoji = message.reaction?.emoji ?? "";
+              referenceMessageId = message.reaction?.message_id ?? null;
+              messageBody = reactionEmoji ? `Reacted ${reactionEmoji}` : "Removed reaction";
+              msgType = "reaction";
+            } else if (rawType === "image") {
+              messageBody = message.image?.caption ?? "📷 Image";
+              mediaUrl = message.image?.id ? `wa-media:${message.image.id}` : null;
+              msgType = "image";
+            } else if (rawType === "sticker") {
+              messageBody = "🎨 Sticker";
+              mediaUrl = message.sticker?.id ? `wa-media:${message.sticker.id}` : null;
+              msgType = "sticker";
+            } else if (rawType === "document") {
+              messageBody = message.document?.filename ?? "📄 Document";
+              msgType = "document";
+            } else if (rawType === "audio" || rawType === "voice") {
+              messageBody = "🎵 Audio";
+              msgType = "audio";
+            } else if (rawType === "video") {
+              messageBody = message.video?.caption ?? "🎬 Video";
+              msgType = "video";
+            } else if (rawType === "location") {
+              messageBody = `📍 Location: ${message.location?.latitude},${message.location?.longitude}`;
+              msgType = "location";
+            } else if (rawType === "contacts") {
+              messageBody = "👤 Contact shared";
+              msgType = "contacts";
+            }
 
             const [matchedOrder] = await db
               .select({ id: orders.id, merchantId: orders.merchantId, status: orders.workflowStatus, orderNumber: orders.orderNumber })
@@ -5576,8 +5615,28 @@ export async function registerRoutes(
               .orderBy(desc(orders.createdAt))
               .limit(1);
 
+            const contactName = value?.contacts?.[0]?.profile?.name ?? undefined;
+
             if (!matchedOrder) {
-              console.warn(`[WhatsApp Webhook:${merchantId}] ${requestId} - No order for phone ${fromPhone}`);
+              console.warn(`[WhatsApp Webhook:${merchantId}] ${requestId} - No order for phone ${fromPhone}, saving to inbox anyway`);
+              const conv = await storage.upsertConversation({
+                merchantId,
+                contactPhone: fromPhone,
+                contactName,
+                lastMessage: messageBody.slice(0, 200),
+              });
+              await storage.createWaMessage({
+                conversationId: conv.id,
+                direction: "inbound",
+                senderName: contactName ?? fromPhone,
+                text: messageBody,
+                waMessageId,
+                status: "received",
+                messageType: msgType,
+                mediaUrl,
+                reactionEmoji,
+                referenceMessageId,
+              });
               continue;
             }
 
@@ -5587,12 +5646,11 @@ export async function registerRoutes(
                 orderId: matchedOrder.id,
                 waMessageId,
                 fromPhone,
-                messageType,
+                messageType: rawType,
                 messageBody,
                 rawPayload: message,
               });
 
-              const contactName = value?.contacts?.[0]?.profile?.name ?? undefined;
               const conv = await storage.upsertConversation({
                 merchantId: matchedOrder.merchantId,
                 contactPhone: fromPhone,
@@ -5608,12 +5666,18 @@ export async function registerRoutes(
                 text: messageBody,
                 waMessageId,
                 status: "received",
+                messageType: msgType,
+                mediaUrl,
+                reactionEmoji,
+                referenceMessageId,
               });
 
-              await processWhatsAppOrderResponse(
-                matchedOrder.merchantId, matchedOrder.id,
-                matchedOrder.orderNumber, messageBody, fromPhone, fromPhone
-              );
+              if (msgType === "text" || msgType === "button_reply") {
+                await processWhatsAppOrderResponse(
+                  matchedOrder.merchantId, matchedOrder.id,
+                  matchedOrder.orderNumber, messageBody, fromPhone, fromPhone
+                );
+              }
             } catch (dbErr: any) {
               console.error(`[WhatsApp Webhook:${merchantId}] ${requestId} - DB error: ${dbErr.message}`);
             }
@@ -7478,6 +7542,98 @@ export async function registerRoutes(
         senderName: "Agent",
         text: text.trim(),
         waMessageId: messageId,
+        status: "sent",
+      });
+
+      res.json(msg);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/support/conversations/:id/label", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { label } = req.body;
+      await storage.updateConversationLabel(merchantId, req.params.id, label || null);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/support/conversations/:id/assign", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { userId, userName } = req.body;
+      await storage.updateConversationAssignment(merchantId, req.params.id, userId || null, userName || null);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/support/conversations/:id/read", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      await storage.markConversationRead(merchantId, req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/support/conversations/:id/react", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { emoji, waMessageId } = req.body;
+      if (!emoji || !waMessageId) return res.status(400).json({ error: "emoji and waMessageId required" });
+
+      const conv = await storage.getConversationById(req.params.id);
+      if (!conv || conv.merchantId !== merchantId) return res.status(404).json({ error: "Conversation not found" });
+
+      const [merchantRow] = await db.select({
+        waPhoneNumberId: merchants.waPhoneNumberId,
+        waAccessToken: merchants.waAccessToken,
+      }).from(merchants).where(eq(merchants.id, merchantId)).limit(1);
+
+      const phoneNumberId = merchantRow?.waPhoneNumberId || process.env.WHATSAPP_PHONE_NO_ID;
+      const accessToken = merchantRow?.waAccessToken || process.env.WHATSAPP_ACCESS_TOKEN;
+
+      if (!phoneNumberId || !accessToken) {
+        return res.status(400).json({ error: "WhatsApp credentials not configured" });
+      }
+
+      const waPayload = {
+        messaging_product: "whatsapp",
+        to: conv.contactPhone,
+        type: "reaction",
+        reaction: { message_id: waMessageId, emoji },
+      };
+
+      const waRes = await fetch(`https://graph.facebook.com/v22.0/${phoneNumberId}/messages`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify(waPayload),
+        signal: AbortSignal.timeout(10000),
+      });
+
+      if (!waRes.ok) {
+        const errData = await waRes.json().catch(() => ({})) as any;
+        return res.status(400).json({ error: errData?.error?.message || "Failed to send reaction" });
+      }
+
+      const msg = await storage.createWaMessage({
+        conversationId: conv.id,
+        direction: "outbound",
+        senderName: "Agent",
+        messageType: "reaction",
+        reactionEmoji: emoji,
+        referenceMessageId: waMessageId,
         status: "sent",
       });
 

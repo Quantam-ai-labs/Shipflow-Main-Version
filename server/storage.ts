@@ -252,7 +252,10 @@ export interface IStorage {
   upsertConversation(data: { merchantId: string; contactPhone: string; contactName?: string; orderId?: string | null; orderNumber?: string | null; lastMessage?: string | null }): Promise<WaConversation>;
   deleteConversation(id: string): Promise<void>;
   getWaMessages(conversationId: string): Promise<WaMessage[]>;
-  createWaMessage(data: { conversationId: string; direction: string; senderName?: string | null; text?: string | null; waMessageId?: string | null; status?: string | null }): Promise<WaMessage>;
+  createWaMessage(data: { conversationId: string; direction: string; senderName?: string | null; text?: string | null; waMessageId?: string | null; status?: string | null; messageType?: string | null; mediaUrl?: string | null; reactionEmoji?: string | null; referenceMessageId?: string | null }): Promise<WaMessage>;
+  updateConversationLabel(merchantId: string, convId: string, label: string | null): Promise<void>;
+  updateConversationAssignment(merchantId: string, convId: string, userId: string | null, userName: string | null): Promise<void>;
+  markConversationRead(merchantId: string, convId: string): Promise<void>;
 
   // Seed
   seedDemoData(): Promise<void>;
@@ -2165,6 +2168,7 @@ export class DatabaseStorage implements IStorage {
           orderNumber: data.orderNumber !== undefined ? data.orderNumber : existing.orderNumber,
           lastMessage: data.lastMessage ?? existing.lastMessage,
           lastMessageAt: new Date(),
+          unreadCount: sql`${waConversations.unreadCount} + 1`,
         })
         .where(eq(waConversations.id, existing.id))
         .returning();
@@ -2178,6 +2182,7 @@ export class DatabaseStorage implements IStorage {
       orderNumber: data.orderNumber,
       lastMessage: data.lastMessage,
       lastMessageAt: new Date(),
+      unreadCount: 1,
     }).returning();
     return row;
   }
@@ -2193,7 +2198,7 @@ export class DatabaseStorage implements IStorage {
       .orderBy(asc(waMessages.createdAt));
   }
 
-  async createWaMessage(data: { conversationId: string; direction: string; senderName?: string | null; text?: string | null; waMessageId?: string | null; status?: string | null }): Promise<WaMessage> {
+  async createWaMessage(data: { conversationId: string; direction: string; senderName?: string | null; text?: string | null; waMessageId?: string | null; status?: string | null; messageType?: string | null; mediaUrl?: string | null; reactionEmoji?: string | null; referenceMessageId?: string | null }): Promise<WaMessage> {
     const [row] = await db.insert(waMessages).values({
       conversationId: data.conversationId,
       direction: data.direction,
@@ -2201,8 +2206,30 @@ export class DatabaseStorage implements IStorage {
       text: data.text,
       waMessageId: data.waMessageId,
       status: data.status ?? "sent",
+      messageType: data.messageType ?? "text",
+      mediaUrl: data.mediaUrl,
+      reactionEmoji: data.reactionEmoji,
+      referenceMessageId: data.referenceMessageId,
     }).returning();
     return row;
+  }
+
+  async updateConversationLabel(merchantId: string, convId: string, label: string | null): Promise<void> {
+    await db.update(waConversations)
+      .set({ label })
+      .where(and(eq(waConversations.id, convId), eq(waConversations.merchantId, merchantId)));
+  }
+
+  async updateConversationAssignment(merchantId: string, convId: string, userId: string | null, userName: string | null): Promise<void> {
+    await db.update(waConversations)
+      .set({ assignedToUserId: userId, assignedToName: userName })
+      .where(and(eq(waConversations.id, convId), eq(waConversations.merchantId, merchantId)));
+  }
+
+  async markConversationRead(merchantId: string, convId: string): Promise<void> {
+    await db.update(waConversations)
+      .set({ unreadCount: 0 })
+      .where(and(eq(waConversations.id, convId), eq(waConversations.merchantId, merchantId)));
   }
 
   async seedDemoData(): Promise<void> {
