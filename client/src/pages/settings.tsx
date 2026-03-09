@@ -166,8 +166,8 @@ export default function Settings() {
 
   return (
     <div className="min-h-full">
-      <div className="border-b px-6">
-        <div className="flex gap-1 overflow-x-auto scrollbar-none" data-testid="settings-tab-nav">
+      <div className="px-6 pt-4 pb-2">
+        <div className="flex gap-2 overflow-x-auto scrollbar-none pb-1" data-testid="settings-tab-nav">
           {SETTINGS_TABS.map(tab => {
             const Icon = tab.icon;
             const isActive = tab.id === activeTab;
@@ -178,14 +178,14 @@ export default function Settings() {
                 onClick={() => setActiveTab(tab.id)}
                 data-testid={`settings-tab-${tab.id}`}
                 className={[
-                  "flex-shrink-0 flex items-center gap-2 px-4 py-3 text-sm font-medium",
-                  "border-b-2 transition-colors whitespace-nowrap",
+                  "flex-shrink-0 flex flex-col items-center justify-center gap-1.5",
+                  "px-5 py-3 rounded-lg border text-xs font-medium transition-all whitespace-nowrap min-w-[90px]",
                   isActive
-                    ? "border-primary text-foreground"
-                    : "border-transparent text-muted-foreground hover:text-foreground",
+                    ? "border-primary bg-primary/10 text-primary shadow-sm"
+                    : "border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40 hover:bg-accent/50",
                 ].join(" ")}
               >
-                <Icon className="w-4 h-4" />
+                <Icon className="w-[18px] h-[18px]" />
                 {tab.label}
               </button>
             );
