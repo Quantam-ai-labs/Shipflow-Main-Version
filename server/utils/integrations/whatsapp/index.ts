@@ -35,24 +35,20 @@ export async function sendOrderStatusWhatsApp(
   if (!(WA_NOTIFY_STATUSES as readonly string[]).includes(params.toStatus))
     return;
 
-  if (!IS_PRODUCTION) {
+  // if (!IS_PRODUCTION) {
+  //   console.log(
+  //     `${LOG_PREFIX} [DEV] Skipping send for order ${params.orderNumber} (${params.toStatus}) — not in production`,
+  //   );
+  //   return;
+  // }
+
+  // Only allow specific merchant/domain from ENV
+  const allowedDomain = process.env.LALAIMPORT;
+  if (allowedDomain && allowedDomain !== params.shopDomain) {
     console.log(
-      `${LOG_PREFIX} [DEV] Skipping send for order ${params.orderNumber} (${params.toStatus}) — not in production`,
+      `${LOG_PREFIX} [ENV FILTER] Skipping order ${params.orderNumber} — domain "${params.shopDomain}" does not match ENV "${allowedDomain}"`,
     );
     return;
-  }
-
-  const allowedDomains = (process.env.WA_ALLOWED_SHOP_DOMAINS || "")
-    .split(",")
-    .map((d) => d.trim())
-    .filter(Boolean);
-  if (allowedDomains.length > 0 && params.shopDomain) {
-    if (!allowedDomains.includes(params.shopDomain)) {
-      console.log(
-        `${LOG_PREFIX} [STORE FILTER] Skipping order ${params.orderNumber} — store "${params.shopDomain}" not in allowed list [${allowedDomains.join(", ")}]`,
-      );
-      return;
-    }
   }
 
   try {
