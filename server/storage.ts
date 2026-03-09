@@ -173,6 +173,7 @@ export interface IStorage {
   // WA Meta Templates
   getWaMetaTemplates(merchantId: string): Promise<WaMetaTemplate[]>;
   createWaMetaTemplate(data: InsertWaMetaTemplate): Promise<WaMetaTemplate>;
+  upsertWaMetaTemplate(merchantId: string, data: Omit<InsertWaMetaTemplate, "merchantId">): Promise<WaMetaTemplate>;
   deleteWaMetaTemplate(merchantId: string, id: string): Promise<void>;
 
   // WA Automations
@@ -1658,6 +1659,27 @@ export class DatabaseStorage implements IStorage {
 
   async createWaMetaTemplate(data: InsertWaMetaTemplate): Promise<WaMetaTemplate> {
     const [result] = await db.insert(waMetaTemplates).values({ ...data, updatedAt: new Date() }).returning();
+    return result;
+  }
+
+  async upsertWaMetaTemplate(merchantId: string, data: Omit<InsertWaMetaTemplate, "merchantId">): Promise<WaMetaTemplate> {
+    const now = new Date();
+    const [result] = await db.insert(waMetaTemplates)
+      .values({ ...data, merchantId, updatedAt: now })
+      .onConflictDoUpdate({
+        target: [waMetaTemplates.merchantId, waMetaTemplates.name, waMetaTemplates.language],
+        set: {
+          category: data.category,
+          headerType: data.headerType,
+          headerText: data.headerText,
+          body: data.body,
+          footer: data.footer,
+          buttons: data.buttons,
+          status: data.status,
+          updatedAt: now,
+        },
+      })
+      .returning();
     return result;
   }
 

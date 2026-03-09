@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import {
-  FileText, Plus, Zap, Trash2, ChevronDown, ChevronUp, ShoppingCart, Clock, Edit2,
+  FileText, Plus, Zap, Trash2, ChevronDown, ChevronUp, ShoppingCart, Clock, Edit2, RefreshCw, Loader2,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -754,6 +754,28 @@ export default function SupportTemplatesPage() {
     onError: () => toast({ title: "Failed to delete template", variant: "destructive" }),
   });
 
+  const syncMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/wa-meta-templates/sync");
+      return await res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/wa-meta-templates"] });
+      toast({ title: `${data?.synced ?? 0} templates synced from Meta` });
+    },
+    onError: (err: any) => {
+      toast({ title: err?.message || "Failed to sync templates from Meta", variant: "destructive" });
+    },
+  });
+
+  const [hasSynced, setHasSynced] = useState(false);
+  useEffect(() => {
+    if (activeTab === "templates" && !hasSynced && !syncMutation.isPending) {
+      setHasSynced(true);
+      syncMutation.mutate();
+    }
+  }, [activeTab, hasSynced]);
+
   // WA Automations
   const { data: automations = [], isLoading: autoLoading } = useQuery<WaAutomation[]>({
     queryKey: ["/api/wa-automations"],
@@ -861,14 +883,29 @@ export default function SupportTemplatesPage() {
                 Create WhatsApp templates with Header, Body, Footer and Buttons. Templates are submitted to Meta for approval.
               </p>
             </div>
-            <Button
-              onClick={() => { setEditorPreset(null); setEditorOpen(true); }}
-              data-testid="button-new-template"
-              className="bg-violet-600 hover:bg-violet-700 text-white shrink-0"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              New Template
-            </Button>
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                variant="outline"
+                onClick={() => syncMutation.mutate()}
+                disabled={syncMutation.isPending}
+                data-testid="button-sync-meta"
+              >
+                {syncMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                )}
+                {syncMutation.isPending ? "Syncing..." : "Sync from Meta"}
+              </Button>
+              <Button
+                onClick={() => { setEditorPreset(null); setEditorOpen(true); }}
+                data-testid="button-new-template"
+                className="bg-violet-600 hover:bg-violet-700 text-white"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                New Template
+              </Button>
+            </div>
           </div>
 
           {/* Quick Start Presets */}
@@ -930,8 +967,14 @@ export default function SupportTemplatesPage() {
                       <p className="font-semibold text-sm truncate">{tpl.name}</p>
                       <p className="text-xs text-muted-foreground">{tpl.language} | {tpl.category.toUpperCase()}</p>
                     </div>
-                    <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800 text-xs shrink-0">
-                      APPROVED
+                    <Badge className={`text-xs shrink-0 ${
+                      tpl.status === "approved"
+                        ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800"
+                        : tpl.status === "rejected"
+                        ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800"
+                        : "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800"
+                    }`}>
+                      {tpl.status.toUpperCase()}
                     </Badge>
                     <button
                       type="button"

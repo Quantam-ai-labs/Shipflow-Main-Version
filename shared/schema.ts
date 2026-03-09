@@ -377,6 +377,7 @@ export const waMetaTemplates = pgTable("wa_meta_templates", {
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
   index("idx_wa_meta_templates_merchant").on(table.merchantId),
+  uniqueIndex("idx_wa_meta_templates_merchant_name_lang").on(table.merchantId, table.name, table.language),
 ]);
 
 export const insertWaMetaTemplateSchema = createInsertSchema(waMetaTemplates).omit({ id: true, createdAt: true, updatedAt: true });

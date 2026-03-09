@@ -6952,6 +6952,86 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/wa-meta-templates/sync", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const merchant = await storage.getMerchant(merchantId);
+      if (!merchant) return res.status(404).json({ error: "Merchant not found" });
+
+      const wabaId = merchant.waWabaId;
+      const accessToken = merchant.waAccessToken || process.env.WHATSAPP_ACCESS_TOKEN;
+
+      if (!wabaId || !accessToken) {
+        return res.status(400).json({ error: "WhatsApp Business Account ID or Access Token not configured. Go to Support > Connection to set them up." });
+      }
+
+      let nextUrl: string | null = `https://graph.facebook.com/v22.0/${wabaId}/message_templates?limit=100`;
+      const templates: any[] = [];
+
+      while (nextUrl) {
+        const metaRes = await fetch(nextUrl, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+
+        if (!metaRes.ok) {
+          const errBody = await metaRes.text();
+          console.error("[WA Sync] Meta API error:", metaRes.status, errBody);
+          if (templates.length === 0) {
+            return res.status(502).json({ error: "Failed to fetch templates from Meta. Check your WABA ID and Access Token." });
+          }
+          break;
+        }
+
+        const metaData = await metaRes.json() as { data: any[]; paging?: { next?: string } };
+        templates.push(...(metaData.data ?? []));
+        nextUrl = metaData.paging?.next ?? null;
+      }
+
+      const results = [];
+      for (const t of templates) {
+        const components = t.components ?? [];
+        const headerComp = components.find((c: any) => c.type === "HEADER");
+        const bodyComp = components.find((c: any) => c.type === "BODY");
+        const footerComp = components.find((c: any) => c.type === "FOOTER");
+        const buttonComps = components.filter((c: any) => c.type === "BUTTONS");
+
+        let buttons: { type: string; text: string; url?: string }[] = [];
+        for (const bc of buttonComps) {
+          if (Array.isArray(bc.buttons)) {
+            for (const btn of bc.buttons) {
+              buttons.push({
+                type: btn.type === "URL" ? "url" : btn.type === "PHONE_NUMBER" ? "phone" : "quick_reply",
+                text: btn.text || "",
+                url: btn.url,
+              });
+            }
+          }
+        }
+
+        const result = await storage.upsertWaMetaTemplate(merchantId, {
+          name: t.name,
+          language: t.language || "en",
+          category: (t.category || "utility").toLowerCase(),
+          headerType: headerComp ? (headerComp.format || "text").toLowerCase() : "none",
+          headerText: headerComp?.text?.slice(0, 60) ?? null,
+          body: bodyComp?.text ?? null,
+          footer: footerComp?.text?.slice(0, 60) ?? null,
+          buttons,
+          status: (t.status || "approved").toLowerCase(),
+        });
+        results.push(result);
+      }
+
+      console.log(`[WA Sync] Synced ${results.length} templates from Meta for merchant ${merchantId}`);
+      res.json({ synced: results.length, templates: results });
+    } catch (error: any) {
+      console.error("[WA Sync] Error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.delete("/api/wa-meta-templates/:id", isAuthenticated, async (req, res) => {
     try {
       const merchantId = await requireMerchant(req, res);
