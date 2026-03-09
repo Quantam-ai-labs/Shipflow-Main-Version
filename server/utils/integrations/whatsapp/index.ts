@@ -44,7 +44,7 @@ export async function sendOrderStatusWhatsApp(
 
   // Only allow specific merchant/domain from ENV
   const allowedDomain = process.env.LALAIMPORT;
-  if (allowedDomain && allowedDomain !== params.shopDomain) {
+  if (allowedDomain && allowedDomain == params.shopDomain) {
     console.log(
       `${LOG_PREFIX} [ENV FILTER] Skipping order ${params.orderNumber} — domain "${params.shopDomain}" does not match ENV "${allowedDomain}"`,
     );
