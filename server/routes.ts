@@ -6421,6 +6421,46 @@ export async function registerRoutes(
     },
   );
 
+  app.get("/api/shopify/webhooks/debug", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const [health, secretsDiag] = await Promise.all([
+        checkWebhookHealth(merchantId).catch((e: any) => ({ status: 'error' as const, registered: [], missing: [], callbackUrl: '', error: e.message })),
+        Promise.resolve(webhookHandler.getSecretsDiagnostics()),
+      ]);
+
+      const since1h = new Date(Date.now() - 60 * 60 * 1000);
+      const recentFailures = await db
+        .select({
+          topic: shopifyWebhookEvents.topic,
+          status: shopifyWebhookEvents.processingStatus,
+          receivedAt: shopifyWebhookEvents.receivedAt,
+          error: shopifyWebhookEvents.errorMessage,
+        })
+        .from(shopifyWebhookEvents)
+        .where(
+          and(
+            eq(shopifyWebhookEvents.merchantId, merchantId),
+            gte(shopifyWebhookEvents.receivedAt, since1h)
+          )
+        )
+        .orderBy(desc(shopifyWebhookEvents.receivedAt))
+        .limit(20);
+
+      res.json({
+        webhookHealth: health,
+        secrets: secretsDiag,
+        recentEvents: recentFailures,
+        note: "If HMAC fails, webhooks are rejected before reaching the events table. Check server logs for '[WebhookHandler] HMAC failed' entries.",
+      });
+    } catch (error: any) {
+      console.error("Error in webhook debug:", error);
+      res.status(500).json({ message: error.message || "Failed to get debug info" });
+    }
+  });
+
   app.get("/api/shopify/webhook-activity", isAuthenticated, async (req, res) => {
     try {
       const merchantId = await requireMerchant(req, res);

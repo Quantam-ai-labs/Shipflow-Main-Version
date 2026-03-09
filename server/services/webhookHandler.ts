@@ -13,24 +13,43 @@ interface WebhookProcessResult {
 
 export class WebhookHandler {
   private webhookSecrets: string[];
+  private secretLabels: string[];
 
   constructor() {
-    const candidates = [
-      process.env.SHOPIFY_WEBHOOK_SECRET,
-      process.env.SHOPIFY_APP_CLIENT_SECRET,
-      process.env.SHOPIFY_CLIENT_SECRET,
-      process.env.SHOPIFY_APP_SHARED_SECRET,
-      process.env.SHOPIFY_APP_SHARED_SECRET_2,
+    const envKeys = [
+      'SHOPIFY_WEBHOOK_SECRET',
+      'SHOPIFY_APP_CLIENT_SECRET',
+      'SHOPIFY_CLIENT_SECRET',
+      'SHOPIFY_APP_SHARED_SECRET',
+      'SHOPIFY_APP_SHARED_SECRET_2',
     ];
-    this.webhookSecrets = candidates.filter((s): s is string => !!s);
+    this.webhookSecrets = [];
+    this.secretLabels = [];
+    for (const key of envKeys) {
+      const val = process.env[key];
+      if (val) {
+        this.webhookSecrets.push(val);
+        this.secretLabels.push(key);
+      }
+    }
+
+    const masked = this.secretLabels.map((label, i) => {
+      const s = this.webhookSecrets[i];
+      return `${label}=${s.slice(0, 4)}...${s.slice(-4)} (${s.length} chars)`;
+    });
+    console.log(`[WebhookHandler] Initialized with ${this.webhookSecrets.length} secrets: ${masked.join(', ') || 'NONE'}`);
   }
 
   verifyHmac(rawBody: Buffer, hmacHeader: string): boolean {
-    if (!this.webhookSecrets.length || !hmacHeader) return false;
+    if (!this.webhookSecrets.length || !hmacHeader) {
+      console.warn(`[WebhookHandler] HMAC verify skipped: ${this.webhookSecrets.length} secrets loaded, hmacHeader=${hmacHeader ? 'present' : 'missing'}`);
+      return false;
+    }
 
     const hmacBuf = Buffer.from(hmacHeader, 'base64');
 
-    for (const secret of this.webhookSecrets) {
+    for (let i = 0; i < this.webhookSecrets.length; i++) {
+      const secret = this.webhookSecrets[i];
       try {
         const generated = crypto
           .createHmac('sha256', secret)
@@ -44,10 +63,21 @@ export class WebhookHandler {
           return true;
         }
       } catch {
-        // try next secret
       }
     }
+
+    console.warn(`[WebhookHandler] HMAC failed: tried ${this.webhookSecrets.length} secrets (${this.secretLabels.join(', ')}), header=${hmacHeader.slice(0, 8)}..., bodyLen=${rawBody.length}`);
     return false;
+  }
+
+  getSecretsDiagnostics(): { count: number; configured: { name: string; masked: string }[] } {
+    return {
+      count: this.webhookSecrets.length,
+      configured: this.secretLabels.map((label, i) => {
+        const s = this.webhookSecrets[i];
+        return { name: label, masked: `${s.slice(0, 4)}...${s.slice(-4)} (${s.length} chars)` };
+      }),
+    };
   }
 
   computePayloadHash(rawBody: Buffer): string {
