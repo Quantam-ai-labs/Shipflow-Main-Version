@@ -5424,6 +5424,8 @@ export async function registerRoutes(
                 merchantId: orders.merchantId,
                 status: orders.workflowStatus,
                 orderNumber: orders.orderNumber,
+                shopifyOrderId: orders.shopifyOrderId,
+                tags: orders.tags,
               })
               .from(orders)
               .where(
@@ -5494,7 +5496,8 @@ export async function registerRoutes(
                 matchedOrder.orderNumber,
                 messageBody,
                 fromPhone,
-                normalizedPhone
+                normalizedPhone,
+                matchedOrder.shopifyOrderId,
               );
             } catch (dbError: any) {
               console.error(`      ❌ DATABASE ERROR: ${dbError.message}`);
@@ -5604,7 +5607,7 @@ export async function registerRoutes(
             }
 
             const [matchedOrder] = await db
-              .select({ id: orders.id, merchantId: orders.merchantId, status: orders.workflowStatus, orderNumber: orders.orderNumber })
+              .select({ id: orders.id, merchantId: orders.merchantId, status: orders.workflowStatus, orderNumber: orders.orderNumber, shopifyOrderId: orders.shopifyOrderId, tags: orders.tags })
               .from(orders)
               .where(and(
                 eq(orders.merchantId, merchantId),
@@ -5677,7 +5680,8 @@ export async function registerRoutes(
               if (msgType === "text" || msgType === "button_reply") {
                 await processWhatsAppOrderResponse(
                   matchedOrder.merchantId, matchedOrder.id,
-                  matchedOrder.orderNumber, messageBody, fromPhone, fromPhone
+                  matchedOrder.orderNumber, messageBody, fromPhone, fromPhone,
+                  matchedOrder.shopifyOrderId,
                 );
               }
             } catch (dbErr: any) {
@@ -5702,7 +5706,8 @@ export async function registerRoutes(
     orderNumber: string,
     messageBody: string,
     phoneNumber: string,
-    normalizedPhone: string
+    normalizedPhone: string,
+    shopifyOrderId?: string,
   ) {
     try {
       const lowerMessage = messageBody.toLowerCase().trim();
@@ -5799,8 +5804,34 @@ export async function registerRoutes(
           );
         }
       } else {
-        console.log(`        ❓ Unknown response - asking for clarification`);
-        // Send clarification request
+        console.log(`        ❓ Unknown response - adding Querry tag`);
+
+        try {
+          if (shopifyOrderId) {
+            writeBackAddTag(merchantId, shopifyOrderId, "Querry").catch(err => {
+              console.warn(`[WhatsApp] Failed to add Querry tag for order ${orderNumber}: ${err.message}`);
+            });
+          }
+
+          const [currentOrder] = await db
+            .select({ tags: orders.tags })
+            .from(orders)
+            .where(and(eq(orders.id, orderId), eq(orders.merchantId, merchantId)))
+            .limit(1);
+
+          if (currentOrder) {
+            const currentTags: string[] = Array.isArray(currentOrder.tags) ? currentOrder.tags : [];
+            if (!currentTags.some(t => t.toLowerCase() === "querry")) {
+              await db.update(orders)
+                .set({ tags: [...currentTags, "Querry"] })
+                .where(and(eq(orders.id, orderId), eq(orders.merchantId, merchantId)));
+            }
+          }
+          console.log(`        🏷️ Added "Querry" tag to order #${orderNumber}`);
+        } catch (tagErr: any) {
+          console.warn(`[WhatsApp] Failed to add Querry tag for order ${orderNumber}: ${tagErr.message}`);
+        }
+
         await sendWhatsAppReply(
           normalizedPhone,
           `I didn't understand your response. Please reply with:\n✅ *confirm* - to confirm the order\n❌ *cancel* - to cancel the order`
