@@ -359,6 +359,54 @@ export type InsertWhatsappTemplate = z.infer<typeof insertWhatsappTemplateSchema
 export type WhatsappTemplate = typeof whatsappTemplates.$inferSelect;
 
 // ============================================
+// WA META TEMPLATES (Meta-style template builder with header/body/footer/buttons)
+// ============================================
+export const waMetaTemplates = pgTable("wa_meta_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  language: varchar("language", { length: 10 }).default("en").notNull(),
+  category: varchar("category", { length: 50 }).default("utility").notNull(),
+  headerType: varchar("header_type", { length: 20 }).default("text").notNull(),
+  headerText: varchar("header_text", { length: 60 }),
+  body: text("body"),
+  footer: varchar("footer", { length: 60 }),
+  buttons: jsonb("buttons").default([]),
+  status: varchar("status", { length: 20 }).default("approved").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_wa_meta_templates_merchant").on(table.merchantId),
+]);
+
+export const insertWaMetaTemplateSchema = createInsertSchema(waMetaTemplates).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertWaMetaTemplate = z.infer<typeof insertWaMetaTemplateSchema>;
+export type WaMetaTemplate = typeof waMetaTemplates.$inferSelect;
+
+// ============================================
+// WA AUTOMATIONS (Trigger-based send rules)
+// ============================================
+export const waAutomations = pgTable("wa_automations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description"),
+  triggerStatus: varchar("trigger_status", { length: 50 }).notNull(),
+  delayMinutes: integer("delay_minutes").default(0).notNull(),
+  messageText: text("message_text"),
+  templateName: varchar("template_name", { length: 255 }),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_wa_automations_merchant").on(table.merchantId),
+]);
+
+export const insertWaAutomationSchema = createInsertSchema(waAutomations).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertWaAutomation = z.infer<typeof insertWaAutomationSchema>;
+export type WaAutomation = typeof waAutomations.$inferSelect;
+
+// ============================================
 // WHATSAPP INCOMING RESPONSES
 // ============================================
 export const whatsappResponses = pgTable("whatsapp_responses", {

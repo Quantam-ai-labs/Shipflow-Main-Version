@@ -6914,6 +6914,126 @@ export async function registerRoutes(
     }
   });
 
+  // ── WA Meta Templates ──────────────────────────────────────────────────────
+  app.get("/api/wa-meta-templates", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const templates = await storage.getWaMetaTemplates(merchantId);
+      res.json(templates);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/wa-meta-templates", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { name, language, category, headerType, headerText, body, footer, buttons } = req.body;
+      if (!name || typeof name !== "string" || name.trim().length === 0) {
+        return res.status(400).json({ error: "name is required" });
+      }
+      const template = await storage.createWaMetaTemplate({
+        merchantId,
+        name: name.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_"),
+        language: language || "en",
+        category: category || "utility",
+        headerType: headerType || "text",
+        headerText: headerText ? String(headerText).slice(0, 60) : null,
+        body: body ? String(body) : null,
+        footer: footer ? String(footer).slice(0, 60) : null,
+        buttons: Array.isArray(buttons) ? buttons : [],
+        status: "approved",
+      });
+      res.json(template);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/wa-meta-templates/:id", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      await storage.deleteWaMetaTemplate(merchantId, req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ── WA Automations ──────────────────────────────────────────────────────────
+  app.get("/api/wa-automations", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const automations = await storage.getWaAutomations(merchantId);
+      res.json(automations);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/wa-automations", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { title, description, triggerStatus, delayMinutes, messageText, templateName } = req.body;
+      if (!title || typeof title !== "string" || title.trim().length === 0) {
+        return res.status(400).json({ error: "title is required" });
+      }
+      if (!triggerStatus || typeof triggerStatus !== "string") {
+        return res.status(400).json({ error: "triggerStatus is required" });
+      }
+      const automation = await storage.createWaAutomation({
+        merchantId,
+        title: title.trim(),
+        description: description ? String(description).trim() : null,
+        triggerStatus: triggerStatus.toUpperCase(),
+        delayMinutes: typeof delayMinutes === "number" ? Math.max(0, delayMinutes) : 0,
+        messageText: messageText ? String(messageText).trim() : null,
+        templateName: templateName && templateName !== "none" ? String(templateName).trim() : null,
+        isActive: true,
+      });
+      res.json(automation);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/wa-automations/:id", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { title, description, triggerStatus, delayMinutes, messageText, templateName, isActive } = req.body;
+      const updateData: Record<string, any> = {};
+      if (title !== undefined) updateData.title = String(title).trim();
+      if (description !== undefined) updateData.description = description ? String(description).trim() : null;
+      if (triggerStatus !== undefined) updateData.triggerStatus = String(triggerStatus).toUpperCase();
+      if (delayMinutes !== undefined) updateData.delayMinutes = Math.max(0, Number(delayMinutes) || 0);
+      if (messageText !== undefined) updateData.messageText = messageText ? String(messageText).trim() : null;
+      if (templateName !== undefined) updateData.templateName = templateName && templateName !== "none" ? String(templateName).trim() : null;
+      if (isActive !== undefined) updateData.isActive = Boolean(isActive);
+      const updated = await storage.updateWaAutomation(merchantId, req.params.id, updateData);
+      if (!updated) return res.status(404).json({ error: "Automation not found" });
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/wa-automations/:id", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      await storage.deleteWaAutomation(merchantId, req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.get("/api/whatsapp-logs", isAuthenticated, async (req, res) => {
     try {
       const merchantId = await requireMerchant(req, res);

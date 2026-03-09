@@ -42,6 +42,10 @@ import {
   waConversations, waMessages,
   type WaConversation, type InsertWaConversation,
   type WaMessage, type InsertWaMessage,
+  waMetaTemplates,
+  type WaMetaTemplate, type InsertWaMetaTemplate,
+  waAutomations,
+  type WaAutomation, type InsertWaAutomation,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, or, ilike, sql, count, inArray, isNull, isNotNull, gte, lte } from "drizzle-orm";
@@ -165,6 +169,18 @@ export interface IStorage {
   upsertWhatsAppTemplate(data: { merchantId: string; workflowStatus: string; templateName: string; messageBody?: string | null; isActive: boolean; delayMinutes?: number }): Promise<WhatsappTemplate>;
   deleteWhatsAppTemplate(merchantId: string, workflowStatus: string): Promise<void>;
   getWhatsAppTemplateForStatus(merchantId: string, workflowStatus: string): Promise<{ templateName: string; messageBody: string | null }>;
+
+  // WA Meta Templates
+  getWaMetaTemplates(merchantId: string): Promise<WaMetaTemplate[]>;
+  createWaMetaTemplate(data: InsertWaMetaTemplate): Promise<WaMetaTemplate>;
+  deleteWaMetaTemplate(merchantId: string, id: string): Promise<void>;
+
+  // WA Automations
+  getWaAutomations(merchantId: string): Promise<WaAutomation[]>;
+  getWaAutomationsByTrigger(merchantId: string, triggerStatus: string): Promise<WaAutomation[]>;
+  createWaAutomation(data: InsertWaAutomation): Promise<WaAutomation>;
+  updateWaAutomation(merchantId: string, id: string, data: Partial<InsertWaAutomation>): Promise<WaAutomation | undefined>;
+  deleteWaAutomation(merchantId: string, id: string): Promise<void>;
 
   // Order Payments
   getOrderPayments(merchantId: string, orderId: string): Promise<OrderPayment[]>;
@@ -1632,6 +1648,49 @@ export class DatabaseStorage implements IStorage {
     }
     const defaultName = workflowStatus === "NEW" ? "order_confirmation_2" : "order_updates";
     return { templateName: defaultName, messageBody: null };
+  }
+
+  async getWaMetaTemplates(merchantId: string): Promise<WaMetaTemplate[]> {
+    return db.select().from(waMetaTemplates)
+      .where(eq(waMetaTemplates.merchantId, merchantId))
+      .orderBy(desc(waMetaTemplates.createdAt));
+  }
+
+  async createWaMetaTemplate(data: InsertWaMetaTemplate): Promise<WaMetaTemplate> {
+    const [result] = await db.insert(waMetaTemplates).values({ ...data, updatedAt: new Date() }).returning();
+    return result;
+  }
+
+  async deleteWaMetaTemplate(merchantId: string, id: string): Promise<void> {
+    await db.delete(waMetaTemplates).where(and(eq(waMetaTemplates.merchantId, merchantId), eq(waMetaTemplates.id, id)));
+  }
+
+  async getWaAutomations(merchantId: string): Promise<WaAutomation[]> {
+    return db.select().from(waAutomations)
+      .where(eq(waAutomations.merchantId, merchantId))
+      .orderBy(desc(waAutomations.createdAt));
+  }
+
+  async getWaAutomationsByTrigger(merchantId: string, triggerStatus: string): Promise<WaAutomation[]> {
+    return db.select().from(waAutomations)
+      .where(and(eq(waAutomations.merchantId, merchantId), eq(waAutomations.triggerStatus, triggerStatus), eq(waAutomations.isActive, true)));
+  }
+
+  async createWaAutomation(data: InsertWaAutomation): Promise<WaAutomation> {
+    const [result] = await db.insert(waAutomations).values({ ...data, updatedAt: new Date() }).returning();
+    return result;
+  }
+
+  async updateWaAutomation(merchantId: string, id: string, data: Partial<InsertWaAutomation>): Promise<WaAutomation | undefined> {
+    const [result] = await db.update(waAutomations)
+      .set({ ...data, updatedAt: new Date() })
+      .where(and(eq(waAutomations.merchantId, merchantId), eq(waAutomations.id, id)))
+      .returning();
+    return result;
+  }
+
+  async deleteWaAutomation(merchantId: string, id: string): Promise<void> {
+    await db.delete(waAutomations).where(and(eq(waAutomations.merchantId, merchantId), eq(waAutomations.id, id)));
   }
 
   // Order Payments

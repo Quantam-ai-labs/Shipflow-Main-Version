@@ -1,6 +1,7 @@
 import { db } from "../../../db";
 import { orderChangeLog, merchants } from "@shared/schema";
 import { eq, and, sql } from "drizzle-orm";
+import type { WaAutomation } from "@shared/schema";
 import { storage } from "../../../storage";
 import {
   buildVarsFromParams,
@@ -206,5 +207,54 @@ export async function sendOrderStatusWhatsApp(
       `${LOG_PREFIX} Unexpected error for order ${params.orderId}:`,
       err.message || err,
     );
+  }
+
+  // Fire any active WA automations matching this status
+  try {
+    const automations = await storage.getWaAutomationsByTrigger(params.merchantId, params.toStatus);
+    if (automations.length > 0) {
+      const [merchantRow] = await db.select({
+        waPhoneNumberId: merchants.waPhoneNumberId,
+        waAccessToken: merchants.waAccessToken,
+      }).from(merchants).where(eq(merchants.id, params.merchantId)).limit(1);
+
+      const formattedPhone = formatPhoneForWhatsApp(params.customerPhone);
+      if (!formattedPhone) return;
+
+      const vars = buildVarsFromParams(params);
+
+      for (const automation of automations) {
+        const fireAutomation = async () => {
+          try {
+            const msgText = automation.messageText
+              ? interpolateMessageBody(automation.messageText, vars, params.toStatus)
+              : null;
+            const tmplName = automation.templateName || null;
+            const templateParams = tmplName ? buildTemplateParams(tmplName, vars) : null;
+
+            await sendWhatsAppApiRequest({
+              formattedPhone,
+              templateName: tmplName || "custom_message",
+              messageText: msgText || "",
+              orderNumber: params.orderNumber,
+              templateParams: templateParams ?? undefined,
+              phoneNumberId: merchantRow?.waPhoneNumberId ?? undefined,
+              accessToken: merchantRow?.waAccessToken ?? undefined,
+            });
+            console.log(`${LOG_PREFIX} Automation "${automation.title}" fired for order ${params.orderNumber}`);
+          } catch (e: any) {
+            console.error(`${LOG_PREFIX} Automation "${automation.title}" failed:`, e.message);
+          }
+        };
+
+        if (automation.delayMinutes > 0) {
+          setTimeout(fireAutomation, automation.delayMinutes * 60 * 1000);
+        } else {
+          await fireAutomation();
+        }
+      }
+    }
+  } catch (autoErr: any) {
+    console.error(`${LOG_PREFIX} Error firing automations for order ${params.orderId}:`, autoErr.message);
   }
 }
