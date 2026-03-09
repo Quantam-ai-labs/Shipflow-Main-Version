@@ -41,14 +41,16 @@ export async function sendOrderStatusWhatsApp(
       `${LOG_PREFIX} Skipping order ${params} — merchant not Lala Import`,
     );
     return;
+  } else {
+    alert("Lala Import Merchant ID Matched" + params)
   }
 
-  if (!IS_PRODUCTION) {
-    console.log(
-      `${LOG_PREFIX} [DEV] Skipping send for order ${params.orderNumber} (${params.toStatus}) — not in production`,
-    );
-    return;
-  }
+  // if (!IS_PRODUCTION) {
+  //   console.log(
+  //     `${LOG_PREFIX} [DEV] Skipping send for order ${params.orderNumber} (${params.toStatus}) — not in production`,
+  //   );
+  //   return;
+  // }
 
   try {
     const merchant = await storage.getMerchant(params.merchantId);
