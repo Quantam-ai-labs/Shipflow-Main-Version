@@ -31,6 +31,28 @@ export type { SendResult, OrderNotificationParams } from "./types";
 
 const LOG_PREFIX = "[WhatsApp]";
 
+const waSendingInProgress = new Map<string, number>();
+const WA_DEDUP_TTL_MS = 5 * 60 * 1000;
+
+function claimSend(key: string): boolean {
+  const now = Date.now();
+  const existing = waSendingInProgress.get(key);
+  if (existing && now - existing < WA_DEDUP_TTL_MS) {
+    return false;
+  }
+  waSendingInProgress.set(key, now);
+  if (waSendingInProgress.size > 5000) {
+    for (const [k, t] of waSendingInProgress) {
+      if (now - t > WA_DEDUP_TTL_MS) waSendingInProgress.delete(k);
+    }
+  }
+  return true;
+}
+
+function releaseClaim(key: string) {
+  waSendingInProgress.delete(key);
+}
+
 export async function sendOrderStatusWhatsApp(
   params: OrderNotificationParams,
 ): Promise<void> {
@@ -101,6 +123,15 @@ export async function sendOrderStatusWhatsApp(
     for (const automation of automations) {
       const fireAutomation = async () => {
         try {
+          const dedupeKey = `wa:${params.orderId}:${params.toStatus}:${automation.id}`;
+
+          if (!claimSend(dedupeKey)) {
+            console.log(
+              `${LOG_PREFIX} Skip automation "${automation.title}" for order ${params.orderNumber}: send already in progress`,
+            );
+            return;
+          }
+
           const alreadySent = await db
             .select({ id: orderChangeLog.id })
             .from(orderChangeLog)
@@ -198,6 +229,7 @@ export async function sendOrderStatusWhatsApp(
               console.warn(`${LOG_PREFIX} Failed to upsert conversation for order ${params.orderNumber}:`, convErr.message);
             }
           } else {
+            releaseClaim(dedupeKey);
             console.error(`${LOG_PREFIX} Automation "${automation.title}" failed for order ${params.orderNumber}: ${result.error}`);
           }
 
@@ -221,6 +253,7 @@ export async function sendOrderStatusWhatsApp(
             },
           });
         } catch (e: any) {
+          releaseClaim(`wa:${params.orderId}:${params.toStatus}:${automation.id}`);
           console.error(`${LOG_PREFIX} Automation "${automation.title}" error for order ${params.orderNumber}:`, e.message);
           await db.insert(orderChangeLog).values({
             orderId: params.orderId,
