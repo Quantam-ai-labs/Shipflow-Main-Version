@@ -28,7 +28,7 @@ export type { SendResult, OrderNotificationParams } from "./types";
 
 const LOG_PREFIX = "[WhatsApp]";
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
-const LALA_IMPORT_MERCHANT_ID = "2e83e397-6bc6-4ca8-a2f4-1b591cac4250";
+const LALA_IMPORT_MERCHANT_ID = process.env.LALA_IMPORT_MERCHANT_ID;
 
 export async function sendOrderStatusWhatsApp(
   params: OrderNotificationParams,
