@@ -6951,7 +6951,10 @@ export async function registerRoutes(
 
       const components: any[] = [];
       if (headerType === "text" && headerText) {
-        const hdrText = String(headerText).slice(0, 60);
+        const hdrText = String(headerText).slice(0, 60)
+          .replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}\u{E0020}-\u{E007F}]/gu, "")
+          .replace(/[*_~`\n\r]/g, "")
+          .trim();
         const hdrVarMatches = hdrText.match(/\{\{\w+\}\}/g) ?? [];
         const indexedHdr = hdrVarMatches.reduce((txt, _v, i) => txt.replace(_v, `{{${i + 1}}}`), hdrText);
         const hdrComponent: any = { type: "HEADER", format: "TEXT", text: indexedHdr };
@@ -7003,7 +7006,7 @@ export async function registerRoutes(
       const metaData = await metaRes.json() as any;
 
       if (!metaRes.ok) {
-        const errMsg = metaData?.error?.message || metaData?.error?.error_user_msg || "Failed to submit template to Meta";
+        const errMsg = metaData?.error?.error_user_msg || metaData?.error?.error_user_title || metaData?.error?.message || "Failed to submit template to Meta";
         console.error("[WA Template] Meta API error:", metaRes.status, JSON.stringify(metaData));
         return res.status(metaRes.status >= 500 ? 502 : 400).json({ error: errMsg });
       }
