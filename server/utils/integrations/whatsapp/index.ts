@@ -41,20 +41,18 @@ export async function sendOrderStatusWhatsApp(
     );
     return;
   }
-  
-  try {
-    const merchant = await storage.getMerchant(params.merchantId);
-    const allowedDomains = (merchant?.waAllowedShopDomains as string[] | null) ?? [];
-    if (allowedDomains.length > 0 && params.shopDomain) {
-      if (!allowedDomains.includes(params.shopDomain)) {
-        console.log(
-          `${LOG_PREFIX} [STORE FILTER] Skipping order ${params.orderNumber} — store "${params.shopDomain}" not in allowed list [${allowedDomains.join(", ")}]`,
-        );
-        return;
-      }
+
+  const allowedDomains = (process.env.WA_ALLOWED_SHOP_DOMAINS || "")
+    .split(",")
+    .map((d) => d.trim())
+    .filter(Boolean);
+  if (allowedDomains.length > 0 && params.shopDomain) {
+    if (!allowedDomains.includes(params.shopDomain)) {
+      console.log(
+        `${LOG_PREFIX} [STORE FILTER] Skipping order ${params.orderNumber} — store "${params.shopDomain}" not in allowed list [${allowedDomains.join(", ")}]`,
+      );
+      return;
     }
-  } catch (e) {
-    // If we can't load merchant, proceed without filtering
   }
 
   try {
