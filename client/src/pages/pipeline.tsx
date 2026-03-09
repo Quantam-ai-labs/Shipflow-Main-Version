@@ -1837,16 +1837,7 @@ export default function Pipeline() {
                   key={order.id}
                   className={`border-b transition-colors hover-elevate ${
                     selectedIds.has(order.id) ? "bg-primary/5" : ""
-                  } ${activeTab === "HOLD" && order.holdUntil && isPast(new Date(order.holdUntil)) ? "bg-red-50/50 dark:bg-red-950/30" : ""} ${
-                    (() => {
-                      const hist = order.customerPhone && customerHistory ? customerHistory[order.customerPhone] : null;
-                      if (!hist || hist.orderCount <= 1) return "";
-                      const c = getProximityColor(order.orderDate, hist.orderDates || []);
-                      if (c === "red") return "bg-red-50/40 dark:bg-red-950/20 border-l-2 border-l-red-400 dark:border-l-red-600";
-                      if (c === "blue") return "bg-blue-50/40 dark:bg-blue-950/20 border-l-2 border-l-blue-400 dark:border-l-blue-600";
-                      return "bg-green-50/40 dark:bg-green-950/20 border-l-2 border-l-green-400 dark:border-l-green-600";
-                    })()
-                  }`}
+                  } ${activeTab === "HOLD" && order.holdUntil && isPast(new Date(order.holdUntil)) ? "bg-red-50/50 dark:bg-red-950/30" : ""}`}
                   data-testid={`order-row-${order.id}`}
                 >
                   {activeTab !== "CANCELLED" && activeTab !== "DELIVERED" && activeTab !== "RETURN" && (activeTab !== "ALL" || (order.workflowStatus !== "CANCELLED" && order.workflowStatus !== "DELIVERED" && order.workflowStatus !== "RETURN")) && (
