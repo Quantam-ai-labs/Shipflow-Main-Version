@@ -1,5 +1,5 @@
 import { db } from "../../../db";
-import { orderChangeLog } from "@shared/schema";
+import { orderChangeLog, merchants } from "@shared/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { storage } from "../../../storage";
 import {
@@ -135,13 +135,43 @@ export async function sendOrderStatusWhatsApp(
       `${LOG_PREFIX} ────────────────────────────────────────────────────`,
     );
 
+    const [merchantRow] = await db.select({
+      waPhoneNumberId: merchants.waPhoneNumberId,
+      waAccessToken: merchants.waAccessToken,
+    }).from(merchants).where(eq(merchants.id, params.merchantId)).limit(1);
+
     const result = await sendWhatsAppApiRequest({
       formattedPhone,
       templateName,
       messageText,
       orderNumber: params.orderNumber,
       templateParams: templateParams ?? undefined,
+      phoneNumberId: merchantRow?.waPhoneNumberId ?? undefined,
+      accessToken: merchantRow?.waAccessToken ?? undefined,
     });
+
+    if (result.success) {
+      try {
+        const conv = await storage.upsertConversation({
+          merchantId: params.merchantId,
+          contactPhone: formattedPhone,
+          contactName: params.customerName,
+          orderId: params.orderId,
+          orderNumber: params.orderNumber,
+          lastMessage: messageText.slice(0, 200),
+        });
+        await storage.createWaMessage({
+          conversationId: conv.id,
+          direction: "outbound",
+          senderName: "System",
+          text: messageText,
+          waMessageId: result.messageId,
+          status: "sent",
+        });
+      } catch (convErr: any) {
+        console.warn(`${LOG_PREFIX} Failed to upsert conversation for order ${params.orderNumber}:`, convErr.message);
+      }
+    }
 
     await db.insert(orderChangeLog).values({
       orderId: params.orderId,

@@ -1,8 +1,6 @@
 import type { SendResult } from "./types";
 
 const LOG_PREFIX = "[WhatsApp]";
-const WHATSAPP_API_URL =
-  `https://graph.facebook.com/v22.0/${process.env.WHATSAPP_PHONE_NO_ID}/messages`;
 const WHATSAPP_REQUEST_TIMEOUT_MS = 10_000;
 
 export function formatPhoneForWhatsApp(
@@ -78,10 +76,14 @@ export async function sendWhatsAppApiRequest(params: {
   messageText: string;
   orderNumber: string;
   templateParams?: string[];
+  phoneNumberId?: string;
+  accessToken?: string;
 }): Promise<SendResult> {
   const { formattedPhone, templateName, messageText, orderNumber, templateParams } = params;
 
-  const token = process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneNumberId = params.phoneNumberId || process.env.WHATSAPP_PHONE_NO_ID;
+  const token = params.accessToken || process.env.WHATSAPP_ACCESS_TOKEN;
+
   if (!token) {
     console.warn(
       `${LOG_PREFIX} WHATSAPP_ACCESS_TOKEN not set — skipping order ${orderNumber}`
@@ -89,11 +91,19 @@ export async function sendWhatsAppApiRequest(params: {
     return { success: false, error: "WHATSAPP_ACCESS_TOKEN not configured" };
   }
 
+  if (!phoneNumberId) {
+    console.warn(
+      `${LOG_PREFIX} WHATSAPP_PHONE_NO_ID not set — skipping order ${orderNumber}`
+    );
+    return { success: false, error: "WhatsApp Phone Number ID not configured" };
+  }
+
+  const apiUrl = `https://graph.facebook.com/v22.0/${phoneNumberId}/messages`;
   const payload = buildTemplatePayload(formattedPhone, templateName, messageText, templateParams);
 
   let response: Response;
   try {
-    response = await fetch(WHATSAPP_API_URL, {
+    response = await fetch(apiUrl, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,

@@ -5462,6 +5462,28 @@ export async function registerRoutes(
               });
               console.log(`      ✅ Response saved`);
 
+              try {
+                const contactName = value?.contacts?.[0]?.profile?.name ?? undefined;
+                const conv = await storage.upsertConversation({
+                  merchantId: matchedOrder.merchantId,
+                  contactPhone: normalizedPhone,
+                  contactName,
+                  orderId: matchedOrder.id,
+                  orderNumber: matchedOrder.orderNumber,
+                  lastMessage: messageBody.slice(0, 200),
+                });
+                await storage.createWaMessage({
+                  conversationId: conv.id,
+                  direction: "inbound",
+                  senderName: contactName ?? fromPhone,
+                  text: messageBody,
+                  waMessageId,
+                  status: "received",
+                });
+              } catch (convErr: any) {
+                console.warn(`      ⚠️ Conversation upsert failed: ${convErr.message}`);
+              }
+
               // ✅ Step 9: Process the response (CONFIRM/CANCEL logic)
               console.log(`      └─ Processing user response...`);
               await processWhatsAppOrderResponse(
@@ -6806,6 +6828,237 @@ export async function registerRoutes(
       res.status(500).json({ error: error.message });
     }
   });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // SUPPORT SECTION ROUTES
+  // ─────────────────────────────────────────────────────────────────────────
+
+  app.get("/api/support/chat-access", async (req: any, res) => {
+    const pin = req.query.pin as string;
+    const expectedPin = process.env.SUPPORT_CHAT_PIN || "1234";
+    if (!pin || pin !== expectedPin) {
+      return res.status(401).json({ valid: false, error: "Invalid PIN" });
+    }
+    res.json({ valid: true });
+  });
+
+  app.get("/api/support/dashboard-stats", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      const logs = await db
+        .select({
+          id: orderChangeLog.id,
+          newValue: orderChangeLog.newValue,
+          metadata: orderChangeLog.metadata,
+          createdAt: orderChangeLog.createdAt,
+          orderNumber: orders.orderNumber,
+          customerName: orders.customerName,
+          customerPhone: orders.customerPhone,
+        })
+        .from(orderChangeLog)
+        .innerJoin(orders, eq(orderChangeLog.orderId, orders.id))
+        .where(
+          and(
+            eq(orderChangeLog.merchantId, merchantId),
+            eq(orderChangeLog.changeType, "WHATSAPP_SENT"),
+            gte(orderChangeLog.createdAt, thirtyDaysAgo)
+          )
+        )
+        .orderBy(desc(orderChangeLog.createdAt))
+        .limit(200);
+
+      const messagesSent = logs.length;
+      const delivered = logs.filter(l => (l.metadata as any)?.success === true).length;
+      const failed = logs.filter(l => (l.metadata as any)?.success === false).length;
+
+      const conversations = await storage.getConversations(merchantId);
+      const activeConversations = conversations.length;
+
+      const recentActivity = logs.slice(0, 20).map(l => ({
+        id: l.id,
+        orderNumber: l.orderNumber,
+        customerName: l.customerName,
+        phone: (l.metadata as any)?.phone ?? l.customerPhone,
+        status: (l.metadata as any)?.toStatus,
+        success: (l.metadata as any)?.success,
+        error: (l.metadata as any)?.error,
+        createdAt: l.createdAt,
+      }));
+
+      const [merchantRow] = await db.select({
+        waPhoneNumberId: merchants.waPhoneNumberId,
+        waAccessToken: merchants.waAccessToken,
+      }).from(merchants).where(eq(merchants.id, merchantId)).limit(1);
+
+      res.json({
+        messagesSent,
+        delivered,
+        failed,
+        activeConversations,
+        recentActivity,
+        connected: !!(merchantRow?.waPhoneNumberId && merchantRow?.waAccessToken),
+      });
+    } catch (error: any) {
+      console.error("[Support Dashboard] Error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/support/conversations", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const conversations = await storage.getConversations(merchantId);
+      res.json(conversations);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/support/conversations/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const conv = await storage.getConversationById(req.params.id);
+      if (!conv || conv.merchantId !== merchantId) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+      await storage.deleteConversation(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/support/conversations/:id/messages", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const conv = await storage.getConversationById(req.params.id);
+      if (!conv || conv.merchantId !== merchantId) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+      const messages = await storage.getWaMessages(req.params.id);
+      res.json(messages);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/support/conversations/:id/messages", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const conv = await storage.getConversationById(req.params.id);
+      if (!conv || conv.merchantId !== merchantId) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+      const { text } = req.body;
+      if (!text?.trim()) return res.status(400).json({ error: "Message text required" });
+
+      const [merchantRow] = await db.select({
+        waPhoneNumberId: merchants.waPhoneNumberId,
+        waAccessToken: merchants.waAccessToken,
+      }).from(merchants).where(eq(merchants.id, merchantId)).limit(1);
+
+      const phoneNumberId = merchantRow?.waPhoneNumberId || process.env.WHATSAPP_PHONE_NO_ID;
+      const accessToken = merchantRow?.waAccessToken || process.env.WHATSAPP_ACCESS_TOKEN;
+
+      if (!phoneNumberId || !accessToken) {
+        return res.status(400).json({ error: "WhatsApp credentials not configured" });
+      }
+
+      const waApiUrl = `https://graph.facebook.com/v22.0/${phoneNumberId}/messages`;
+      const waPayload = {
+        messaging_product: "whatsapp",
+        to: conv.contactPhone,
+        type: "text",
+        text: { body: text.trim() },
+      };
+
+      let messageId: string | undefined;
+      try {
+        const waRes = await fetch(waApiUrl, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify(waPayload),
+          signal: AbortSignal.timeout(10000),
+        });
+        if (waRes.ok) {
+          const waData = await waRes.json() as any;
+          messageId = waData?.messages?.[0]?.id;
+        }
+      } catch (_) {}
+
+      await storage.upsertConversation({
+        merchantId,
+        contactPhone: conv.contactPhone,
+        contactName: conv.contactName ?? undefined,
+        orderId: conv.orderId,
+        orderNumber: conv.orderNumber,
+        lastMessage: text.trim().slice(0, 200),
+      });
+
+      const msg = await storage.createWaMessage({
+        conversationId: conv.id,
+        direction: "outbound",
+        senderName: "Agent",
+        text: text.trim(),
+        waMessageId: messageId,
+        status: "sent",
+      });
+
+      res.json(msg);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/support/connection", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const [merchantRow] = await db.select({
+        waPhoneNumberId: merchants.waPhoneNumberId,
+        waAccessToken: merchants.waAccessToken,
+        waWabaId: merchants.waWabaId,
+      }).from(merchants).where(eq(merchants.id, merchantId)).limit(1);
+      res.json({
+        waPhoneNumberId: merchantRow?.waPhoneNumberId ?? "",
+        waAccessToken: merchantRow?.waAccessToken ? "••••••••" : "",
+        waWabaId: merchantRow?.waWabaId ?? "",
+        connected: !!(merchantRow?.waPhoneNumberId && merchantRow?.waAccessToken),
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.put("/api/support/connection", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { waPhoneNumberId, waAccessToken, waWabaId } = req.body;
+      const updateData: any = {
+        waPhoneNumberId: waPhoneNumberId?.trim() || null,
+        waWabaId: waWabaId?.trim() || null,
+      };
+      if (waAccessToken && waAccessToken !== "••••••••" && waAccessToken.trim() !== "") {
+        updateData.waAccessToken = waAccessToken.trim();
+      }
+      await db.update(merchants).set(updateData).where(eq(merchants.id, merchantId));
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
 
   app.get("/api/orders/:orderId/whatsapp-responses", isAuthenticated, async (req: any, res) => {
     try {

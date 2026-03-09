@@ -156,7 +156,17 @@ const allNavGroups: NavGroup[] = [
       { id: "ads-profitability", title: "Profitability", url: "/marketing/profitability", icon: TrendingUp },
       { id: "ads-attribution", title: "Attribution", url: "/marketing/attribution", icon: Target },
       { id: "revenue-truth", title: "Revenue Truth", url: "/marketing/revenue-truth", icon: BarChart3 },
-      { id: "whatsapp-hub", title: "WhatsApp", url: "/whatsapp", icon: MessageCircle },
+    ],
+  },
+  {
+    id: "support",
+    title: "Support",
+    icon: MessageCircle,
+    items: [
+      { id: "support-dashboard", title: "Dashboard", url: "/support/dashboard", icon: LayoutDashboard },
+      { id: "support-templates", title: "Templates", url: "/support/templates", icon: MessageCircle },
+      { id: "support-chat", title: "Chat", url: "/support/chat", icon: Sparkles },
+      { id: "support-connection", title: "Connection", url: "/support/connection", icon: Cog },
     ],
   },
 ];

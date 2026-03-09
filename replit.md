@@ -40,8 +40,8 @@ Preferred communication style: Simple, everyday language.
 - **Status Mapping Import/Export**: Allows importing and exporting custom status mappings and keyword rules for couriers via JSON files.
 - **Product & Inventory Management**: Syncs Shopify product data (title, variants, SKU, price, cost, inventory) and displays a searchable catalog.
 - **Accounting & Finance Module**: A comprehensive double-entry accounting system covering various financial aspects, including P&L, Balance Snapshot, and Cash Flow reports.
-- **WhatsApp Order Notifications**: Sends automated WhatsApp messages to customers via Meta Graph API upon order status changes (NEW, BOOKED, FULFILLED, DELIVERED). Logs all send attempts in `orderChangeLog`.
-- **WhatsApp Template Management**: Per-merchant, per-status template name configuration via the settings interface, supporting custom Meta Business API templates.
+- **WhatsApp Order Notifications**: Sends automated WhatsApp messages to customers via Meta Graph API upon order status changes (NEW, BOOKED, FULFILLED, DELIVERED). Logs all send attempts in `orderChangeLog`. Credentials (Phone Number ID, Access Token, WABA ID) are stored per-merchant in the DB; env vars serve as fallback.
+- **Support Section**: A dedicated nav section with 4 pages — Dashboard (WA stats + activity feed), Templates (per-status message templates with variable chips), Chat (PIN-gated agent inbox with two-panel layout, 5s polling), and Connection (per-merchant WA credentials form with test + save). Chat page is public (no merchant login required). The old /whatsapp settings tab has been removed and replaced by this section.
 - **Loadsheet System**: A two-interface system for shipment handover manifest generation: a Portal Loadsheet with scanning capabilities and a Warehouse PWA for mobile-optimized warehouse operations, including PIN authentication and AWB PDF pre-generation.
 - **Booking Remarks**: Customizable special instructions per merchant, used during courier booking.
 - **Booking Modal Enhancements**: Full-screen modal with editable order numbers, product thumbnails, and keyboard-navigable city autocomplete.

@@ -100,7 +100,10 @@ import AdAttribution from "@/pages/marketing/ad-attribution";
 import RevenueTruth from "@/pages/marketing/revenue-truth";
 import ReportsHub from "@/pages/reports";
 import AIAssistant from "@/pages/ai-assistant";
-import WhatsAppPage from "@/pages/whatsapp";
+import SupportDashboardPage from "@/pages/support/dashboard";
+import SupportTemplatesPage from "@/pages/support/templates";
+import SupportChatPage from "@/pages/support/chat";
+import SupportConnectionPage from "@/pages/support/connection";
 import NotFound from "@/pages/not-found";
 import LoadsheetPage from "@/pages/loadsheet";
 import WarehousePage from "@/pages/warehouse";
@@ -156,7 +159,6 @@ const routeToPageId: Record<string, string> = {
   "/marketing/profitability": "ads-profitability",
   "/marketing/attribution": "ads-attribution",
   "/marketing/revenue-truth": "revenue-truth",
-  "/whatsapp": "whatsapp-hub",
   "/accounting/settings": "preferences",
   "/settings/shopify": "settings-shopify",
   "/settings/couriers": "settings-couriers",
@@ -264,7 +266,10 @@ function AppRoutes() {
       <Route path="/marketing/profitability">{() => <ProtectedRoute component={AdsProfitability} path="/marketing/profitability" />}</Route>
       <Route path="/marketing/attribution">{() => <ProtectedRoute component={AdAttribution} path="/marketing/attribution" />}</Route>
       <Route path="/marketing/revenue-truth">{() => <ProtectedRoute component={RevenueTruth} path="/marketing/revenue-truth" />}</Route>
-      <Route path="/whatsapp">{() => <ProtectedRoute component={WhatsAppPage} path="/whatsapp" />}</Route>
+      <Route path="/support/dashboard">{() => <ProtectedRoute component={SupportDashboardPage} path="/support/dashboard" />}</Route>
+      <Route path="/support/templates">{() => <ProtectedRoute component={SupportTemplatesPage} path="/support/templates" />}</Route>
+      <Route path="/support/chat" component={SupportChatPage} />
+      <Route path="/support/connection">{() => <ProtectedRoute component={SupportConnectionPage} path="/support/connection" />}</Route>
       <Route path="/accounting/settings">{() => <ProtectedRoute component={AccountingSettings} path="/accounting/settings" />}</Route>
       <Route path="/loadsheet">{() => <ProtectedRoute component={LoadsheetPage} path="/loadsheet" />}</Route>
       <Route path="/warehouse/:slug" component={WarehousePage} />

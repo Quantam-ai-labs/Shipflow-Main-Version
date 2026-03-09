@@ -39,6 +39,9 @@ import {
   type WhatsappTemplate,
   whatsappResponses,
   type WhatsappResponse, type InsertWhatsappResponse,
+  waConversations, waMessages,
+  type WaConversation, type InsertWaConversation,
+  type WaMessage, type InsertWaMessage,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, or, ilike, sql, count, inArray, isNull, isNotNull, gte, lte } from "drizzle-orm";
@@ -223,6 +226,15 @@ export interface IStorage {
   saveWhatsappResponse(data: InsertWhatsappResponse): Promise<WhatsappResponse>;
   getWhatsappResponsesByOrder(merchantId: string, orderId: string): Promise<WhatsappResponse[]>;
   getWhatsappResponsesByPhone(merchantId: string, phone: string): Promise<WhatsappResponse[]>;
+
+  // WA Conversations
+  getConversations(merchantId: string): Promise<WaConversation[]>;
+  getConversationById(id: string): Promise<WaConversation | undefined>;
+  getConversationByPhone(merchantId: string, phone: string): Promise<WaConversation | undefined>;
+  upsertConversation(data: { merchantId: string; contactPhone: string; contactName?: string; orderId?: string | null; orderNumber?: string | null; lastMessage?: string | null }): Promise<WaConversation>;
+  deleteConversation(id: string): Promise<void>;
+  getWaMessages(conversationId: string): Promise<WaMessage[]>;
+  createWaMessage(data: { conversationId: string; direction: string; senderName?: string | null; text?: string | null; waMessageId?: string | null; status?: string | null }): Promise<WaMessage>;
 
   // Seed
   seedDemoData(): Promise<void>;
@@ -2034,6 +2046,73 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(whatsappResponses)
       .where(and(eq(whatsappResponses.merchantId, merchantId), eq(whatsappResponses.fromPhone, phone)))
       .orderBy(desc(whatsappResponses.receivedAt));
+  }
+
+  async getConversations(merchantId: string): Promise<WaConversation[]> {
+    return db.select().from(waConversations)
+      .where(eq(waConversations.merchantId, merchantId))
+      .orderBy(desc(waConversations.lastMessageAt));
+  }
+
+  async getConversationById(id: string): Promise<WaConversation | undefined> {
+    const [row] = await db.select().from(waConversations).where(eq(waConversations.id, id));
+    return row;
+  }
+
+  async getConversationByPhone(merchantId: string, phone: string): Promise<WaConversation | undefined> {
+    const [row] = await db.select().from(waConversations)
+      .where(and(eq(waConversations.merchantId, merchantId), eq(waConversations.contactPhone, phone)));
+    return row;
+  }
+
+  async upsertConversation(data: { merchantId: string; contactPhone: string; contactName?: string; orderId?: string | null; orderNumber?: string | null; lastMessage?: string | null }): Promise<WaConversation> {
+    const existing = await this.getConversationByPhone(data.merchantId, data.contactPhone);
+    if (existing) {
+      const [row] = await db.update(waConversations)
+        .set({
+          contactName: data.contactName ?? existing.contactName,
+          orderId: data.orderId !== undefined ? data.orderId : existing.orderId,
+          orderNumber: data.orderNumber !== undefined ? data.orderNumber : existing.orderNumber,
+          lastMessage: data.lastMessage ?? existing.lastMessage,
+          lastMessageAt: new Date(),
+        })
+        .where(eq(waConversations.id, existing.id))
+        .returning();
+      return row;
+    }
+    const [row] = await db.insert(waConversations).values({
+      merchantId: data.merchantId,
+      contactPhone: data.contactPhone,
+      contactName: data.contactName,
+      orderId: data.orderId,
+      orderNumber: data.orderNumber,
+      lastMessage: data.lastMessage,
+      lastMessageAt: new Date(),
+    }).returning();
+    return row;
+  }
+
+  async deleteConversation(id: string): Promise<void> {
+    await db.delete(waMessages).where(eq(waMessages.conversationId, id));
+    await db.delete(waConversations).where(eq(waConversations.id, id));
+  }
+
+  async getWaMessages(conversationId: string): Promise<WaMessage[]> {
+    return db.select().from(waMessages)
+      .where(eq(waMessages.conversationId, conversationId))
+      .orderBy(asc(waMessages.createdAt));
+  }
+
+  async createWaMessage(data: { conversationId: string; direction: string; senderName?: string | null; text?: string | null; waMessageId?: string | null; status?: string | null }): Promise<WaMessage> {
+    const [row] = await db.insert(waMessages).values({
+      conversationId: data.conversationId,
+      direction: data.direction,
+      senderName: data.senderName,
+      text: data.text,
+      waMessageId: data.waMessageId,
+      status: data.status ?? "sent",
+    }).returning();
+    return row;
   }
 
   async seedDemoData(): Promise<void> {

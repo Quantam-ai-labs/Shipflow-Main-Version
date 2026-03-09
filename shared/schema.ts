@@ -39,6 +39,9 @@ export const merchants = pgTable("merchants", {
   warehousePin: varchar("warehouse_pin", { length: 6 }),
   warehousePinHash: varchar("warehouse_pin_hash", { length: 128 }),
   waAllowedShopDomains: jsonb("wa_allowed_shop_domains").default([]),
+  waPhoneNumberId: varchar("wa_phone_number_id", { length: 255 }),
+  waAccessToken: text("wa_access_token"),
+  waWabaId: varchar("wa_waba_id", { length: 255 }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -372,6 +375,49 @@ export const whatsappResponses = pgTable("whatsapp_responses", {
 export const insertWhatsappResponseSchema = createInsertSchema(whatsappResponses).omit({ id: true, receivedAt: true });
 export type InsertWhatsappResponse = z.infer<typeof insertWhatsappResponseSchema>;
 export type WhatsappResponse = typeof whatsappResponses.$inferSelect;
+
+// ============================================
+// WA CONVERSATIONS (Per-merchant chat inbox)
+// ============================================
+export const waConversations = pgTable("wa_conversations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  contactPhone: varchar("contact_phone", { length: 50 }).notNull(),
+  contactName: varchar("contact_name", { length: 255 }),
+  orderId: varchar("order_id").references(() => orders.id, { onDelete: "set null" }),
+  orderNumber: varchar("order_number", { length: 100 }),
+  lastMessage: text("last_message"),
+  lastMessageAt: timestamp("last_message_at").defaultNow(),
+  unreadCount: integer("unread_count").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_wa_conversations_merchant").on(table.merchantId),
+  index("idx_wa_conversations_phone").on(table.merchantId, table.contactPhone),
+]);
+
+export const insertWaConversationSchema = createInsertSchema(waConversations).omit({ id: true, createdAt: true });
+export type InsertWaConversation = z.infer<typeof insertWaConversationSchema>;
+export type WaConversation = typeof waConversations.$inferSelect;
+
+// ============================================
+// WA MESSAGES (Per-conversation message thread)
+// ============================================
+export const waMessages = pgTable("wa_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  conversationId: varchar("conversation_id").notNull().references(() => waConversations.id, { onDelete: "cascade" }),
+  direction: varchar("direction", { length: 10 }).notNull().default("inbound"),
+  senderName: varchar("sender_name", { length: 255 }),
+  text: text("text"),
+  waMessageId: varchar("wa_message_id", { length: 255 }),
+  status: varchar("status", { length: 20 }).default("sent"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_wa_messages_conversation").on(table.conversationId),
+]);
+
+export const insertWaMessageSchema = createInsertSchema(waMessages).omit({ id: true, createdAt: true });
+export type InsertWaMessage = z.infer<typeof insertWaMessageSchema>;
+export type WaMessage = typeof waMessages.$inferSelect;
 
 // ============================================
 // ORDER PAYMENTS (Prepaid / partial payment tracking)
