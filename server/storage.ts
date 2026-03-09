@@ -172,6 +172,7 @@ export interface IStorage {
 
   // WA Meta Templates
   getWaMetaTemplates(merchantId: string): Promise<WaMetaTemplate[]>;
+  getWaMetaTemplateById(merchantId: string, id: string): Promise<WaMetaTemplate | undefined>;
   createWaMetaTemplate(data: InsertWaMetaTemplate): Promise<WaMetaTemplate>;
   upsertWaMetaTemplate(merchantId: string, data: Omit<InsertWaMetaTemplate, "merchantId">): Promise<WaMetaTemplate>;
   deleteWaMetaTemplate(merchantId: string, id: string): Promise<void>;
@@ -1655,6 +1656,13 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(waMetaTemplates)
       .where(eq(waMetaTemplates.merchantId, merchantId))
       .orderBy(desc(waMetaTemplates.createdAt));
+  }
+
+  async getWaMetaTemplateById(merchantId: string, id: string): Promise<WaMetaTemplate | undefined> {
+    const [result] = await db.select().from(waMetaTemplates)
+      .where(and(eq(waMetaTemplates.merchantId, merchantId), eq(waMetaTemplates.id, id)))
+      .limit(1);
+    return result;
   }
 
   async createWaMetaTemplate(data: InsertWaMetaTemplate): Promise<WaMetaTemplate> {

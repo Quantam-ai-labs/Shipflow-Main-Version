@@ -6934,20 +6934,98 @@ export async function registerRoutes(
       if (!name || typeof name !== "string" || name.trim().length === 0) {
         return res.status(400).json({ error: "name is required" });
       }
-      const template = await storage.createWaMetaTemplate({
-        merchantId,
-        name: name.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_"),
-        language: language || "en",
-        category: category || "utility",
+
+      const merchant = await storage.getMerchant(merchantId);
+      if (!merchant) return res.status(404).json({ error: "Merchant not found" });
+
+      const wabaId = merchant.waWabaId;
+      const accessToken = merchant.waAccessToken || process.env.WHATSAPP_ACCESS_TOKEN;
+
+      if (!wabaId || !accessToken) {
+        return res.status(400).json({ error: "WhatsApp Business Account not configured. Go to Support > Connection to set up WABA ID and Access Token." });
+      }
+
+      const cleanName = name.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
+      const lang = language || "en";
+      const cat = (category || "utility").toUpperCase();
+
+      const components: any[] = [];
+      if (headerType === "text" && headerText) {
+        const hdrText = String(headerText).slice(0, 60);
+        const hdrVarMatches = hdrText.match(/\{\{\w+\}\}/g) ?? [];
+        const indexedHdr = hdrVarMatches.reduce((txt, _v, i) => txt.replace(_v, `{{${i + 1}}}`), hdrText);
+        const hdrComponent: any = { type: "HEADER", format: "TEXT", text: indexedHdr };
+        if (hdrVarMatches.length > 0) {
+          hdrComponent.example = { header_text: hdrVarMatches.map(v => v.replace(/[{}]/g, "")) };
+        }
+        components.push(hdrComponent);
+      }
+      if (body) {
+        const bodyText = String(body);
+        const varMatches = bodyText.match(/\{\{\w+\}\}/g) ?? [];
+        const indexedBody = varMatches.reduce((txt, _v, i) => txt.replace(_v, `{{${i + 1}}}`), bodyText);
+        const bodyComponent: any = { type: "BODY", text: indexedBody };
+        if (varMatches.length > 0) {
+          bodyComponent.example = { body_text: [varMatches.map(v => v.replace(/[{}]/g, ""))] };
+        }
+        components.push(bodyComponent);
+      }
+      if (footer) {
+        components.push({ type: "FOOTER", text: String(footer).slice(0, 60) });
+      }
+      if (Array.isArray(buttons) && buttons.length > 0) {
+        const metaButtons = buttons.map((btn: any) => {
+          if (btn.type === "url") {
+            if (!btn.url) throw new Error("URL button requires a URL value");
+            return { type: "URL", text: btn.text || "Link", url: btn.url };
+          }
+          if (btn.type === "phone") {
+            if (!btn.phone) throw new Error("Phone button requires a phone number");
+            return { type: "PHONE_NUMBER", text: btn.text || "Call", phone_number: btn.phone };
+          }
+          return { type: "QUICK_REPLY", text: btn.text || "Reply" };
+        });
+        components.push({ type: "BUTTONS", buttons: metaButtons });
+      }
+
+      const metaPayload = { name: cleanName, language: lang, category: cat, components };
+      console.log("[WA Template] Submitting to Meta:", JSON.stringify(metaPayload));
+
+      const metaRes = await fetch(`https://graph.facebook.com/v22.0/${wabaId}/message_templates`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(metaPayload),
+      });
+
+      const metaData = await metaRes.json() as any;
+
+      if (!metaRes.ok) {
+        const errMsg = metaData?.error?.message || metaData?.error?.error_user_msg || "Failed to submit template to Meta";
+        console.error("[WA Template] Meta API error:", metaRes.status, JSON.stringify(metaData));
+        return res.status(metaRes.status >= 500 ? 502 : 400).json({ error: errMsg });
+      }
+
+      const metaStatus = (metaData.status || "PENDING").toLowerCase();
+
+      const template = await storage.upsertWaMetaTemplate(merchantId, {
+        name: cleanName,
+        language: lang,
+        category: cat.toLowerCase(),
         headerType: headerType || "text",
         headerText: headerText ? String(headerText).slice(0, 60) : null,
         body: body ? String(body) : null,
         footer: footer ? String(footer).slice(0, 60) : null,
         buttons: Array.isArray(buttons) ? buttons : [],
-        status: "approved",
+        status: metaStatus,
       });
+
+      console.log(`[WA Template] Template "${cleanName}" submitted to Meta, status: ${metaStatus}, id: ${metaData.id}`);
       res.json(template);
     } catch (error: any) {
+      console.error("[WA Template] Error creating:", error.message);
       res.status(500).json({ error: error.message });
     }
   });
@@ -7036,6 +7114,31 @@ export async function registerRoutes(
     try {
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
+
+      const tpl = await storage.getWaMetaTemplateById(merchantId, req.params.id);
+      if (!tpl) return res.status(404).json({ error: "Template not found" });
+
+      const merchant = await storage.getMerchant(merchantId);
+      const wabaId = merchant?.waWabaId;
+      const accessToken = merchant?.waAccessToken || process.env.WHATSAPP_ACCESS_TOKEN;
+
+      if (wabaId && accessToken) {
+        try {
+          const delRes = await fetch(
+            `https://graph.facebook.com/v22.0/${wabaId}/message_templates?name=${encodeURIComponent(tpl.name)}`,
+            { method: "DELETE", headers: { Authorization: `Bearer ${accessToken}` } }
+          );
+          const delData = await delRes.json().catch(() => ({}));
+          if (delRes.ok) {
+            console.log(`[WA Template] Deleted "${tpl.name}" from Meta`);
+          } else {
+            console.warn(`[WA Template] Meta delete failed for "${tpl.name}":`, JSON.stringify(delData));
+          }
+        } catch (metaErr: any) {
+          console.warn(`[WA Template] Meta delete error for "${tpl.name}":`, metaErr.message);
+        }
+      }
+
       await storage.deleteWaMetaTemplate(merchantId, req.params.id);
       res.json({ success: true });
     } catch (error: any) {

@@ -736,13 +736,17 @@ export default function SupportTemplatesPage() {
   });
 
   const createTplMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("POST", "/api/wa-meta-templates", data),
-    onSuccess: () => {
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("POST", "/api/wa-meta-templates", data);
+      return await res.json();
+    },
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/wa-meta-templates"] });
       setEditorOpen(false);
-      toast({ title: "Template saved" });
+      const statusLabel = data?.status === "approved" ? "approved" : "submitted for approval";
+      toast({ title: `Template ${statusLabel}` });
     },
-    onError: () => toast({ title: "Failed to save template", variant: "destructive" }),
+    onError: (err: any) => toast({ title: err?.message || "Failed to submit template to Meta", variant: "destructive" }),
   });
 
   const deleteTplMutation = useMutation({
