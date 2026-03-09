@@ -35,18 +35,18 @@ export async function sendOrderStatusWhatsApp(
   if (!(WA_NOTIFY_STATUSES as readonly string[]).includes(params.toStatus))
     return;
 
-  if (!IS_PRODUCTION) {
-    console.log(
-      `${LOG_PREFIX} [DEV] Skipping send for order ${params.orderNumber} (${params.toStatus}) — not in production`,
-    );
-    return;
-  }
+  // if (!IS_PRODUCTION) {
+  //   console.log(
+  //     `${LOG_PREFIX} [DEV] Skipping send for order ${params.orderNumber} (${params.toStatus}) — not in production`,
+  //   );
+  //   return;
+  // }
 
   const allowedDomain = process.env.LALA_IMPORT;
   if (allowedDomain) {
     const order = await storage.getOrderById(params.merchantId, params.orderId);
     const orderShopDomain = order?.shopDomain ?? null;
-    if (orderShopDomain !== allowedDomain) {
+    if (orderShopDomain == allowedDomain) {
       console.log(
         `${LOG_PREFIX} [ENV FILTER] Skipping order ${params.orderNumber} — shop_domain "${orderShopDomain}" does not match allowed "${allowedDomain}"`,
       );
