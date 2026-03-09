@@ -42,7 +42,7 @@ export async function sendOrderStatusWhatsApp(
     return;
   }
 
-  const allowedDomain = process.env.LALAIMPORT;
+  const allowedDomain = process.env.LALA_IMPORT;
   if (allowedDomain) {
     const order = await storage.getOrderById(params.merchantId, params.orderId);
     const orderShopDomain = order?.shopDomain ?? null;
