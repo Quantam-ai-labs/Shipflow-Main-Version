@@ -1,5 +1,5 @@
-const CACHE_NAME = '1sol-warehouse-v1';
-const STATIC_ASSETS = ['/', '/warehouse'];
+const CACHE_NAME = '1sol-pwa-v2';
+const STATIC_ASSETS = ['/', '/warehouse', '/agent-chat'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

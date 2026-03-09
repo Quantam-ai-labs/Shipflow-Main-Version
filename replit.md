@@ -63,6 +63,7 @@ Preferred communication style: Simple, everyday language.
 - **All Orders View**: A unified view displaying all orders regardless of their workflow status, with context-aware actions and bulk operations.
 - **Tag Management**: Bi-directional synchronization of tags with Shopify, displaying all tags with specific coloring for Robo-tags.
 - **Pipeline Action Dropdown**: Consolidates various order actions into a dropdown menu, context-aware based on order status.
+- **Agent Chat PWA**: A standalone mobile-optimized PWA at `/agent-chat` for support agents to manage WhatsApp conversations on their phones. Features: PIN-gated access with numeric keypad, mobile-first view-switching pattern (conversation list vs chat view with back button), dark theme (slate-950), touch-friendly tap targets, quick emoji bar for reactions, formatting toolbar, auto-polling for new messages, 100dvh layout with safe-area support. Separate PWA manifest (`agent-chat-manifest.json`) with `display: standalone` and `start_url: /agent-chat`. Install banner with Android `beforeinstallprompt` support and iOS "Add to Home Screen" instructions. Service worker caches the route for offline shell loading.
 
 ### Database Reliability
 - **Connection Pool**: Configured PostgreSQL pool with `max: 20` connections and appropriate timeouts.

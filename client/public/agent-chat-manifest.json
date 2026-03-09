@@ -1,0 +1,24 @@
+{
+  "name": "1SOL Agent Chat",
+  "short_name": "Agent Chat",
+  "description": "WhatsApp agent inbox for 1SOL.AI support",
+  "start_url": "/agent-chat",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#111b21",
+  "theme_color": "#111b21",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "lang": "en"
+}

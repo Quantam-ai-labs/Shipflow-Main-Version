@@ -107,6 +107,7 @@ import SupportConnectionPage from "@/pages/support/connection";
 import NotFound from "@/pages/not-found";
 import LoadsheetPage from "@/pages/loadsheet";
 import WarehousePage from "@/pages/warehouse";
+import AgentChatPage from "@/pages/agent-chat";
 
 function OnboardingBanner() {
   return (
@@ -495,6 +496,10 @@ function MainApp() {
 
   if (location.startsWith("/print-labels")) {
     return <PrintLabels />;
+  }
+
+  if (location === "/agent-chat") {
+    return <AgentChatPage />;
   }
 
   if (user?.merchant?.onboardingStep !== "COMPLETED" && location !== "/onboarding" && location !== "/admin") {
