@@ -558,6 +558,7 @@ export class ShopifyService {
       }
 
       const shopifyOrderId = String(shopifyOrder.id);
+      (shopifyOrder as any)._shopDomain = shopDomain;
       const transformedOrder = this.transformOrderForStorage(shopifyOrder);
       
       if (transformedOrder.lineItems && Array.isArray(transformedOrder.lineItems) && productImageMap.size > 0) {
@@ -684,6 +685,7 @@ export class ShopifyService {
                     totalAmount: created.totalAmount,
                     itemSummary: created.itemSummary,
                     lineItems: Array.isArray(created.lineItems) ? (created.lineItems as any[]) : null,
+                    shopDomain: (created as any).shopDomain || shopDomain,
                   });
                 } catch (e) {}
               })()
@@ -717,6 +719,7 @@ export class ShopifyService {
                   totalAmount: created.totalAmount,
                   itemSummary: created.itemSummary,
                   lineItems: Array.isArray(created.lineItems) ? (created.lineItems as any[]) : null,
+                  shopDomain: (created as any).shopDomain || shopDomain,
                 });
               } catch (e2) {}
             }
@@ -1087,6 +1090,7 @@ export class ShopifyService {
       fbClickId: utmParams.fbClickId,
       rawShopifyData: shopifyOrder as unknown as Record<string, any>,
       orderSource: shopifyOrder.source_name || null,
+      shopDomain: (shopifyOrder as any)._shopDomain || null,
     };
   }
 

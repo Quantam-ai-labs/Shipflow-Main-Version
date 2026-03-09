@@ -375,6 +375,72 @@ function EditDialog({ open, statusInfo, initial, onSave, onClose, isSaving }: Ed
   );
 }
 
+function WhatsAppStoreFilterCard() {
+  const { toast } = useToast();
+
+  const { data, isLoading } = useQuery<{ allowedDomains: string[]; connectedStore: string | null }>({
+    queryKey: ["/api/whatsapp-allowed-stores"],
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async (allowedDomains: string[]) =>
+      apiRequest("PUT", "/api/whatsapp-allowed-stores", { allowedDomains }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/whatsapp-allowed-stores"] });
+      toast({ title: "Saved", description: "WhatsApp store filter updated." });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to save.", variant: "destructive" }),
+  });
+
+  const connectedStore = data?.connectedStore;
+  const allowedDomains = data?.allowedDomains ?? [];
+  const isFiltered = allowedDomains.length > 0;
+
+  const handleToggle = (enabled: boolean) => {
+    if (enabled && connectedStore) {
+      saveMutation.mutate([connectedStore]);
+    } else {
+      saveMutation.mutate([]);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <MessageCircle className="w-4 h-4 text-green-500" />
+          Store Filter
+        </CardTitle>
+        <CardDescription>
+          Restrict WhatsApp notifications to orders from specific stores. Useful when you have multiple connected stores.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <Skeleton className="h-12 w-full" />
+        ) : !connectedStore ? (
+          <p className="text-sm text-muted-foreground">No Shopify store connected.</p>
+        ) : (
+          <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+            <div className="min-w-0">
+              <p className="text-sm font-medium truncate">{connectedStore}</p>
+              <p className="text-xs text-muted-foreground">
+                {isFiltered ? "WhatsApp sends only for this store's orders" : "Sending for all stores (no filter)"}
+              </p>
+            </div>
+            <Switch
+              checked={isFiltered}
+              onCheckedChange={handleToggle}
+              disabled={saveMutation.isPending}
+              data-testid="switch-wa-store-filter"
+            />
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function WhatsAppTemplatesCard() {
   const { toast } = useToast();
   const [editingStatus, setEditingStatus] = useState<string | null>(null);
@@ -724,7 +790,8 @@ export default function Settings() {
         {activeTab === "couriers" && <SettingsCouriers />}
 
         {activeTab === "whatsapp" && (
-          <div className="max-w-3xl">
+          <div className="max-w-3xl space-y-4">
+            <WhatsAppStoreFilterCard />
             <WhatsAppTemplatesCard />
           </div>
         )}

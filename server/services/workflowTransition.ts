@@ -154,6 +154,7 @@ async function _transitionOrderInner(params: TransitionParams): Promise<Transiti
       courierTracking: order.courierTracking,
       itemSummary: order.itemSummary,
       lineItems: Array.isArray(order.lineItems) ? (order.lineItems as any[]) : null,
+      shopDomain: (order as any).shopDomain || null,
     }).catch(err => console.error(`[WhatsApp] Error in transitionOrder for ${orderId}:`, err));
   }
 
@@ -285,6 +286,7 @@ export async function bulkTransitionOrders(params: {
         courierTracking: o.courierTracking,
         itemSummary: o.itemSummary,
         lineItems: Array.isArray(o.lineItems) ? (o.lineItems as any[]) : null,
+        shopDomain: (o as any).shopDomain || null,
       }).catch(err => console.error(`[WhatsApp] Error in bulkTransition for ${o.id}:`, err));
     });
   }
@@ -370,6 +372,7 @@ export async function revertOrder(merchantId: string, orderId: string, actorUser
         courierTracking: order.courierTracking,
         itemSummary: order.itemSummary,
         lineItems: Array.isArray(order.lineItems) ? (order.lineItems as any[]) : null,
+        shopDomain: (order as any).shopDomain || null,
       }).catch(err => console.error(`[WhatsApp] Error in revertOrder for ${orderId}:`, err));
     }
 

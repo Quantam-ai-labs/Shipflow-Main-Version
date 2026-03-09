@@ -180,6 +180,7 @@ export class WebhookHandler {
             totalAmount: created.totalAmount,
             itemSummary: created.itemSummary,
             lineItems: Array.isArray(created.lineItems) ? (created.lineItems as any[]) : null,
+            shopDomain: (created as any).shopDomain || null,
           });
         } catch (waErr) {
           console.error(`[Webhook] WhatsApp notification failed for order ${created.orderNumber}:`, waErr);

@@ -38,6 +38,7 @@ export const merchants = pgTable("merchants", {
   bookingRemarks: text("booking_remarks"),
   warehousePin: varchar("warehouse_pin", { length: 6 }),
   warehousePinHash: varchar("warehouse_pin_hash", { length: 128 }),
+  waAllowedShopDomains: jsonb("wa_allowed_shop_domains").default([]),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -246,6 +247,7 @@ export const orders = pgTable("orders", {
   codPaymentStatus: varchar("cod_payment_status", { length: 20 }).default("UNPAID"),
   lastPaymentAt: timestamp("last_payment_at"),
   orderSource: varchar("order_source", { length: 50 }),
+  shopDomain: varchar("shop_domain", { length: 255 }),
 }, (table) => [
   index("idx_orders_merchant").on(table.merchantId),
   index("idx_orders_shopify_id").on(table.shopifyOrderId),

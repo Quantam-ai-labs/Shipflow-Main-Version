@@ -6661,6 +6661,32 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/whatsapp-allowed-stores", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const merchant = await storage.getMerchant(merchantId);
+      const allowedDomains = (merchant?.waAllowedShopDomains as string[] | null) ?? [];
+      const stores = await storage.getShopifyStore(merchantId);
+      res.json({ allowedDomains, connectedStore: stores?.shopDomain || null });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.put("/api/whatsapp-allowed-stores", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { allowedDomains } = req.body;
+      if (!Array.isArray(allowedDomains)) return res.status(400).json({ error: "allowedDomains must be an array" });
+      await storage.updateMerchant(merchantId, { waAllowedShopDomains: allowedDomains } as any);
+      res.json({ success: true, allowedDomains });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.get("/api/whatsapp-templates", isAuthenticated, async (req, res) => {
     try {
       const merchantId = await requireMerchant(req, res);
