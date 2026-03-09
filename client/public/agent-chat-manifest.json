@@ -2,7 +2,7 @@
   "name": "1SOL Agent Chat",
   "short_name": "Agent Chat",
   "description": "WhatsApp agent inbox for 1SOL.AI support",
-  "start_url": "/agent-chat",
+  "start_url": "/agent-chat/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#111b21",

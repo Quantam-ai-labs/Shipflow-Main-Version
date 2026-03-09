@@ -1,5 +1,5 @@
 const CACHE_NAME = '1sol-pwa-v2';
-const STATIC_ASSETS = ['/', '/warehouse', '/agent-chat'];
+const STATIC_ASSETS = ['/', '/warehouse'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

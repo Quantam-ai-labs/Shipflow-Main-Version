@@ -1,15 +1,63 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback, createContext, useContext } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
 import {
   MessageCircle, Search, Send, Lock, Phone,
   MoreVertical, Tag, UserPlus, Check, CheckCheck,
   Smile, Bold, Italic, Strikethrough, Code, Filter,
   X, ArrowLeft, Image as ImageIcon, Mic, FileText,
-  MapPin, Users, Reply, Trash2, RefreshCw,
+  MapPin, Users, Reply, Trash2, RefreshCw, AlertTriangle,
 } from "lucide-react";
-import { formatDistanceToNow, format, isToday, isYesterday } from "date-fns";
+import { format, isToday, isYesterday } from "date-fns";
 import { cn } from "@/lib/utils";
+
+function getSlugFromPath(): string {
+  const match = window.location.pathname.match(/^\/agent-chat\/([^/]+)/);
+  return match?.[1] || "";
+}
+
+function getTokenKey(slug: string) {
+  return `agent_chat_token_${slug}`;
+}
+
+function getStoredToken(slug: string): string | null {
+  return localStorage.getItem(getTokenKey(slug));
+}
+
+function storeToken(slug: string, token: string) {
+  localStorage.setItem(getTokenKey(slug), token);
+}
+
+function clearToken(slug: string) {
+  localStorage.removeItem(getTokenKey(slug));
+}
+
+async function agentFetch(url: string, slug: string, options: RequestInit = {}): Promise<Response> {
+  const token = getStoredToken(slug);
+  const headers: Record<string, string> = {
+    ...(options.headers as Record<string, string> || {}),
+  };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  if (options.body && typeof options.body === "string") {
+    headers["Content-Type"] = "application/json";
+  }
+  return fetch(url, { ...options, headers });
+}
+
+async function agentApiRequest(method: string, url: string, slug: string, body?: any): Promise<Response> {
+  const resp = await agentFetch(url, slug, {
+    method,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!resp.ok) {
+    const data = await resp.json().catch(() => ({ message: "Request failed" }));
+    throw new Error(data.message || data.error || "Request failed");
+  }
+  return resp;
+}
+
+const SlugContext = createContext<string>("");
 
 interface Conversation {
   id: string;
@@ -47,7 +95,6 @@ interface TeamMember {
   role: string;
 }
 
-const SESSION_KEY = "agent_chat_access";
 
 const LABELS = [
   { value: "new", label: "New", color: "bg-blue-500" },
@@ -127,7 +174,7 @@ function MessageTypeIcon({ type }: { type: string | null }) {
   }
 }
 
-function PinScreen({ onSuccess }: { onSuccess: () => void }) {
+function PinScreen({ slug, merchantName, onSuccess }: { slug: string; merchantName: string; onSuccess: () => void }) {
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -138,13 +185,17 @@ function PinScreen({ onSuccess }: { onSuccess: () => void }) {
     setLoading(true);
     setError("");
     try {
-      const resp = await fetch(`/api/support/chat-access?pin=${encodeURIComponent(pin)}`);
-      const data = await resp.json() as { valid: boolean; error?: string };
-      if (data.valid) {
-        sessionStorage.setItem(SESSION_KEY, "true");
+      const resp = await fetch("/api/agent-chat/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug, pin }),
+      });
+      const data = await resp.json() as { success?: boolean; token?: string; message?: string };
+      if (resp.ok && data.success && data.token) {
+        storeToken(slug, data.token);
         onSuccess();
       } else {
-        setError("Incorrect PIN. Please try again.");
+        setError(data.message || "Incorrect PIN. Please try again.");
         setPin("");
       }
     } catch {
@@ -161,7 +212,7 @@ function PinScreen({ onSuccess }: { onSuccess: () => void }) {
           <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mx-auto">
             <Lock className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-white">Agent Chat</h1>
+          <h1 className="text-2xl font-bold text-white">{merchantName || "Agent Chat"}</h1>
           <p className="text-slate-400 text-sm">Enter your PIN to access the chat inbox</p>
         </div>
 
@@ -406,6 +457,7 @@ function ChatView({
   conversation: Conversation;
   onBack: () => void;
 }) {
+  const slug = useContext(SlugContext);
   const [messageText, setMessageText] = useState("");
   const [showEmojis, setShowEmojis] = useState(false);
   const [showFormatBar, setShowFormatBar] = useState(false);
@@ -415,9 +467,10 @@ function ChatView({
   const queryClient = useQueryClient();
 
   const { data: messages = [] } = useQuery<Message[]>({
-    queryKey: ["/api/support/conversations", conversation.id, "messages"],
+    queryKey: ["/api/agent-chat/conversations", slug, conversation.id, "messages"],
     queryFn: async () => {
-      const resp = await fetch(`/api/support/conversations/${conversation.id}/messages`, { credentials: "include" });
+      const resp = await agentFetch(`/api/agent-chat/conversations/${conversation.id}/messages`, slug);
+      if (!resp.ok) throw new Error("Failed to fetch messages");
       return resp.json();
     },
     refetchInterval: 5000,
@@ -425,7 +478,12 @@ function ChatView({
   });
 
   const { data: teamData } = useQuery<{ members: TeamMember[]; total: number }>({
-    queryKey: ["/api/team"],
+    queryKey: ["/api/agent-chat/team", slug],
+    queryFn: async () => {
+      const resp = await agentFetch("/api/agent-chat/team", slug);
+      if (!resp.ok) throw new Error("Failed to fetch team");
+      return resp.json();
+    },
   });
   const teamMembers = teamData?.members ?? [];
 
@@ -453,23 +511,23 @@ function ChatView({
   useEffect(() => {
     if (conversation.unreadCount > 0 && !markingReadRef.current) {
       markingReadRef.current = true;
-      apiRequest("PATCH", `/api/support/conversations/${conversation.id}/read`, {}).then(() => {
-        queryClient.invalidateQueries({ queryKey: ["/api/support/conversations"] });
+      agentApiRequest("PATCH", `/api/agent-chat/conversations/${conversation.id}/read`, slug, {}).then(() => {
+        queryClient.invalidateQueries({ queryKey: ["/api/agent-chat/conversations", slug] });
       }).catch(() => {}).finally(() => {
         markingReadRef.current = false;
       });
     }
-  }, [conversation.id, conversation.unreadCount, queryClient]);
+  }, [conversation.id, conversation.unreadCount, queryClient, slug]);
 
   const lastSentTextRef = useRef("");
   const sendMutation = useMutation({
     mutationFn: async (text: string) => {
       lastSentTextRef.current = text;
-      return apiRequest("POST", `/api/support/conversations/${conversation.id}/messages`, { text });
+      return agentApiRequest("POST", `/api/agent-chat/conversations/${conversation.id}/messages`, slug, { text });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/support/conversations", conversation.id, "messages"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/support/conversations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/agent-chat/conversations", slug, conversation.id, "messages"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/agent-chat/conversations", slug] });
       inputRef.current?.focus();
     },
     onError: () => {
@@ -479,29 +537,29 @@ function ChatView({
 
   const labelMutation = useMutation({
     mutationFn: async ({ label }: { label: string | null }) =>
-      apiRequest("PATCH", `/api/support/conversations/${conversation.id}/label`, { label }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/support/conversations"] }),
+      agentApiRequest("PATCH", `/api/agent-chat/conversations/${conversation.id}/label`, slug, { label }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/agent-chat/conversations", slug] }),
   });
 
   const assignMutation = useMutation({
     mutationFn: async ({ userId, userName }: { userId: string | null; userName: string | null }) =>
-      apiRequest("PATCH", `/api/support/conversations/${conversation.id}/assign`, { userId, userName }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/support/conversations"] }),
+      agentApiRequest("PATCH", `/api/agent-chat/conversations/${conversation.id}/assign`, slug, { userId, userName }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/agent-chat/conversations", slug] }),
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async () => apiRequest("DELETE", `/api/support/conversations/${conversation.id}`),
+    mutationFn: async () => agentApiRequest("DELETE", `/api/agent-chat/conversations/${conversation.id}`, slug),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/support/conversations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/agent-chat/conversations", slug] });
       onBack();
     },
   });
 
   const reactMutation = useMutation({
     mutationFn: async ({ emoji, waMessageId }: { emoji: string; waMessageId: string }) =>
-      apiRequest("POST", `/api/support/conversations/${conversation.id}/react`, { emoji, waMessageId }),
+      agentApiRequest("POST", `/api/agent-chat/conversations/${conversation.id}/react`, slug, { emoji, waMessageId }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/support/conversations", conversation.id, "messages"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/agent-chat/conversations", slug, conversation.id, "messages"] });
     },
   });
 
@@ -913,14 +971,53 @@ function InstallBanner() {
   );
 }
 
+function NotFoundScreen() {
+  return (
+    <div className="min-h-[100dvh] flex items-center justify-center bg-slate-950 p-6">
+      <div className="text-center space-y-3">
+        <AlertTriangle className="w-12 h-12 text-red-400 mx-auto" />
+        <h1 className="text-xl font-bold text-white">Store Not Found</h1>
+        <p className="text-slate-400 text-sm">The link you followed is invalid or this store no longer exists.</p>
+      </div>
+    </div>
+  );
+}
+
 export default function AgentChatPage() {
-  const [hasAccess, setHasAccess] = useState(() => sessionStorage.getItem(SESSION_KEY) === "true");
+  const slug = getSlugFromPath();
+  const [hasAccess, setHasAccess] = useState(() => !!getStoredToken(slug));
   const [selectedConvId, setSelectedConvId] = useState<string | null>(null);
+  const [merchantNotFound, setMerchantNotFound] = useState(false);
   const queryClient = useQueryClient();
 
+  const { data: merchantInfo } = useQuery<{ name: string; logoUrl: string | null; slug: string }>({
+    queryKey: ["/api/agent-chat/merchant-info", slug],
+    queryFn: async () => {
+      const resp = await fetch(`/api/agent-chat/merchant-info/${slug}`);
+      if (resp.status === 404) {
+        setMerchantNotFound(true);
+        throw new Error("Not found");
+      }
+      if (!resp.ok) throw new Error("Failed to fetch merchant info");
+      return resp.json();
+    },
+    enabled: !!slug,
+    retry: false,
+  });
+
   const { data: conversations = [] } = useQuery<Conversation[]>({
-    queryKey: ["/api/support/conversations"],
-    enabled: hasAccess,
+    queryKey: ["/api/agent-chat/conversations", slug],
+    queryFn: async () => {
+      const resp = await agentFetch("/api/agent-chat/conversations", slug);
+      if (resp.status === 401) {
+        clearToken(slug);
+        setHasAccess(false);
+        throw new Error("Token expired");
+      }
+      if (!resp.ok) throw new Error("Failed to fetch conversations");
+      return resp.json();
+    },
+    enabled: hasAccess && !!slug,
     refetchInterval: 8000,
     staleTime: 4000,
   });
@@ -933,9 +1030,27 @@ export default function AgentChatPage() {
     document.body.style.overflow = "hidden";
     document.documentElement.style.overflow = "hidden";
 
+    const manifestData = {
+      name: "1SOL Agent Chat",
+      short_name: "Agent Chat",
+      description: "WhatsApp agent inbox for 1SOL.AI support",
+      start_url: `/agent-chat/${slug}`,
+      display: "standalone",
+      orientation: "portrait",
+      background_color: "#111b21",
+      theme_color: "#111b21",
+      icons: [
+        { src: "/favicon.png", sizes: "192x192", type: "image/png" },
+        { src: "/favicon.png", sizes: "512x512", type: "image/png" },
+      ],
+      categories: ["business", "productivity"],
+      lang: "en",
+    };
+    const blob = new Blob([JSON.stringify(manifestData)], { type: "application/json" });
+    const manifestUrl = URL.createObjectURL(blob);
     const existingManifest = document.querySelector('link[rel="manifest"]');
     if (existingManifest) {
-      existingManifest.setAttribute("href", "/agent-chat-manifest.json");
+      existingManifest.setAttribute("href", manifestUrl);
     }
     const titleTag = document.querySelector('meta[name="apple-mobile-web-app-title"]');
     if (titleTag) {
@@ -947,6 +1062,7 @@ export default function AgentChatPage() {
     }
 
     return () => {
+      URL.revokeObjectURL(manifestUrl);
       if (meta) {
         meta.setAttribute("content", "width=device-width, initial-scale=1");
       }
@@ -964,8 +1080,12 @@ export default function AgentChatPage() {
     };
   }, []);
 
+  if (!slug || merchantNotFound) {
+    return <NotFoundScreen />;
+  }
+
   if (!hasAccess) {
-    return <PinScreen onSuccess={() => setHasAccess(true)} />;
+    return <PinScreen slug={slug} merchantName={merchantInfo?.name || ""} onSuccess={() => setHasAccess(true)} />;
   }
 
   const totalUnread = conversations.reduce((sum, c) => sum + c.unreadCount, 0);
@@ -973,23 +1093,27 @@ export default function AgentChatPage() {
 
   if (selectedConv) {
     return (
-      <div className="h-[100dvh] flex flex-col">
-        <ChatView
-          conversation={selectedConv}
-          onBack={() => setSelectedConvId(null)}
-        />
-      </div>
+      <SlugContext.Provider value={slug}>
+        <div className="h-[100dvh] flex flex-col">
+          <ChatView
+            conversation={selectedConv}
+            onBack={() => setSelectedConvId(null)}
+          />
+        </div>
+      </SlugContext.Provider>
     );
   }
 
   return (
-    <div className="h-[100dvh] flex flex-col">
-      <InstallBanner />
-      <ConversationList
-        conversations={conversations}
-        onSelect={(id) => setSelectedConvId(id)}
-        totalUnread={totalUnread}
-      />
-    </div>
+    <SlugContext.Provider value={slug}>
+      <div className="h-[100dvh] flex flex-col">
+        <InstallBanner />
+        <ConversationList
+          conversations={conversations}
+          onSelect={(id) => setSelectedConvId(id)}
+          totalUnread={totalUnread}
+        />
+      </div>
+    </SlugContext.Provider>
   );
 }

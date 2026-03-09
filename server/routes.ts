@@ -10284,6 +10284,305 @@ export async function registerRoutes(
   );
 
   // ============================================
+  // AGENT CHAT PWA APIS (slug-based, JWT auth)
+  // ============================================
+
+  const AGENT_CHAT_JWT_SECRET = process.env.SESSION_SECRET || "agent-chat-secret-1sol";
+
+  function signAgentChatToken(merchantId: string): string {
+    const jwt = require("jsonwebtoken");
+    return jwt.sign({ merchantId, isAgentChat: true }, AGENT_CHAT_JWT_SECRET, { expiresIn: "12h" });
+  }
+
+  function verifyAgentChatToken(token: string): { merchantId: string } | null {
+    try {
+      const jwt = require("jsonwebtoken");
+      const payload = jwt.verify(token, AGENT_CHAT_JWT_SECRET) as any;
+      if (!payload.isAgentChat) return null;
+      return { merchantId: payload.merchantId };
+    } catch {
+      return null;
+    }
+  }
+
+  function agentChatAuth(req: Request, res: Response, next: NextFunction) {
+    const auth = req.headers.authorization;
+    if (!auth || !auth.startsWith("Bearer ")) {
+      return res.status(401).json({ message: "Agent chat authentication required" });
+    }
+    const token = auth.slice(7);
+    const payload = verifyAgentChatToken(token);
+    if (!payload) {
+      return res.status(401).json({ message: "Invalid or expired agent chat token" });
+    }
+    (req as any).agentChatMerchantId = payload.merchantId;
+    next();
+  }
+
+  app.get("/api/agent-chat/merchant-info/:slug", async (req, res) => {
+    try {
+      const merchant = await storage.getMerchantBySlug(req.params.slug);
+      if (!merchant || !merchant.isActive) {
+        return res.status(404).json({ message: "Merchant not found" });
+      }
+      res.json({ name: merchant.name, logoUrl: merchant.logoUrl, slug: merchant.slug });
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to fetch merchant info" });
+    }
+  });
+
+  app.post("/api/agent-chat/login", async (req, res) => {
+    try {
+      const { slug, pin } = req.body;
+      if (!slug || !pin) {
+        return res.status(400).json({ message: "slug and pin are required" });
+      }
+      const merchant = await storage.getMerchantBySlug(slug);
+      if (!merchant || !merchant.isActive) {
+        return res.status(401).json({ message: "Invalid credentials" });
+      }
+
+      if (merchant.supportChatPinHash) {
+        const valid = await bcrypt.compare(String(pin), merchant.supportChatPinHash);
+        if (!valid) {
+          return res.status(401).json({ message: "Incorrect PIN" });
+        }
+      } else {
+        const fallback = process.env.SUPPORT_CHAT_PIN || "1234";
+        if (String(pin) !== fallback) {
+          return res.status(401).json({ message: "Incorrect PIN" });
+        }
+      }
+
+      const token = signAgentChatToken(merchant.id);
+      res.json({ success: true, token, merchantName: merchant.name });
+    } catch (error: any) {
+      res.status(500).json({ message: "Login failed" });
+    }
+  });
+
+  app.get("/api/agent-chat/conversations", agentChatAuth, async (req, res) => {
+    try {
+      const merchantId = (req as any).agentChatMerchantId as string;
+      const conversations = await storage.getConversations(merchantId);
+      res.json(conversations);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/agent-chat/conversations/:id/messages", agentChatAuth, async (req, res) => {
+    try {
+      const merchantId = (req as any).agentChatMerchantId as string;
+      const conv = await storage.getConversationById(req.params.id);
+      if (!conv || conv.merchantId !== merchantId) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+      const messages = await storage.getWaMessages(req.params.id);
+      res.json(messages);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/agent-chat/conversations/:id/messages", agentChatAuth, async (req, res) => {
+    try {
+      const merchantId = (req as any).agentChatMerchantId as string;
+      const conv = await storage.getConversationById(req.params.id);
+      if (!conv || conv.merchantId !== merchantId) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+      const { text } = req.body;
+      if (!text?.trim()) return res.status(400).json({ error: "Message text required" });
+
+      const [merchantRow] = await db.select({
+        waPhoneNumberId: merchants.waPhoneNumberId,
+        waAccessToken: merchants.waAccessToken,
+      }).from(merchants).where(eq(merchants.id, merchantId)).limit(1);
+
+      const phoneNumberId = merchantRow?.waPhoneNumberId || process.env.WHATSAPP_PHONE_NO_ID;
+      const accessToken = merchantRow?.waAccessToken || process.env.WHATSAPP_ACCESS_TOKEN;
+
+      if (!phoneNumberId || !accessToken) {
+        return res.status(400).json({ error: "WhatsApp credentials not configured" });
+      }
+
+      await storage.upsertConversation({
+        merchantId,
+        contactPhone: conv.contactPhone,
+        contactName: conv.contactName ?? undefined,
+        orderId: conv.orderId,
+        orderNumber: conv.orderNumber,
+        lastMessage: text.trim().slice(0, 200),
+      });
+
+      const msg = await storage.createWaMessage({
+        conversationId: conv.id,
+        direction: "outbound",
+        senderName: "Agent",
+        text: text.trim(),
+        status: "sent",
+      });
+
+      res.json(msg);
+
+      const waApiUrl = `https://graph.facebook.com/v22.0/${phoneNumberId}/messages`;
+      const waPayload = {
+        messaging_product: "whatsapp",
+        to: conv.contactPhone,
+        type: "text",
+        text: { body: text.trim() },
+      };
+      try {
+        const waRes = await fetch(waApiUrl, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify(waPayload),
+          signal: AbortSignal.timeout(15000),
+        });
+        if (waRes.ok) {
+          const waData = await waRes.json() as any;
+          const waMessageId = waData?.messages?.[0]?.id;
+          if (waMessageId) {
+            await storage.updateWaMessageStatus(msg.id, "sent", waMessageId);
+          }
+        } else {
+          await storage.updateWaMessageStatus(msg.id, "failed");
+        }
+      } catch (_) {
+        await storage.updateWaMessageStatus(msg.id, "failed");
+      }
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/agent-chat/conversations/:id/label", agentChatAuth, async (req, res) => {
+    try {
+      const merchantId = (req as any).agentChatMerchantId as string;
+      const { label } = req.body;
+      await storage.updateConversationLabel(merchantId, req.params.id, label || null);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/agent-chat/conversations/:id/assign", agentChatAuth, async (req, res) => {
+    try {
+      const merchantId = (req as any).agentChatMerchantId as string;
+      const { userId, userName } = req.body;
+      await storage.updateConversationAssignment(merchantId, req.params.id, userId || null, userName || null);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/agent-chat/conversations/:id/read", agentChatAuth, async (req, res) => {
+    try {
+      const merchantId = (req as any).agentChatMerchantId as string;
+      await storage.markConversationRead(merchantId, req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/agent-chat/conversations/:id/react", agentChatAuth, async (req, res) => {
+    try {
+      const merchantId = (req as any).agentChatMerchantId as string;
+      const { emoji, waMessageId } = req.body;
+      if (!emoji || !waMessageId) return res.status(400).json({ error: "emoji and waMessageId required" });
+
+      const conv = await storage.getConversationById(req.params.id);
+      if (!conv || conv.merchantId !== merchantId) return res.status(404).json({ error: "Conversation not found" });
+
+      const [merchantRow] = await db.select({
+        waPhoneNumberId: merchants.waPhoneNumberId,
+        waAccessToken: merchants.waAccessToken,
+      }).from(merchants).where(eq(merchants.id, merchantId)).limit(1);
+
+      const phoneNumberId = merchantRow?.waPhoneNumberId || process.env.WHATSAPP_PHONE_NO_ID;
+      const accessToken = merchantRow?.waAccessToken || process.env.WHATSAPP_ACCESS_TOKEN;
+
+      if (!phoneNumberId || !accessToken) {
+        return res.status(400).json({ error: "WhatsApp credentials not configured" });
+      }
+
+      const waPayload = {
+        messaging_product: "whatsapp",
+        to: conv.contactPhone,
+        type: "reaction",
+        reaction: { message_id: waMessageId, emoji },
+      };
+
+      const waRes = await fetch(`https://graph.facebook.com/v22.0/${phoneNumberId}/messages`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify(waPayload),
+        signal: AbortSignal.timeout(10000),
+      });
+
+      if (!waRes.ok) {
+        const errData = await waRes.json().catch(() => ({})) as any;
+        return res.status(400).json({ error: errData?.error?.message || "Failed to send reaction" });
+      }
+
+      const msg = await storage.createWaMessage({
+        conversationId: conv.id,
+        direction: "outbound",
+        senderName: "Agent",
+        messageType: "reaction",
+        reactionEmoji: emoji,
+        referenceMessageId: waMessageId,
+        status: "sent",
+      });
+
+      res.json(msg);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/agent-chat/conversations/:id", agentChatAuth, async (req, res) => {
+    try {
+      const merchantId = (req as any).agentChatMerchantId as string;
+      const conv = await storage.getConversationById(req.params.id);
+      if (!conv || conv.merchantId !== merchantId) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+      await storage.deleteConversation(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/agent-chat/team", agentChatAuth, async (req, res) => {
+    try {
+      const merchantId = (req as any).agentChatMerchantId as string;
+      const members = await storage.getTeamMembers(merchantId);
+      const enriched = await Promise.all(members.map(async (member) => {
+        const [user] = await db.select({
+          firstName: users.firstName,
+          lastName: users.lastName,
+          email: users.email,
+        }).from(users).where(eq(users.id, member.userId));
+        return {
+          id: member.id,
+          userId: member.userId,
+          user: user || { firstName: "Unknown", lastName: "", email: "" },
+          role: member.role,
+        };
+      }));
+      res.json({ members: enriched, total: enriched.length });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
   // WAREHOUSE / LOADSHEET APIS
   // ============================================
 

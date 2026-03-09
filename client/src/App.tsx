@@ -478,6 +478,10 @@ function MainApp() {
     );
   }
 
+  if (location.startsWith("/agent-chat/")) {
+    return <AgentChatPage />;
+  }
+
   if (!isAuthenticated) {
     return <AuthPage />;
   }
@@ -496,10 +500,6 @@ function MainApp() {
 
   if (location.startsWith("/print-labels")) {
     return <PrintLabels />;
-  }
-
-  if (location === "/agent-chat") {
-    return <AgentChatPage />;
   }
 
   if (user?.merchant?.onboardingStep !== "COMPLETED" && location !== "/onboarding" && location !== "/admin") {
