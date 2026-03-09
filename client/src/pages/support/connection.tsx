@@ -8,13 +8,36 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Wifi, WifiOff, Eye, EyeOff, FlaskConical, Save } from "lucide-react";
+import { Wifi, WifiOff, Eye, EyeOff, FlaskConical, Save, Copy, Check } from "lucide-react";
 
 interface ConnectionData {
   waPhoneNumberId: string;
   waAccessToken: string;
   waWabaId: string;
   connected: boolean;
+  waVerifyToken: string;
+  webhookUrl: string;
+}
+
+function CopyButton({ value, testId }: { value: string; testId: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = () => {
+    navigator.clipboard.writeText(value).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="shrink-0 p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+      title="Copy to clipboard"
+      data-testid={testId}
+    >
+      {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+    </button>
+  );
 }
 
 export default function SupportConnectionPage() {
@@ -189,26 +212,48 @@ export default function SupportConnectionPage() {
         <CardHeader>
           <CardTitle className="text-base">Webhook Configuration</CardTitle>
           <CardDescription>
-            Configure this URL in Meta Developer Portal → Webhooks to receive incoming messages.
+            Configure these values in Meta Developer Portal → WhatsApp → Configuration → Webhooks.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Webhook URL</Label>
-            <div className="flex items-center gap-2">
-              <code className="flex-1 text-sm bg-muted px-3 py-2 rounded-md break-all font-mono" data-testid="text-webhook-url">
-                {window.location.origin}/webhooks/whatsapp
-              </code>
+        <CardContent className="space-y-4">
+          {isLoading ? (
+            <div className="space-y-3">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
             </div>
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Subscribe to Fields</Label>
-            <div className="flex gap-2 flex-wrap">
-              <Badge variant="secondary">messages</Badge>
-              <Badge variant="secondary">message_deliveries</Badge>
-              <Badge variant="secondary">message_reads</Badge>
-            </div>
-          </div>
+          ) : (
+            <>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Callback URL</Label>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 text-sm bg-muted px-3 py-2 rounded-md break-all font-mono" data-testid="text-webhook-url">
+                    {data?.webhookUrl ?? "—"}
+                  </code>
+                  {data?.webhookUrl && <CopyButton value={data.webhookUrl} testId="button-copy-webhook-url" />}
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Verify Token</Label>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 text-sm bg-muted px-3 py-2 rounded-md break-all font-mono" data-testid="text-verify-token">
+                    {data?.waVerifyToken ?? "—"}
+                  </code>
+                  {data?.waVerifyToken && <CopyButton value={data.waVerifyToken} testId="button-copy-verify-token" />}
+                </div>
+                <p className="text-xs text-muted-foreground">This token is unique to your account — auto-generated and saved securely.</p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Subscribe to Fields</Label>
+                <div className="flex gap-2 flex-wrap">
+                  <Badge variant="secondary">messages</Badge>
+                  <Badge variant="secondary">message_deliveries</Badge>
+                  <Badge variant="secondary">message_reads</Badge>
+                </div>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>

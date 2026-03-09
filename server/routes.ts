@@ -5509,6 +5509,122 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Per-merchant WhatsApp Webhooks ───────────────────────────────────────
+  // GET: Meta verification challenge (per merchant)
+  app.get("/webhooks/whatsapp/:merchantId", async (req: any, res) => {
+    try {
+      const { merchantId } = req.params;
+      const [merchantRow] = await db.select({ waVerifyToken: merchants.waVerifyToken })
+        .from(merchants).where(eq(merchants.id, merchantId)).limit(1);
+      const verifyToken = merchantRow?.waVerifyToken;
+      if (!verifyToken) return res.status(403).json({ error: "Forbidden" });
+      const mode = req.query["hub.mode"];
+      const token = req.query["hub.verify_token"];
+      const challenge = req.query["hub.challenge"];
+      if (mode === "subscribe" && token === verifyToken) {
+        console.log(`[WhatsApp Webhook] Merchant ${merchantId} verified successfully`);
+        res.status(200).send(challenge);
+      } else {
+        console.warn(`[WhatsApp Webhook] Merchant ${merchantId} verification failed — token mismatch`);
+        res.status(403).json({ error: "Forbidden" });
+      }
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST: Receive incoming messages (per merchant)
+  app.post("/webhooks/whatsapp/:merchantId", async (req: any, res) => {
+    const { merchantId } = req.params;
+    const requestId = `REQ-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    try {
+      const body = req.body;
+      res.status(200).json({ status: "ok" });
+
+      if (body?.object !== "whatsapp_business_account") return;
+
+      const entries = body?.entry ?? [];
+      for (const entry of entries) {
+        for (const change of (entry?.changes ?? [])) {
+          if (change?.field !== "messages") continue;
+
+          const value = change.value;
+          const messages = value?.messages ?? [];
+
+          for (const message of messages) {
+            const fromPhone = (message.from ?? "").replace(/^\+/, "");
+            const waMessageId = message.id ?? "";
+            const messageType = message.type ?? "text";
+            const messageBody =
+              message.text?.body ??
+              message.button?.text ??
+              message.interactive?.button_reply?.title ??
+              message.interactive?.list_reply?.title ??
+              "[non-text message]";
+
+            const [matchedOrder] = await db
+              .select({ id: orders.id, merchantId: orders.merchantId, status: orders.workflowStatus, orderNumber: orders.orderNumber })
+              .from(orders)
+              .where(and(
+                eq(orders.merchantId, merchantId),
+                or(
+                  eq(orders.customerPhone, fromPhone),
+                  eq(orders.customerPhone, `+${fromPhone}`),
+                  eq(orders.customerPhone, `0${fromPhone.slice(2)}`),
+                )
+              ))
+              .orderBy(desc(orders.createdAt))
+              .limit(1);
+
+            if (!matchedOrder) {
+              console.warn(`[WhatsApp Webhook:${merchantId}] ${requestId} - No order for phone ${fromPhone}`);
+              continue;
+            }
+
+            try {
+              await storage.saveWhatsappResponse({
+                merchantId: matchedOrder.merchantId,
+                orderId: matchedOrder.id,
+                waMessageId,
+                fromPhone,
+                messageType,
+                messageBody,
+                rawPayload: message,
+              });
+
+              const contactName = value?.contacts?.[0]?.profile?.name ?? undefined;
+              const conv = await storage.upsertConversation({
+                merchantId: matchedOrder.merchantId,
+                contactPhone: fromPhone,
+                contactName,
+                orderId: matchedOrder.id,
+                orderNumber: matchedOrder.orderNumber,
+                lastMessage: messageBody.slice(0, 200),
+              });
+              await storage.createWaMessage({
+                conversationId: conv.id,
+                direction: "inbound",
+                senderName: contactName ?? fromPhone,
+                text: messageBody,
+                waMessageId,
+                status: "received",
+              });
+
+              await processWhatsAppOrderResponse(
+                matchedOrder.merchantId, matchedOrder.id,
+                matchedOrder.orderNumber, messageBody, fromPhone, fromPhone
+              );
+            } catch (dbErr: any) {
+              console.error(`[WhatsApp Webhook:${merchantId}] ${requestId} - DB error: ${dbErr.message}`);
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error(`[WhatsApp Webhook:${merchantId}] ${requestId} - FATAL: ${err.message}`);
+    }
+  });
+
   // ─────────────────────────────────────────────────────────────────────────
 
   /**
@@ -7027,12 +7143,27 @@ export async function registerRoutes(
         waPhoneNumberId: merchants.waPhoneNumberId,
         waAccessToken: merchants.waAccessToken,
         waWabaId: merchants.waWabaId,
+        waVerifyToken: merchants.waVerifyToken,
       }).from(merchants).where(eq(merchants.id, merchantId)).limit(1);
+
+      let verifyToken = merchantRow?.waVerifyToken ?? null;
+      if (!verifyToken) {
+        const { randomUUID } = await import("crypto");
+        verifyToken = randomUUID();
+        await db.update(merchants).set({ waVerifyToken: verifyToken }).where(eq(merchants.id, merchantId));
+      }
+
+      const canonicalHost = process.env.REPL_SLUG
+        ? `https://lala-logistics.replit.app`
+        : `https://lala-logistics.replit.app`;
+
       res.json({
         waPhoneNumberId: merchantRow?.waPhoneNumberId ?? "",
         waAccessToken: merchantRow?.waAccessToken ? "••••••••" : "",
         waWabaId: merchantRow?.waWabaId ?? "",
         connected: !!(merchantRow?.waPhoneNumberId && merchantRow?.waAccessToken),
+        waVerifyToken: verifyToken,
+        webhookUrl: `${canonicalHost}/webhooks/whatsapp/${merchantId}`,
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message });

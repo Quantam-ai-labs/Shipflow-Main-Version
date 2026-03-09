@@ -42,6 +42,7 @@ export const merchants = pgTable("merchants", {
   waPhoneNumberId: varchar("wa_phone_number_id", { length: 255 }),
   waAccessToken: text("wa_access_token"),
   waWabaId: varchar("wa_waba_id", { length: 255 }),
+  waVerifyToken: varchar("wa_verify_token", { length: 255 }),
   waNotificationsEnabled: boolean("wa_notifications_enabled").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
