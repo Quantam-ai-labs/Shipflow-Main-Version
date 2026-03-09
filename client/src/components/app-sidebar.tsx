@@ -166,7 +166,6 @@ const allNavGroups: NavGroup[] = [
       { id: "support-dashboard", title: "Dashboard", url: "/support/dashboard", icon: LayoutDashboard },
       { id: "support-templates", title: "Templates", url: "/support/templates", icon: MessageCircle },
       { id: "support-chat", title: "Chat", url: "/support/chat", icon: Sparkles },
-      { id: "support-connection", title: "Connection", url: "/support/connection", icon: Cog },
     ],
   },
 ];
