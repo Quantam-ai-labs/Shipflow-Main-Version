@@ -7058,6 +7058,30 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/support/wa-enabled", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const merchant = await storage.getMerchant(merchantId);
+      res.json({ enabled: merchant?.waNotificationsEnabled ?? true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.put("/api/support/wa-enabled", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { enabled } = req.body;
+      if (typeof enabled !== "boolean") return res.status(400).json({ error: "enabled must be a boolean" });
+      await storage.updateMerchant(merchantId, { waNotificationsEnabled: enabled } as any);
+      res.json({ success: true, enabled });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // ─────────────────────────────────────────────────────────────────────────
 
   app.get("/api/orders/:orderId/whatsapp-responses", isAuthenticated, async (req: any, res) => {

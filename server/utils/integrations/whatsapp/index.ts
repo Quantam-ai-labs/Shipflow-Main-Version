@@ -42,6 +42,17 @@ export async function sendOrderStatusWhatsApp(
   //   return;
   // }
 
+  const merchant = await storage.getMerchant(params.merchantId);
+  if (!merchant) {
+    console.log(`${LOG_PREFIX} Merchant ${params.merchantId} not found, skipping`);
+    return;
+  }
+
+  if (merchant.waNotificationsEnabled === false) {
+    console.log(`${LOG_PREFIX} [DISABLED] WA notifications disabled for merchant ${params.merchantId}, skipping order ${params.orderNumber}`);
+    return;
+  }
+
   const allowedDomain = process.env.LALA_IMPORT;
   if (allowedDomain) {
     const order = await storage.getOrderById(params.merchantId, params.orderId);

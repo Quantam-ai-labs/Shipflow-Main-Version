@@ -8,7 +8,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -16,7 +15,7 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
-import { MessageCircle, Pencil, CheckCircle2, XCircle, Store } from "lucide-react";
+import { MessageCircle, Pencil, CheckCircle2, XCircle } from "lucide-react";
 
 interface WhatsAppTemplate {
   id: string;
@@ -196,25 +195,6 @@ export default function SupportTemplatesPage() {
     queryKey: ["/api/whatsapp-templates"],
   });
 
-  const { data: storeData } = useQuery<{ allowedDomains: string[]; connectedStore: string | null }>({
-    queryKey: ["/api/whatsapp-allowed-stores"],
-  });
-
-  const [storeInput, setStoreInput] = useState("");
-  useEffect(() => {
-    if (Array.isArray(storeData?.allowedDomains)) setStoreInput(storeData.allowedDomains.join(", "));
-  }, [storeData]);
-
-  const saveStoreMutation = useMutation({
-    mutationFn: async (allowedDomains: string[]) =>
-      apiRequest("PUT", "/api/whatsapp-allowed-stores", { allowedDomains }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/whatsapp-allowed-stores"] });
-      toast({ title: "Store filter saved" });
-    },
-    onError: () => toast({ title: "Failed to save", variant: "destructive" }),
-  });
-
   const saveMutation = useMutation({
     mutationFn: async ({ status, templateName, messageBody, isActive }: {
       status: string; templateName: string; messageBody?: string | null; isActive: boolean;
@@ -314,42 +294,6 @@ export default function SupportTemplatesPage() {
           })
         )}
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Store className="w-4 h-4 text-muted-foreground" />
-            Store Filter
-          </CardTitle>
-          <CardDescription>
-            Restrict WhatsApp notifications to specific Shopify store domains. Leave empty to allow all stores.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="store-filter">Allowed Domains</Label>
-            <Input
-              id="store-filter"
-              value={storeInput}
-              onChange={e => setStoreInput(e.target.value)}
-              placeholder="e.g. mystore.myshopify.com, store2.myshopify.com"
-              data-testid="input-store-filter"
-            />
-            <p className="text-xs text-muted-foreground">Comma-separated list of Shopify store domains</p>
-          </div>
-          <Button
-            size="sm"
-            onClick={() => {
-              const domains = storeInput.split(",").map(s => s.trim()).filter(Boolean);
-              saveStoreMutation.mutate(domains);
-            }}
-            disabled={saveStoreMutation.isPending}
-            data-testid="button-save-store-filter"
-          >
-            {saveStoreMutation.isPending ? "Saving..." : "Save Store Filter"}
-          </Button>
-        </CardContent>
-      </Card>
 
       {editingStatus && (
         <EditDialog

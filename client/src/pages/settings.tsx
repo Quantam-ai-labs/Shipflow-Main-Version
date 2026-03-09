@@ -113,6 +113,19 @@ export default function Settings() {
     queryKey: ["/api/settings"],
   });
 
+  const { data: waEnabledData } = useQuery<{ enabled: boolean }>({
+    queryKey: ["/api/support/wa-enabled"],
+  });
+
+  const waEnabledMutation = useMutation({
+    mutationFn: async (enabled: boolean) =>
+      apiRequest("PUT", "/api/support/wa-enabled", { enabled }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/support/wa-enabled"] });
+    },
+    onError: () => toast({ title: "Failed to update", variant: "destructive" }),
+  });
+
   if (data && !initialized) {
     setName(data.name || "");
     setEmail(data.email || "");
@@ -318,6 +331,19 @@ export default function Settings() {
                         <p className="text-sm text-muted-foreground">Weekly reminders about pending COD reconciliation.</p>
                       </div>
                       <Switch checked={emailCodReminders} onCheckedChange={setEmailCodReminders} data-testid="switch-cod-reminders" />
+                    </div>
+                    <Separator />
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label>WhatsApp Order Notifications</Label>
+                        <p className="text-sm text-muted-foreground">Automatically send WhatsApp messages to customers when order status changes.</p>
+                      </div>
+                      <Switch
+                        checked={waEnabledData?.enabled ?? true}
+                        onCheckedChange={(checked) => waEnabledMutation.mutate(checked)}
+                        disabled={waEnabledMutation.isPending}
+                        data-testid="switch-wa-notifications"
+                      />
                     </div>
                     <Button onClick={handleSaveNotifications} disabled={saveSettingsMutation.isPending} data-testid="button-save-notifications">
                       <Save className="w-4 h-4 mr-2" />
