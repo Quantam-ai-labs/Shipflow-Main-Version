@@ -76,11 +76,47 @@ function buildItemLines(
   return itemSummary || "your order";
 }
 
-export function buildTemplateParams(
-  _templateName: string,
-  _vars: Record<string, string>
+export function buildTemplateParamsFromBody(
+  metaTemplateBody: string,
+  vars: Record<string, string>
 ): string[] | null {
-  return null;
+  const paramMatches = metaTemplateBody.match(/\{\{(\d+)\}\}/g);
+  if (!paramMatches || paramMatches.length === 0) return null;
+
+  const maxParam = Math.max(...paramMatches.map(m => parseInt(m.replace(/[{}]/g, ""))));
+  const params: string[] = [];
+
+  const orderedVarNames = ["name", "order_number", "items", "order_total", "tracking_number", "courier_name", "new_status", "city", "address", "shipping_amount"];
+
+  for (let i = 0; i < maxParam; i++) {
+    if (i < orderedVarNames.length) {
+      params.push(vars[orderedVarNames[i]] || "-");
+    } else {
+      params.push("-");
+    }
+  }
+
+  return params;
+}
+
+export function extractMessageTextParams(
+  messageText: string,
+  vars: Record<string, string>
+): string[] | null {
+  const placeholders = messageText.match(/\{\{(\w+)\}\}/g);
+  if (!placeholders || placeholders.length === 0) return null;
+
+  const aliasMap: Record<string, string> = {
+    customer_name: "name",
+    item_name: "items",
+    total_amount: "order_total",
+  };
+
+  return placeholders.map(p => {
+    const key = p.replace(/[{}]/g, "");
+    const mapped = aliasMap[key] ?? key;
+    return vars[mapped] ?? vars[key] ?? "-";
+  });
 }
 
 export function buildVarsFromParams(params: {

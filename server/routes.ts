@@ -36,6 +36,8 @@ import {
   whatsappTemplates,
   bookingJobs,
   shopifyWebhookEvents,
+  waMetaTemplates,
+  waAutomations,
 } from "@shared/schema";
 import {
   and,
@@ -7223,6 +7225,148 @@ export async function registerRoutes(
       res.json(logs);
     } catch (error: any) {
       console.error("[WhatsApp Logs] Error fetching:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/whatsapp-logs/:logId/retry", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const [logEntry] = await db.select()
+        .from(orderChangeLog)
+        .where(and(
+          eq(orderChangeLog.id, req.params.logId),
+          eq(orderChangeLog.merchantId, merchantId),
+          eq(orderChangeLog.changeType, "WHATSAPP_SENT"),
+        ))
+        .limit(1);
+
+      if (!logEntry) return res.status(404).json({ error: "Log entry not found" });
+
+      const meta = logEntry.metadata as any;
+      if (meta?.success === true) return res.status(400).json({ error: "This message was already sent successfully" });
+
+      const order = await storage.getOrderById(merchantId, logEntry.orderId);
+      if (!order) return res.status(404).json({ error: "Order not found" });
+
+      const phone = meta?.phone || order.customerPhone;
+      if (!phone) return res.status(400).json({ error: "No phone number available" });
+
+      const templateName = meta?.templateName;
+      if (!templateName) return res.status(400).json({ error: "No template name in log entry" });
+
+      const { formatPhoneForWhatsApp, sendWhatsAppApiRequest } = await import("./utils/integrations/whatsapp/sender");
+      const { buildVarsFromParams, interpolateMessageBody, buildTemplateParamsFromBody, extractMessageTextParams } = await import("./utils/integrations/whatsapp/variables");
+
+      const formattedPhone = formatPhoneForWhatsApp(phone);
+      if (!formattedPhone) return res.status(400).json({ error: "Invalid phone number format" });
+
+      const lineItems = Array.isArray(order.lineItems) ? (order.lineItems as any[]).map((li: any) => ({
+        name: li.name || li.title || "",
+        quantity: li.quantity || 1,
+        price: parseFloat(li.price || "0"),
+        variantTitle: li.variant_title || li.variantTitle || null,
+      })) : [];
+
+      const vars = buildVarsFromParams({
+        customerName: order.customerName || "Customer",
+        orderNumber: order.orderNumber || "",
+        fromStatus: "",
+        toStatus: meta?.toStatus || "",
+        totalAmount: order.totalAmount ? String(order.totalAmount) : null,
+        city: order.customerCity || null,
+        shippingAddress: order.shippingAddress || null,
+        courierName: order.courierName || null,
+        courierTracking: order.trackingNumber || null,
+        itemSummary: order.itemSummary || null,
+        lineItems,
+      });
+
+      let templateParams: string[] | null = null;
+      const [metaTemplate] = await db.select({ body: waMetaTemplates.body })
+        .from(waMetaTemplates)
+        .where(and(
+          eq(waMetaTemplates.merchantId, merchantId),
+          eq(waMetaTemplates.name, templateName),
+        ))
+        .limit(1);
+
+      if (metaTemplate?.body) {
+        templateParams = buildTemplateParamsFromBody(metaTemplate.body, vars);
+      }
+      if (!templateParams && meta?.automationId) {
+        const automation = await storage.getWaAutomationById(merchantId, meta.automationId);
+        if (automation?.messageText) {
+          templateParams = extractMessageTextParams(automation.messageText, vars);
+        }
+      }
+
+      const msgText = meta?.messageText || interpolateMessageBody(null, vars, meta?.toStatus);
+
+      const [merchantRow] = await db.select({
+        waPhoneNumberId: merchants.waPhoneNumberId,
+        waAccessToken: merchants.waAccessToken,
+      }).from(merchants).where(eq(merchants.id, merchantId)).limit(1);
+
+      const result = await sendWhatsAppApiRequest({
+        formattedPhone,
+        templateName,
+        messageText: msgText,
+        orderNumber: order.orderNumber || "",
+        templateParams: templateParams ?? undefined,
+        phoneNumberId: merchantRow?.waPhoneNumberId ?? undefined,
+        accessToken: merchantRow?.waAccessToken ?? undefined,
+      });
+
+      if (result.success) {
+        try {
+          const conv = await storage.upsertConversation({
+            merchantId,
+            contactPhone: formattedPhone,
+            contactName: order.customerName || undefined,
+            orderId: order.id,
+            orderNumber: order.orderNumber || undefined,
+            lastMessage: msgText.slice(0, 200),
+          });
+          await storage.createWaMessage({
+            conversationId: conv.id,
+            direction: "outbound",
+            senderName: "System (Retry)",
+            text: msgText,
+            waMessageId: result.messageId,
+            status: "sent",
+          });
+        } catch (convErr: any) {
+          console.warn("[WhatsApp Retry] Failed to upsert conversation:", convErr.message);
+        }
+      }
+
+      await db.insert(orderChangeLog).values({
+        orderId: order.id,
+        merchantId,
+        changeType: "WHATSAPP_SENT",
+        newValue: result.success ? "sent" : "failed",
+        actorType: "system",
+        actorName: "WhatsApp",
+        metadata: {
+          success: result.success,
+          toStatus: meta?.toStatus,
+          phone: formattedPhone,
+          templateName,
+          automationId: meta?.automationId,
+          automationTitle: meta?.automationTitle,
+          messageId: result.messageId,
+          messageText: msgText,
+          error: result.error,
+          retryOf: logEntry.id,
+        },
+      });
+
+      res.json({ success: result.success, error: result.error || null });
+    } catch (error: any) {
+      console.error("[WhatsApp Retry] Error:", error);
       res.status(500).json({ error: error.message });
     }
   });

@@ -172,6 +172,7 @@ export interface IStorage {
 
   // WA Automations
   getWaAutomations(merchantId: string): Promise<WaAutomation[]>;
+  getWaAutomationById(merchantId: string, id: string): Promise<WaAutomation | undefined>;
   getWaAutomationsByTrigger(merchantId: string, triggerStatus: string): Promise<WaAutomation[]>;
   createWaAutomation(data: InsertWaAutomation): Promise<WaAutomation>;
   updateWaAutomation(merchantId: string, id: string, data: Partial<InsertWaAutomation>): Promise<WaAutomation | undefined>;
@@ -1622,6 +1623,13 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(waAutomations)
       .where(eq(waAutomations.merchantId, merchantId))
       .orderBy(desc(waAutomations.createdAt));
+  }
+
+  async getWaAutomationById(merchantId: string, id: string): Promise<WaAutomation | undefined> {
+    const [result] = await db.select().from(waAutomations)
+      .where(and(eq(waAutomations.merchantId, merchantId), eq(waAutomations.id, id)))
+      .limit(1);
+    return result;
   }
 
   async getWaAutomationsByTrigger(merchantId: string, triggerStatus: string): Promise<WaAutomation[]> {

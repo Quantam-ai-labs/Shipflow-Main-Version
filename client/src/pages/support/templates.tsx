@@ -13,7 +13,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import {
   FileText, Plus, Zap, Trash2, ChevronDown, ChevronUp, ShoppingCart, Clock, Edit2, RefreshCw, Loader2,
+  MessageSquare, RotateCcw, CheckCircle2, XCircle, Phone, AlertTriangle,
 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
+import { formatDistanceToNow, format } from "date-fns";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -43,6 +46,27 @@ interface WaAutomation {
   templateName: string | null;
   isActive: boolean;
   createdAt: string;
+}
+
+interface WaMessageLog {
+  id: string;
+  orderId: string;
+  newValue: string | null;
+  metadata: {
+    success: boolean;
+    toStatus?: string;
+    phone?: string;
+    templateName?: string;
+    automationId?: string;
+    automationTitle?: string;
+    messageId?: string;
+    messageText?: string;
+    error?: string;
+    retryOf?: string;
+  };
+  createdAt: string;
+  orderNumber: string | null;
+  customerName: string | null;
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -724,7 +748,7 @@ function AutomationCard({
 
 export default function SupportTemplatesPage() {
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<"templates" | "automations">("templates");
+  const [activeTab, setActiveTab] = useState<"templates" | "automations" | "logs">("templates");
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorPreset, setEditorPreset] = useState<typeof PRESETS[0] | null>(null);
   const [autoDialogOpen, setAutoDialogOpen] = useState(false);
@@ -833,6 +857,28 @@ export default function SupportTemplatesPage() {
     }
   };
 
+  // Message Logs
+  const { data: messageLogs = [], isLoading: logsLoading } = useQuery<WaMessageLog[]>({
+    queryKey: ["/api/whatsapp-logs"],
+    enabled: activeTab === "logs",
+  });
+
+  const retryMutation = useMutation({
+    mutationFn: async (logId: string) => {
+      const res = await apiRequest("POST", `/api/whatsapp-logs/${logId}/retry`);
+      return await res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/whatsapp-logs"] });
+      if (data?.success) {
+        toast({ title: "Message resent successfully" });
+      } else {
+        toast({ title: data?.error || "Retry failed", variant: "destructive" });
+      }
+    },
+    onError: (err: any) => toast({ title: err?.message || "Retry failed", variant: "destructive" }),
+  });
+
   // ── Template Editor full-page mode ──
   if (editorOpen) {
     return (
@@ -873,6 +919,18 @@ export default function SupportTemplatesPage() {
           data-testid="tab-automations"
         >
           Automations
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("logs")}
+          className={`px-5 py-2 rounded-md text-sm font-medium transition-colors ${
+            activeTab === "logs"
+              ? "bg-background text-foreground shadow-sm border"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+          data-testid="tab-logs"
+        >
+          Message Logs
         </button>
       </div>
 
@@ -1063,6 +1121,162 @@ export default function SupportTemplatesPage() {
             templates={metaTemplates}
             editData={editingAutomation}
           />
+        </div>
+      )}
+
+      {/* ── MESSAGE LOGS TAB ── */}
+      {activeTab === "logs" && (
+        <div className="border rounded-xl bg-card overflow-hidden">
+          <div className="flex items-start justify-between p-6 border-b">
+            <div>
+              <h1 className="text-lg font-bold tracking-tight" data-testid="text-logs-title">Message Logs</h1>
+              <p className="text-sm text-muted-foreground mt-0.5 max-w-xl">
+                Recent WhatsApp messages sent by automations. Retry failed messages with one click.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => queryClient.invalidateQueries({ queryKey: ["/api/whatsapp-logs"] })}
+              data-testid="button-refresh-logs"
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Refresh
+            </Button>
+          </div>
+
+          {logsLoading ? (
+            <div className="p-6 space-y-3">
+              {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-14 rounded-lg" />)}
+            </div>
+          ) : messageLogs.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-4">
+              <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center">
+                <MessageSquare className="w-7 h-7 text-muted-foreground" />
+              </div>
+              <div className="text-center">
+                <p className="font-semibold text-base" data-testid="text-no-logs">No messages sent yet</p>
+                <p className="text-sm text-muted-foreground mt-1">Messages sent through automations will appear here.</p>
+              </div>
+            </div>
+          ) : (
+            <TooltipProvider>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm" data-testid="table-message-logs">
+                  <thead>
+                    <tr className="border-b bg-muted/30">
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Time</th>
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Customer</th>
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Phone</th>
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Template</th>
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status Change</th>
+                      <th className="text-right px-4 py-3 font-medium text-muted-foreground">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {messageLogs.map((log) => {
+                      const meta = log.metadata;
+                      const isSuccess = meta?.success === true;
+                      const isRetry = !!meta?.retryOf;
+                      return (
+                        <tr key={log.id} className="border-b last:border-b-0 hover:bg-muted/20 transition-colors" data-testid={`row-log-${log.id}`}>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="text-muted-foreground cursor-default" data-testid={`text-time-${log.id}`}>
+                                  {formatDistanceToNow(new Date(log.createdAt), { addSuffix: true })}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {format(new Date(log.createdAt), "PPpp")}
+                              </TooltipContent>
+                            </Tooltip>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div data-testid={`text-customer-${log.id}`}>
+                              <span className="font-medium">{log.customerName || "—"}</span>
+                              {log.orderNumber && (
+                                <span className="text-muted-foreground ml-1.5 text-xs">#{log.orderNumber}</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <span className="text-muted-foreground flex items-center gap-1.5" data-testid={`text-phone-${log.id}`}>
+                              <Phone className="w-3.5 h-3.5" />
+                              {meta?.phone || "—"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1.5" data-testid={`text-template-${log.id}`}>
+                              <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
+                                {meta?.templateName || "—"}
+                              </code>
+                              {isRetry && (
+                                <Badge variant="outline" className="text-[10px] px-1 py-0 border-amber-500/50 text-amber-600">
+                                  retry
+                                </Badge>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            {isSuccess ? (
+                              <Badge className="bg-emerald-500/15 text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/20" data-testid={`badge-status-${log.id}`}>
+                                <CheckCircle2 className="w-3 h-3 mr-1" />
+                                Sent
+                              </Badge>
+                            ) : (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Badge variant="destructive" className="cursor-default bg-red-500/15 text-red-500 border-red-500/30 hover:bg-red-500/20" data-testid={`badge-status-${log.id}`}>
+                                    <XCircle className="w-3 h-3 mr-1" />
+                                    Failed
+                                  </Badge>
+                                </TooltipTrigger>
+                                {meta?.error && (
+                                  <TooltipContent className="max-w-xs">
+                                    <p className="text-xs">{meta.error}</p>
+                                  </TooltipContent>
+                                )}
+                              </Tooltip>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            {meta?.toStatus ? (
+                              <Badge variant="outline" className="text-xs" data-testid={`text-status-change-${log.id}`}>
+                                → {meta.toStatus}
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {!isSuccess && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => retryMutation.mutate(log.id)}
+                                disabled={retryMutation.isPending}
+                                data-testid={`button-retry-${log.id}`}
+                                className="h-7 text-xs gap-1.5"
+                              >
+                                {retryMutation.isPending ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <RotateCcw className="w-3 h-3" />
+                                )}
+                                Retry
+                              </Button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </TooltipProvider>
+          )}
         </div>
       )}
     </div>

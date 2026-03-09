@@ -5,11 +5,13 @@ import type { WaAutomation } from "@shared/schema";
 import { storage } from "../../../storage";
 import {
   buildVarsFromParams,
-  buildTemplateParams,
+  buildTemplateParamsFromBody,
+  extractMessageTextParams,
   interpolateMessageBody,
   getStatusLabel,
   WA_NOTIFY_STATUSES,
 } from "./variables";
+import { waMetaTemplates } from "@shared/schema";
 import { formatPhoneForWhatsApp, sendWhatsAppApiRequest } from "./sender";
 import type { OrderNotificationParams } from "./types";
 
@@ -124,8 +126,25 @@ export async function sendOrderStatusWhatsApp(
             ? interpolateMessageBody(automation.messageText, vars, params.toStatus)
             : null;
           const tmplName = automation.templateName || null;
-          const templateParams = tmplName ? buildTemplateParams(tmplName, vars) : null;
           const effectiveTemplateName = tmplName || "custom_message";
+
+          let templateParams: string[] | null = null;
+          if (tmplName) {
+            const [metaTemplate] = await db.select({ body: waMetaTemplates.body })
+              .from(waMetaTemplates)
+              .where(and(
+                eq(waMetaTemplates.merchantId, params.merchantId),
+                eq(waMetaTemplates.name, tmplName),
+              ))
+              .limit(1);
+
+            if (metaTemplate?.body) {
+              templateParams = buildTemplateParamsFromBody(metaTemplate.body, vars);
+            }
+            if (!templateParams && automation.messageText) {
+              templateParams = extractMessageTextParams(automation.messageText, vars);
+            }
+          }
 
           console.log(
             `${LOG_PREFIX} ─── Automation: "${automation.title}" ──────────────────`,
