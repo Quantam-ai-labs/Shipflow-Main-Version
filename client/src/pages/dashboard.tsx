@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,21 +23,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Package,
-  Truck,
   CheckCircle2,
   Clock,
-  AlertCircle,
-  TrendingUp,
-  TrendingDown,
   ArrowUpRight,
   RefreshCw,
   Search,
   X,
   Loader2,
-  BarChart3,
-  Target,
-  RotateCcw,
-  Send,
   Ban,
   Edit3,
   Pause,
@@ -52,7 +43,6 @@ import { useToast } from "@/hooks/use-toast";
 import type { Order, Shipment } from "@shared/schema";
 import { Link, useLocation } from "wouter";
 import { useDateRange } from "@/contexts/date-range-context";
-import { AIInsightsBanner } from "@/components/ai-insights-banner";
 import { formatPkDateTime } from "@/lib/dateFormat";
 
 const DEFAULT_TAG_CONFIG = { confirm: "Robo-Confirm", pending: "Robo-Pending", cancel: "Robo-Cancel" };
@@ -89,72 +79,6 @@ interface DashboardStats {
 
 interface RecentOrder extends Order {
   shipment?: Shipment;
-}
-
-function StatCard({
-  title,
-  value,
-  icon: Icon,
-  trend,
-  trendLabel,
-  subtitle,
-  iconColor = "text-primary",
-  isLoading = false,
-}: {
-  title: string;
-  value: string | number;
-  icon: React.ElementType;
-  trend?: number;
-  trendLabel?: string;
-  subtitle?: string;
-  iconColor?: string;
-  isLoading?: boolean;
-}) {
-  if (isLoading) {
-    return (
-      <Card>
-        <CardContent className="p-4">
-          <div className="space-y-2">
-            <Skeleton className="h-3 w-20" />
-            <Skeleton className="h-7 w-16" />
-            <Skeleton className="h-3 w-24" />
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="space-y-1 min-w-0">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{title}</p>
-            <p className="text-2xl font-semibold">{value}</p>
-            {trend !== undefined && (
-              <div className="flex items-center gap-1 text-xs">
-                {trend >= 0 ? (
-                  <TrendingUp className="w-3 h-3 text-green-600 dark:text-green-400" />
-                ) : (
-                  <TrendingDown className="w-3 h-3 text-red-600 dark:text-red-400" />
-                )}
-                <span className={trend >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
-                  {trend >= 0 ? "+" : ""}{trend}%
-                </span>
-                <span className="text-muted-foreground">{trendLabel}</span>
-              </div>
-            )}
-            {subtitle && (
-              <p className="text-xs text-muted-foreground">{subtitle}</p>
-            )}
-          </div>
-          <div className={`${iconColor} opacity-60`}>
-            <Icon className="w-5 h-5" />
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
 }
 
 const UNIVERSAL_STATUS_COLORS: Record<string, string> = {
@@ -226,35 +150,9 @@ const WORKFLOW_STAGE_COLORS: Record<string, string> = {
   CANCELLED: "bg-red-500/10 text-red-600 border-red-500/20",
 };
 
-function getStageFeatures(order: Order): string {
-  const stage = order.workflowStatus || "NEW";
-  switch (stage) {
-    case "BOOKED":
-    case "FULFILLED":
-      return [order.courierName, order.courierTracking, order.shipmentStatus ? UNIVERSAL_STATUS_LABELS[order.shipmentStatus] || order.shipmentStatus : null].filter(Boolean).join(" | ");
-    case "DELIVERED":
-      return [order.courierName, order.courierTracking, "Delivered"].filter(Boolean).join(" | ");
-    case "RETURN":
-      return [order.courierName, order.courierTracking, order.shipmentStatus ? UNIVERSAL_STATUS_LABELS[order.shipmentStatus] || order.shipmentStatus : "Return"].filter(Boolean).join(" | ");
-    case "CANCELLED":
-      return "Cancelled";
-    case "PENDING":
-      return order.pendingReasonType || "Pending review";
-    case "HOLD":
-      return order.remark || "On hold";
-    case "READY_TO_SHIP":
-      return "Awaiting booking";
-    default:
-      return order.fulfillmentStatus || "";
-  }
-}
-
 function OrderSearchSection() {
-  const [searchOrderNumber, setSearchOrderNumber] = useState("");
-  const [searchTracking, setSearchTracking] = useState("");
-  const [searchName, setSearchName] = useState("");
-  const [searchPhone, setSearchPhone] = useState("");
-  const [debouncedParams, setDebouncedParams] = useState({ searchOrderNumber: "", searchTracking: "", searchName: "", searchPhone: "" });
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [editingOrder, setEditingOrder] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editPhone, setEditPhone] = useState("");
@@ -282,23 +180,17 @@ function OrderSearchSection() {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      setDebouncedParams({
-        searchOrderNumber: searchOrderNumber.trim(),
-        searchTracking: searchTracking.trim(),
-        searchName: searchName.trim(),
-        searchPhone: searchPhone.trim(),
-      });
+      setDebouncedQuery(searchQuery.trim());
     }, 400);
     return () => clearTimeout(timer);
-  }, [searchOrderNumber, searchTracking, searchName, searchPhone]);
+  }, [searchQuery]);
 
-  const hasSearch = Object.values(debouncedParams).some((v) => v.length >= 2);
+  const hasSearch = debouncedQuery.length >= 2;
 
   const queryParams = new URLSearchParams();
-  if (debouncedParams.searchOrderNumber) queryParams.set("searchOrderNumber", debouncedParams.searchOrderNumber);
-  if (debouncedParams.searchTracking) queryParams.set("searchTracking", debouncedParams.searchTracking);
-  if (debouncedParams.searchName) queryParams.set("searchName", debouncedParams.searchName);
-  if (debouncedParams.searchPhone) queryParams.set("searchPhone", debouncedParams.searchPhone);
+  if (debouncedQuery) {
+    queryParams.set("search", debouncedQuery);
+  }
   queryParams.set("pageSize", "50");
 
   const { data, isLoading } = useQuery<{ orders: Order[]; total: number }>({
@@ -427,15 +319,6 @@ function OrderSearchSection() {
     return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
   });
 
-  const handleClear = () => {
-    setSearchOrderNumber("");
-    setSearchTracking("");
-    setSearchName("");
-    setSearchPhone("");
-  };
-
-  const hasAnyInput = searchOrderNumber || searchTracking || searchName || searchPhone;
-
   const hasShipmentColumns = (stage: string) => ["BOOKED", "FULFILLED", "DELIVERED", "RETURN"].includes(stage);
   const hasAddressProducts = (stage: string) => ["NEW", "PENDING"].includes(stage);
 
@@ -443,16 +326,16 @@ function OrderSearchSection() {
     return (
       <div className="flex items-center justify-end gap-1">
         {(stage === "NEW" || stage === "PENDING" || stage === "HOLD") && (
-          <Button size="icon" variant="ghost" className="h-7 w-7 text-green-600"
+          <Button size="icon" variant="ghost" className="text-green-600"
             onClick={() => handleSingleAction(order.id, stage === "HOLD" ? "release-hold" : stage === "PENDING" ? "fix-confirm" : "confirm")}
             disabled={isPending}
             title={stage === "HOLD" ? "Release" : "Confirm"}
             data-testid={`button-search-confirm-${order.id}`}>
-            <CheckCircle2 className="w-4 h-4" />
+            <CheckCircle2 className="w-3.5 h-3.5" />
           </Button>
         )}
         {(stage === "NEW" || stage === "PENDING" || stage === "READY_TO_SHIP" || stage === "BOOKED" || stage === "FULFILLED") && (
-          <Button size="icon" variant="ghost" className="h-7 w-7"
+          <Button size="icon" variant="ghost"
             onClick={() => {
               setEditingOrder(order.id);
               setEditName(order.customerName || "");
@@ -462,81 +345,86 @@ function OrderSearchSection() {
             }}
             title="Edit"
             data-testid={`button-search-edit-${order.id}`}>
-            <Edit3 className="w-4 h-4" />
+            <Edit3 className="w-3.5 h-3.5" />
           </Button>
         )}
         {(stage === "NEW" || stage === "PENDING") && (
-          <Button size="icon" variant="ghost" className="h-7 w-7 text-purple-600"
+          <Button size="icon" variant="ghost" className="text-purple-600"
             onClick={() => handleSingleAction(order.id, "hold")}
             disabled={isPending}
             title="Hold"
             data-testid={`button-search-hold-${order.id}`}>
-            <Pause className="w-4 h-4" />
+            <Pause className="w-3.5 h-3.5" />
           </Button>
         )}
         {stage === "HOLD" && (
-          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-amber-600"
+          <Button size="icon" variant="ghost" className="text-amber-600"
             onClick={() => handleSingleAction(order.id, "move-to-pending")}
             disabled={isPending}
+            title="Move to Pending"
             data-testid={`button-search-to-pending-${order.id}`}>
-            <Clock className="w-3.5 h-3.5 mr-1" />Pending
+            <Clock className="w-3.5 h-3.5" />
           </Button>
         )}
         {stage === "READY_TO_SHIP" && (
           <>
-            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-amber-600"
+            <Button size="icon" variant="ghost" className="text-amber-600"
               onClick={() => handleSingleAction(order.id, "pending")}
               disabled={isPending}
               title="Move to Pending"
               data-testid={`button-search-pending-rts-${order.id}`}>
-              <Clock className="w-3.5 h-3.5 mr-1" />Pending
+              <Clock className="w-3.5 h-3.5" />
             </Button>
-            <Button size="icon" variant="ghost" className="h-7 w-7 text-purple-600"
+            <Button size="icon" variant="ghost" className="text-purple-600"
               onClick={() => handleSingleAction(order.id, "hold")}
               disabled={isPending}
               title="Hold"
               data-testid={`button-search-hold-rts-${order.id}`}>
-              <Pause className="w-4 h-4" />
+              <Pause className="w-3.5 h-3.5" />
             </Button>
           </>
         )}
         {stage === "BOOKED" && (
-          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-red-600"
+          <Button size="icon" variant="ghost" className="text-red-600"
             onClick={() => setCancelConfirm({ open: true, orderId: order.id, type: "courier", orderNumber: order.orderNumber })}
             disabled={cancelBookingMutation.isPending}
+            title="Cancel AWB"
             data-testid={`button-search-cancel-awb-${order.id}`}>
-            <Undo2 className="w-3.5 h-3.5 mr-1" />Cancel AWB
+            <Undo2 className="w-3.5 h-3.5" />
           </Button>
         )}
         {order.shopifyOrderId && !order.cancelledAt && stage === "BOOKED" && (
-          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-orange-600"
+          <Button size="icon" variant="ghost" className="text-orange-600"
             onClick={() => setCancelConfirm({ open: true, orderId: order.id, type: "shopify", orderNumber: order.orderNumber })}
             disabled={cancelShopifyMutation.isPending}
+            title="Cancel Shopify"
             data-testid={`button-search-cancel-shopify-${order.id}`}>
-            <XCircle className="w-3.5 h-3.5 mr-1" />Cancel Shopify
+            <XCircle className="w-3.5 h-3.5" />
           </Button>
         )}
         {stage === "CANCELLED" && order.shopifyOrderId && !(order as any).isShopifyCancelled && (
-          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-orange-600"
+          <Button size="icon" variant="ghost" className="text-orange-600"
             onClick={() => setCancelConfirm({ open: true, orderId: order.id, type: "shopify", orderNumber: order.orderNumber })}
             disabled={cancelShopifyMutation.isPending}
+            title="Cancel on Shopify"
             data-testid={`button-search-cancel-shopify-cancelled-${order.id}`}>
-            <XCircle className="w-3.5 h-3.5 mr-1" />Cancel on Shopify
+            <XCircle className="w-3.5 h-3.5" />
           </Button>
         )}
         {stage !== "NEW" && stage !== "BOOKED" && stage !== "FULFILLED" && stage !== "DELIVERED" && stage !== "RETURN" && order.previousWorkflowStatus && (
-          <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground"
+          <Button size="icon" variant="ghost" className="text-muted-foreground"
             onClick={() => workflowMutation.mutate({ orderId: order.id, action: "revert" })}
             disabled={isPending}
             title="Revert"
             data-testid={`button-search-revert-${order.id}`}>
-            <Undo2 className="w-4 h-4" />
+            <Undo2 className="w-3.5 h-3.5" />
           </Button>
         )}
         {(stage === "NEW" || stage === "PENDING" || stage === "HOLD" || stage === "READY_TO_SHIP") && (
-          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-red-600"
+          <Button size="icon" variant="ghost" className="text-red-600"
             onClick={() => handleSingleAction(order.id, "cancel")}
             disabled={isPending}
+            title="Cancel"
             data-testid={`button-search-cancel-${order.id}`}>
             <XCircle className="w-3.5 h-3.5" />
           </Button>
@@ -547,285 +435,235 @@ function OrderSearchSection() {
 
   return (
     <>
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between gap-2">
-          <CardTitle className="text-sm font-medium">
-            Order Search
-          </CardTitle>
-          {hasAnyInput && (
-            <Button variant="ghost" size="sm" onClick={handleClear} data-testid="button-clear-search">
-              <X className="w-4 h-4 mr-1" />
-              Clear
-            </Button>
-          )}
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">Order ID</label>
-            <div className="relative">
-              <Package className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-              <Input
-                value={searchOrderNumber}
-                onChange={(e) => setSearchOrderNumber(e.target.value)}
-                placeholder="e.g. 23409, 23410"
-                className="pl-8 text-sm"
-                data-testid="input-search-order-id"
-              />
-            </div>
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">Tracking Number</label>
-            <div className="relative">
-              <Truck className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-              <Input
-                value={searchTracking}
-                onChange={(e) => setSearchTracking(e.target.value)}
-                placeholder="e.g. PW751350, PW751351"
-                className="pl-8 text-sm"
-                data-testid="input-search-tracking"
-              />
-            </div>
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">Customer Name</label>
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-              <Input
-                value={searchName}
-                onChange={(e) => setSearchName(e.target.value)}
-                placeholder="e.g. Ahmed"
-                className="pl-8 text-sm"
-                data-testid="input-search-name"
-              />
-            </div>
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">Contact Number</label>
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-              <Input
-                value={searchPhone}
-                onChange={(e) => setSearchPhone(e.target.value)}
-                placeholder="e.g. 03001234567"
-                className="pl-8 text-sm"
-                data-testid="input-search-phone"
-              />
-            </div>
-          </div>
-        </div>
+    <div>
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search by order ID, tracking number, customer name, or phone..."
+          className="pl-9 text-sm"
+          data-testid="input-unified-search"
+        />
+        {searchQuery && (
+          <button
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            onClick={() => setSearchQuery("")}
+            data-testid="button-clear-search"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
 
-        {hasSearch && (
-          <div className="border rounded-md">
-            {isLoading ? (
-              <div className="flex items-center justify-center gap-2 p-6 text-sm text-muted-foreground">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Searching...
-              </div>
-            ) : results.length === 0 ? (
-              <div className="p-6 text-sm text-muted-foreground text-center" data-testid="text-no-results">
-                No orders found matching your search criteria
-              </div>
-            ) : (
-              <div className="max-h-[600px] overflow-y-auto">
-                {sortedStages.map(stage => {
-                  const stageOrders = groupedResults[stage];
-                  return (
-                    <div key={stage} data-testid={`search-group-${stage}`}>
-                      <div className="sticky top-0 z-10 bg-muted px-4 py-1.5 border-b flex items-center gap-2">
-                        <Badge className={`text-[10px] ${WORKFLOW_STAGE_COLORS[stage] || ""}`}>
-                          {WORKFLOW_STAGE_LABELS[stage] || stage}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground">{stageOrders.length} order{stageOrders.length !== 1 ? "s" : ""}</span>
-                      </div>
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b">
-                            <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Order</th>
-                            <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Customer</th>
-                            <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs hidden md:table-cell">City</th>
+      {hasSearch && (
+        <div className="border rounded-md mt-2">
+          {isLoading ? (
+            <div className="flex items-center justify-center gap-2 p-4 text-xs text-muted-foreground">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              Searching...
+            </div>
+          ) : results.length === 0 ? (
+            <div className="p-4 text-xs text-muted-foreground text-center" data-testid="text-no-results">
+              No orders found
+            </div>
+          ) : (
+            <div className="max-h-[500px] overflow-y-auto">
+              {sortedStages.map(stage => {
+                const stageOrders = groupedResults[stage];
+                return (
+                  <div key={stage} data-testid={`search-group-${stage}`}>
+                    <div className="sticky top-0 z-10 bg-muted px-3 py-1 border-b flex items-center gap-2">
+                      <Badge className={`text-[10px] ${WORKFLOW_STAGE_COLORS[stage] || ""}`}>
+                        {WORKFLOW_STAGE_LABELS[stage] || stage}
+                      </Badge>
+                      <span className="text-[11px] text-muted-foreground">{stageOrders.length}</span>
+                    </div>
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="px-3 py-1.5 text-left font-medium text-muted-foreground text-[10px] uppercase tracking-wider">Order</th>
+                          <th className="px-3 py-1.5 text-left font-medium text-muted-foreground text-[10px] uppercase tracking-wider">Customer</th>
+                          <th className="px-3 py-1.5 text-left font-medium text-muted-foreground text-[10px] uppercase tracking-wider hidden md:table-cell">City</th>
+                          {hasAddressProducts(stage) && (
+                            <>
+                              <th className="px-3 py-1.5 text-left font-medium text-muted-foreground text-[10px] uppercase tracking-wider">Address</th>
+                              <th className="px-3 py-1.5 text-left font-medium text-muted-foreground text-[10px] uppercase tracking-wider">Products</th>
+                            </>
+                          )}
+                          <th className="px-3 py-1.5 text-left font-medium text-muted-foreground text-[10px] uppercase tracking-wider">Amount</th>
+                          <th className="px-3 py-1.5 text-center font-medium text-muted-foreground text-[10px] uppercase tracking-wider hidden lg:table-cell w-[36px]">Qty</th>
+                          <th className="px-3 py-1.5 text-left font-medium text-muted-foreground text-[10px] uppercase tracking-wider hidden md:table-cell max-w-[80px]">Tags</th>
+                          {stage === "PENDING" && (
+                            <th className="px-3 py-1.5 text-left font-medium text-muted-foreground text-[10px] uppercase tracking-wider">Reason</th>
+                          )}
+                          {stage === "HOLD" && (
+                            <th className="px-3 py-1.5 text-left font-medium text-muted-foreground text-[10px] uppercase tracking-wider">Hold Until</th>
+                          )}
+                          {hasShipmentColumns(stage) && (
+                            <>
+                              <th className="px-3 py-1.5 text-left font-medium text-muted-foreground text-[10px] uppercase tracking-wider">Courier</th>
+                              <th className="px-3 py-1.5 text-left font-medium text-muted-foreground text-[10px] uppercase tracking-wider">Status</th>
+                            </>
+                          )}
+                          {stage === "CANCELLED" && (
+                            <th className="px-3 py-1.5 text-left font-medium text-muted-foreground text-[10px] uppercase tracking-wider">Reason</th>
+                          )}
+                          <th className="px-3 py-1.5 text-left font-medium text-muted-foreground text-[10px] uppercase tracking-wider">Remark</th>
+                          <th className="px-3 py-1.5 text-right font-medium text-muted-foreground text-[10px] uppercase tracking-wider">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {stageOrders.map(order => (
+                          <tr key={order.id} className="border-b transition-colors hover-elevate" data-testid={`search-result-${order.id}`}>
+                            <td className="px-3 py-1">
+                              <div className="flex items-center gap-1">
+                                <Link href={`/orders/detail/${order.id}`} className="font-medium text-xs hover:underline" data-testid={`link-search-order-${order.id}`}>
+                                  {String(order.orderNumber || '').replace(/^#/, '')}
+                                </Link>
+                                {order.orderSource === "shopify_draft_order" && (
+                                  <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-green-100 dark:bg-green-900 border border-green-300 dark:border-green-700" title="Custom Order">
+                                    <PenLine className="w-2 h-2 text-green-700 dark:text-green-300" />
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[10px] text-muted-foreground">
+                                {order.orderDate ? formatPkDateTime(order.orderDate) : ""}
+                              </div>
+                            </td>
+                            <td className="px-3 py-1">
+                              {editingOrder === order.id ? (
+                                <div className="space-y-1">
+                                  <Input value={editName} onChange={e => setEditName(e.target.value)} placeholder="Name" className="h-6 text-xs" data-testid={`input-search-edit-name-${order.id}`} />
+                                  <Input value={editPhone} onChange={e => setEditPhone(e.target.value)} placeholder="Phone" className="h-6 text-xs" data-testid={`input-search-edit-phone-${order.id}`} />
+                                  <Input value={editAddress} onChange={e => setEditAddress(e.target.value)} placeholder="Address" className="h-6 text-xs" data-testid={`input-search-edit-address-${order.id}`} />
+                                  <Input value={editCity} onChange={e => setEditCity(e.target.value)} placeholder="City" className="h-6 text-xs" data-testid={`input-search-edit-city-${order.id}`} />
+                                  <div className="flex gap-1">
+                                    <Button size="sm" className="h-5 text-[10px] px-2" onClick={() => {
+                                      customerUpdateMutation.mutate({
+                                        orderId: order.id,
+                                        data: { customerName: editName, customerPhone: editPhone, shippingAddress: editAddress, city: editCity }
+                                      });
+                                    }} data-testid={`button-search-save-edit-${order.id}`}>Save</Button>
+                                    <Button size="sm" variant="ghost" className="h-5 text-[10px] px-2" onClick={() => setEditingOrder(null)}>Cancel</Button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div>
+                                  <div className="font-medium text-xs truncate max-w-[110px]" title={order.customerName || ""}>{order.customerName && order.customerName.length > 15 ? order.customerName.slice(0, 13) + ".." : order.customerName}</div>
+                                  <div className="text-[10px] text-muted-foreground">{order.customerPhone || "No phone"}</div>
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-3 py-1 hidden md:table-cell text-xs truncate max-w-[90px]" title={order.city || ""}>{order.city && order.city.length > 15 ? order.city.slice(0, 13) + ".." : (order.city || "-")}</td>
                             {hasAddressProducts(stage) && (
                               <>
-                                <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Address</th>
-                                <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Products</th>
+                                <td className="px-3 py-1 max-w-[200px]">
+                                  <div className="text-[10px] text-muted-foreground whitespace-normal leading-tight">{order.shippingAddress || "-"}</div>
+                                </td>
+                                <td className="px-3 py-1 max-w-[160px]">
+                                  <div className="text-[10px] text-muted-foreground leading-tight">
+                                    {order.itemSummary ? order.itemSummary.split(' || ').map((item, i) => (
+                                      <div key={i} className="truncate">{item}</div>
+                                    )) : "-"}
+                                  </div>
+                                </td>
                               </>
                             )}
-                            <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Amount (PKR)</th>
-                            <th className="px-3 py-2 text-center font-medium text-muted-foreground text-xs hidden lg:table-cell w-[40px]">Items</th>
-                            <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs hidden md:table-cell max-w-[100px]">Tags</th>
+                            <td className="px-3 py-1">
+                              <div className="font-medium text-xs">{Number(order.totalAmount).toLocaleString()}</div>
+                              {order.codPaymentStatus === "PAID" ? (
+                                <Badge className="text-[10px] bg-green-500/10 text-green-600 border-green-500/20">Prepaid</Badge>
+                              ) : order.codPaymentStatus === "PARTIALLY_PAID" ? (
+                                <span className="text-[10px] text-amber-600">COD: {Number(order.codRemaining ?? order.totalAmount).toLocaleString()}</span>
+                              ) : (
+                                <div className="text-[10px] text-muted-foreground capitalize">{order.paymentMethod}</div>
+                              )}
+                            </td>
+                            <td className="px-3 py-1 hidden lg:table-cell text-center w-[36px]">
+                              <span className="text-xs">{order.totalQuantity || 1}</span>
+                            </td>
+                            <td className="px-3 py-1 hidden md:table-cell max-w-[80px]">
+                              <div className="flex flex-wrap gap-0.5">
+                                {getRoboTags(order.tags as string[], tagConfig).map(tag => (
+                                  <Badge key={tag} className={`text-[9px] px-1 py-0 leading-3 ${getRoboTagStyle(tag, tagConfig) || ''}`}>
+                                    {tag}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </td>
                             {stage === "PENDING" && (
-                              <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Reason</th>
+                              <td className="px-3 py-1">
+                                <Badge variant="secondary" className="text-[10px]">
+                                  {order.pendingReasonType || "Unknown"}
+                                </Badge>
+                              </td>
                             )}
                             {stage === "HOLD" && (
-                              <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Hold Until</th>
+                              <td className="px-3 py-1">
+                                {order.holdUntil ? (
+                                  <div className="text-[10px]">{formatPkDateTime(order.holdUntil)}</div>
+                                ) : "-"}
+                              </td>
                             )}
                             {hasShipmentColumns(stage) && (
                               <>
-                                <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Courier</th>
-                                <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Status</th>
+                                <td className="px-3 py-1">
+                                  <div className="text-xs font-medium">{order.courierName || "-"}</div>
+                                  <div className="text-[10px] text-muted-foreground">{order.courierTracking || "-"}</div>
+                                </td>
+                                <td className="px-3 py-1">
+                                  <Badge className={`text-[10px] ${UNIVERSAL_STATUS_COLORS[order.shipmentStatus || ""] || "bg-slate-100 text-slate-700"}`}
+                                    title={order.courierRawStatus ? `Courier: ${order.courierRawStatus}` : undefined}
+                                    data-testid={`badge-search-status-${order.id}`}>
+                                    {UNIVERSAL_STATUS_LABELS[order.shipmentStatus || ""] || order.shipmentStatus || "Unknown"}
+                                  </Badge>
+                                </td>
                               </>
                             )}
                             {stage === "CANCELLED" && (
-                              <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Reason</th>
+                              <td className="px-3 py-1">
+                                <div className="text-[10px] text-muted-foreground">{order.cancelReason || "No reason given"}</div>
+                                {order.cancelledAt && (
+                                  <div className="text-[10px] text-muted-foreground/70">{formatPkDateTime(order.cancelledAt)}</div>
+                                )}
+                              </td>
                             )}
-                            <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Remark</th>
-                            <th className="px-3 py-2 text-right font-medium text-muted-foreground text-xs">Actions</th>
+                            <td className="px-3 py-1 max-w-[120px]">
+                              <button
+                                className="text-left w-full cursor-pointer hover:opacity-80"
+                                onClick={() => openRemarkDialog(order)}
+                                data-testid={`button-search-remark-${order.id}`}
+                              >
+                                {order.remark ? (
+                                  <span className="text-[10px] text-muted-foreground truncate block max-w-[110px]" title={order.remark}>
+                                    {order.remark.length > 25 ? order.remark.slice(0, 23) + "..." : order.remark}
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] text-muted-foreground/50 italic">Add...</span>
+                                )}
+                              </button>
+                            </td>
+                            <td className="px-3 py-1 text-right">
+                              {renderActionButtons(order, stage)}
+                            </td>
                           </tr>
-                        </thead>
-                        <tbody>
-                          {stageOrders.map(order => (
-                            <tr key={order.id} className="border-b transition-colors hover-elevate" data-testid={`search-result-${order.id}`}>
-                              <td className="px-3 py-1.5">
-                                <div className="flex items-center gap-1.5">
-                                  <Link href={`/orders/detail/${order.id}`} className="font-medium text-sm hover:underline" data-testid={`link-search-order-${order.id}`}>
-                                    {String(order.orderNumber || '').replace(/^#/, '')}
-                                  </Link>
-                                  {order.orderSource === "shopify_draft_order" && (
-                                    <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-green-100 dark:bg-green-900 border border-green-300 dark:border-green-700" title="Custom Order">
-                                      <PenLine className="w-2.5 h-2.5 text-green-700 dark:text-green-300" />
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="text-xs text-muted-foreground">
-                                  {order.orderDate ? formatPkDateTime(order.orderDate) : ""}
-                                </div>
-                              </td>
-                              <td className="px-3 py-1.5">
-                                {editingOrder === order.id ? (
-                                  <div className="space-y-1">
-                                    <Input value={editName} onChange={e => setEditName(e.target.value)} placeholder="Name" className="h-7 text-xs" data-testid={`input-search-edit-name-${order.id}`} />
-                                    <Input value={editPhone} onChange={e => setEditPhone(e.target.value)} placeholder="Phone" className="h-7 text-xs" data-testid={`input-search-edit-phone-${order.id}`} />
-                                    <Input value={editAddress} onChange={e => setEditAddress(e.target.value)} placeholder="Address" className="h-7 text-xs" data-testid={`input-search-edit-address-${order.id}`} />
-                                    <Input value={editCity} onChange={e => setEditCity(e.target.value)} placeholder="City" className="h-7 text-xs" data-testid={`input-search-edit-city-${order.id}`} />
-                                    <div className="flex gap-1">
-                                      <Button size="sm" className="h-6 text-xs px-2" onClick={() => {
-                                        customerUpdateMutation.mutate({
-                                          orderId: order.id,
-                                          data: { customerName: editName, customerPhone: editPhone, shippingAddress: editAddress, city: editCity }
-                                        });
-                                      }} data-testid={`button-search-save-edit-${order.id}`}>Save</Button>
-                                      <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={() => setEditingOrder(null)}>Cancel</Button>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div>
-                                    <div className="font-medium text-sm truncate max-w-[120px]" title={order.customerName || ""}>{order.customerName && order.customerName.length > 15 ? order.customerName.slice(0, 13) + ".." : order.customerName}</div>
-                                    <div className="text-xs text-muted-foreground">{order.customerPhone || "No phone"}</div>
-                                  </div>
-                                )}
-                              </td>
-                              <td className="px-3 py-1.5 hidden md:table-cell text-sm truncate max-w-[100px]" title={order.city || ""}>{order.city && order.city.length > 15 ? order.city.slice(0, 13) + ".." : (order.city || "-")}</td>
-                              {hasAddressProducts(stage) && (
-                                <>
-                                  <td className="px-3 py-1.5 max-w-[220px]">
-                                    <div className="text-xs text-muted-foreground whitespace-normal leading-tight">{order.shippingAddress || "-"}</div>
-                                  </td>
-                                  <td className="px-3 py-1.5 max-w-[180px]">
-                                    <div className="text-xs text-muted-foreground leading-tight">
-                                      {order.itemSummary ? order.itemSummary.split(' || ').map((item, i) => (
-                                        <div key={i} className="truncate">{item}</div>
-                                      )) : "-"}
-                                    </div>
-                                  </td>
-                                </>
-                              )}
-                              <td className="px-3 py-1.5">
-                                <div className="font-medium text-sm">{Number(order.totalAmount).toLocaleString()}</div>
-                                {order.codPaymentStatus === "PAID" ? (
-                                  <Badge className="text-xs bg-green-500/10 text-green-600 border-green-500/20">Prepaid</Badge>
-                                ) : order.codPaymentStatus === "PARTIALLY_PAID" ? (
-                                  <span className="text-xs text-amber-600">COD: {Number(order.codRemaining ?? order.totalAmount).toLocaleString()}</span>
-                                ) : (
-                                  <div className="text-xs text-muted-foreground capitalize">{order.paymentMethod}</div>
-                                )}
-                              </td>
-                              <td className="px-3 py-1.5 hidden lg:table-cell text-center w-[40px]">
-                                <span className="text-sm font-medium">{order.totalQuantity || 1}</span>
-                              </td>
-                              <td className="px-3 py-1.5 hidden md:table-cell max-w-[100px]">
-                                <div className="flex flex-wrap gap-0.5">
-                                  {getRoboTags(order.tags as string[], tagConfig).map(tag => (
-                                    <Badge key={tag} className={`text-[10px] px-1.5 py-0 leading-4 ${getRoboTagStyle(tag, tagConfig) || ''}`}>
-                                      {tag}
-                                    </Badge>
-                                  ))}
-                                </div>
-                              </td>
-                              {stage === "PENDING" && (
-                                <td className="px-3 py-1.5">
-                                  <Badge variant="secondary" className="text-xs">
-                                    {order.pendingReasonType || "Unknown"}
-                                  </Badge>
-                                </td>
-                              )}
-                              {stage === "HOLD" && (
-                                <td className="px-3 py-1.5">
-                                  {order.holdUntil ? (
-                                    <div className="text-xs">{formatPkDateTime(order.holdUntil)}</div>
-                                  ) : "-"}
-                                </td>
-                              )}
-                              {hasShipmentColumns(stage) && (
-                                <>
-                                  <td className="px-3 py-1.5">
-                                    <div className="text-xs font-medium">{order.courierName || "-"}</div>
-                                    <div className="text-xs text-muted-foreground">{order.courierTracking || "-"}</div>
-                                  </td>
-                                  <td className="px-3 py-1.5">
-                                    <Badge className={`text-xs ${UNIVERSAL_STATUS_COLORS[order.shipmentStatus || ""] || "bg-slate-100 text-slate-700"}`}
-                                      title={order.courierRawStatus ? `Courier: ${order.courierRawStatus}` : undefined}
-                                      data-testid={`badge-search-status-${order.id}`}>
-                                      {UNIVERSAL_STATUS_LABELS[order.shipmentStatus || ""] || order.shipmentStatus || "Unknown"}
-                                    </Badge>
-                                  </td>
-                                </>
-                              )}
-                              {stage === "CANCELLED" && (
-                                <td className="px-3 py-1.5">
-                                  <div className="text-xs text-muted-foreground">{order.cancelReason || "No reason given"}</div>
-                                  {order.cancelledAt && (
-                                    <div className="text-xs text-muted-foreground/70">{formatPkDateTime(order.cancelledAt)}</div>
-                                  )}
-                                </td>
-                              )}
-                              <td className="px-3 py-1.5 max-w-[150px]">
-                                <button
-                                  className="text-left w-full cursor-pointer hover:opacity-80"
-                                  onClick={() => openRemarkDialog(order)}
-                                  data-testid={`button-search-remark-${order.id}`}
-                                >
-                                  {order.remark ? (
-                                    <span className="text-xs text-muted-foreground truncate block max-w-[140px]" title={order.remark}>
-                                      {order.remark.length > 30 ? order.remark.slice(0, 28) + "..." : order.remark}
-                                    </span>
-                                  ) : (
-                                    <span className="text-xs text-muted-foreground/50 italic">Add...</span>
-                                  )}
-                                </button>
-                              </td>
-                              <td className="px-3 py-1.5 text-right">
-                                {renderActionButtons(order, stage)}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  );
-                })}
-                {(data?.total || 0) > results.length && (
-                  <div className="px-4 py-2 text-xs text-muted-foreground text-center border-t">
-                    Showing {results.length} of {data?.total} results
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+                );
+              })}
+              {(data?.total || 0) > results.length && (
+                <div className="px-3 py-1.5 text-[10px] text-muted-foreground text-center border-t">
+                  Showing {results.length} of {data?.total}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
     <Dialog open={remarkDialogOpen} onOpenChange={setRemarkDialogOpen}>
       <DialogContent>
         <DialogHeader>
@@ -928,273 +766,183 @@ export default function Dashboard() {
     refetchStats();
   };
 
+  const total = Object.values(workflowCounts ?? {}).reduce((sum, v) => sum + (v || 0), 0);
+  const dispatched = (workflowCounts?.FULFILLED ?? 0) + (workflowCounts?.DELIVERED ?? 0) + (workflowCounts?.RETURN ?? 0);
+  const pending = (workflowCounts?.NEW ?? 0) + (workflowCounts?.PENDING ?? 0) + (workflowCounts?.HOLD ?? 0) + (workflowCounts?.READY_TO_SHIP ?? 0) + (workflowCounts?.BOOKED ?? 0);
+  const delivered = workflowCounts?.DELIVERED ?? 0;
+  const cancelled = workflowCounts?.CANCELLED ?? 0;
+
+  const totalCod = Object.values(workflowAmounts).reduce((sum, v) => sum + (v || 0), 0);
+  const dispatchedCod = (workflowAmounts.FULFILLED ?? 0) + (workflowAmounts.DELIVERED ?? 0) + (workflowAmounts.RETURN ?? 0);
+  const deliveredCod = workflowAmounts.DELIVERED ?? 0;
+  const pendingCod = (workflowAmounts.NEW ?? 0) + (workflowAmounts.PENDING ?? 0) + (workflowAmounts.HOLD ?? 0) + (workflowAmounts.READY_TO_SHIP ?? 0) + (workflowAmounts.BOOKED ?? 0);
+  const cancelledCod = workflowAmounts.CANCELLED ?? 0;
+  const fmtCod = (amount: number) => `PKR ${Math.round(amount).toLocaleString()}`;
+
+  const fulfillmentRatio = total > 0 ? Math.round((dispatched / total) * 100) : 0;
+  const deliveryRatio = dispatched > 0 ? Math.round((delivered / dispatched) * 100) : 0;
+  const returnRatio = dispatched > 0 ? Math.round(((workflowCounts?.RETURN ?? 0) / dispatched) * 100) : 0;
+  const cancellationRatio = total > 0 ? Math.round((cancelled / total) * 100) : 0;
+  const pendingRatio = dispatched > 0 ? Math.round(((workflowCounts?.FULFILLED ?? 0) / dispatched) * 100) : 0;
+
   return (
-    <div className="space-y-5">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">Dashboard</h1>
-          <p className="text-sm text-muted-foreground">Your logistics overview</p>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <Button onClick={handleRefresh} variant="outline" size="sm" data-testid="button-refresh-dashboard">
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Refresh
-          </Button>
-        </div>
+    <div className="space-y-4 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-lg font-semibold" data-testid="text-dashboard-title">Dashboard</h1>
+        <Button onClick={handleRefresh} variant="ghost" size="sm" data-testid="button-refresh-dashboard">
+          <RefreshCw className="w-3.5 h-3.5" />
+        </Button>
       </div>
 
-      <AIInsightsBanner section="dashboard" />
-
-      {/* Search */}
       <OrderSearchSection />
 
-      {/* Section 1: Order Overview */}
-      {(() => {
-        const total = Object.values(workflowCounts ?? {}).reduce((sum, v) => sum + (v || 0), 0);
-        const dispatched = (workflowCounts?.FULFILLED ?? 0) + (workflowCounts?.DELIVERED ?? 0) + (workflowCounts?.RETURN ?? 0);
-        const pending = (workflowCounts?.NEW ?? 0) + (workflowCounts?.PENDING ?? 0) + (workflowCounts?.HOLD ?? 0) + (workflowCounts?.READY_TO_SHIP ?? 0) + (workflowCounts?.BOOKED ?? 0);
-        const delivered = workflowCounts?.DELIVERED ?? 0;
-        const cancelled = workflowCounts?.CANCELLED ?? 0;
-
-        const fmtCod = (amount: number) => `COD: PKR ${Math.round(amount).toLocaleString()}`;
-        const totalCod = Object.values(workflowAmounts).reduce((sum, v) => sum + (v || 0), 0);
-        const dispatchedCod = (workflowAmounts.FULFILLED ?? 0) + (workflowAmounts.DELIVERED ?? 0) + (workflowAmounts.RETURN ?? 0);
-        const deliveredCod = workflowAmounts.DELIVERED ?? 0;
-        const pendingCod = (workflowAmounts.NEW ?? 0) + (workflowAmounts.PENDING ?? 0) + (workflowAmounts.HOLD ?? 0) + (workflowAmounts.READY_TO_SHIP ?? 0) + (workflowAmounts.BOOKED ?? 0);
-        const cancelledCod = workflowAmounts.CANCELLED ?? 0;
-
-        return (
-          <div className="space-y-3">
-            <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide" data-testid="section-order-overview">Order Overview</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-              <StatCard
-                title="Total Orders"
-                value={countsLoading ? "—" : total.toLocaleString()}
-                icon={Package}
-                trend={stats?.ordersTrend}
-                trendLabel="vs last week"
-                subtitle={countsLoading ? undefined : fmtCod(totalCod)}
-                isLoading={countsLoading}
-              />
-              <StatCard
-                title="Dispatched"
-                value={countsLoading ? "—" : dispatched.toLocaleString()}
-                icon={Send}
-                iconColor="text-muted-foreground"
-                subtitle={countsLoading ? undefined : fmtCod(dispatchedCod)}
-                isLoading={countsLoading}
-              />
-              <StatCard
-                title="Delivered"
-                value={countsLoading ? "—" : delivered.toLocaleString()}
-                icon={CheckCircle2}
-                iconColor="text-muted-foreground"
-                subtitle={countsLoading ? undefined : fmtCod(deliveredCod)}
-                isLoading={countsLoading}
-              />
-              <StatCard
-                title="Pending"
-                value={countsLoading ? "—" : pending.toLocaleString()}
-                icon={Clock}
-                iconColor="text-muted-foreground"
-                subtitle={countsLoading ? undefined : fmtCod(pendingCod)}
-                isLoading={countsLoading}
-              />
-              <StatCard
-                title="Cancelled"
-                value={countsLoading ? "—" : cancelled.toLocaleString()}
-                icon={Ban}
-                iconColor="text-muted-foreground"
-                subtitle={countsLoading ? undefined : fmtCod(cancelledCod)}
-                isLoading={countsLoading}
-              />
+      {countsLoading ? (
+        <div className="flex gap-6 flex-wrap">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="space-y-1">
+              <Skeleton className="h-3 w-14" />
+              <Skeleton className="h-6 w-10" />
             </div>
-          </div>
-        );
-      })()}
-
-      {/* Section 2: Performance Metrics */}
-      {(() => {
-        const total = Object.values(workflowCounts ?? {}).reduce((sum, v) => sum + (v || 0), 0);
-        const dispatched = (workflowCounts?.FULFILLED ?? 0) + (workflowCounts?.DELIVERED ?? 0) + (workflowCounts?.RETURN ?? 0);
-        const delivered = workflowCounts?.DELIVERED ?? 0;
-        const returned = workflowCounts?.RETURN ?? 0;
-        const cancelled = workflowCounts?.CANCELLED ?? 0;
-        const fulfilled = workflowCounts?.FULFILLED ?? 0;
-
-        const fulfillmentRatio = total > 0 ? Math.round((dispatched / total) * 100) : 0;
-        const deliveryRatio = dispatched > 0 ? Math.round((delivered / dispatched) * 100) : 0;
-        const returnRatio = dispatched > 0 ? Math.round((returned / dispatched) * 100) : 0;
-        const cancellationRatio = total > 0 ? Math.round((cancelled / total) * 100) : 0;
-        const pendingRatio = dispatched > 0 ? Math.round((fulfilled / dispatched) * 100) : 0;
-
-        return (
-          <div className="space-y-3">
-            <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide" data-testid="section-performance-metrics">Performance Metrics</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-              <StatCard
-                title="Fulfillment Ratio"
-                value={countsLoading ? "—" : `${fulfillmentRatio}%`}
-                icon={BarChart3}
-                iconColor="text-muted-foreground"
-                subtitle={`${dispatched} dispatched / ${total} total`}
-                isLoading={countsLoading}
-              />
-              <StatCard
-                title="Cancellation Ratio"
-                value={countsLoading ? "—" : `${cancellationRatio}%`}
-                icon={X}
-                iconColor="text-muted-foreground"
-                subtitle={`${cancelled} cancelled / ${total} total`}
-                isLoading={countsLoading}
-              />
-              <StatCard
-                title="Delivery Ratio"
-                value={countsLoading ? "—" : `${deliveryRatio}%`}
-                icon={Target}
-                iconColor="text-muted-foreground"
-                subtitle={`${delivered} delivered / ${dispatched} dispatched`}
-                isLoading={countsLoading}
-              />
-              <StatCard
-                title="Pending Ratio"
-                value={countsLoading ? "—" : `${pendingRatio}%`}
-                icon={Clock}
-                iconColor="text-muted-foreground"
-                subtitle={`${fulfilled} fulfilled / ${dispatched} dispatched`}
-                isLoading={countsLoading}
-              />
-              <StatCard
-                title="Return Ratio"
-                value={countsLoading ? "—" : `${returnRatio}%`}
-                icon={RotateCcw}
-                iconColor="text-muted-foreground"
-                subtitle={`${returned} returned / ${dispatched} dispatched`}
-                isLoading={countsLoading}
-              />
+          ))}
+        </div>
+      ) : (
+        <div className="flex gap-6 flex-wrap items-start" data-testid="section-order-overview">
+          {[
+            { label: "Total", value: total, cod: totalCod, trend: stats?.ordersTrend },
+            { label: "Dispatched", value: dispatched, cod: dispatchedCod },
+            { label: "Delivered", value: delivered, cod: deliveredCod },
+            { label: "Pending", value: pending, cod: pendingCod },
+            { label: "Cancelled", value: cancelled, cod: cancelledCod },
+          ].map(item => (
+            <div key={item.label} className="min-w-0">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{item.label}</p>
+              <p className="text-xl font-semibold tabular-nums">{item.value.toLocaleString()}</p>
+              <p className="text-[10px] text-muted-foreground">{fmtCod(item.cod)}</p>
             </div>
-          </div>
-        );
-      })()}
+          ))}
+        </div>
+      )}
 
-      {/* Status Breakdown */}
-      <Card>
-        <CardContent className="p-3">
-          {countsLoading ? (
-            <div className="flex gap-2 flex-wrap">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Skeleton key={i} className="h-6 w-20 rounded-md" />
-              ))}
-            </div>
-          ) : workflowCounts ? (
-            <div className="flex gap-1.5 flex-wrap" data-testid="status-breakdown-chips">
-              {[
-                { key: 'NEW', label: 'New' },
-                { key: 'PENDING', label: 'Pending' },
-                { key: 'HOLD', label: 'Hold' },
-                { key: 'READY_TO_SHIP', label: 'Ready to Ship' },
-                { key: 'BOOKED', label: 'Booked' },
-                { key: 'FULFILLED', label: 'Fulfilled' },
-                { key: 'DELIVERED', label: 'Delivered' },
-                { key: 'RETURN', label: 'Return' },
-                { key: 'CANCELLED', label: 'Cancelled' },
-              ]
-                .filter(s => (workflowCounts[s.key] || 0) > 0)
-                .map(s => (
-                  <Link key={s.key} href={`/orders?workflowStatus=${s.key}`}>
-                    <Badge
-                      variant="secondary"
-                      className="cursor-pointer text-xs"
-                      data-testid={`chip-dashboard-${s.key}`}
-                    >
-                      {s.label}
-                      <span className="font-semibold ml-1">{(workflowCounts[s.key] || 0).toLocaleString()}</span>
-                    </Badge>
-                  </Link>
-                ))}
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
+      {!countsLoading && workflowCounts && (
+        <div className="flex gap-1.5 flex-wrap" data-testid="status-breakdown-chips">
+          {[
+            { key: 'NEW', label: 'New' },
+            { key: 'PENDING', label: 'Pending' },
+            { key: 'HOLD', label: 'Hold' },
+            { key: 'READY_TO_SHIP', label: 'Ready to Ship' },
+            { key: 'BOOKED', label: 'Booked' },
+            { key: 'FULFILLED', label: 'Fulfilled' },
+            { key: 'DELIVERED', label: 'Delivered' },
+            { key: 'RETURN', label: 'Return' },
+            { key: 'CANCELLED', label: 'Cancelled' },
+          ]
+            .filter(s => (workflowCounts[s.key] || 0) > 0)
+            .map(s => (
+              <Link key={s.key} href={`/orders?workflowStatus=${s.key}`}>
+                <Badge
+                  variant="secondary"
+                  className="cursor-pointer text-[10px]"
+                  data-testid={`chip-dashboard-${s.key}`}
+                >
+                  {s.label}
+                  <span className="font-semibold ml-1">{(workflowCounts[s.key] || 0).toLocaleString()}</span>
+                </Badge>
+              </Link>
+            ))}
+        </div>
+      )}
 
-      {/* COD Pending Card */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div>
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">COD Pending Collection</p>
-              <p className="text-2xl font-semibold mt-1">PKR {stats?.codPending ?? "0"}</p>
+      {countsLoading ? (
+        <div className="flex gap-6 flex-wrap">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="space-y-1">
+              <Skeleton className="h-3 w-16" />
+              <Skeleton className="h-5 w-10" />
             </div>
-            <Link href="/cod">
-              <Button variant="outline" size="sm" data-testid="button-view-cod">
-                View Details
-                <ArrowUpRight className="w-3.5 h-3.5 ml-1.5" />
-              </Button>
-            </Link>
-          </div>
-        </CardContent>
-      </Card>
+          ))}
+        </div>
+      ) : (
+        <div className="flex gap-6 flex-wrap items-start" data-testid="section-performance-metrics">
+          {[
+            { label: "Fulfillment", value: `${fulfillmentRatio}%`, sub: `${dispatched}/${total}` },
+            { label: "Cancellation", value: `${cancellationRatio}%`, sub: `${cancelled}/${total}` },
+            { label: "Delivery", value: `${deliveryRatio}%`, sub: `${delivered}/${dispatched}` },
+            { label: "Pending", value: `${pendingRatio}%`, sub: `${workflowCounts?.FULFILLED ?? 0}/${dispatched}` },
+            { label: "Return", value: `${returnRatio}%`, sub: `${workflowCounts?.RETURN ?? 0}/${dispatched}` },
+          ].map(item => (
+            <div key={item.label} className="min-w-0">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{item.label}</p>
+              <p className="text-lg font-semibold tabular-nums">{item.value}</p>
+              <p className="text-[10px] text-muted-foreground tabular-nums">{item.sub}</p>
+            </div>
+          ))}
+        </div>
+      )}
 
-      {/* Recent Orders */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-4 pb-2">
-          <CardTitle className="text-sm font-medium">Recent Orders</CardTitle>
+      <div className="flex items-center justify-between py-1 border-b">
+        <div>
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider">COD Pending</p>
+          <p className="text-base font-semibold tabular-nums" data-testid="text-cod-pending">PKR {stats?.codPending ?? "0"}</p>
+        </div>
+        <Link href="/cod">
+          <Button variant="ghost" size="sm" data-testid="button-view-cod">
+            View
+            <ArrowUpRight className="w-3 h-3 ml-1" />
+          </Button>
+        </Link>
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Recent Orders</p>
           <Link href="/orders">
             <Button variant="ghost" size="sm" data-testid="button-view-all-orders">
               View All
-              <ArrowUpRight className="w-3.5 h-3.5 ml-1" />
+              <ArrowUpRight className="w-3 h-3 ml-1" />
             </Button>
           </Link>
-        </CardHeader>
-        <CardContent className="p-0">
-          {ordersLoading ? (
-            <div className="divide-y">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="flex items-center justify-between px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <div className="space-y-1.5">
-                      <Skeleton className="h-4 w-20" />
-                      <Skeleton className="h-3 w-28" />
-                    </div>
-                  </div>
-                  <Skeleton className="h-5 w-16" />
+        </div>
+        {ordersLoading ? (
+          <div className="space-y-2">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="flex items-center justify-between py-1.5">
+                <div className="space-y-1">
+                  <Skeleton className="h-3.5 w-16" />
+                  <Skeleton className="h-3 w-24" />
                 </div>
-              ))}
-            </div>
-          ) : recentOrders && recentOrders.length > 0 ? (
-            <div className="divide-y">
-              {recentOrders.map((order) => (
-                <Link key={order.id} href={`/orders/detail/${order.id}`}>
-                  <div className="flex items-center justify-between px-4 py-3 hover-elevate cursor-pointer" data-testid={`order-row-${order.id}`}>
-                    <div>
-                      <p className="font-medium text-sm">{String(order.orderNumber || '').replace(/^#/, '')}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {order.customerName} • {order.city}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="text-right hidden sm:block">
-                        <p className="text-sm font-medium">PKR {order.totalAmount}</p>
-                        <p className="text-xs text-muted-foreground capitalize">{order.paymentMethod}</p>
-                      </div>
-                      {getStatusBadge(order.shipmentStatus || "Unfulfilled")}
-                    </div>
+                <Skeleton className="h-4 w-14" />
+              </div>
+            ))}
+          </div>
+        ) : recentOrders && recentOrders.length > 0 ? (
+          <div className="divide-y">
+            {recentOrders.map((order) => (
+              <Link key={order.id} href={`/orders/detail/${order.id}`}>
+                <div className="flex items-center justify-between py-1.5 hover-elevate cursor-pointer" data-testid={`order-row-${order.id}`}>
+                  <div className="min-w-0">
+                    <p className="font-medium text-xs">{String(order.orderNumber || '').replace(/^#/, '')}</p>
+                    <p className="text-[10px] text-muted-foreground truncate">
+                      {order.customerName} · {order.city}
+                    </p>
                   </div>
-                </Link>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-10 px-4">
-              <Package className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
-              <p className="text-sm font-medium mb-0.5">No orders yet</p>
-              <p className="text-xs text-muted-foreground">
-                Orders from your Shopify store will appear here
-              </p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="text-right hidden sm:block">
+                      <p className="text-xs font-medium tabular-nums">PKR {order.totalAmount}</p>
+                      <p className="text-[10px] text-muted-foreground capitalize">{order.paymentMethod}</p>
+                    </div>
+                    {getStatusBadge(order.shipmentStatus || "Unfulfilled")}
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8">
+            <Package className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
+            <p className="text-xs text-muted-foreground">No orders yet</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

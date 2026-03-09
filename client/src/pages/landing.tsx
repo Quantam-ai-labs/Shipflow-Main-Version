@@ -19,7 +19,7 @@ export default function Landing() {
       {/* Navigation */}
       <nav className="fixed top-0 left-0 right-0 z-50 border-b bg-background">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16 gap-4">
+          <div className="flex items-center justify-between h-14 gap-4">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
                 <Package className="w-5 h-5 text-primary-foreground" />
@@ -51,11 +51,11 @@ export default function Landing() {
       </nav>
 
       {/* Hero Section */}
-      <section className="pt-32 pb-20 px-4 sm:px-6 lg:px-8">
+      <section className="pt-24 pb-16 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            <div className="space-y-8">
-              <div className="space-y-4">
+          <div className="grid lg:grid-cols-2 gap-10 items-center">
+            <div className="space-y-6">
+              <div className="space-y-3">
                 <Badge variant="secondary" className="px-4 py-1.5">
                   <Zap className="w-3 h-3 mr-1" />
                   Built for Pakistani Merchants
@@ -147,79 +147,79 @@ export default function Landing() {
       </section>
 
       {/* Features Section */}
-      <section id="features" className="py-20 bg-muted/30">
+      <section id="features" className="py-16 bg-muted/30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <Badge variant="outline" className="mb-4">Features</Badge>
-            <h2 className="text-3xl sm:text-4xl font-bold mb-4">
+          <div className="text-center mb-10">
+            <Badge variant="outline" className="mb-3">Features</Badge>
+            <h2 className="text-2xl sm:text-3xl font-bold mb-3">
               Everything You Need to Manage Logistics
             </h2>
-            <p className="text-muted-foreground max-w-2xl mx-auto">
+            <p className="text-muted-foreground text-sm max-w-2xl mx-auto">
               From order syncing to COD reconciliation, we've got you covered with powerful tools built specifically for Pakistani e-commerce.
             </p>
           </div>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             <Card className="hover-elevate">
-              <CardContent className="p-6">
-                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
-                  <Package className="w-6 h-6 text-primary" />
+              <CardContent className="p-5">
+                <div className="w-9 h-9 rounded-md bg-primary/10 flex items-center justify-center mb-3">
+                  <Package className="w-4.5 h-4.5 text-primary" />
                 </div>
-                <h3 className="font-semibold text-lg mb-2">Shopify Sync</h3>
+                <h3 className="font-semibold text-sm mb-1.5">Shopify Sync</h3>
                 <p className="text-muted-foreground text-sm">
                   Automatically sync orders from your Shopify store. No manual imports, real-time updates via webhooks.
                 </p>
               </CardContent>
             </Card>
             <Card className="hover-elevate">
-              <CardContent className="p-6">
-                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
-                  <Truck className="w-6 h-6 text-primary" />
+              <CardContent className="p-5">
+                <div className="w-9 h-9 rounded-md bg-primary/10 flex items-center justify-center mb-3">
+                  <Truck className="w-4.5 h-4.5 text-primary" />
                 </div>
-                <h3 className="font-semibold text-lg mb-2">Multi-Courier Tracking</h3>
+                <h3 className="font-semibold text-sm mb-1.5">Multi-Courier Tracking</h3>
                 <p className="text-muted-foreground text-sm">
                   Track shipments across Leopards, PostEx, and more. One dashboard for all your couriers.
                 </p>
               </CardContent>
             </Card>
             <Card className="hover-elevate">
-              <CardContent className="p-6">
-                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
-                  <BarChart3 className="w-6 h-6 text-primary" />
+              <CardContent className="p-5">
+                <div className="w-9 h-9 rounded-md bg-primary/10 flex items-center justify-center mb-3">
+                  <BarChart3 className="w-4.5 h-4.5 text-primary" />
                 </div>
-                <h3 className="font-semibold text-lg mb-2">Analytics Dashboard</h3>
+                <h3 className="font-semibold text-sm mb-1.5">Analytics Dashboard</h3>
                 <p className="text-muted-foreground text-sm">
                   Insights by courier performance, city-wise breakdown, and delivery success rates.
                 </p>
               </CardContent>
             </Card>
             <Card className="hover-elevate">
-              <CardContent className="p-6">
-                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
-                  <ShieldCheck className="w-6 h-6 text-primary" />
+              <CardContent className="p-5">
+                <div className="w-9 h-9 rounded-md bg-primary/10 flex items-center justify-center mb-3">
+                  <ShieldCheck className="w-4.5 h-4.5 text-primary" />
                 </div>
-                <h3 className="font-semibold text-lg mb-2">COD Reconciliation</h3>
+                <h3 className="font-semibold text-sm mb-1.5">COD Reconciliation</h3>
                 <p className="text-muted-foreground text-sm">
                   Match courier payments with orders. Never miss a COD payment again with automated tracking.
                 </p>
               </CardContent>
             </Card>
             <Card className="hover-elevate">
-              <CardContent className="p-6">
-                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
-                  <Globe className="w-6 h-6 text-primary" />
+              <CardContent className="p-5">
+                <div className="w-9 h-9 rounded-md bg-primary/10 flex items-center justify-center mb-3">
+                  <Globe className="w-4.5 h-4.5 text-primary" />
                 </div>
-                <h3 className="font-semibold text-lg mb-2">Multi-Tenant</h3>
+                <h3 className="font-semibold text-sm mb-1.5">Multi-Tenant</h3>
                 <p className="text-muted-foreground text-sm">
                   Manage multiple stores and team members. Role-based access for admins, managers, and agents.
                 </p>
               </CardContent>
             </Card>
             <Card className="hover-elevate">
-              <CardContent className="p-6">
-                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
-                  <Zap className="w-6 h-6 text-primary" />
+              <CardContent className="p-5">
+                <div className="w-9 h-9 rounded-md bg-primary/10 flex items-center justify-center mb-3">
+                  <Zap className="w-4.5 h-4.5 text-primary" />
                 </div>
-                <h3 className="font-semibold text-lg mb-2">Real-Time Updates</h3>
+                <h3 className="font-semibold text-sm mb-1.5">Real-Time Updates</h3>
                 <p className="text-muted-foreground text-sm">
                   Webhooks and scheduled syncs keep your data fresh. Always know the latest status.
                 </p>
@@ -230,41 +230,41 @@ export default function Landing() {
       </section>
 
       {/* How it Works */}
-      <section id="how-it-works" className="py-20">
+      <section id="how-it-works" className="py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <Badge variant="outline" className="mb-4">How it Works</Badge>
-            <h2 className="text-3xl sm:text-4xl font-bold mb-4">
+          <div className="text-center mb-10">
+            <Badge variant="outline" className="mb-3">How it Works</Badge>
+            <h2 className="text-2xl sm:text-3xl font-bold mb-3">
               Get Started in Minutes
             </h2>
-            <p className="text-muted-foreground max-w-2xl mx-auto">
+            <p className="text-muted-foreground text-sm max-w-2xl mx-auto">
               Connect your store, configure your couriers, and start managing orders like a pro.
             </p>
           </div>
-          <div className="grid md:grid-cols-3 gap-8">
+          <div className="grid md:grid-cols-3 gap-6">
             <div className="text-center">
-              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
-                <span className="text-2xl font-bold text-primary">1</span>
+              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                <span className="text-lg font-bold text-primary">1</span>
               </div>
-              <h3 className="font-semibold text-lg mb-2">Connect Shopify</h3>
+              <h3 className="font-semibold text-sm mb-1.5">Connect Shopify</h3>
               <p className="text-muted-foreground text-sm">
                 One-click OAuth integration. No API keys to copy, just authorize and go.
               </p>
             </div>
             <div className="text-center">
-              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
-                <span className="text-2xl font-bold text-primary">2</span>
+              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                <span className="text-lg font-bold text-primary">2</span>
               </div>
-              <h3 className="font-semibold text-lg mb-2">Add Couriers</h3>
+              <h3 className="font-semibold text-sm mb-1.5">Add Couriers</h3>
               <p className="text-muted-foreground text-sm">
                 Connect Leopards, PostEx, or other couriers with your account credentials.
               </p>
             </div>
             <div className="text-center">
-              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
-                <span className="text-2xl font-bold text-primary">3</span>
+              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                <span className="text-lg font-bold text-primary">3</span>
               </div>
-              <h3 className="font-semibold text-lg mb-2">Start Shipping</h3>
+              <h3 className="font-semibold text-sm mb-1.5">Start Shipping</h3>
               <p className="text-muted-foreground text-sm">
                 Manage orders, track shipments, and reconcile payments from one dashboard.
               </p>
@@ -274,12 +274,12 @@ export default function Landing() {
       </section>
 
       {/* CTA Section */}
-      <section className="py-20 bg-primary">
+      <section className="py-16 bg-primary">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl sm:text-4xl font-bold text-primary-foreground mb-4">
+          <h2 className="text-2xl sm:text-3xl font-bold text-primary-foreground mb-3">
             Ready to Streamline Your Logistics?
           </h2>
-          <p className="text-primary-foreground/80 mb-8 max-w-2xl mx-auto">
+          <p className="text-primary-foreground/80 mb-6 max-w-2xl mx-auto text-sm">
             Join hundreds of Pakistani merchants who trust 1SOL.AI for their e-commerce operations.
           </p>
           <a href="/api/login">
@@ -292,7 +292,7 @@ export default function Landing() {
       </section>
 
       {/* Footer */}
-      <footer className="py-12 border-t">
+      <footer className="py-8 border-t">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2">

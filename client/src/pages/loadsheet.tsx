@@ -451,15 +451,15 @@ export default function LoadsheetPage() {
   });
 
   return (
-    <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-4">
+    <div className="p-4 max-w-6xl mx-auto space-y-3">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h1 className="text-xl font-semibold flex items-center gap-2">
-            <ClipboardList className="w-5 h-5" />
+            <ClipboardList className="w-4 h-4" />
             Loadsheet
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Scan shipments, generate loadsheets, and view booking &amp; loadsheet logs
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Scan shipments, generate loadsheets, and view logs
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -732,7 +732,7 @@ export default function LoadsheetPage() {
         </TabsContent>
 
         {/* ====== BOOKING LOGS TAB ====== */}
-        <TabsContent value="booking-logs" className="space-y-4 mt-4">
+        <TabsContent value="booking-logs" className="space-y-3 mt-3">
           <Card>
             <CardContent className="p-4">
               <div className="flex flex-col sm:flex-row gap-4 flex-wrap">
@@ -756,9 +756,9 @@ export default function LoadsheetPage() {
           </Card>
 
           <Card>
-            <CardHeader className="pb-4">
-              <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                <BookOpen className="w-5 h-5" />
+            <CardHeader className="px-4 pt-4 pb-2">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <BookOpen className="w-4 h-4" />
                 Booking Sessions
                 {bkData?.total !== undefined && (
                   <Badge variant="secondary" className="ml-2">{bkData.total} sessions</Badge>
@@ -862,7 +862,7 @@ export default function LoadsheetPage() {
         </TabsContent>
 
         {/* ====== LOADSHEET LOGS TAB ====== */}
-        <TabsContent value="loadsheet-logs" className="space-y-4 mt-4">
+        <TabsContent value="loadsheet-logs" className="space-y-3 mt-3">
           <Card>
             <CardContent className="p-4">
               <div className="flex flex-col sm:flex-row gap-4 flex-wrap">
@@ -886,9 +886,9 @@ export default function LoadsheetPage() {
           </Card>
 
           <Card>
-            <CardHeader className="pb-4">
-              <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                <FileSpreadsheet className="w-5 h-5" />
+            <CardHeader className="px-4 pt-4 pb-2">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <FileSpreadsheet className="w-4 h-4" />
                 Loadsheet Logs
                 {batchesData?.total !== undefined && (
                   <Badge variant="secondary" className="ml-2">{batchesData.total} loadsheets</Badge>

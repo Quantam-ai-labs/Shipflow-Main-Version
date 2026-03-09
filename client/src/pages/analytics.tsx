@@ -1,16 +1,11 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  BarChart3,
-  TrendingUp,
-  Package,
-  CheckCircle2,
   Download,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useDateRange } from "@/contexts/date-range-context";
-import { AIInsightsBanner } from "@/components/ai-insights-banner";
 import { exportCsvWithDate } from "@/lib/exportCsv";
 import {
   BarChart,
@@ -112,177 +107,103 @@ export default function Analytics() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold">Analytics</h1>
-          <p className="text-muted-foreground">Track performance and insights across your operations.</p>
+          <h1 className="text-lg font-semibold">Analytics</h1>
+          <p className="text-xs text-muted-foreground">Performance and insights across operations</p>
         </div>
         <Button
           variant="outline"
+          size="sm"
           onClick={handleExport}
           disabled={isLoading || (!courierPerformance.length && !cityBreakdown.length && !dailyOrders.length)}
           data-testid="button-export-analytics"
         >
-          <Download className="w-4 h-4 mr-2" />
+          <Download className="w-3.5 h-3.5 mr-1" />
           Export
         </Button>
       </div>
 
-      <AIInsightsBanner section="analytics" />
-
-      {/* Overview Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-1.5 mb-1">
-              <Package className="w-3.5 h-3.5 text-muted-foreground" />
-              <p className="text-xs text-muted-foreground font-medium">Total Orders</p>
-            </div>
-            {isLoading ? (
-              <Skeleton className="h-7 w-16" />
-            ) : (
-              <p className="text-xl font-bold">{overview?.totalOrders ?? 0}</p>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-1.5 mb-1">
-              <CheckCircle2 className="w-3.5 h-3.5 text-muted-foreground" />
-              <p className="text-xs text-muted-foreground font-medium">Delivered</p>
-            </div>
-            {isLoading ? (
-              <Skeleton className="h-7 w-16" />
-            ) : (
-              <p className="text-xl font-bold">{overview?.totalDelivered ?? 0}</p>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-1.5 mb-1">
-              <TrendingUp className="w-3.5 h-3.5 text-muted-foreground" />
-              <p className="text-xs text-muted-foreground font-medium">Delivery Rate</p>
-            </div>
-            {isLoading ? (
-              <Skeleton className="h-7 w-16" />
-            ) : (
-              <p className="text-xl font-bold">{overview?.deliveryRate ?? 0}%</p>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-1.5 mb-1">
-              <BarChart3 className="w-3.5 h-3.5 text-muted-foreground" />
-              <p className="text-xs text-muted-foreground font-medium">Total Revenue</p>
-            </div>
-            {isLoading ? (
-              <Skeleton className="h-7 w-24" />
-            ) : (
-              <p className="text-xl font-bold">PKR {overview?.totalRevenue ?? "0"}</p>
-            )}
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+        <div className="py-2 px-3">
+          <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Total Orders</span>
+          {isLoading ? (
+            <Skeleton className="h-6 w-14 mt-0.5" />
+          ) : (
+            <p className="text-base font-bold mt-0.5 tabular-nums">{overview?.totalOrders ?? 0}</p>
+          )}
+        </div>
+        <div className="py-2 px-3">
+          <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Delivered</span>
+          {isLoading ? (
+            <Skeleton className="h-6 w-14 mt-0.5" />
+          ) : (
+            <p className="text-base font-bold mt-0.5 tabular-nums">{overview?.totalDelivered ?? 0}</p>
+          )}
+        </div>
+        <div className="py-2 px-3">
+          <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Delivery Rate</span>
+          {isLoading ? (
+            <Skeleton className="h-6 w-14 mt-0.5" />
+          ) : (
+            <p className="text-base font-bold mt-0.5 tabular-nums">{overview?.deliveryRate ?? 0}%</p>
+          )}
+        </div>
+        <div className="py-2 px-3">
+          <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Total Revenue</span>
+          {isLoading ? (
+            <Skeleton className="h-6 w-20 mt-0.5" />
+          ) : (
+            <p className="text-base font-bold mt-0.5 tabular-nums">PKR {overview?.totalRevenue ?? "0"}</p>
+          )}
+        </div>
       </div>
 
-      {/* Charts Row */}
-      <div className="grid lg:grid-cols-2 gap-6">
-        {/* Orders Trend */}
+      <div className="grid lg:grid-cols-2 gap-3">
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Orders Trend</CardTitle>
-          </CardHeader>
-          <CardContent>
+          <CardContent className="p-3 pt-3">
+            <p className="text-xs font-medium text-muted-foreground mb-2">Orders Trend</p>
             {isLoading ? (
-              <Skeleton className="h-[300px] w-full" />
+              <Skeleton className="h-[220px] w-full" />
             ) : dailyOrders.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
+              <ResponsiveContainer width="100%" height={220}>
                 <LineChart data={dailyOrders}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis
-                    dataKey="date"
-                    tick={{ fontSize: 12 }}
-                    tickLine={false}
-                    axisLine={false}
-                    className="text-muted-foreground"
-                  />
-                  <YAxis
-                    tick={{ fontSize: 12 }}
-                    tickLine={false}
-                    axisLine={false}
-                    className="text-muted-foreground"
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "8px",
-                    }}
-                  />
-                  <Legend />
-                  <Line
-                    type="monotone"
-                    dataKey="orders"
-                    stroke="hsl(220, 70%, 50%)"
-                    strokeWidth={2}
-                    dot={false}
-                    name="Orders"
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="delivered"
-                    stroke="hsl(160, 60%, 45%)"
-                    strokeWidth={2}
-                    dot={false}
-                    name="Delivered"
-                  />
+                  <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                  <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                  <Tooltip contentStyle={{ fontSize: 11 }} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Line type="monotone" dataKey="orders" stroke="hsl(220, 70%, 50%)" strokeWidth={1.5} dot={false} name="Orders" />
+                  <Line type="monotone" dataKey="delivered" stroke="hsl(160, 60%, 45%)" strokeWidth={1.5} dot={false} name="Delivered" />
                 </LineChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+              <div className="h-[220px] flex items-center justify-center text-muted-foreground text-xs">
                 No data available
               </div>
             )}
           </CardContent>
         </Card>
 
-        {/* Courier Performance */}
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Courier Performance</CardTitle>
-          </CardHeader>
-          <CardContent>
+          <CardContent className="p-3 pt-3">
+            <p className="text-xs font-medium text-muted-foreground mb-2">Courier Performance</p>
             {isLoading ? (
-              <Skeleton className="h-[300px] w-full" />
+              <Skeleton className="h-[220px] w-full" />
             ) : courierPerformance.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
+              <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={courierPerformance} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" horizontal={false} />
-                  <XAxis type="number" tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
-                  <YAxis
-                    type="category"
-                    dataKey="courier"
-                    tick={{ fontSize: 12 }}
-                    tickLine={false}
-                    axisLine={false}
-                    width={80}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "8px",
-                    }}
-                  />
-                  <Bar dataKey="delivered" fill="hsl(160, 60%, 45%)" name="Delivered" radius={[0, 4, 4, 0]} />
-                  <Bar dataKey="returned" fill="hsl(350, 70%, 55%)" name="Returned" radius={[0, 4, 4, 0]} />
+                  <XAxis type="number" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                  <YAxis type="category" dataKey="courier" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={70} />
+                  <Tooltip contentStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="delivered" fill="hsl(160, 60%, 45%)" name="Delivered" radius={[0, 2, 2, 0]} />
+                  <Bar dataKey="returned" fill="hsl(350, 70%, 55%)" name="Returned" radius={[0, 2, 2, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+              <div className="h-[220px] flex items-center justify-center text-muted-foreground text-xs">
                 No courier data available
               </div>
             )}
@@ -290,24 +211,21 @@ export default function Analytics() {
         </Card>
       </div>
 
-      {/* City Breakdown */}
-      <div className="grid lg:grid-cols-2 gap-6">
+      <div className="grid lg:grid-cols-2 gap-3">
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Orders by City</CardTitle>
-          </CardHeader>
-          <CardContent>
+          <CardContent className="p-3 pt-3">
+            <p className="text-xs font-medium text-muted-foreground mb-2">Orders by City</p>
             {isLoading ? (
-              <Skeleton className="h-[300px] w-full" />
+              <Skeleton className="h-[220px] w-full" />
             ) : cityBreakdown.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
+              <ResponsiveContainer width="100%" height={220}>
                 <PieChart>
                   <Pie
                     data={cityBreakdown.slice(0, 5)}
                     cx="50%"
                     cy="50%"
                     labelLine={false}
-                    outerRadius={100}
+                    outerRadius={80}
                     fill="#8884d8"
                     dataKey="orders"
                     label={({ city, percent }) => `${city} ${(percent * 100).toFixed(0)}%`}
@@ -316,55 +234,46 @@ export default function Analytics() {
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "8px",
-                    }}
-                  />
+                  <Tooltip contentStyle={{ fontSize: 11 }} />
                 </PieChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+              <div className="h-[220px] flex items-center justify-center text-muted-foreground text-xs">
                 No city data available
               </div>
             )}
           </CardContent>
         </Card>
 
-        {/* Top Cities Table */}
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Top Cities by Orders</CardTitle>
-          </CardHeader>
-          <CardContent>
+          <CardContent className="p-3 pt-3">
+            <p className="text-xs font-medium text-muted-foreground mb-2">Top Cities by Orders</p>
             {isLoading ? (
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {[1, 2, 3, 4, 5].map((i) => (
-                  <Skeleton key={i} className="h-12 w-full" />
+                  <Skeleton key={i} className="h-8 w-full" />
                 ))}
               </div>
             ) : cityBreakdown.length > 0 ? (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {cityBreakdown.slice(0, 6).map((city, index) => (
-                  <div key={city.city} className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-2.5">
-                      <span className="text-xs text-muted-foreground font-medium w-4 text-right tabular-nums">{index + 1}</span>
+                  <div key={city.city} className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-muted-foreground font-medium w-3 text-right tabular-nums">{index + 1}</span>
                       <div>
-                        <p className="text-sm font-medium">{city.city}</p>
-                        <p className="text-xs text-muted-foreground">{city.orders} orders</p>
+                        <p className="text-xs font-medium">{city.city}</p>
+                        <p className="text-[10px] text-muted-foreground">{city.orders} orders</p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm font-medium tabular-nums">PKR {city.revenue}</p>
-                      <p className="text-xs text-muted-foreground">{city.delivered} delivered</p>
+                      <p className="text-xs font-medium tabular-nums">PKR {city.revenue}</p>
+                      <p className="text-[10px] text-muted-foreground">{city.delivered} delivered</p>
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="h-[280px] flex items-center justify-center text-muted-foreground">
+              <div className="h-[220px] flex items-center justify-center text-muted-foreground text-xs">
                 No city data available
               </div>
             )}

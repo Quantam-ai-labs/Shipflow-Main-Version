@@ -40,11 +40,11 @@ export default function SupportDashboardPage() {
   });
 
   return (
-    <div className="p-6 space-y-6 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between">
+    <div className="p-4 space-y-4 max-w-6xl mx-auto">
+      <div className="flex items-center justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">WhatsApp Dashboard</h1>
-          <p className="text-muted-foreground text-sm mt-1">Monitor automated notifications and conversations</p>
+          <h1 className="text-xl font-semibold tracking-tight" data-testid="text-page-title">WhatsApp Dashboard</h1>
+          <p className="text-muted-foreground text-xs mt-0.5">Monitor automated notifications and conversations</p>
         </div>
         {isLoading ? (
           <Skeleton className="h-7 w-32" />
@@ -60,7 +60,7 @@ export default function SupportDashboardPage() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard
           title="Messages Sent"
           subtitle="Last 30 days"
@@ -96,28 +96,28 @@ export default function SupportDashboardPage() {
       </div>
 
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base font-semibold flex items-center gap-2">
-            <Clock className="w-4 h-4 text-muted-foreground" />
+        <CardHeader className="pb-2 px-4 pt-4">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <Clock className="w-3.5 h-3.5 text-muted-foreground" />
             Recent Activity
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-4 pb-4">
           {isLoading ? (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {Array.from({ length: 5 }).map((_, i) => (
-                <Skeleton key={i} className="h-10 w-full" />
+                <Skeleton key={i} className="h-8 w-full" />
               ))}
             </div>
           ) : !stats?.recentActivity?.length ? (
-            <div className="text-center py-10 text-muted-foreground text-sm">
+            <div className="text-center py-8 text-muted-foreground text-xs">
               No activity yet. WhatsApp notifications will appear here once sent.
             </div>
           ) : (
             <div className="divide-y">
               {stats.recentActivity.map((item) => (
-                <div key={item.id} className="py-3 flex items-center justify-between gap-4" data-testid={`row-activity-${item.id}`}>
-                  <div className="flex items-center gap-3 min-w-0">
+                <div key={item.id} className="py-2 flex items-center justify-between gap-3" data-testid={`row-activity-${item.id}`}>
+                  <div className="flex items-center gap-2 min-w-0">
                     {item.success ? (
                       <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
                     ) : (
@@ -172,18 +172,18 @@ function StatCard({
 }) {
   return (
     <Card>
-      <CardContent className="pt-6">
-        <div className="flex items-start justify-between">
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between gap-2">
           <div>
-            <p className="text-sm text-muted-foreground">{title}</p>
+            <p className="text-xs text-muted-foreground">{title}</p>
             {isLoading ? (
-              <Skeleton className="h-8 w-16 mt-1" />
+              <Skeleton className="h-6 w-14 mt-1" />
             ) : (
-              <p className="text-3xl font-bold mt-1" data-testid={testId}>{value ?? 0}</p>
+              <p className="text-2xl font-bold mt-0.5" data-testid={testId}>{value ?? 0}</p>
             )}
-            <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">{subtitle}</p>
           </div>
-          <div className="p-2 bg-muted rounded-md">{icon}</div>
+          <div className="p-1.5 bg-muted rounded-md">{icon}</div>
         </div>
       </CardContent>
     </Card>

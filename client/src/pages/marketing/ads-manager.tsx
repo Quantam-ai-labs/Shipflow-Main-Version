@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -365,20 +365,20 @@ export default function AdsManager() {
     : DATE_PRESETS.find(p => p.value === datePreset)?.label || "Last 7 Days";
 
   return (
-    <div className="p-4 md:p-6 space-y-4 max-w-[1600px] mx-auto" data-testid="ads-manager-page">
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+    <div className="p-3 md:p-4 space-y-3 max-w-[1600px] mx-auto" data-testid="ads-manager-page">
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
           <div>
-            <h1 className="text-2xl font-bold" data-testid="text-page-title">Ads Manager</h1>
-            <p className="text-sm text-muted-foreground">
+            <h1 className="text-lg font-semibold" data-testid="text-page-title">Ads Manager</h1>
+            <p className="text-xs text-muted-foreground">
               {formatDateLabel(dateFrom, dateTo)}
-              {lastSyncTime && <span className="ml-2">· Last synced {lastSyncTime}</span>}
+              {lastSyncTime && <span className="ml-1.5">· Synced {lastSyncTime}</span>}
               {metaStatus?.account?.currency && (
-                <span className="ml-2">· {metaStatus.account.currency}</span>
+                <span className="ml-1.5">· {metaStatus.account.currency}</span>
               )}
             </p>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 flex-wrap">
             <Button
               variant="outline"
               size="sm"
@@ -386,7 +386,7 @@ export default function AdsManager() {
               data-testid="button-auto-refresh"
               className={autoRefresh ? "border-green-500 text-green-600" : ""}
             >
-              {autoRefresh ? <ToggleRight className="w-4 h-4 mr-1 text-green-500" /> : <ToggleLeft className="w-4 h-4 mr-1" />}
+              {autoRefresh ? <ToggleRight className="w-3.5 h-3.5 mr-1 text-green-500" /> : <ToggleLeft className="w-3.5 h-3.5 mr-1" />}
               Auto
             </Button>
             <Button
@@ -396,11 +396,11 @@ export default function AdsManager() {
               disabled={syncMutation.isPending}
               data-testid="button-sync"
             >
-              {syncMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <RefreshCw className="w-4 h-4 mr-1" />}
-              Sync Now
+              {syncMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <RefreshCw className="w-3.5 h-3.5 mr-1" />}
+              Sync
             </Button>
             <Button variant="outline" size="sm" onClick={handleExportCSV} data-testid="button-export-ads">
-              <Download className="w-4 h-4 mr-1" />
+              <Download className="w-3.5 h-3.5 mr-1" />
               CSV
             </Button>
           </div>
@@ -530,54 +530,44 @@ export default function AdsManager() {
       </div>
 
       {data?.totals && !isLoading && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
-          <Card>
-            <CardContent className="p-3">
-              <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Total Spend</div>
-              <div className="text-lg font-bold mt-0.5" data-testid="text-total-spend">{formatCurrency(data.totals.spend)}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-3">
-              <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Purchases</div>
-              <div className="text-lg font-bold mt-0.5" data-testid="text-total-purchases">{formatNumber(data.totals.purchases)}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-3">
-              <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Revenue</div>
-              <div className="text-lg font-bold mt-0.5" data-testid="text-total-revenue">{formatCurrency(data.totals.purchaseValue)}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-3">
-              <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">ROAS</div>
-              <div className="text-lg font-bold mt-0.5" data-testid="text-total-roas">
-                <span className={data.totals.roas >= 1 ? "text-green-600" : "text-red-600"}>
-                  {data.totals.roas.toFixed(2)}x
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-3">
-              <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Cost/Purchase</div>
-              <div className="text-lg font-bold mt-0.5" data-testid="text-total-cpa">{formatCurrency(data.totals.costPerPurchase)}</div>
-            </CardContent>
-          </Card>
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+          <div className="py-1.5 px-3">
+            <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Total Spend</div>
+            <div className="text-base font-bold mt-0.5 tabular-nums" data-testid="text-total-spend">{formatCurrency(data.totals.spend)}</div>
+          </div>
+          <div className="py-1.5 px-3">
+            <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Purchases</div>
+            <div className="text-base font-bold mt-0.5 tabular-nums" data-testid="text-total-purchases">{formatNumber(data.totals.purchases)}</div>
+          </div>
+          <div className="py-1.5 px-3">
+            <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Revenue</div>
+            <div className="text-base font-bold mt-0.5 tabular-nums" data-testid="text-total-revenue">{formatCurrency(data.totals.purchaseValue)}</div>
+          </div>
+          <div className="py-1.5 px-3">
+            <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">ROAS</div>
+            <div className="text-base font-bold mt-0.5 tabular-nums" data-testid="text-total-roas">
+              <span className={data.totals.roas >= 1 ? "text-green-600" : "text-red-600"}>
+                {data.totals.roas.toFixed(2)}x
+              </span>
+            </div>
+          </div>
+          <div className="py-1.5 px-3">
+            <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Cost/Purchase</div>
+            <div className="text-base font-bold mt-0.5 tabular-nums" data-testid="text-total-cpa">{formatCurrency(data.totals.costPerPurchase)}</div>
+          </div>
         </div>
       )}
 
       <Card data-testid="card-ads-table">
         <CardContent className="p-0">
           {isLoading ? (
-            <div className="p-6 space-y-3">
-              <Skeleton className="h-8 w-full" />
-              <Skeleton className="h-[400px] w-full" />
+            <div className="p-4 space-y-2">
+              <Skeleton className="h-6 w-full" />
+              <Skeleton className="h-[300px] w-full" />
             </div>
           ) : !data?.rows || data.rows.length === 0 ? (
-            <div className="p-12 text-center">
-              <p className="text-muted-foreground text-sm mb-3">
+            <div className="p-8 text-center">
+              <p className="text-muted-foreground text-xs mb-2">
                 No {level} data found for the selected period and filters.
               </p>
               <Button
@@ -679,9 +669,9 @@ export default function AdsManager() {
               </div>
 
               {totalPages > 1 && (
-                <div className="flex items-center justify-between px-4 py-3 border-t">
-                  <span className="text-xs text-muted-foreground">
-                    Showing {((currentPage - 1) * PAGE_SIZE) + 1}-{Math.min(currentPage * PAGE_SIZE, sortedRows.length)} of {sortedRows.length}
+                <div className="flex items-center justify-between px-3 py-2 border-t">
+                  <span className="text-[11px] text-muted-foreground">
+                    {((currentPage - 1) * PAGE_SIZE) + 1}-{Math.min(currentPage * PAGE_SIZE, sortedRows.length)} of {sortedRows.length}
                   </span>
                   <div className="flex items-center gap-1">
                     <Button

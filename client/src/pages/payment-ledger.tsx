@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,15 +27,11 @@ import {
 import {
   Receipt,
   Search,
-  Filter,
   Download,
   ChevronLeft,
   ChevronRight,
   CloudDownload,
   ExternalLink,
-  ArrowDownRight,
-  Wallet,
-  TrendingDown,
   Info,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -231,13 +226,13 @@ export default function PaymentLedgerPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-semibold" data-testid="text-ledger-title">Payment Ledger</h1>
-          <p className="text-muted-foreground">Per-shipment financial breakdown: COD collected vs courier charges vs amount paid.</p>
+          <h1 className="text-lg font-semibold" data-testid="text-ledger-title">Payment Ledger</h1>
+          <p className="text-xs text-muted-foreground">Per-shipment financial breakdown: COD collected vs courier charges vs amount paid.</p>
         </div>
-        <div className="flex flex-col items-end gap-2">
+        <div className="flex flex-col items-end gap-1">
           <div className="flex items-center gap-2 flex-wrap">
             <Button
               variant="outline"
@@ -246,357 +241,316 @@ export default function PaymentLedgerPage() {
               disabled={syncPaymentsMutation.isPending}
               data-testid="button-import-ledger"
             >
-              <CloudDownload className={`w-4 h-4 mr-2 ${syncPaymentsMutation.isPending ? 'animate-pulse' : ''}`} />
+              <CloudDownload className={`w-3.5 h-3.5 mr-1.5 ${syncPaymentsMutation.isPending ? 'animate-pulse' : ''}`} />
               {syncPaymentsMutation.isPending ? 'Importing...' : 'Import Ledger'}
             </Button>
             <Button variant="outline" size="sm" onClick={handleExport} data-testid="button-export-payment-ledger">
-              <Download className="w-4 h-4 mr-2" />
+              <Download className="w-3.5 h-3.5 mr-1.5" />
               Export CSV
             </Button>
           </div>
           {syncPaymentsMutation.isPending && codSyncProgress && (
-            <div className="w-48 space-y-1" data-testid="cod-sync-progress-ledger">
-              <Progress value={codSyncProgress.total > 0 ? (codSyncProgress.processed / codSyncProgress.total) * 100 : undefined} className="h-2" />
-              <p className="text-xs text-muted-foreground text-right">
+            <div className="w-40 space-y-0.5" data-testid="cod-sync-progress-ledger">
+              <Progress value={codSyncProgress.total > 0 ? (codSyncProgress.processed / codSyncProgress.total) * 100 : undefined} className="h-1.5" />
+              <p className="text-[10px] text-muted-foreground text-right">
                 {codSyncProgress.total > 0
-                  ? `Syncing ${codSyncProgress.processed} of ${codSyncProgress.total} records...`
-                  : "Starting sync..."}
+                  ? `${codSyncProgress.processed}/${codSyncProgress.total}`
+                  : "Starting..."}
               </p>
             </div>
           )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Total COD Collected</p>
-                {isLoading ? (
-                  <Skeleton className="h-8 w-28 mt-1" />
-                ) : (
-                  <>
-                    <p className="text-2xl font-bold" data-testid="text-total-cod">Rs {summary?.totalCod ?? "0"}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{summary?.recordCount ?? 0} shipments</p>
-                  </>
-                )}
-              </div>
-              <Wallet className="w-5 h-5 text-muted-foreground" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Total Courier Deductions</p>
-                {isLoading ? (
-                  <Skeleton className="h-8 w-28 mt-1" />
-                ) : (
-                  <>
-                    <p className="text-2xl font-bold" data-testid="text-total-deductions">Rs {summary?.totalDeductions ?? "0"}</p>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
-                      <span>Fee: Rs {summary?.totalTxnFee ?? "0"}</span>
-                      <span>Tax: Rs {summary?.totalTxnTax ?? "0"}</span>
-                    </div>
-                  </>
-                )}
-              </div>
-              <TrendingDown className="w-5 h-5 text-muted-foreground" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Net Amount Paid to You</p>
-                {isLoading ? (
-                  <Skeleton className="h-8 w-28 mt-1" />
-                ) : (
-                  <>
-                    <p className="text-2xl font-bold" data-testid="text-total-net">Rs {summary?.totalNetPaid ?? "0"}</p>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
-                      <span>{summary?.syncedCount ?? 0} synced</span>
-                      {(summary?.unsyncedCount ?? 0) > 0 && (
-                        <Badge variant="secondary" className="text-xs">{summary?.unsyncedCount} pending sync</Badge>
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
-              <ArrowDownRight className="w-5 h-5 text-muted-foreground" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex flex-col lg:flex-row gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Search by tracking number or courier..."
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                className="pl-10"
-                data-testid="input-search-ledger"
-              />
-            </div>
-            <Select value={courierFilter} onValueChange={(v) => { setCourierFilter(v); setPage(1); }}>
-              <SelectTrigger className="w-[180px]" data-testid="select-courier-filter">
-                <Filter className="w-4 h-4 mr-2" />
-                <SelectValue placeholder="Courier" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Couriers</SelectItem>
-                <SelectItem value="Leopards Courier">Leopards</SelectItem>
-                <SelectItem value="PostEx">PostEx</SelectItem>
-                <SelectItem value="TCS">TCS</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-4">
-          <CardTitle className="text-base font-semibold flex items-center gap-2">
-            Shipment Financial Breakdown
-            {data?.total !== undefined && (
-              <Badge variant="secondary" className="ml-2">{data.total} records</Badge>
-            )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
+      <div className="flex items-center gap-6 py-2 border-b" data-testid="metrics-strip">
+        <div className="min-w-0">
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Total COD</p>
           {isLoading ? (
-            <div className="p-4 space-y-4">
-              {[1, 2, 3, 4, 5, 6].map(i => (
-                <div key={i} className="flex items-center gap-4">
-                  <Skeleton className="h-4 w-28" />
-                  <Skeleton className="h-4 w-20" />
-                  <Skeleton className="h-4 w-24" />
-                  <Skeleton className="h-4 w-20" />
-                  <Skeleton className="h-4 w-24 flex-1" />
-                </div>
-              ))}
-            </div>
-          ) : records.length > 0 ? (
-            <>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Tracking #</TableHead>
-                      <TableHead>Courier</TableHead>
-                      <TableHead className="text-right">COD Amount</TableHead>
-                      <TableHead className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          Service Fee
-                          <Tooltip>
-                            <TooltipTrigger>
-                              <Info className="w-3 h-3 text-muted-foreground" />
-                            </TooltipTrigger>
-                            <TooltipContent>Courier delivery/service charges per shipment</TooltipContent>
-                          </Tooltip>
-                        </div>
-                      </TableHead>
-                      <TableHead className="text-right">Tax</TableHead>
-                      <TableHead className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          Reversal
-                          <Tooltip>
-                            <TooltipTrigger>
-                              <Info className="w-3 h-3 text-muted-foreground" />
-                            </TooltipTrigger>
-                            <TooltipContent>Charges for returned/reversed shipments</TooltipContent>
-                          </Tooltip>
-                        </div>
-                      </TableHead>
-                      <TableHead className="text-right font-semibold">Total Deducted</TableHead>
-                      <TableHead className="text-right font-semibold">Net Paid</TableHead>
-                      <TableHead>Payment Status</TableHead>
-                      <TableHead>Payment Method</TableHead>
-                      <TableHead>Billing Method</TableHead>
-                      <TableHead>Invoice/Cheque #</TableHead>
-                      <TableHead>Settlement Date</TableHead>
-                      <TableHead>Message</TableHead>
-                      <TableHead>Slip</TableHead>
-                      <TableHead className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          Upfront
-                          <Tooltip>
-                            <TooltipTrigger>
-                              <Info className="w-3 h-3 text-muted-foreground" />
-                            </TooltipTrigger>
-                            <TooltipContent>PostEx upfront payment amount</TooltipContent>
-                          </Tooltip>
-                        </div>
-                      </TableHead>
-                      <TableHead className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          Reserve
-                          <Tooltip>
-                            <TooltipTrigger>
-                              <Info className="w-3 h-3 text-muted-foreground" />
-                            </TooltipTrigger>
-                            <TooltipContent>PostEx reserve payment amount</TooltipContent>
-                          </Tooltip>
-                        </div>
-                      </TableHead>
-                      <TableHead className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          Balance
-                          <Tooltip>
-                            <TooltipTrigger>
-                              <Info className="w-3 h-3 text-muted-foreground" />
-                            </TooltipTrigger>
-                            <TooltipContent>PostEx final balance payment</TooltipContent>
-                          </Tooltip>
-                        </div>
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {records.map(record => {
-                      const hasFees = Number(record.totalDeduction) > 0;
-                      const isSettled = record.courierPaymentStatus?.toLowerCase() === 'settled' ||
-                        record.courierPaymentStatus?.toLowerCase() === 'paid';
-
-                      return (
-                        <TableRow key={record.id} data-testid={`ledger-row-${record.id}`}>
-                          <TableCell className="font-mono text-sm">{record.trackingNumber || "-"}</TableCell>
-                          <TableCell className="capitalize text-sm">{record.courierName || "-"}</TableCell>
-                          <TableCell className="text-right font-medium">
-                            Rs {Number(record.codAmount).toLocaleString()}
-                          </TableCell>
-                          <TableCell className="text-right text-muted-foreground">
-                            {formatPKR(record.transactionFee)}
-                          </TableCell>
-                          <TableCell className="text-right text-muted-foreground">
-                            {formatPKR(record.transactionTax)}
-                          </TableCell>
-                          <TableCell className="text-right text-muted-foreground">
-                            {Number(record.reversalFee || 0) + Number(record.reversalTax || 0) > 0
-                              ? formatPKR(String(Number(record.reversalFee || 0) + Number(record.reversalTax || 0)))
-                              : "--"
-                            }
-                          </TableCell>
-                          <TableCell className="text-right font-medium text-red-500">
-                            {hasFees ? `-Rs ${Number(record.totalDeduction).toLocaleString()}` : "--"}
-                          </TableCell>
-                          <TableCell className="text-right font-semibold text-green-600 dark:text-green-400">
-                            {record.hasSyncedData
-                              ? `Rs ${Number(record.calculatedNetPaid).toLocaleString()}`
-                              : <span className="text-muted-foreground font-normal">Pending sync</span>
-                            }
-                          </TableCell>
-                          <TableCell>
-                            {record.courierPaymentStatus ? (
-                              <Badge className={
-                                isSettled
-                                  ? "bg-green-500/10 text-green-600 border-green-500/20"
-                                  : "bg-amber-500/10 text-amber-600 border-amber-500/20"
-                              }>
-                                {record.courierPaymentStatus}
-                              </Badge>
-                            ) : (
-                              <span className="text-muted-foreground text-xs">--</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-sm" data-testid={`text-payment-method-${record.id}`}>
-                            {record.courierPaymentMethod || <span className="text-muted-foreground">--</span>}
-                          </TableCell>
-                          <TableCell className="text-sm" data-testid={`text-billing-method-${record.id}`}>
-                            {record.courierBillingMethod || <span className="text-muted-foreground">--</span>}
-                          </TableCell>
-                          <TableCell className="text-sm font-mono" data-testid={`text-invoice-cheque-${record.id}`}>
-                            {record.courierPaymentRef || <span className="text-muted-foreground">--</span>}
-                          </TableCell>
-                          <TableCell className="text-sm text-muted-foreground whitespace-nowrap" data-testid={`text-settlement-date-${record.id}`}>
-                            {record.courierSettlementDate
-                              ? formatPkDate(record.courierSettlementDate)
-                              : "--"
-                            }
-                          </TableCell>
-                          <TableCell className="text-sm max-w-[200px] truncate" title={record.courierMessage || undefined} data-testid={`text-message-${record.id}`}>
-                            {record.courierMessage || <span className="text-muted-foreground">--</span>}
-                          </TableCell>
-                          <TableCell>
-                            {record.courierSlipLink ? (
-                              <a
-                                href={record.courierSlipLink}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400 hover:underline"
-                                data-testid={`link-slip-${record.id}`}
-                              >
-                                <ExternalLink className="w-3.5 h-3.5" />
-                                View
-                              </a>
-                            ) : (
-                              <span className="text-muted-foreground text-xs">--</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right text-muted-foreground">
-                            {formatPKR(record.upfrontPayment)}
-                          </TableCell>
-                          <TableCell className="text-right text-muted-foreground">
-                            {formatPKR(record.reservePayment)}
-                          </TableCell>
-                          <TableCell className="text-right text-muted-foreground">
-                            {formatPKR(record.balancePayment)}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-              {totalPages > 1 && (
-                <div className="flex items-center justify-between p-4 border-t">
-                  <p className="text-sm text-muted-foreground">
-                    Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, data?.total ?? 0)} of {data?.total}
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" onClick={() => setPage(page - 1)} disabled={page === 1} data-testid="button-prev-page">
-                      <ChevronLeft className="w-4 h-4" />
-                    </Button>
-                    <span className="text-sm" data-testid="text-page-info">Page {page} of {totalPages}</span>
-                    <Button variant="outline" size="sm" onClick={() => setPage(page + 1)} disabled={page >= totalPages} data-testid="button-next-page">
-                      <ChevronRight className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </>
+            <Skeleton className="h-5 w-20 mt-0.5" />
           ) : (
-            <div className="text-center py-16">
-              <Receipt className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
-              <h3 className="font-medium mb-1">No payment ledger records found</h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                {search || courierFilter !== "all"
-                  ? "Try adjusting your filters"
-                  : "Click \"Import Ledger\" to fetch payment data from your couriers"
-                }
-              </p>
-              {!search && courierFilter === "all" && (
-                <Button
-                  variant="outline"
-                  onClick={() => syncPaymentsMutation.mutate()}
-                  disabled={syncPaymentsMutation.isPending}
-                  data-testid="button-import-ledger-empty"
-                >
-                  <CloudDownload className="w-4 h-4 mr-2" />
-                  Import Ledger
-                </Button>
-              )}
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-sm font-semibold" data-testid="text-total-cod">Rs {summary?.totalCod ?? "0"}</span>
+              <span className="text-[10px] text-muted-foreground">{summary?.recordCount ?? 0} shipments</span>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+        <div className="min-w-0">
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Deductions</p>
+          {isLoading ? (
+            <Skeleton className="h-5 w-20 mt-0.5" />
+          ) : (
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-sm font-semibold" data-testid="text-total-deductions">Rs {summary?.totalDeductions ?? "0"}</span>
+              <span className="text-[10px] text-muted-foreground">Fee: {summary?.totalTxnFee ?? "0"} | Tax: {summary?.totalTxnTax ?? "0"}</span>
+            </div>
+          )}
+        </div>
+        <div className="min-w-0">
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Net Paid</p>
+          {isLoading ? (
+            <Skeleton className="h-5 w-20 mt-0.5" />
+          ) : (
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-sm font-semibold" data-testid="text-total-net">Rs {summary?.totalNetPaid ?? "0"}</span>
+              <span className="text-[10px] text-muted-foreground">
+                {summary?.syncedCount ?? 0} synced
+                {(summary?.unsyncedCount ?? 0) > 0 && ` · ${summary?.unsyncedCount} pending`}
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="flex flex-col lg:flex-row gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          <Input
+            placeholder="Search tracking or courier..."
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            className="pl-8 h-8 text-xs"
+            data-testid="input-search-ledger"
+          />
+        </div>
+        <Select value={courierFilter} onValueChange={(v) => { setCourierFilter(v); setPage(1); }}>
+          <SelectTrigger className="w-[150px] h-8 text-xs" data-testid="select-courier-filter">
+            <SelectValue placeholder="Courier" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Couriers</SelectItem>
+            <SelectItem value="Leopards Courier">Leopards</SelectItem>
+            <SelectItem value="PostEx">PostEx</SelectItem>
+            <SelectItem value="TCS">TCS</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div>
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-xs font-medium text-muted-foreground">Shipment Financial Breakdown</span>
+          {data?.total !== undefined && (
+            <span className="text-[10px] text-muted-foreground">{data.total} records</span>
+          )}
+        </div>
+        {isLoading ? (
+          <div className="space-y-2 py-2">
+            {[1, 2, 3, 4, 5, 6].map(i => (
+              <Skeleton key={i} className="h-6 w-full" />
+            ))}
+          </div>
+        ) : records.length > 0 ? (
+          <>
+            <div className="overflow-x-auto border rounded-md">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="text-[10px] uppercase tracking-wider py-1.5">Tracking #</TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider py-1.5">Courier</TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider py-1.5 text-right">COD</TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider py-1.5 text-right">
+                      <div className="flex items-center justify-end gap-0.5">
+                        Fee
+                        <Tooltip>
+                          <TooltipTrigger>
+                            <Info className="w-2.5 h-2.5 text-muted-foreground" />
+                          </TooltipTrigger>
+                          <TooltipContent>Courier delivery/service charges</TooltipContent>
+                        </Tooltip>
+                      </div>
+                    </TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider py-1.5 text-right">Tax</TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider py-1.5 text-right">
+                      <div className="flex items-center justify-end gap-0.5">
+                        Rev.
+                        <Tooltip>
+                          <TooltipTrigger>
+                            <Info className="w-2.5 h-2.5 text-muted-foreground" />
+                          </TooltipTrigger>
+                          <TooltipContent>Charges for returned/reversed shipments</TooltipContent>
+                        </Tooltip>
+                      </div>
+                    </TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider py-1.5 text-right font-semibold">Deducted</TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider py-1.5 text-right font-semibold">Net Paid</TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider py-1.5">Status</TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider py-1.5">Method</TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider py-1.5">Billing</TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider py-1.5">Inv/Chq #</TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider py-1.5">Settled</TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider py-1.5">Msg</TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider py-1.5">Slip</TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider py-1.5 text-right">
+                      <div className="flex items-center justify-end gap-0.5">
+                        Up
+                        <Tooltip>
+                          <TooltipTrigger>
+                            <Info className="w-2.5 h-2.5 text-muted-foreground" />
+                          </TooltipTrigger>
+                          <TooltipContent>PostEx upfront payment</TooltipContent>
+                        </Tooltip>
+                      </div>
+                    </TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider py-1.5 text-right">
+                      <div className="flex items-center justify-end gap-0.5">
+                        Res
+                        <Tooltip>
+                          <TooltipTrigger>
+                            <Info className="w-2.5 h-2.5 text-muted-foreground" />
+                          </TooltipTrigger>
+                          <TooltipContent>PostEx reserve payment</TooltipContent>
+                        </Tooltip>
+                      </div>
+                    </TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider py-1.5 text-right">
+                      <div className="flex items-center justify-end gap-0.5">
+                        Bal
+                        <Tooltip>
+                          <TooltipTrigger>
+                            <Info className="w-2.5 h-2.5 text-muted-foreground" />
+                          </TooltipTrigger>
+                          <TooltipContent>PostEx final balance payment</TooltipContent>
+                        </Tooltip>
+                      </div>
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {records.map(record => {
+                    const hasFees = Number(record.totalDeduction) > 0;
+                    const isSettled = record.courierPaymentStatus?.toLowerCase() === 'settled' ||
+                      record.courierPaymentStatus?.toLowerCase() === 'paid';
+
+                    return (
+                      <TableRow key={record.id} data-testid={`ledger-row-${record.id}`}>
+                        <TableCell className="font-mono text-xs py-1">{record.trackingNumber || "-"}</TableCell>
+                        <TableCell className="capitalize text-xs py-1">{record.courierName || "-"}</TableCell>
+                        <TableCell className="text-right text-xs font-medium py-1">
+                          {Number(record.codAmount).toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-right text-xs text-muted-foreground py-1">
+                          {formatPKR(record.transactionFee)}
+                        </TableCell>
+                        <TableCell className="text-right text-xs text-muted-foreground py-1">
+                          {formatPKR(record.transactionTax)}
+                        </TableCell>
+                        <TableCell className="text-right text-xs text-muted-foreground py-1">
+                          {Number(record.reversalFee || 0) + Number(record.reversalTax || 0) > 0
+                            ? formatPKR(String(Number(record.reversalFee || 0) + Number(record.reversalTax || 0)))
+                            : "--"
+                          }
+                        </TableCell>
+                        <TableCell className="text-right text-xs font-medium text-red-500 py-1">
+                          {hasFees ? `-${Number(record.totalDeduction).toLocaleString()}` : "--"}
+                        </TableCell>
+                        <TableCell className="text-right text-xs font-semibold text-green-600 dark:text-green-400 py-1">
+                          {record.hasSyncedData
+                            ? Number(record.calculatedNetPaid).toLocaleString()
+                            : <span className="text-muted-foreground font-normal text-[10px]">Pending</span>
+                          }
+                        </TableCell>
+                        <TableCell className="py-1">
+                          {record.courierPaymentStatus ? (
+                            <Badge className={
+                              isSettled
+                                ? "bg-green-500/10 text-green-600 border-green-500/20"
+                                : "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                            }>
+                              {record.courierPaymentStatus}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground text-[10px]">--</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-xs py-1" data-testid={`text-payment-method-${record.id}`}>
+                          {record.courierPaymentMethod || <span className="text-muted-foreground">--</span>}
+                        </TableCell>
+                        <TableCell className="text-xs py-1" data-testid={`text-billing-method-${record.id}`}>
+                          {record.courierBillingMethod || <span className="text-muted-foreground">--</span>}
+                        </TableCell>
+                        <TableCell className="text-xs font-mono py-1" data-testid={`text-invoice-cheque-${record.id}`}>
+                          {record.courierPaymentRef || <span className="text-muted-foreground">--</span>}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap py-1" data-testid={`text-settlement-date-${record.id}`}>
+                          {record.courierSettlementDate
+                            ? formatPkDate(record.courierSettlementDate)
+                            : "--"
+                          }
+                        </TableCell>
+                        <TableCell className="text-xs max-w-[120px] truncate py-1" title={record.courierMessage || undefined} data-testid={`text-message-${record.id}`}>
+                          {record.courierMessage || <span className="text-muted-foreground">--</span>}
+                        </TableCell>
+                        <TableCell className="py-1">
+                          {record.courierSlipLink ? (
+                            <a
+                              href={record.courierSlipLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-0.5 text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                              data-testid={`link-slip-${record.id}`}
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          ) : (
+                            <span className="text-muted-foreground text-[10px]">--</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right text-xs text-muted-foreground py-1">
+                          {formatPKR(record.upfrontPayment)}
+                        </TableCell>
+                        <TableCell className="text-right text-xs text-muted-foreground py-1">
+                          {formatPKR(record.reservePayment)}
+                        </TableCell>
+                        <TableCell className="text-right text-xs text-muted-foreground py-1">
+                          {formatPKR(record.balancePayment)}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between py-2">
+                <p className="text-xs text-muted-foreground">
+                  {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, data?.total ?? 0)} of {data?.total}
+                </p>
+                <div className="flex items-center gap-1.5">
+                  <Button variant="outline" size="sm" onClick={() => setPage(page - 1)} disabled={page === 1} data-testid="button-prev-page">
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </Button>
+                  <span className="text-xs text-muted-foreground" data-testid="text-page-info">{page}/{totalPages}</span>
+                  <Button variant="outline" size="sm" onClick={() => setPage(page + 1)} disabled={page >= totalPages} data-testid="button-next-page">
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="text-center py-10">
+            <Receipt className="w-8 h-8 text-muted-foreground/50 mx-auto mb-2" />
+            <h3 className="text-sm font-medium mb-0.5">No payment ledger records found</h3>
+            <p className="text-xs text-muted-foreground mb-3">
+              {search || courierFilter !== "all"
+                ? "Try adjusting your filters"
+                : "Click \"Import Ledger\" to fetch payment data from your couriers"
+              }
+            </p>
+            {!search && courierFilter === "all" && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => syncPaymentsMutation.mutate()}
+                disabled={syncPaymentsMutation.isPending}
+                data-testid="button-import-ledger-empty"
+              >
+                <CloudDownload className="w-3.5 h-3.5 mr-1.5" />
+                Import Ledger
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

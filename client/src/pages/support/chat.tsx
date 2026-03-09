@@ -92,9 +92,9 @@ function formatChatTime(dateStr: string) {
 }
 
 function StatusTicks({ status }: { status: string | null }) {
-  if (status === "read") return <CheckCheck className="w-3.5 h-3.5 text-blue-400 inline-block ml-1" />;
-  if (status === "delivered") return <CheckCheck className="w-3.5 h-3.5 text-muted-foreground inline-block ml-1" />;
-  if (status === "sent") return <Check className="w-3.5 h-3.5 text-muted-foreground inline-block ml-1" />;
+  if (status === "read") return <CheckCheck className="w-3 h-3 text-blue-400 inline-block ml-0.5" />;
+  if (status === "delivered") return <CheckCheck className="w-3 h-3 text-muted-foreground inline-block ml-0.5" />;
+  if (status === "sent") return <Check className="w-3 h-3 text-muted-foreground inline-block ml-0.5" />;
   return null;
 }
 
@@ -169,15 +169,15 @@ function PinScreen({ onSuccess }: { onSuccess: () => void }) {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <div className="w-full max-w-sm space-y-6">
-        <div className="text-center space-y-2">
-          <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center mx-auto">
-            <Lock className="w-8 h-8 text-primary-foreground" />
+      <div className="w-full max-w-xs space-y-5">
+        <div className="text-center space-y-1.5">
+          <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center mx-auto">
+            <Lock className="w-5 h-5 text-primary-foreground" />
           </div>
-          <h1 className="text-2xl font-bold text-foreground">Support Chat</h1>
-          <p className="text-muted-foreground text-sm">Enter your PIN to access the chat inbox</p>
+          <h1 className="text-lg font-semibold text-foreground">Support Chat</h1>
+          <p className="text-muted-foreground text-xs">Enter your PIN to access the chat inbox</p>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-3">
           <Input
             type="password"
             placeholder="Enter PIN"
@@ -185,10 +185,10 @@ function PinScreen({ onSuccess }: { onSuccess: () => void }) {
             onChange={(e) => setPin(e.target.value)}
             maxLength={8}
             autoFocus
-            className="text-center text-xl tracking-widest"
+            className="text-center text-lg tracking-widest"
             data-testid="input-pin"
           />
-          {error && <p className="text-destructive text-sm text-center" data-testid="text-pin-error">{error}</p>}
+          {error && <p className="text-destructive text-xs text-center" data-testid="text-pin-error">{error}</p>}
           <Button type="submit" className="w-full" disabled={loading || pin.length < 4} data-testid="button-submit-pin">
             {loading ? "Verifying..." : "Enter Chat"}
           </Button>
@@ -391,16 +391,13 @@ export default function SupportChatPage() {
 
   return (
     <div className="flex h-full overflow-hidden bg-background">
-      <div className="w-[380px] border-r border-border flex flex-col shrink-0 bg-background">
-        <div className="h-14 bg-card border-b border-border flex items-center px-4 gap-3">
-          <div className="w-9 h-9 bg-primary rounded-full flex items-center justify-center">
-            <MessageCircle className="w-5 h-5 text-primary-foreground" />
-          </div>
-          <h2 className="font-semibold text-foreground text-sm flex-1">Chats</h2>
+      <div className="w-[340px] border-r border-border flex flex-col shrink-0 bg-background">
+        <div className="h-10 border-b border-border flex items-center px-3 gap-2">
+          <h2 className="font-medium text-foreground text-xs uppercase tracking-wider flex-1">Chats</h2>
           {totalUnread > 0 && (
-            <Badge variant="default" className="text-xs rounded-full" data-testid="badge-total-unread">
+            <span className="text-[10px] font-medium text-primary" data-testid="badge-total-unread">
               {totalUnread}
-            </Badge>
+            </span>
           )}
           <Button
             size="icon"
@@ -409,36 +406,36 @@ export default function SupportChatPage() {
             className={cn(showFilters && "text-primary")}
             data-testid="button-toggle-filters"
           >
-            <Filter className="w-5 h-5" />
+            <Filter className="w-3.5 h-3.5" />
           </Button>
         </div>
 
-        <div className="px-3 py-2">
+        <div className="px-2 py-1.5">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
             <Input
-              placeholder="Search by name, phone, or order..."
+              placeholder="Search name, phone, order..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 pr-8"
+              className="pl-8 pr-7 text-xs"
               data-testid="input-search-conversations"
             />
             {search && (
-              <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                <X className="w-4 h-4" />
+              <button onClick={() => setSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
         </div>
 
         {showFilters && (
-          <div className="px-3 pb-2 flex gap-1.5 flex-wrap">
+          <div className="px-2 pb-1.5 flex gap-1 flex-wrap">
             {LABEL_FILTERS.map(f => (
               <button
                 key={f.value}
                 onClick={() => setLabelFilter(f.value)}
                 className={cn(
-                  "px-3 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-all border",
+                  "px-2 py-0.5 rounded-md text-[10px] font-medium whitespace-nowrap transition-all border",
                   labelFilter === f.value
                     ? "bg-primary text-primary-foreground border-transparent"
                     : "bg-card text-muted-foreground border-border hover-elevate"
@@ -446,7 +443,7 @@ export default function SupportChatPage() {
                 data-testid={`filter-${f.value}`}
               >
                 {f.value !== "all" && f.value !== "unread" && (
-                  <span className={cn("inline-block w-2 h-2 rounded-full mr-1.5", (f as any).color)} />
+                  <span className={cn("inline-block w-1.5 h-1.5 rounded-full mr-1", (f as any).color)} />
                 )}
                 {f.label}
               </button>
@@ -456,8 +453,8 @@ export default function SupportChatPage() {
 
         <ScrollArea className="flex-1">
           {filtered.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground text-sm">
-              <MessageCircle className="w-12 h-12 mx-auto opacity-20 mb-3" />
+            <div className="p-6 text-center text-muted-foreground text-xs">
+              <MessageCircle className="w-8 h-8 mx-auto opacity-20 mb-2" />
               {search ? "No conversations match your search" : "No conversations yet"}
             </div>
           ) : (
@@ -469,51 +466,51 @@ export default function SupportChatPage() {
                   key={conv.id}
                   onClick={() => setSelectedConvId(conv.id)}
                   className={cn(
-                    "w-full px-3 py-3 text-left transition-colors flex items-center gap-3 border-b border-border",
+                    "w-full px-2.5 py-2 text-left transition-colors flex items-center gap-2.5 border-b border-border",
                     isSelected ? "bg-accent" : "hover-elevate"
                   )}
                   data-testid={`button-conversation-${conv.id}`}
                 >
                   <div className="relative shrink-0">
                     <div className={cn(
-                      "w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-base",
+                      "w-8 h-8 rounded-full flex items-center justify-center text-white font-medium text-xs",
                       labelInfo ? labelInfo.color : "bg-primary"
                     )}>
                       {(conv.contactName ?? conv.contactPhone).charAt(0).toUpperCase()}
                     </div>
                     {conv.unreadCount > 0 && (
-                      <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-primary rounded-full text-primary-foreground text-[10px] flex items-center justify-center font-bold">
+                      <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-primary rounded-full text-primary-foreground text-[9px] flex items-center justify-center font-bold">
                         {conv.unreadCount > 9 ? "9+" : conv.unreadCount}
                       </span>
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className={cn("text-sm truncate", conv.unreadCount > 0 ? "font-bold text-foreground" : "text-foreground")} data-testid={`text-contact-${conv.id}`}>
+                    <div className="flex items-center justify-between gap-1">
+                      <span className={cn("text-xs truncate", conv.unreadCount > 0 ? "font-semibold text-foreground" : "text-foreground")} data-testid={`text-contact-${conv.id}`}>
                         {conv.contactName || `+${conv.contactPhone}`}
                       </span>
-                      <span className={cn("text-xs whitespace-nowrap", conv.unreadCount > 0 ? "text-primary font-medium" : "text-muted-foreground")}>
+                      <span className={cn("text-[10px] whitespace-nowrap", conv.unreadCount > 0 ? "text-primary font-medium" : "text-muted-foreground")}>
                         {formatChatTime(conv.lastMessageAt)}
                       </span>
                     </div>
-                    <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                    <div className="flex items-center gap-1 mt-px flex-wrap">
                       {conv.orderNumber && (
-                        <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-mono">
+                        <span className="text-[9px] text-muted-foreground bg-muted px-1 py-px rounded font-mono">
                           #{conv.orderNumber}
                         </span>
                       )}
                       {labelInfo && (
-                        <span className={cn("text-[10px] text-white px-1.5 py-0.5 rounded", labelInfo.color)}>
+                        <span className={cn("text-[9px] text-white px-1 py-px rounded", labelInfo.color)}>
                           {labelInfo.label}
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center justify-between gap-1 mt-0.5">
-                      <p className={cn("text-xs truncate flex-1", conv.unreadCount > 0 ? "text-foreground" : "text-muted-foreground")}>
+                    <div className="flex items-center justify-between gap-1 mt-px">
+                      <p className={cn("text-[11px] truncate flex-1", conv.unreadCount > 0 ? "text-foreground" : "text-muted-foreground")}>
                         {conv.lastMessage || "No messages"}
                       </p>
                       {conv.assignedToName && (
-                        <span className="text-[10px] text-muted-foreground ml-2 flex items-center gap-0.5 shrink-0">
+                        <span className="text-[9px] text-muted-foreground ml-1 flex items-center gap-0.5 shrink-0">
                           <UserPlus className="w-2.5 h-2.5" />
                           {conv.assignedToName.split(" ")[0]}
                         </span>
@@ -530,29 +527,28 @@ export default function SupportChatPage() {
       <div className="flex-1 flex flex-col min-w-0">
         {!selectedConv ? (
           <div className="flex-1 flex items-center justify-center bg-card">
-            <div className="text-center space-y-3">
-              <div className="w-24 h-24 bg-muted rounded-full flex items-center justify-center mx-auto">
-                <MessageCircle className="w-12 h-12 text-muted-foreground" />
+            <div className="text-center space-y-2">
+              <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto">
+                <MessageCircle className="w-8 h-8 text-muted-foreground" />
               </div>
-              <h3 className="text-xl font-light text-foreground">WhatsApp Support</h3>
-              <p className="text-sm text-muted-foreground max-w-sm">Select a conversation from the sidebar to start chatting with your customers</p>
+              <h3 className="text-base font-light text-foreground">WhatsApp Support</h3>
+              <p className="text-xs text-muted-foreground max-w-xs">Select a conversation to start chatting</p>
             </div>
           </div>
         ) : (
           <>
-            <div className="h-14 bg-card flex items-center px-4 gap-3 border-b border-border">
+            <div className="h-10 flex items-center px-3 gap-2.5 border-b border-border">
               <div className={cn(
-                "w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold shrink-0",
+                "w-8 h-8 rounded-full flex items-center justify-center text-white font-medium text-xs shrink-0",
                 getLabelInfo(selectedConv.label)?.color || "bg-primary"
               )}>
                 {(selectedConv.contactName ?? selectedConv.contactPhone).charAt(0).toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-medium text-sm text-foreground" data-testid="text-selected-contact">
+                <p className="font-medium text-xs text-foreground" data-testid="text-selected-contact">
                   {selectedConv.contactName || `+${selectedConv.contactPhone}`}
                 </p>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
-                  <Phone className="w-3 h-3" />
+                <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground flex-wrap">
                   <span>+{selectedConv.contactPhone}</span>
                   {selectedConv.orderNumber && (
                     <>
@@ -563,7 +559,6 @@ export default function SupportChatPage() {
                   {selectedConv.assignedToName && (
                     <>
                       <span>·</span>
-                      <UserPlus className="w-3 h-3" />
                       <span>{selectedConv.assignedToName}</span>
                     </>
                   )}
@@ -573,7 +568,7 @@ export default function SupportChatPage() {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button size="icon" variant="ghost" data-testid="button-chat-menu">
-                    <MoreVertical className="w-5 h-5" />
+                    <MoreVertical className="w-4 h-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
@@ -655,18 +650,18 @@ export default function SupportChatPage() {
             </div>
 
             <ScrollArea className="flex-1 bg-muted/30">
-              <div className="px-[8%] py-4 space-y-1">
+              <div className="px-[6%] py-3 space-y-0.5">
                 {messages.filter(m => m.messageType !== "reaction").length === 0 ? (
-                  <div className="text-center py-8">
-                    <span className="bg-card text-muted-foreground text-xs px-4 py-2 rounded-md inline-block border border-border">
+                  <div className="text-center py-6">
+                    <span className="bg-card text-muted-foreground text-[10px] px-3 py-1 rounded-md inline-block border border-border">
                       No messages yet — start the conversation
                     </span>
                   </div>
                 ) : (
                   messagesByDate.map(group => (
                     <div key={group.date}>
-                      <div className="flex justify-center my-3">
-                        <span className="bg-card text-muted-foreground text-[11px] px-3 py-1 rounded-md border border-border">
+                      <div className="flex justify-center my-2">
+                        <span className="bg-card text-muted-foreground text-[10px] px-2.5 py-0.5 rounded-md border border-border">
                           {formatDateHeader(group.date)}
                         </span>
                       </div>
@@ -679,33 +674,33 @@ export default function SupportChatPage() {
                         return (
                           <div
                             key={msg.id}
-                            className={cn("flex mb-1 group", isOutbound ? "justify-end" : "justify-start")}
+                            className={cn("flex mb-0.5 group", isOutbound ? "justify-end" : "justify-start")}
                             data-testid={`message-${msg.id}`}
                           >
                             <div className="relative max-w-[65%]">
                               <div className={cn(
-                                "relative px-3 py-1.5 rounded-md text-sm border",
+                                "relative px-2.5 py-1 rounded-md text-xs border",
                                 isOutbound
                                   ? "bg-primary/10 dark:bg-primary/20 text-foreground border-primary/20 rounded-tr-none"
                                   : "bg-card text-foreground border-border rounded-tl-none"
                               )}>
                                 {isButtonReply && (
-                                  <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium mb-1 bg-primary/10 text-primary">
-                                    <Reply className="w-3 h-3" />
+                                  <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium mb-0.5 bg-primary/10 text-primary">
+                                    <Reply className="w-2.5 h-2.5" />
                                     {msg.text}
                                   </div>
                                 )}
                                 {!isButtonReply && (
-                                  <div className="whitespace-pre-wrap break-words leading-relaxed">
+                                  <div className="whitespace-pre-wrap break-words leading-normal">
                                     {isNonText && <MessageTypeIcon type={msg.messageType} />}
                                     {renderFormattedText(msg.text || "")}
                                   </div>
                                 )}
                                 <div className={cn(
-                                  "flex items-center gap-1 mt-0.5",
+                                  "flex items-center gap-0.5 mt-px",
                                   isOutbound ? "justify-end" : ""
                                 )}>
-                                  <span className="text-[10px] text-muted-foreground">
+                                  <span className="text-[9px] text-muted-foreground">
                                     {format(new Date(msg.createdAt), "HH:mm")}
                                   </span>
                                   {isOutbound && <StatusTicks status={msg.status} />}
@@ -746,23 +741,23 @@ export default function SupportChatPage() {
               </div>
             </ScrollArea>
 
-            <div className="bg-card px-4 py-2 border-t border-border">
-              <div className="flex items-center gap-1 mb-1.5">
-                <Button size="icon" variant="ghost" onClick={() => insertFormatting("*", "*")} title="Bold" data-testid="button-format-bold" className="h-7 w-7">
-                  <Bold className="w-4 h-4" />
+            <div className="px-3 py-1.5 border-t border-border">
+              <div className="flex items-center gap-0.5 mb-1">
+                <Button size="icon" variant="ghost" onClick={() => insertFormatting("*", "*")} title="Bold" data-testid="button-format-bold">
+                  <Bold className="w-3.5 h-3.5" />
                 </Button>
-                <Button size="icon" variant="ghost" onClick={() => insertFormatting("_", "_")} title="Italic" data-testid="button-format-italic" className="h-7 w-7">
-                  <Italic className="w-4 h-4" />
+                <Button size="icon" variant="ghost" onClick={() => insertFormatting("_", "_")} title="Italic" data-testid="button-format-italic">
+                  <Italic className="w-3.5 h-3.5" />
                 </Button>
-                <Button size="icon" variant="ghost" onClick={() => insertFormatting("~", "~")} title="Strikethrough" data-testid="button-format-strike" className="h-7 w-7">
-                  <Strikethrough className="w-4 h-4" />
+                <Button size="icon" variant="ghost" onClick={() => insertFormatting("~", "~")} title="Strikethrough" data-testid="button-format-strike">
+                  <Strikethrough className="w-3.5 h-3.5" />
                 </Button>
-                <Button size="icon" variant="ghost" onClick={() => insertFormatting("```", "```")} title="Code" data-testid="button-format-code" className="h-7 w-7">
-                  <Code className="w-4 h-4" />
+                <Button size="icon" variant="ghost" onClick={() => insertFormatting("```", "```")} title="Code" data-testid="button-format-code">
+                  <Code className="w-3.5 h-3.5" />
                 </Button>
               </div>
 
-              <div className="flex items-end gap-2">
+              <div className="flex items-end gap-1.5">
                 <EmojiPicker
                   onSelect={(emoji) => {
                     setMessageText(prev => prev + emoji);
@@ -770,7 +765,7 @@ export default function SupportChatPage() {
                   }}
                   trigger={
                     <Button size="icon" variant="ghost" className="shrink-0 mb-0.5" data-testid="button-emoji-picker">
-                      <Smile className="w-5 h-5" />
+                      <Smile className="w-4 h-4" />
                     </Button>
                   }
                   side="top"
@@ -783,7 +778,7 @@ export default function SupportChatPage() {
                   onChange={(e) => setMessageText(e.target.value)}
                   onKeyDown={handleKeyDown}
                   rows={1}
-                  className="flex-1 resize-none bg-muted text-foreground rounded-md px-3 py-2.5 text-sm placeholder:text-muted-foreground border border-border outline-none focus:ring-1 focus:ring-ring max-h-[120px] min-h-[40px]"
+                  className="flex-1 resize-none bg-muted text-foreground rounded-md px-2.5 py-2 text-xs placeholder:text-muted-foreground border border-border outline-none focus:ring-1 focus:ring-ring max-h-[100px] min-h-[36px]"
                   style={{ height: "auto", overflow: messageText.split("\n").length > 3 ? "auto" : "hidden" }}
                   data-testid="input-message"
                 />
@@ -794,7 +789,7 @@ export default function SupportChatPage() {
                   className="shrink-0 mb-0.5"
                   data-testid="button-send-message"
                 >
-                  <Send className="w-5 h-5" />
+                  <Send className="w-4 h-4" />
                 </Button>
               </div>
             </div>

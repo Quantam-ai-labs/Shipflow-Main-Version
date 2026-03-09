@@ -896,13 +896,12 @@ export default function SupportTemplatesPage() {
 
   // ── Tab Bar ──
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
-      {/* Tab Navigation */}
-      <div className="flex gap-1 bg-muted/40 rounded-lg p-1 w-fit border">
+    <div className="p-4 max-w-5xl mx-auto space-y-4">
+      <div className="flex gap-1 bg-muted/40 rounded-md p-0.5 w-fit border">
         <button
           type="button"
           onClick={() => setActiveTab("templates")}
-          className={`px-5 py-2 rounded-md text-sm font-medium transition-colors ${
+          className={`px-4 py-1.5 rounded-md text-xs font-medium transition-colors ${
             activeTab === "templates"
               ? "bg-background text-foreground shadow-sm border"
               : "text-muted-foreground hover:text-foreground"
@@ -914,7 +913,7 @@ export default function SupportTemplatesPage() {
         <button
           type="button"
           onClick={() => setActiveTab("automations")}
-          className={`px-5 py-2 rounded-md text-sm font-medium transition-colors ${
+          className={`px-4 py-1.5 rounded-md text-xs font-medium transition-colors ${
             activeTab === "automations"
               ? "bg-background text-foreground shadow-sm border"
               : "text-muted-foreground hover:text-foreground"
@@ -926,7 +925,7 @@ export default function SupportTemplatesPage() {
         <button
           type="button"
           onClick={() => setActiveTab("logs")}
-          className={`px-5 py-2 rounded-md text-sm font-medium transition-colors ${
+          className={`px-4 py-1.5 rounded-md text-xs font-medium transition-colors ${
             activeTab === "logs"
               ? "bg-background text-foreground shadow-sm border"
               : "text-muted-foreground hover:text-foreground"
@@ -940,11 +939,11 @@ export default function SupportTemplatesPage() {
       {/* ── TEMPLATES TAB ── */}
       {activeTab === "templates" && (
         <div className="border rounded-md bg-card overflow-hidden">
-          <div className="flex items-start justify-between p-6 border-b">
+          <div className="flex items-start justify-between p-4 border-b gap-3">
             <div>
-              <h1 className="text-lg font-bold tracking-tight" data-testid="text-page-title">Shopify Message Templates</h1>
-              <p className="text-sm text-muted-foreground mt-0.5 max-w-xl">
-                Create WhatsApp templates with Header, Body, Footer and Buttons. Templates are submitted to Meta for approval.
+              <h1 className="text-sm font-semibold tracking-tight" data-testid="text-page-title">Shopify Message Templates</h1>
+              <p className="text-xs text-muted-foreground mt-0.5 max-w-xl">
+                Create WhatsApp templates with Header, Body, Footer and Buttons.
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -972,15 +971,15 @@ export default function SupportTemplatesPage() {
           </div>
 
           {/* Quick Start Presets */}
-          <div className="p-6 border-b space-y-3">
-            <h2 className="text-sm font-semibold">Quick Start Presets</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="p-4 border-b space-y-2">
+            <h2 className="text-xs font-semibold">Quick Start Presets</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               {PRESETS.map(preset => (
                 <button
                   key={preset.id}
                   type="button"
                   onClick={() => { setEditorPreset(preset); setEditorOpen(true); }}
-                  className="text-left p-4 rounded-md border bg-background hover-elevate transition-colors"
+                  className="text-left p-3 rounded-md border bg-background hover-elevate transition-colors"
                   data-testid={`card-preset-${preset.id}`}
                 >
                   <div className="flex items-start justify-between gap-2 mb-1.5">
@@ -1007,8 +1006,8 @@ export default function SupportTemplatesPage() {
           </div>
 
           {/* Your Templates */}
-          <div className="p-6 space-y-3">
-            <h2 className="text-sm font-semibold">Your Templates</h2>
+          <div className="p-4 space-y-2">
+            <h2 className="text-xs font-semibold">Your Templates</h2>
             {tplLoading ? (
               <div className="space-y-2">
                 {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-lg" />)}
@@ -1050,10 +1049,10 @@ export default function SupportTemplatesPage() {
       {activeTab === "automations" && (
         <div>
           {/* Header */}
-          <div className="flex items-start justify-between mb-6">
+          <div className="flex items-start justify-between mb-4 gap-3">
             <div>
-              <h1 className="text-xl font-bold tracking-tight" data-testid="text-automations-title">Automations</h1>
-              <p className="text-muted-foreground text-sm mt-0.5">Set up workflows to engage customers automatically.</p>
+              <h1 className="text-sm font-semibold tracking-tight" data-testid="text-automations-title">Automations</h1>
+              <p className="text-muted-foreground text-xs mt-0.5">Set up workflows to engage customers automatically.</p>
             </div>
             <Button
               onClick={() => { setEditingAutomation(null); setAutoDialogOpen(true); }}
@@ -1116,11 +1115,11 @@ export default function SupportTemplatesPage() {
       {/* ── MESSAGE LOGS TAB ── */}
       {activeTab === "logs" && (
         <div className="border rounded-md bg-card overflow-hidden">
-          <div className="flex items-start justify-between p-6 border-b">
+          <div className="flex items-start justify-between p-4 border-b gap-3">
             <div>
-              <h1 className="text-lg font-bold tracking-tight" data-testid="text-logs-title">Message Logs</h1>
-              <p className="text-sm text-muted-foreground mt-0.5 max-w-xl">
-                Recent WhatsApp messages sent by automations. Retry failed messages with one click.
+              <h1 className="text-sm font-semibold tracking-tight" data-testid="text-logs-title">Message Logs</h1>
+              <p className="text-xs text-muted-foreground mt-0.5 max-w-xl">
+                Recent WhatsApp messages sent by automations.
               </p>
             </div>
             <Button

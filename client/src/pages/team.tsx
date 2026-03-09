@@ -585,11 +585,11 @@ export default function Team() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold" data-testid="text-team-title">Team Management</h1>
-          <p className="text-muted-foreground">Manage your team members and their access levels.</p>
+          <h1 className="text-xl font-semibold" data-testid="text-team-title">Team Management</h1>
+          <p className="text-muted-foreground text-xs">Manage your team members and their access levels.</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Button
@@ -694,57 +694,57 @@ export default function Team() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center">
-              <Shield className="w-5 h-5 text-muted-foreground" />
+          <CardContent className="p-3 flex items-center gap-2">
+            <div className="w-8 h-8 rounded-md bg-muted flex items-center justify-center">
+              <Shield className="w-4 h-4 text-muted-foreground" />
             </div>
             <div>
-              <p className="text-2xl font-bold" data-testid="text-manager-count">{members.filter((m) => m.role === "manager" || m.role === "admin").length}</p>
-              <p className="text-sm text-muted-foreground">Managers</p>
+              <p className="text-lg font-bold" data-testid="text-manager-count">{members.filter((m) => m.role === "manager" || m.role === "admin").length}</p>
+              <p className="text-xs text-muted-foreground">Managers</p>
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center">
-              <Headphones className="w-5 h-5 text-muted-foreground" />
+          <CardContent className="p-3 flex items-center gap-2">
+            <div className="w-8 h-8 rounded-md bg-muted flex items-center justify-center">
+              <Headphones className="w-4 h-4 text-muted-foreground" />
             </div>
             <div>
-              <p className="text-2xl font-bold" data-testid="text-support-count">{members.filter((m) => m.role === "customer_support" || m.role === "agent").length}</p>
-              <p className="text-sm text-muted-foreground">Support</p>
+              <p className="text-lg font-bold" data-testid="text-support-count">{members.filter((m) => m.role === "customer_support" || m.role === "agent").length}</p>
+              <p className="text-xs text-muted-foreground">Support</p>
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center">
-              <Calculator className="w-5 h-5 text-muted-foreground" />
+          <CardContent className="p-3 flex items-center gap-2">
+            <div className="w-8 h-8 rounded-md bg-muted flex items-center justify-center">
+              <Calculator className="w-4 h-4 text-muted-foreground" />
             </div>
             <div>
-              <p className="text-2xl font-bold" data-testid="text-accountant-count">{members.filter((m) => m.role === "accountant").length}</p>
-              <p className="text-sm text-muted-foreground">Accountants</p>
+              <p className="text-lg font-bold" data-testid="text-accountant-count">{members.filter((m) => m.role === "accountant").length}</p>
+              <p className="text-xs text-muted-foreground">Accountants</p>
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center">
-              <Truck className="w-5 h-5 text-muted-foreground" />
+          <CardContent className="p-3 flex items-center gap-2">
+            <div className="w-8 h-8 rounded-md bg-muted flex items-center justify-center">
+              <Truck className="w-4 h-4 text-muted-foreground" />
             </div>
             <div>
-              <p className="text-2xl font-bold" data-testid="text-logistics-count">{members.filter((m) => m.role === "logistics_manager").length}</p>
-              <p className="text-sm text-muted-foreground">Logistics</p>
+              <p className="text-lg font-bold" data-testid="text-logistics-count">{members.filter((m) => m.role === "logistics_manager").length}</p>
+              <p className="text-xs text-muted-foreground">Logistics</p>
             </div>
           </CardContent>
         </Card>
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Users className="w-5 h-5" />
+        <CardHeader className="px-4 pt-4 pb-2">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <Users className="w-4 h-4" />
             Team Members
             {data?.total !== undefined && (
               <Badge variant="secondary" className="ml-2">
@@ -755,25 +755,25 @@ export default function Team() {
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <div className="space-y-4">
+            <div className="space-y-2">
               {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="flex items-center gap-4 p-4 border rounded-lg">
-                  <Skeleton className="h-12 w-12 rounded-full" />
-                  <div className="flex-1 space-y-2">
-                    <Skeleton className="h-4 w-32" />
-                    <Skeleton className="h-3 w-48" />
+                <div key={i} className="flex items-center gap-3 p-2.5 border rounded-md">
+                  <Skeleton className="h-8 w-8 rounded-full" />
+                  <div className="flex-1 space-y-1.5">
+                    <Skeleton className="h-3 w-28" />
+                    <Skeleton className="h-2.5 w-40" />
                   </div>
-                  <Skeleton className="h-6 w-20" />
+                  <Skeleton className="h-5 w-16" />
                 </div>
               ))}
             </div>
           ) : members.length > 0 ? (
-            <div className="space-y-3">
+            <div className="space-y-1.5">
               {members.map((member) => (
-                <div key={member.id} className={`flex items-center gap-4 p-4 border rounded-lg hover-elevate ${!member.isActive ? "opacity-50 bg-muted/30" : ""}`} data-testid={`team-member-${member.id}`}>
-                  <Avatar className="h-12 w-12">
+                <div key={member.id} className={`flex items-center gap-3 p-2.5 border rounded-md hover-elevate ${!member.isActive ? "opacity-50 bg-muted/30" : ""}`} data-testid={`team-member-${member.id}`}>
+                  <Avatar className="h-8 w-8">
                     <AvatarImage src={member.user?.profileImageUrl || undefined} />
-                    <AvatarFallback className="bg-primary/10 text-primary">
+                    <AvatarFallback className="bg-primary/10 text-primary text-xs">
                       {getUserInitials(member)}
                     </AvatarFallback>
                   </Avatar>
@@ -895,19 +895,19 @@ export default function Team() {
 
       {pendingInvites.length > 0 && (
         <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Mail className="w-5 h-5" />
+          <CardHeader className="px-4 pt-4 pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Mail className="w-4 h-4" />
               Pending Invitations
               <Badge variant="secondary">{pendingInvites.length}</Badge>
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
+          <CardContent className="px-4 pb-4">
+            <div className="space-y-1.5">
               {pendingInvites.map((invite) => (
-                <div key={invite.id} className="flex items-center gap-4 p-4 border rounded-md" data-testid={`pending-invite-${invite.id}`}>
-                  <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                    <Mail className="w-5 h-5 text-muted-foreground" />
+                <div key={invite.id} className="flex items-center gap-3 p-2.5 border rounded-md" data-testid={`pending-invite-${invite.id}`}>
+                  <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                    <Mail className="w-4 h-4 text-muted-foreground" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium" data-testid={`text-invite-email-${invite.id}`}>{invite.email}</p>

@@ -110,9 +110,9 @@ import WarehousePage from "@/pages/warehouse";
 
 function OnboardingBanner() {
   return (
-    <div className="bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-800 px-4 py-2 flex items-center justify-between gap-2" data-testid="banner-onboarding">
-      <div className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-400">
-        <AlertTriangle className="w-4 h-4 shrink-0" />
+    <div className="bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-800 px-3 py-1.5 flex items-center justify-between gap-2" data-testid="banner-onboarding">
+      <div className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400">
+        <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
         <span>Setup incomplete</span>
       </div>
       <Link href="/onboarding">
@@ -324,7 +324,7 @@ function GlobalRefreshButton() {
       data-testid="button-global-refresh"
       className="h-8 w-8"
     >
-      <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
+      <RefreshCw className={`h-3.5 w-3.5 ${syncing ? "animate-spin" : ""}`} />
     </Button>
   );
 }
@@ -349,9 +349,9 @@ function ImpersonationBanner() {
   if (!user?.isImpersonating) return null;
 
   return (
-    <div className="bg-amber-500 text-amber-950 px-4 py-2 flex items-center justify-between text-sm font-medium" data-testid="impersonation-banner">
-      <div className="flex items-center gap-2">
-        <Shield className="w-4 h-4" />
+    <div className="bg-amber-500 text-amber-950 px-3 py-1.5 flex items-center justify-between gap-2 text-xs font-medium" data-testid="impersonation-banner">
+      <div className="flex items-center gap-1.5">
+        <Shield className="w-3.5 h-3.5" />
         <span>Viewing as <strong>{user.email}</strong> (impersonation mode)</span>
       </div>
       <Button size="sm" variant="secondary" onClick={() => stopMutation.mutate()} disabled={stopMutation.isPending} data-testid="button-stop-impersonation">
@@ -366,8 +366,8 @@ function AuthenticatedLayout() {
   const onboardingIncomplete = user?.merchant?.onboardingStep !== "COMPLETED";
 
   const style = {
-    "--sidebar-width": "16rem",
-    "--sidebar-width-icon": "3rem",
+    "--sidebar-width": "13rem",
+    "--sidebar-width-icon": "2.5rem",
   };
 
   return (
@@ -377,9 +377,9 @@ function AuthenticatedLayout() {
           <AppSidebar />
           <div className="flex flex-col flex-1 overflow-hidden">
             <ImpersonationBanner />
-            <header className="flex items-center justify-between gap-4 px-4 py-2.5 border-b bg-background">
+            <header className="flex items-center justify-between gap-2 px-3 py-1.5 border-b bg-background">
               <SidebarTrigger data-testid="button-sidebar-toggle" />
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <GlobalRefreshButton />
                 <HeaderDateRangePicker />
                 <ThemeToggle />

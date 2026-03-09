@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { AIInsightsBanner } from "@/components/ai-insights-banner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -282,11 +281,11 @@ export default function Shipments() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold" data-testid="text-shipments-title">Shipments</h1>
-          <p className="text-muted-foreground">All dispatched orders handed over to couriers.</p>
+          <h1 className="text-xl font-semibold" data-testid="text-shipments-title">Shipments</h1>
+          <p className="text-muted-foreground text-xs">All dispatched orders handed over to couriers.</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Button
@@ -342,60 +341,57 @@ export default function Shipments() {
         </div>
       </div>
 
-      <AIInsightsBanner section="shipments" />
-
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList data-testid="tabs-shipments" className="flex flex-wrap gap-1">
           <TabsTrigger value="shipments" data-testid="tab-shipments">
-            <Truck className="w-4 h-4 mr-2" />
+            <Truck className="w-4 h-4 mr-1.5" />
             Shipments
           </TabsTrigger>
         </TabsList>
 
-        {/* ====== SHIPMENTS TAB ====== */}
-        <TabsContent value="shipments" className="space-y-6 mt-6">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <TabsContent value="shipments" className="space-y-4 mt-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <Card>
-              <CardContent className="p-4 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
-                  <Package className="w-5 h-5 text-muted-foreground" />
+              <CardContent className="p-3 flex items-center gap-2">
+                <div className="w-8 h-8 rounded-md bg-muted flex items-center justify-center">
+                  <Package className="w-4 h-4 text-muted-foreground" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold" data-testid="stat-total">{totalCount}</p>
-                  <p className="text-xs text-muted-foreground">Total Dispatched</p>
+                  <p className="text-lg font-bold" data-testid="stat-total">{totalCount}</p>
+                  <p className="text-[10px] text-muted-foreground">Total Dispatched</p>
                 </div>
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="p-4 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-yellow-500/10 flex items-center justify-center">
-                  <Clock className="w-5 h-5 text-yellow-500" />
+              <CardContent className="p-3 flex items-center gap-2">
+                <div className="w-8 h-8 rounded-md bg-yellow-500/10 flex items-center justify-center">
+                  <Clock className="w-4 h-4 text-yellow-500" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold" data-testid="stat-pending">{pendingCount}</p>
-                  <p className="text-xs text-muted-foreground">In Transit</p>
+                  <p className="text-lg font-bold" data-testid="stat-pending">{pendingCount}</p>
+                  <p className="text-[10px] text-muted-foreground">In Transit</p>
                 </div>
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="p-4 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center">
-                  <CheckCircle2 className="w-5 h-5 text-green-500" />
+              <CardContent className="p-3 flex items-center gap-2">
+                <div className="w-8 h-8 rounded-md bg-green-500/10 flex items-center justify-center">
+                  <CheckCircle2 className="w-4 h-4 text-green-500" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold" data-testid="stat-delivered">{deliveredCount}</p>
-                  <p className="text-xs text-muted-foreground">Delivered</p>
+                  <p className="text-lg font-bold" data-testid="stat-delivered">{deliveredCount}</p>
+                  <p className="text-[10px] text-muted-foreground">Delivered</p>
                 </div>
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="p-4 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center">
-                  <RotateCcw className="w-5 h-5 text-red-500" />
+              <CardContent className="p-3 flex items-center gap-2">
+                <div className="w-8 h-8 rounded-md bg-red-500/10 flex items-center justify-center">
+                  <RotateCcw className="w-4 h-4 text-red-500" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold" data-testid="stat-return">{returnCount}</p>
-                  <p className="text-xs text-muted-foreground">Returned</p>
+                  <p className="text-lg font-bold" data-testid="stat-return">{returnCount}</p>
+                  <p className="text-[10px] text-muted-foreground">Returned</p>
                 </div>
               </CardContent>
             </Card>

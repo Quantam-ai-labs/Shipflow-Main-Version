@@ -35,6 +35,19 @@ Preferred communication style: Simple, everyday language.
 - **Chart Colors**: Use CSS chart tokens (`--chart-1` through `--chart-5`) instead of hardcoded Tailwind colors.
 - **Consistency**: Same visual language across all pages — dashboard, pipeline, chat, AI, settings, accounting, marketing.
 
+### Structural Layout (Minimalist Redesign — Completed)
+- **Dashboard**: Compact metrics strip (no card borders, no icons, just typography). Single unified search input (uses `search` param for OR matching). Status pills inline without card wrapper. Performance metrics as compact row. Recent orders as tight table.
+- **Pipeline**: Dense table with `text-xs`, `py-1` row padding, `text-[10px] uppercase tracking-wider` column headers. Max 2 tags shown. `w-6 h-6` product thumbnails. Icon-only action buttons. No AIInsightsBanner.
+- **Orders**: Matching density — merged Customer Name+Phone column, compact inline filters, icon-only action buttons, slim pagination.
+- **Sidebar**: Width `13rem`, `w-3.5 h-3.5` icons, `text-xs` labels, plain count numbers (not badges), `text-[10px] uppercase tracking-widest` section headers, compact footer.
+- **Header**: Slim `px-3 py-1.5` padding, minimal chrome.
+- **Order Details**: `px-4 py-3` card padding, `text-[11px] uppercase tracking-wider` field labels, compact timeline.
+- **Settings**: Text-only tabs (no icons), flat form layout with dividers instead of cards.
+- **Chat**: 340px sidebar, `w-8 h-8` avatars, `text-xs` message text, slim input area.
+- **Financial Pages**: Metrics strips instead of card grids, compact tables with `py-1` cells.
+- **Marketing/Analytics**: Removed card wrappers from KPIs, compact chart heights (200px), simple text tabs.
+- **All Remaining Pages**: Consistent compact treatment — auth (max-w-sm), team (compact member rows), support, shipments, products, loadsheet, landing (slim nav/hero/footer).
+
 ### Key Features
 - **Merchant & Team Management**: Core tenant management, team invites, and role-based access. Super Admin functionalities include impersonation, cross-tenant team management, and user deletion.
 - **Shopify Integration**: OAuth-based access, encrypted tokens, webhook processing for orders and fulfillments, historical data import, bi-directional write-back, and configurable "Robo-Tags" for order automation.

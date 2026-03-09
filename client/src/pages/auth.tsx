@@ -145,25 +145,25 @@ export default function AuthPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <div className="w-full max-w-md space-y-6">
-        <div className="text-center space-y-2">
-          <div className="w-12 h-12 rounded-md bg-primary flex items-center justify-center mx-auto">
-            <Package className="w-7 h-7 text-primary-foreground" />
+      <div className="w-full max-w-sm space-y-4">
+        <div className="text-center space-y-1">
+          <div className="w-9 h-9 rounded-md bg-primary flex items-center justify-center mx-auto">
+            <Package className="w-5 h-5 text-primary-foreground" />
           </div>
-          <h1 className="text-2xl font-bold" data-testid="text-app-title">1SOL.AI</h1>
-          <p className="text-muted-foreground text-sm">Logistics operations for Shopify merchants</p>
+          <h1 className="text-lg font-bold" data-testid="text-app-title">1SOL.AI</h1>
+          <p className="text-muted-foreground text-xs">Logistics operations for Shopify merchants</p>
         </div>
 
         <Card>
-          <CardHeader className="pb-4">
-            <CardTitle className="text-lg text-center">{getTitle()}</CardTitle>
+          <CardHeader className="pb-2 pt-4 px-5">
+            <CardTitle className="text-sm text-center font-medium">{getTitle()}</CardTitle>
           </CardHeader>
           <CardContent>
             {mode === "login" ? (
               loginStep === "credentials" ? (
-                <form onSubmit={handleSendOtp} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="login-email">Email</Label>
+                <form onSubmit={handleSendOtp} className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="login-email" className="text-xs">Email</Label>
                     <Input
                       id="login-email"
                       data-testid="input-email"
@@ -175,9 +175,9 @@ export default function AuthPage() {
                       autoComplete="email"
                     />
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
-                      <Label htmlFor="login-password">Password</Label>
+                      <Label htmlFor="login-password" className="text-xs">Password</Label>
                       <button
                         type="button"
                         className="text-xs text-primary hover:underline"
@@ -233,7 +233,7 @@ export default function AuthPage() {
                   </p>
                 </form>
               ) : (
-                <form onSubmit={handleVerifyOtp} className="space-y-4">
+                <form onSubmit={handleVerifyOtp} className="space-y-3">
                   <div className="space-y-2">
                     <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50 text-sm text-muted-foreground">
                       <Mail className="w-4 h-4 shrink-0" />
@@ -300,7 +300,7 @@ export default function AuthPage() {
               )
             ) : mode === "forgot" ? (
               forgotStep === "email" ? (
-                <form onSubmit={handleForgotSendOtp} className="space-y-4">
+                <form onSubmit={handleForgotSendOtp} className="space-y-3">
                   <p className="text-sm text-muted-foreground text-center">
                     Enter your email address and we'll send you a verification code to reset your password.
                   </p>
@@ -333,7 +333,7 @@ export default function AuthPage() {
                   </p>
                 </form>
               ) : (
-                <form onSubmit={handleResetPassword} className="space-y-4">
+                <form onSubmit={handleResetPassword} className="space-y-3">
                   <div className="space-y-2">
                     <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50 text-sm text-muted-foreground">
                       <Mail className="w-4 h-4 shrink-0" />
@@ -436,10 +436,10 @@ export default function AuthPage() {
                 </form>
               )
             ) : (
-              <form onSubmit={handleRegister} className="space-y-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="reg-first">First Name</Label>
+              <form onSubmit={handleRegister} className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="reg-first" className="text-xs">First Name</Label>
                     <Input
                       id="reg-first"
                       data-testid="input-first-name"
@@ -449,8 +449,8 @@ export default function AuthPage() {
                       required
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="reg-last">Last Name</Label>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="reg-last" className="text-xs">Last Name</Label>
                     <Input
                       id="reg-last"
                       data-testid="input-last-name"
@@ -460,8 +460,8 @@ export default function AuthPage() {
                     />
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="reg-business">Business Name</Label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="reg-business" className="text-xs">Business Name</Label>
                   <Input
                     id="reg-business"
                     data-testid="input-merchant-name"
@@ -471,8 +471,8 @@ export default function AuthPage() {
                     required
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="reg-email">Email</Label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="reg-email" className="text-xs">Email</Label>
                   <Input
                     id="reg-email"
                     data-testid="input-register-email"
@@ -483,8 +483,8 @@ export default function AuthPage() {
                     required
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="reg-password">Password</Label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="reg-password" className="text-xs">Password</Label>
                   <div className="relative">
                     <Input
                       id="reg-password"
@@ -509,8 +509,8 @@ export default function AuthPage() {
                     </button>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="reg-confirm">Confirm Password</Label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="reg-confirm" className="text-xs">Confirm Password</Label>
                   <div className="relative">
                     <Input
                       id="reg-confirm"

@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -34,20 +33,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Settings as SettingsIcon,
-  Building2,
-  Bell,
-  Shield,
   Save,
-  Pencil,
-  Trash2,
-  Plus,
-  Store,
-  Truck,
-  ArrowLeftRight,
-  Users,
-  BarChart2,
-  Cog,
-  MessageCircle,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -79,15 +65,15 @@ interface MerchantSettings {
 
 
 const SETTINGS_TABS = [
-  { id: "profile",       label: "Profile",        icon: Building2 },
-  { id: "shopify",       label: "Shopify",        icon: Store },
-  { id: "couriers",      label: "Couriers",       icon: Truck },
-  { id: "whatsapp",      label: "WhatsApp",       icon: MessageCircle },
-  { id: "notifications", label: "Notifications",  icon: Bell },
-  { id: "mapping",       label: "Status Mapping", icon: ArrowLeftRight },
-  { id: "marketing",     label: "Marketing",      icon: BarChart2 },
-  { id: "team",          label: "Team",           icon: Users },
-  { id: "accounting",    label: "Accounting",     icon: Cog },
+  { id: "profile",       label: "Profile" },
+  { id: "shopify",       label: "Shopify" },
+  { id: "couriers",      label: "Couriers" },
+  { id: "whatsapp",      label: "WhatsApp" },
+  { id: "notifications", label: "Notifications" },
+  { id: "mapping",       label: "Status Mapping" },
+  { id: "marketing",     label: "Marketing" },
+  { id: "team",          label: "Team" },
+  { id: "accounting",    label: "Accounting" },
 ];
 
 export default function Settings() {
@@ -166,10 +152,9 @@ export default function Settings() {
 
   return (
     <div className="min-h-full">
-      <div className="border-b px-6">
-        <div className="flex gap-1 overflow-x-auto scrollbar-none" data-testid="settings-tab-nav">
+      <div className="border-b px-4">
+        <div className="flex gap-0 overflow-x-auto scrollbar-none" data-testid="settings-tab-nav">
           {SETTINGS_TABS.map(tab => {
-            const Icon = tab.icon;
             const isActive = tab.id === activeTab;
 
             return (
@@ -178,14 +163,13 @@ export default function Settings() {
                 onClick={() => setActiveTab(tab.id)}
                 data-testid={`settings-tab-${tab.id}`}
                 className={[
-                  "flex-shrink-0 flex items-center gap-2 px-4 py-3 text-sm font-medium",
+                  "flex-shrink-0 px-3 py-2 text-xs font-medium",
                   "border-b-2 transition-colors whitespace-nowrap",
                   isActive
                     ? "border-primary text-foreground"
                     : "border-transparent text-muted-foreground hover:text-foreground",
                 ].join(" ")}
               >
-                <Icon className="w-4 h-4" />
                 {tab.label}
               </button>
             );
@@ -193,85 +177,68 @@ export default function Settings() {
         </div>
       </div>
 
-      {/* Tab content */}
-      <div className="p-6">
+      <div className="p-4">
         {activeTab === "profile" && (
-          <div className="space-y-6 max-w-3xl">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Building2 className="w-5 h-5" />
-                  Business Profile
-                </CardTitle>
-                <CardDescription>
-                  Update your business information that appears on invoices and communications.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {isLoading ? (
-                  <div className="space-y-4">
-                    {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-10 w-full" />)}
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="grid sm:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="businessName">Business Name</Label>
-                        <Input id="businessName" value={name} onChange={e => setName(e.target.value)} placeholder="Your business name" data-testid="input-business-name" />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="businessEmail">Email</Label>
-                        <Input id="businessEmail" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="business@example.com" data-testid="input-business-email" />
-                      </div>
-                    </div>
-                    <div className="grid sm:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="phone">Phone Number</Label>
-                        <Input id="phone" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+92 300 1234567" data-testid="input-phone" />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="city">City</Label>
-                        <Input id="city" value={city} onChange={e => setCity(e.target.value)} placeholder="Karachi" data-testid="input-city" />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="address">Address</Label>
-                      <Input id="address" value={address} onChange={e => setAddress(e.target.value)} placeholder="Your business address" data-testid="input-address" />
-                    </div>
-                    <Button onClick={handleSaveProfile} disabled={saveSettingsMutation.isPending} data-testid="button-save-profile">
-                      <Save className="w-4 h-4 mr-2" />
-                      {saveSettingsMutation.isPending ? "Saving..." : "Save Changes"}
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Shield className="w-5 h-5" />
-                  Security
-                </CardTitle>
-                <CardDescription>
-                  Manage your account security and authentication.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between p-4 border rounded-md">
-                    <div>
-                      <p className="font-medium">Authentication</p>
-                      <p className="text-sm text-muted-foreground">You're signed in via Replit Auth with secure OAuth 2.0.</p>
-                    </div>
-                    <SettingsIcon className="w-5 h-5 text-muted-foreground" />
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Your account is protected with industry-standard security. All data is encrypted in transit and at rest.
-                  </p>
+          <div className="max-w-2xl space-y-6">
+            <div>
+              <h3 className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium mb-3" data-testid="text-section-profile">Business Profile</h3>
+              <p className="text-xs text-muted-foreground mb-3">Update your business information that appears on invoices and communications.</p>
+              {isLoading ? (
+                <div className="space-y-3">
+                  {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-9 w-full" />)}
                 </div>
-              </CardContent>
-            </Card>
+              ) : (
+                <div className="space-y-3">
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label htmlFor="businessName" className="text-xs">Business Name</Label>
+                      <Input id="businessName" value={name} onChange={e => setName(e.target.value)} placeholder="Your business name" data-testid="input-business-name" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="businessEmail" className="text-xs">Email</Label>
+                      <Input id="businessEmail" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="business@example.com" data-testid="input-business-email" />
+                    </div>
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label htmlFor="phone" className="text-xs">Phone Number</Label>
+                      <Input id="phone" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+92 300 1234567" data-testid="input-phone" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="city" className="text-xs">City</Label>
+                      <Input id="city" value={city} onChange={e => setCity(e.target.value)} placeholder="Karachi" data-testid="input-city" />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="address" className="text-xs">Address</Label>
+                    <Input id="address" value={address} onChange={e => setAddress(e.target.value)} placeholder="Your business address" data-testid="input-address" />
+                  </div>
+                  <Button size="sm" onClick={handleSaveProfile} disabled={saveSettingsMutation.isPending} data-testid="button-save-profile">
+                    <Save className="w-3.5 h-3.5 mr-1.5" />
+                    {saveSettingsMutation.isPending ? "Saving..." : "Save Changes"}
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium mb-3" data-testid="text-section-security">Security</h3>
+              <p className="text-xs text-muted-foreground mb-3">Manage your account security and authentication.</p>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2 py-2">
+                  <div>
+                    <p className="text-sm font-medium">Authentication</p>
+                    <p className="text-xs text-muted-foreground">You're signed in via Replit Auth with secure OAuth 2.0.</p>
+                  </div>
+                  <SettingsIcon className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Your account is protected with industry-standard security. All data is encrypted in transit and at rest.
+                </p>
+              </div>
+            </div>
           </div>
         )}
 
@@ -281,68 +248,56 @@ export default function Settings() {
 
 
         {activeTab === "notifications" && (
-          <div className="max-w-3xl">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Bell className="w-5 h-5" />
-                  Notifications
-                </CardTitle>
-                <CardDescription>
-                  Configure how you want to be notified about your logistics operations.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {isLoading ? (
-                  <div className="space-y-4">
-                    {[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}
+          <div className="max-w-2xl">
+            <h3 className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium mb-3" data-testid="text-section-notifications">Notifications</h3>
+            <p className="text-xs text-muted-foreground mb-4">Configure how you want to be notified about your logistics operations.</p>
+            {isLoading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map(i => <Skeleton key={i} className="h-10 w-full" />)}
+              </div>
+            ) : (
+              <div className="space-y-0">
+                <div className="flex items-center justify-between gap-2 py-3 border-b">
+                  <div className="space-y-0.5">
+                    <Label className="text-xs font-medium">Order Updates</Label>
+                    <p className="text-xs text-muted-foreground">Receive email notifications when orders are synced or updated.</p>
                   </div>
-                ) : (
-                  <div className="space-y-6">
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <Label>Order Updates</Label>
-                        <p className="text-sm text-muted-foreground">Receive email notifications when orders are synced or updated.</p>
-                      </div>
-                      <Switch checked={emailOrderUpdates} onCheckedChange={setEmailOrderUpdates} data-testid="switch-order-updates" />
-                    </div>
-                    <Separator />
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <Label>Delivery Alerts</Label>
-                        <p className="text-sm text-muted-foreground">Get notified when shipments are delivered or have issues.</p>
-                      </div>
-                      <Switch checked={emailDeliveryAlerts} onCheckedChange={setEmailDeliveryAlerts} data-testid="switch-delivery-alerts" />
-                    </div>
-                    <Separator />
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <Label>COD Reminders</Label>
-                        <p className="text-sm text-muted-foreground">Weekly reminders about pending COD reconciliation.</p>
-                      </div>
-                      <Switch checked={emailCodReminders} onCheckedChange={setEmailCodReminders} data-testid="switch-cod-reminders" />
-                    </div>
-                    <Separator />
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <Label>WhatsApp Order Notifications</Label>
-                        <p className="text-sm text-muted-foreground">Automatically send WhatsApp messages to customers when order status changes.</p>
-                      </div>
-                      <Switch
-                        checked={waEnabledData?.enabled ?? true}
-                        onCheckedChange={(checked) => waEnabledMutation.mutate(checked)}
-                        disabled={waEnabledMutation.isPending}
-                        data-testid="switch-wa-notifications"
-                      />
-                    </div>
-                    <Button onClick={handleSaveNotifications} disabled={saveSettingsMutation.isPending} data-testid="button-save-notifications">
-                      <Save className="w-4 h-4 mr-2" />
-                      {saveSettingsMutation.isPending ? "Saving..." : "Save Preferences"}
-                    </Button>
+                  <Switch checked={emailOrderUpdates} onCheckedChange={setEmailOrderUpdates} data-testid="switch-order-updates" />
+                </div>
+                <div className="flex items-center justify-between gap-2 py-3 border-b">
+                  <div className="space-y-0.5">
+                    <Label className="text-xs font-medium">Delivery Alerts</Label>
+                    <p className="text-xs text-muted-foreground">Get notified when shipments are delivered or have issues.</p>
                   </div>
-                )}
-              </CardContent>
-            </Card>
+                  <Switch checked={emailDeliveryAlerts} onCheckedChange={setEmailDeliveryAlerts} data-testid="switch-delivery-alerts" />
+                </div>
+                <div className="flex items-center justify-between gap-2 py-3 border-b">
+                  <div className="space-y-0.5">
+                    <Label className="text-xs font-medium">COD Reminders</Label>
+                    <p className="text-xs text-muted-foreground">Weekly reminders about pending COD reconciliation.</p>
+                  </div>
+                  <Switch checked={emailCodReminders} onCheckedChange={setEmailCodReminders} data-testid="switch-cod-reminders" />
+                </div>
+                <div className="flex items-center justify-between gap-2 py-3 border-b">
+                  <div className="space-y-0.5">
+                    <Label className="text-xs font-medium">WhatsApp Order Notifications</Label>
+                    <p className="text-xs text-muted-foreground">Automatically send WhatsApp messages to customers when order status changes.</p>
+                  </div>
+                  <Switch
+                    checked={waEnabledData?.enabled ?? true}
+                    onCheckedChange={(checked) => waEnabledMutation.mutate(checked)}
+                    disabled={waEnabledMutation.isPending}
+                    data-testid="switch-wa-notifications"
+                  />
+                </div>
+                <div className="pt-3">
+                  <Button size="sm" onClick={handleSaveNotifications} disabled={saveSettingsMutation.isPending} data-testid="button-save-notifications">
+                    <Save className="w-3.5 h-3.5 mr-1.5" />
+                    {saveSettingsMutation.isPending ? "Saving..." : "Save Preferences"}
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -354,7 +309,7 @@ export default function Settings() {
 
         {activeTab === "team" && <Team />}
         {activeTab === "accounting" && (
-          <div className="space-y-8">
+          <div className="space-y-6">
             <AccountingSettings />
             <OpeningBalancesPage />
           </div>
