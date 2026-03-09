@@ -34,21 +34,24 @@ export async function sendOrderStatusWhatsApp(
 ): Promise<void> {
   if (!(WA_NOTIFY_STATUSES as readonly string[]).includes(params.toStatus))
     return;
+  
+  console.log(
+        `${LOG_PREFIX} Skipping order ${params} — merchant not Lala Import`,
+      );
 
-  const LALA_IMPORT_MERCHANT_ID = "2e83e397-6bc6-4ca8-a2f4-1b591cac4250";
-  if (params.merchantId !== LALA_IMPORT_MERCHANT_ID) {
-    console.log(
-      `${LOG_PREFIX} Skipping order ${params.orderNumber} — merchant not Lala Import`,
-    );
-    return;
-  }
+  // if (params.merchantId !== process.env.LALA_IMPORT) {
+  //   console.log(
+  //     `${LOG_PREFIX} Skipping order ${params} — merchant not Lala Import`,
+  //   );
+  //   return;
+  // }
 
-  if (!IS_PRODUCTION) {
-    console.log(
-      `${LOG_PREFIX} [DEV] Skipping send for order ${params.orderNumber} (${params.toStatus}) — not in production`,
-    );
-    return;
-  }
+  // if (!IS_PRODUCTION) {
+  //   console.log(
+  //     `${LOG_PREFIX} [DEV] Skipping send for order ${params.orderNumber} (${params.toStatus}) — not in production`,
+  //   );
+  //   return;
+  // }
   
   try {
     const merchant = await storage.getMerchant(params.merchantId);
