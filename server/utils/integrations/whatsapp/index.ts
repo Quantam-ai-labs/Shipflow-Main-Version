@@ -28,7 +28,6 @@ export type { SendResult, OrderNotificationParams } from "./types";
 
 const LOG_PREFIX = "[WhatsApp]";
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
-const LALA_IMPORT_MERCHANT_ID = process.env.LALA_IMPORT;
 
 export async function sendOrderStatusWhatsApp(
   params: OrderNotificationParams,
@@ -36,21 +35,12 @@ export async function sendOrderStatusWhatsApp(
   if (!(WA_NOTIFY_STATUSES as readonly string[]).includes(params.toStatus))
     return;
 
-  if (params.merchantId !== LALA_IMPORT_MERCHANT_ID) {
+  if (!IS_PRODUCTION) {
     console.log(
-      `${LOG_PREFIX} Skipping order ${params} — merchant not Lala Import`,
+      `${LOG_PREFIX} [DEV] Skipping send for order ${params.orderNumber} (${params.toStatus}) — not in production`,
     );
     return;
-  } else {
-    alert("Lala Import Merchant ID Matched" + params)
   }
-
-  // if (!IS_PRODUCTION) {
-  //   console.log(
-  //     `${LOG_PREFIX} [DEV] Skipping send for order ${params.orderNumber} (${params.toStatus}) — not in production`,
-  //   );
-  //   return;
-  // }
 
   try {
     const merchant = await storage.getMerchant(params.merchantId);
