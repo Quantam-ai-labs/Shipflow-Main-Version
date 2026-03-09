@@ -44,6 +44,8 @@ export const merchants = pgTable("merchants", {
   waWabaId: varchar("wa_waba_id", { length: 255 }),
   waVerifyToken: varchar("wa_verify_token", { length: 255 }),
   waNotificationsEnabled: boolean("wa_notifications_enabled").notNull().default(true),
+  supportChatPin: varchar("support_chat_pin", { length: 6 }),
+  supportChatPinHash: varchar("support_chat_pin_hash", { length: 128 }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

@@ -6949,13 +6949,58 @@ export async function registerRoutes(
   // SUPPORT SECTION ROUTES
   // ─────────────────────────────────────────────────────────────────────────
 
-  app.get("/api/support/chat-access", async (req: any, res) => {
-    const pin = req.query.pin as string;
-    const expectedPin = process.env.SUPPORT_CHAT_PIN || "1234";
-    if (!pin || pin !== expectedPin) {
-      return res.status(401).json({ valid: false, error: "Invalid PIN" });
+  app.get("/api/support/chat-access", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const pin = req.query.pin as string;
+      if (!pin) return res.status(401).json({ valid: false, error: "Invalid PIN" });
+
+      const [merchantRow] = await db.select({ supportChatPinHash: merchants.supportChatPinHash })
+        .from(merchants).where(eq(merchants.id, merchantId)).limit(1);
+
+      if (merchantRow?.supportChatPinHash) {
+        const valid = await bcrypt.compare(String(pin), merchantRow.supportChatPinHash);
+        if (!valid) return res.status(401).json({ valid: false, error: "Invalid PIN" });
+      } else {
+        const fallback = process.env.SUPPORT_CHAT_PIN || "1234";
+        if (pin !== fallback) return res.status(401).json({ valid: false, error: "Invalid PIN" });
+      }
+
+      res.json({ valid: true });
+    } catch (err: any) {
+      res.status(500).json({ valid: false, error: err.message });
     }
-    res.json({ valid: true });
+  });
+
+  app.get("/api/support/chat-pin", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const [merchantRow] = await db.select({ supportChatPinHash: merchants.supportChatPinHash })
+        .from(merchants).where(eq(merchants.id, merchantId)).limit(1);
+      res.json({ isSet: !!merchantRow?.supportChatPinHash });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/support/chat-pin", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { pin } = req.body;
+      if (!pin || String(pin).length < 4 || String(pin).length > 6) {
+        return res.status(400).json({ error: "PIN must be 4–6 digits" });
+      }
+      const pinStr = String(pin).replace(/\D/g, "");
+      if (pinStr.length < 4) return res.status(400).json({ error: "PIN must be numeric" });
+      const hash = await bcrypt.hash(pinStr, 10);
+      await db.update(merchants).set({ supportChatPin: pinStr, supportChatPinHash: hash } as any).where(eq(merchants.id, merchantId));
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   app.get("/api/support/dashboard-stats", isAuthenticated, async (req: any, res) => {

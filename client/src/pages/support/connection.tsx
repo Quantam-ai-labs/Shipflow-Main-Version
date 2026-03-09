@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Wifi, WifiOff, Eye, EyeOff, FlaskConical, Save, Copy, Check } from "lucide-react";
+import { Wifi, WifiOff, Eye, EyeOff, FlaskConical, Save, Copy, Check, Lock } from "lucide-react";
 
 interface ConnectionData {
   waPhoneNumberId: string;
@@ -46,6 +46,7 @@ export default function SupportConnectionPage() {
   const [form, setForm] = useState({ waPhoneNumberId: "", waAccessToken: "", waWabaId: "" });
   const [loaded, setLoaded] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [chatPin, setChatPin] = useState("");
 
   const { data, isLoading } = useQuery<ConnectionData>({
     queryKey: ["/api/support/connection"],
@@ -60,6 +61,23 @@ export default function SupportConnectionPage() {
     });
     setLoaded(true);
   }
+
+  const { data: chatPinStatus } = useQuery<{ isSet: boolean }>({
+    queryKey: ["/api/support/chat-pin"],
+    refetchOnWindowFocus: false,
+  });
+
+  const saveChatPinMutation = useMutation({
+    mutationFn: async (pin: string) => apiRequest("POST", "/api/support/chat-pin", { pin }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/support/chat-pin"] });
+      setChatPin("");
+      toast({ title: "PIN saved", description: "Support Chat PIN updated successfully." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
 
   const saveMutation = useMutation({
     mutationFn: async (values: typeof form) =>
@@ -254,6 +272,55 @@ export default function SupportConnectionPage() {
               </div>
             </>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Lock className="w-4 h-4" />
+            Chat PIN
+          </CardTitle>
+          <CardDescription>
+            Required to open the Support Chat inbox. Set a 4–6 digit PIN.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Badge variant={chatPinStatus?.isSet ? "default" : "secondary"} className={chatPinStatus?.isSet ? "bg-green-500 hover:bg-green-600 text-white" : ""} data-testid="status-chat-pin">
+              {chatPinStatus?.isSet ? "PIN set" : "Not set — using default (1234)"}
+            </Badge>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="chatPin">{chatPinStatus?.isSet ? "Reset PIN" : "Set PIN"}</Label>
+            <div className="flex gap-2">
+              <Input
+                id="chatPin"
+                type="password"
+                inputMode="numeric"
+                maxLength={6}
+                placeholder="4–6 digit PIN"
+                value={chatPin}
+                onChange={(e) => setChatPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                className="max-w-[160px]"
+                data-testid="input-chat-pin"
+              />
+              <Button
+                onClick={() => {
+                  if (chatPin.length < 4) {
+                    toast({ title: "Too short", description: "PIN must be at least 4 digits.", variant: "destructive" });
+                    return;
+                  }
+                  saveChatPinMutation.mutate(chatPin);
+                }}
+                disabled={saveChatPinMutation.isPending || chatPin.length < 4}
+                data-testid="button-save-chat-pin"
+              >
+                <Save className="w-4 h-4 mr-2" />
+                {saveChatPinMutation.isPending ? "Saving..." : chatPinStatus?.isSet ? "Reset PIN" : "Set PIN"}
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>
