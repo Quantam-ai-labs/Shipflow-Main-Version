@@ -79,15 +79,15 @@ interface MerchantSettings {
 
 
 const SETTINGS_TABS = [
-  { id: "profile",       label: "Profile",        icon: Building2 },
-  { id: "shopify",       label: "Shopify",        icon: Store },
-  { id: "couriers",      label: "Couriers",       icon: Truck },
-  { id: "whatsapp",      label: "WhatsApp",       icon: MessageCircle },
-  { id: "notifications", label: "Notifications",  icon: Bell },
-  { id: "mapping",       label: "Status Mapping", icon: ArrowLeftRight },
-  { id: "marketing",     label: "Marketing",      icon: BarChart2 },
-  { id: "team",          label: "Team",           icon: Users },
-  { id: "accounting",    label: "Accounting",     icon: Cog },
+  { id: "profile",       label: "Profile",        icon: Building2,       active: "from-blue-500 to-blue-600",       inactive: "from-blue-500/10 to-blue-500/5 border-blue-500/20 text-blue-400 hover:from-blue-500/20" },
+  { id: "shopify",       label: "Shopify",        icon: Store,           active: "from-green-500 to-green-600",     inactive: "from-green-500/10 to-green-500/5 border-green-500/20 text-green-400 hover:from-green-500/20" },
+  { id: "couriers",      label: "Couriers",       icon: Truck,           active: "from-orange-500 to-orange-600",   inactive: "from-orange-500/10 to-orange-500/5 border-orange-500/20 text-orange-400 hover:from-orange-500/20" },
+  { id: "whatsapp",      label: "WhatsApp",       icon: MessageCircle,   active: "from-emerald-500 to-emerald-600", inactive: "from-emerald-500/10 to-emerald-500/5 border-emerald-500/20 text-emerald-400 hover:from-emerald-500/20" },
+  { id: "notifications", label: "Notifications",  icon: Bell,            active: "from-purple-500 to-purple-600",   inactive: "from-purple-500/10 to-purple-500/5 border-purple-500/20 text-purple-400 hover:from-purple-500/20" },
+  { id: "mapping",       label: "Status Mapping", icon: ArrowLeftRight,  active: "from-cyan-500 to-cyan-600",       inactive: "from-cyan-500/10 to-cyan-500/5 border-cyan-500/20 text-cyan-400 hover:from-cyan-500/20" },
+  { id: "marketing",     label: "Marketing",      icon: BarChart2,       active: "from-pink-500 to-pink-600",       inactive: "from-pink-500/10 to-pink-500/5 border-pink-500/20 text-pink-400 hover:from-pink-500/20" },
+  { id: "team",          label: "Team",           icon: Users,           active: "from-indigo-500 to-indigo-600",   inactive: "from-indigo-500/10 to-indigo-500/5 border-indigo-500/20 text-indigo-400 hover:from-indigo-500/20" },
+  { id: "accounting",    label: "Accounting",     icon: Cog,             active: "from-amber-500 to-amber-600",     inactive: "from-amber-500/10 to-amber-500/5 border-amber-500/20 text-amber-400 hover:from-amber-500/20" },
 ];
 
 export default function Settings() {
@@ -167,7 +167,7 @@ export default function Settings() {
   return (
     <div className="min-h-full">
       <div className="px-6 pt-4 pb-2">
-        <div className="flex gap-2 overflow-x-auto scrollbar-none pb-1" data-testid="settings-tab-nav">
+        <div className="flex gap-2.5 overflow-x-auto scrollbar-none pb-1" data-testid="settings-tab-nav">
           {SETTINGS_TABS.map(tab => {
             const Icon = tab.icon;
             const isActive = tab.id === activeTab;
@@ -179,13 +179,14 @@ export default function Settings() {
                 data-testid={`settings-tab-${tab.id}`}
                 className={[
                   "flex-shrink-0 flex flex-col items-center justify-center gap-1.5",
-                  "px-5 py-3 rounded-lg border text-xs font-medium transition-all whitespace-nowrap min-w-[90px]",
+                  "px-5 py-3 rounded-xl border text-xs font-semibold transition-all whitespace-nowrap min-w-[90px]",
+                  "bg-gradient-to-br",
                   isActive
-                    ? "border-primary bg-primary/10 text-primary shadow-sm"
-                    : "border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40 hover:bg-accent/50",
+                    ? `${tab.active} text-white shadow-lg shadow-black/20 border-transparent`
+                    : `${tab.inactive}`,
                 ].join(" ")}
               >
-                <Icon className="w-[18px] h-[18px]" />
+                <Icon className="w-5 h-5" />
                 {tab.label}
               </button>
             );
