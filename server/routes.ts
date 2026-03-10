@@ -5606,8 +5606,9 @@ export async function registerRoutes(
               msgType = "document";
             } else if (rawType === "audio" || rawType === "voice") {
               messageBody = "🎵 Audio";
-              mediaUrl = message.audio?.id ? `wa-media:${message.audio.id}` : null;
-              mimeType = message.audio?.mime_type ?? null;
+              const audioId = message.audio?.id || message.voice?.id;
+              mediaUrl = audioId ? `wa-media:${audioId}` : null;
+              mimeType = message.audio?.mime_type ?? message.voice?.mime_type ?? null;
               msgType = "audio";
             } else if (rawType === "video") {
               messageBody = message.video?.caption ?? "🎬 Video";
