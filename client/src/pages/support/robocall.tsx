@@ -41,12 +41,12 @@ interface CallRecord {
 
 const CALL_STATUS_MAP: Record<number, { label: string; color: string }> = {
   1: { label: "Initiated", color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300" },
-  2: { label: "Answered", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300" },
-  3: { label: "Congestion", color: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300" },
-  4: { label: "Busy", color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300" },
-  5: { label: "No Answer", color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300" },
-  6: { label: "Hangup", color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300" },
-  8: { label: "Pushed to SIP", color: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300" },
+  2: { label: "Ringing", color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300" },
+  3: { label: "No Answer", color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300" },
+  4: { label: "Answered", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300" },
+  5: { label: "Failed", color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300" },
+  6: { label: "Cancelled", color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300" },
+  8: { label: "Queued", color: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300" },
 };
 
 const DTMF_MAP: Record<number, { label: string; color: string }> = {
@@ -205,9 +205,8 @@ export default function RoboCallPage() {
         const smsData = data.sms;
         if (smsData && smsData.voice_status !== undefined) {
           const callStatus = smsData.voice_status;
-          const dtmf = smsData.voice_dtmf;
-          const retry = smsData.voice_retry ?? 0;
-          const isFinal = callStatus === 2 || callStatus >= 3;
+          const dtmf = smsData.voice_dtmf && smsData.voice_dtmf > 0 ? smsData.voice_dtmf : null;
+          const isFinal = callStatus >= 3;
 
           setCallHistory((prev) =>
             prev.map((c) =>
@@ -339,7 +338,7 @@ export default function RoboCallPage() {
               ? {
                   ...c,
                   status: CALL_STATUS_MAP[smsData.voice_status]?.label || `Status ${smsData.voice_status}`,
-                  dtmf: smsData.voice_dtmf,
+                  dtmf: smsData.voice_dtmf && smsData.voice_dtmf > 0 ? smsData.voice_dtmf : null,
                 }
               : c
           )
@@ -731,7 +730,7 @@ export default function RoboCallPage() {
                         </div>
                       </td>
                       <td className="py-2 pr-4">
-                        {call.dtmf != null ? (
+                        {call.dtmf != null && call.dtmf > 0 ? (
                           <Badge className={DTMF_MAP[call.dtmf]?.color || ""} data-testid={`badge-call-dtmf-${i}`}>
                             {call.dtmf === 1 && <CheckCircle2 className="w-3 h-3 mr-1" />}
                             {call.dtmf === 2 && <XCircle className="w-3 h-3 mr-1" />}

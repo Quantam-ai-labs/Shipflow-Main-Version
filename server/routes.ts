@@ -15208,13 +15208,14 @@ export async function registerRoutes(
       if (data.raw) return res.status(400).json({ error: data.error });
       const smsData = data.sms;
       if (smsData && smsData.voice_status !== undefined) {
-        const CALL_STATUS_LABELS: Record<number, string> = { 1: "Initiated", 2: "Answered", 3: "Congestion", 4: "Busy", 5: "No Answer", 6: "Hangup", 8: "Pushed to SIP" };
+        const CALL_STATUS_LABELS: Record<number, string> = { 1: "Initiated", 2: "Ringing", 3: "No Answer", 4: "Answered", 5: "Failed", 6: "Cancelled", 8: "Queued" };
         const statusLabel = CALL_STATUS_LABELS[smsData.voice_status] || `Status ${smsData.voice_status}`;
+        const dtmfValue = smsData.voice_dtmf && smsData.voice_dtmf > 0 ? smsData.voice_dtmf : null;
         const log = await storage.getRobocallLogByCallId(merchantId, callId);
         if (log) {
           await storage.updateRobocallLog(log.id, {
             status: statusLabel,
-            dtmf: smsData.voice_dtmf ?? null,
+            dtmf: dtmfValue,
           });
         }
       }
@@ -15243,19 +15244,21 @@ export async function registerRoutes(
       if (!merchantId) return;
       const creds = await storage.getRobocallCredentials(merchantId);
       if (!creds) return res.status(400).json({ error: "No RoboCall credentials saved" });
-      const nonFinalLogs = await storage.getRobocallLogsByStatus(merchantId, ["Initiated", "Queued", "Ringing"]);
-      const CALL_STATUS_LABELS: Record<number, string> = { 1: "Initiated", 2: "Answered", 3: "Congestion", 4: "Busy", 5: "No Answer", 6: "Hangup", 8: "Pushed to SIP" };
+      const FINAL_STATUSES = ["Answered", "Error", "Failed", "Cancelled", "Hangup"];
+      const allLogs = await storage.getRobocallLogs(merchantId, 200);
+      const nonFinalLogs = allLogs.filter(l => l.callId && !FINAL_STATUSES.includes(l.status));
+      const CALL_STATUS_LABELS: Record<number, string> = { 1: "Initiated", 2: "Ringing", 3: "No Answer", 4: "Answered", 5: "Failed", 6: "Cancelled", 8: "Queued" };
       let updated = 0;
       for (const log of nonFinalLogs) {
-        if (!log.callId) continue;
         try {
-          const data = await safeFetchJson(`${ROBOCALL_API_BASE}/get-call?email=${encodeURIComponent(creds.email)}&key=${encodeURIComponent(creds.apiKey)}&id=${encodeURIComponent(log.callId)}`);
+          const data = await safeFetchJson(`${ROBOCALL_API_BASE}/get-call?email=${encodeURIComponent(creds.email)}&key=${encodeURIComponent(creds.apiKey)}&id=${encodeURIComponent(log.callId!)}`);
           const smsData = data.sms;
           if (smsData && smsData.voice_status !== undefined) {
             const statusLabel = CALL_STATUS_LABELS[smsData.voice_status] || `Status ${smsData.voice_status}`;
+            const dtmfValue = smsData.voice_dtmf && smsData.voice_dtmf > 0 ? smsData.voice_dtmf : null;
             await storage.updateRobocallLog(log.id, {
               status: statusLabel,
-              dtmf: smsData.voice_dtmf ?? null,
+              dtmf: dtmfValue,
             });
             updated++;
           }
