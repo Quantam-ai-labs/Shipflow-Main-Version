@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { db } from "../../db";
 import { users, merchants, teamMembers } from "@shared/schema";
-import { eq, ilike } from "drizzle-orm";
+import { eq, and, ilike } from "drizzle-orm";
 import { isAuthenticated } from "./replitAuth";
 import { z } from "zod";
 import { sendOtpEmail } from "../../services/email";
@@ -516,6 +516,39 @@ export function registerAuthRoutes(app: Express): void {
     });
   });
 
+  app.get("/api/auth/memberships", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const memberships = await storage.getUserMerchantMemberships(userId);
+      res.json(memberships);
+    } catch (error) {
+      console.error("Error fetching memberships:", error);
+      res.status(500).json({ message: "Failed to fetch memberships" });
+    }
+  });
+
+  app.post("/api/auth/switch-merchant", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { merchantId } = req.body;
+      if (!merchantId) {
+        return res.status(400).json({ message: "merchantId is required" });
+      }
+
+      const memberships = await storage.getUserMerchantMemberships(userId);
+      const target = memberships.find(m => m.merchantId === merchantId);
+      if (!target) {
+        return res.status(403).json({ message: "You don't have access to that store" });
+      }
+
+      await db.update(users).set({ merchantId }).where(eq(users.id, userId));
+      res.json({ success: true, merchantId, merchantName: target.merchantName });
+    } catch (error) {
+      console.error("Error switching merchant:", error);
+      res.status(500).json({ message: "Failed to switch store" });
+    }
+  });
+
   app.get("/api/auth/me", isAuthenticated, async (req, res) => {
     try {
       const userId = (req.session as any).userId;
@@ -552,7 +585,7 @@ export function registerAuthRoutes(app: Express): void {
         }
 
         const [teamMember] = await db.select().from(teamMembers)
-          .where(eq(teamMembers.userId, user.id));
+          .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.merchantId, user.merchantId!), eq(teamMembers.isActive, true)));
         if (teamMember) {
           allowedPages = isMerchantOwner ? null : (teamMember.allowedPages || null);
           teamRole = teamMember.role;
