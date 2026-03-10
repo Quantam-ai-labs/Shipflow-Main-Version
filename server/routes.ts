@@ -1,6 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import express from "express";
 import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
@@ -10321,13 +10322,11 @@ export async function registerRoutes(
   const AGENT_CHAT_JWT_SECRET = process.env.SESSION_SECRET || "agent-chat-secret-1sol";
 
   function signAgentChatToken(merchantId: string): string {
-    const jwt = require("jsonwebtoken");
     return jwt.sign({ merchantId, isAgentChat: true }, AGENT_CHAT_JWT_SECRET, { expiresIn: "12h" });
   }
 
   function verifyAgentChatToken(token: string): { merchantId: string } | null {
     try {
-      const jwt = require("jsonwebtoken");
       const payload = jwt.verify(token, AGENT_CHAT_JWT_SECRET) as any;
       if (!payload.isAgentChat) return null;
       return { merchantId: payload.merchantId };
@@ -10388,6 +10387,7 @@ export async function registerRoutes(
       const token = signAgentChatToken(merchant.id);
       res.json({ success: true, token, merchantName: merchant.name });
     } catch (error: any) {
+      console.error("[AgentChat] Login error:", error.message, error.stack);
       res.status(500).json({ message: "Login failed" });
     }
   });
@@ -10620,13 +10620,11 @@ export async function registerRoutes(
   const WAREHOUSE_JWT_SECRET = process.env.SESSION_SECRET || "warehouse-secret-1sol";
 
   function signWarehouseToken(merchantId: string): string {
-    const jwt = require("jsonwebtoken");
     return jwt.sign({ merchantId, isWarehouse: true }, WAREHOUSE_JWT_SECRET, { expiresIn: "12h" });
   }
 
   function verifyWarehouseToken(token: string): { merchantId: string } | null {
     try {
-      const jwt = require("jsonwebtoken");
       const payload = jwt.verify(token, WAREHOUSE_JWT_SECRET) as any;
       if (!payload.isWarehouse) return null;
       return { merchantId: payload.merchantId };

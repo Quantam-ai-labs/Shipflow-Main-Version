@@ -311,6 +311,21 @@ export default function SupportChatPage() {
     },
   });
 
+  const messagesByDate = useMemo(() => {
+    const groups: { date: string; messages: Message[] }[] = [];
+    let currentDate = "";
+    for (const msg of messages.filter(m => m.messageType !== "reaction")) {
+      const d = format(new Date(msg.createdAt), "yyyy-MM-dd");
+      if (d !== currentDate) {
+        currentDate = d;
+        groups.push({ date: d, messages: [msg] });
+      } else {
+        groups[groups.length - 1].messages.push(msg);
+      }
+    }
+    return groups;
+  }, [messages]);
+
   if (!hasAccess) {
     return <PinScreen onSuccess={() => setHasAccess(true)} />;
   }
@@ -366,21 +381,6 @@ export default function SupportChatPage() {
   };
 
   const totalUnread = conversations.reduce((sum, c) => sum + c.unreadCount, 0);
-
-  const messagesByDate = useMemo(() => {
-    const groups: { date: string; messages: Message[] }[] = [];
-    let currentDate = "";
-    for (const msg of messages.filter(m => m.messageType !== "reaction")) {
-      const d = format(new Date(msg.createdAt), "yyyy-MM-dd");
-      if (d !== currentDate) {
-        currentDate = d;
-        groups.push({ date: d, messages: [msg] });
-      } else {
-        groups[groups.length - 1].messages.push(msg);
-      }
-    }
-    return groups;
-  }, [messages]);
 
   function formatDateHeader(dateStr: string) {
     const d = new Date(dateStr);
