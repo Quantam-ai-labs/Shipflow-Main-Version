@@ -48,6 +48,7 @@ import {
   BarChart2,
   Cog,
   MessageCircle,
+  Phone,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -62,6 +63,7 @@ import Team from "./team";
 import AccountingSettings from "./accounting/settings";
 import OpeningBalancesPage from "./accounting/opening-balances";
 import SettingsWhatsApp from "./settings/whatsapp";
+import SettingsRobocall from "./settings/robocall";
 
 interface MerchantSettings {
   id: string;
@@ -87,6 +89,7 @@ const SETTINGS_TABS = [
   { id: "mapping",       label: "Status Mapping", icon: ArrowLeftRight,  active: "from-cyan-500 to-cyan-600",       inactive: "from-cyan-500/10 to-cyan-500/5 border-cyan-500/20 text-cyan-400 hover:from-cyan-500/20" },
   { id: "marketing",     label: "Marketing",      icon: BarChart2,       active: "from-pink-500 to-pink-600",       inactive: "from-pink-500/10 to-pink-500/5 border-pink-500/20 text-pink-400 hover:from-pink-500/20" },
   { id: "team",          label: "Team",           icon: Users,           active: "from-indigo-500 to-indigo-600",   inactive: "from-indigo-500/10 to-indigo-500/5 border-indigo-500/20 text-indigo-400 hover:from-indigo-500/20" },
+  { id: "robocall",      label: "RoboCall",       icon: Phone,           active: "from-rose-500 to-rose-600",       inactive: "from-rose-500/10 to-rose-500/5 border-rose-500/20 text-rose-400 hover:from-rose-500/20" },
   { id: "accounting",    label: "Accounting",     icon: Cog,             active: "from-amber-500 to-amber-600",     inactive: "from-amber-500/10 to-amber-500/5 border-amber-500/20 text-amber-400 hover:from-amber-500/20" },
 ];
 
@@ -348,6 +351,8 @@ export default function Settings() {
         )}
 
         {activeTab === "whatsapp" && <SettingsWhatsApp />}
+
+        {activeTab === "robocall" && <SettingsRobocall />}
 
         {activeTab === "mapping" && <SettingsStatusMapping />}
 

@@ -46,6 +46,8 @@ export const merchants = pgTable("merchants", {
   waNotificationsEnabled: boolean("wa_notifications_enabled").notNull().default(true),
   supportChatPin: varchar("support_chat_pin", { length: 6 }),
   supportChatPinHash: varchar("support_chat_pin_hash", { length: 128 }),
+  robocallEmail: varchar("robocall_email", { length: 255 }),
+  robocallApiKey: text("robocall_api_key"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -2065,3 +2067,27 @@ export const aiInsightCache = pgTable("ai_insight_cache", {
 export const insertAiInsightCacheSchema = createInsertSchema(aiInsightCache).omit({ id: true, generatedAt: true });
 export type InsertAiInsightCache = z.infer<typeof insertAiInsightCacheSchema>;
 export type AiInsightCache = typeof aiInsightCache.$inferSelect;
+
+export const robocallLogs = pgTable("robocall_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  orderId: varchar("order_id").references(() => orders.id, { onDelete: "set null" }),
+  callId: varchar("call_id", { length: 100 }),
+  phone: varchar("phone", { length: 50 }).notNull(),
+  amount: varchar("amount", { length: 50 }),
+  orderNumber: varchar("order_number", { length: 100 }),
+  voiceId: varchar("voice_id", { length: 20 }),
+  status: varchar("status", { length: 50 }).notNull().default("initiated"),
+  dtmf: varchar("dtmf", { length: 10 }),
+  error: text("error"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_robocall_logs_merchant").on(table.merchantId),
+  index("idx_robocall_logs_order").on(table.orderId),
+  index("idx_robocall_logs_call_id").on(table.callId),
+]);
+
+export const insertRobocallLogSchema = createInsertSchema(robocallLogs).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertRobocallLog = z.infer<typeof insertRobocallLogSchema>;
+export type RobocallLog = typeof robocallLogs.$inferSelect;
