@@ -370,18 +370,20 @@ async function syncMerchantCourierStatuses(merchantId: string, options?: { force
           continue;
         }
 
-        const weightUpdate: Record<string, any> = {
-          shipmentStatus: normalizedStatus,
-          courierRawStatus: rawCourierStatus,
-          lastTrackingUpdate: new Date(),
-        };
-        if (trackResult.courierWeight) {
-          weightUpdate.courierWeight = trackResult.courierWeight;
-        }
-        await storage.updateOrder(merchantId, order.id, weightUpdate);
-
         const newWorkflow = await autoTransitionOrder(merchantId, order, normalizedStatus, rawCourierStatus);
         if (newWorkflow) lTransitioned++;
+
+        if (newWorkflow !== 'READY_TO_SHIP') {
+          const weightUpdate: Record<string, any> = {
+            shipmentStatus: normalizedStatus,
+            courierRawStatus: rawCourierStatus,
+            lastTrackingUpdate: new Date(),
+          };
+          if (trackResult.courierWeight) {
+            weightUpdate.courierWeight = trackResult.courierWeight;
+          }
+          await storage.updateOrder(merchantId, order.id, weightUpdate);
+        }
 
         lUpdated++;
       } catch {
@@ -419,14 +421,16 @@ async function syncMerchantCourierStatuses(merchantId: string, options?: { force
                 return 'skipped';
               }
 
-              await storage.updateOrder(merchantId, order.id, {
-                shipmentStatus: result.normalizedStatus,
-                courierRawStatus: result.rawCourierStatus,
-                lastTrackingUpdate: new Date(),
-              });
-
               const newWorkflow = await autoTransitionOrder(merchantId, order, result.normalizedStatus, result.rawCourierStatus);
               if (newWorkflow) pTransitioned++;
+
+              if (newWorkflow !== 'READY_TO_SHIP') {
+                await storage.updateOrder(merchantId, order.id, {
+                  shipmentStatus: result.normalizedStatus,
+                  courierRawStatus: result.rawCourierStatus,
+                  lastTrackingUpdate: new Date(),
+                });
+              }
 
               return 'updated';
             }
@@ -749,17 +753,20 @@ async function sweepTerminalOrders(merchantId: string): Promise<{ rechecked: num
           }
 
           if (normalizedStatus !== order.shipmentStatus) {
-            const recheckUpdate: Record<string, any> = {
-              shipmentStatus: normalizedStatus,
-              courierRawStatus: rawCourierStatus,
-              lastTrackingUpdate: new Date(),
-            };
-            if (trackResult.courierWeight) {
-              recheckUpdate.courierWeight = trackResult.courierWeight;
-            }
-            await storage.updateOrder(merchantId, order.id, recheckUpdate);
             const newWorkflow = await autoTransitionOrder(merchantId, order, normalizedStatus, rawCourierStatus);
             if (newWorkflow) reverted++;
+
+            if (newWorkflow !== 'READY_TO_SHIP') {
+              const recheckUpdate: Record<string, any> = {
+                shipmentStatus: normalizedStatus,
+                courierRawStatus: rawCourierStatus,
+                lastTrackingUpdate: new Date(),
+              };
+              if (trackResult.courierWeight) {
+                recheckUpdate.courierWeight = trackResult.courierWeight;
+              }
+              await storage.updateOrder(merchantId, order.id, recheckUpdate);
+            }
             updated++;
           } else {
             const recheckWeightOnly: Record<string, any> = { lastTrackingUpdate: new Date() };
@@ -790,13 +797,16 @@ async function sweepTerminalOrders(merchantId: string): Promise<{ rechecked: num
 
       if (result && result.success && isValidUniversalStatus(result.normalizedStatus)) {
         if (result.normalizedStatus !== order.shipmentStatus) {
-          await storage.updateOrder(merchantId, order.id, {
-            shipmentStatus: result.normalizedStatus,
-            courierRawStatus: result.rawCourierStatus,
-            lastTrackingUpdate: new Date(),
-          });
           const newWorkflow = await autoTransitionOrder(merchantId, order, result.normalizedStatus, result.rawCourierStatus);
           if (newWorkflow) reverted++;
+
+          if (newWorkflow !== 'READY_TO_SHIP') {
+            await storage.updateOrder(merchantId, order.id, {
+              shipmentStatus: result.normalizedStatus,
+              courierRawStatus: result.rawCourierStatus,
+              lastTrackingUpdate: new Date(),
+            });
+          }
           updated++;
         } else {
           await storage.updateOrder(merchantId, order.id, { lastTrackingUpdate: new Date() });

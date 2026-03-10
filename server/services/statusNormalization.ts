@@ -209,10 +209,6 @@ export function normalizeStatus(
   customMappings?: Record<string, string>,
   keywordMappings?: KeywordMappingRule[],
 ): { normalizedStatus: UniversalStatus; mapped: boolean } {
-  if (currentStatus && FINAL_STATUSES.includes(currentStatus as UniversalStatus)) {
-    return { normalizedStatus: currentStatus as UniversalStatus, mapped: true };
-  }
-
   const key = rawStatus.toLowerCase().trim();
 
   if (customMappings && customMappings[key]) {
@@ -237,10 +233,41 @@ export function normalizeStatus(
 
   const map = getCourierMap(courier);
 
+  const STATUS_RANK: Record<string, number> = {
+    'BOOKED': 0, 'PICKED_UP': 1, 'ARRIVED_AT_ORIGIN': 2, 'IN_TRANSIT': 3,
+    'ARRIVED_AT_DESTINATION': 4, 'OUT_FOR_DELIVERY': 5, 'DELIVERY_ATTEMPTED': 6,
+    'DELIVERED': 7, 'DELIVERY_FAILED': 6,
+    'READY_FOR_RETURN': 8, 'RETURN_IN_TRANSIT': 9, 'RETURNED_TO_ORIGIN': 10, 'RETURNED_TO_SHIPPER': 11,
+    'CANCELLED': 12,
+  };
+
   const applyRegressionGuard = (newStatus: UniversalStatus): UniversalStatus => {
-    if (newStatus === 'BOOKED' && currentStatus && currentStatus !== 'BOOKED' && POST_ORIGIN_STATUSES.includes(currentStatus as UniversalStatus)) {
+    if (!currentStatus || currentStatus === newStatus) return newStatus;
+    const currentRank = STATUS_RANK[currentStatus] ?? -1;
+    const newRank = STATUS_RANK[newStatus] ?? -1;
+
+    if (newRank < currentRank && currentRank >= 7) {
+      const workflowRankMap: Record<string, number> = {
+        'BOOKED': 0, 'FULFILLED': 5, 'DELIVERED': 7, 'RETURN': 9, 'CANCELLED': 12,
+      };
+      const wfRank = workflowStatus ? (workflowRankMap[workflowStatus] ?? -1) : -1;
+      if (wfRank >= 0 && wfRank < currentRank) {
+        console.log(`[StatusNorm] Regression allowed: workflowStatus=${workflowStatus} (rank ${wfRank}) is behind shipmentStatus=${currentStatus} (rank ${currentRank}) — data mismatch, trusting courier: ${newStatus} (raw: "${rawStatus}")`);
+        return newStatus;
+      }
+
+      if (events && events.length > 0) {
+        const latestEventStatus = events[events.length - 1]?.status?.toLowerCase().trim();
+        const latestMapped = getCourierMap(courier)[latestEventStatus || ''];
+        if (latestMapped && (STATUS_RANK[latestMapped] ?? -1) < currentRank) {
+          console.log(`[StatusNorm] Regression allowed: courier events confirm status moved back from ${currentStatus} to ${newStatus} (raw: "${rawStatus}")`);
+          return newStatus;
+        }
+      }
+      console.log(`[StatusNorm] Regression blocked: ${currentStatus} (rank ${currentRank}) → ${newStatus} (rank ${newRank}), keeping ${currentStatus}`);
       return currentStatus as UniversalStatus;
     }
+
     if (newStatus === 'BOOKED' && workflowStatus && POST_BOOKING_WORKFLOWS.includes(workflowStatus)) {
       return (currentStatus as UniversalStatus) || 'PICKED_UP';
     }

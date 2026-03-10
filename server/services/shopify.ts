@@ -777,6 +777,17 @@ export class ShopifyService {
             } else if (initialWorkflowStatus === 'BOOKED') {
               const preBookedStates = ['NEW', 'PENDING', 'HOLD', 'READY_TO_SHIP'];
               if (existingOrder && preBookedStates.includes(existingOrder.workflowStatus)) {
+                const bookedFields: Record<string, any> = {
+                  shipmentStatus: 'BOOKED',
+                  bookingStatus: 'BOOKED',
+                  bookedAt: existingOrder.bookedAt || now,
+                };
+                if (transformedOrder.courierTracking && !existingOrder.courierTracking) {
+                  bookedFields.courierTracking = transformedOrder.courierTracking;
+                  bookedFields.courierName = transformedOrder.courierName || existingOrder.courierName;
+                }
+                await storage.updateOrder(merchantId, existingOrderId, bookedFields);
+
                 await transitionOrder({
                   merchantId,
                   orderId: existingOrderId,
