@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Wifi, WifiOff, Eye, EyeOff, FlaskConical, Save, Copy, Check, Lock, Smartphone, QrCode } from "lucide-react";
+import { Wifi, WifiOff, Eye, EyeOff, FlaskConical, Save, Copy, Check, Lock, Smartphone, QrCode, Shield, XCircle } from "lucide-react";
+import { format } from "date-fns";
 import QRCode from "qrcode";
 
 interface ConnectionData {
@@ -342,14 +343,32 @@ export default function SettingsWhatsApp() {
               Agent Chat Mobile App
             </CardTitle>
             <CardDescription>
-              Share this link with your support agents to install the mobile WhatsApp chat app on their phones.
+              Share this link with your support agents. They can sign in using the merchant email OTP.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
-              <p className="text-xs text-muted-foreground font-medium">Agent Chat URL</p>
+              <p className="text-xs text-muted-foreground font-medium">Agent Chat URL (Universal)</p>
               <div className="flex items-center gap-2">
                 <code className="text-xs bg-muted px-2 py-1 rounded flex-1 truncate" data-testid="text-agent-chat-url">
+                  {`${window.location.origin}/agent-chat/`}
+                </code>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${window.location.origin}/agent-chat/`);
+                    toast({ title: "URL copied" });
+                  }}
+                  data-testid="button-copy-agent-chat-url"
+                >
+                  <Copy className="w-3 h-3" />
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground font-medium mt-2">Direct Link (Store-specific)</p>
+              <div className="flex items-center gap-2">
+                <code className="text-xs bg-muted px-2 py-1 rounded flex-1 truncate" data-testid="text-agent-chat-direct-url">
                   {agentChatUrl}
                 </code>
                 <Button
@@ -360,7 +379,7 @@ export default function SettingsWhatsApp() {
                     navigator.clipboard.writeText(agentChatUrl);
                     toast({ title: "URL copied" });
                   }}
-                  data-testid="button-copy-agent-chat-url"
+                  data-testid="button-copy-agent-chat-direct-url"
                 >
                   <Copy className="w-3 h-3" />
                 </Button>
@@ -369,13 +388,123 @@ export default function SettingsWhatsApp() {
                 <canvas ref={agentChatQrRef} className="rounded border" data-testid="qr-agent-chat" />
                 <div className="text-xs text-muted-foreground text-center space-y-0.5">
                   <p className="flex items-center justify-center gap-1"><QrCode className="w-3 h-3" /> Scan QR to open on mobile</p>
-                  <p>Or share the link + Chat PIN with your agents</p>
+                  <p>Agents sign in with merchant email OTP</p>
                 </div>
               </div>
             </div>
           </CardContent>
         </Card>
       )}
+
+      <AgentChatSessionsCard />
     </div>
+  );
+}
+
+function AgentChatSessionsCard() {
+  const { toast } = useToast();
+
+  const { data: sessions = [], isLoading } = useQuery<any[]>({
+    queryKey: ["/api/settings/agent-chat-sessions"],
+  });
+
+  const revokeMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("POST", `/api/settings/agent-chat-sessions/${id}/revoke`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/agent-chat-sessions"] });
+      toast({ title: "Session revoked" });
+    },
+  });
+
+  const revokeAllMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/settings/agent-chat-sessions/revoke-all");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/agent-chat-sessions"] });
+      toast({ title: "All sessions revoked" });
+    },
+  });
+
+  const activeSessions = sessions.filter((s: any) => !s.isRevoked);
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Shield className="w-4 h-4" />
+              Agent Chat Sessions
+            </CardTitle>
+            <CardDescription>
+              {activeSessions.length} active session{activeSessions.length !== 1 ? "s" : ""}. Revoke access for any device.
+            </CardDescription>
+          </div>
+          {activeSessions.length > 0 && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => revokeAllMutation.mutate()}
+              disabled={revokeAllMutation.isPending}
+              data-testid="button-revoke-all-sessions"
+            >
+              {revokeAllMutation.isPending ? "Revoking..." : "Revoke All"}
+            </Button>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="space-y-3">
+            <Skeleton className="h-16 w-full" />
+            <Skeleton className="h-16 w-full" />
+          </div>
+        ) : sessions.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-4">No agent chat logins yet</p>
+        ) : (
+          <div className="space-y-2">
+            {sessions.map((session: any) => (
+              <div
+                key={session.id}
+                className={`rounded-lg border p-3 flex items-center gap-3 ${session.isRevoked ? "opacity-50" : ""}`}
+                data-testid={`session-row-${session.id}`}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-medium truncate">{session.loginEmail}</span>
+                    <Badge variant={session.isRevoked ? "secondary" : "default"} className="text-[10px]">
+                      {session.isRevoked ? "Revoked" : "Active"}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5 flex-wrap">
+                    <span className="truncate max-w-[200px]">{session.deviceName || "Unknown device"}</span>
+                    <span>{session.deviceIp || ""}</span>
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    Logged in: {session.createdAt ? format(new Date(session.createdAt), "MMM d, yyyy HH:mm") : "—"}
+                    {session.lastActiveAt && ` · Last active: ${format(new Date(session.lastActiveAt), "MMM d, HH:mm")}`}
+                  </div>
+                </div>
+                {!session.isRevoked && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:text-destructive shrink-0"
+                    onClick={() => revokeMutation.mutate(session.id)}
+                    disabled={revokeMutation.isPending}
+                    data-testid={`button-revoke-session-${session.id}`}
+                  >
+                    <XCircle className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

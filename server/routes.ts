@@ -2,6 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import express from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import webpush from "web-push";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
@@ -39,6 +40,8 @@ import {
   shopifyWebhookEvents,
   waMetaTemplates,
   waAutomations,
+  agentChatSessions,
+  pushSubscriptions,
 } from "@shared/schema";
 import {
   and,
@@ -53,6 +56,7 @@ import {
   isNull,
   gte,
   lte,
+  inArray,
 } from "drizzle-orm";
 import {
   setupAuth,
@@ -5664,6 +5668,7 @@ export async function registerRoutes(
                 reactionEmoji,
                 referenceMessageId,
               });
+              sendAgentChatPushNotifications(merchantId, contactName ?? fromPhone, messageBody, conv.id).catch(() => {});
               continue;
             }
 
@@ -5708,6 +5713,8 @@ export async function registerRoutes(
                   matchedOrder.shopifyOrderId,
                 );
               }
+
+              sendAgentChatPushNotifications(matchedOrder.merchantId, contactName ?? fromPhone, messageBody, conv.id).catch(() => {});
             } catch (dbErr: any) {
               console.error(`[WhatsApp Webhook:${merchantId}] ${requestId} - DB error: ${dbErr.message}`);
             }
@@ -10383,23 +10390,73 @@ export async function registerRoutes(
   // AGENT CHAT PWA APIS (slug-based, JWT auth)
   // ============================================
 
-  const AGENT_CHAT_JWT_SECRET = process.env.SESSION_SECRET || "agent-chat-secret-1sol";
+  async function sendAgentChatPushNotifications(merchantId: string, senderName: string, messagePreview: string, conversationId: string) {
+    try {
+      const subs = await db.select({
+        id: pushSubscriptions.id,
+        endpoint: pushSubscriptions.endpoint,
+        p256dh: pushSubscriptions.p256dh,
+        auth: pushSubscriptions.auth,
+        sessionId: pushSubscriptions.sessionId,
+      }).from(pushSubscriptions)
+        .where(eq(pushSubscriptions.merchantId, merchantId));
 
-  function signAgentChatToken(merchantId: string): string {
-    return jwt.sign({ merchantId, isAgentChat: true }, AGENT_CHAT_JWT_SECRET, { expiresIn: "12h" });
+      if (subs.length === 0) return;
+
+      const payload = JSON.stringify({
+        title: senderName,
+        body: messagePreview.slice(0, 200),
+        conversationId,
+        timestamp: Date.now(),
+      });
+
+      const staleIds: string[] = [];
+      await Promise.allSettled(subs.map(async (sub) => {
+        try {
+          if (sub.sessionId) {
+            const [session] = await db.select({ isRevoked: agentChatSessions.isRevoked })
+              .from(agentChatSessions).where(eq(agentChatSessions.id, sub.sessionId)).limit(1);
+            if (session?.isRevoked) {
+              staleIds.push(sub.id);
+              return;
+            }
+          }
+          await webpush.sendNotification({
+            endpoint: sub.endpoint,
+            keys: { p256dh: sub.p256dh, auth: sub.auth },
+          }, payload);
+        } catch (err: any) {
+          if (err.statusCode === 410 || err.statusCode === 404) {
+            staleIds.push(sub.id);
+          }
+        }
+      }));
+
+      if (staleIds.length > 0) {
+        await db.delete(pushSubscriptions).where(inArray(pushSubscriptions.id, staleIds)).catch(() => {});
+      }
+    } catch (err: any) {
+      console.error("[WebPush] Send error:", err.message);
+    }
   }
 
-  function verifyAgentChatToken(token: string): { merchantId: string } | null {
+  const AGENT_CHAT_JWT_SECRET = process.env.SESSION_SECRET || "agent-chat-secret-1sol";
+
+  function signAgentChatToken(merchantId: string, sessionId: string): string {
+    return jwt.sign({ merchantId, sessionId, isAgentChat: true }, AGENT_CHAT_JWT_SECRET, { expiresIn: "30d" });
+  }
+
+  function verifyAgentChatToken(token: string): { merchantId: string; sessionId?: string } | null {
     try {
       const payload = jwt.verify(token, AGENT_CHAT_JWT_SECRET) as any;
       if (!payload.isAgentChat) return null;
-      return { merchantId: payload.merchantId };
+      return { merchantId: payload.merchantId, sessionId: payload.sessionId };
     } catch {
       return null;
     }
   }
 
-  function agentChatAuth(req: Request, res: Response, next: NextFunction) {
+  async function agentChatAuth(req: Request, res: Response, next: NextFunction) {
     const auth = req.headers.authorization;
     if (!auth || !auth.startsWith("Bearer ")) {
       return res.status(401).json({ message: "Agent chat authentication required" });
@@ -10409,7 +10466,17 @@ export async function registerRoutes(
     if (!payload) {
       return res.status(401).json({ message: "Invalid or expired agent chat token" });
     }
+    if (payload.sessionId) {
+      const [session] = await db.select({ isRevoked: agentChatSessions.isRevoked })
+        .from(agentChatSessions).where(eq(agentChatSessions.id, payload.sessionId)).limit(1);
+      if (session?.isRevoked) {
+        return res.status(401).json({ message: "Session has been revoked" });
+      }
+      db.update(agentChatSessions).set({ lastActiveAt: new Date() })
+        .where(eq(agentChatSessions.id, payload.sessionId)).catch(() => {});
+    }
     (req as any).agentChatMerchantId = payload.merchantId;
+    (req as any).agentChatSessionId = payload.sessionId;
     next();
   }
 
@@ -10422,6 +10489,96 @@ export async function registerRoutes(
       res.json({ name: merchant.name, logoUrl: merchant.logoUrl, slug: merchant.slug });
     } catch (error: any) {
       res.status(500).json({ message: "Failed to fetch merchant info" });
+    }
+  });
+
+  app.post("/api/agent-chat/send-otp", async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email) return res.status(400).json({ message: "Email is required" });
+
+      const normalizedEmail = email.toLowerCase().trim();
+      const merchant = await storage.getMerchantByEmail(normalizedEmail);
+      if (!merchant || !merchant.isActive) {
+        return res.json({ success: true, merchantName: "Store" });
+      }
+
+      const otpKey = `agent-chat:${normalizedEmail}`;
+      const existing = otpStore.get(otpKey);
+      if (existing && Date.now() - existing.sentAt < 60_000) {
+        return res.status(429).json({ message: "Please wait before requesting another OTP" });
+      }
+
+      const code = generateOtp();
+      otpStore.set(otpKey, { code, expiresAt: Date.now() + 5 * 60 * 1000, attempts: 0, sentAt: Date.now() });
+
+      const emailResult = await sendOtpEmail({
+        toEmail: normalizedEmail,
+        code,
+        name: "Agent",
+      });
+
+      if (!emailResult.success) {
+        otpStore.delete(otpKey);
+        console.error("[AgentChat] OTP email failed:", emailResult.error);
+        return res.status(500).json({ message: "Failed to send OTP email" });
+      }
+
+      console.log(`[AgentChat] OTP sent to ${normalizedEmail} for merchant ${merchant.name}`);
+      res.json({ success: true, merchantName: merchant.name });
+    } catch (error: any) {
+      console.error("[AgentChat] Send OTP error:", error.message);
+      res.status(500).json({ message: "Failed to send OTP" });
+    }
+  });
+
+  app.post("/api/agent-chat/verify-otp", async (req, res) => {
+    try {
+      const { email, code } = req.body;
+      if (!email || !code) return res.status(400).json({ message: "Email and code are required" });
+
+      const normalizedEmail = email.toLowerCase().trim();
+      const otpKey = `agent-chat:${normalizedEmail}`;
+      const stored = otpStore.get(otpKey);
+
+      if (!stored) return res.status(400).json({ message: "No OTP found. Please request a new one." });
+      if (Date.now() > stored.expiresAt) {
+        otpStore.delete(otpKey);
+        return res.status(400).json({ message: "OTP has expired. Please request a new one." });
+      }
+      if (stored.code !== String(code)) {
+        stored.attempts++;
+        if (stored.attempts >= 5) {
+          otpStore.delete(otpKey);
+          return res.status(400).json({ message: "Too many attempts. Please request a new OTP." });
+        }
+        return res.status(400).json({ message: "Incorrect code" });
+      }
+
+      otpStore.delete(otpKey);
+
+      const merchant = await storage.getMerchantByEmail(normalizedEmail);
+      if (!merchant || !merchant.isActive) {
+        return res.status(404).json({ message: "Merchant not found" });
+      }
+
+      const userAgent = req.headers["user-agent"] || "Unknown";
+      const deviceName = userAgent.length > 200 ? userAgent.slice(0, 200) : userAgent;
+      const deviceIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || "unknown";
+
+      const [session] = await db.insert(agentChatSessions).values({
+        merchantId: merchant.id,
+        loginEmail: normalizedEmail,
+        deviceName,
+        deviceIp,
+      }).returning();
+
+      const token = signAgentChatToken(merchant.id, session.id);
+      console.log(`[AgentChat] OTP verified, session ${session.id} created for ${normalizedEmail}`);
+      res.json({ success: true, token, merchantName: merchant.name, slug: merchant.slug });
+    } catch (error: any) {
+      console.error("[AgentChat] Verify OTP error:", error.message, error.stack);
+      res.status(500).json({ message: "Verification failed" });
     }
   });
 
@@ -10448,7 +10605,17 @@ export async function registerRoutes(
         }
       }
 
-      const token = signAgentChatToken(merchant.id);
+      const sessionId = crypto.randomUUID();
+      const ua = req.headers["user-agent"] || "Unknown";
+      const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || "";
+      await db.insert(agentChatSessions).values({
+        id: sessionId,
+        merchantId: merchant.id,
+        loginEmail: "pin-login",
+        deviceName: ua.slice(0, 255),
+        deviceIp: ip.slice(0, 50),
+      });
+      const token = signAgentChatToken(merchant.id, sessionId);
       res.json({ success: true, token, merchantName: merchant.name });
     } catch (error: any) {
       console.error("[AgentChat] Login error:", error.message, error.stack);
@@ -10714,6 +10881,113 @@ export async function registerRoutes(
       res.json({ members: enriched, total: enriched.length });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // AGENT CHAT SESSION MANAGEMENT (for merchant settings)
+  // ============================================
+
+  app.get("/api/settings/agent-chat-sessions", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const sessions = await db.select()
+        .from(agentChatSessions)
+        .where(eq(agentChatSessions.merchantId, merchantId))
+        .orderBy(desc(agentChatSessions.createdAt));
+      res.json(sessions);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/settings/agent-chat-sessions/:id/revoke", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { id } = req.params;
+      await db.update(agentChatSessions)
+        .set({ isRevoked: true })
+        .where(and(eq(agentChatSessions.id, id), eq(agentChatSessions.merchantId, merchantId)));
+      await db.delete(pushSubscriptions)
+        .where(eq(pushSubscriptions.sessionId, id));
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/settings/agent-chat-sessions/revoke-all", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      await db.update(agentChatSessions)
+        .set({ isRevoked: true })
+        .where(and(eq(agentChatSessions.merchantId, merchantId), eq(agentChatSessions.isRevoked, false)));
+      await db.delete(pushSubscriptions)
+        .where(eq(pushSubscriptions.merchantId, merchantId));
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ============================================
+  // AGENT CHAT PUSH NOTIFICATIONS
+  // ============================================
+
+  const vapidPublicKey = process.env.VAPID_PUBLIC_KEY;
+  const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
+  const vapidSubject = process.env.VAPID_SUBJECT || "mailto:support@1sol.ai";
+
+  if (vapidPublicKey && vapidPrivateKey) {
+    webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
+    console.log("[WebPush] VAPID keys configured");
+  }
+
+  app.get("/api/agent-chat/push/vapid-key", (req, res) => {
+    res.json({ publicKey: vapidPublicKey || null });
+  });
+
+  app.post("/api/agent-chat/push/subscribe", agentChatAuth, async (req, res) => {
+    try {
+      const merchantId = (req as any).agentChatMerchantId as string;
+      const sessionId = (req as any).agentChatSessionId as string;
+      const { endpoint, keys } = req.body;
+      if (!endpoint || !keys?.p256dh || !keys?.auth) {
+        return res.status(400).json({ error: "Invalid push subscription" });
+      }
+      const existing = await db.select({ id: pushSubscriptions.id })
+        .from(pushSubscriptions)
+        .where(eq(pushSubscriptions.endpoint, endpoint))
+        .limit(1);
+      if (existing.length > 0) {
+        return res.json({ success: true, message: "Already subscribed" });
+      }
+      await db.insert(pushSubscriptions).values({
+        merchantId,
+        sessionId: sessionId && sessionId !== "legacy-pin" ? sessionId : null,
+        endpoint,
+        p256dh: keys.p256dh,
+        auth: keys.auth,
+      });
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("[WebPush] Subscribe error:", err.message);
+      res.status(500).json({ error: "Failed to save subscription" });
+    }
+  });
+
+  app.post("/api/agent-chat/push/unsubscribe", agentChatAuth, async (req, res) => {
+    try {
+      const { endpoint } = req.body;
+      if (endpoint) {
+        await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, endpoint));
+      }
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: "Failed to unsubscribe" });
     }
   });
 

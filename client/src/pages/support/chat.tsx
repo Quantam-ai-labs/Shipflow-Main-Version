@@ -913,9 +913,11 @@ export default function SupportChatPage() {
                                     {msg.text}
                                   </div>
                                 )}
-                                {!isButtonReply && (
+                                {!isButtonReply && isNonText && (
+                                  <MediaBubble msg={msg} mediaProxyBase="/api/whatsapp/media" />
+                                )}
+                                {!isButtonReply && !isNonText && (
                                   <div className="whitespace-pre-wrap break-words leading-relaxed">
-                                    {isNonText && <MessageTypeIcon type={msg.messageType} />}
                                     {renderFormattedText(msg.text || "")}
                                   </div>
                                 )}

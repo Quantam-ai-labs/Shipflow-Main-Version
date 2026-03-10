@@ -478,7 +478,7 @@ function MainApp() {
     );
   }
 
-  if (location.startsWith("/agent-chat/")) {
+  if (location.startsWith("/agent-chat")) {
     return <AgentChatPage />;
   }
 

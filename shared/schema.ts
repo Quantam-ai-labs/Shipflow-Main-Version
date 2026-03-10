@@ -483,6 +483,45 @@ export type InsertWaMessage = z.infer<typeof insertWaMessageSchema>;
 export type WaMessage = typeof waMessages.$inferSelect;
 
 // ============================================
+// AGENT CHAT SESSIONS (Login history + revoke)
+// ============================================
+export const agentChatSessions = pgTable("agent_chat_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  loginEmail: varchar("login_email", { length: 255 }).notNull(),
+  deviceName: varchar("device_name", { length: 255 }),
+  deviceIp: varchar("device_ip", { length: 50 }),
+  isRevoked: boolean("is_revoked").notNull().default(false),
+  lastActiveAt: timestamp("last_active_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_agent_chat_sessions_merchant").on(table.merchantId),
+]);
+
+export const insertAgentChatSessionSchema = createInsertSchema(agentChatSessions).omit({ id: true, createdAt: true, lastActiveAt: true });
+export type InsertAgentChatSession = z.infer<typeof insertAgentChatSessionSchema>;
+export type AgentChatSession = typeof agentChatSessions.$inferSelect;
+
+// ============================================
+// PUSH SUBSCRIPTIONS (Web Push for agent chat)
+// ============================================
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  sessionId: varchar("session_id").references(() => agentChatSessions.id, { onDelete: "cascade" }),
+  endpoint: text("endpoint").notNull(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_push_subscriptions_merchant").on(table.merchantId),
+]);
+
+export const insertPushSubscriptionSchema = createInsertSchema(pushSubscriptions).omit({ id: true, createdAt: true });
+export type InsertPushSubscription = z.infer<typeof insertPushSubscriptionSchema>;
+export type PushSubscription = typeof pushSubscriptions.$inferSelect;
+
+// ============================================
 // ORDER PAYMENTS (Prepaid / partial payment tracking)
 // ============================================
 export const orderPayments = pgTable("order_payments", {
