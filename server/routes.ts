@@ -15040,14 +15040,15 @@ export async function registerRoutes(
   });
 
   // ============================================
-  // ROBOCALL TESTING - Proxy to robocall.pk API
+  // ROBOCALL TESTING - Proxy to H3 Techs / BrandedSMS API
   // ============================================
+  const ROBOCALL_API_BASE = "https://secure.h3techs.com/sms/api";
 
   app.post("/api/robocall/verify-key", isAuthenticated, async (req: any, res) => {
     try {
       const { apiKey } = req.body;
       if (!apiKey) return res.status(400).json({ error: "API key is required" });
-      const response = await fetch(`https://portal.robocall.pk/api/user_verify?api_key=${encodeURIComponent(apiKey)}`);
+      const response = await fetch(`${ROBOCALL_API_BASE}/user_verify?api_key=${encodeURIComponent(apiKey)}`);
       const data = await response.json();
       res.json(data);
     } catch (error: any) {
@@ -15060,7 +15061,7 @@ export async function registerRoutes(
     try {
       const { apiKey } = req.body;
       if (!apiKey) return res.status(400).json({ error: "API key is required" });
-      const response = await fetch(`https://portal.robocall.pk/api/check_balance?api_key=${encodeURIComponent(apiKey)}`);
+      const response = await fetch(`${ROBOCALL_API_BASE}/check_balance?api_key=${encodeURIComponent(apiKey)}`);
       const data = await response.json();
       res.json(data);
     } catch (error: any) {
@@ -15086,7 +15087,7 @@ export async function registerRoutes(
         key4: String(key4 || 0),
         key5: String(key5 || 0),
       });
-      const response = await fetch(`https://portal.robocall.pk/api/calls?${params.toString()}`);
+      const response = await fetch(`${ROBOCALL_API_BASE}/calls?${params.toString()}`);
       const data = await response.json();
       res.json(data);
     } catch (error: any) {
@@ -15116,7 +15117,7 @@ export async function registerRoutes(
             key4: String(call.key4 || 0),
             key5: String(call.key5 || 0),
           });
-          const response = await fetch(`https://portal.robocall.pk/api/calls?${params.toString()}`);
+          const response = await fetch(`${ROBOCALL_API_BASE}/calls?${params.toString()}`);
           const data = await response.json();
           results.push({ callerId: call.callerId, ...data });
           await new Promise(resolve => setTimeout(resolve, 200));
@@ -15135,7 +15136,7 @@ export async function registerRoutes(
     try {
       const { apiKey, callId } = req.body;
       if (!apiKey || !callId) return res.status(400).json({ error: "apiKey and callId are required" });
-      const response = await fetch(`https://portal.robocall.pk/api/get_call?api_key=${encodeURIComponent(apiKey)}&call_id=${encodeURIComponent(callId)}`);
+      const response = await fetch(`${ROBOCALL_API_BASE}/get_call?api_key=${encodeURIComponent(apiKey)}&call_id=${encodeURIComponent(callId)}`);
       const data = await response.json();
       res.json(data);
     } catch (error: any) {
