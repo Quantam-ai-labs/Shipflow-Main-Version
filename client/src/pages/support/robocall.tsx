@@ -199,7 +199,7 @@ export default function RoboCallPage() {
       });
       const data = await res.json();
       const sms = data.sms;
-      const callId = data.data?.call_id ? String(data.data.call_id) : (sms?.call_id ? String(sms.call_id) : (data.call_id ? String(data.call_id) : undefined));
+      const callId = data.data?.call_id ? String(data.data.call_id) : (sms?.id ? String(sms.id) : (sms?.call_id ? String(sms.call_id) : (data.call_id ? String(data.call_id) : undefined)));
       if (data.error || (sms && sms.code !== "000" && sms.code !== "200" && sms.code !== "201")) {
         toast({ title: "Call Failed", description: data.error || sms?.response || "Unknown error", variant: "destructive" });
       } else {
@@ -241,7 +241,7 @@ export default function RoboCallPage() {
       if (data.results) {
         const newRecords: CallRecord[] = data.results.map((r: any) => {
           const smsR = r.sms;
-          const callId = r.data?.call_id ? String(r.data.call_id) : (smsR?.call_id ? String(smsR.call_id) : (r.call_id ? String(r.call_id) : undefined));
+          const callId = r.data?.call_id ? String(r.data.call_id) : (smsR?.id ? String(smsR.id) : (smsR?.call_id ? String(smsR.call_id) : (r.call_id ? String(r.call_id) : undefined)));
           const hasError = r.error || (smsR && smsR.code !== "000" && smsR.code !== "200" && smsR.code !== "201");
           return {
             to: r.to,
