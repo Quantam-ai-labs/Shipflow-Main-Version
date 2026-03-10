@@ -60,6 +60,7 @@ export default function RoboCallPage() {
   const [verifying, setVerifying] = useState(false);
   const [balance, setBalance] = useState<{ remaining_balance: string; remaining_date: string } | null>(null);
   const [checkingBalance, setCheckingBalance] = useState(false);
+  const [syncingAll, setSyncingAll] = useState(false);
 
   const [phoneTo, setPhoneTo] = useState("");
   const [amount, setAmount] = useState("");
@@ -263,7 +264,7 @@ export default function RoboCallPage() {
     }
   };
 
-  const refreshCallStatus = async (callId: string) => {
+  const refreshCallStatus = async (callId: string): Promise<boolean> => {
     try {
       const res = await apiRequest("POST", "/api/robocall/status", { apiKey, email, callId });
       const data = await res.json();
@@ -280,6 +281,7 @@ export default function RoboCallPage() {
               : c
           )
         );
+        return true;
       } else if (statusData && statusData.code && statusData.code !== "000") {
         setCallHistory((prev) =>
           prev.map((c) =>
@@ -288,10 +290,35 @@ export default function RoboCallPage() {
               : c
           )
         );
+        return false;
       }
+      return false;
     } catch {
-      // silent
+      return false;
     }
+  };
+
+  const syncAllCalls = async () => {
+    if (!credentialsValid) {
+      toast({ title: "Missing Credentials", description: "Enter email and API key first.", variant: "destructive" });
+      return;
+    }
+    const callsWithId = callHistory.filter((c) => c.callId);
+    if (callsWithId.length === 0) return;
+    setSyncingAll(true);
+    let successCount = 0;
+    for (const call of callsWithId) {
+      const ok = await refreshCallStatus(call.callId!);
+      if (ok) successCount++;
+    }
+    if (successCount === callsWithId.length) {
+      toast({ title: "Synced", description: `Updated status for ${successCount} call(s).` });
+    } else if (successCount > 0) {
+      toast({ title: "Partial Sync", description: `${successCount} of ${callsWithId.length} calls updated. Some failed.`, variant: "destructive" });
+    } else {
+      toast({ title: "Sync Failed", description: "Could not update any call statuses. Check your credentials.", variant: "destructive" });
+    }
+    setSyncingAll(false);
   };
 
   const addBulkRow = () => {
@@ -550,10 +577,22 @@ export default function RoboCallPage() {
       {callHistory.length > 0 && (
         <Card data-testid="card-call-history">
           <CardHeader>
+            <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2 text-lg">
               <Clock className="w-5 h-5" />
               Call History ({callHistory.length})
             </CardTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={syncAllCalls}
+              disabled={syncingAll || !credentialsValid || !callHistory.some((c) => c.callId)}
+              data-testid="button-sync-all-calls"
+            >
+              {syncingAll ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-1" />}
+              {syncingAll ? "Syncing..." : "Sync All"}
+            </Button>
+          </div>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
