@@ -517,10 +517,6 @@ export default function Pipeline() {
   const [removeTagChips, setRemoveTagChips] = useState<string[]>([]);
   const [confirmActionModal, setConfirmActionModal] = useState<{ open: boolean; action: string; orderIds: string[]; description: string }>({ open: false, action: "", orderIds: [], description: "" });
 
-  const [ivrModal, setIvrModal] = useState<{ open: boolean; orderIds: string[] }>({ open: false, orderIds: [] });
-  const [ivrVoiceId, setIvrVoiceId] = useState("1");
-  const [ivrResultsModal, setIvrResultsModal] = useState<{ open: boolean; results: any | null }>({ open: false, results: null });
-
   const [remarkDialogOpen, setRemarkDialogOpen] = useState(false);
   const [selectedRemarkOrder, setSelectedRemarkOrder] = useState<Order | null>(null);
   const [remarkValue, setRemarkValue] = useState("");
@@ -600,10 +596,6 @@ export default function Pipeline() {
 
   const { data: integrationsData } = useQuery<{ couriers: Array<{ name: string; isActive: boolean; hasDbCredentials: boolean }> }>({
     queryKey: ["/api/integrations"],
-  });
-
-  const { data: robocallSettings } = useQuery<{ email: string; apiKey: string; configured: boolean }>({
-    queryKey: ["/api/robocall/settings"],
   });
 
   const SHIPMENT_SUB_TABS: Record<string, { value: string; label: string }[]> = {
@@ -830,27 +822,6 @@ export default function Pipeline() {
     },
     onError: (err: any) => {
       toast({ title: "Failed", description: err.message || "Failed to update tags", variant: "destructive" });
-    },
-  });
-
-  const ivrBulkMutation = useMutation({
-    mutationFn: async (data: { orderIds: string[]; voiceId: string }) => {
-      const res = await apiRequest("POST", "/api/robocall/send-bulk-orders", data);
-      return res.json();
-    },
-    onSuccess: (data) => {
-      setIvrModal({ open: false, orderIds: [] });
-      setIvrResultsModal({ open: true, results: data });
-      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/orders/workflow-counts"] });
-      setSelectedIds(new Set());
-      toast({
-        title: "IVR Calls Sent",
-        description: `${data.successCount} of ${data.total} calls initiated. DTMF responses will auto-tag orders.`,
-      });
-    },
-    onError: (err: any) => {
-      toast({ title: "IVR Call Failed", description: err.message, variant: "destructive" });
     },
   });
 
@@ -1568,22 +1539,6 @@ export default function Pipeline() {
                   <Plus className="w-3.5 h-3.5 mr-1.5" />Add Payment
                 </Button>
               )}
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  if (!robocallSettings?.configured) {
-                    toast({ title: "RoboCall Not Configured", description: "Please set up your BrandedSMS credentials in Settings → RoboCall first.", variant: "destructive" });
-                    return;
-                  }
-                  setIvrModal({ open: true, orderIds: Array.from(selectedIds) });
-                  setIvrVoiceId("1");
-                }}
-                disabled={ivrBulkMutation.isPending}
-                data-testid="bulk-ivr-call"
-              >
-                <Phone className="w-3.5 h-3.5 mr-1.5" />IVR Call
-              </Button>
             </>
           )}
 
