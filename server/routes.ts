@@ -15050,7 +15050,9 @@ export async function registerRoutes(
     try {
       return JSON.parse(text);
     } catch {
-      return { error: text.trim() || "Unknown error from API", raw: true };
+      const isHtml = text.trim().startsWith("<!") || text.trim().startsWith("<html");
+      const cleanError = isHtml ? "BrandedSMS API returned an error page. Please check your credentials or try again later." : (text.trim() || "Unknown error from API");
+      return { error: cleanError, raw: true };
     }
   }
 

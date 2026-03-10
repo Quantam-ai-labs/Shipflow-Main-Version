@@ -58,7 +58,7 @@ export default function RoboCallPage() {
   const [email, setEmail] = useState("");
   const [keyVerified, setKeyVerified] = useState(false);
   const [verifying, setVerifying] = useState(false);
-  const [balance, setBalance] = useState<{ balance: string; username: string; call_rate: string } | null>(null);
+  const [balance, setBalance] = useState<{ remaining_balance: string; remaining_date: string } | null>(null);
   const [checkingBalance, setCheckingBalance] = useState(false);
 
   const [phoneTo, setPhoneTo] = useState("");
@@ -91,13 +91,17 @@ export default function RoboCallPage() {
     try {
       const res = await apiRequest("POST", "/api/robocall/verify-key", { apiKey, email });
       const data = await res.json();
-      if (data.status === 401 || data.response) {
+      const sms = data.sms;
+      if (data.error || data.status === 401) {
         setKeyVerified(false);
-        toast({ title: "Invalid Credentials", description: data.response || "Verification failed.", variant: "destructive" });
-      } else {
+        toast({ title: "Invalid Credentials", description: data.response || data.error || "Verification failed.", variant: "destructive" });
+      } else if (sms && sms.code === "000") {
         setKeyVerified(true);
-        if (data.data) setBalance(data.data);
-        toast({ title: "Verified", description: "Your credentials are valid." });
+        setBalance({ remaining_balance: sms.remaining_balance, remaining_date: sms.remaining_date || "" });
+        toast({ title: "Verified", description: `Credentials valid. Balance: PKR ${sms.remaining_balance}` });
+      } else {
+        setKeyVerified(false);
+        toast({ title: "Invalid Credentials", description: sms?.response || "Verification failed.", variant: "destructive" });
       }
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -112,11 +116,12 @@ export default function RoboCallPage() {
     try {
       const res = await apiRequest("POST", "/api/robocall/balance", { apiKey, email });
       const data = await res.json();
-      if (data.data) {
-        setBalance(data.data);
+      const sms = data.sms;
+      if (sms && sms.remaining_balance !== undefined) {
+        setBalance({ remaining_balance: sms.remaining_balance, remaining_date: sms.remaining_date || "" });
         setKeyVerified(true);
       } else {
-        toast({ title: "Error", description: data.error || "Could not fetch balance.", variant: "destructive" });
+        toast({ title: "Error", description: sms?.response || data.error || "Could not fetch balance.", variant: "destructive" });
       }
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -132,10 +137,11 @@ export default function RoboCallPage() {
       try {
         const res = await apiRequest("POST", "/api/robocall/status", { apiKey, email, callId });
         const data = await res.json();
-        if (data.data) {
-          const callStatus = data.data.call_status;
-          const dtmf = data.data.dtmf;
-          const retry = data.data.retry ?? 0;
+        const statusData = data.data || data.sms;
+        if (statusData && statusData.call_status !== undefined) {
+          const callStatus = statusData.call_status;
+          const dtmf = statusData.dtmf;
+          const retry = statusData.retry ?? 0;
           const isFinal = callStatus === 2 || (callStatus >= 3 && retry >= 3);
 
           setCallHistory((prev) =>
@@ -155,6 +161,16 @@ export default function RoboCallPage() {
             clearInterval(interval);
             pollingIntervals.current.delete(callId);
           }
+        } else if (statusData && statusData.code && statusData.code !== "000") {
+          setCallHistory((prev) =>
+            prev.map((c) =>
+              c.callId === callId
+                ? { ...c, status: "Error", error: statusData.response || "Status check failed", polling: false }
+                : c
+            )
+          );
+          clearInterval(interval);
+          pollingIntervals.current.delete(callId);
         }
       } catch {
         // silent retry
@@ -181,9 +197,10 @@ export default function RoboCallPage() {
         orderNumber,
       });
       const data = await res.json();
-      const callId = data.data?.call_id ? String(data.data.call_id) : (data.call_id ? String(data.call_id) : undefined);
-      if (data.error) {
-        toast({ title: "Call Failed", description: data.error, variant: "destructive" });
+      const sms = data.sms;
+      const callId = data.data?.call_id ? String(data.data.call_id) : (sms?.call_id ? String(sms.call_id) : (data.call_id ? String(data.call_id) : undefined));
+      if (data.error || (sms && sms.code !== "000" && sms.code !== "200" && sms.code !== "201")) {
+        toast({ title: "Call Failed", description: data.error || sms?.response || "Unknown error", variant: "destructive" });
       } else {
         const record: CallRecord = {
           to: phoneTo.trim(),
@@ -222,13 +239,15 @@ export default function RoboCallPage() {
       const data = await res.json();
       if (data.results) {
         const newRecords: CallRecord[] = data.results.map((r: any) => {
-          const callId = r.data?.call_id ? String(r.data.call_id) : (r.call_id ? String(r.call_id) : undefined);
+          const smsR = r.sms;
+          const callId = r.data?.call_id ? String(r.data.call_id) : (smsR?.call_id ? String(smsR.call_id) : (r.call_id ? String(r.call_id) : undefined));
+          const hasError = r.error || (smsR && smsR.code !== "000" && smsR.code !== "200" && smsR.code !== "201");
           return {
             to: r.to,
             callId,
-            status: r.error ? "Error" : "Initiated",
-            error: r.error,
-            polling: !r.error && !!callId,
+            status: hasError ? "Error" : "Initiated",
+            error: r.error || (hasError ? smsR?.response : undefined),
+            polling: !hasError && !!callId,
           };
         });
         setCallHistory((prev) => [...newRecords, ...prev]);
@@ -248,15 +267,24 @@ export default function RoboCallPage() {
     try {
       const res = await apiRequest("POST", "/api/robocall/status", { apiKey, email, callId });
       const data = await res.json();
-      if (data.data) {
+      const statusData = data.data || data.sms;
+      if (statusData && statusData.call_status !== undefined) {
         setCallHistory((prev) =>
           prev.map((c) =>
             c.callId === callId
               ? {
                   ...c,
-                  status: CALL_STATUS_MAP[data.data.call_status]?.label || `Status ${data.data.call_status}`,
-                  dtmf: data.data.dtmf,
+                  status: CALL_STATUS_MAP[statusData.call_status]?.label || `Status ${statusData.call_status}`,
+                  dtmf: statusData.dtmf,
                 }
+              : c
+          )
+        );
+      } else if (statusData && statusData.code && statusData.code !== "000") {
+        setCallHistory((prev) =>
+          prev.map((c) =>
+            c.callId === callId
+              ? { ...c, status: "Error", error: statusData.response || "Status check failed" }
               : c
           )
         );
@@ -355,14 +383,13 @@ export default function RoboCallPage() {
             {balance && (
               <div className="flex items-center gap-3 text-sm" data-testid="text-balance-info">
                 <span>
-                  <strong>Balance:</strong> PKR {balance.balance}
+                  <strong>Balance:</strong> PKR {balance.remaining_balance}
                 </span>
-                <span>
-                  <strong>Rate:</strong> PKR {balance.call_rate}/call
-                </span>
-                <span>
-                  <strong>User:</strong> {balance.username}
-                </span>
+                {balance.remaining_date && (
+                  <span>
+                    <strong>Expiry:</strong> {balance.remaining_date}
+                  </span>
+                )}
               </div>
             )}
           </div>
