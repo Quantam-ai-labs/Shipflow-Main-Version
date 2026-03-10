@@ -84,6 +84,7 @@ import {
   Pin,
   ClipboardList,
   Target,
+  PhoneCall,
   type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -166,6 +167,7 @@ const allNavGroups: NavGroup[] = [
       { id: "support-dashboard", title: "Dashboard", url: "/support/dashboard", icon: LayoutDashboard },
       { id: "support-templates", title: "Templates", url: "/support/templates", icon: MessageCircle },
       { id: "support-chat", title: "Chat", url: "/support/chat", icon: Sparkles },
+      { id: "support-robocall", title: "Robo Call", url: "/support/robocall", icon: PhoneCall },
     ],
   },
 ];

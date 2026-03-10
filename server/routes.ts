@@ -15039,5 +15039,110 @@ export async function registerRoutes(
     }
   });
 
+  // ============================================
+  // ROBOCALL TESTING - Proxy to robocall.pk API
+  // ============================================
+
+  app.post("/api/robocall/verify-key", isAuthenticated, async (req: any, res) => {
+    try {
+      const { apiKey } = req.body;
+      if (!apiKey) return res.status(400).json({ error: "API key is required" });
+      const response = await fetch(`https://portal.robocall.pk/api/user_verify?api_key=${encodeURIComponent(apiKey)}`);
+      const data = await response.json();
+      res.json(data);
+    } catch (error: any) {
+      console.error("[RoboCall] Verify key error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/robocall/balance", isAuthenticated, async (req: any, res) => {
+    try {
+      const { apiKey } = req.body;
+      if (!apiKey) return res.status(400).json({ error: "API key is required" });
+      const response = await fetch(`https://portal.robocall.pk/api/check_balance?api_key=${encodeURIComponent(apiKey)}`);
+      const data = await response.json();
+      res.json(data);
+    } catch (error: any) {
+      console.error("[RoboCall] Balance error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/robocall/send", isAuthenticated, async (req: any, res) => {
+    try {
+      const { apiKey, callerId, amount, voiceId, text1, text2, key1, key2, key3, key4, key5 } = req.body;
+      if (!apiKey || !callerId || !voiceId) return res.status(400).json({ error: "apiKey, callerId, and voiceId are required" });
+      const params = new URLSearchParams({
+        api_key: apiKey,
+        caller_id: callerId,
+        voice_id: String(voiceId),
+        amount: String(amount || 0),
+        text1: text1 || "",
+        text2: text2 || "",
+        key1: String(key1 || 0),
+        key2: String(key2 || 0),
+        key3: String(key3 || 0),
+        key4: String(key4 || 0),
+        key5: String(key5 || 0),
+      });
+      const response = await fetch(`https://portal.robocall.pk/api/calls?${params.toString()}`);
+      const data = await response.json();
+      res.json(data);
+    } catch (error: any) {
+      console.error("[RoboCall] Send call error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/robocall/send-bulk", isAuthenticated, async (req: any, res) => {
+    try {
+      const { apiKey, calls } = req.body;
+      if (!apiKey || !Array.isArray(calls) || calls.length === 0) return res.status(400).json({ error: "apiKey and calls array are required" });
+      if (calls.length > 50) return res.status(400).json({ error: "Maximum 50 calls per batch" });
+      const results: any[] = [];
+      for (const call of calls) {
+        try {
+          const params = new URLSearchParams({
+            api_key: apiKey,
+            caller_id: call.callerId,
+            voice_id: String(call.voiceId),
+            amount: String(call.amount || 0),
+            text1: call.text1 || "",
+            text2: call.text2 || "",
+            key1: String(call.key1 || 0),
+            key2: String(call.key2 || 0),
+            key3: String(call.key3 || 0),
+            key4: String(call.key4 || 0),
+            key5: String(call.key5 || 0),
+          });
+          const response = await fetch(`https://portal.robocall.pk/api/calls?${params.toString()}`);
+          const data = await response.json();
+          results.push({ callerId: call.callerId, ...data });
+          await new Promise(resolve => setTimeout(resolve, 200));
+        } catch (err: any) {
+          results.push({ callerId: call.callerId, error: err.message });
+        }
+      }
+      res.json({ results });
+    } catch (error: any) {
+      console.error("[RoboCall] Bulk send error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/robocall/status", isAuthenticated, async (req: any, res) => {
+    try {
+      const { apiKey, callId } = req.body;
+      if (!apiKey || !callId) return res.status(400).json({ error: "apiKey and callId are required" });
+      const response = await fetch(`https://portal.robocall.pk/api/get_call?api_key=${encodeURIComponent(apiKey)}&call_id=${encodeURIComponent(callId)}`);
+      const data = await response.json();
+      res.json(data);
+    } catch (error: any) {
+      console.error("[RoboCall] Status error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   return httpServer;
 }

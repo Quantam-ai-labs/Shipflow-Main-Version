@@ -104,6 +104,7 @@ import SupportDashboardPage from "@/pages/support/dashboard";
 import SupportTemplatesPage from "@/pages/support/templates";
 import SupportChatPage from "@/pages/support/chat";
 import SupportConnectionPage from "@/pages/support/connection";
+import SupportRoboCallPage from "@/pages/support/robocall";
 import NotFound from "@/pages/not-found";
 import LoadsheetPage from "@/pages/loadsheet";
 import WarehousePage from "@/pages/warehouse";
@@ -167,6 +168,11 @@ const routeToPageId: Record<string, string> = {
   "/settings/marketing": "settings-marketing",
   "/settings": "settings",
   "/loadsheet": "loadsheet",
+  "/support/dashboard": "support-dashboard",
+  "/support/templates": "support-templates",
+  "/support/chat": "support-chat",
+  "/support/connection": "support-connection",
+  "/support/robocall": "support-robocall",
 };
 
 function getPageIdForRoute(path: string): string | null {
@@ -271,6 +277,7 @@ function AppRoutes() {
       <Route path="/support/templates">{() => <ProtectedRoute component={SupportTemplatesPage} path="/support/templates" />}</Route>
       <Route path="/support/chat" component={SupportChatPage} />
       <Route path="/support/connection">{() => <ProtectedRoute component={SupportConnectionPage} path="/support/connection" />}</Route>
+      <Route path="/support/robocall">{() => <ProtectedRoute component={SupportRoboCallPage} path="/support/robocall" />}</Route>
       <Route path="/accounting/settings">{() => <ProtectedRoute component={AccountingSettings} path="/accounting/settings" />}</Route>
       <Route path="/loadsheet">{() => <ProtectedRoute component={LoadsheetPage} path="/loadsheet" />}</Route>
       <Route path="/warehouse/:slug" component={WarehousePage} />
