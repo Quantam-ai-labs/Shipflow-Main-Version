@@ -202,12 +202,12 @@ export default function RoboCallPage() {
       try {
         const res = await apiRequest("POST", "/api/robocall/status", { apiKey, email, callId });
         const data = await res.json();
-        const statusData = data.data || data.sms;
-        if (statusData && statusData.call_status !== undefined) {
-          const callStatus = statusData.call_status;
-          const dtmf = statusData.dtmf;
-          const retry = statusData.retry ?? 0;
-          const isFinal = callStatus === 2 || (callStatus >= 3 && retry >= 3);
+        const smsData = data.sms;
+        if (smsData && smsData.voice_status !== undefined) {
+          const callStatus = smsData.voice_status;
+          const dtmf = smsData.voice_dtmf;
+          const retry = smsData.voice_retry ?? 0;
+          const isFinal = callStatus === 2 || callStatus >= 3;
 
           setCallHistory((prev) =>
             prev.map((c) =>
@@ -226,11 +226,11 @@ export default function RoboCallPage() {
             clearInterval(interval);
             pollingIntervals.current.delete(callId);
           }
-        } else if (statusData && statusData.code && statusData.code !== "000") {
+        } else if (smsData && smsData.code && smsData.code !== "000") {
           setCallHistory((prev) =>
             prev.map((c) =>
               c.callId === callId
-                ? { ...c, status: "Error", error: statusData.response || "Status check failed", polling: false }
+                ? { ...c, status: "Error", error: smsData.response || "Status check failed", polling: false }
                 : c
             )
           );
@@ -331,25 +331,25 @@ export default function RoboCallPage() {
     try {
       const res = await apiRequest("POST", "/api/robocall/status", { apiKey, email, callId });
       const data = await res.json();
-      const statusData = data.data || data.sms;
-      if (statusData && statusData.call_status !== undefined) {
+      const smsData = data.sms;
+      if (smsData && smsData.voice_status !== undefined) {
         setCallHistory((prev) =>
           prev.map((c) =>
             c.callId === callId
               ? {
                   ...c,
-                  status: CALL_STATUS_MAP[statusData.call_status]?.label || `Status ${statusData.call_status}`,
-                  dtmf: statusData.dtmf,
+                  status: CALL_STATUS_MAP[smsData.voice_status]?.label || `Status ${smsData.voice_status}`,
+                  dtmf: smsData.voice_dtmf,
                 }
               : c
           )
         );
         return true;
-      } else if (statusData && statusData.code && statusData.code !== "000") {
+      } else if (smsData && smsData.code && smsData.code !== "000") {
         setCallHistory((prev) =>
           prev.map((c) =>
             c.callId === callId
-              ? { ...c, status: "Error", error: statusData.response || "Status check failed" }
+              ? { ...c, status: "Error", error: smsData.response || "Status check failed" }
               : c
           )
         );

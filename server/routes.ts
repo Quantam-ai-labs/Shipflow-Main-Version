@@ -15206,15 +15206,15 @@ export async function registerRoutes(
       const data = await safeFetchJson(`${ROBOCALL_API_BASE}/get-call?email=${encodeURIComponent(email)}&key=${encodeURIComponent(apiKey)}&id=${encodeURIComponent(callId)}`);
       console.log(`[RoboCall] get-call response for ${callId}:`, JSON.stringify(data));
       if (data.raw) return res.status(400).json({ error: data.error });
-      const statusData = data.data || data.sms;
-      if (statusData && statusData.call_status !== undefined) {
-        const CALL_STATUS_LABELS: Record<number, string> = { 0: "Queued", 1: "Ringing", 2: "Answered", 3: "No Answer", 4: "Busy", 5: "Failed", 6: "Cancelled" };
-        const statusLabel = CALL_STATUS_LABELS[statusData.call_status] || `Status ${statusData.call_status}`;
+      const smsData = data.sms;
+      if (smsData && smsData.voice_status !== undefined) {
+        const CALL_STATUS_LABELS: Record<number, string> = { 1: "Initiated", 2: "Answered", 3: "Congestion", 4: "Busy", 5: "No Answer", 6: "Hangup", 8: "Pushed to SIP" };
+        const statusLabel = CALL_STATUS_LABELS[smsData.voice_status] || `Status ${smsData.voice_status}`;
         const log = await storage.getRobocallLogByCallId(merchantId, callId);
         if (log) {
           await storage.updateRobocallLog(log.id, {
             status: statusLabel,
-            dtmf: statusData.dtmf ?? null,
+            dtmf: smsData.voice_dtmf ?? null,
           });
         }
       }
@@ -15244,18 +15244,18 @@ export async function registerRoutes(
       const creds = await storage.getRobocallCredentials(merchantId);
       if (!creds) return res.status(400).json({ error: "No RoboCall credentials saved" });
       const nonFinalLogs = await storage.getRobocallLogsByStatus(merchantId, ["Initiated", "Queued", "Ringing"]);
-      const CALL_STATUS_LABELS: Record<number, string> = { 0: "Queued", 1: "Ringing", 2: "Answered", 3: "No Answer", 4: "Busy", 5: "Failed", 6: "Cancelled" };
+      const CALL_STATUS_LABELS: Record<number, string> = { 1: "Initiated", 2: "Answered", 3: "Congestion", 4: "Busy", 5: "No Answer", 6: "Hangup", 8: "Pushed to SIP" };
       let updated = 0;
       for (const log of nonFinalLogs) {
         if (!log.callId) continue;
         try {
           const data = await safeFetchJson(`${ROBOCALL_API_BASE}/get-call?email=${encodeURIComponent(creds.email)}&key=${encodeURIComponent(creds.apiKey)}&id=${encodeURIComponent(log.callId)}`);
-          const statusData = data.data || data.sms;
-          if (statusData && statusData.call_status !== undefined) {
-            const statusLabel = CALL_STATUS_LABELS[statusData.call_status] || `Status ${statusData.call_status}`;
+          const smsData = data.sms;
+          if (smsData && smsData.voice_status !== undefined) {
+            const statusLabel = CALL_STATUS_LABELS[smsData.voice_status] || `Status ${smsData.voice_status}`;
             await storage.updateRobocallLog(log.id, {
               status: statusLabel,
-              dtmf: statusData.dtmf ?? null,
+              dtmf: smsData.voice_dtmf ?? null,
             });
             updated++;
           }
