@@ -63,7 +63,6 @@ export interface IStorage {
   getTeamMemberByUserId(merchantId: string, userId: string): Promise<TeamMember | undefined>;
   getTeamMemberById(merchantId: string, id: string): Promise<TeamMember | undefined>;
   getUserMerchantId(userId: string): Promise<string | null>;
-  getUserMerchantMemberships(userId: string): Promise<{ merchantId: string; merchantName: string; role: string }[]>;
   createTeamMember(member: InsertTeamMember): Promise<TeamMember>;
   updateTeamMemberRole(merchantId: string, id: string, role: string): Promise<TeamMember | undefined>;
   deleteTeamMember(merchantId: string, id: string): Promise<void>;
@@ -309,26 +308,6 @@ export class DatabaseStorage implements IStorage {
     const [membership] = await db.select().from(teamMembers)
       .where(and(eq(teamMembers.userId, userId), eq(teamMembers.isActive, true)));
     return membership?.merchantId || null;
-  }
-
-  async getUserMerchantMemberships(userId: string): Promise<{ merchantId: string; merchantName: string; role: string }[]> {
-    const rows = await db.select({
-      merchantId: teamMembers.merchantId,
-      merchantName: merchants.name,
-      role: teamMembers.role,
-    })
-      .from(teamMembers)
-      .innerJoin(merchants, eq(merchants.id, teamMembers.merchantId))
-      .where(and(
-        eq(teamMembers.userId, userId),
-        eq(teamMembers.isActive, true),
-        eq(merchants.isActive, true),
-      ));
-    return rows.map(r => ({
-      merchantId: r.merchantId,
-      merchantName: r.merchantName || "Unnamed Store",
-      role: r.role,
-    }));
   }
 
   async createTeamMember(member: InsertTeamMember): Promise<TeamMember> {

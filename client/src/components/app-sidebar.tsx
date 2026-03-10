@@ -24,9 +24,6 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  DropdownMenuSub,
-  DropdownMenuSubTrigger,
-  DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -67,7 +64,6 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   ArrowLeftRight,
-  Check,
   UserCircle,
   PieChart,
   BookOpen,
@@ -239,23 +235,6 @@ export function AppSidebar() {
     }
     return user?.email || "User";
   };
-
-  const { data: memberships = [] } = useQuery<{ merchantId: string; merchantName: string; role: string }[]>({
-    queryKey: ["/api/auth/memberships"],
-    staleTime: 60000,
-  });
-
-  const switchMerchant = useMutation({
-    mutationFn: async (merchantId: string) => {
-      const res = await apiRequest("POST", "/api/auth/switch-merchant", { merchantId });
-      return res.json();
-    },
-    onSuccess: () => {
-      window.location.reload();
-    },
-  });
-
-  const hasMultipleStores = memberships.length > 1;
 
   const { dateParams } = useDateRange();
   const countsUrl = `/api/orders/workflow-counts${dateParams.dateFrom || dateParams.dateTo ? `?${new URLSearchParams(Object.entries(dateParams).filter(([_, v]) => v)).toString()}` : ''}`;
@@ -685,7 +664,7 @@ export function AppSidebar() {
               </Avatar>
               <div className="flex-1 text-left min-w-0">
                 <p className="text-sm font-medium truncate">{getUserDisplayName()}</p>
-                <p className="text-[11px] text-muted-foreground truncate">{user?.merchant?.name || user?.email}</p>
+                <p className="text-[11px] text-muted-foreground truncate">{user?.email}</p>
               </div>
               <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
             </button>
@@ -697,38 +676,6 @@ export function AppSidebar() {
                 Settings
               </Link>
             </DropdownMenuItem>
-            {hasMultipleStores && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger data-testid="nav-switch-store">
-                    <ArrowLeftRight className="w-4 h-4 mr-2" />
-                    Switch Store
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="w-56">
-                    {memberships.map((m) => (
-                      <DropdownMenuItem
-                        key={m.merchantId}
-                        onClick={() => {
-                          if (m.merchantId !== user?.merchantId) {
-                            switchMerchant.mutate(m.merchantId);
-                          }
-                        }}
-                        disabled={switchMerchant.isPending}
-                        className="flex items-center gap-2"
-                        data-testid={`switch-store-${m.merchantId}`}
-                      >
-                        <Store className="w-4 h-4 shrink-0" />
-                        <span className="flex-1 truncate">{m.merchantName}</span>
-                        {m.merchantId === user?.merchantId && (
-                          <Check className="w-4 h-4 text-primary shrink-0" />
-                        )}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
-              </>
-            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={() => logout()}
