@@ -7477,9 +7477,9 @@ export async function registerRoutes(
     try {
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
-      const [merchantRow] = await db.select({ supportChatPinHash: merchants.supportChatPinHash })
+      const [merchantRow] = await db.select({ supportChatPinHash: merchants.supportChatPinHash, slug: merchants.slug })
         .from(merchants).where(eq(merchants.id, merchantId)).limit(1);
-      res.json({ isSet: !!merchantRow?.supportChatPinHash });
+      res.json({ isSet: !!merchantRow?.supportChatPinHash, slug: merchantRow?.slug || "" });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Wifi, WifiOff, Eye, EyeOff, FlaskConical, Save, Copy, Check, Lock } from "lucide-react";
+import { Wifi, WifiOff, Eye, EyeOff, FlaskConical, Save, Copy, Check, Lock, Smartphone, QrCode } from "lucide-react";
+import QRCode from "qrcode";
 
 interface ConnectionData {
   waPhoneNumberId: string;
@@ -47,6 +48,7 @@ export default function SettingsWhatsApp() {
   const [loaded, setLoaded] = useState(false);
   const [testing, setTesting] = useState(false);
   const [chatPin, setChatPin] = useState("");
+  const agentChatQrRef = useRef<HTMLCanvasElement>(null);
 
   const { data, isLoading } = useQuery<ConnectionData>({
     queryKey: ["/api/support/connection"],
@@ -62,10 +64,18 @@ export default function SettingsWhatsApp() {
     setLoaded(true);
   }
 
-  const { data: chatPinStatus } = useQuery<{ isSet: boolean }>({
+  const { data: chatPinStatus } = useQuery<{ isSet: boolean; slug: string }>({
     queryKey: ["/api/support/chat-pin"],
     refetchOnWindowFocus: false,
   });
+
+  const agentChatUrl = chatPinStatus?.slug ? `${window.location.origin}/agent-chat/${chatPinStatus.slug}` : "";
+
+  useEffect(() => {
+    if (agentChatUrl && agentChatQrRef.current) {
+      QRCode.toCanvas(agentChatQrRef.current, agentChatUrl, { width: 160, margin: 1 }).catch(() => {});
+    }
+  }, [agentChatUrl]);
 
   const saveChatPinMutation = useMutation({
     mutationFn: async (pin: string) => apiRequest("POST", "/api/support/chat-pin", { pin }),
@@ -323,6 +333,49 @@ export default function SettingsWhatsApp() {
           </div>
         </CardContent>
       </Card>
+
+      {chatPinStatus?.slug && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Smartphone className="w-4 h-4" />
+              Agent Chat Mobile App
+            </CardTitle>
+            <CardDescription>
+              Share this link with your support agents to install the mobile WhatsApp chat app on their phones.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+              <p className="text-xs text-muted-foreground font-medium">Agent Chat URL</p>
+              <div className="flex items-center gap-2">
+                <code className="text-xs bg-muted px-2 py-1 rounded flex-1 truncate" data-testid="text-agent-chat-url">
+                  {agentChatUrl}
+                </code>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={() => {
+                    navigator.clipboard.writeText(agentChatUrl);
+                    toast({ title: "URL copied" });
+                  }}
+                  data-testid="button-copy-agent-chat-url"
+                >
+                  <Copy className="w-3 h-3" />
+                </Button>
+              </div>
+              <div className="flex flex-col items-center gap-2 pt-2">
+                <canvas ref={agentChatQrRef} className="rounded border" data-testid="qr-agent-chat" />
+                <div className="text-xs text-muted-foreground text-center space-y-0.5">
+                  <p className="flex items-center justify-center gap-1"><QrCode className="w-3 h-3" /> Scan QR to open on mobile</p>
+                  <p>Or share the link + Chat PIN with your agents</p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
