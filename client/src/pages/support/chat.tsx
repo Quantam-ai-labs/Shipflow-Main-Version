@@ -16,7 +16,7 @@ import {
   DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
 import {
-  MessageCircle, Search, Send, Trash2, Lock, Phone,
+  MessageCircle, Search, Send, Trash2, Phone,
   MoreVertical, Tag, UserPlus, Check, CheckCheck,
   Smile, Bold, Italic, Strikethrough, Code, Filter,
   X, ChevronDown, Image as ImageIcon, Mic, FileText,
@@ -65,7 +65,6 @@ interface TeamMember {
   role: string;
 }
 
-const SESSION_KEY = "support_chat_access";
 
 const LABELS = [
   { value: "new", label: "New", color: "bg-blue-500" },
@@ -394,66 +393,7 @@ function MediaBubble({ msg, mediaProxyBase }: { msg: Message; mediaProxyBase: st
   );
 }
 
-function PinScreen({ onSuccess }: { onSuccess: () => void }) {
-  const [pin, setPin] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (pin.length < 4) return;
-    setLoading(true);
-    setError("");
-    try {
-      const resp = await fetch(`/api/support/chat-access?pin=${encodeURIComponent(pin)}`);
-      const data = await resp.json() as { valid: boolean; error?: string };
-      if (data.valid) {
-        sessionStorage.setItem(SESSION_KEY, "true");
-        onSuccess();
-      } else {
-        setError("Incorrect PIN. Please try again.");
-        setPin("");
-      }
-    } catch {
-      setError("Connection error. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <div className="w-full max-w-sm space-y-6">
-        <div className="text-center space-y-2">
-          <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center mx-auto">
-            <Lock className="w-8 h-8 text-primary-foreground" />
-          </div>
-          <h1 className="text-2xl font-bold text-foreground">Support Chat</h1>
-          <p className="text-muted-foreground text-sm">Enter your PIN to access the chat inbox</p>
-        </div>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <Input
-            type="password"
-            placeholder="Enter PIN"
-            value={pin}
-            onChange={(e) => setPin(e.target.value)}
-            maxLength={8}
-            autoFocus
-            className="text-center text-xl tracking-widest"
-            data-testid="input-pin"
-          />
-          {error && <p className="text-destructive text-sm text-center" data-testid="text-pin-error">{error}</p>}
-          <Button type="submit" className="w-full" disabled={loading || pin.length < 4} data-testid="button-submit-pin">
-            {loading ? "Verifying..." : "Enter Chat"}
-          </Button>
-        </form>
-      </div>
-    </div>
-  );
-}
-
 export default function SupportChatPage() {
-  const [hasAccess, setHasAccess] = useState(() => sessionStorage.getItem(SESSION_KEY) === "true");
   const [selectedConvId, setSelectedConvId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [messageText, setMessageText] = useState("");
@@ -465,7 +405,6 @@ export default function SupportChatPage() {
 
   const { data: conversations = [] } = useQuery<Conversation[]>({
     queryKey: ["/api/support/conversations"],
-    enabled: hasAccess,
     refetchInterval: 10000,
     staleTime: 5000,
   });
@@ -477,14 +416,13 @@ export default function SupportChatPage() {
       const resp = await fetch(`/api/support/conversations/${selectedConvId}/messages`, { credentials: "include" });
       return resp.json();
     },
-    enabled: hasAccess && !!selectedConvId,
+    enabled: !!selectedConvId,
     refetchInterval: 8000,
     staleTime: 4000,
   });
 
   const { data: teamData } = useQuery<{ members: TeamMember[]; total: number }>({
     queryKey: ["/api/team"],
-    enabled: hasAccess,
   });
   const teamMembers = teamData?.members ?? [];
 
@@ -579,10 +517,6 @@ export default function SupportChatPage() {
     }
     return groups;
   }, [messages]);
-
-  if (!hasAccess) {
-    return <PinScreen onSuccess={() => setHasAccess(true)} />;
-  }
 
   const filtered = conversations.filter(c => {
     if (labelFilter === "unread" && c.unreadCount === 0) return false;
