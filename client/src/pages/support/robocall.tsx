@@ -22,9 +22,11 @@ import {
   RefreshCw,
   Send,
   Mail,
+  Save,
 } from "lucide-react";
 
 interface CallRecord {
+  id?: string;
   to: string;
   callId?: string;
   status: string;
@@ -33,6 +35,7 @@ interface CallRecord {
   orderNumber?: string;
   error?: string;
   polling?: boolean;
+  createdAt?: string;
 }
 
 const CALL_STATUS_MAP: Record<number, { label: string; color: string }> = {
@@ -61,6 +64,8 @@ export default function RoboCallPage() {
   const [balance, setBalance] = useState<{ remaining_balance: string; remaining_date: string } | null>(null);
   const [checkingBalance, setCheckingBalance] = useState(false);
   const [syncingAll, setSyncingAll] = useState(false);
+  const [savingCreds, setSavingCreds] = useState(false);
+  const [loadingInit, setLoadingInit] = useState(true);
 
   const [phoneTo, setPhoneTo] = useState("");
   const [amount, setAmount] = useState("");
@@ -79,12 +84,68 @@ export default function RoboCallPage() {
   const pollingIntervals = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
   useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        const [credsRes, historyRes] = await Promise.all([
+          apiRequest("GET", "/api/robocall/credentials"),
+          apiRequest("GET", "/api/robocall/history"),
+        ]);
+        const credsData = await credsRes.json();
+        const historyData = await historyRes.json();
+        if (credsData.email) setEmail(credsData.email);
+        if (credsData.apiKey) setApiKey(credsData.apiKey);
+        if (historyData.logs) {
+          const records: CallRecord[] = historyData.logs.map((log: any) => ({
+            id: log.id,
+            to: log.phone,
+            callId: log.callId || undefined,
+            status: log.status,
+            dtmf: log.dtmf,
+            amount: log.amount,
+            orderNumber: log.orderNumber,
+            error: log.error,
+            polling: false,
+            createdAt: log.createdAt,
+          }));
+          setCallHistory(records);
+        }
+        if (credsData.email && credsData.apiKey) {
+          try {
+            const verifyRes = await apiRequest("POST", "/api/robocall/verify-key", { apiKey: credsData.apiKey, email: credsData.email });
+            const verifyData = await verifyRes.json();
+            const sms = verifyData.sms;
+            if (sms && sms.code === "000") {
+              setKeyVerified(true);
+              setBalance({ remaining_balance: sms.remaining_balance, remaining_date: sms.remaining_date || "" });
+            }
+          } catch {
+          }
+        }
+      } catch {
+      } finally {
+        setLoadingInit(false);
+      }
+    };
+    loadInitialData();
     return () => {
       pollingIntervals.current.forEach((interval) => clearInterval(interval));
     };
   }, []);
 
   const credentialsValid = apiKey.trim() && email.trim();
+
+  const saveCredentials = async () => {
+    if (!credentialsValid) return;
+    setSavingCreds(true);
+    try {
+      await apiRequest("POST", "/api/robocall/credentials", { email, apiKey });
+      toast({ title: "Saved", description: "Credentials saved to your account." });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setSavingCreds(false);
+    }
+  };
 
   const verifyKey = async () => {
     if (!credentialsValid) return;
@@ -99,7 +160,8 @@ export default function RoboCallPage() {
       } else if (sms && sms.code === "000") {
         setKeyVerified(true);
         setBalance({ remaining_balance: sms.remaining_balance, remaining_date: sms.remaining_date || "" });
-        toast({ title: "Verified", description: `Credentials valid. Balance: PKR ${sms.remaining_balance}` });
+        await apiRequest("POST", "/api/robocall/credentials", { email, apiKey });
+        toast({ title: "Verified & Saved", description: `Balance: PKR ${sms.remaining_balance}` });
       } else {
         setKeyVerified(false);
         toast({ title: "Invalid Credentials", description: sms?.response || "Verification failed.", variant: "destructive" });
@@ -203,17 +265,19 @@ export default function RoboCallPage() {
       if (data.error || (sms && sms.code !== "000" && sms.code !== "200" && sms.code !== "201")) {
         toast({ title: "Call Failed", description: data.error || sms?.response || "Unknown error", variant: "destructive" });
       } else {
-        const record: CallRecord = {
-          to: phoneTo.trim(),
-          callId,
-          status: "Initiated",
-          amount,
-          orderNumber,
-          polling: !!callId,
-        };
-        setCallHistory((prev) => [record, ...prev]);
         toast({ title: "Call Sent", description: `Call initiated to ${phoneTo}${callId ? ` (ID: ${callId})` : ""}` });
         if (callId) pollCallStatus(callId);
+        try {
+          const histRes = await apiRequest("GET", "/api/robocall/history");
+          const histData = await histRes.json();
+          if (histData.logs) {
+            setCallHistory(histData.logs.map((log: any) => ({
+              id: log.id, to: log.phone, callId: log.callId || undefined, status: log.status,
+              dtmf: log.dtmf, amount: log.amount, orderNumber: log.orderNumber, error: log.error,
+              polling: false, createdAt: log.createdAt,
+            })));
+          }
+        } catch {}
       }
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -239,23 +303,19 @@ export default function RoboCallPage() {
       const res = await apiRequest("POST", "/api/robocall/send-bulk", { apiKey, email, calls });
       const data = await res.json();
       if (data.results) {
-        const newRecords: CallRecord[] = data.results.map((r: any) => {
-          const smsR = r.sms;
-          const callId = r.data?.call_id ? String(r.data.call_id) : (smsR?.id ? String(smsR.id) : (smsR?.call_id ? String(smsR.call_id) : (r.call_id ? String(r.call_id) : undefined)));
-          const hasError = r.error || (smsR && smsR.code !== "000" && smsR.code !== "200" && smsR.code !== "201");
-          return {
-            to: r.to,
-            callId,
-            status: hasError ? "Error" : "Initiated",
-            error: r.error || (hasError ? smsR?.response : undefined),
-            polling: !hasError && !!callId,
-          };
-        });
-        setCallHistory((prev) => [...newRecords, ...prev]);
-        newRecords.forEach((rec) => {
-          if (rec.callId && !rec.error) pollCallStatus(rec.callId);
-        });
-        toast({ title: "Bulk Calls Sent", description: `${newRecords.filter((r) => !r.error).length} of ${newRecords.length} calls initiated.` });
+        const successCount = data.results.filter((r: any) => !r.error && r.sms?.code === "000").length;
+        toast({ title: "Bulk Calls Sent", description: `${successCount} of ${data.results.length} calls initiated.` });
+        try {
+          const histRes = await apiRequest("GET", "/api/robocall/history");
+          const histData = await histRes.json();
+          if (histData.logs) {
+            setCallHistory(histData.logs.map((log: any) => ({
+              id: log.id, to: log.phone, callId: log.callId || undefined, status: log.status,
+              dtmf: log.dtmf, amount: log.amount, orderNumber: log.orderNumber, error: log.error,
+              polling: false, createdAt: log.createdAt,
+            })));
+          }
+        } catch {}
       }
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -303,22 +363,31 @@ export default function RoboCallPage() {
       toast({ title: "Missing Credentials", description: "Enter email and API key first.", variant: "destructive" });
       return;
     }
-    const callsWithId = callHistory.filter((c) => c.callId);
-    if (callsWithId.length === 0) return;
     setSyncingAll(true);
-    let successCount = 0;
-    for (const call of callsWithId) {
-      const ok = await refreshCallStatus(call.callId!);
-      if (ok) successCount++;
+    try {
+      const res = await apiRequest("POST", "/api/robocall/sync-all", {});
+      const data = await res.json();
+      if (data.logs) {
+        const records: CallRecord[] = data.logs.map((log: any) => ({
+          id: log.id,
+          to: log.phone,
+          callId: log.callId || undefined,
+          status: log.status,
+          dtmf: log.dtmf,
+          amount: log.amount,
+          orderNumber: log.orderNumber,
+          error: log.error,
+          polling: false,
+          createdAt: log.createdAt,
+        }));
+        setCallHistory(records);
+      }
+      toast({ title: "Synced", description: `Updated ${data.updated} of ${data.total} pending call(s).` });
+    } catch (err: any) {
+      toast({ title: "Sync Error", description: err.message, variant: "destructive" });
+    } finally {
+      setSyncingAll(false);
     }
-    if (successCount === callsWithId.length) {
-      toast({ title: "Synced", description: `Updated status for ${successCount} call(s).` });
-    } else if (successCount > 0) {
-      toast({ title: "Partial Sync", description: `${successCount} of ${callsWithId.length} calls updated. Some failed.`, variant: "destructive" });
-    } else {
-      toast({ title: "Sync Failed", description: "Could not update any call statuses. Check your credentials.", variant: "destructive" });
-    }
-    setSyncingAll(false);
   };
 
   const addBulkRow = () => {
@@ -341,6 +410,14 @@ export default function RoboCallPage() {
     });
     if (rows.length > 0) setBulkRows(rows);
   };
+
+  if (loadingInit) {
+    return (
+      <div className="p-4 md:p-6 flex items-center justify-center min-h-[200px]">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-5xl">
@@ -401,6 +478,10 @@ export default function RoboCallPage() {
             <Button onClick={checkBalance} disabled={checkingBalance || !credentialsValid} variant="outline" data-testid="button-check-balance">
               {checkingBalance ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Wallet className="w-4 h-4 mr-1" />}
               Balance
+            </Button>
+            <Button onClick={saveCredentials} disabled={savingCreds || !credentialsValid} variant="outline" data-testid="button-save-credentials">
+              {savingCreds ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Save className="w-4 h-4 mr-1" />}
+              Save
             </Button>
             {keyVerified && (
               <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300" data-testid="badge-key-verified">
@@ -586,7 +667,7 @@ export default function RoboCallPage() {
               variant="outline"
               size="sm"
               onClick={syncAllCalls}
-              disabled={syncingAll || !credentialsValid || !callHistory.some((c) => c.callId)}
+              disabled={syncingAll || !credentialsValid}
               data-testid="button-sync-all-calls"
             >
               {syncingAll ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-1" />}

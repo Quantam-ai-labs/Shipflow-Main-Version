@@ -45,6 +45,8 @@ import {
   type WaMetaTemplate, type InsertWaMetaTemplate,
   waAutomations,
   type WaAutomation, type InsertWaAutomation,
+  robocallLogs,
+  type RobocallLog, type InsertRobocallLog,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, or, ilike, sql, count, inArray, isNull, isNotNull, gte, lte } from "drizzle-orm";
@@ -252,6 +254,15 @@ export interface IStorage {
   updateConversationLabel(merchantId: string, convId: string, label: string | null): Promise<void>;
   updateConversationAssignment(merchantId: string, convId: string, userId: string | null, userName: string | null): Promise<void>;
   markConversationRead(merchantId: string, convId: string): Promise<void>;
+
+  // RoboCall
+  getRobocallCredentials(merchantId: string): Promise<{ email: string; apiKey: string } | null>;
+  saveRobocallCredentials(merchantId: string, email: string, apiKey: string): Promise<void>;
+  createRobocallLog(log: InsertRobocallLog): Promise<RobocallLog>;
+  updateRobocallLog(id: string, data: Partial<InsertRobocallLog>): Promise<RobocallLog | undefined>;
+  getRobocallLogs(merchantId: string, limit?: number): Promise<RobocallLog[]>;
+  getRobocallLogByCallId(merchantId: string, callId: string): Promise<RobocallLog | undefined>;
+  getRobocallLogsByStatus(merchantId: string, statuses: string[]): Promise<RobocallLog[]>;
 
   // Seed
   seedDemoData(): Promise<void>;
@@ -2173,6 +2184,57 @@ export class DatabaseStorage implements IStorage {
     await db.update(waConversations)
       .set({ unreadCount: 0 })
       .where(and(eq(waConversations.id, convId), eq(waConversations.merchantId, merchantId)));
+  }
+
+  async getRobocallCredentials(merchantId: string): Promise<{ email: string; apiKey: string } | null> {
+    const [merchant] = await db.select({
+      email: merchants.robocallEmail,
+      apiKey: merchants.robocallApiKey,
+    }).from(merchants).where(eq(merchants.id, merchantId));
+    if (!merchant?.email || !merchant?.apiKey) return null;
+    return { email: merchant.email, apiKey: merchant.apiKey };
+  }
+
+  async saveRobocallCredentials(merchantId: string, email: string, apiKey: string): Promise<void> {
+    await db.update(merchants)
+      .set({ robocallEmail: email, robocallApiKey: apiKey, updatedAt: new Date() })
+      .where(eq(merchants.id, merchantId));
+  }
+
+  async createRobocallLog(log: InsertRobocallLog): Promise<RobocallLog> {
+    const [created] = await db.insert(robocallLogs).values(log).returning();
+    return created;
+  }
+
+  async updateRobocallLog(id: string, data: Partial<InsertRobocallLog>): Promise<RobocallLog | undefined> {
+    const [updated] = await db.update(robocallLogs)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(robocallLogs.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getRobocallLogs(merchantId: string, limit = 100): Promise<RobocallLog[]> {
+    return db.select().from(robocallLogs)
+      .where(eq(robocallLogs.merchantId, merchantId))
+      .orderBy(desc(robocallLogs.createdAt))
+      .limit(limit);
+  }
+
+  async getRobocallLogByCallId(merchantId: string, callId: string): Promise<RobocallLog | undefined> {
+    const [log] = await db.select().from(robocallLogs)
+      .where(and(eq(robocallLogs.merchantId, merchantId), eq(robocallLogs.callId, callId)));
+    return log;
+  }
+
+  async getRobocallLogsByStatus(merchantId: string, statuses: string[]): Promise<RobocallLog[]> {
+    return db.select().from(robocallLogs)
+      .where(and(
+        eq(robocallLogs.merchantId, merchantId),
+        inArray(robocallLogs.status, statuses),
+        isNotNull(robocallLogs.callId),
+      ))
+      .orderBy(desc(robocallLogs.createdAt));
   }
 
   async seedDemoData(): Promise<void> {

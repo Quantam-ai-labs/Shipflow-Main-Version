@@ -15056,6 +15056,33 @@ export async function registerRoutes(
     }
   }
 
+  app.get("/api/robocall/credentials", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const creds = await storage.getRobocallCredentials(merchantId);
+      if (!creds) return res.json({ email: "", apiKey: "", hasSavedKey: false });
+      res.json({ email: creds.email, apiKey: creds.apiKey, hasSavedKey: true });
+    } catch (error: any) {
+      console.error("[RoboCall] Get credentials error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/robocall/credentials", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { email, apiKey } = req.body;
+      if (!email || !apiKey) return res.status(400).json({ error: "Email and API key are required" });
+      await storage.saveRobocallCredentials(merchantId, email, apiKey);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("[RoboCall] Save credentials error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.post("/api/robocall/verify-key", isAuthenticated, async (req: any, res) => {
     try {
       const { apiKey, email } = req.body;
@@ -15084,6 +15111,8 @@ export async function registerRoutes(
 
   app.post("/api/robocall/send", isAuthenticated, async (req: any, res) => {
     try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
       const { apiKey, email, to, amount, voiceId, orderId, orderNumber } = req.body;
       if (!apiKey || !email || !to || !voiceId) return res.status(400).json({ error: "apiKey, email, phone number, and voiceId are required" });
       const params = new URLSearchParams({
@@ -15097,6 +15126,20 @@ export async function registerRoutes(
         order_number: orderNumber || "",
       });
       const data = await safeFetchJson(`${ROBOCALL_API_BASE}/send-voice?${params.toString()}`);
+      const sms = data.sms;
+      const callIdFromApi = data.data?.call_id ? String(data.data.call_id) : (sms?.id ? String(sms.id) : (sms?.call_id ? String(sms.call_id) : (data.call_id ? String(data.call_id) : null)));
+      const isSuccess = !data.raw && sms?.code === "000";
+      await storage.createRobocallLog({
+        merchantId,
+        callId: callIdFromApi,
+        phone: to,
+        amount: String(amount || 0),
+        voiceId: String(voiceId),
+        orderId: orderId || null,
+        orderNumber: orderNumber || null,
+        status: isSuccess ? "Initiated" : "Error",
+        error: data.raw ? data.error : (!isSuccess ? (sms?.response || "Send failed") : null),
+      });
       if (data.raw) return res.status(400).json({ error: data.error });
       res.json(data);
     } catch (error: any) {
@@ -15107,6 +15150,8 @@ export async function registerRoutes(
 
   app.post("/api/robocall/send-bulk", isAuthenticated, async (req: any, res) => {
     try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
       const { apiKey, email, calls } = req.body;
       if (!apiKey || !email || !Array.isArray(calls) || calls.length === 0) return res.status(400).json({ error: "apiKey, email, and calls array are required" });
       if (calls.length > 50) return res.status(400).json({ error: "Maximum 50 calls per batch" });
@@ -15124,7 +15169,21 @@ export async function registerRoutes(
             order_number: call.orderNumber || "",
           });
           const data = await safeFetchJson(`${ROBOCALL_API_BASE}/send-voice?${params.toString()}`);
-          results.push({ to: call.to, ...(data.raw ? { error: data.error } : data) });
+          const result = { to: call.to, ...(data.raw ? { error: data.error } : data) };
+          results.push(result);
+          const sms = data.sms;
+          const callIdFromApi = data.data?.call_id ? String(data.data.call_id) : (sms?.id ? String(sms.id) : (sms?.call_id ? String(sms.call_id) : (data.call_id ? String(data.call_id) : null)));
+          const isSuccess = !data.raw && sms?.code === "000";
+          await storage.createRobocallLog({
+            merchantId,
+            callId: callIdFromApi,
+            phone: call.to,
+            amount: String(call.amount || 0),
+            voiceId: String(call.voiceId),
+            orderNumber: call.orderNumber || null,
+            status: isSuccess ? "Initiated" : "Error",
+            error: data.raw ? data.error : (!isSuccess ? (sms?.response || "Send failed") : null),
+          });
           await new Promise(resolve => setTimeout(resolve, 200));
         } catch (err: any) {
           results.push({ to: call.to, error: err.message });
@@ -15139,14 +15198,75 @@ export async function registerRoutes(
 
   app.post("/api/robocall/status", isAuthenticated, async (req: any, res) => {
     try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
       const { apiKey, email, callId } = req.body;
       if (!apiKey || !email || !callId) return res.status(400).json({ error: "apiKey, email, and callId are required" });
       const data = await safeFetchJson(`${ROBOCALL_API_BASE}/get-call?email=${encodeURIComponent(email)}&key=${encodeURIComponent(apiKey)}&id=${encodeURIComponent(callId)}`);
       console.log(`[RoboCall] get-call response for ${callId}:`, JSON.stringify(data));
       if (data.raw) return res.status(400).json({ error: data.error });
+      const statusData = data.data || data.sms;
+      if (statusData && statusData.call_status !== undefined) {
+        const CALL_STATUS_LABELS: Record<number, string> = { 0: "Queued", 1: "Ringing", 2: "Answered", 3: "No Answer", 4: "Busy", 5: "Failed", 6: "Cancelled" };
+        const statusLabel = CALL_STATUS_LABELS[statusData.call_status] || `Status ${statusData.call_status}`;
+        const log = await storage.getRobocallLogByCallId(merchantId, callId);
+        if (log) {
+          await storage.updateRobocallLog(log.id, {
+            status: statusLabel,
+            dtmf: statusData.dtmf ?? null,
+          });
+        }
+      }
       res.json(data);
     } catch (error: any) {
       console.error("[RoboCall] Status error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/robocall/history", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const logs = await storage.getRobocallLogs(merchantId, 200);
+      res.json({ logs });
+    } catch (error: any) {
+      console.error("[RoboCall] History error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/robocall/sync-all", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const creds = await storage.getRobocallCredentials(merchantId);
+      if (!creds) return res.status(400).json({ error: "No RoboCall credentials saved" });
+      const nonFinalLogs = await storage.getRobocallLogsByStatus(merchantId, ["Initiated", "Queued", "Ringing"]);
+      const CALL_STATUS_LABELS: Record<number, string> = { 0: "Queued", 1: "Ringing", 2: "Answered", 3: "No Answer", 4: "Busy", 5: "Failed", 6: "Cancelled" };
+      let updated = 0;
+      for (const log of nonFinalLogs) {
+        if (!log.callId) continue;
+        try {
+          const data = await safeFetchJson(`${ROBOCALL_API_BASE}/get-call?email=${encodeURIComponent(creds.email)}&key=${encodeURIComponent(creds.apiKey)}&id=${encodeURIComponent(log.callId)}`);
+          const statusData = data.data || data.sms;
+          if (statusData && statusData.call_status !== undefined) {
+            const statusLabel = CALL_STATUS_LABELS[statusData.call_status] || `Status ${statusData.call_status}`;
+            await storage.updateRobocallLog(log.id, {
+              status: statusLabel,
+              dtmf: statusData.dtmf ?? null,
+            });
+            updated++;
+          }
+          await new Promise(resolve => setTimeout(resolve, 100));
+        } catch {
+          // continue to next
+        }
+      }
+      const logs = await storage.getRobocallLogs(merchantId, 200);
+      res.json({ updated, total: nonFinalLogs.length, logs });
+    } catch (error: any) {
+      console.error("[RoboCall] Sync all error:", error);
       res.status(500).json({ error: error.message });
     }
   });
