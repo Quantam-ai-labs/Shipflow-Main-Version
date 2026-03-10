@@ -41,12 +41,16 @@ interface CallRecord {
 
 const CALL_STATUS_MAP: Record<number, { label: string; color: string }> = {
   1: { label: "Initiated", color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300" },
-  2: { label: "Ringing", color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300" },
-  3: { label: "No Answer", color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300" },
+  2: { label: "Congestion", color: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300" },
+  3: { label: "No Response", color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300" },
   4: { label: "Answered", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300" },
-  5: { label: "Failed", color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300" },
-  6: { label: "Cancelled", color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300" },
-  8: { label: "Queued", color: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300" },
+  5: { label: "Busy", color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300" },
+  6: { label: "Hangup", color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300" },
+  7: { label: "Limit Exceeded", color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300" },
+  8: { label: "Sent to SIP", color: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300" },
+  9: { label: "Verified", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300" },
+  10: { label: "Deleted", color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300" },
+  11: { label: "Queued", color: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300" },
 };
 
 const DTMF_MAP: Record<number, { label: string; color: string }> = {
@@ -206,7 +210,8 @@ export default function RoboCallPage() {
         if (smsData && smsData.voice_status !== undefined) {
           const callStatus = smsData.voice_status;
           const dtmf = smsData.voice_dtmf && smsData.voice_dtmf > 0 ? smsData.voice_dtmf : null;
-          const isFinal = callStatus >= 3;
+          const FINAL_CODES = [4, 6, 9, 10];
+          const isFinal = FINAL_CODES.includes(callStatus);
 
           setCallHistory((prev) =>
             prev.map((c) =>
