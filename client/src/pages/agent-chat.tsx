@@ -281,11 +281,17 @@ function AuthVideo({ proxyUrl, className, caption }: { proxyUrl: string | null; 
   );
 }
 
+const WAVEFORM_BARS = [3,5,8,4,7,10,6,9,4,7,5,8,11,6,4,9,7,5,10,8,6,3,7,5,9,4,8,6,10,5];
+
 function AgentAudioPlayer({ src }: { src: string }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [loaded, setLoaded] = useState(false);
+
+  const safeDuration = (d: number) => (isFinite(d) && !isNaN(d) && d > 0) ? d : 0;
 
   const toggle = () => {
     const a = audioRef.current;
@@ -295,44 +301,75 @@ function AgentAudioPlayer({ src }: { src: string }) {
   };
 
   const formatTime = (s: number) => {
+    if (!isFinite(s) || isNaN(s) || s < 0) return "0:00";
     const m = Math.floor(s / 60);
     const sec = Math.floor(s % 60);
     return `${m}:${sec.toString().padStart(2, "0")}`;
   };
 
+  const handleDuration = () => {
+    const d = audioRef.current?.duration ?? 0;
+    const safe = safeDuration(d);
+    if (safe > 0) { setDuration(safe); setLoaded(true); }
+  };
+
   return (
-    <div className="flex items-center gap-2 min-w-[200px]" data-testid="audio-player">
+    <div className="flex items-center gap-2.5 min-w-[220px] py-1" data-testid="audio-player">
       <audio
         ref={audioRef}
         src={src}
         preload="metadata"
-        onLoadedMetadata={() => setDuration(audioRef.current?.duration ?? 0)}
+        onLoadedMetadata={handleDuration}
+        onDurationChange={handleDuration}
+        onCanPlay={() => { handleDuration(); setLoaded(true); }}
         onTimeUpdate={() => {
           const a = audioRef.current;
-          if (a && a.duration) setProgress((a.currentTime / a.duration) * 100);
+          if (!a) return;
+          const d = safeDuration(a.duration);
+          if (d > 0) {
+            setCurrentTime(a.currentTime);
+            setProgress((a.currentTime / d) * 100);
+            if (!duration) setDuration(d);
+          }
         }}
-        onEnded={() => { setPlaying(false); setProgress(0); }}
+        onEnded={() => { setPlaying(false); setProgress(0); setCurrentTime(0); }}
       />
       <button
         onClick={toggle}
-        className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center active:bg-blue-500/30 transition-colors"
+        className="flex-shrink-0 w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center active:bg-blue-600 transition-colors shadow-sm"
         data-testid="audio-play-btn"
       >
-        {playing ? <Pause className="w-4 h-4 text-blue-400" /> : <Play className="w-4 h-4 text-blue-400 ml-0.5" />}
+        {playing ? <Pause className="w-4 h-4 text-white" /> : <Play className="w-4 h-4 text-white ml-0.5" />}
       </button>
-      <div className="flex-1 flex flex-col gap-0.5">
-        <div className="w-full h-1.5 bg-slate-700 rounded-full overflow-hidden cursor-pointer"
+      <div className="flex-1 flex flex-col gap-1">
+        <div className="relative w-full h-[22px] flex items-end gap-[2px] cursor-pointer"
           onClick={(e) => {
             const rect = e.currentTarget.getBoundingClientRect();
             const pct = (e.clientX - rect.left) / rect.width;
-            if (audioRef.current) { audioRef.current.currentTime = pct * (audioRef.current.duration || 0); }
+            const a = audioRef.current;
+            const d = safeDuration(a?.duration ?? 0);
+            if (a && d > 0) { a.currentTime = pct * d; }
           }}
         >
-          <div className="h-full bg-blue-400 rounded-full transition-all" style={{ width: `${progress}%` }} />
+          {WAVEFORM_BARS.map((h, i) => {
+            const barPct = ((i + 0.5) / WAVEFORM_BARS.length) * 100;
+            const isPlayed = barPct <= progress;
+            return (
+              <div
+                key={i}
+                className={cn(
+                  "flex-1 rounded-full transition-colors duration-150",
+                  isPlayed ? "bg-blue-400" : "bg-slate-600"
+                )}
+                style={{ height: `${h * 2}px` }}
+              />
+            );
+          })}
         </div>
-        <span className="text-[10px] text-slate-500">{duration > 0 ? formatTime(duration) : "0:00"}</span>
+        <span className="text-[10px] text-slate-400 tabular-nums">
+          {playing ? formatTime(currentTime) : formatTime(duration)}
+        </span>
       </div>
-      <Volume2 className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
     </div>
   );
 }
