@@ -2078,7 +2078,7 @@ export const robocallLogs = pgTable("robocall_logs", {
   phone: varchar("phone", { length: 50 }).notNull(),
   amount: varchar("amount", { length: 50 }),
   voiceId: varchar("voice_id", { length: 10 }),
-  orderId: varchar("order_id"),
+  brandName: varchar("brand_name", { length: 200 }),
   orderNumber: varchar("order_number", { length: 100 }),
   status: varchar("status", { length: 50 }).notNull().default("Initiated"),
   dtmf: integer("dtmf"),

@@ -32,6 +32,7 @@ interface CallRecord {
   status: string;
   dtmf?: number | null;
   amount?: string;
+  brandName?: string;
   orderNumber?: string;
   error?: string;
   polling?: boolean;
@@ -70,12 +71,12 @@ export default function RoboCallPage() {
   const [phoneTo, setPhoneTo] = useState("");
   const [amount, setAmount] = useState("");
   const [voiceId, setVoiceId] = useState("1");
-  const [orderId, setOrderId] = useState("");
+  const [brandName, setBrandName] = useState("");
   const [orderNumber, setOrderNumber] = useState("");
   const [sending, setSending] = useState(false);
 
-  const [bulkRows, setBulkRows] = useState<Array<{ to: string; amount: string; orderNumber: string }>>([
-    { to: "", amount: "", orderNumber: "" },
+  const [bulkRows, setBulkRows] = useState<Array<{ to: string; amount: string; brandName: string; orderNumber: string }>>([
+    { to: "", amount: "", brandName: "", orderNumber: "" },
   ]);
   const [bulkVoiceId, setBulkVoiceId] = useState("1");
   const [sendingBulk, setSendingBulk] = useState(false);
@@ -102,6 +103,7 @@ export default function RoboCallPage() {
             status: log.status,
             dtmf: log.dtmf,
             amount: log.amount,
+            brandName: log.brandName,
             orderNumber: log.orderNumber,
             error: log.error,
             polling: false,
@@ -256,7 +258,7 @@ export default function RoboCallPage() {
         to: phoneTo.trim(),
         amount: amount || "0",
         voiceId,
-        orderId,
+        brandName,
         orderNumber,
       });
       const data = await res.json();
@@ -273,7 +275,7 @@ export default function RoboCallPage() {
           if (histData.logs) {
             setCallHistory(histData.logs.map((log: any) => ({
               id: log.id, to: log.phone, callId: log.callId || undefined, status: log.status,
-              dtmf: log.dtmf, amount: log.amount, orderNumber: log.orderNumber, error: log.error,
+              dtmf: log.dtmf, amount: log.amount, brandName: log.brandName, orderNumber: log.orderNumber, error: log.error,
               polling: false, createdAt: log.createdAt,
             })));
           }
@@ -298,6 +300,7 @@ export default function RoboCallPage() {
         to: r.to.trim(),
         amount: r.amount || "0",
         voiceId: bulkVoiceId,
+        brandName: r.brandName || "",
         orderNumber: r.orderNumber || "",
       }));
       const res = await apiRequest("POST", "/api/robocall/send-bulk", { apiKey, email, calls });
@@ -311,7 +314,7 @@ export default function RoboCallPage() {
           if (histData.logs) {
             setCallHistory(histData.logs.map((log: any) => ({
               id: log.id, to: log.phone, callId: log.callId || undefined, status: log.status,
-              dtmf: log.dtmf, amount: log.amount, orderNumber: log.orderNumber, error: log.error,
+              dtmf: log.dtmf, amount: log.amount, brandName: log.brandName, orderNumber: log.orderNumber, error: log.error,
               polling: false, createdAt: log.createdAt,
             })));
           }
@@ -375,6 +378,7 @@ export default function RoboCallPage() {
           status: log.status,
           dtmf: log.dtmf,
           amount: log.amount,
+          brandName: log.brandName,
           orderNumber: log.orderNumber,
           error: log.error,
           polling: false,
@@ -391,7 +395,7 @@ export default function RoboCallPage() {
   };
 
   const addBulkRow = () => {
-    setBulkRows((prev) => [...prev, { to: "", amount: "", orderNumber: "" }]);
+    setBulkRows((prev) => [...prev, { to: "", amount: "", brandName: "", orderNumber: "" }]);
   };
 
   const removeBulkRow = (index: number) => {
@@ -406,7 +410,7 @@ export default function RoboCallPage() {
     const lines = text.split("\n").filter((l) => l.trim());
     const rows = lines.map((line) => {
       const parts = line.split(/[,\t]/).map((p) => p.trim());
-      return { to: parts[0] || "", amount: parts[1] || "", orderNumber: parts[2] || "" };
+      return { to: parts[0] || "", amount: parts[1] || "", brandName: parts[2] || "", orderNumber: parts[3] || "" };
     });
     if (rows.length > 0) setBulkRows(rows);
   };
@@ -553,14 +557,15 @@ export default function RoboCallPage() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="orderId">Order ID</Label>
+                  <Label htmlFor="brandName">Brand Name</Label>
                   <Input
-                    id="orderId"
-                    placeholder="123"
-                    value={orderId}
-                    onChange={(e) => setOrderId(e.target.value)}
-                    data-testid="input-order-id"
+                    id="brandName"
+                    placeholder="My Store"
+                    value={brandName}
+                    onChange={(e) => setBrandName(e.target.value)}
+                    data-testid="input-brand-name"
                   />
+                  <p className="text-xs text-muted-foreground mt-1">Read aloud in the IVR call</p>
                 </div>
                 <div>
                   <Label htmlFor="orderNumber">Order Number</Label>
@@ -602,9 +607,9 @@ export default function RoboCallPage() {
               </div>
 
               <div>
-                <Label>Paste CSV (phone, amount, orderNumber — one per line)</Label>
+                <Label>Paste CSV (phone, amount, brandName, orderNumber — one per line)</Label>
                 <Textarea
-                  placeholder={"923001234567, 1500, ORD001\n923009876543, 2000, ORD002"}
+                  placeholder={"923001234567, 1500, MyStore, ORD001\n923009876543, 2000, MyStore, ORD002"}
                   rows={3}
                   onChange={(e) => parseBulkText(e.target.value)}
                   data-testid="textarea-bulk-csv"
@@ -630,10 +635,17 @@ export default function RoboCallPage() {
                       data-testid={`input-bulk-amount-${i}`}
                     />
                     <Input
+                      placeholder="Brand"
+                      value={row.brandName}
+                      onChange={(e) => updateBulkRow(i, "brandName", e.target.value)}
+                      className="w-28"
+                      data-testid={`input-bulk-brand-${i}`}
+                    />
+                    <Input
                       placeholder="Order #"
                       value={row.orderNumber}
                       onChange={(e) => updateBulkRow(i, "orderNumber", e.target.value)}
-                      className="w-32"
+                      className="w-28"
                       data-testid={`input-bulk-ordernum-${i}`}
                     />
                     <Button variant="ghost" size="icon" onClick={() => removeBulkRow(i)} disabled={bulkRows.length === 1} data-testid={`button-remove-row-${i}`}>
@@ -683,6 +695,7 @@ export default function RoboCallPage() {
                     <th className="py-2 pr-4 font-medium">Phone</th>
                     <th className="py-2 pr-4 font-medium">Call ID</th>
                     <th className="py-2 pr-4 font-medium">Amount</th>
+                    <th className="py-2 pr-4 font-medium">Brand</th>
                     <th className="py-2 pr-4 font-medium">Order #</th>
                     <th className="py-2 pr-4 font-medium">Status</th>
                     <th className="py-2 pr-4 font-medium">Response</th>
@@ -695,6 +708,7 @@ export default function RoboCallPage() {
                       <td className="py-2 pr-4 font-mono" data-testid={`text-call-phone-${i}`}>{call.to}</td>
                       <td className="py-2 pr-4 font-mono text-muted-foreground" data-testid={`text-call-id-${i}`}>{call.callId || "—"}</td>
                       <td className="py-2 pr-4" data-testid={`text-call-amount-${i}`}>{call.amount || "—"}</td>
+                      <td className="py-2 pr-4" data-testid={`text-call-brand-${i}`}>{call.brandName || "—"}</td>
                       <td className="py-2 pr-4" data-testid={`text-call-order-${i}`}>{call.orderNumber || "—"}</td>
                       <td className="py-2 pr-4">
                         <div className="flex items-center gap-1">

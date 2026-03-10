@@ -15113,7 +15113,7 @@ export async function registerRoutes(
     try {
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
-      const { apiKey, email, to, amount, voiceId, orderId, orderNumber } = req.body;
+      const { apiKey, email, to, amount, voiceId, brandName, orderNumber } = req.body;
       if (!apiKey || !email || !to || !voiceId) return res.status(400).json({ error: "apiKey, email, phone number, and voiceId are required" });
       const params = new URLSearchParams({
         email,
@@ -15122,7 +15122,7 @@ export async function registerRoutes(
         type: "dtmf",
         voice_id: String(voiceId),
         amount: String(amount || 0),
-        order_id: orderId || "",
+        brand_name: brandName || "",
         order_number: orderNumber || "",
       });
       const data = await safeFetchJson(`${ROBOCALL_API_BASE}/send-voice?${params.toString()}`);
@@ -15135,7 +15135,7 @@ export async function registerRoutes(
         phone: to,
         amount: String(amount || 0),
         voiceId: String(voiceId),
-        orderId: orderId || null,
+        brandName: brandName || null,
         orderNumber: orderNumber || null,
         status: isSuccess ? "Initiated" : "Error",
         error: data.raw ? data.error : (!isSuccess ? (sms?.response || "Send failed") : null),
@@ -15165,7 +15165,7 @@ export async function registerRoutes(
             type: "dtmf",
             voice_id: String(call.voiceId),
             amount: String(call.amount || 0),
-            order_id: call.orderId || "",
+            brand_name: call.brandName || "",
             order_number: call.orderNumber || "",
           });
           const data = await safeFetchJson(`${ROBOCALL_API_BASE}/send-voice?${params.toString()}`);
@@ -15180,6 +15180,7 @@ export async function registerRoutes(
             phone: call.to,
             amount: String(call.amount || 0),
             voiceId: String(call.voiceId),
+            brandName: call.brandName || null,
             orderNumber: call.orderNumber || null,
             status: isSuccess ? "Initiated" : "Error",
             error: data.raw ? data.error : (!isSuccess ? (sms?.response || "Send failed") : null),
