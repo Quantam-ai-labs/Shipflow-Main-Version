@@ -5,6 +5,8 @@ import { createServer } from "http";
 import { startAutoSync } from "./services/autoSync";
 import { startCourierSyncScheduler } from "./services/courierSyncScheduler";
 import { startMarketingSyncScheduler } from "./services/metaAds";
+import { startConfirmationTimer } from "./services/confirmationTimer";
+import { startRobocallQueueProcessor } from "./services/robocallQueue";
 import { db } from "./db";
 import { shopifyStores, users, courierAccounts } from "../shared/schema";
 import { eq } from "drizzle-orm";
@@ -193,6 +195,8 @@ function scheduleStartupRecovery() {
       startAutoSync();
       startCourierSyncScheduler();
       startMarketingSyncScheduler();
+      startConfirmationTimer();
+      startRobocallQueueProcessor();
       scheduleStartupRecovery();
       warmCourierCityCache();
     },

@@ -3,6 +3,16 @@ import { storage } from '../storage';
 import { shopifyService } from './shopify';
 import { isRecentWriteBack } from './shopifyWriteBack';
 import { sendOrderStatusWhatsApp } from '../utils/integrations/whatsapp';
+import { initializeOrderConfirmation, logConfirmationEvent } from './confirmationEngine';
+import { db } from '../db';
+import { orders } from '@shared/schema';
+import { eq } from 'drizzle-orm';
+
+async function db_updateWaSentAt(orderId: string) {
+  try {
+    await db.update(orders).set({ waConfirmationSentAt: new Date() }).where(eq(orders.id, orderId));
+  } catch {}
+}
 
 interface WebhookProcessResult {
   success: boolean;
@@ -254,6 +264,13 @@ export class WebhookHandler {
         });
         resultOrderId = created.id;
         console.log(`[Webhook] Created new order ${transformedOrder.orderNumber} (${topic})`);
+
+        initializeOrderConfirmation({
+          merchantId,
+          orderId: created.id,
+          orderNumber: created.orderNumber,
+        }).catch(err => console.error(`[Webhook] Confirmation init failed for ${created.orderNumber}:`, err));
+
         try {
           await sendOrderStatusWhatsApp({
             merchantId,
@@ -270,8 +287,26 @@ export class WebhookHandler {
             lineItems: Array.isArray(created.lineItems) ? (created.lineItems as any[]) : null,
             shopDomain: (created as any).shopDomain || null,
           });
+
+          await logConfirmationEvent({
+            merchantId,
+            orderId: created.id,
+            eventType: "WA_SENT",
+            channel: "whatsapp",
+            note: `Confirmation WhatsApp sent to ${created.customerPhone}`,
+          }).catch(() => {});
+
+          await db_updateWaSentAt(created.id);
         } catch (waErr) {
           console.error(`[Webhook] WhatsApp notification failed for order ${created.orderNumber}:`, waErr);
+          await logConfirmationEvent({
+            merchantId,
+            orderId: created.id,
+            eventType: "WA_SENT",
+            channel: "whatsapp",
+            errorDetails: String(waErr),
+            note: "WhatsApp confirmation send failed",
+          }).catch(() => {});
         }
       }
 

@@ -653,12 +653,25 @@ export class DatabaseStorage implements IStorage {
       .where(and(...conditions))
       .groupBy(orders.workflowStatus);
     
-    const counts: Record<string, number> = { NEW: 0, PENDING: 0, HOLD: 0, READY_TO_SHIP: 0, BOOKED: 0, FULFILLED: 0, DELIVERED: 0, RETURN: 0, CANCELLED: 0 };
-    const totalAmounts: Record<string, number> = { NEW: 0, PENDING: 0, HOLD: 0, READY_TO_SHIP: 0, BOOKED: 0, FULFILLED: 0, DELIVERED: 0, RETURN: 0, CANCELLED: 0 };
+    const counts: Record<string, number> = { NEW: 0, PENDING: 0, HOLD: 0, READY_TO_SHIP: 0, BOOKED: 0, FULFILLED: 0, DELIVERED: 0, RETURN: 0, CANCELLED: 0, CONFIRMATION_PENDING: 0 };
+    const totalAmounts: Record<string, number> = { NEW: 0, PENDING: 0, HOLD: 0, READY_TO_SHIP: 0, BOOKED: 0, FULFILLED: 0, DELIVERED: 0, RETURN: 0, CANCELLED: 0, CONFIRMATION_PENDING: 0 };
     for (const row of result) {
       counts[row.status] = row.count;
       totalAmounts[row.status] = Number(row.totalAmount) || 0;
     }
+
+    const [cpResult] = await db.select({
+      count: count(),
+      totalAmount: sql<string>`COALESCE(SUM(${orders.totalAmount}), 0)`,
+    }).from(orders)
+      .where(and(
+        ...conditions,
+        eq(orders.workflowStatus, "PENDING"),
+        eq(orders.pendingReasonType, "confirmation_pending"),
+      ));
+    counts.CONFIRMATION_PENDING = cpResult?.count || 0;
+    totalAmounts.CONFIRMATION_PENDING = Number(cpResult?.totalAmount) || 0;
+
     return { counts, totalAmounts };
   }
 

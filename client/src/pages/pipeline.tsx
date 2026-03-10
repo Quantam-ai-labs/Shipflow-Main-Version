@@ -80,6 +80,8 @@ import {
   SlidersHorizontal,
   Tag,
   X,
+  AlertTriangle,
+  Lock,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -255,6 +257,7 @@ const STAGE_TITLES: Record<string, string> = {
 };
 
 const PENDING_REASON_TYPES = [
+  { value: "confirmation_pending", label: "Confirmation" },
   { value: "INCOMPLETE_ADDRESS", label: "Address" },
   { value: "MISSING_PHONE", label: "Phone" },
   { value: "WRONG_CITY", label: "City" },
@@ -1861,6 +1864,24 @@ export default function Pipeline() {
                         <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-green-100 dark:bg-green-900 border border-green-300 dark:border-green-700" title="Custom Order" data-testid={`badge-draft-${order.id}`}>
                           <PenLine className="w-2.5 h-2.5 text-green-700 dark:text-green-300" />
                         </span>
+                      )}
+                      {(order as any).confirmationSource && (
+                        <span className={`inline-flex items-center justify-center px-1 py-0.5 rounded text-[10px] font-medium leading-none ${
+                          (order as any).confirmationSource === "whatsapp" ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" :
+                          (order as any).confirmationSource === "robocall" ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300" :
+                          (order as any).confirmationSource === "manual" ? "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300" :
+                          "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"
+                        }`} title={`Confirmed via ${(order as any).confirmationSource}`} data-testid={`badge-source-${order.id}`}>
+                          {(order as any).confirmationSource === "whatsapp" ? "WA" : (order as any).confirmationSource === "robocall" ? "RC" : "M"}
+                        </span>
+                      )}
+                      {(order as any).conflictDetected && (
+                        <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-orange-100 dark:bg-orange-900 border border-orange-300 dark:border-orange-700" title="Conflict Detected" data-testid={`badge-conflict-${order.id}`}>
+                          <AlertTriangle className="w-2.5 h-2.5 text-orange-700 dark:text-orange-300" />
+                        </span>
+                      )}
+                      {(order as any).confirmationLocked && (
+                        <Lock className="w-3 h-3 text-muted-foreground" data-testid={`badge-locked-${order.id}`} />
                       )}
                     </div>
                     <div className="text-xs text-muted-foreground">

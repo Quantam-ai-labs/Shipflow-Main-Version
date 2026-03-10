@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Select,
   SelectContent,
@@ -43,6 +44,8 @@ import {
   Edit3,
   Lock,
   ArrowRightLeft,
+  Shield,
+  UserCheck,
   DollarSign,
   Ban,
   ChevronDown,
@@ -388,6 +391,334 @@ function ActivityTimeline({ auditLog, changeLog }: { auditLog: any[] | undefined
             className="w-full mt-3"
             onClick={() => setExpanded(!expanded)}
             data-testid="button-toggle-activity"
+          >
+            {expanded ? (
+              <>
+                <ChevronUp className="w-4 h-4 mr-1" />
+                Show Less
+              </>
+            ) : (
+              <>
+                <ChevronDown className="w-4 h-4 mr-1" />
+                Show All ({timeline.length})
+              </>
+            )}
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function getConfirmationStatusBadge(status: string | null | undefined) {
+  const s = (status || "pending").toLowerCase();
+  const map: Record<string, { cls: string; label: string }> = {
+    confirmed: { cls: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300", label: "Confirmed" },
+    cancelled: { cls: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300", label: "Cancelled" },
+    pending: { cls: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300", label: "Pending" },
+    query: { cls: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300", label: "Query" },
+    conflict: { cls: "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300", label: "Conflict" },
+  };
+  const c = map[s] || map.pending;
+  return <Badge className={c.cls} data-testid="badge-confirmation-status">{c.label}</Badge>;
+}
+
+function getConfirmationSourceBadge(source: string | null | undefined) {
+  if (!source) return null;
+  const s = source.toLowerCase();
+  const map: Record<string, { icon: React.ElementType; cls: string; label: string }> = {
+    whatsapp: { icon: MessageCircle, cls: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300", label: "WhatsApp" },
+    robocall: { icon: Phone, cls: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300", label: "Robocall" },
+    manual: { icon: UserCheck, cls: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300", label: "Manual" },
+  };
+  const c = map[s] || { icon: Clock, cls: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300", label: source };
+  const Icon = c.icon;
+  return (
+    <Badge className={c.cls} data-testid="badge-confirmation-source">
+      <Icon className="w-3 h-3 mr-1" />
+      {c.label}
+    </Badge>
+  );
+}
+
+function ConfirmationStatusCard({ order, orderId }: { order: OrderDetails; orderId: string }) {
+  const [resolutionNote, setResolutionNote] = useState("");
+  const { toast } = useToast();
+
+  const confirmMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", `/api/orders/${orderId}/manual-confirm`, { note: resolutionNote });
+    },
+    onSuccess: () => {
+      toast({ title: "Order confirmed manually" });
+      setResolutionNote("");
+      queryClient.invalidateQueries({ queryKey: ["/api/orders", orderId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders", orderId, "confirmation-timeline"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", `/api/orders/${orderId}/manual-cancel`, { note: resolutionNote });
+    },
+    onSuccess: () => {
+      toast({ title: "Order cancelled manually" });
+      setResolutionNote("");
+      queryClient.invalidateQueries({ queryKey: ["/api/orders", orderId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders", orderId, "confirmation-timeline"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const showResolution = order.workflowStatus === "HOLD" || order.conflictDetected === true;
+
+  return (
+    <Card data-testid="card-confirmation-status">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-lg flex items-center gap-2">
+          <Shield className="w-5 h-5" />
+          Confirmation Status
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          {getConfirmationStatusBadge((order as any).confirmationStatus)}
+          {getConfirmationSourceBadge((order as any).confirmationSource)}
+          {(order as any).confirmationLocked && (
+            <Badge variant="outline" className="gap-1" data-testid="badge-confirmation-locked">
+              <Lock className="w-3 h-3" />
+              Locked
+            </Badge>
+          )}
+        </div>
+
+        {(order as any).conflictDetected && (
+          <Alert variant="destructive" data-testid="alert-conflict">
+            <AlertTriangle className="w-4 h-4" />
+            <AlertDescription>
+              Conflicting responses detected. Manual resolution required.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        <div className="space-y-1 text-sm">
+          {(order as any).waConfirmationSentAt && (
+            <div className="flex justify-between gap-2">
+              <span className="text-muted-foreground">WA Sent</span>
+              <span data-testid="text-wa-sent-time">
+                {formatDistanceToNow(new Date((order as any).waConfirmationSentAt), { addSuffix: true })}
+              </span>
+            </div>
+          )}
+          {(order as any).waResponseAt && (
+            <div className="flex justify-between gap-2">
+              <span className="text-muted-foreground">WA Response</span>
+              <span data-testid="text-wa-response-time">
+                {formatDistanceToNow(new Date((order as any).waResponseAt), { addSuffix: true })}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {showResolution && (
+          <>
+            <Separator />
+            <div className="space-y-2">
+              <Input
+                placeholder="Resolution note (required)"
+                value={resolutionNote}
+                onChange={(e) => setResolutionNote(e.target.value)}
+                data-testid="input-resolution-note"
+              />
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => confirmMutation.mutate()}
+                  disabled={!resolutionNote.trim() || confirmMutation.isPending || cancelMutation.isPending}
+                  className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                  data-testid="button-manual-confirm"
+                >
+                  {confirmMutation.isPending ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5 mr-1" />}
+                  Manual Confirm
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => cancelMutation.mutate()}
+                  disabled={!resolutionNote.trim() || confirmMutation.isPending || cancelMutation.isPending}
+                  className="flex-1"
+                  data-testid="button-manual-cancel"
+                >
+                  {cancelMutation.isPending ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <XCircle className="w-3.5 h-3.5 mr-1" />}
+                  Manual Cancel
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function getTimelineEventIcon(eventType: string): React.ElementType {
+  const map: Record<string, React.ElementType> = {
+    ORDER_IMPORTED: Clock,
+    WA_SENT: MessageCircle,
+    WA_RESPONSE: MessageCircle,
+    MOVED_TO_PENDING: Clock,
+    CALL_QUEUED: Phone,
+    CALL_ATTEMPTED: Phone,
+    CALL_RESPONSE: Phone,
+    STATUS_CHANGED: Shield,
+    TAGS_WRITTEN: Tag,
+    MANUAL_OVERRIDE: UserCheck,
+    ORDER_BOOKED: Package,
+    LATE_RESPONSE_IGNORED: AlertTriangle,
+  };
+  return map[eventType] || Clock;
+}
+
+function getTimelineEventLabel(eventType: string): string {
+  const map: Record<string, string> = {
+    ORDER_IMPORTED: "Order Imported",
+    WA_SENT: "WhatsApp Sent",
+    WA_RESPONSE: "WhatsApp Response",
+    MOVED_TO_PENDING: "Moved to Pending",
+    CALL_QUEUED: "Call Queued",
+    CALL_ATTEMPTED: "Call Attempted",
+    CALL_RESPONSE: "Call Response",
+    STATUS_CHANGED: "Status Changed",
+    TAGS_WRITTEN: "Tags Written",
+    MANUAL_OVERRIDE: "Manual Override",
+    ORDER_BOOKED: "Order Booked",
+    LATE_RESPONSE_IGNORED: "Late Response Ignored",
+  };
+  return map[eventType] || eventType.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
+}
+
+function getTimelineEventColor(eventType: string): string {
+  const map: Record<string, string> = {
+    ORDER_IMPORTED: "text-blue-500 bg-blue-100 dark:bg-blue-950",
+    WA_SENT: "text-green-500 bg-green-100 dark:bg-green-950",
+    WA_RESPONSE: "text-green-600 bg-green-100 dark:bg-green-950",
+    MOVED_TO_PENDING: "text-yellow-500 bg-yellow-100 dark:bg-yellow-950",
+    CALL_QUEUED: "text-blue-500 bg-blue-100 dark:bg-blue-950",
+    CALL_ATTEMPTED: "text-indigo-500 bg-indigo-100 dark:bg-indigo-950",
+    CALL_RESPONSE: "text-indigo-600 bg-indigo-100 dark:bg-indigo-950",
+    STATUS_CHANGED: "text-purple-500 bg-purple-100 dark:bg-purple-950",
+    TAGS_WRITTEN: "text-sky-500 bg-sky-100 dark:bg-sky-950",
+    MANUAL_OVERRIDE: "text-amber-500 bg-amber-100 dark:bg-amber-950",
+    ORDER_BOOKED: "text-cyan-500 bg-cyan-100 dark:bg-cyan-950",
+    LATE_RESPONSE_IGNORED: "text-orange-500 bg-orange-100 dark:bg-orange-950",
+  };
+  return map[eventType] || "text-muted-foreground bg-muted";
+}
+
+function getChannelBadge(channel: string | null | undefined) {
+  if (!channel) return null;
+  const c = channel.toLowerCase();
+  const map: Record<string, string> = {
+    whatsapp: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
+    robocall: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
+    manual: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
+    system: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
+  };
+  return <Badge className={map[c] || map.system} variant="outline">{channel}</Badge>;
+}
+
+function ConfirmationTimeline({ orderId }: { orderId: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const COLLAPSED_COUNT = 5;
+
+  const { data, isLoading } = useQuery<{ timeline: any[] }>({
+    queryKey: ["/api/orders", orderId, "confirmation-timeline"],
+    staleTime: 30000,
+  });
+
+  const timeline = data?.timeline || [];
+
+  if (isLoading) {
+    return (
+      <Card data-testid="card-confirmation-timeline">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Shield className="w-5 h-5" />
+            Confirmation Timeline
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {[1, 2, 3].map(i => <Skeleton key={i} className="h-10 w-full" />)}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (timeline.length === 0) return null;
+
+  const visible = expanded ? timeline : timeline.slice(0, COLLAPSED_COUNT);
+  const hasMore = timeline.length > COLLAPSED_COUNT;
+
+  return (
+    <Card data-testid="card-confirmation-timeline">
+      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+        <CardTitle className="text-lg flex items-center gap-2">
+          <Shield className="w-5 h-5" />
+          Confirmation Timeline
+        </CardTitle>
+        <Badge variant="secondary" className="text-xs">{timeline.length}</Badge>
+      </CardHeader>
+      <CardContent>
+        <div className="relative" data-testid="confirmation-timeline-list">
+          <div className="absolute left-4 top-0 bottom-0 w-px bg-border" />
+          <div className="space-y-4">
+            {visible.map((event: any, idx: number) => {
+              const Icon = getTimelineEventIcon(event.eventType);
+              const colorCls = getTimelineEventColor(event.eventType);
+              const label = getTimelineEventLabel(event.eventType);
+              const timeStr = event.createdAt ? formatDistanceToNow(new Date(event.createdAt), { addSuffix: true }) : "";
+
+              return (
+                <div key={event.id || idx} className="flex items-start gap-3 relative" data-testid={`confirmation-event-${idx}`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 z-10 ${colorCls}`}>
+                    <Icon className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="flex-1 min-w-0 pt-0.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-medium">{label}</span>
+                      {getChannelBadge(event.channel)}
+                    </div>
+                    {(event.oldStatus || event.newStatus) && (
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                        {event.oldStatus && <Badge variant="outline" className="text-xs">{event.oldStatus}</Badge>}
+                        {event.oldStatus && event.newStatus && <ArrowRightLeft className="w-3 h-3 text-muted-foreground" />}
+                        {event.newStatus && <Badge variant="secondary" className="text-xs">{event.newStatus}</Badge>}
+                      </div>
+                    )}
+                    {event.note && (
+                      <p className="text-xs text-muted-foreground mt-0.5 break-words">{event.note}</p>
+                    )}
+                    <p className="text-xs text-muted-foreground/60 mt-0.5">{timeStr}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        {hasMore && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full mt-3"
+            onClick={() => setExpanded(!expanded)}
+            data-testid="button-toggle-confirmation-timeline"
           >
             {expanded ? (
               <>
@@ -1066,6 +1397,8 @@ export default function OrderDetails() {
         </div>
       )}
 
+      <ConfirmationStatusCard order={order} orderId={id!} />
+
       <div className="grid lg:grid-cols-3 gap-4">
         {/* Main Content */}
         <div className="lg:col-span-2 space-y-4">
@@ -1382,6 +1715,8 @@ export default function OrderDetails() {
               </CardContent>
             </Card>
           )}
+
+          <ConfirmationTimeline orderId={id!} />
 
           {/* Combined Activity History */}
           <ActivityTimeline auditLog={auditLog} changeLog={order?.changeLog} />

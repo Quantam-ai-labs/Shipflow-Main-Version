@@ -48,6 +48,9 @@ export const merchants = pgTable("merchants", {
   supportChatPinHash: varchar("support_chat_pin_hash", { length: 128 }),
   robocallEmail: varchar("robocall_email", { length: 255 }),
   robocallApiKey: text("robocall_api_key"),
+  robocallStartTime: varchar("robocall_start_time", { length: 5 }).default("10:00"),
+  robocallEndTime: varchar("robocall_end_time", { length: 5 }).default("20:00"),
+  robocallVoiceId: varchar("robocall_voice_id", { length: 10 }).default("735"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -257,6 +260,16 @@ export const orders = pgTable("orders", {
   lastPaymentAt: timestamp("last_payment_at"),
   orderSource: varchar("order_source", { length: 50 }),
   shopDomain: varchar("shop_domain", { length: 255 }),
+  confirmationStatus: varchar("confirmation_status", { length: 30 }).default("pending"),
+  confirmationSource: varchar("confirmation_source", { length: 20 }),
+  confirmationLocked: boolean("confirmation_locked").default(false),
+  confirmationLockedAt: timestamp("confirmation_locked_at"),
+  waConfirmationSentAt: timestamp("wa_confirmation_sent_at"),
+  waResponseAt: timestamp("wa_response_at"),
+  waResponsePayload: jsonb("wa_response_payload"),
+  roboResponseAt: timestamp("robo_response_at"),
+  conflictDetected: boolean("conflict_detected").default(false),
+  confirmationResponseCount: integer("confirmation_response_count").default(0),
 }, (table) => [
   index("idx_orders_merchant").on(table.merchantId),
   index("idx_orders_shopify_id").on(table.shopifyOrderId),
@@ -2093,3 +2106,88 @@ export const robocallLogs = pgTable("robocall_logs", {
 export const insertRobocallLogSchema = createInsertSchema(robocallLogs).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertRobocallLog = z.infer<typeof insertRobocallLogSchema>;
 export type RobocallLog = typeof robocallLogs.$inferSelect;
+
+// ============================================
+// ORDER CONFIRMATION LOG (Activity Timeline)
+// ============================================
+export const orderConfirmationLog = pgTable("order_confirmation_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  orderId: varchar("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
+  eventType: varchar("event_type", { length: 50 }).notNull(),
+  channel: varchar("channel", { length: 20 }),
+  oldStatus: varchar("old_status", { length: 50 }),
+  newStatus: varchar("new_status", { length: 50 }),
+  oldTags: jsonb("old_tags"),
+  newTags: jsonb("new_tags"),
+  responsePayload: jsonb("response_payload"),
+  responseClassification: varchar("response_classification", { length: 30 }),
+  actingUserId: varchar("acting_user_id"),
+  retryCount: integer("retry_count"),
+  queueInfo: jsonb("queue_info"),
+  apiResponse: jsonb("api_response"),
+  errorDetails: text("error_details"),
+  note: text("note"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_ocl_order").on(table.orderId),
+  index("idx_ocl_merchant").on(table.merchantId),
+  index("idx_ocl_event_type").on(table.eventType),
+]);
+
+export const insertOrderConfirmationLogSchema = createInsertSchema(orderConfirmationLog).omit({ id: true, createdAt: true });
+export type InsertOrderConfirmationLog = z.infer<typeof insertOrderConfirmationLogSchema>;
+export type OrderConfirmationLog = typeof orderConfirmationLog.$inferSelect;
+
+// ============================================
+// NOTIFICATIONS
+// ============================================
+export const notifications = pgTable("notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  type: varchar("type", { length: 50 }).notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  message: text("message").notNull(),
+  orderId: varchar("order_id"),
+  orderNumber: varchar("order_number", { length: 100 }),
+  read: boolean("read").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_notifications_merchant").on(table.merchantId),
+  index("idx_notifications_read").on(table.merchantId, table.read),
+]);
+
+export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true, createdAt: true });
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+export type Notification = typeof notifications.$inferSelect;
+
+// ============================================
+// ROBOCALL QUEUE
+// ============================================
+export const robocallQueue = pgTable("robocall_queue", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  orderId: varchar("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
+  orderNumber: varchar("order_number", { length: 100 }),
+  customerName: varchar("customer_name", { length: 500 }),
+  phone: varchar("phone", { length: 50 }).notNull(),
+  amount: varchar("amount", { length: 50 }),
+  brandName: varchar("brand_name", { length: 200 }),
+  status: varchar("status", { length: 20 }).notNull().default("waiting"),
+  reason: text("reason"),
+  scheduledAt: timestamp("scheduled_at").notNull(),
+  attemptCount: integer("attempt_count").default(0),
+  waResponseArrived: boolean("wa_response_arrived").default(false),
+  callId: varchar("call_id"),
+  queuedAt: timestamp("queued_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+}, (table) => [
+  index("idx_rcq_merchant").on(table.merchantId),
+  index("idx_rcq_order").on(table.orderId),
+  index("idx_rcq_status").on(table.status),
+  index("idx_rcq_scheduled").on(table.scheduledAt),
+]);
+
+export const insertRobocallQueueSchema = createInsertSchema(robocallQueue).omit({ id: true, queuedAt: true, completedAt: true });
+export type InsertRobocallQueue = z.infer<typeof insertRobocallQueueSchema>;
+export type RobocallQueue = typeof robocallQueue.$inferSelect;

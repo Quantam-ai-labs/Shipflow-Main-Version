@@ -42,6 +42,10 @@ import {
   waAutomations,
   agentChatSessions,
   pushSubscriptions,
+  notifications,
+  robocallQueue,
+  orderConfirmationLog,
+  robocallLogs,
 } from "@shared/schema";
 import {
   and,
@@ -104,6 +108,7 @@ import { leopardsService } from "./services/couriers/leopards";
 import { postexService } from "./services/couriers/postex";
 import { getCourierSyncMetrics, cleanupStaleManualSyncProgress, autoTransitionOrder, getLastCourierSyncResult } from "./services/courierSyncScheduler";
 import { getShopifySyncMetrics } from "./services/autoSync";
+import { processConfirmationResponse, logConfirmationEvent, createNotification } from "./services/confirmationEngine";
 
 const oauthStateStore = new Map<
   string,
@@ -5745,132 +5750,69 @@ export async function registerRoutes(
       const lowerMessage = messageBody.toLowerCase().trim();
       console.log(`        Analyzing message: "${lowerMessage}"`);
 
+      let action: "confirm" | "cancel" | "query";
       if (lowerMessage.includes("confirm")) {
-        console.log(`        ✅ User wants to CONFIRM order`);
-
-        // Update order workflow status
-        const userId = "whatsapp_webhook";
-        const result = await transitionOrder({
-          merchantId,
-          orderId,
-          toStatus: "READY_TO_SHIP",
-          action: "whatsapp_confirm",
-          actorUserId: userId,
-          actorName: "WhatsApp Confirmation",
-          actorType: "system",
-          reason: `Order confirmed via WhatsApp by customer`,
-        });
-
-        if (result.success) {
-          console.log(`        ✅ Order status updated to READY_TO_SHIP`);
-
-          // Send confirmation reply to user
-          await sendWhatsAppReply(
-            normalizedPhone,
-            `✅ Thank you! Order #${orderNumber} has been confirmed. We'll process and ship it shortly.`
-          );
-
-          // Create change log entry
-          await storage.createOrderChangeLog({
-            orderId,
-            merchantId,
-            changeType: "WHATSAPP_CONFIRMED",
-            fieldName: "workflowStatus",
-            oldValue: "PENDING",
-            newValue: "READY_TO_SHIP",
-            actorUserId: userId,
-            actorName: "WhatsApp Confirmation",
-            actorType: "system",
-            metadata: { phoneNumber: normalizedPhone, waMessageBody: messageBody },
-          });
-        } else {
-          console.log(`        ❌ Failed to update order: ${result.error}`);
-          await sendWhatsAppReply(
-            normalizedPhone,
-            `❌ Sorry, there was an issue confirming your order. Please try again or contact support.`
-          );
-        }
+        action = "confirm";
       } else if (lowerMessage.includes("cancel")) {
-        console.log(`        ❌ User wants to CANCEL order`);
-
-        // Update order workflow status to CANCELLED
-        const userId = "whatsapp_webhook";
-        const result = await transitionOrder({
-          merchantId,
-          orderId,
-          toStatus: "CANCELLED",
-          action: "robo_cancel",
-          actorUserId: userId,
-          actorName: "WhatsApp Cancellation",
-          actorType: "system",
-          reason: `Order cancelled via WhatsApp by customer request`,
-        });
-
-        if (result.success) {
-          console.log(`        ✅ Order status updated to CANCELLED`);
-
-          // Send cancellation reply to user
-          await sendWhatsAppReply(
-            normalizedPhone,
-            `Order #${orderNumber} has been cancelled. No charges will be applied. If you have any questions, please contact support.`
-          );
-
-          // Create change log entry
-          await storage.createOrderChangeLog({
-            orderId,
-            merchantId,
-            changeType: "WHATSAPP_CANCELLED",
-            fieldName: "workflowStatus",
-            oldValue: "PENDING",
-            newValue: "CANCELLED",
-            actorUserId: userId,
-            actorName: "WhatsApp Cancellation",
-            actorType: "system",
-            metadata: { phoneNumber: normalizedPhone, waMessageBody: messageBody },
-          });
-        } else {
-          console.log(`        ❌ Failed to cancel order: ${result.error}`);
-          await sendWhatsAppReply(
-            normalizedPhone,
-            `❌ Sorry, there was an issue cancelling your order. Please try again or contact support.`
-          );
-        }
+        action = "cancel";
       } else {
-        console.log(`        ❓ Unknown response - adding Querry tag`);
-
-        try {
-          if (shopifyOrderId) {
-            writeBackAddTag(merchantId, shopifyOrderId, "Querry").catch(err => {
-              console.warn(`[WhatsApp] Failed to add Querry tag for order ${orderNumber}: ${err.message}`);
-            });
-          }
-
-          const [currentOrder] = await db
-            .select({ tags: orders.tags })
-            .from(orders)
-            .where(and(eq(orders.id, orderId), eq(orders.merchantId, merchantId)))
-            .limit(1);
-
-          if (currentOrder) {
-            const currentTags: string[] = Array.isArray(currentOrder.tags) ? currentOrder.tags : [];
-            if (!currentTags.some(t => t.toLowerCase() === "querry")) {
-              await db.update(orders)
-                .set({ tags: [...currentTags, "Querry"] })
-                .where(and(eq(orders.id, orderId), eq(orders.merchantId, merchantId)));
-            }
-          }
-          console.log(`        🏷️ Added "Querry" tag to order #${orderNumber}`);
-        } catch (tagErr: any) {
-          console.warn(`[WhatsApp] Failed to add Querry tag for order ${orderNumber}: ${tagErr.message}`);
-        }
-
-        await sendWhatsAppReply(
-          normalizedPhone,
-          `I didn't understand your response. Please reply with:\n✅ *confirm* - to confirm the order\n❌ *cancel* - to cancel the order`
-        );
+        action = "query";
       }
+
+      console.log(`        → Classified as: ${action}`);
+
+      const result = await processConfirmationResponse({
+        merchantId,
+        orderId,
+        source: "whatsapp",
+        action,
+        payload: { phoneNumber: normalizedPhone, messageBody, raw: messageBody },
+      });
+
+      if (result.success) {
+        if (action === "confirm") {
+          if (result.conflict) {
+            await sendWhatsAppReply(normalizedPhone,
+              `Your response for order #${orderNumber} has been noted. Our team will review and confirm shortly.`);
+          } else {
+            await sendWhatsAppReply(normalizedPhone,
+              `Thank you! Order #${orderNumber} has been confirmed. We'll process and ship it shortly.`);
+          }
+        } else if (action === "cancel") {
+          if (result.conflict) {
+            await sendWhatsAppReply(normalizedPhone,
+              `Your cancellation request for order #${orderNumber} has been noted. Our team will review shortly.`);
+          } else {
+            await sendWhatsAppReply(normalizedPhone,
+              `Order #${orderNumber} has been cancelled. No charges will be applied. If you have any questions, please contact support.`);
+          }
+        } else {
+          await sendWhatsAppReply(normalizedPhone,
+            `Thank you for your message regarding order #${orderNumber}. Our team will get back to you shortly.\n\nTo confirm or cancel, please reply with:\n*confirm* - to confirm the order\n*cancel* - to cancel the order`);
+        }
+      } else if (result.locked) {
+        await sendWhatsAppReply(normalizedPhone,
+          `Order #${orderNumber} has already been processed and shipped. For any changes, please contact our support team.`);
+      } else {
+        console.log(`        Failed: ${result.error}`);
+        await sendWhatsAppReply(normalizedPhone,
+          `Sorry, there was an issue processing your response for order #${orderNumber}. Please try again or contact support.`);
+      }
+
+      await storage.createOrderChangeLog({
+        orderId,
+        merchantId,
+        changeType: action === "confirm" ? "WHATSAPP_CONFIRMED" : action === "cancel" ? "WHATSAPP_CANCELLED" : "WHATSAPP_QUERY",
+        fieldName: "workflowStatus",
+        oldValue: "",
+        newValue: result.newStatus || "",
+        actorUserId: "whatsapp_webhook",
+        actorName: "WhatsApp Response",
+        actorType: "system",
+        metadata: { phoneNumber: normalizedPhone, waMessageBody: messageBody, conflict: result.conflict },
+      });
     } catch (error: any) {
-      console.error(`        ❌ Error processing WhatsApp response:`, error.message);
+      console.error(`        Error processing WhatsApp response:`, error.message);
     }
   }
 
@@ -15271,6 +15213,183 @@ export async function registerRoutes(
       res.json({ updated, total: nonFinalLogs.length, logs });
     } catch (error: any) {
       console.error("[RoboCall] Sync all error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ─── Notifications API ────────────────────────────────────────────────────
+
+  app.get("/api/notifications", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const limit = parseInt(req.query.limit) || 50;
+      const notifs = await db.select().from(notifications)
+        .where(eq(notifications.merchantId, merchantId))
+        .orderBy(desc(notifications.createdAt))
+        .limit(limit);
+      res.json({ notifications: notifs });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/notifications/unread-count", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const [result] = await db.select({ count: sql<number>`count(*)::int` })
+        .from(notifications)
+        .where(and(eq(notifications.merchantId, merchantId), eq(notifications.read, false)));
+      res.json({ count: result?.count || 0 });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/notifications/:id/read", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      await db.update(notifications).set({ read: true })
+        .where(and(eq(notifications.id, req.params.id), eq(notifications.merchantId, merchantId)));
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/notifications/mark-all-read", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      await db.update(notifications).set({ read: true })
+        .where(and(eq(notifications.merchantId, merchantId), eq(notifications.read, false)));
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ─── Robocall Queue API ─────────────────────────────────────────────────
+
+  app.get("/api/robocall/queue", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const entries = await db.select().from(robocallQueue)
+        .where(eq(robocallQueue.merchantId, merchantId))
+        .orderBy(desc(robocallQueue.queuedAt))
+        .limit(200);
+      res.json({ entries });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ─── Robocall Settings API ──────────────────────────────────────────────
+
+  app.get("/api/robocall/settings", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const merchant = await storage.getMerchant(merchantId);
+      if (!merchant) return res.status(404).json({ error: "Merchant not found" });
+      res.json({
+        startTime: merchant.robocallStartTime || "10:00",
+        endTime: merchant.robocallEndTime || "20:00",
+        voiceId: merchant.robocallVoiceId || "735",
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/robocall/settings", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { startTime, endTime, voiceId } = req.body;
+      await db.update(merchants).set({
+        robocallStartTime: startTime || "10:00",
+        robocallEndTime: endTime || "20:00",
+        robocallVoiceId: voiceId || "735",
+        updatedAt: new Date(),
+      }).where(eq(merchants.id, merchantId));
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ─── Manual Confirmation/Cancellation ───────────────────────────────────
+
+  app.post("/api/orders/:id/manual-confirm", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { note } = req.body;
+      const userId = req.session?.userId || req.user?.id || "manual";
+
+      const result = await processConfirmationResponse({
+        merchantId,
+        orderId: req.params.id,
+        source: "manual",
+        action: "confirm",
+        actingUserId: userId,
+        note: note || "Manually confirmed by team",
+      });
+
+      if (result.success) {
+        res.json({ success: true, newStatus: result.newStatus });
+      } else {
+        res.status(400).json({ error: result.error });
+      }
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/orders/:id/manual-cancel", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { note } = req.body;
+      const userId = req.session?.userId || req.user?.id || "manual";
+
+      const result = await processConfirmationResponse({
+        merchantId,
+        orderId: req.params.id,
+        source: "manual",
+        action: "cancel",
+        actingUserId: userId,
+        note: note || "Manually cancelled by team",
+      });
+
+      if (result.success) {
+        res.json({ success: true, newStatus: result.newStatus });
+      } else {
+        res.status(400).json({ error: result.error });
+      }
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ─── Order Confirmation Timeline ───────────────────────────────────────
+
+  app.get("/api/orders/:id/confirmation-timeline", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const timeline = await db.select().from(orderConfirmationLog)
+        .where(and(
+          eq(orderConfirmationLog.orderId, req.params.id),
+          eq(orderConfirmationLog.merchantId, merchantId),
+        ))
+        .orderBy(desc(orderConfirmationLog.createdAt));
+      res.json({ timeline });
+    } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
   });

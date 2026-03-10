@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { apiRequest } from "@/lib/queryClient";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,6 +59,71 @@ const DTMF_MAP: Record<number, { label: string; color: string }> = {
   2: { label: "Cancelled", color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300" },
   3: { label: "Callback", color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300" },
 };
+
+function TimeWindowSettings() {
+  const { toast } = useToast();
+  const { data: settings } = useQuery<{ startTime: string; endTime: string; voiceId: string }>({
+    queryKey: ['/api/robocall/settings'],
+  });
+  const [startTime, setStartTime] = useState("10:00");
+  const [endTime, setEndTime] = useState("20:00");
+  const [defaultVoiceId, setDefaultVoiceId] = useState("735");
+
+  useEffect(() => {
+    if (settings) {
+      setStartTime(settings.startTime);
+      setEndTime(settings.endTime);
+      setDefaultVoiceId(settings.voiceId);
+    }
+  }, [settings]);
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/robocall/settings", { startTime, endTime, voiceId: defaultVoiceId });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/robocall/settings'] });
+      toast({ title: "Settings saved", description: "RoboCall time window updated." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  return (
+    <Card data-testid="card-time-window">
+      <CardHeader>
+        <CardTitle className="text-lg flex items-center gap-2">
+          <Clock className="w-5 h-5" />
+          Automated Call Settings
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="text-sm text-muted-foreground mb-3">
+          Set the allowed time window for automated robocalls. Orders that become eligible outside this window will be queued for the next available slot.
+        </p>
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="space-y-1">
+            <Label htmlFor="startTime">Start Time</Label>
+            <Input id="startTime" type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="w-32" data-testid="input-start-time" />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="endTime">End Time</Label>
+            <Input id="endTime" type="time" value={endTime} onChange={e => setEndTime(e.target.value)} className="w-32" data-testid="input-end-time" />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="defaultVoiceId">Default Voice ID</Label>
+            <Input id="defaultVoiceId" value={defaultVoiceId} onChange={e => setDefaultVoiceId(e.target.value)} className="w-24" data-testid="input-default-voice-id" />
+          </div>
+          <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} data-testid="button-save-time-window">
+            {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Save className="w-4 h-4 mr-1" />}
+            Save Settings
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function RoboCallPage() {
   const { toast } = useToast();
@@ -511,6 +577,8 @@ export default function RoboCallPage() {
           </div>
         </CardContent>
       </Card>
+
+      <TimeWindowSettings />
 
       <Tabs defaultValue="single">
         <TabsList data-testid="tabs-call-type">

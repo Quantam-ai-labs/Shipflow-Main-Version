@@ -262,6 +262,67 @@ export async function writeBackTags(
   });
 }
 
+const CONFIRMATION_TAGS = [
+  "Pending", "Confirm", "Cancel", "Querry",
+  "Whatsapp-Pending", "Whatsapp-Confirmed", "Whatsapp-Cancelled", "Whatsapp-Querry",
+  "Manual-Confirm", "Manual-Cancel",
+  "Robo-Confirmed", "Robo-Cancelled",
+];
+
+export async function writeBackConfirmationTags(
+  merchantId: string,
+  shopifyOrderId: string,
+  oldTags: string[],
+  newTags: string[],
+): Promise<{ success: boolean; error?: string }> {
+  const newConfirmTags = newTags.filter(t => CONFIRMATION_TAGS.some(ct => ct.toLowerCase() === t.toLowerCase()));
+  if (newConfirmTags.length === 0) return { success: true };
+
+  return enqueueWriteBack(`confirmtags:${shopifyOrderId}`, async () => {
+    const creds = await getShopifyCredentials(merchantId);
+    if (!creds) return { success: false, error: 'Shopify not connected' };
+
+    try {
+      const getUrl = `https://${creds.shopDomain}/admin/api/${API_VERSION}/orders/${shopifyOrderId}.json?fields=id,tags`;
+      const getRes = await fetch(getUrl, {
+        headers: { 'X-Shopify-Access-Token': creds.accessToken, 'Content-Type': 'application/json' },
+      });
+
+      if (!getRes.ok) return { success: false, error: `Failed to get order: ${getRes.status}` };
+
+      const orderData = await getRes.json();
+      const existingShopifyTags = (orderData.order?.tags || '')
+        .split(',').map((t: string) => t.trim()).filter((t: string) => t.length > 0);
+
+      const filteredTags = existingShopifyTags.filter((t: string) =>
+        !CONFIRMATION_TAGS.some(ct => ct.toLowerCase() === t.toLowerCase())
+      );
+      filteredTags.push(...newConfirmTags);
+      const updatedTags = filteredTags.join(', ');
+
+      markWriteBack(shopifyOrderId);
+      await new Promise(r => setTimeout(r, 550));
+
+      const putUrl = `https://${creds.shopDomain}/admin/api/${API_VERSION}/orders/${shopifyOrderId}.json`;
+      const putRes = await fetch(putUrl, {
+        method: 'PUT',
+        headers: { 'X-Shopify-Access-Token': creds.accessToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order: { id: shopifyOrderId, tags: updatedTags } }),
+      });
+
+      if (!putRes.ok) {
+        const errText = await putRes.text();
+        return { success: false, error: `Shopify API error ${putRes.status}: ${errText}` };
+      }
+
+      console.log(`[ShopifyWriteBack] Confirmation tags updated for order ${shopifyOrderId}: ${newConfirmTags.join(', ')}`);
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message || 'Unknown error' };
+    }
+  });
+}
+
 export async function writeBackAddTag(
   merchantId: string,
   shopifyOrderId: string,

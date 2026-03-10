@@ -1,7 +1,7 @@
 # 1SOL.AI - Logistics Operations Platform
 
 ## Overview
-1SOL.AI is a production-grade, multi-tenant logistics operations platform designed for Shopify merchants in Pakistan. Its primary purpose is to streamline e-commerce logistics by providing an all-in-one dashboard for Shopify order synchronization, multi-courier shipment tracking (Leopards, PostEx, TCS), COD reconciliation, and team collaboration. The platform aims to enhance operational efficiency and profitability through a scalable SaaS model with robust role-based access control and merchant isolation.
+1SOL.AI is a production-grade, multi-tenant logistics operations platform for Shopify merchants in Pakistan. It streamlines e-commerce logistics with an all-in-one dashboard for Shopify order synchronization, multi-courier shipment tracking (Leopards, PostEx, TCS), COD reconciliation, and team collaboration. The platform aims to enhance operational efficiency and profitability through a scalable SaaS model, robust role-based access control, and merchant isolation, focusing on improving the e-commerce logistics landscape in Pakistan.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
@@ -12,65 +12,56 @@ Preferred communication style: Simple, everyday language.
 - **Frontend**: React 18 with TypeScript, Wouter, TanStack React Query, shadcn/ui (Radix UI), Tailwind CSS, and Vite.
 - **Backend**: Node.js with Express.js, TypeScript (ESM), and RESTful JSON APIs with Zod validation.
 - **Database**: PostgreSQL with Drizzle ORM and Drizzle Kit for migrations.
-- **Authentication**: Two-factor authentication for merchants/teams (email+password then email OTP) and OTP-only for admin, utilizing Resend for OTP delivery with rate-limiting. Sessions vary by user type and "remember device" preference. Device tracking and display name parsing are included for audit trails.
+- **Authentication**: Two-factor authentication for merchants/teams (email+password then email OTP) and OTP-only for admin, using Resend for OTP delivery with rate-limiting.
 
 ### Multi-Tenancy & Access Control
-- Data is isolated per merchant using `merchantId` scoping.
-- Role-based access control includes Manager, Customer Support, Accountant, and Logistics Manager. Merchant owners have full, unchangeable access. Page-level permissions are enforced, with settings pages restricted to merchant owners and Managers.
+- Data isolation per merchant using `merchantId` scoping.
+- Role-based access control with roles like Manager, Customer Support, Accountant, and Logistics Manager. Merchant owners have full, unchangeable access, and page-level permissions are enforced.
 
 ### UI/UX Decisions
-- Dates are formatted `dd-MM-yyyy` (Pakistani standard).
-- Settings feature a collapsible sidebar.
-- Order details adopt a Shopify-like layout.
-
-### Design System (UI Overhaul — Completed)
-- **Font**: Inter (Google Fonts), system fallback stack.
-- **Theme Variables**: Clean neutral palette defined in `client/src/index.css`. Light: pure white bg, near-white cards, light borders. Dark: deep bg (`220 10% 6%`), dark cards, subtle borders.
-- **Primary Color**: Muted blue (`220 60% 50%` light / `220 60% 55%` dark) — used sparingly for CTAs only.
-- **Border Radius**: `0.375rem` (6px) for a crisp feel.
-- **Shadows**: None (`0 0 #0000`) — flat design throughout.
-- **No Glassmorphism**: No `backdrop-blur`, no frosted glass effects anywhere. Header uses solid `bg-background`.
-- **Icon Colors**: All decorative stat card icons use `text-muted-foreground`. Semantic indicators (trend up/down, success/error, severity) retain meaningful colors.
-- **Badges**: Use `variant="secondary"` or `variant="outline"` instead of hardcoded colored backgrounds.
-- **Chart Colors**: Use CSS chart tokens (`--chart-1` through `--chart-5`) instead of hardcoded Tailwind colors.
-- **Consistency**: Same visual language across all pages — dashboard, pipeline, chat, AI, settings, accounting, marketing.
+- Dates are formatted `dd-MM-yyyy`.
+- Collapsible sidebar for settings.
+- Shopify-like layout for order details.
+- **Design System**: Inter font, clean neutral palette, muted blue primary color for CTAs, `0.375rem` border radius, flat design (no shadows, no glassmorphism), consistent visual language across all pages.
+- **Specific UI Elements**: Icons use `text-muted-foreground`, badges use `variant="secondary"` or `variant="outline"`, chart colors use CSS chart tokens (`--chart-1` to `--chart-5`).
 
 ### Key Features
-- **Merchant & Team Management**: Core tenant management, team invites, and role-based access. Super Admin functionalities include impersonation, cross-tenant team management, and user deletion.
-- **Shopify Integration**: OAuth-based access, encrypted tokens, webhook processing for orders and fulfillments, historical data import, bi-directional write-back, and configurable "Robo-Tags" for order automation.
-- **Courier Management**: API credential management per courier, specific handling for PostEx booking, universal status normalization, optimized courier sync, and display of logged weight. Booking is restricted if courier accounts are not configured.
-- **Order & Shipment Management**: Shopify order synchronization, status tracking, remarks with history, and a strict 9-stage workflow transition system. Supports batch booking with Leopards and PostEx.
-- **COD Reconciliation**: Tracks payment settlements, `prepaidAmount`, `codRemaining`, `codPaymentStatus`, and supports payment detail fetching and automatic settlement marking. Includes a detailed Payment Ledger.
-- **Onboarding Wizard**: Guides initial setup for Shopify and courier configurations, including a "Configure Order Tags" step before initial order import.
+- **Merchant & Team Management**: Tenant management, team invites, role-based access, and Super Admin impersonation capabilities.
+- **Shopify Integration**: OAuth-based access, encrypted tokens, webhook processing for orders and fulfillments, historical data import, bi-directional write-back, and configurable "Robo-Tags" for automation.
+- **Courier Management**: API credential management per courier, universal status normalization, optimized sync, and display of logged weight.
+- **Order & Shipment Management**: Shopify order sync, status tracking, remarks, 9-stage workflow, and batch booking.
+- **COD Reconciliation**: Tracks payment settlements, `prepaidAmount`, `codRemaining`, `codPaymentStatus`, payment detail fetching, and automatic settlement marking via a Payment Ledger.
+- **Onboarding Wizard**: Guides initial Shopify and courier setup.
 - **Batch Import & API-Only Sync**: Asynchronous, resumable background jobs for large Shopify order imports and incremental sync.
-- **Print & Logs System**: Generates native courier airway bills and batch loadsheets. Includes a picklist PDF generation feature aggregating line items from selected orders.
-- **CSV Export**: Client-side CSV export available on all major data pages.
-- **Webhook Resilience**: Immediate 200 responses, webhook health check API, and per-merchant HMAC verification using DB-stored `shopifyAppClientSecret` (with env var fallback). Debug endpoint at `GET /api/shopify/webhooks/debug`.
-- **Ads Profitability Calculator**: Tracks Facebook/Meta campaign profitability, auto-syncs campaign data, and provides financial metrics with product matching and campaign journey tracking.
+- **Print & Logs System**: Generates native courier airway bills, batch loadsheets, and picklist PDFs.
+- **CSV Export**: Client-side CSV export available on major data pages.
+- **Webhook Resilience**: Immediate 200 responses, health check API, per-merchant HMAC verification.
+- **Ads Profitability Calculator**: Tracks Facebook/Meta campaign profitability with auto-sync and financial metrics.
 - **AI Marketing Intelligence**: AI-powered analytics with auto-generated insights and a conversational chat interface.
-- **Universal AI Assistant**: Dedicated AI page with alerts, chat, voice input/output, and multi-language support. Insights are cached server-side.
-- **Status Mapping Import/Export**: Allows importing and exporting custom status mappings and keyword rules for couriers via JSON files.
-- **Product & Inventory Management**: Syncs Shopify product data (title, variants, SKU, price, cost, inventory) and displays a searchable catalog.
-- **Accounting & Finance Module**: A comprehensive double-entry accounting system covering various financial aspects, including P&L, Balance Snapshot, and Cash Flow reports.
-- **WhatsApp Order Notifications**: Sends automated WhatsApp messages to customers via Meta Graph API upon order status changes. Driven exclusively by the `wa_automations` system — no hardcoded template defaults. Each automation rule specifies the template name, message text, trigger status, and optional delay. Template parameters are built by looking up the Meta template body from `wa_meta_templates`, counting `{{N}}` placeholders, and mapping order variables (name, order_number, items, order_total, etc.) positionally. Logs all send attempts (with automationId/title) in `orderChangeLog`. Failed messages can be retried via `POST /api/whatsapp-logs/:logId/retry`. Credentials (Phone Number ID, Access Token, WABA ID) are stored per-merchant in the DB; env vars serve as fallback. Duplicate prevention uses a two-layer approach: (1) in-memory claim map (`claimSend`/`releaseClaim`) prevents concurrent webhook+auto-sync from firing the same automation simultaneously (5-min TTL, auto-cleanup at 5000 entries), and (2) DB-level `alreadySent` check against `orderChangeLog` with `WHATSAPP_SENT` + `success=true` prevents re-sends across server restarts. Claims are released on failure so retries work.
-- **Support Section**: A dedicated nav section with 5 pages — Dashboard (WA stats + activity feed), Templates (three-tab page: Templates + Automations + Message Logs), Chat (WhatsApp-style agent inbox), Connection (redirects to Settings > WhatsApp), and Robo Call (IVR testing page). WhatsApp settings are now on the Settings page under a dedicated WhatsApp tab.
-- **RoboCall IVR System**: At `/support/robocall` — IVR call interface via BrandedSMS Pakistan (app.brandedsmspakistan.com). Features: persistent API credentials (email + API key saved per merchant in DB, auto-loaded on page visit), balance check, single call form (phone, amount, voice ID, brand name, order number), bulk calls (CSV paste or manual rows with brand name field, max 50 per batch), persistent call history stored in `robocall_logs` table (survives page refresh/sessions) with brand name column, server-side Sync All endpoint that fetches DTMF responses for all pending calls and updates DB, DTMF response display (1=Confirmed, 2=Cancelled, 3=Callback). Backend proxy endpoints at `/api/robocall/*` (credentials, verify-key, balance, send, send-bulk, status, history, sync-all) — all require authentication. API params include `brand_name` (read aloud in IVR call). API response format: `{sms: {code, remaining_balance, id, response}}`.
-- **WhatsApp Chat UI**: Full WhatsApp Desktop-style rebuild at `/support/chat`. Features: PIN-gated access, dark theme (#111b21), left sidebar with conversation list (avatar initials, unread badges, label chips, assigned agent, order number, timestamp), search by name/phone/order, label filter pills (All, Unread, New, Open, Pending, Resolved, Spam, Sales, Urgent), right chat panel with WhatsApp wallpaper pattern, green outbound bubbles (#005c4b) and dark inbound bubbles (#202c33), message status ticks (sent/delivered/read), WhatsApp text formatting rendering (*bold*, _italic_, ~strikethrough~, \`code\`), emoji picker with 8 categories + search + recent, emoji reactions on inbound messages via Meta API, button reply messages shown as pills, date group headers, conversation label management, agent assignment from team members, conversation delete. Webhook handler parses all message types: text, button, interactive, reaction, image, sticker, document, audio, video, location, contacts. Unread count increments on inbound, resets when conversation selected. Messages without matching orders are still saved to inbox.
-- **Templates Tab**: "Shopify Message Templates" page with Quick Start Presets grid (4 presets), flat "Your Templates" list with APPROVED badges and delete, and a full-page rich template editor (Header/Body/Footer/Buttons collapsible sections + live preview panel). Templates stored in `wa_meta_templates` table.
-- **Automations Tab**: Automation rules page where users create rules that fire WhatsApp messages when order workflow statuses change. Create Automation dialog with Title/Description/Trigger (workflow statuses)/Delay/Message Text/Template dropdown. Automation cards show toggle/edit/delete. Rules stored in `wa_automations` table and executed in `sendOrderStatusWhatsApp`.
-- **Loadsheet System**: A two-interface system for shipment handover manifest generation: a Portal Loadsheet with scanning capabilities and a Warehouse PWA for mobile-optimized warehouse operations, including PIN authentication and AWB PDF pre-generation.
-- **Booking Remarks**: Customizable special instructions per merchant, used during courier booking.
-- **Booking Modal Enhancements**: Full-screen modal with editable order numbers, product thumbnails, and keyboard-navigable city autocomplete.
-- **All Orders View**: A unified view displaying all orders regardless of their workflow status, with context-aware actions and bulk operations.
-- **Tag Management**: Bi-directional synchronization of tags with Shopify, displaying all tags with specific coloring for Robo-tags.
-- **Pipeline Action Dropdown**: Consolidates various order actions into a dropdown menu, context-aware based on order status.
-- **Agent Chat PWA**: A standalone mobile-optimized PWA for support agents to manage WhatsApp conversations on their phones. **Universal access** via `/agent-chat/` (one URL for all stores) — agents enter the merchant email, receive a 6-digit OTP, and sign in. Sessions are tracked in the `agentChatSessions` table with device name, IP, and email; JWT tokens include `sessionId` and expire after 30 days. Merchants can view all agent login sessions and revoke access from Settings > WhatsApp. Legacy PIN login (`POST /api/agent-chat/login`) preserved as fallback. Direct store-specific links (`/agent-chat/:slug`) still supported with auto-session restore. **localStorage caching** provides instant load (conversations and messages cached, stale-while-revalidate pattern). **Web Push notifications** via VAPID keys — push subscriptions stored in `pushSubscriptions` table, inbound WhatsApp messages trigger push to all active sessions, stale subscriptions auto-cleaned on 410. **Visibility-aware polling** — 5s conversation polling, 3s message polling when active, pauses when app backgrounded, immediate refetch on focus. **Service worker** caches app shell, static assets, and media proxy responses with LRU eviction. **Rich media rendering** — images (with lightbox), audio (HTML5 player with progress), video (native controls), documents (download card), location (Google Maps link), contacts (name+phone cards) via `AgentMediaBubble` component. Mobile-first dark theme (slate-950), touch-friendly tap targets, emoji reactions, formatting toolbar, 100dvh layout with safe-area support.
+- **Universal AI Assistant**: Dedicated AI page with alerts, chat, voice I/O, and multi-language support.
+- **Status Mapping Import/Export**: Custom status mappings and keyword rules for couriers via JSON.
+- **Product & Inventory Management**: Syncs Shopify product data (title, variants, SKU, price, cost, inventory).
+- **Accounting & Finance Module**: Double-entry accounting system with P&L, Balance Snapshot, and Cash Flow reports.
+- **WhatsApp Order Notifications**: Automated WhatsApp messages via Meta Graph API on order status changes, driven by `wa_automations` rules. Features robust duplicate prevention and retry mechanisms.
+- **Support Section**: Nav section with Dashboard (WA stats), Templates (editor, automations, message logs), Chat (WhatsApp-style agent inbox), Connection, and Robo Call (IVR testing).
+- **Order Confirmation Automation System**: Decision-engine-driven confirmation flow for new orders (WhatsApp confirmation, timeout, RoboCall, response processing), with conflict detection, booking lock, manual resolution, and activity logging.
+- **RoboCall IVR System**: IVR call interface via BrandedSMS Pakistan, with persistent API credentials, balance check, single/bulk calls, persistent call history, DTMF response display, and automated call time windows.
+- **WhatsApp Chat UI**: Full WhatsApp Desktop-style rebuild with PIN-gated access, conversation list, search, filters, chat panel, message status, formatting, emoji picker/reactions, label management, agent assignment, and conversation deletion.
+- **Templates Tab**: "Shopify Message Templates" page with Quick Start Presets, "Your Templates" list, and a rich template editor.
+- **Automations Tab**: Rules page for creating WhatsApp message automations based on order workflow status changes.
+- **Loadsheet System**: Portal Loadsheet with scanning and Warehouse PWA for mobile operations (PIN auth, AWB PDF pre-generation).
+- **Booking Remarks**: Customizable special instructions per merchant for courier booking.
+- **Booking Modal Enhancements**: Full-screen modal with editable order numbers, product thumbnails, and city autocomplete.
+- **All Orders View**: Unified view of all orders with context-aware actions and bulk operations.
+- **Tag Management**: Bi-directional sync of tags with Shopify, with specific coloring for Robo-tags.
+- **Pipeline Action Dropdown**: Consolidates order actions contextually.
+- **Agent Chat PWA**: Standalone mobile-optimized PWA for support agents, featuring universal access (email+OTP login), session management, localStorage caching, Web Push notifications, visibility-aware polling, service worker for caching, and rich media rendering.
 
 ### Database Reliability
-- **Connection Pool**: Configured PostgreSQL pool with `max: 20` connections and appropriate timeouts.
-- **Pool Error Handling**: Catches unexpected disconnections on idle clients.
-- **Retry Logic**: `withRetry()` utility for transient database operation errors.
-- **Startup Recovery**: Delayed merchant syncs to prevent pool exhaustion during server startup.
+- **Connection Pool**: Configured PostgreSQL pool (`max: 20`).
+- **Pool Error Handling**: Catches unexpected disconnections.
+- **Retry Logic**: `withRetry()` utility for transient errors.
+- **Startup Recovery**: Delayed merchant syncs to prevent pool exhaustion.
 
 ## External Dependencies
 
@@ -83,4 +74,4 @@ Preferred communication style: Simple, everyday language.
     - TCS Courier API
     - Resend (for email services)
     - OpenAI via Replit AI Integrations (GPT-4o)
-    - RoboCall Pakistan API (robocall.pk) — IVR order confirmation calls
+    - RoboCall Pakistan API (robocall.pk)

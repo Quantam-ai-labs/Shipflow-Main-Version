@@ -5,6 +5,7 @@ import type { Order } from "@shared/schema";
 import { writeBackCancel, writeBackTags } from './shopifyWriteBack';
 import { getMerchantRoboTags, type RoboTagConfig } from './roboTags';
 import { sendOrderStatusWhatsApp, WA_NOTIFY_STATUSES } from '../utils/integrations/whatsapp';
+import { lockOrderAfterBooking } from './confirmationEngine';
 
 export { getMerchantRoboTags, type RoboTagConfig };
 
@@ -24,10 +25,10 @@ const ALLOWED_TRANSITIONS: Record<WorkflowStatus, WorkflowStatus[]> = {
 };
 
 const SYSTEM_ALLOWED_TRANSITIONS: Record<WorkflowStatus, WorkflowStatus[]> = {
-  NEW:           ["PENDING", "READY_TO_SHIP", "CANCELLED"],
-  PENDING:       ["READY_TO_SHIP", "CANCELLED"],
+  NEW:           ["PENDING", "HOLD", "READY_TO_SHIP", "CANCELLED"],
+  PENDING:       ["HOLD", "READY_TO_SHIP", "CANCELLED"],
   HOLD:          ["PENDING", "READY_TO_SHIP", "CANCELLED"],
-  READY_TO_SHIP: ["BOOKED", "CANCELLED"],
+  READY_TO_SHIP: ["HOLD", "BOOKED", "CANCELLED"],
   BOOKED:        ["PENDING", "READY_TO_SHIP", "FULFILLED", "CANCELLED"],
   FULFILLED:     ["DELIVERED", "RETURN"],
   DELIVERED:     [],
@@ -156,6 +157,11 @@ async function _transitionOrderInner(params: TransitionParams): Promise<Transiti
       lineItems: Array.isArray(order.lineItems) ? (order.lineItems as any[]) : null,
       shopDomain: (order as any).shopDomain || null,
     }).catch(err => console.error(`[WhatsApp] Error in transitionOrder for ${orderId}:`, err));
+  }
+
+  if (toStatus === "BOOKED") {
+    lockOrderAfterBooking(merchantId, orderId)
+      .catch(err => console.error(`[Workflow] Failed to lock order after booking: ${err.message}`));
   }
 
   if (order.shopifyOrderId && action !== 'courier_status_sync') {
@@ -452,46 +458,6 @@ export function parseRoboTags(tags: string[] | null, config?: RoboTagConfig): { 
   };
 }
 
-export async function applyRoboTags(merchantId: string, orderId: string, tags: string[] | null): Promise<TransitionResult | null> {
-  const config = await getMerchantRoboTags(merchantId);
-  const robo = parseRoboTags(tags, config);
-
-  if (!robo.roboConfirm && !robo.roboCancel && !robo.roboPending) {
-    return null;
-  }
-
-  const [order] = await db.select().from(orders)
-    .where(and(eq(orders.id, orderId), eq(orders.merchantId, merchantId)));
-
-  if (!order) return null;
-
-  if (!["NEW", "PENDING"].includes(order.workflowStatus)) {
-    return null;
-  }
-
-  if (robo.roboCancel) {
-    return transitionOrder({
-      merchantId,
-      orderId,
-      toStatus: "CANCELLED",
-      action: "robo_cancel",
-      actorType: "system",
-      reason: `${config.cancel} tag`,
-      extraData: { cancelledAt: new Date(), cancelReason: `${config.cancel} tag` },
-    });
-  }
-
-  if (robo.roboConfirm) {
-    return transitionOrder({
-      merchantId,
-      orderId,
-      toStatus: "READY_TO_SHIP",
-      action: "robo_confirm",
-      actorType: "system",
-      reason: `${config.confirm} tag`,
-      extraData: { confirmedAt: new Date() },
-    });
-  }
-
+export async function applyRoboTags(_merchantId: string, _orderId: string, _tags: string[] | null): Promise<TransitionResult | null> {
   return null;
 }
