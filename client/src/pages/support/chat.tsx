@@ -20,7 +20,8 @@ import {
   MoreVertical, Tag, UserPlus, Check, CheckCheck,
   Smile, Bold, Italic, Strikethrough, Code, Filter,
   X, ChevronDown, Image as ImageIcon, Mic, FileText,
-  MapPin, Users, Reply,
+  MapPin, Users, Reply, Download, Play, Pause, Volume2,
+  ExternalLink, File, Video,
 } from "lucide-react";
 import { formatDistanceToNow, format, isToday, isYesterday } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -49,6 +50,8 @@ interface Message {
   status: string | null;
   messageType: string | null;
   mediaUrl: string | null;
+  mimeType: string | null;
+  fileName: string | null;
   reactionEmoji: string | null;
   referenceMessageId: string | null;
   waMessageId: string | null;
@@ -132,12 +135,227 @@ function MessageTypeIcon({ type }: { type: string | null }) {
     case "image": return <ImageIcon className="w-3 h-3 inline mr-1" />;
     case "sticker": return <ImageIcon className="w-3 h-3 inline mr-1" />;
     case "audio": case "voice": return <Mic className="w-3 h-3 inline mr-1" />;
-    case "video": return <FileText className="w-3 h-3 inline mr-1" />;
+    case "video": return <Video className="w-3 h-3 inline mr-1" />;
     case "document": return <FileText className="w-3 h-3 inline mr-1" />;
     case "location": return <MapPin className="w-3 h-3 inline mr-1" />;
     case "contacts": return <Users className="w-3 h-3 inline mr-1" />;
     default: return null;
   }
+}
+
+function extractMediaId(mediaUrl: string | null): string | null {
+  if (!mediaUrl) return null;
+  if (mediaUrl.startsWith("wa-media:")) return mediaUrl.slice(9);
+  return null;
+}
+
+function AudioPlayer({ src }: { src: string }) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
+
+  const toggle = () => {
+    const a = audioRef.current;
+    if (!a) return;
+    if (playing) { a.pause(); } else { a.play(); }
+    setPlaying(!playing);
+  };
+
+  const formatTime = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, "0")}`;
+  };
+
+  return (
+    <div className="flex items-center gap-2 min-w-[200px]" data-testid="audio-player">
+      <audio
+        ref={audioRef}
+        src={src}
+        preload="metadata"
+        onLoadedMetadata={() => setDuration(audioRef.current?.duration ?? 0)}
+        onTimeUpdate={() => {
+          const a = audioRef.current;
+          if (a && a.duration) setProgress((a.currentTime / a.duration) * 100);
+        }}
+        onEnded={() => { setPlaying(false); setProgress(0); }}
+      />
+      <button
+        onClick={toggle}
+        className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/20 dark:bg-primary/30 flex items-center justify-center hover:bg-primary/30 transition-colors"
+        data-testid="audio-play-btn"
+      >
+        {playing ? <Pause className="w-4 h-4 text-primary" /> : <Play className="w-4 h-4 text-primary ml-0.5" />}
+      </button>
+      <div className="flex-1 flex flex-col gap-0.5">
+        <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden cursor-pointer"
+          onClick={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            const pct = (e.clientX - rect.left) / rect.width;
+            if (audioRef.current) { audioRef.current.currentTime = pct * (audioRef.current.duration || 0); }
+          }}
+        >
+          <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${progress}%` }} />
+        </div>
+        <span className="text-[10px] text-muted-foreground">{duration > 0 ? formatTime(duration) : "0:00"}</span>
+      </div>
+      <Volume2 className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+    </div>
+  );
+}
+
+function MediaBubble({ msg, mediaProxyBase }: { msg: Message; mediaProxyBase: string }) {
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const mediaId = extractMediaId(msg.mediaUrl);
+  const proxyUrl = mediaId ? `${mediaProxyBase}/${mediaId}` : null;
+  const caption = msg.text && !["📷 Image", "🎨 Sticker", "🎵 Audio", "🎬 Video", "📄 Document"].includes(msg.text) ? msg.text : null;
+
+  if (msg.messageType === "image" && proxyUrl) {
+    return (
+      <div data-testid={`media-image-${msg.id}`}>
+        <img
+          src={proxyUrl}
+          alt={caption || "Image"}
+          className="max-w-[280px] max-h-[300px] rounded-md cursor-pointer object-cover"
+          onClick={() => setLightboxOpen(true)}
+          loading="lazy"
+        />
+        {caption && <div className="mt-1 whitespace-pre-wrap break-words leading-relaxed text-sm">{renderFormattedText(caption)}</div>}
+        {lightboxOpen && (
+          <div
+            className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+            onClick={() => setLightboxOpen(false)}
+            data-testid="image-lightbox"
+          >
+            <button className="absolute top-4 right-4 text-white hover:text-gray-300" onClick={() => setLightboxOpen(false)}>
+              <X className="w-8 h-8" />
+            </button>
+            <img src={proxyUrl} alt={caption || "Image"} className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg" />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (msg.messageType === "sticker" && proxyUrl) {
+    return (
+      <div data-testid={`media-sticker-${msg.id}`}>
+        <img src={proxyUrl} alt="Sticker" className="w-32 h-32 object-contain" loading="lazy" />
+      </div>
+    );
+  }
+
+  if (msg.messageType === "audio" && proxyUrl) {
+    return (
+      <div data-testid={`media-audio-${msg.id}`}>
+        <AudioPlayer src={proxyUrl} />
+      </div>
+    );
+  }
+
+  if (msg.messageType === "video" && proxyUrl) {
+    return (
+      <div data-testid={`media-video-${msg.id}`}>
+        <video
+          src={proxyUrl}
+          controls
+          preload="metadata"
+          className="max-w-[280px] max-h-[240px] rounded-md"
+        />
+        {caption && <div className="mt-1 whitespace-pre-wrap break-words leading-relaxed text-sm">{renderFormattedText(caption)}</div>}
+      </div>
+    );
+  }
+
+  if (msg.messageType === "document" && proxyUrl) {
+    const fName = msg.fileName || msg.text || "Document";
+    const isPdf = msg.mimeType?.includes("pdf") || fName.toLowerCase().endsWith(".pdf");
+    return (
+      <div className="flex items-center gap-3 p-2 rounded-md bg-muted/50 min-w-[200px]" data-testid={`media-document-${msg.id}`}>
+        <div className="flex-shrink-0 w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center">
+          {isPdf ? <FileText className="w-5 h-5 text-red-500" /> : <File className="w-5 h-5 text-muted-foreground" />}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-medium truncate">{fName}</div>
+          {msg.mimeType && <div className="text-[10px] text-muted-foreground uppercase">{msg.mimeType.split("/")[1] || msg.mimeType}</div>}
+        </div>
+        <a
+          href={`${proxyUrl}?download=1&filename=${encodeURIComponent(fName)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center hover:bg-primary/20 transition-colors"
+          data-testid={`download-document-${msg.id}`}
+        >
+          <Download className="w-4 h-4 text-primary" />
+        </a>
+      </div>
+    );
+  }
+
+  if (msg.messageType === "location" && msg.mediaUrl?.startsWith("geo:")) {
+    const coords = msg.mediaUrl.slice(4).split(",");
+    const lat = coords[0];
+    const lng = coords[1];
+    const mapUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+    return (
+      <div data-testid={`media-location-${msg.id}`}>
+        <a href={mapUrl} target="_blank" rel="noopener noreferrer"
+          className="block rounded-md overflow-hidden border border-border hover:opacity-90 transition-opacity"
+        >
+          <div className="bg-muted/50 p-3 flex items-center gap-2">
+            <MapPin className="w-5 h-5 text-red-500 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium">{msg.text || "Shared Location"}</div>
+              <div className="text-[10px] text-muted-foreground">{lat}, {lng}</div>
+            </div>
+            <ExternalLink className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+          </div>
+        </a>
+      </div>
+    );
+  }
+
+  if (msg.messageType === "contacts") {
+    let contacts: any[] = [];
+    try { contacts = JSON.parse(msg.mediaUrl || "[]"); } catch { }
+    if (contacts.length === 0) {
+      return (
+        <div className="flex items-center gap-2" data-testid={`media-contacts-${msg.id}`}>
+          <Users className="w-4 h-4 text-muted-foreground" />
+          <span className="text-sm">{msg.text || "Contact shared"}</span>
+        </div>
+      );
+    }
+    return (
+      <div className="space-y-2" data-testid={`media-contacts-${msg.id}`}>
+        {contacts.map((c: any, i: number) => {
+          const name = c.name?.formatted_name || "Unknown";
+          const phones = c.phones?.map((p: any) => p.phone).filter(Boolean) || [];
+          return (
+            <div key={i} className="flex items-center gap-3 p-2 rounded-md bg-muted/50">
+              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <Users className="w-4 h-4 text-primary" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium truncate">{name}</div>
+                {phones.map((p: string, j: number) => (
+                  <div key={j} className="text-[11px] text-muted-foreground">{p}</div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  return (
+    <div className="whitespace-pre-wrap break-words leading-relaxed">
+      <MessageTypeIcon type={msg.messageType} />
+      {renderFormattedText(msg.text || "")}
+    </div>
+  );
 }
 
 function PinScreen({ onSuccess }: { onSuccess: () => void }) {

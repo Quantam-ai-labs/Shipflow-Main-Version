@@ -469,6 +469,8 @@ export const waMessages = pgTable("wa_messages", {
   status: varchar("status", { length: 20 }).default("sent"),
   messageType: varchar("message_type", { length: 20 }).default("text"),
   mediaUrl: text("media_url"),
+  mimeType: varchar("mime_type", { length: 100 }),
+  fileName: varchar("file_name", { length: 500 }),
   reactionEmoji: varchar("reaction_emoji", { length: 10 }),
   referenceMessageId: varchar("reference_message_id", { length: 255 }),
   createdAt: timestamp("created_at").defaultNow(),

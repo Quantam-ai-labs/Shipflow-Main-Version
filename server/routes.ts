@@ -5565,6 +5565,8 @@ export async function registerRoutes(
             let msgType = "text";
             let messageBody = "[non-text message]";
             let mediaUrl: string | null = null;
+            let mimeType: string | null = null;
+            let fileName: string | null = null;
             let reactionEmoji: string | null = null;
             let referenceMessageId: string | null = null;
 
@@ -5585,25 +5587,42 @@ export async function registerRoutes(
             } else if (rawType === "image") {
               messageBody = message.image?.caption ?? "📷 Image";
               mediaUrl = message.image?.id ? `wa-media:${message.image.id}` : null;
+              mimeType = message.image?.mime_type ?? null;
               msgType = "image";
             } else if (rawType === "sticker") {
               messageBody = "🎨 Sticker";
               mediaUrl = message.sticker?.id ? `wa-media:${message.sticker.id}` : null;
+              mimeType = message.sticker?.mime_type ?? null;
               msgType = "sticker";
             } else if (rawType === "document") {
-              messageBody = message.document?.filename ?? "📄 Document";
+              messageBody = message.document?.caption ?? message.document?.filename ?? "📄 Document";
+              mediaUrl = message.document?.id ? `wa-media:${message.document.id}` : null;
+              mimeType = message.document?.mime_type ?? null;
+              fileName = message.document?.filename ?? null;
               msgType = "document";
             } else if (rawType === "audio" || rawType === "voice") {
               messageBody = "🎵 Audio";
+              mediaUrl = message.audio?.id ? `wa-media:${message.audio.id}` : null;
+              mimeType = message.audio?.mime_type ?? null;
               msgType = "audio";
             } else if (rawType === "video") {
               messageBody = message.video?.caption ?? "🎬 Video";
+              mediaUrl = message.video?.id ? `wa-media:${message.video.id}` : null;
+              mimeType = message.video?.mime_type ?? null;
               msgType = "video";
             } else if (rawType === "location") {
-              messageBody = `📍 Location: ${message.location?.latitude},${message.location?.longitude}`;
+              const lat = message.location?.latitude;
+              const lng = message.location?.longitude;
+              const locName = message.location?.name ?? "";
+              const locAddr = message.location?.address ?? "";
+              messageBody = locName || locAddr || `${lat},${lng}`;
+              mediaUrl = `geo:${lat},${lng}`;
               msgType = "location";
             } else if (rawType === "contacts") {
-              messageBody = "👤 Contact shared";
+              const contacts = message.contacts ?? [];
+              const contactNames = contacts.map((c: any) => c.name?.formatted_name ?? "Unknown").join(", ");
+              messageBody = contactNames || "Contact shared";
+              mediaUrl = JSON.stringify(contacts);
               msgType = "contacts";
             }
 
@@ -5640,6 +5659,8 @@ export async function registerRoutes(
                 status: "received",
                 messageType: msgType,
                 mediaUrl,
+                mimeType,
+                fileName,
                 reactionEmoji,
                 referenceMessageId,
               });
@@ -5674,6 +5695,8 @@ export async function registerRoutes(
                 status: "received",
                 messageType: msgType,
                 mediaUrl,
+                mimeType,
+                fileName,
                 reactionEmoji,
                 referenceMessageId,
               });
@@ -7449,6 +7472,47 @@ export async function registerRoutes(
   // ─────────────────────────────────────────────────────────────────────────
   // SUPPORT SECTION ROUTES
   // ─────────────────────────────────────────────────────────────────────────
+
+  app.get("/api/whatsapp/media/:mediaId", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { mediaId } = req.params;
+      if (!mediaId) return res.status(400).json({ error: "Missing mediaId" });
+
+      const [merchantRow] = await db.select({ waAccessToken: merchants.waAccessToken })
+        .from(merchants).where(eq(merchants.id, merchantId)).limit(1);
+      const accessToken = merchantRow?.waAccessToken || process.env.WHATSAPP_ACCESS_TOKEN;
+      if (!accessToken) return res.status(500).json({ error: "WhatsApp not configured" });
+
+      const metaRes = await fetch(`https://graph.facebook.com/v21.0/${mediaId}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!metaRes.ok) return res.status(metaRes.status).json({ error: "Failed to get media URL from Meta" });
+      const metaData = await metaRes.json() as any;
+      const downloadUrl = metaData.url;
+      if (!downloadUrl) return res.status(404).json({ error: "No download URL returned" });
+
+      const mediaRes = await fetch(downloadUrl, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!mediaRes.ok) return res.status(mediaRes.status).json({ error: "Failed to download media" });
+
+      const contentType = metaData.mime_type || mediaRes.headers.get("content-type") || "application/octet-stream";
+      res.setHeader("Content-Type", contentType);
+      res.setHeader("Cache-Control", "public, max-age=86400, immutable");
+      if (req.query.download === "1") {
+        const fname = req.query.filename || "file";
+        res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
+      }
+
+      const arrayBuffer = await mediaRes.arrayBuffer();
+      res.send(Buffer.from(arrayBuffer));
+    } catch (err: any) {
+      console.error("[MediaProxy] Error:", err.message);
+      res.status(500).json({ error: "Media proxy error" });
+    }
+  });
 
   app.get("/api/support/chat-access", isAuthenticated, async (req: any, res) => {
     try {
@@ -10389,6 +10453,46 @@ export async function registerRoutes(
     } catch (error: any) {
       console.error("[AgentChat] Login error:", error.message, error.stack);
       res.status(500).json({ message: "Login failed" });
+    }
+  });
+
+  app.get("/api/agent-chat/media/:mediaId", agentChatAuth, async (req, res) => {
+    try {
+      const merchantId = (req as any).agentChatMerchantId as string;
+      const { mediaId } = req.params;
+      if (!mediaId) return res.status(400).json({ error: "Missing mediaId" });
+
+      const [merchantRow] = await db.select({ waAccessToken: merchants.waAccessToken })
+        .from(merchants).where(eq(merchants.id, merchantId)).limit(1);
+      const accessToken = merchantRow?.waAccessToken || process.env.WHATSAPP_ACCESS_TOKEN;
+      if (!accessToken) return res.status(500).json({ error: "WhatsApp not configured" });
+
+      const metaRes = await fetch(`https://graph.facebook.com/v21.0/${mediaId}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!metaRes.ok) return res.status(metaRes.status).json({ error: "Failed to get media URL from Meta" });
+      const metaData = await metaRes.json() as any;
+      const downloadUrl = metaData.url;
+      if (!downloadUrl) return res.status(404).json({ error: "No download URL returned" });
+
+      const mediaRes = await fetch(downloadUrl, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!mediaRes.ok) return res.status(mediaRes.status).json({ error: "Failed to download media" });
+
+      const contentType = metaData.mime_type || mediaRes.headers.get("content-type") || "application/octet-stream";
+      res.setHeader("Content-Type", contentType);
+      res.setHeader("Cache-Control", "public, max-age=86400, immutable");
+      if (req.query.download === "1") {
+        const fname = req.query.filename || "file";
+        res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
+      }
+
+      const arrayBuffer = await mediaRes.arrayBuffer();
+      res.send(Buffer.from(arrayBuffer));
+    } catch (err: any) {
+      console.error("[AgentChat MediaProxy] Error:", err.message);
+      res.status(500).json({ error: "Media proxy error" });
     }
   });
 
