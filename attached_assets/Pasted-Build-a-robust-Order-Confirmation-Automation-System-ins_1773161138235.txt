@@ -1,0 +1,931 @@
+Build a robust Order Confirmation Automation System inside our existing ecommerce operations app. Orders already sync automatically from Shopify into the app. This system must handle WhatsApp confirmation, confirmation pending, robo call automation, manual resolution, queue management, activity logs, notifications, order state locking, and Shopify write-back tags.
+
+Core Business Rule
+
+From now on, the app must not depend on Shopify tags for decision-making.
+
+The app must run entirely on its own internal workflow, statuses, timestamps, logs, and decision engine.
+
+Shopify tags are only a backup / write-back mirror so that if something is disturbed in the app, a backup trace still exists in Shopify.
+
+This must be clearly reflected in the implementation.
+
+1. Order Entry Flow
+
+When a new order comes from Shopify into the app:
+
+create/import the order into the app
+
+place it in New Orders
+
+immediately apply these initial tags:
+
+Whatsapp-Pending
+
+Pending
+
+These tags must be applied:
+
+inside the app
+
+and written back to Shopify as backup
+
+Immediately after order creation, send a WhatsApp confirmation message to the customer.
+
+The WhatsApp message must contain two clear actions:
+
+Confirm
+
+Cancel
+
+2. WhatsApp Response Logic
+If customer confirms on WhatsApp
+
+Do the following:
+
+remove previous active status/source tags
+
+specifically remove:
+
+Whatsapp-Pending
+
+Pending
+
+Add:
+
+Whatsapp-Confirmed
+
+Confirm
+
+Then:
+
+move order to Ready to Ship
+
+save WhatsApp response time
+
+save response source
+
+save exact response payload
+
+show it in order detail page
+
+write these tags back to Shopify
+
+log the write-back and tag changes
+
+If customer cancels on WhatsApp
+
+Do the following:
+
+remove previous active status/source tags
+
+specifically remove:
+
+Whatsapp-Pending
+
+Pending
+
+Add:
+
+Whatsapp-Cancelled
+
+Cancel
+
+Then:
+
+move order to Cancelled
+
+save WhatsApp response time
+
+save response source
+
+save exact response payload
+
+show it in order detail page
+
+write these tags back to Shopify
+
+log the write-back and tag changes
+
+If customer sends any message other than confirm/cancel
+
+Add:
+
+Whatsapp-Querry
+
+Querry
+
+Then:
+
+do not auto-confirm or auto-cancel
+
+keep order in its current stage
+
+show this message and classification in order details
+
+log it properly
+
+write tags back to Shopify
+
+3. Repeated / Opposite WhatsApp Responses
+
+The system must handle multiple WhatsApp actions safely until the order is Booked.
+
+Case A: Customer confirms, then later cancels
+
+Example:
+
+order already moved to Ready to Ship
+
+before booking, customer presses Cancel
+
+Then:
+
+remove previous tags:
+
+Whatsapp-Confirmed
+
+Confirm
+
+add:
+
+Whatsapp-Cancelled
+
+Cancel
+
+move order to Hold
+
+require manual confirmation
+
+log that conflicting customer intent was detected
+
+Case B: Customer cancels, then later confirms
+
+Example:
+
+order already moved to Cancelled
+
+before booking, customer presses Confirm
+
+Then:
+
+remove previous tags:
+
+Whatsapp-Cancelled
+
+Cancel
+
+add:
+
+Whatsapp-Confirmed
+
+Confirm
+
+move order to Hold
+
+require manual confirmation
+
+log that conflicting customer intent was detected
+
+Important Rule
+
+If the customer gives both confirm and cancel responses before booking, the order must go to Hold for manual review.
+
+Do not trust the later message blindly for shipping.
+The system should preserve the latest tags but still shift workflow to Hold for manual confirmation.
+
+4. Global Tag Replacement Rule
+
+The system must never stack conflicting tags.
+
+Whenever a new status/source tag is applied:
+
+all previous active status/source tags must be removed first
+
+only the new current-state tags should remain
+
+Tags must always reflect the current state only.
+
+Status Tags Group
+
+Only one of these may exist at a time:
+
+Pending
+
+Confirm
+
+Cancel
+
+Querry
+
+Source Tags Group
+
+Only one relevant source tag may exist at a time:
+
+Whatsapp-Pending
+
+Whatsapp-Confirmed
+
+Whatsapp-Cancelled
+
+Whatsapp-Querry
+
+Manual-Confirm
+
+Manual-Cancel
+
+Robo-Confirmed
+
+Robo-Cancelled
+
+Required Tag Update Sequence
+
+Every tag update must follow this exact order:
+
+identify current active status/source tags
+
+remove old active tags
+
+apply new tags
+
+write back to Shopify
+
+log the full tag transition
+
+This logic must be hardcoded and must not be skipped.
+
+5. Confirmation Pending Logic
+
+If no valid WhatsApp confirm/cancel response is received within 12 hours after order creation:
+
+move order from New Orders to Confirmation Pending
+
+Orders in Confirmation Pending become eligible for robo call only if:
+
+no valid WhatsApp confirmation/cancellation exists yet
+
+12 hours have passed
+
+current time is within the allowed robo call time window
+
+Before triggering robo call, the system must re-check:
+
+did WhatsApp response arrive already?
+
+if yes, do not call
+
+process WhatsApp result instead
+
+6. Robo Call Allowed Time Settings
+
+Create a Robo Call Settings section where admin can configure:
+
+allowed call start time
+
+allowed call end time
+
+Example:
+
+allowed between 10:00 AM and 8:00 PM
+
+If an order becomes eligible for robo call outside the allowed time window:
+
+do not trigger the call immediately
+
+place the order into a call queue
+
+schedule the call for the next allowed start time
+
+normally next day at allowed start time if current window has passed
+
+7. Active Call Queue Page
+
+Create a separate page called something like:
+
+Active Call Queue
+or
+
+Queued Robo Calls
+
+This must be different from call logs.
+
+This page should show all calls that are currently waiting to be sent.
+
+For each queued call show:
+
+order ID
+
+customer name
+
+phone number
+
+current order status
+
+queue created time
+
+scheduled call time
+
+reason for queue
+
+attempt count
+
+call eligibility status
+
+whether WhatsApp response arrived meanwhile
+
+queue state such as waiting / sending / skipped / completed
+
+This page is for operational visibility of pending call automation.
+
+8. Robo Call Logic
+
+If robo call is triggered, customer hears:
+
+order information
+
+press 1 to confirm
+
+press 2 to cancel
+
+If customer presses 1
+
+Do the following:
+
+remove previous active status/source tags
+
+add:
+
+Robo-Confirmed
+
+Confirm
+
+move order to Ready to Ship
+
+save robo call history
+
+save digit pressed
+
+save response timestamp
+
+save call attempt details
+
+show all of this in order detail page
+
+write these tags back to Shopify
+
+log everything
+
+If customer presses 2
+
+Do the following:
+
+remove previous active status/source tags
+
+add:
+
+Robo-Cancelled
+
+Cancel
+
+move order to Cancelled
+
+save robo call history
+
+save digit pressed
+
+save response timestamp
+
+save call attempt details
+
+show all of this in order detail page
+
+write these tags back to Shopify
+
+log everything
+
+If robo call fails / unanswered / busy / no input
+
+Then:
+
+keep order in Confirmation Pending
+
+log failure reason
+
+log attempt count
+
+keep or requeue according to retry rules
+
+show it clearly in queue/log pages
+
+9. Manual Resolution Flow
+
+Orders moved to Hold require team review.
+
+For Hold orders, the team should manually contact customer and then choose final action.
+
+If team manually confirms
+
+Do the following:
+
+remove previous active tags
+
+add:
+
+Manual-Confirm
+
+Confirm
+
+move order to Ready to Ship
+
+record user who performed manual action
+
+record timestamp
+
+record note/reason
+
+write back to Shopify
+
+log the override
+
+If team manually cancels
+
+Do the following:
+
+remove previous active tags
+
+add:
+
+Manual-Cancel
+
+Cancel
+
+move order to Cancelled
+
+record user who performed manual action
+
+record timestamp
+
+record note/reason
+
+write back to Shopify
+
+log the override
+
+10. Order Lock Rule After Booking
+
+Responses from WhatsApp or Robo Call can be accepted only until the order is Booked with a courier.
+
+Once an order reaches Booked:
+
+the flow becomes locked
+
+no further WhatsApp or Robo Call response should change status
+
+no new tags should be applied based on those late responses
+
+Shopify tags should not be changed from those late responses
+
+internal workflow state must remain unchanged
+
+If any response arrives after booking:
+
+create an alert
+
+show it in notifications
+
+keep audit log
+
+do not entertain it as a live workflow change
+
+This lock must be strict and hardcoded.
+
+11. Notifications System
+
+Add a notification bell/button in the top header.
+
+Use it for important alerts such as:
+
+response received after booking
+
+conflicting customer responses
+
+failed Shopify write-back
+
+failed WhatsApp send
+
+failed robo call
+
+duplicate event detected
+
+queue scheduling issues
+
+Notifications should be visible to operations/admin staff.
+
+12. Order Statuses / Pipeline Sections
+
+Build and maintain these order pipeline sections:
+
+All Orders
+
+New Orders
+
+Confirmation Pending
+
+Hold
+
+Ready to Ship
+
+Booked
+
+Shipped
+
+Delivered
+
+Returns
+
+Cancelled
+
+13. Order Detail Page Requirements
+
+On the Order Detail Page, show:
+
+Shopify order info
+
+customer info
+
+phone number
+
+WhatsApp status
+
+WhatsApp sent time
+
+WhatsApp response
+
+WhatsApp response timestamp
+
+Robo call attempt history
+
+Robo call status
+
+Robo call response digit
+
+Robo call response timestamp
+
+final decision source
+
+conflict detected or not
+
+current pipeline status
+
+Shopify tags synced back
+
+internal notes
+
+manual override history
+
+Also add a proper timeline/activity feed showing:
+
+order imported
+
+WhatsApp sent
+
+WhatsApp response
+
+moved to confirmation pending
+
+call queued
+
+robo call attempted
+
+robo call response
+
+status changed
+
+tags written back
+
+manual override
+
+order booked
+
+late response ignored
+
+14. Logging Requirements
+
+Create separate logs for:
+
+WhatsApp Logs
+
+Robo Call Logs
+
+Active Call Queue / Queue Events
+
+Conflict Logs
+
+Shopify Write-back Logs
+
+Automation Event Logs
+
+Manual Action Logs
+
+Notification Events
+
+Each log entry should include:
+
+order ID
+
+customer name
+
+phone number if available
+
+channel
+
+event type
+
+old state
+
+new state
+
+old tags
+
+new tags
+
+response payload
+
+response classification
+
+timestamp
+
+retry count
+
+queue info if relevant
+
+API response if relevant
+
+error details if failed
+
+acting user if manual
+
+15. Shopify Write-back Requirements
+
+Shopify tag syncing is only backup, but it must still be done properly.
+
+These write-backs must be:
+
+hardcoded correctly
+
+not skippable
+
+always attempted
+
+retryable if API fails
+
+logged every time
+
+Tag mappings
+New order imported
+
+Add:
+
+Whatsapp-Pending
+
+Pending
+
+WhatsApp confirm
+
+Remove old active tags
+Add:
+
+Whatsapp-Confirmed
+
+Confirm
+
+WhatsApp cancel
+
+Remove old active tags
+Add:
+
+Whatsapp-Cancelled
+
+Cancel
+
+WhatsApp other message
+
+Remove old active tags only if needed according to current state logic
+Add:
+
+Whatsapp-Querry
+
+Querry
+
+Robo confirm
+
+Remove old active tags
+Add:
+
+Robo-Confirmed
+
+Confirm
+
+Robo cancel
+
+Remove old active tags
+Add:
+
+Robo-Cancelled
+
+Cancel
+
+Manual confirm
+
+Remove old active tags
+Add:
+
+Manual-Confirm
+
+Confirm
+
+Manual cancel
+
+Remove old active tags
+Add:
+
+Manual-Cancel
+
+Cancel
+
+Booked lock state
+
+No future response should overwrite tags after booking.
+
+16. Decision Engine Rules
+
+Create one central decision engine.
+WhatsApp and robo call must not directly manipulate final workflow independently without passing through this engine.
+
+The decision engine must evaluate:
+
+current app status
+
+whether order is booked or not
+
+response source
+
+response value
+
+response time
+
+previous responses
+
+existing tags
+
+whether conflict exists
+
+whether manual action is required
+
+The app’s internal database and workflow are the source of truth, not Shopify tags.
+
+17. Edge Cases to Handle
+
+The system must safely handle:
+
+customer presses WhatsApp confirm multiple times
+
+customer presses WhatsApp cancel multiple times
+
+customer confirms then cancels
+
+customer cancels then confirms
+
+customer sends free text question/message
+
+duplicate webhooks
+
+webhook delay
+
+WhatsApp response arrives just before robo call
+
+WhatsApp response arrives while call is queued
+
+robo call response arrives after WhatsApp response
+
+late responses after booking
+
+invalid phone number
+
+WhatsApp send failure
+
+robo call busy / no input / failed
+
+Shopify API failure
+
+partial write-back failure
+
+manual override after automation
+
+race conditions between queue, WhatsApp, and call callbacks
+
+18. Technical Requirements
+
+Build this in a production-safe way using:
+
+event-driven architecture
+
+internal state machine
+
+central decision engine
+
+job queue / delayed jobs
+
+webhook handling for WhatsApp
+
+callback handling for robo calls
+
+retry-safe processing
+
+idempotent event handling
+
+duplicate prevention
+
+race-condition protection
+
+strong audit trail
+
+strict booking lock rule
+
+settings for call allowed hours
+
+operational queue visibility
+
+reliable Shopify write-back retries
+
+19. UI Requirements
+
+In admin panel:
+
+show counts beside each tab
+
+show clear status badges
+
+show source badges:
+
+WhatsApp
+
+Robo Call
+
+Manual
+
+Hold
+
+Locked
+
+show top notification bell
+
+show conflict warnings
+
+show booked-lock warning
+
+show queue page
+
+show logs page
+
+show timeline in order details
+
+show manual confirm/cancel actions
+
+show filters by source, status, tag, conflict, date, queue state
+
+20. Final Objective
+
+The final system should work like this:
+
+order comes from Shopify into app
+
+app becomes source of truth
+
+initial pending tags are applied internally and mirrored to Shopify
+
+WhatsApp confirmation is attempted first
+
+if no valid response within 12 hours, order moves to Confirmation Pending
+
+robo call is triggered only during allowed time window
+
+otherwise it is queued
+
+responses can update flow only until order is booked
+
+after booking, the flow is locked
+
+late responses only create alerts
+
+all tags are always replaced cleanly
+
+Shopify write-back always happens as backup
+
+all actions are logged
+
+conflicts go to Hold for manual review
+
+app never depends on Shopify tags for actual decision logic
+
+Use this exact business logic and do not simplify or skip any hardcoded write-back, tag replacement, queue timing, hold logic, or booking lock logic.
