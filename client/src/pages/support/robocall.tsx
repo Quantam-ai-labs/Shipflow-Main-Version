@@ -11,7 +11,6 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Phone,
   PhoneCall,
-  PhoneOff,
   CheckCircle2,
   XCircle,
   Clock,
@@ -22,15 +21,16 @@ import {
   Trash2,
   RefreshCw,
   Send,
+  Mail,
 } from "lucide-react";
 
 interface CallRecord {
-  callerId: string;
+  to: string;
   callId?: string;
   status: string;
   dtmf?: number | null;
   amount?: string;
-  text2?: string;
+  orderNumber?: string;
   error?: string;
   polling?: boolean;
 }
@@ -55,28 +55,23 @@ export default function RoboCallPage() {
   const { toast } = useToast();
 
   const [apiKey, setApiKey] = useState("");
+  const [email, setEmail] = useState("");
   const [keyVerified, setKeyVerified] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [balance, setBalance] = useState<{ balance: string; username: string; call_rate: string } | null>(null);
   const [checkingBalance, setCheckingBalance] = useState(false);
 
-  const [callerId, setCallerId] = useState("");
+  const [phoneTo, setPhoneTo] = useState("");
   const [amount, setAmount] = useState("");
-  const [voiceId, setVoiceId] = useState("102");
-  const [text1, setText1] = useState("");
-  const [text2, setText2] = useState("");
-  const [key1, setKey1] = useState("");
-  const [key2, setKey2] = useState("");
-  const [key3, setKey3] = useState("");
-  const [key4, setKey4] = useState("");
-  const [key5, setKey5] = useState("");
+  const [voiceId, setVoiceId] = useState("1");
+  const [orderId, setOrderId] = useState("");
+  const [orderNumber, setOrderNumber] = useState("");
   const [sending, setSending] = useState(false);
 
-  const [bulkRows, setBulkRows] = useState<Array<{ callerId: string; amount: string; text2: string }>>([
-    { callerId: "", amount: "", text2: "" },
+  const [bulkRows, setBulkRows] = useState<Array<{ to: string; amount: string; orderNumber: string }>>([
+    { to: "", amount: "", orderNumber: "" },
   ]);
-  const [bulkVoiceId, setBulkVoiceId] = useState("102");
-  const [bulkText1, setBulkText1] = useState("");
+  const [bulkVoiceId, setBulkVoiceId] = useState("1");
   const [sendingBulk, setSendingBulk] = useState(false);
 
   const [callHistory, setCallHistory] = useState<CallRecord[]>([]);
@@ -88,18 +83,21 @@ export default function RoboCallPage() {
     };
   }, []);
 
+  const credentialsValid = apiKey.trim() && email.trim();
+
   const verifyKey = async () => {
-    if (!apiKey.trim()) return;
+    if (!credentialsValid) return;
     setVerifying(true);
     try {
-      const res = await apiRequest("POST", "/api/robocall/verify-key", { apiKey });
+      const res = await apiRequest("POST", "/api/robocall/verify-key", { apiKey, email });
       const data = await res.json();
-      if (String(data.status) === "200") {
-        setKeyVerified(true);
-        toast({ title: "API Key Verified", description: "Your RoboCall API key is valid." });
-      } else {
+      if (data.status === 401 || data.response) {
         setKeyVerified(false);
-        toast({ title: "Invalid API Key", description: data.response || "Key verification failed.", variant: "destructive" });
+        toast({ title: "Invalid Credentials", description: data.response || "Verification failed.", variant: "destructive" });
+      } else {
+        setKeyVerified(true);
+        if (data.data) setBalance(data.data);
+        toast({ title: "Verified", description: "Your credentials are valid." });
       }
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -109,15 +107,16 @@ export default function RoboCallPage() {
   };
 
   const checkBalance = async () => {
-    if (!apiKey.trim()) return;
+    if (!credentialsValid) return;
     setCheckingBalance(true);
     try {
-      const res = await apiRequest("POST", "/api/robocall/balance", { apiKey });
+      const res = await apiRequest("POST", "/api/robocall/balance", { apiKey, email });
       const data = await res.json();
-      if (String(data.status) === "200" && data.data) {
+      if (data.data) {
         setBalance(data.data);
+        setKeyVerified(true);
       } else {
-        toast({ title: "Error", description: data.response || "Could not fetch balance.", variant: "destructive" });
+        toast({ title: "Error", description: data.error || "Could not fetch balance.", variant: "destructive" });
       }
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -131,7 +130,7 @@ export default function RoboCallPage() {
 
     const interval = setInterval(async () => {
       try {
-        const res = await apiRequest("POST", "/api/robocall/status", { apiKey, callId });
+        const res = await apiRequest("POST", "/api/robocall/status", { apiKey, email, callId });
         const data = await res.json();
         if (data.data) {
           const callStatus = data.data.call_status;
@@ -163,44 +162,40 @@ export default function RoboCallPage() {
     }, 5000);
 
     pollingIntervals.current.set(callId, interval);
-  }, [apiKey]);
+  }, [apiKey, email]);
 
   const sendSingleCall = async () => {
-    if (!apiKey.trim() || !callerId.trim() || !voiceId.trim()) {
-      toast({ title: "Missing fields", description: "API Key, Phone Number, and Voice ID are required.", variant: "destructive" });
+    if (!credentialsValid || !phoneTo.trim() || !voiceId.trim()) {
+      toast({ title: "Missing fields", description: "Email, API Key, Phone Number, and Voice ID are required.", variant: "destructive" });
       return;
     }
     setSending(true);
     try {
       const res = await apiRequest("POST", "/api/robocall/send", {
         apiKey,
-        callerId: callerId.trim(),
+        email,
+        to: phoneTo.trim(),
         amount: amount || "0",
         voiceId,
-        text1,
-        text2,
-        key1: key1 || "0",
-        key2: key2 || "0",
-        key3: key3 || "0",
-        key4: key4 || "0",
-        key5: key5 || "0",
+        orderId,
+        orderNumber,
       });
       const data = await res.json();
-      if (data.status === "200" || data.status === 200) {
-        const callId = data.data?.call_id ? String(data.data.call_id) : undefined;
+      const callId = data.data?.call_id ? String(data.data.call_id) : (data.call_id ? String(data.call_id) : undefined);
+      if (data.error) {
+        toast({ title: "Call Failed", description: data.error, variant: "destructive" });
+      } else {
         const record: CallRecord = {
-          callerId: callerId.trim(),
+          to: phoneTo.trim(),
           callId,
           status: "Initiated",
           amount,
-          text2,
+          orderNumber,
           polling: !!callId,
         };
         setCallHistory((prev) => [record, ...prev]);
-        toast({ title: "Call Sent", description: `Call initiated to ${callerId}${callId ? ` (ID: ${callId})` : ""}` });
+        toast({ title: "Call Sent", description: `Call initiated to ${phoneTo}${callId ? ` (ID: ${callId})` : ""}` });
         if (callId) pollCallStatus(callId);
-      } else {
-        toast({ title: "Call Failed", description: data.message || JSON.stringify(data), variant: "destructive" });
       }
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -210,27 +205,26 @@ export default function RoboCallPage() {
   };
 
   const sendBulkCalls = async () => {
-    const validRows = bulkRows.filter((r) => r.callerId.trim());
-    if (!apiKey.trim() || validRows.length === 0) {
-      toast({ title: "Missing data", description: "API Key and at least one phone number are required.", variant: "destructive" });
+    const validRows = bulkRows.filter((r) => r.to.trim());
+    if (!credentialsValid || validRows.length === 0) {
+      toast({ title: "Missing data", description: "Email, API Key, and at least one phone number are required.", variant: "destructive" });
       return;
     }
     setSendingBulk(true);
     try {
       const calls = validRows.map((r) => ({
-        callerId: r.callerId.trim(),
+        to: r.to.trim(),
         amount: r.amount || "0",
         voiceId: bulkVoiceId,
-        text1: bulkText1,
-        text2: r.text2 || "",
+        orderNumber: r.orderNumber || "",
       }));
-      const res = await apiRequest("POST", "/api/robocall/send-bulk", { apiKey, calls });
+      const res = await apiRequest("POST", "/api/robocall/send-bulk", { apiKey, email, calls });
       const data = await res.json();
       if (data.results) {
         const newRecords: CallRecord[] = data.results.map((r: any) => {
-          const callId = r.data?.call_id ? String(r.data.call_id) : undefined;
+          const callId = r.data?.call_id ? String(r.data.call_id) : (r.call_id ? String(r.call_id) : undefined);
           return {
-            callerId: r.callerId,
+            to: r.to,
             callId,
             status: r.error ? "Error" : "Initiated",
             error: r.error,
@@ -252,7 +246,7 @@ export default function RoboCallPage() {
 
   const refreshCallStatus = async (callId: string) => {
     try {
-      const res = await apiRequest("POST", "/api/robocall/status", { apiKey, callId });
+      const res = await apiRequest("POST", "/api/robocall/status", { apiKey, email, callId });
       const data = await res.json();
       if (data.data) {
         setCallHistory((prev) =>
@@ -273,7 +267,7 @@ export default function RoboCallPage() {
   };
 
   const addBulkRow = () => {
-    setBulkRows((prev) => [...prev, { callerId: "", amount: "", text2: "" }]);
+    setBulkRows((prev) => [...prev, { to: "", amount: "", orderNumber: "" }]);
   };
 
   const removeBulkRow = (index: number) => {
@@ -288,7 +282,7 @@ export default function RoboCallPage() {
     const lines = text.split("\n").filter((l) => l.trim());
     const rows = lines.map((line) => {
       const parts = line.split(/[,\t]/).map((p) => p.trim());
-      return { callerId: parts[0] || "", amount: parts[1] || "", text2: parts[2] || "" };
+      return { to: parts[0] || "", amount: parts[1] || "", orderNumber: parts[2] || "" };
     });
     if (rows.length > 0) setBulkRows(rows);
   };
@@ -298,7 +292,7 @@ export default function RoboCallPage() {
       <div>
         <h1 className="text-2xl font-bold" data-testid="text-page-title">RoboCall Testing</h1>
         <p className="text-muted-foreground mt-1" data-testid="text-page-description">
-          Test IVR calls via RoboCall Pakistan (robocall.pk). Send single or bulk calls and monitor responses.
+          Test IVR DTMF calls via BrandedSMS Pakistan. Send single or bulk calls and monitor responses.
         </p>
       </div>
 
@@ -310,13 +304,29 @@ export default function RoboCallPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="flex-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="email">Account Email</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="your@email.com"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setKeyVerified(false);
+                  setBalance(null);
+                }}
+                data-testid="input-email"
+              />
+              <p className="text-xs text-muted-foreground mt-1">Your BrandedSMS portal login email</p>
+            </div>
+            <div>
               <Label htmlFor="apiKey">API Key</Label>
               <Input
                 id="apiKey"
                 type="password"
-                placeholder="Enter your RoboCall API key"
+                placeholder="Enter your API key"
                 value={apiKey}
                 onChange={(e) => {
                   setApiKey(e.target.value);
@@ -325,22 +335,21 @@ export default function RoboCallPage() {
                 }}
                 data-testid="input-api-key"
               />
-            </div>
-            <div className="flex items-end gap-2">
-              <Button onClick={verifyKey} disabled={verifying || !apiKey.trim()} variant="outline" data-testid="button-verify-key">
-                {verifying ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <CheckCircle2 className="w-4 h-4 mr-1" />}
-                Verify
-              </Button>
-              <Button onClick={checkBalance} disabled={checkingBalance || !apiKey.trim()} variant="outline" data-testid="button-check-balance">
-                {checkingBalance ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Wallet className="w-4 h-4 mr-1" />}
-                Balance
-              </Button>
+              <p className="text-xs text-muted-foreground mt-1">From app.brandedsmspakistan.com/developers/key</p>
             </div>
           </div>
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button onClick={verifyKey} disabled={verifying || !credentialsValid} variant="outline" data-testid="button-verify-key">
+              {verifying ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <CheckCircle2 className="w-4 h-4 mr-1" />}
+              Verify
+            </Button>
+            <Button onClick={checkBalance} disabled={checkingBalance || !credentialsValid} variant="outline" data-testid="button-check-balance">
+              {checkingBalance ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Wallet className="w-4 h-4 mr-1" />}
+              Balance
+            </Button>
             {keyVerified && (
               <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300" data-testid="badge-key-verified">
-                <CheckCircle2 className="w-3 h-3 mr-1" /> Key Verified
+                <CheckCircle2 className="w-3 h-3 mr-1" /> Verified
               </Badge>
             )}
             {balance && (
@@ -378,13 +387,13 @@ export default function RoboCallPage() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div>
-                  <Label htmlFor="callerId">Phone Number *</Label>
+                  <Label htmlFor="phoneTo">Phone Number *</Label>
                   <Input
-                    id="callerId"
+                    id="phoneTo"
                     placeholder="923001234567"
-                    value={callerId}
-                    onChange={(e) => setCallerId(e.target.value)}
-                    data-testid="input-caller-id"
+                    value={phoneTo}
+                    onChange={(e) => setPhoneTo(e.target.value)}
+                    data-testid="input-phone-to"
                   />
                   <p className="text-xs text-muted-foreground mt-1">Format: 923xxxxxxxxx</p>
                 </div>
@@ -402,64 +411,35 @@ export default function RoboCallPage() {
                   <Label htmlFor="voiceId">Voice ID *</Label>
                   <Input
                     id="voiceId"
-                    placeholder="102"
+                    placeholder="1"
                     value={voiceId}
                     onChange={(e) => setVoiceId(e.target.value)}
                     data-testid="input-voice-id"
                   />
-                  <p className="text-xs text-muted-foreground mt-1">e.g. 48, 49, 102</p>
                 </div>
                 <div>
-                  <Label htmlFor="text1">Store Name (text1)</Label>
+                  <Label htmlFor="orderId">Order ID</Label>
                   <Input
-                    id="text1"
-                    placeholder="My Store"
-                    value={text1}
-                    onChange={(e) => setText1(e.target.value)}
-                    data-testid="input-text1"
+                    id="orderId"
+                    placeholder="123"
+                    value={orderId}
+                    onChange={(e) => setOrderId(e.target.value)}
+                    data-testid="input-order-id"
                   />
                 </div>
                 <div>
-                  <Label htmlFor="text2">Order ID (text2)</Label>
+                  <Label htmlFor="orderNumber">Order Number</Label>
                   <Input
-                    id="text2"
+                    id="orderNumber"
                     placeholder="ORD12345"
-                    value={text2}
-                    onChange={(e) => setText2(e.target.value)}
-                    data-testid="input-text2"
+                    value={orderNumber}
+                    onChange={(e) => setOrderNumber(e.target.value)}
+                    data-testid="input-order-number"
                   />
                 </div>
               </div>
 
-              <details className="text-sm">
-                <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
-                  Advanced Fields (key1–key5)
-                </summary>
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-3">
-                  <div>
-                    <Label htmlFor="key1">key1</Label>
-                    <Input id="key1" placeholder="0" value={key1} onChange={(e) => setKey1(e.target.value)} data-testid="input-key1" />
-                  </div>
-                  <div>
-                    <Label htmlFor="key2">key2</Label>
-                    <Input id="key2" placeholder="0" value={key2} onChange={(e) => setKey2(e.target.value)} data-testid="input-key2" />
-                  </div>
-                  <div>
-                    <Label htmlFor="key3">key3</Label>
-                    <Input id="key3" placeholder="0" value={key3} onChange={(e) => setKey3(e.target.value)} data-testid="input-key3" />
-                  </div>
-                  <div>
-                    <Label htmlFor="key4">key4</Label>
-                    <Input id="key4" placeholder="0" value={key4} onChange={(e) => setKey4(e.target.value)} data-testid="input-key4" />
-                  </div>
-                  <div>
-                    <Label htmlFor="key5">key5</Label>
-                    <Input id="key5" placeholder="0" value={key5} onChange={(e) => setKey5(e.target.value)} data-testid="input-key5" />
-                  </div>
-                </div>
-              </details>
-
-              <Button onClick={sendSingleCall} disabled={sending || !apiKey.trim()} className="w-full sm:w-auto" data-testid="button-send-single">
+              <Button onClick={sendSingleCall} disabled={sending || !credentialsValid} className="w-full sm:w-auto" data-testid="button-send-single">
                 {sending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Send className="w-4 h-4 mr-2" />}
                 Send Call
               </Button>
@@ -478,26 +458,16 @@ export default function RoboCallPage() {
                   <Label htmlFor="bulkVoiceId">Voice ID *</Label>
                   <Input
                     id="bulkVoiceId"
-                    placeholder="102"
+                    placeholder="1"
                     value={bulkVoiceId}
                     onChange={(e) => setBulkVoiceId(e.target.value)}
                     data-testid="input-bulk-voice-id"
                   />
                 </div>
-                <div>
-                  <Label htmlFor="bulkText1">Store Name (text1)</Label>
-                  <Input
-                    id="bulkText1"
-                    placeholder="My Store"
-                    value={bulkText1}
-                    onChange={(e) => setBulkText1(e.target.value)}
-                    data-testid="input-bulk-text1"
-                  />
-                </div>
               </div>
 
               <div>
-                <Label>Paste CSV (phone, amount, orderId — one per line)</Label>
+                <Label>Paste CSV (phone, amount, orderNumber — one per line)</Label>
                 <Textarea
                   placeholder={"923001234567, 1500, ORD001\n923009876543, 2000, ORD002"}
                   rows={3}
@@ -512,8 +482,8 @@ export default function RoboCallPage() {
                   <div key={i} className="flex items-center gap-2">
                     <Input
                       placeholder="Phone (923...)"
-                      value={row.callerId}
-                      onChange={(e) => updateBulkRow(i, "callerId", e.target.value)}
+                      value={row.to}
+                      onChange={(e) => updateBulkRow(i, "to", e.target.value)}
                       className="flex-1"
                       data-testid={`input-bulk-phone-${i}`}
                     />
@@ -525,11 +495,11 @@ export default function RoboCallPage() {
                       data-testid={`input-bulk-amount-${i}`}
                     />
                     <Input
-                      placeholder="Order ID"
-                      value={row.text2}
-                      onChange={(e) => updateBulkRow(i, "text2", e.target.value)}
+                      placeholder="Order #"
+                      value={row.orderNumber}
+                      onChange={(e) => updateBulkRow(i, "orderNumber", e.target.value)}
                       className="w-32"
-                      data-testid={`input-bulk-orderid-${i}`}
+                      data-testid={`input-bulk-ordernum-${i}`}
                     />
                     <Button variant="ghost" size="icon" onClick={() => removeBulkRow(i)} disabled={bulkRows.length === 1} data-testid={`button-remove-row-${i}`}>
                       <Trash2 className="w-4 h-4 text-muted-foreground" />
@@ -541,9 +511,9 @@ export default function RoboCallPage() {
                 </Button>
               </div>
 
-              <Button onClick={sendBulkCalls} disabled={sendingBulk || !apiKey.trim()} className="w-full sm:w-auto" data-testid="button-send-bulk">
+              <Button onClick={sendBulkCalls} disabled={sendingBulk || !credentialsValid} className="w-full sm:w-auto" data-testid="button-send-bulk">
                 {sendingBulk ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Send className="w-4 h-4 mr-2" />}
-                Send {bulkRows.filter((r) => r.callerId.trim()).length} Calls
+                Send {bulkRows.filter((r) => r.to.trim()).length} Calls
               </Button>
             </CardContent>
           </Card>
@@ -566,7 +536,7 @@ export default function RoboCallPage() {
                     <th className="py-2 pr-4 font-medium">Phone</th>
                     <th className="py-2 pr-4 font-medium">Call ID</th>
                     <th className="py-2 pr-4 font-medium">Amount</th>
-                    <th className="py-2 pr-4 font-medium">Order ID</th>
+                    <th className="py-2 pr-4 font-medium">Order #</th>
                     <th className="py-2 pr-4 font-medium">Status</th>
                     <th className="py-2 pr-4 font-medium">Response</th>
                     <th className="py-2 font-medium"></th>
@@ -575,10 +545,10 @@ export default function RoboCallPage() {
                 <tbody>
                   {callHistory.map((call, i) => (
                     <tr key={i} className="border-b last:border-0" data-testid={`row-call-${i}`}>
-                      <td className="py-2 pr-4 font-mono" data-testid={`text-call-phone-${i}`}>{call.callerId}</td>
+                      <td className="py-2 pr-4 font-mono" data-testid={`text-call-phone-${i}`}>{call.to}</td>
                       <td className="py-2 pr-4 font-mono text-muted-foreground" data-testid={`text-call-id-${i}`}>{call.callId || "—"}</td>
                       <td className="py-2 pr-4" data-testid={`text-call-amount-${i}`}>{call.amount || "—"}</td>
-                      <td className="py-2 pr-4" data-testid={`text-call-order-${i}`}>{call.text2 || "—"}</td>
+                      <td className="py-2 pr-4" data-testid={`text-call-order-${i}`}>{call.orderNumber || "—"}</td>
                       <td className="py-2 pr-4">
                         <div className="flex items-center gap-1">
                           {call.polling && <Loader2 className="w-3 h-3 animate-spin" />}

@@ -15040,16 +15040,26 @@ export async function registerRoutes(
   });
 
   // ============================================
-  // ROBOCALL TESTING - Proxy to H3 Techs / BrandedSMS API
+  // ROBOCALL TESTING - Proxy to BrandedSMS Pakistan API
   // ============================================
-  const ROBOCALL_API_BASE = "https://secure.h3techs.com/sms/api";
+  const ROBOCALL_API_BASE = "https://app.brandedsmspakistan.com/api";
+
+  async function safeFetchJson(url: string): Promise<any> {
+    const response = await fetch(url);
+    const text = await response.text();
+    try {
+      return JSON.parse(text);
+    } catch {
+      return { error: text.trim() || "Unknown error from API", raw: true };
+    }
+  }
 
   app.post("/api/robocall/verify-key", isAuthenticated, async (req: any, res) => {
     try {
-      const { apiKey } = req.body;
-      if (!apiKey) return res.status(400).json({ error: "API key is required" });
-      const response = await fetch(`${ROBOCALL_API_BASE}/user_verify?api_key=${encodeURIComponent(apiKey)}`);
-      const data = await response.json();
+      const { apiKey, email } = req.body;
+      if (!apiKey || !email) return res.status(400).json({ error: "API key and email are required" });
+      const data = await safeFetchJson(`${ROBOCALL_API_BASE}/balance?email=${encodeURIComponent(email)}&key=${encodeURIComponent(apiKey)}`);
+      if (data.raw) return res.json({ status: 401, response: data.error });
       res.json(data);
     } catch (error: any) {
       console.error("[RoboCall] Verify key error:", error);
@@ -15059,10 +15069,10 @@ export async function registerRoutes(
 
   app.post("/api/robocall/balance", isAuthenticated, async (req: any, res) => {
     try {
-      const { apiKey } = req.body;
-      if (!apiKey) return res.status(400).json({ error: "API key is required" });
-      const response = await fetch(`${ROBOCALL_API_BASE}/check_balance?api_key=${encodeURIComponent(apiKey)}`);
-      const data = await response.json();
+      const { apiKey, email } = req.body;
+      if (!apiKey || !email) return res.status(400).json({ error: "API key and email are required" });
+      const data = await safeFetchJson(`${ROBOCALL_API_BASE}/balance?email=${encodeURIComponent(email)}&key=${encodeURIComponent(apiKey)}`);
+      if (data.raw) return res.status(400).json({ error: data.error });
       res.json(data);
     } catch (error: any) {
       console.error("[RoboCall] Balance error:", error);
@@ -15072,23 +15082,20 @@ export async function registerRoutes(
 
   app.post("/api/robocall/send", isAuthenticated, async (req: any, res) => {
     try {
-      const { apiKey, callerId, amount, voiceId, text1, text2, key1, key2, key3, key4, key5 } = req.body;
-      if (!apiKey || !callerId || !voiceId) return res.status(400).json({ error: "apiKey, callerId, and voiceId are required" });
+      const { apiKey, email, to, amount, voiceId, orderId, orderNumber } = req.body;
+      if (!apiKey || !email || !to || !voiceId) return res.status(400).json({ error: "apiKey, email, phone number, and voiceId are required" });
       const params = new URLSearchParams({
-        api_key: apiKey,
-        caller_id: callerId,
+        email,
+        key: apiKey,
+        to,
+        type: "dtmf",
         voice_id: String(voiceId),
         amount: String(amount || 0),
-        text1: text1 || "",
-        text2: text2 || "",
-        key1: String(key1 || 0),
-        key2: String(key2 || 0),
-        key3: String(key3 || 0),
-        key4: String(key4 || 0),
-        key5: String(key5 || 0),
+        order_id: orderId || "",
+        order_number: orderNumber || "",
       });
-      const response = await fetch(`${ROBOCALL_API_BASE}/calls?${params.toString()}`);
-      const data = await response.json();
+      const data = await safeFetchJson(`${ROBOCALL_API_BASE}/send-voice?${params.toString()}`);
+      if (data.raw) return res.status(400).json({ error: data.error });
       res.json(data);
     } catch (error: any) {
       console.error("[RoboCall] Send call error:", error);
@@ -15098,31 +15105,27 @@ export async function registerRoutes(
 
   app.post("/api/robocall/send-bulk", isAuthenticated, async (req: any, res) => {
     try {
-      const { apiKey, calls } = req.body;
-      if (!apiKey || !Array.isArray(calls) || calls.length === 0) return res.status(400).json({ error: "apiKey and calls array are required" });
+      const { apiKey, email, calls } = req.body;
+      if (!apiKey || !email || !Array.isArray(calls) || calls.length === 0) return res.status(400).json({ error: "apiKey, email, and calls array are required" });
       if (calls.length > 50) return res.status(400).json({ error: "Maximum 50 calls per batch" });
       const results: any[] = [];
       for (const call of calls) {
         try {
           const params = new URLSearchParams({
-            api_key: apiKey,
-            caller_id: call.callerId,
+            email,
+            key: apiKey,
+            to: call.to,
+            type: "dtmf",
             voice_id: String(call.voiceId),
             amount: String(call.amount || 0),
-            text1: call.text1 || "",
-            text2: call.text2 || "",
-            key1: String(call.key1 || 0),
-            key2: String(call.key2 || 0),
-            key3: String(call.key3 || 0),
-            key4: String(call.key4 || 0),
-            key5: String(call.key5 || 0),
+            order_id: call.orderId || "",
+            order_number: call.orderNumber || "",
           });
-          const response = await fetch(`${ROBOCALL_API_BASE}/calls?${params.toString()}`);
-          const data = await response.json();
-          results.push({ callerId: call.callerId, ...data });
+          const data = await safeFetchJson(`${ROBOCALL_API_BASE}/send-voice?${params.toString()}`);
+          results.push({ to: call.to, ...(data.raw ? { error: data.error } : data) });
           await new Promise(resolve => setTimeout(resolve, 200));
         } catch (err: any) {
-          results.push({ callerId: call.callerId, error: err.message });
+          results.push({ to: call.to, error: err.message });
         }
       }
       res.json({ results });
@@ -15134,10 +15137,10 @@ export async function registerRoutes(
 
   app.post("/api/robocall/status", isAuthenticated, async (req: any, res) => {
     try {
-      const { apiKey, callId } = req.body;
-      if (!apiKey || !callId) return res.status(400).json({ error: "apiKey and callId are required" });
-      const response = await fetch(`${ROBOCALL_API_BASE}/get_call?api_key=${encodeURIComponent(apiKey)}&call_id=${encodeURIComponent(callId)}`);
-      const data = await response.json();
+      const { apiKey, email, callId } = req.body;
+      if (!apiKey || !email || !callId) return res.status(400).json({ error: "apiKey, email, and callId are required" });
+      const data = await safeFetchJson(`${ROBOCALL_API_BASE}/get-call?email=${encodeURIComponent(email)}&key=${encodeURIComponent(apiKey)}&id=${encodeURIComponent(callId)}`);
+      if (data.raw) return res.status(400).json({ error: data.error });
       res.json(data);
     } catch (error: any) {
       console.error("[RoboCall] Status error:", error);
