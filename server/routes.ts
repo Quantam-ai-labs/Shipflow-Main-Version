@@ -15334,6 +15334,42 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/robocall/queue/:id/retry", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { id } = req.params;
+      const [entry] = await db.select().from(robocallQueue)
+        .where(and(eq(robocallQueue.id, id), eq(robocallQueue.merchantId, merchantId)))
+        .limit(1);
+      if (!entry) return res.status(404).json({ error: "Queue entry not found" });
+      if (!["failed", "exhausted"].includes(entry.status)) {
+        return res.status(400).json({ error: `Cannot retry entry with status "${entry.status}"` });
+      }
+      await db.update(robocallQueue).set({
+        status: "waiting",
+        scheduledAt: new Date(),
+        nextRetryAt: null,
+        callId: null,
+        completedAt: null,
+        lastCallResult: null,
+        attemptCount: 0,
+      }).where(eq(robocallQueue.id, id));
+
+      const { logConfirmationEvent } = await import("./services/confirmationEngine");
+      await logConfirmationEvent({
+        merchantId,
+        orderId: entry.orderId,
+        eventType: "CALL_QUEUED",
+        note: `RoboCall manually retried — re-queued for sending`,
+      });
+
+      res.json({ success: true, message: "Queue entry retried" });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // ─── Robocall Settings API ──────────────────────────────────────────────
 
   app.get("/api/robocall/settings", isAuthenticated, async (req: any, res) => {

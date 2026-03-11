@@ -38,6 +38,8 @@ import {
   Save,
   Unplug,
   PlugZap,
+  RotateCw,
+  ListOrdered,
 } from "lucide-react";
 
 interface CallRecord {
@@ -73,6 +75,137 @@ const DTMF_MAP: Record<number, { label: string; color: string }> = {
   2: { label: "Cancelled", color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300" },
   3: { label: "Callback", color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300" },
 };
+
+const QUEUE_STATUS_STYLES: Record<string, string> = {
+  waiting: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
+  sending: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300",
+  completed: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
+  processed: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
+  failed: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
+  exhausted: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300",
+};
+
+function QueueTab() {
+  const { toast } = useToast();
+  const { data, isLoading } = useQuery<{ entries: any[] }>({
+    queryKey: ["/api/robocall/queue"],
+  });
+  const entries = data?.entries || [];
+
+  const retryMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("POST", `/api/robocall/queue/${id}/retry`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/robocall/queue"] });
+      toast({ title: "Retried", description: "Queue entry re-queued for sending" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const formatDate = (d: string | null) => {
+    if (!d) return "—";
+    const date = new Date(d);
+    return date.toLocaleString("en-PK", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  };
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="py-8 flex justify-center">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card data-testid="card-queue">
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <ListOrdered className="w-5 h-5" />
+            Automated Queue ({entries.length})
+          </CardTitle>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => queryClient.invalidateQueries({ queryKey: ["/api/robocall/queue"] })}
+            data-testid="button-refresh-queue"
+          >
+            <RefreshCw className="w-4 h-4 mr-1" />
+            Refresh
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {entries.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-4" data-testid="text-queue-empty">No queue entries yet</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left">
+                  <th className="py-2 pr-4 font-medium">Order #</th>
+                  <th className="py-2 pr-4 font-medium">Phone</th>
+                  <th className="py-2 pr-4 font-medium">Amount</th>
+                  <th className="py-2 pr-4 font-medium">Status</th>
+                  <th className="py-2 pr-4 font-medium">Reason</th>
+                  <th className="py-2 pr-4 font-medium">Attempts</th>
+                  <th className="py-2 pr-4 font-medium">Queued</th>
+                  <th className="py-2 pr-4 font-medium">Next Retry</th>
+                  <th className="py-2 pr-4 font-medium">Last Result</th>
+                  <th className="py-2 font-medium"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map((entry: any) => (
+                  <tr key={entry.id} className="border-b last:border-0" data-testid={`row-queue-${entry.id}`}>
+                    <td className="py-2 pr-4 font-medium" data-testid={`text-queue-order-${entry.id}`}>{entry.orderNumber || "—"}</td>
+                    <td className="py-2 pr-4 font-mono text-xs" data-testid={`text-queue-phone-${entry.id}`}>{entry.phone}</td>
+                    <td className="py-2 pr-4" data-testid={`text-queue-amount-${entry.id}`}>{entry.amount || "—"}</td>
+                    <td className="py-2 pr-4">
+                      <Badge variant="secondary" className={QUEUE_STATUS_STYLES[entry.status] || ""} data-testid={`badge-queue-status-${entry.id}`}>
+                        {entry.status}
+                      </Badge>
+                    </td>
+                    <td className="py-2 pr-4 text-xs text-muted-foreground max-w-[200px] truncate" title={entry.reason || ""} data-testid={`text-queue-reason-${entry.id}`}>
+                      {entry.reason || "—"}
+                    </td>
+                    <td className="py-2 pr-4 text-center" data-testid={`text-queue-attempts-${entry.id}`}>
+                      {entry.attemptCount || 0}/{entry.maxAttempts || 3}
+                    </td>
+                    <td className="py-2 pr-4 text-xs text-muted-foreground" data-testid={`text-queue-queued-${entry.id}`}>{formatDate(entry.queuedAt)}</td>
+                    <td className="py-2 pr-4 text-xs text-muted-foreground" data-testid={`text-queue-nextretry-${entry.id}`}>{formatDate(entry.nextRetryAt)}</td>
+                    <td className="py-2 pr-4 text-xs text-muted-foreground max-w-[150px] truncate" title={entry.lastCallResult || ""} data-testid={`text-queue-result-${entry.id}`}>
+                      {entry.lastCallResult || "—"}
+                    </td>
+                    <td className="py-2">
+                      {(entry.status === "failed" || entry.status === "exhausted") && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => retryMutation.mutate(entry.id)}
+                          disabled={retryMutation.isPending}
+                          data-testid={`button-retry-queue-${entry.id}`}
+                        >
+                          {retryMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <RotateCw className="w-3 h-3 mr-1" />}
+                          Retry
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 interface SettingsData {
   startTime: string;
@@ -816,6 +949,9 @@ export default function RoboCallPage() {
           <TabsTrigger value="bulk" data-testid="tab-bulk-call">
             <PhoneCall className="w-4 h-4 mr-1" /> Bulk Calls
           </TabsTrigger>
+          <TabsTrigger value="queue" data-testid="tab-queue">
+            <ListOrdered className="w-4 h-4 mr-1" /> Queue
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="single">
@@ -964,6 +1100,10 @@ export default function RoboCallPage() {
               </Button>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="queue">
+          <QueueTab />
         </TabsContent>
       </Tabs>
 

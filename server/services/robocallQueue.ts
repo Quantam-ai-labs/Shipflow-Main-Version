@@ -172,30 +172,62 @@ async function processQueue() {
 
           console.log(`${LOG_PREFIX} Call sent for #${entry.orderNumber} — callId: ${callId}`);
         } else {
-          await db.update(robocallQueue).set({
-            status: "failed",
-            attemptCount: (entry.attemptCount || 0) + 1,
-            completedAt: now,
-          }).where(eq(robocallQueue.id, entry.id));
+          const errorMsg = data?.error || "No call ID returned";
+          const isNetworkError = /fetch failed|network error|etimedout|econnrefused|econnreset|enotfound|socket hang up|abort|timeout/i.test(errorMsg);
+          const currentAttempts = (entry.attemptCount || 0) + 1;
+          const maxAttempts = entry.maxAttempts ?? 3;
 
-          await logConfirmationEvent({
-            merchantId: entry.merchantId,
-            orderId: entry.orderId,
-            eventType: "CALL_ATTEMPTED",
-            channel: "robocall",
-            apiResponse: data,
-            errorDetails: data?.error || "No call ID returned",
-            note: "RoboCall send failed",
-          });
+          if (isNetworkError && currentAttempts < maxAttempts) {
+            const startTime = merchant.robocallStartTime || "10:00";
+            const endTime = merchant.robocallEndTime || "20:00";
+            const retryGap = merchant.robocallRetryGapMinutes || 45;
+            const nextRetry = computeNextRetryAt(retryGap, startTime, endTime);
 
-          await createNotification({
-            merchantId: entry.merchantId,
-            type: "robocall_failed",
-            title: `RoboCall failed for #${entry.orderNumber}`,
-            message: `Failed to send robocall: ${data?.error || "No call ID returned"}`,
-            orderId: entry.orderId,
-            orderNumber: entry.orderNumber || undefined,
-          });
+            await db.update(robocallQueue).set({
+              status: "waiting",
+              attemptCount: currentAttempts,
+              nextRetryAt: nextRetry,
+              lastCallResult: `Network error: ${errorMsg}`,
+            }).where(eq(robocallQueue.id, entry.id));
+
+            await logConfirmationEvent({
+              merchantId: entry.merchantId,
+              orderId: entry.orderId,
+              eventType: "CALL_ATTEMPTED",
+              channel: "robocall",
+              apiResponse: data,
+              errorDetails: errorMsg,
+              note: `RoboCall network error — auto-retry ${currentAttempts}/${maxAttempts}, next at ${nextRetry.toISOString()}`,
+            });
+
+            console.log(`${LOG_PREFIX} Network error for #${entry.orderNumber} — auto-retry ${currentAttempts}/${maxAttempts}, next at ${nextRetry.toISOString()}`);
+          } else {
+            await db.update(robocallQueue).set({
+              status: "failed",
+              attemptCount: currentAttempts,
+              completedAt: now,
+              lastCallResult: errorMsg,
+            }).where(eq(robocallQueue.id, entry.id));
+
+            await logConfirmationEvent({
+              merchantId: entry.merchantId,
+              orderId: entry.orderId,
+              eventType: "CALL_ATTEMPTED",
+              channel: "robocall",
+              apiResponse: data,
+              errorDetails: errorMsg,
+              note: `RoboCall send failed${isNetworkError ? ` — max attempts exhausted (${currentAttempts}/${maxAttempts})` : ""}`,
+            });
+
+            await createNotification({
+              merchantId: entry.merchantId,
+              type: "robocall_failed",
+              title: `RoboCall failed for #${entry.orderNumber}`,
+              message: `Failed to send robocall: ${errorMsg}`,
+              orderId: entry.orderId,
+              orderNumber: entry.orderNumber || undefined,
+            });
+          }
         }
 
         await new Promise(r => setTimeout(r, 500));
