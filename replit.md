@@ -49,7 +49,8 @@ Preferred communication style: Simple, everyday language.
 - **WhatsApp Chat UI**: Full WhatsApp Desktop-style rebuild with PIN-gated access, conversation list, search, filters, chat panel, message status, formatting, emoji picker/reactions, label management, agent assignment, and conversation deletion.
 - **Templates Tab**: "Shopify Message Templates" page with Quick Start Presets, "Your Templates" list, and a rich template editor.
 - **Automations Tab**: Rules page for creating WhatsApp message automations based on order workflow status changes.
-- **Loadsheet System**: Portal Loadsheet with scanning and Warehouse PWA for mobile operations (PIN auth, AWB PDF pre-generation).
+- **Loadsheet System**: Portal Loadsheet with scanning (USB barcode + camera QR) and Warehouse PWA for mobile operations (PIN auth, AWB PDF pre-generation). Scanner extracts CN from composite barcode data (CN+amount+orderId) and normalizes courier names for comparison.
+- **Disconnect/Reconnect**: Both WhatsApp and RoboCall integrations support temporary disconnection (pauses sending without deleting credentials) and one-click reconnection. Backend gates in whatsapp/index.ts, confirmationTimer.ts, robocallQueue.ts, and webhookHandler.ts check `waDisconnected`/`robocallDisconnected` flags.
 - **Booking Remarks**: Customizable special instructions per merchant for courier booking.
 - **Booking Modal Enhancements**: Full-screen modal with editable order numbers, product thumbnails, and city autocomplete.
 - **All Orders View**: Unified view of all orders with context-aware actions and bulk operations.

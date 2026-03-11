@@ -11,6 +11,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
   Phone,
   PhoneCall,
   CheckCircle2,
@@ -25,6 +36,8 @@ import {
   Send,
   Mail,
   Save,
+  Unplug,
+  PlugZap,
 } from "lucide-react";
 
 interface CallRecord {
@@ -264,6 +277,7 @@ export default function RoboCallPage() {
   const [syncingAll, setSyncingAll] = useState(false);
   const [savingCreds, setSavingCreds] = useState(false);
   const [loadingInit, setLoadingInit] = useState(true);
+  const [robocallDisconnected, setRobocallDisconnected] = useState(false);
 
   const [phoneTo, setPhoneTo] = useState("");
   const [amount, setAmount] = useState("");
@@ -292,6 +306,7 @@ export default function RoboCallPage() {
         const historyData = await historyRes.json();
         if (credsData.email) setEmail(credsData.email);
         if (credsData.apiKey) setApiKey(credsData.apiKey);
+        if (credsData.robocallDisconnected) setRobocallDisconnected(true);
         if (historyData.logs) {
           const records: CallRecord[] = historyData.logs.map((log: any) => ({
             id: log.id,
@@ -591,6 +606,32 @@ export default function RoboCallPage() {
     }
   };
 
+  const disconnectMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/robocall/disconnect", {});
+    },
+    onSuccess: () => {
+      setRobocallDisconnected(true);
+      toast({ title: "Disconnected", description: "RoboCall sending has been paused." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const reconnectMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/robocall/reconnect", {});
+    },
+    onSuccess: () => {
+      setRobocallDisconnected(false);
+      toast({ title: "Reconnected", description: "RoboCall sending has been re-enabled." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
   const addBulkRow = () => {
     setBulkRows((prev) => [...prev, { to: "", amount: "", brandName: "", orderNumber: "" }]);
   };
@@ -631,10 +672,70 @@ export default function RoboCallPage() {
 
       <Card data-testid="card-api-config">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Key className="w-5 h-5" />
-            API Configuration
-          </CardTitle>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Key className="w-5 h-5" />
+              API Configuration
+            </CardTitle>
+            <div className="flex items-center gap-2 flex-wrap">
+              {robocallDisconnected ? (
+                <Badge className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300" data-testid="badge-connection-status">
+                  <XCircle className="w-3 h-3 mr-1" /> Disconnected
+                </Badge>
+              ) : !apiKey || !email ? (
+                <Badge variant="secondary" data-testid="badge-connection-status">
+                  Not Configured
+                </Badge>
+              ) : (
+                <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300" data-testid="badge-connection-status">
+                  <CheckCircle2 className="w-3 h-3 mr-1" /> Connected
+                </Badge>
+              )}
+              {apiKey && email && (robocallDisconnected ? (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="outline" size="sm" disabled={reconnectMutation.isPending} data-testid="button-reconnect">
+                      {reconnectMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <PlugZap className="w-4 h-4 mr-1" />}
+                      Reconnect
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Reconnect RoboCall?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will re-enable automated RoboCall sending. New orders will be queued for confirmation calls again.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel data-testid="button-reconnect-cancel">Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => reconnectMutation.mutate()} data-testid="button-reconnect-confirm">Reconnect</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              ) : (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="outline" size="sm" disabled={disconnectMutation.isPending} data-testid="button-disconnect">
+                      {disconnectMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Unplug className="w-4 h-4 mr-1" />}
+                      Disconnect
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Disconnect RoboCall?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will pause all automated RoboCall sending. Your credentials will be preserved and you can reconnect at any time.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel data-testid="button-disconnect-cancel">Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => disconnectMutation.mutate()} data-testid="button-disconnect-confirm">Disconnect</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              ))}
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

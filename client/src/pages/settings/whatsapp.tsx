@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Wifi, WifiOff, Eye, EyeOff, FlaskConical, Save, Copy, Check, Lock, Smartphone, QrCode, Shield, XCircle } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Wifi, WifiOff, Eye, EyeOff, FlaskConical, Save, Copy, Check, Lock, Smartphone, QrCode, Shield, XCircle, Unplug, PlugZap } from "lucide-react";
 import { format } from "date-fns";
 import QRCode from "qrcode";
 
@@ -104,6 +105,30 @@ export default function SettingsWhatsApp() {
     },
   });
 
+  const disconnectMutation = useMutation({
+    mutationFn: async () => apiRequest("POST", "/api/support/connection/disconnect"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/support/connection"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/support/dashboard-stats"] });
+      toast({ title: "WhatsApp Disconnected", description: "WhatsApp message sending has been paused. Your credentials are preserved." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const reconnectMutation = useMutation({
+    mutationFn: async () => apiRequest("POST", "/api/support/connection/reconnect"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/support/connection"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/support/dashboard-stats"] });
+      toast({ title: "WhatsApp Reconnected", description: "WhatsApp message sending has been re-enabled." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
   const handleTest = async () => {
     const phoneId = form.waPhoneNumberId.trim();
     const token = form.waAccessToken.trim();
@@ -139,14 +164,67 @@ export default function SettingsWhatsApp() {
         {isLoading ? (
           <Skeleton className="h-7 w-28" />
         ) : (
-          <Badge
-            variant={data?.connected ? "default" : "secondary"}
-            className={data?.connected ? "bg-green-500 hover:bg-green-600 text-white gap-1.5" : "gap-1.5"}
-            data-testid="status-wa-connection"
-          >
-            {data?.connected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-            {data?.connected ? "Connected" : "Not Connected"}
-          </Badge>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge
+              variant={data?.connected && !data?.waDisconnected ? "default" : "secondary"}
+              className={
+                data?.connected && !data?.waDisconnected
+                  ? "bg-green-500 text-white gap-1.5 no-default-hover-elevate no-default-active-elevate"
+                  : data?.waDisconnected
+                    ? "bg-amber-500 text-white gap-1.5 no-default-hover-elevate no-default-active-elevate"
+                    : "gap-1.5"
+              }
+              data-testid="status-wa-connection"
+            >
+              {data?.connected && !data?.waDisconnected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
+              {data?.waDisconnected ? "Disconnected" : data?.connected ? "Connected" : "Not Connected"}
+            </Badge>
+            {data?.connected && !data?.waDisconnected && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-destructive"
+                    data-testid="button-disconnect-wa"
+                  >
+                    <Unplug className="w-3.5 h-3.5 mr-1.5" />
+                    Disconnect
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Disconnect WhatsApp?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will pause all WhatsApp message sending (order confirmations, status updates, etc.). Your credentials will be preserved and you can reconnect at any time.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel data-testid="button-cancel-disconnect">Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => disconnectMutation.mutate()}
+                      className="bg-destructive text-destructive-foreground"
+                      data-testid="button-confirm-disconnect"
+                    >
+                      {disconnectMutation.isPending ? "Disconnecting..." : "Disconnect"}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+            {data?.waDisconnected && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => reconnectMutation.mutate()}
+                disabled={reconnectMutation.isPending}
+                data-testid="button-reconnect-wa"
+              >
+                <PlugZap className="w-3.5 h-3.5 mr-1.5" />
+                {reconnectMutation.isPending ? "Reconnecting..." : "Reconnect"}
+              </Button>
+            )}
+          </div>
         )}
       </div>
 

@@ -341,20 +341,33 @@ export default function LoadsheetPage() {
   const handleScan = useCallback((raw: string) => {
     const value = raw.trim().toUpperCase();
     if (!value) return;
-    const alreadyScanned = scannedItems.some((i) => i.trackingNumber.toUpperCase() === value);
+    let shipment = shipmentMapRef.current.get(value);
+    let resolvedCN = value;
+    if (!shipment) {
+      const tokens = value.split(/[\s|,;]+/).filter(Boolean);
+      for (const token of tokens) {
+        const match = shipmentMapRef.current.get(token);
+        if (match) {
+          shipment = match;
+          resolvedCN = token;
+          break;
+        }
+      }
+    }
+    const alreadyScanned = scannedItems.some((i) => i.trackingNumber.toUpperCase() === resolvedCN);
     if (alreadyScanned) {
       playBeep(false);
       showFeedback({ status: "duplicate", message: "Already added to this loadsheet" });
       return;
     }
-    const shipment = shipmentMapRef.current.get(value);
     if (!shipment) {
       playBeep(false);
       showFeedback({ status: "not_found", message: `CN not found: "${value}" — not in booked orders or already fulfilled` });
       return;
     }
     // Enforce single-courier loadsheet
-    if (lockedCourier && shipment.courierName !== lockedCourier) {
+    const normalizeCourierName = (name: string) => name.trim().toLowerCase().replace(/\s+courier$/i, "");
+    if (lockedCourier && normalizeCourierName(shipment.courierName) !== normalizeCourierName(lockedCourier)) {
       playBeep(false);
       showFeedback({ status: "wrong_courier", message: `Wrong courier — this loadsheet is locked to ${lockedCourier}. "${value}" belongs to ${shipment.courierName}.` });
       return;
