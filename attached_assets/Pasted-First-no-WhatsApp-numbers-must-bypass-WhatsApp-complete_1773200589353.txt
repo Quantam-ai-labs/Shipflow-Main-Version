@@ -1,0 +1,36 @@
+First, no-WhatsApp numbers must bypass WhatsApp completely. When a new order is imported, the system should run a WhatsApp availability check (either via WhatsApp API capability check or by detecting if the number is not registered). If the number is not on WhatsApp, the system should not send a WhatsApp template at all. Instead, the order should move directly to the Robo Call Flow and be placed into the Robo Call Queue immediately, respecting the allowed call time window. Internally the order should receive a source tag such as Robo-Pending and status Pending, and this state should also be mirrored back to Shopify as backup. This avoids wasting 12 hours waiting for a channel the customer cannot use.
+
+Second, you need a clear reattempt policy for both WhatsApp and robo calls so the system never loops endlessly.
+
+For WhatsApp attempts, define a fixed sequence. Example policy:
+Attempt 1: immediately after order import using Template-1 (primary confirmation template).
+Attempt 2: if no valid response after 4 hours, send Template-2 (reminder confirmation).
+Attempt 3: if still no response after 8 more hours, send Template-3 (final reminder).
+After 12 hours total, if still no valid response, move the order to Confirmation Pending and make it eligible for robo call.
+Maximum WhatsApp attempts: 3.
+
+Each template should have a different tone:
+Template-1: normal confirmation request.
+Template-2: reminder message.
+Template-3: final notice saying a call may follow.
+
+For Robo Call attempts, the system should also have strict limits. Example policy:
+Maximum 3 call attempts.
+Attempt gap: 30–60 minutes between attempts within the allowed calling window.
+If outside allowed window, place into Active Call Queue for the next available time.
+
+Example flow:
+Call attempt 1 → if no answer/busy/no input → retry after 45 minutes.
+Call attempt 2 → same logic.
+Call attempt 3 → if still unsuccessful, stop automation and move order to Hold for manual resolution.
+
+Every attempt must log:
+call attempt number, timestamp, call result, call duration, response digit if any, and provider API response.
+
+You should also add a rule that any valid WhatsApp response immediately cancels all scheduled robo call attempts, and any robo response cancels pending WhatsApp reminders. Only one channel should remain active once a valid response is received.
+
+Pros of this rule:
+It prevents wasted time on customers who do not have WhatsApp, reduces confirmation delay, and keeps the system deterministic.
+
+Potential downside:
+WhatsApp availability checks are not always 100% reliable depending on provider, so you may want a fallback rule: if WhatsApp send fails with “not registered” error, automatically switch to robo call instead of waiting.
