@@ -144,8 +144,8 @@ async function processQueue() {
           type: "dtmf",
           voice_id: voiceId,
           amount: entry.amount || "0",
-          brand_name: entry.brandName || merchant.name,
-          order_number: entry.orderNumber || "",
+          brand_name: (entry.brandName || merchant.name || "").replace(/\s+/g, " ").trim(),
+          order_number: (entry.orderNumber || "").replace(/^#/, ""),
         });
         const sendUrl = `${ROBOCALL_API_BASE}/send-voice?${params.toString()}`;
 
@@ -401,6 +401,68 @@ async function checkRobocallResponses() {
               lastCallResult: statusLabel,
               completedAt: new Date(),
             }).where(eq(robocallQueue.id, entry.id));
+          }
+        } else if (smsData.voice_status === 8 || smsData.voice_status === 1 || smsData.voice_status === 11) {
+          const completedTime = entry.completedAt ? new Date(entry.completedAt).getTime() : 0;
+          const stuckMinutes = completedTime ? (Date.now() - completedTime) / 60000 : 0;
+
+          if (stuckMinutes >= 10) {
+            console.log(`${LOG_PREFIX} Call stuck at "${statusLabel}" for ${Math.round(stuckMinutes)}min for #${entry.orderNumber} — treating as No Response`);
+
+            await logConfirmationEvent({
+              merchantId: entry.merchantId,
+              orderId: entry.orderId,
+              eventType: "CALL_RESPONSE",
+              channel: "robocall",
+              responseClassification: `${statusLabel} (timed out)`,
+              note: `Call stuck at "${statusLabel}" for ${Math.round(stuckMinutes)} minutes — treating as No Response`,
+              apiResponse: { voiceStatus: smsData.voice_status, voiceSec: smsData.voice_sec, dtmf: dtmfValue },
+            });
+
+            const maxAttempts = entry.maxAttempts ?? 3;
+            const currentAttempts = entry.attemptCount || 0;
+
+            if (currentAttempts < maxAttempts) {
+              const startTime = merchant.robocallStartTime || "10:00";
+              const endTime = merchant.robocallEndTime || "20:00";
+              const retryGap = merchant.robocallRetryGapMinutes || 45;
+              const nextRetry = computeNextRetryAt(retryGap, startTime, endTime);
+
+              await db.update(robocallQueue).set({
+                status: "waiting",
+                lastCallResult: `${statusLabel} (timed out)`,
+                nextRetryAt: nextRetry,
+                callId: null,
+              }).where(eq(robocallQueue.id, entry.id));
+
+              console.log(`${LOG_PREFIX} Retry scheduled for #${entry.orderNumber} — ${currentAttempts}/${maxAttempts}, next at ${nextRetry.toISOString()}`);
+            } else {
+              await db.update(robocallQueue).set({
+                status: "exhausted",
+                lastCallResult: `${statusLabel} (timed out)`,
+                completedAt: new Date(),
+              }).where(eq(robocallQueue.id, entry.id));
+
+              await transitionOrder({
+                merchantId: entry.merchantId,
+                orderId: entry.orderId,
+                toStatus: "HOLD",
+                action: "robocall_exhausted",
+                actorType: "system",
+                reason: `Robocall stuck at "${statusLabel}" — attempts exhausted`,
+              });
+
+              await createNotification({
+                merchantId: entry.merchantId,
+                type: "robocall_exhausted",
+                title: `RoboCall timed out for #${entry.orderNumber}`,
+                message: `Call stuck at "${statusLabel}" after ${maxAttempts} attempt(s). Order moved to Hold.`,
+                orderId: entry.orderId,
+                orderNumber: entry.orderNumber || undefined,
+              });
+
+              console.log(`${LOG_PREFIX} Attempts exhausted for #${entry.orderNumber} after "${statusLabel}" timeout — moved to HOLD`);
+            }
           }
         }
 
