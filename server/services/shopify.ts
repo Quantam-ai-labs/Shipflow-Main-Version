@@ -3,6 +3,177 @@ import { decryptToken } from './encryption';
 import { normalizePakistaniPhone } from '../utils/phone';
 import { toMerchantStartOfDay, DEFAULT_TIMEZONE } from '../utils/timezone';
 import { sendOrderStatusWhatsApp } from '../utils/integrations/whatsapp';
+import { initializeOrderConfirmation, logConfirmationEvent } from './confirmationEngine';
+import { db } from '../db';
+import { orders, robocallQueue, merchants } from '@shared/schema';
+import { eq, and } from 'drizzle-orm';
+import { formatPhoneForWhatsApp } from '../utils/integrations/whatsapp/sender';
+
+async function handleNewOrderWaResult(
+  merchantId: string,
+  created: { id: string; orderNumber: string; customerPhone: string | null; customerName: string | null; totalAmount: string | null },
+  waResult: any,
+) {
+  try {
+    if (waResult?.notOnWhatsApp) {
+      await db.update(orders).set({ waNotOnWhatsApp: true }).where(eq(orders.id, created.id));
+
+      await logConfirmationEvent({
+        merchantId,
+        orderId: created.id,
+        eventType: "WA_NOT_AVAILABLE",
+        channel: "whatsapp",
+        note: `Number ${created.customerPhone} not on WhatsApp — bypassing to RoboCall`,
+        errorDetails: waResult.error,
+      }).catch(() => {});
+
+      await db.update(orders).set({
+        workflowStatus: "PENDING",
+        previousWorkflowStatus: "NEW",
+        pendingReason: "Number not on WhatsApp — routed to RoboCall",
+        pendingReasonType: "confirmation_pending",
+        lastStatusChangedAt: new Date(),
+        updatedAt: new Date(),
+      }).where(eq(orders.id, created.id));
+
+      await syncQueueForRobocall(merchantId, created, "WhatsApp unavailable — direct bypass to RoboCall");
+      console.log(`[Shopify Sync] Order #${created.orderNumber}: number not on WhatsApp, bypassed to RoboCall`);
+    } else if (waResult?.sent) {
+      await logConfirmationEvent({
+        merchantId,
+        orderId: created.id,
+        eventType: "WA_SENT",
+        channel: "whatsapp",
+        note: `Confirmation WhatsApp sent to ${created.customerPhone}`,
+      }).catch(() => {});
+
+      const [merchantData] = await db.select({
+        waAttempt2DelayHours: merchants.waAttempt2DelayHours,
+      }).from(merchants).where(eq(merchants.id, merchantId)).limit(1);
+      const delayHours = merchantData?.waAttempt2DelayHours || 4;
+      const nextAttempt = new Date(Date.now() + delayHours * 60 * 60 * 1000);
+
+      await db.update(orders).set({
+        waAttemptCount: 1,
+        waConfirmationSentAt: new Date(),
+        waNextAttemptAt: nextAttempt,
+      }).where(eq(orders.id, created.id));
+    } else {
+      const errorStr = waResult?.error || "";
+      const isPermanentError = /\(#100\)|\(#131008\)|\(#132000\)|\(#132001\)|\(#132018\)/.test(errorStr);
+
+      if (isPermanentError) {
+        await db.update(orders).set({
+          waAttemptCount: 1,
+          waNextAttemptAt: null,
+          workflowStatus: "PENDING",
+          previousWorkflowStatus: "NEW",
+          pendingReason: "WhatsApp template error — routed to RoboCall",
+          pendingReasonType: "confirmation_pending",
+          lastStatusChangedAt: new Date(),
+          updatedAt: new Date(),
+        }).where(eq(orders.id, created.id));
+
+        await logConfirmationEvent({
+          merchantId,
+          orderId: created.id,
+          eventType: "WA_PERMANENT_FAILURE",
+          channel: "whatsapp",
+          errorDetails: errorStr,
+          note: `WhatsApp send failed with permanent error — escalating to RoboCall immediately`,
+        }).catch(() => {});
+
+        await syncQueueForRobocall(merchantId, created, "WhatsApp template/parameter error — immediate bypass to RoboCall");
+        console.log(`[Shopify Sync] Order #${created.orderNumber}: WA permanent error, bypassed to RoboCall`);
+      } else {
+        const retryAt = new Date(Date.now() + 30 * 60 * 1000);
+        await db.update(orders).set({
+          waAttemptCount: 1,
+          waNextAttemptAt: retryAt,
+        }).where(eq(orders.id, created.id));
+
+        await logConfirmationEvent({
+          merchantId,
+          orderId: created.id,
+          eventType: "WA_SENT",
+          channel: "whatsapp",
+          errorDetails: errorStr || "Unknown error",
+          note: `WhatsApp confirmation send failed (transient error) — will retry at ${retryAt.toISOString()}`,
+        }).catch(() => {});
+      }
+    }
+  } catch (err) {
+    console.error(`[Shopify Sync] Error handling WA result for order #${created.orderNumber}:`, err);
+  }
+}
+
+function isWithinCallWindow(startTime: string, endTime: string): boolean {
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const [startH, startM] = startTime.split(":").map(Number);
+  const [endH, endM] = endTime.split(":").map(Number);
+  return currentMinutes >= startH * 60 + startM && currentMinutes < endH * 60 + endM;
+}
+
+function getNextCallWindowStart(startTime: string): Date {
+  const [startH, startM] = startTime.split(":").map(Number);
+  const now = new Date();
+  const target = new Date(now);
+  target.setHours(startH, startM, 0, 0);
+  if (target <= now) target.setDate(target.getDate() + 1);
+  return target;
+}
+
+async function syncQueueForRobocall(
+  merchantId: string,
+  created: { id: string; orderNumber: string; customerPhone: string | null; customerName: string | null; totalAmount: string | null },
+  reason: string = "WhatsApp unavailable — bypass to RoboCall",
+) {
+  const [merchant] = await db.select().from(merchants).where(eq(merchants.id, merchantId)).limit(1);
+  if (merchant?.robocallDisconnected) {
+    console.log(`[Shopify Sync] RoboCall disconnected for merchant, skipping queue for order #${created.orderNumber}`);
+    return;
+  }
+  if (!merchant?.robocallEmail || !merchant?.robocallApiKey || !created.customerPhone) return;
+
+  const formattedPhone = formatPhoneForWhatsApp(created.customerPhone);
+  if (!formattedPhone) return;
+
+  const existingQueue = await db.select({ id: robocallQueue.id }).from(robocallQueue)
+    .where(and(eq(robocallQueue.orderId, created.id), eq(robocallQueue.status, "waiting")))
+    .limit(1);
+  if (existingQueue.length > 0) return;
+
+  const startTime = merchant.robocallStartTime || "10:00";
+  const endTime = merchant.robocallEndTime || "20:00";
+  const withinWindow = isWithinCallWindow(startTime, endTime);
+  const scheduledAt = withinWindow ? new Date() : getNextCallWindowStart(startTime);
+
+  await db.insert(robocallQueue).values({
+    merchantId,
+    orderId: created.id,
+    orderNumber: created.orderNumber,
+    customerName: created.customerName,
+    phone: formattedPhone,
+    amount: created.totalAmount || "0",
+    brandName: merchant.name,
+    status: "waiting",
+    reason,
+    scheduledAt,
+    attemptCount: 0,
+    maxAttempts: merchant.robocallMaxAttempts ?? 3,
+    waResponseArrived: false,
+  });
+
+  await logConfirmationEvent({
+    merchantId,
+    orderId: created.id,
+    eventType: "CALL_QUEUED",
+    note: withinWindow
+      ? `RoboCall queued — ${reason}`
+      : `RoboCall queued — scheduled for ${scheduledAt.toISOString()} (${reason})`,
+  }).catch(() => {});
+}
 
 interface ShopifyConfig {
   clientId: string;
@@ -671,8 +842,14 @@ export class ShopifyService {
                   const { applyRoboTags } = await import('./workflowTransition');
                   await applyRoboTags(merchantId, created.id, pending.tags);
                 } catch (e) {}
+                initializeOrderConfirmation({
+                  merchantId,
+                  orderId: created.id,
+                  orderNumber: created.orderNumber,
+                }).catch(err => console.error(`[Shopify Sync] Confirmation init failed for ${created.orderNumber}:`, err));
+
                 try {
-                  await sendOrderStatusWhatsApp({
+                  const waResult = await sendOrderStatusWhatsApp({
                     merchantId,
                     orderId: created.id,
                     orderNumber: created.orderNumber,
@@ -687,7 +864,10 @@ export class ShopifyService {
                     lineItems: Array.isArray(created.lineItems) ? (created.lineItems as any[]) : null,
                     shopDomain: (created as any).shopDomain || shopDomain,
                   });
-                } catch (e) {}
+                  await handleNewOrderWaResult(merchantId, created, waResult);
+                } catch (e) {
+                  console.error(`[Shopify Sync] WA send/handling error for order #${created.orderNumber}:`, e);
+                }
               })()
             );
           }
@@ -705,8 +885,14 @@ export class ShopifyService {
                 const { applyRoboTags } = await import('./workflowTransition');
                 await applyRoboTags(merchantId, created.id, item.tags);
               } catch (e2) {}
+              initializeOrderConfirmation({
+                merchantId,
+                orderId: created.id,
+                orderNumber: created.orderNumber,
+              }).catch(err => console.error(`[Shopify Sync] Confirmation init failed for ${created.orderNumber}:`, err));
+
               try {
-                await sendOrderStatusWhatsApp({
+                const waResult = await sendOrderStatusWhatsApp({
                   merchantId,
                   orderId: created.id,
                   orderNumber: created.orderNumber,
@@ -721,7 +907,10 @@ export class ShopifyService {
                   lineItems: Array.isArray(created.lineItems) ? (created.lineItems as any[]) : null,
                   shopDomain: (created as any).shopDomain || shopDomain,
                 });
-              } catch (e2) {}
+                await handleNewOrderWaResult(merchantId, created, waResult);
+              } catch (e2) {
+                console.error(`[Shopify Sync] WA send/handling error for order #${created.orderNumber}:`, e2);
+              }
             }
             newCount++;
           } catch (e2) {
