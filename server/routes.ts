@@ -212,7 +212,7 @@ async function cleanupDbOAuthStates() {
 
 function mapCourierSlugToName(slug: string): string | null {
   const map: Record<string, string> = {
-    leopards: "Leopards Courier",
+    leopards: "Leopards",
     postex: "PostEx",
     tcs: "TCS",
   };
@@ -1602,7 +1602,7 @@ export async function registerRoutes(
 
         for (const order of bookedOrders) {
           const cn = (order.courierName || "").toLowerCase();
-          const courierDisplayName = cn.includes("leopard") ? "Leopards Courier" : cn.includes("postex") ? "PostEx" : cn.includes("tcs") ? "TCS" : order.courierName || "Unknown";
+          const courierDisplayName = cn.includes("leopard") ? "Leopards" : cn.includes("postex") ? "PostEx" : cn.includes("tcs") ? "TCS" : order.courierName || "Unknown";
           try {
             const result = await writeBackFulfillment(
               merchantId,
@@ -3222,7 +3222,7 @@ export async function registerRoutes(
             let postexRecords: any[] = [];
 
             if (leopardsCreds?.apiKey) {
-              leopardsRecords = await storage.getPendingCodRecordsByCourier(merchantId, "Leopards Courier");
+              leopardsRecords = await storage.getPendingCodRecordsByCourier(merchantId, "Leopards");
               courierResults.leopards = { updated: 0, errors: 0, total: leopardsRecords.length };
             }
             if (postexCreds?.apiKey) {
@@ -8910,7 +8910,7 @@ export async function registerRoutes(
           );
           if (orderForFulfill?.shopifyOrderId) {
             const courierDisplayName =
-              courier === "leopards" ? "Leopards Courier" : "PostEx";
+              courier === "leopards" ? "Leopards" : "PostEx";
             writeBackFulfillment(
               merchantId,
               br.orderId,

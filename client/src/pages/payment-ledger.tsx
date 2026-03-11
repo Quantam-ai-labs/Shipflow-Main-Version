@@ -352,7 +352,7 @@ export default function PaymentLedgerPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Couriers</SelectItem>
-                <SelectItem value="Leopards Courier">Leopards</SelectItem>
+                <SelectItem value="Leopards">Leopards</SelectItem>
                 <SelectItem value="PostEx">PostEx</SelectItem>
                 <SelectItem value="TCS">TCS</SelectItem>
               </SelectContent>
