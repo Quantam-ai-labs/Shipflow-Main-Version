@@ -7813,11 +7813,13 @@ export async function registerRoutes(
         ? `https://lala-logistics.replit.app`
         : `https://lala-logistics.replit.app`;
 
+      const [disconnectRow] = await db.select({ waDisconnected: merchants.waDisconnected }).from(merchants).where(eq(merchants.id, merchantId)).limit(1);
       res.json({
         waPhoneNumberId: merchantRow?.waPhoneNumberId ?? "",
         waAccessToken: merchantRow?.waAccessToken ? "••••••••" : "",
         waWabaId: merchantRow?.waWabaId ?? "",
         connected: !!(merchantRow?.waPhoneNumberId && merchantRow?.waAccessToken),
+        waDisconnected: disconnectRow?.waDisconnected ?? false,
         waVerifyToken: verifyToken,
         webhookUrl: `${canonicalHost}/webhooks/whatsapp/${merchantId}`,
       });
@@ -7839,6 +7841,28 @@ export async function registerRoutes(
         updateData.waAccessToken = waAccessToken.trim();
       }
       await db.update(merchants).set(updateData).where(eq(merchants.id, merchantId));
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/support/connection/disconnect", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      await db.update(merchants).set({ waDisconnected: true, updatedAt: new Date() }).where(eq(merchants.id, merchantId));
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/support/connection/reconnect", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      await db.update(merchants).set({ waDisconnected: false, updatedAt: new Date() }).where(eq(merchants.id, merchantId));
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -15003,8 +15027,9 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
       const creds = await storage.getRobocallCredentials(merchantId);
-      if (!creds) return res.json({ email: "", apiKey: "", hasSavedKey: false });
-      res.json({ email: creds.email, apiKey: creds.apiKey, hasSavedKey: true });
+      if (!creds) return res.json({ email: "", apiKey: "", hasSavedKey: false, robocallDisconnected: false });
+      const [disRow] = await db.select({ robocallDisconnected: merchants.robocallDisconnected }).from(merchants).where(eq(merchants.id, merchantId)).limit(1);
+      res.json({ email: creds.email, apiKey: creds.apiKey, hasSavedKey: true, robocallDisconnected: disRow?.robocallDisconnected ?? false });
     } catch (error: any) {
       console.error("[RoboCall] Get credentials error:", error);
       res.status(500).json({ error: error.message });
@@ -15021,6 +15046,28 @@ export async function registerRoutes(
       res.json({ success: true });
     } catch (error: any) {
       console.error("[RoboCall] Save credentials error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/robocall/disconnect", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      await db.update(merchants).set({ robocallDisconnected: true, updatedAt: new Date() }).where(eq(merchants.id, merchantId));
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/robocall/reconnect", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      await db.update(merchants).set({ robocallDisconnected: false, updatedAt: new Date() }).where(eq(merchants.id, merchantId));
+      res.json({ success: true });
+    } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
   });

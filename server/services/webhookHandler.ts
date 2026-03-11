@@ -60,6 +60,10 @@ async function queueForRobocall(params: {
 }): Promise<boolean> {
   const { merchantId, orderId, orderNumber, customerName, customerPhone, totalAmount, reason } = params;
   const [merchant] = await db.select().from(merchants).where(eq(merchants.id, merchantId)).limit(1);
+  if (merchant?.robocallDisconnected) {
+    console.log(`[Webhook] RoboCall disconnected for merchant, skipping queue for order #${orderNumber}`);
+    return false;
+  }
   if (!merchant?.robocallEmail || !merchant?.robocallApiKey || !customerPhone) return false;
 
   const formattedPhone = formatPhoneForWhatsApp(customerPhone);

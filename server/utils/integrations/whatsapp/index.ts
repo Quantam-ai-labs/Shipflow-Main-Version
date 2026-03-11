@@ -78,6 +78,11 @@ export async function sendOrderStatusWhatsApp(
     return SKIP;
   }
 
+  if (merchant.waDisconnected) {
+    console.log(`${LOG_PREFIX} [DISCONNECTED] WhatsApp disconnected for merchant ${params.merchantId}, skipping order ${params.orderNumber}`);
+    return SKIP;
+  }
+
   const allowedDomain = process.env.LALA_IMPORT;
   if (allowedDomain) {
     const order = await storage.getOrderById(params.merchantId, params.orderId);

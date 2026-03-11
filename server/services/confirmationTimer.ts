@@ -35,6 +35,10 @@ function getNextCallWindowStart(startTime: string): Date {
 }
 
 async function queueOrderForRobocall(order: any, merchant: any, reason: string) {
+  if (merchant?.robocallDisconnected) {
+    console.log(`[ConfirmationTimer] RoboCall disconnected for merchant, skipping queue for order #${order.orderNumber}`);
+    return;
+  }
   if (!merchant?.robocallEmail || !merchant?.robocallApiKey || !order.customerPhone) return;
 
   const formattedPhone = formatPhoneForWhatsApp(order.customerPhone);
@@ -187,6 +191,11 @@ async function checkWaReattempts() {
       try {
         const merchant = merchantMap.get(order.merchantId);
         if (!merchant) continue;
+
+        if (merchant.waDisconnected) {
+          console.log(`${LOG_PREFIX} WhatsApp disconnected for merchant, skipping reattempt for order #${order.orderNumber}`);
+          continue;
+        }
 
         const maxAttempts = merchant.waMaxAttempts ?? 3;
         const currentAttemptCount = order.waAttemptCount || 0;

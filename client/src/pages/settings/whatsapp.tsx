@@ -17,6 +17,7 @@ interface ConnectionData {
   waAccessToken: string;
   waWabaId: string;
   connected: boolean;
+  waDisconnected: boolean;
   waVerifyToken: string;
   webhookUrl: string;
 }

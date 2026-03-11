@@ -114,6 +114,11 @@ async function processQueue() {
           if (merchant) merchantCache.set(entry.merchantId, merchant);
         }
 
+        if (merchant?.robocallDisconnected) {
+          console.log(`${LOG_PREFIX} RoboCall disconnected for merchant, skipping #${entry.orderNumber}`);
+          continue;
+        }
+
         if (!merchant?.robocallEmail || !merchant?.robocallApiKey) {
           await db.update(robocallQueue).set({ status: "failed", completedAt: now })
             .where(eq(robocallQueue.id, entry.id));
