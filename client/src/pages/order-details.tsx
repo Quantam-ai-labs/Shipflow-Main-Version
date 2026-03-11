@@ -220,6 +220,13 @@ function getActivityIcon(entry: any) {
       return Edit3;
     case "WHATSAPP_SENT":
       return Smartphone;
+    case "WHATSAPP_CONFIRMED":
+    case "WHATSAPP_CANCELLED":
+    case "WHATSAPP_QUERY":
+      return MessageCircle;
+    case "ROBO_CONFIRMED":
+    case "ROBO_CANCELLED":
+      return Phone;
     default:
       return History;
   }
@@ -253,6 +260,14 @@ function getActivityColor(entry: any): string {
       return entry.newValue === "sent"
         ? "text-green-600 bg-green-100 dark:bg-green-950"
         : "text-red-500 bg-red-100 dark:bg-red-950";
+    case "WHATSAPP_CONFIRMED":
+    case "ROBO_CONFIRMED":
+      return "text-green-600 bg-green-100 dark:bg-green-950";
+    case "WHATSAPP_CANCELLED":
+    case "ROBO_CANCELLED":
+      return "text-red-500 bg-red-100 dark:bg-red-950";
+    case "WHATSAPP_QUERY":
+      return "text-blue-500 bg-blue-100 dark:bg-blue-950";
     default:
       return "text-muted-foreground bg-muted";
   }
@@ -278,13 +293,23 @@ function getActivityLabel(entry: any): string {
     case "REMARK_ADDED": return "Remark Added";
     case "FIELD_EDIT": return "Field Edited";
     case "WHATSAPP_SENT": return entry.newValue === "sent" ? "WhatsApp Sent" : "WhatsApp Failed";
-    default: return entry.changeType || "Change";
+    case "WHATSAPP_CONFIRMED": return "WhatsApp Confirmed";
+    case "WHATSAPP_CANCELLED": return "WhatsApp Cancelled";
+    case "WHATSAPP_QUERY": return "WhatsApp Query";
+    case "ROBO_CONFIRMED": return "RoboCall Confirmed";
+    case "ROBO_CANCELLED": return "RoboCall Cancelled";
+    default: return entry.changeType?.replace(/_/g, " ").replace(/\b\w/g, (l: string) => l.toUpperCase()) || "Change";
   }
 }
 
-function ActivityTimeline({ auditLog, changeLog }: { auditLog: any[] | undefined; changeLog: any[] | undefined }) {
+function OrderTimeline({ orderId, auditLog, changeLog }: { orderId: string; auditLog: any[] | undefined; changeLog: any[] | undefined }) {
   const [expanded, setExpanded] = useState(false);
   const COLLAPSED_COUNT = 5;
+
+  const { data: confirmationData } = useQuery<{ timeline: any[] }>({
+    queryKey: ["/api/orders", orderId, "confirmation-timeline"],
+    staleTime: 30000,
+  });
 
   const timeline: any[] = [];
   if (auditLog) {
@@ -292,6 +317,9 @@ function ActivityTimeline({ auditLog, changeLog }: { auditLog: any[] | undefined
   }
   if (changeLog) {
     changeLog.forEach((e: any) => timeline.push({ ...e, _type: "change" as const, _time: new Date(e.createdAt).getTime() }));
+  }
+  if (confirmationData?.timeline) {
+    confirmationData.timeline.forEach((e: any) => timeline.push({ ...e, _type: "confirmation" as const, _time: new Date(e.createdAt).getTime() }));
   }
   timeline.sort((a, b) => b._time - a._time);
 
@@ -305,15 +333,47 @@ function ActivityTimeline({ auditLog, changeLog }: { auditLog: any[] | undefined
       <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
         <CardTitle className="text-lg flex items-center gap-2">
           <History className="w-5 h-5" />
-          Activity History
+          Order Timeline
         </CardTitle>
         <Badge variant="secondary" className="text-xs">{timeline.length}</Badge>
       </CardHeader>
       <CardContent>
-        <div className="relative" data-testid="audit-log-list">
+        <div className="relative" data-testid="order-timeline-list">
           <div className="absolute left-4 top-0 bottom-0 w-px bg-border" />
           <div className="space-y-4">
             {visible.map((entry: any, idx: number) => {
+              if (entry._type === "confirmation") {
+                const Icon = getTimelineEventIcon(entry.eventType);
+                const colorCls = getTimelineEventColor(entry.eventType);
+                const label = getTimelineEventLabel(entry.eventType);
+                const timeStr = entry.createdAt ? formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true }) : "";
+
+                return (
+                  <div key={`confirmation-${entry.id || idx}`} className="flex items-start gap-3 relative" data-testid={`timeline-entry-${idx}`}>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 z-10 ${colorCls}`}>
+                      <Icon className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="flex-1 min-w-0 pt-0.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium">{label}</span>
+                        {getChannelBadge(entry.channel)}
+                      </div>
+                      {(entry.oldStatus || entry.newStatus) && (
+                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                          {entry.oldStatus && <Badge variant="outline" className="text-xs">{entry.oldStatus}</Badge>}
+                          {entry.oldStatus && entry.newStatus && <ArrowRightLeft className="w-3 h-3 text-muted-foreground" />}
+                          {entry.newStatus && <Badge variant="secondary" className="text-xs">{entry.newStatus}</Badge>}
+                        </div>
+                      )}
+                      {entry.note && (
+                        <p className="text-xs text-muted-foreground mt-0.5 break-words">{entry.note}</p>
+                      )}
+                      <p className="text-xs text-muted-foreground/60 mt-0.5">{timeStr}</p>
+                    </div>
+                  </div>
+                );
+              }
+
               const Icon = getActivityIcon(entry);
               const colorCls = getActivityColor(entry);
               const label = getActivityLabel(entry);
@@ -321,7 +381,7 @@ function ActivityTimeline({ auditLog, changeLog }: { auditLog: any[] | undefined
               const timeStr = entry.createdAt ? formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true }) : "";
 
               return (
-                <div key={`${entry._type}-${entry.id || idx}`} className="flex items-start gap-3 relative" data-testid={`activity-entry-${idx}`}>
+                <div key={`${entry._type}-${entry.id || idx}`} className="flex items-start gap-3 relative" data-testid={`timeline-entry-${idx}`}>
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 z-10 ${colorCls}`}>
                     <Icon className="w-3.5 h-3.5" />
                   </div>
@@ -372,7 +432,16 @@ function ActivityTimeline({ auditLog, changeLog }: { auditLog: any[] | undefined
                           <span className="text-xs text-muted-foreground">template: <span className="font-mono">{entry.metadata.templateName}</span></span>
                         )}
                         {entry.newValue === "failed" && entry.metadata?.error && (
-                          <span className="text-xs text-red-500 break-words">{entry.metadata.error}</span>
+                          <span className="text-xs text-red-500 break-words" title={String(entry.metadata.error)}>
+                            {(() => {
+                              const err = String(entry.metadata.error);
+                              try {
+                                const match = err.match(/"message"\s*:\s*"([^"]+)"/);
+                                if (match) return match[1];
+                              } catch {}
+                              return err.length > 80 ? err.slice(0, 80) + "..." : err;
+                            })()}
+                          </span>
                         )}
                       </div>
                     )}
@@ -392,7 +461,7 @@ function ActivityTimeline({ auditLog, changeLog }: { auditLog: any[] | undefined
             size="sm"
             className="w-full mt-3"
             onClick={() => setExpanded(!expanded)}
-            data-testid="button-toggle-activity"
+            data-testid="button-toggle-timeline"
           >
             {expanded ? (
               <>
@@ -669,111 +738,6 @@ function getChannelBadge(channel: string | null | undefined) {
   return <Badge className={map[c] || map.system} variant="outline">{channel}</Badge>;
 }
 
-function ConfirmationTimeline({ orderId }: { orderId: string }) {
-  const [expanded, setExpanded] = useState(false);
-  const COLLAPSED_COUNT = 5;
-
-  const { data, isLoading } = useQuery<{ timeline: any[] }>({
-    queryKey: ["/api/orders", orderId, "confirmation-timeline"],
-    staleTime: 30000,
-  });
-
-  const timeline = data?.timeline || [];
-
-  if (isLoading) {
-    return (
-      <Card data-testid="card-confirmation-timeline">
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Shield className="w-5 h-5" />
-            Confirmation Timeline
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {[1, 2, 3].map(i => <Skeleton key={i} className="h-10 w-full" />)}
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (timeline.length === 0) return null;
-
-  const visible = expanded ? timeline : timeline.slice(0, COLLAPSED_COUNT);
-  const hasMore = timeline.length > COLLAPSED_COUNT;
-
-  return (
-    <Card data-testid="card-confirmation-timeline">
-      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-        <CardTitle className="text-lg flex items-center gap-2">
-          <Shield className="w-5 h-5" />
-          Confirmation Timeline
-        </CardTitle>
-        <Badge variant="secondary" className="text-xs">{timeline.length}</Badge>
-      </CardHeader>
-      <CardContent>
-        <div className="relative" data-testid="confirmation-timeline-list">
-          <div className="absolute left-4 top-0 bottom-0 w-px bg-border" />
-          <div className="space-y-4">
-            {visible.map((event: any, idx: number) => {
-              const Icon = getTimelineEventIcon(event.eventType);
-              const colorCls = getTimelineEventColor(event.eventType);
-              const label = getTimelineEventLabel(event.eventType);
-              const timeStr = event.createdAt ? formatDistanceToNow(new Date(event.createdAt), { addSuffix: true }) : "";
-
-              return (
-                <div key={event.id || idx} className="flex items-start gap-3 relative" data-testid={`confirmation-event-${idx}`}>
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 z-10 ${colorCls}`}>
-                    <Icon className="w-3.5 h-3.5" />
-                  </div>
-                  <div className="flex-1 min-w-0 pt-0.5">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-medium">{label}</span>
-                      {getChannelBadge(event.channel)}
-                    </div>
-                    {(event.oldStatus || event.newStatus) && (
-                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                        {event.oldStatus && <Badge variant="outline" className="text-xs">{event.oldStatus}</Badge>}
-                        {event.oldStatus && event.newStatus && <ArrowRightLeft className="w-3 h-3 text-muted-foreground" />}
-                        {event.newStatus && <Badge variant="secondary" className="text-xs">{event.newStatus}</Badge>}
-                      </div>
-                    )}
-                    {event.note && (
-                      <p className="text-xs text-muted-foreground mt-0.5 break-words">{event.note}</p>
-                    )}
-                    <p className="text-xs text-muted-foreground/60 mt-0.5">{timeStr}</p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-        {hasMore && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full mt-3"
-            onClick={() => setExpanded(!expanded)}
-            data-testid="button-toggle-confirmation-timeline"
-          >
-            {expanded ? (
-              <>
-                <ChevronUp className="w-4 h-4 mr-1" />
-                Show Less
-              </>
-            ) : (
-              <>
-                <ChevronDown className="w-4 h-4 mr-1" />
-                Show All ({timeline.length})
-              </>
-            )}
-          </Button>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
 
 function TrackingStageNode({ stage, isActive, isCurrent, isLast }: {
   stage: typeof PIPELINE_STAGES[0];
@@ -1753,10 +1717,7 @@ export default function OrderDetails() {
             </Card>
           )}
 
-          <ConfirmationTimeline orderId={id!} />
-
-          {/* Combined Activity History */}
-          <ActivityTimeline auditLog={auditLog} changeLog={order?.changeLog} />
+          <OrderTimeline orderId={id!} auditLog={auditLog} changeLog={order?.changeLog} />
         </div>
 
         {/* Sidebar */}
