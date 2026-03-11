@@ -5,6 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -82,9 +83,11 @@ function TimeWindowSettings() {
   const [startTime, setStartTime] = useState("10:00");
   const [endTime, setEndTime] = useState("20:00");
   const [defaultVoiceId, setDefaultVoiceId] = useState("735");
+  const [waRetriesEnabled, setWaRetriesEnabled] = useState(false);
   const [waMaxAttempts, setWaMaxAttempts] = useState("3");
   const [waAttempt2DelayHours, setWaAttempt2DelayHours] = useState("4");
   const [waAttempt3DelayHours, setWaAttempt3DelayHours] = useState("12");
+  const [robocallRetriesEnabled, setRobocallRetriesEnabled] = useState(false);
   const [robocallMaxAttempts, setRobocallMaxAttempts] = useState("3");
   const [robocallRetryGapMinutes, setRobocallRetryGapMinutes] = useState("45");
   const [waConfirmTemplate1, setWaConfirmTemplate1] = useState("");
@@ -96,10 +99,14 @@ function TimeWindowSettings() {
       setStartTime(settings.startTime);
       setEndTime(settings.endTime);
       setDefaultVoiceId(settings.voiceId);
-      setWaMaxAttempts(String(settings.waMaxAttempts ?? 3));
+      const waMax = settings.waMaxAttempts ?? 3;
+      setWaRetriesEnabled(waMax > 1);
+      setWaMaxAttempts(String(waMax > 1 ? waMax : 3));
       setWaAttempt2DelayHours(String(settings.waAttempt2DelayHours ?? 4));
       setWaAttempt3DelayHours(String(settings.waAttempt3DelayHours ?? 12));
-      setRobocallMaxAttempts(String(settings.robocallMaxAttempts ?? 3));
+      const roboMax = settings.robocallMaxAttempts ?? 3;
+      setRobocallRetriesEnabled(roboMax > 1);
+      setRobocallMaxAttempts(String(roboMax > 1 ? roboMax : 3));
       setRobocallRetryGapMinutes(String(settings.robocallRetryGapMinutes ?? 45));
       setWaConfirmTemplate1(settings.waConfirmTemplate1 || "");
       setWaConfirmTemplate2(settings.waConfirmTemplate2 || "");
@@ -113,14 +120,14 @@ function TimeWindowSettings() {
         startTime,
         endTime,
         voiceId: defaultVoiceId,
-        waMaxAttempts,
+        waMaxAttempts: waRetriesEnabled ? waMaxAttempts : "1",
         waAttempt2DelayHours,
         waAttempt3DelayHours,
-        robocallMaxAttempts,
+        robocallMaxAttempts: robocallRetriesEnabled ? robocallMaxAttempts : "1",
         robocallRetryGapMinutes,
         waConfirmTemplate1,
-        waConfirmTemplate2,
-        waConfirmTemplate3,
+        waConfirmTemplate2: waRetriesEnabled ? waConfirmTemplate2 : "",
+        waConfirmTemplate3: waRetriesEnabled ? waConfirmTemplate3 : "",
       });
     },
     onSuccess: () => {
@@ -163,62 +170,77 @@ function TimeWindowSettings() {
         </div>
 
         <div>
-          <p className="text-sm font-medium mb-2">WhatsApp Attempt Policy</p>
-          <p className="text-sm text-muted-foreground mb-3">
-            Configure how many WhatsApp confirmation attempts are made and the delay between each. After all WA attempts are exhausted, the order moves to RoboCall.
-          </p>
-          <div className="flex flex-wrap items-end gap-4">
-            <div className="space-y-1">
-              <Label htmlFor="waMaxAttempts">Max WA Attempts</Label>
-              <Input id="waMaxAttempts" type="number" min="1" max="10" value={waMaxAttempts} onChange={e => setWaMaxAttempts(e.target.value)} className="w-24" data-testid="input-wa-max-attempts" />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="waAttempt2DelayHours">Attempt 2 Delay (hrs)</Label>
-              <Input id="waAttempt2DelayHours" type="number" min="1" max="72" value={waAttempt2DelayHours} onChange={e => setWaAttempt2DelayHours(e.target.value)} className="w-28" data-testid="input-wa-attempt2-delay" />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="waAttempt3DelayHours">Attempt 3 Delay (hrs)</Label>
-              <Input id="waAttempt3DelayHours" type="number" min="1" max="72" value={waAttempt3DelayHours} onChange={e => setWaAttempt3DelayHours(e.target.value)} className="w-28" data-testid="input-wa-attempt3-delay" />
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm font-medium">WhatsApp Retry Policy</p>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="waRetriesToggle" className="text-xs text-muted-foreground">Enable Retries</Label>
+              <Switch id="waRetriesToggle" checked={waRetriesEnabled} onCheckedChange={setWaRetriesEnabled} data-testid="switch-wa-retries" />
             </div>
           </div>
+          <p className="text-sm text-muted-foreground mb-3">
+            {waRetriesEnabled
+              ? "Configure how many WhatsApp confirmation attempts are made and the delay between each. After all WA attempts are exhausted, the order moves to RoboCall."
+              : "Only one WhatsApp message will be sent per order. Enable retries to send follow-up reminders."}
+          </p>
+          <div className="space-y-1 mb-3">
+            <Label htmlFor="waConfirmTemplate1">WhatsApp Template</Label>
+            <Input id="waConfirmTemplate1" placeholder="order_confirmation" value={waConfirmTemplate1} onChange={e => setWaConfirmTemplate1(e.target.value)} className="max-w-sm" data-testid="input-wa-template-1" />
+          </div>
+          {waRetriesEnabled && (
+            <>
+              <div className="flex flex-wrap items-end gap-4 mb-4">
+                <div className="space-y-1">
+                  <Label htmlFor="waMaxAttempts">Max WA Attempts</Label>
+                  <Input id="waMaxAttempts" type="number" min="2" max="10" value={waMaxAttempts} onChange={e => setWaMaxAttempts(e.target.value)} className="w-24" data-testid="input-wa-max-attempts" />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="waAttempt2DelayHours">Attempt 2 Delay (hrs)</Label>
+                  <Input id="waAttempt2DelayHours" type="number" min="1" max="72" value={waAttempt2DelayHours} onChange={e => setWaAttempt2DelayHours(e.target.value)} className="w-28" data-testid="input-wa-attempt2-delay" />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="waAttempt3DelayHours">Attempt 3 Delay (hrs)</Label>
+                  <Input id="waAttempt3DelayHours" type="number" min="1" max="72" value={waAttempt3DelayHours} onChange={e => setWaAttempt3DelayHours(e.target.value)} className="w-28" data-testid="input-wa-attempt3-delay" />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <Label htmlFor="waConfirmTemplate2">Template 2 (Reminder)</Label>
+                  <Input id="waConfirmTemplate2" placeholder="order_reminder" value={waConfirmTemplate2} onChange={e => setWaConfirmTemplate2(e.target.value)} data-testid="input-wa-template-2" />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="waConfirmTemplate3">Template 3 (Final Notice)</Label>
+                  <Input id="waConfirmTemplate3" placeholder="order_final_notice" value={waConfirmTemplate3} onChange={e => setWaConfirmTemplate3(e.target.value)} data-testid="input-wa-template-3" />
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
         <div>
-          <p className="text-sm font-medium mb-2">WhatsApp Confirmation Templates</p>
-          <p className="text-sm text-muted-foreground mb-3">
-            Specify the WhatsApp template names used for each confirmation attempt. These must match templates approved in your Meta Business account.
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="space-y-1">
-              <Label htmlFor="waConfirmTemplate1">Template 1 (Initial)</Label>
-              <Input id="waConfirmTemplate1" placeholder="order_confirmation" value={waConfirmTemplate1} onChange={e => setWaConfirmTemplate1(e.target.value)} data-testid="input-wa-template-1" />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="waConfirmTemplate2">Template 2 (Reminder)</Label>
-              <Input id="waConfirmTemplate2" placeholder="order_reminder" value={waConfirmTemplate2} onChange={e => setWaConfirmTemplate2(e.target.value)} data-testid="input-wa-template-2" />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="waConfirmTemplate3">Template 3 (Final Notice)</Label>
-              <Input id="waConfirmTemplate3" placeholder="order_final_notice" value={waConfirmTemplate3} onChange={e => setWaConfirmTemplate3(e.target.value)} data-testid="input-wa-template-3" />
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm font-medium">RoboCall Retry Policy</p>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="robocallRetriesToggle" className="text-xs text-muted-foreground">Enable Retries</Label>
+              <Switch id="robocallRetriesToggle" checked={robocallRetriesEnabled} onCheckedChange={setRobocallRetriesEnabled} data-testid="switch-robocall-retries" />
             </div>
           </div>
-        </div>
-
-        <div>
-          <p className="text-sm font-medium mb-2">RoboCall Retry Policy</p>
           <p className="text-sm text-muted-foreground mb-3">
-            Configure how many robocall attempts are made and the minimum gap between retries. After all call attempts are exhausted, the order moves to HOLD for manual resolution.
+            {robocallRetriesEnabled
+              ? "Configure how many robocall attempts are made and the minimum gap between retries. After all call attempts are exhausted, the order moves to HOLD for manual resolution."
+              : "Only one call will be made per order. Enable retries to make follow-up calls if the first is unanswered."}
           </p>
-          <div className="flex flex-wrap items-end gap-4">
-            <div className="space-y-1">
-              <Label htmlFor="robocallMaxAttempts">Max Call Attempts</Label>
-              <Input id="robocallMaxAttempts" type="number" min="1" max="10" value={robocallMaxAttempts} onChange={e => setRobocallMaxAttempts(e.target.value)} className="w-28" data-testid="input-robocall-max-attempts" />
+          {robocallRetriesEnabled && (
+            <div className="flex flex-wrap items-end gap-4">
+              <div className="space-y-1">
+                <Label htmlFor="robocallMaxAttempts">Max Call Attempts</Label>
+                <Input id="robocallMaxAttempts" type="number" min="2" max="10" value={robocallMaxAttempts} onChange={e => setRobocallMaxAttempts(e.target.value)} className="w-28" data-testid="input-robocall-max-attempts" />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="robocallRetryGapMinutes">Retry Gap (minutes)</Label>
+                <Input id="robocallRetryGapMinutes" type="number" min="5" max="480" value={robocallRetryGapMinutes} onChange={e => setRobocallRetryGapMinutes(e.target.value)} className="w-28" data-testid="input-robocall-retry-gap" />
+              </div>
             </div>
-            <div className="space-y-1">
-              <Label htmlFor="robocallRetryGapMinutes">Retry Gap (minutes)</Label>
-              <Input id="robocallRetryGapMinutes" type="number" min="5" max="480" value={robocallRetryGapMinutes} onChange={e => setRobocallRetryGapMinutes(e.target.value)} className="w-28" data-testid="input-robocall-retry-gap" />
-            </div>
-          </div>
+          )}
         </div>
 
         <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} data-testid="button-save-time-window">

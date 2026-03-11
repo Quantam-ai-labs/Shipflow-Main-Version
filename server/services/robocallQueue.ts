@@ -296,7 +296,7 @@ async function checkRobocallResponses() {
             apiResponse: { voiceStatus: smsData.voice_status, voiceSec: smsData.voice_sec, dtmf: dtmfValue },
           });
 
-          const maxAttempts = entry.maxAttempts || 3;
+          const maxAttempts = entry.maxAttempts ?? 3;
           const currentAttempts = entry.attemptCount || 0;
 
           if (NO_DTMF_STATUSES.includes(smsData.voice_status) && currentAttempts < maxAttempts) {

@@ -87,7 +87,7 @@ async function queueForRobocall(params: {
     reason,
     scheduledAt,
     attemptCount: 0,
-    maxAttempts: merchant.robocallMaxAttempts || 3,
+    maxAttempts: merchant.robocallMaxAttempts ?? 3,
     waResponseArrived: false,
   });
 

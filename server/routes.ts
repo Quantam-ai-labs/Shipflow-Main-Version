@@ -15329,11 +15329,26 @@ export async function registerRoutes(
         robocallVoiceId: voiceId || "735",
         updatedAt: new Date(),
       };
-      if (waMaxAttempts !== undefined) updateData.waMaxAttempts = parseInt(waMaxAttempts) || 3;
-      if (waAttempt2DelayHours !== undefined) updateData.waAttempt2DelayHours = parseInt(waAttempt2DelayHours) || 4;
-      if (waAttempt3DelayHours !== undefined) updateData.waAttempt3DelayHours = parseInt(waAttempt3DelayHours) || 12;
-      if (robocallMaxAttempts !== undefined) updateData.robocallMaxAttempts = parseInt(robocallMaxAttempts) || 3;
-      if (robocallRetryGapMinutes !== undefined) updateData.robocallRetryGapMinutes = parseInt(robocallRetryGapMinutes) || 45;
+      if (waMaxAttempts !== undefined) {
+        const parsed = parseInt(waMaxAttempts);
+        updateData.waMaxAttempts = Number.isFinite(parsed) && parsed >= 1 ? parsed : 3;
+      }
+      if (waAttempt2DelayHours !== undefined) {
+        const parsed = parseInt(waAttempt2DelayHours);
+        updateData.waAttempt2DelayHours = Number.isFinite(parsed) && parsed >= 1 ? parsed : 4;
+      }
+      if (waAttempt3DelayHours !== undefined) {
+        const parsed = parseInt(waAttempt3DelayHours);
+        updateData.waAttempt3DelayHours = Number.isFinite(parsed) && parsed >= 1 ? parsed : 12;
+      }
+      if (robocallMaxAttempts !== undefined) {
+        const parsed = parseInt(robocallMaxAttempts);
+        updateData.robocallMaxAttempts = Number.isFinite(parsed) && parsed >= 1 ? parsed : 3;
+      }
+      if (robocallRetryGapMinutes !== undefined) {
+        const parsed = parseInt(robocallRetryGapMinutes);
+        updateData.robocallRetryGapMinutes = Number.isFinite(parsed) && parsed >= 1 ? parsed : 45;
+      }
       if (waConfirmTemplate1 !== undefined) updateData.waConfirmTemplate1 = waConfirmTemplate1 || null;
       if (waConfirmTemplate2 !== undefined) updateData.waConfirmTemplate2 = waConfirmTemplate2 || null;
       if (waConfirmTemplate3 !== undefined) updateData.waConfirmTemplate3 = waConfirmTemplate3 || null;

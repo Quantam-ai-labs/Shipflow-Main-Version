@@ -65,7 +65,7 @@ async function queueOrderForRobocall(order: any, merchant: any, reason: string) 
     reason: withinWindow ? reason : `${reason} — scheduled for next call window (${startTime})`,
     scheduledAt,
     attemptCount: 0,
-    maxAttempts: merchant.robocallMaxAttempts || 3,
+    maxAttempts: merchant.robocallMaxAttempts ?? 3,
     waResponseArrived: false,
   });
 
@@ -87,7 +87,7 @@ function getTemplateForAttempt(merchant: any, attemptNumber: number): string | n
 }
 
 function getNextAttemptDelay(merchant: any, currentAttempt: number): number | null {
-  const maxAttempts = merchant.waMaxAttempts || 3;
+  const maxAttempts = merchant.waMaxAttempts ?? 3;
   if (currentAttempt >= maxAttempts) return null;
 
   if (currentAttempt === 1) {
@@ -188,7 +188,7 @@ async function checkWaReattempts() {
         const merchant = merchantMap.get(order.merchantId);
         if (!merchant) continue;
 
-        const maxAttempts = merchant.waMaxAttempts || 3;
+        const maxAttempts = merchant.waMaxAttempts ?? 3;
         const currentAttemptCount = order.waAttemptCount || 0;
 
         if (currentAttemptCount >= maxAttempts) {
@@ -358,7 +358,7 @@ async function checkExhaustedWaOrders() {
     for (const order of exhaustedOrders) {
       const merchant = merchantMap.get(order.merchantId);
       if (!merchant) continue;
-      const maxAttempts = merchant.waMaxAttempts || 3;
+      const maxAttempts = merchant.waMaxAttempts ?? 3;
       if ((order.waAttemptCount || 0) < maxAttempts) continue;
 
       try {
