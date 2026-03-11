@@ -99,14 +99,16 @@ function getNextAttemptDelay(merchant: any, currentAttempt: number): number | nu
   return null;
 }
 
-async function sendWaReminder(order: any, merchant: any, attemptNumber: number): Promise<boolean> {
+const WA_PERMANENT_ERROR_RE = /\(#100\)|\(#131008\)|\(#132000\)|\(#132001\)|\(#132018\)/;
+
+async function sendWaReminder(order: any, merchant: any, attemptNumber: number): Promise<{ sent: boolean; permanentError?: boolean; error?: string }> {
   const formattedPhone = formatPhoneForWhatsApp(order.customerPhone);
-  if (!formattedPhone) return false;
+  if (!formattedPhone) return { sent: false };
 
   const templateName = getTemplateForAttempt(merchant, attemptNumber);
   if (!templateName) {
     console.log(`${LOG_PREFIX} No template configured for attempt ${attemptNumber}, skipping WA reminder for order #${order.orderNumber}`);
-    return false;
+    return { sent: false };
   }
 
   try {
@@ -121,7 +123,7 @@ async function sendWaReminder(order: any, merchant: any, attemptNumber: number):
 
     if (result.success) {
       console.log(`${LOG_PREFIX} WA reminder #${attemptNumber} sent for order #${order.orderNumber} (template: ${templateName})`);
-      return true;
+      return { sent: true };
     }
 
     if (result.notOnWhatsApp) {
@@ -130,14 +132,15 @@ async function sendWaReminder(order: any, merchant: any, attemptNumber: number):
         waNotOnWhatsApp: true,
         waNextAttemptAt: null,
       }).where(eq(orders.id, order.id));
-      return false;
+      return { sent: false, error: result.error };
     }
 
-    console.error(`${LOG_PREFIX} WA reminder failed for order #${order.orderNumber}: ${result.error}`);
-    return false;
+    const isPermanent = WA_PERMANENT_ERROR_RE.test(result.error || "");
+    console.error(`${LOG_PREFIX} WA reminder failed for order #${order.orderNumber}: ${result.error}${isPermanent ? " (permanent)" : ""}`);
+    return { sent: false, permanentError: isPermanent, error: result.error };
   } catch (err: any) {
     console.error(`${LOG_PREFIX} WA reminder error for order #${order.orderNumber}:`, err.message);
-    return false;
+    return { sent: false, error: err.message };
   }
 }
 
@@ -215,7 +218,7 @@ async function checkWaReattempts() {
 
         const nextAttemptNumber = currentAttemptCount + 1;
         const templateName = getTemplateForAttempt(merchant, nextAttemptNumber);
-        const sent = await sendWaReminder(order, merchant, nextAttemptNumber);
+        const reminderResult = await sendWaReminder(order, merchant, nextAttemptNumber);
 
         await db.update(orders).set({
           waAttemptCount: nextAttemptNumber,
@@ -250,7 +253,32 @@ async function checkWaReattempts() {
           continue;
         }
 
-        if (sent) {
+        if (reminderResult.permanentError) {
+          await db.update(orders).set({
+            workflowStatus: "PENDING",
+            previousWorkflowStatus: "NEW",
+            pendingReason: "WhatsApp template error — routed to RoboCall",
+            pendingReasonType: "confirmation_pending",
+            lastStatusChangedAt: now,
+            waNextAttemptAt: null,
+            updatedAt: now,
+          }).where(eq(orders.id, order.id));
+
+          await logConfirmationEvent({
+            merchantId: order.merchantId,
+            orderId: order.id,
+            eventType: "WA_PERMANENT_FAILURE",
+            channel: "whatsapp",
+            errorDetails: reminderResult.error,
+            note: `WhatsApp permanent error on attempt ${nextAttemptNumber} — escalating to RoboCall immediately`,
+          });
+
+          await queueOrderForRobocall(order, merchant, "WhatsApp template/parameter error — immediate bypass to RoboCall");
+          console.log(`${LOG_PREFIX} Order #${order.orderNumber}: WA permanent error on attempt ${nextAttemptNumber}, bypassed to RoboCall`);
+          continue;
+        }
+
+        if (reminderResult.sent) {
           const nextDelay = getNextAttemptDelay(merchant, nextAttemptNumber);
           const nextAttemptAt = nextDelay ? new Date(Date.now() + nextDelay) : null;
 

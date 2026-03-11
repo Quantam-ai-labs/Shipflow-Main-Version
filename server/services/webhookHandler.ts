@@ -429,25 +429,58 @@ export class WebhookHandler {
               waNextAttemptAt: nextAttempt,
             }).where(eq(orders.id, created.id));
           } else {
-            const [merchantData2] = await db.select({
-              waAttempt2DelayHours: merchants.waAttempt2DelayHours,
-            }).from(merchants).where(eq(merchants.id, merchantId)).limit(1);
-            const retryDelay = merchantData2?.waAttempt2DelayHours || 4;
-            const retryAt = new Date(Date.now() + retryDelay * 60 * 60 * 1000);
+            const errorStr = waResult?.error || "";
+            const isPermanentError = /\(#100\)|\(#131008\)|\(#132000\)|\(#132001\)|\(#132018\)/.test(errorStr);
 
-            await db.update(orders).set({
-              waAttemptCount: 0,
-              waNextAttemptAt: retryAt,
-            }).where(eq(orders.id, created.id));
+            if (isPermanentError) {
+              await db.update(orders).set({
+                waAttemptCount: 1,
+                waNextAttemptAt: null,
+                workflowStatus: "PENDING",
+                previousWorkflowStatus: "NEW",
+                pendingReason: "WhatsApp template error — routed to RoboCall",
+                pendingReasonType: "confirmation_pending",
+                lastStatusChangedAt: new Date(),
+                updatedAt: new Date(),
+              }).where(eq(orders.id, created.id));
 
-            await logConfirmationEvent({
-              merchantId,
-              orderId: created.id,
-              eventType: "WA_SENT",
-              channel: "whatsapp",
-              errorDetails: waResult?.error || "Unknown error",
-              note: `WhatsApp confirmation send failed (transient error) — will retry at ${retryAt.toISOString()}`,
-            }).catch(() => {});
+              await logConfirmationEvent({
+                merchantId,
+                orderId: created.id,
+                eventType: "WA_PERMANENT_FAILURE",
+                channel: "whatsapp",
+                errorDetails: errorStr,
+                note: `WhatsApp send failed with permanent error — escalating to RoboCall immediately`,
+              }).catch(() => {});
+
+              await queueForRobocall({
+                merchantId,
+                orderId: created.id,
+                orderNumber: created.orderNumber,
+                customerName: created.customerName,
+                customerPhone: created.customerPhone,
+                totalAmount: created.totalAmount,
+                reason: "WhatsApp template/parameter error — immediate bypass to RoboCall",
+              });
+
+              console.log(`[Webhook] Order #${created.orderNumber}: WA permanent error, bypassed to RoboCall`);
+            } else {
+              const retryAt = new Date(Date.now() + 30 * 60 * 1000);
+
+              await db.update(orders).set({
+                waAttemptCount: 1,
+                waNextAttemptAt: retryAt,
+              }).where(eq(orders.id, created.id));
+
+              await logConfirmationEvent({
+                merchantId,
+                orderId: created.id,
+                eventType: "WA_SENT",
+                channel: "whatsapp",
+                errorDetails: errorStr || "Unknown error",
+                note: `WhatsApp confirmation send failed (transient error) — will retry at ${retryAt.toISOString()}`,
+              }).catch(() => {});
+            }
           }
         } catch (waErr) {
           console.error(`[Webhook] WhatsApp notification failed for order ${created.orderNumber}:`, waErr);
