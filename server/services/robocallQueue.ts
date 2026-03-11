@@ -7,7 +7,7 @@ import { transitionOrder } from "./workflowTransition";
 
 const LOG_PREFIX = "[RobocallQueue]";
 const PROCESS_INTERVAL_MS = 2 * 60 * 1000;
-const ROBOCALL_API_BASE = "https://api.robocall.pk/api/v1";
+const ROBOCALL_API_BASE = "https://app.brandedsmspakistan.com/api";
 const NO_DTMF_STATUSES = [2, 3, 5, 6];
 
 function isWithinCallWindow(startTime: string, endTime: string): boolean {
@@ -59,6 +59,7 @@ async function safeFetchJson(url: string): Promise<any> {
       return { raw: text, error: "Invalid JSON response" };
     }
   } catch (err: any) {
+    console.error(`${LOG_PREFIX} Fetch error: ${err.message}`);
     return { raw: null, error: err.message || "Network error" };
   }
 }
@@ -136,7 +137,17 @@ async function processQueue() {
           .where(eq(robocallQueue.id, entry.id));
 
         const voiceId = merchant.robocallVoiceId || "735";
-        const sendUrl = `${ROBOCALL_API_BASE}/send-voice-otp?email=${encodeURIComponent(merchant.robocallEmail)}&key=${encodeURIComponent(merchant.robocallApiKey)}&voice_id=${voiceId}&receiver=${encodeURIComponent(entry.phone)}&amount=${encodeURIComponent(entry.amount || "0")}&brand_name=${encodeURIComponent(entry.brandName || merchant.name)}&order_number=${encodeURIComponent(entry.orderNumber || "")}`;
+        const params = new URLSearchParams({
+          email: merchant.robocallEmail,
+          key: merchant.robocallApiKey,
+          to: entry.phone,
+          type: "dtmf",
+          voice_id: voiceId,
+          amount: entry.amount || "0",
+          brand_name: entry.brandName || merchant.name,
+          order_number: entry.orderNumber || "",
+        });
+        const sendUrl = `${ROBOCALL_API_BASE}/send-voice?${params.toString()}`;
 
         const data = await safeFetchJson(sendUrl);
         const smsData = data?.sms || data;
