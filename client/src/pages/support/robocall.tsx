@@ -60,30 +60,72 @@ const DTMF_MAP: Record<number, { label: string; color: string }> = {
   3: { label: "Callback", color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300" },
 };
 
+interface SettingsData {
+  startTime: string;
+  endTime: string;
+  voiceId: string;
+  waMaxAttempts: number;
+  waAttempt2DelayHours: number;
+  waAttempt3DelayHours: number;
+  robocallMaxAttempts: number;
+  robocallRetryGapMinutes: number;
+  waConfirmTemplate1: string;
+  waConfirmTemplate2: string;
+  waConfirmTemplate3: string;
+}
+
 function TimeWindowSettings() {
   const { toast } = useToast();
-  const { data: settings } = useQuery<{ startTime: string; endTime: string; voiceId: string }>({
+  const { data: settings } = useQuery<SettingsData>({
     queryKey: ['/api/robocall/settings'],
   });
   const [startTime, setStartTime] = useState("10:00");
   const [endTime, setEndTime] = useState("20:00");
   const [defaultVoiceId, setDefaultVoiceId] = useState("735");
+  const [waMaxAttempts, setWaMaxAttempts] = useState("3");
+  const [waAttempt2DelayHours, setWaAttempt2DelayHours] = useState("4");
+  const [waAttempt3DelayHours, setWaAttempt3DelayHours] = useState("12");
+  const [robocallMaxAttempts, setRobocallMaxAttempts] = useState("3");
+  const [robocallRetryGapMinutes, setRobocallRetryGapMinutes] = useState("45");
+  const [waConfirmTemplate1, setWaConfirmTemplate1] = useState("");
+  const [waConfirmTemplate2, setWaConfirmTemplate2] = useState("");
+  const [waConfirmTemplate3, setWaConfirmTemplate3] = useState("");
 
   useEffect(() => {
     if (settings) {
       setStartTime(settings.startTime);
       setEndTime(settings.endTime);
       setDefaultVoiceId(settings.voiceId);
+      setWaMaxAttempts(String(settings.waMaxAttempts ?? 3));
+      setWaAttempt2DelayHours(String(settings.waAttempt2DelayHours ?? 4));
+      setWaAttempt3DelayHours(String(settings.waAttempt3DelayHours ?? 12));
+      setRobocallMaxAttempts(String(settings.robocallMaxAttempts ?? 3));
+      setRobocallRetryGapMinutes(String(settings.robocallRetryGapMinutes ?? 45));
+      setWaConfirmTemplate1(settings.waConfirmTemplate1 || "");
+      setWaConfirmTemplate2(settings.waConfirmTemplate2 || "");
+      setWaConfirmTemplate3(settings.waConfirmTemplate3 || "");
     }
   }, [settings]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      await apiRequest("POST", "/api/robocall/settings", { startTime, endTime, voiceId: defaultVoiceId });
+      await apiRequest("POST", "/api/robocall/settings", {
+        startTime,
+        endTime,
+        voiceId: defaultVoiceId,
+        waMaxAttempts,
+        waAttempt2DelayHours,
+        waAttempt3DelayHours,
+        robocallMaxAttempts,
+        robocallRetryGapMinutes,
+        waConfirmTemplate1,
+        waConfirmTemplate2,
+        waConfirmTemplate3,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/robocall/settings'] });
-      toast({ title: "Settings saved", description: "RoboCall time window updated." });
+      toast({ title: "Settings saved", description: "Confirmation automation settings updated." });
     },
     onError: (err: any) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -95,31 +137,94 @@ function TimeWindowSettings() {
       <CardHeader>
         <CardTitle className="text-lg flex items-center gap-2">
           <Clock className="w-5 h-5" />
-          Automated Call Settings
+          Confirmation Automation Settings
         </CardTitle>
       </CardHeader>
-      <CardContent>
-        <p className="text-sm text-muted-foreground mb-3">
-          Set the allowed time window for automated robocalls. Orders that become eligible outside this window will be queued for the next available slot.
-        </p>
-        <div className="flex flex-wrap items-end gap-4">
-          <div className="space-y-1">
-            <Label htmlFor="startTime">Start Time</Label>
-            <Input id="startTime" type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="w-32" data-testid="input-start-time" />
+      <CardContent className="space-y-6">
+        <div>
+          <p className="text-sm font-medium mb-2">RoboCall Time Window</p>
+          <p className="text-sm text-muted-foreground mb-3">
+            Set the allowed time window for automated robocalls. Orders that become eligible outside this window will be queued for the next available slot.
+          </p>
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="space-y-1">
+              <Label htmlFor="startTime">Start Time</Label>
+              <Input id="startTime" type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="w-32" data-testid="input-start-time" />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="endTime">End Time</Label>
+              <Input id="endTime" type="time" value={endTime} onChange={e => setEndTime(e.target.value)} className="w-32" data-testid="input-end-time" />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="defaultVoiceId">Default Voice ID</Label>
+              <Input id="defaultVoiceId" value={defaultVoiceId} onChange={e => setDefaultVoiceId(e.target.value)} className="w-24" data-testid="input-default-voice-id" />
+            </div>
           </div>
-          <div className="space-y-1">
-            <Label htmlFor="endTime">End Time</Label>
-            <Input id="endTime" type="time" value={endTime} onChange={e => setEndTime(e.target.value)} className="w-32" data-testid="input-end-time" />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="defaultVoiceId">Default Voice ID</Label>
-            <Input id="defaultVoiceId" value={defaultVoiceId} onChange={e => setDefaultVoiceId(e.target.value)} className="w-24" data-testid="input-default-voice-id" />
-          </div>
-          <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} data-testid="button-save-time-window">
-            {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Save className="w-4 h-4 mr-1" />}
-            Save Settings
-          </Button>
         </div>
+
+        <div>
+          <p className="text-sm font-medium mb-2">WhatsApp Attempt Policy</p>
+          <p className="text-sm text-muted-foreground mb-3">
+            Configure how many WhatsApp confirmation attempts are made and the delay between each. After all WA attempts are exhausted, the order moves to RoboCall.
+          </p>
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="space-y-1">
+              <Label htmlFor="waMaxAttempts">Max WA Attempts</Label>
+              <Input id="waMaxAttempts" type="number" min="1" max="10" value={waMaxAttempts} onChange={e => setWaMaxAttempts(e.target.value)} className="w-24" data-testid="input-wa-max-attempts" />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="waAttempt2DelayHours">Attempt 2 Delay (hrs)</Label>
+              <Input id="waAttempt2DelayHours" type="number" min="1" max="72" value={waAttempt2DelayHours} onChange={e => setWaAttempt2DelayHours(e.target.value)} className="w-28" data-testid="input-wa-attempt2-delay" />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="waAttempt3DelayHours">Attempt 3 Delay (hrs)</Label>
+              <Input id="waAttempt3DelayHours" type="number" min="1" max="72" value={waAttempt3DelayHours} onChange={e => setWaAttempt3DelayHours(e.target.value)} className="w-28" data-testid="input-wa-attempt3-delay" />
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <p className="text-sm font-medium mb-2">WhatsApp Confirmation Templates</p>
+          <p className="text-sm text-muted-foreground mb-3">
+            Specify the WhatsApp template names used for each confirmation attempt. These must match templates approved in your Meta Business account.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="space-y-1">
+              <Label htmlFor="waConfirmTemplate1">Template 1 (Initial)</Label>
+              <Input id="waConfirmTemplate1" placeholder="order_confirmation" value={waConfirmTemplate1} onChange={e => setWaConfirmTemplate1(e.target.value)} data-testid="input-wa-template-1" />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="waConfirmTemplate2">Template 2 (Reminder)</Label>
+              <Input id="waConfirmTemplate2" placeholder="order_reminder" value={waConfirmTemplate2} onChange={e => setWaConfirmTemplate2(e.target.value)} data-testid="input-wa-template-2" />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="waConfirmTemplate3">Template 3 (Final Notice)</Label>
+              <Input id="waConfirmTemplate3" placeholder="order_final_notice" value={waConfirmTemplate3} onChange={e => setWaConfirmTemplate3(e.target.value)} data-testid="input-wa-template-3" />
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <p className="text-sm font-medium mb-2">RoboCall Retry Policy</p>
+          <p className="text-sm text-muted-foreground mb-3">
+            Configure how many robocall attempts are made and the minimum gap between retries. After all call attempts are exhausted, the order moves to HOLD for manual resolution.
+          </p>
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="space-y-1">
+              <Label htmlFor="robocallMaxAttempts">Max Call Attempts</Label>
+              <Input id="robocallMaxAttempts" type="number" min="1" max="10" value={robocallMaxAttempts} onChange={e => setRobocallMaxAttempts(e.target.value)} className="w-28" data-testid="input-robocall-max-attempts" />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="robocallRetryGapMinutes">Retry Gap (minutes)</Label>
+              <Input id="robocallRetryGapMinutes" type="number" min="5" max="480" value={robocallRetryGapMinutes} onChange={e => setRobocallRetryGapMinutes(e.target.value)} className="w-28" data-testid="input-robocall-retry-gap" />
+            </div>
+          </div>
+        </div>
+
+        <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} data-testid="button-save-time-window">
+          {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Save className="w-4 h-4 mr-1" />}
+          Save Settings
+        </Button>
       </CardContent>
     </Card>
   );

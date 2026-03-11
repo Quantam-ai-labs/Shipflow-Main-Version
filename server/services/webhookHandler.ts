@@ -5,13 +5,102 @@ import { isRecentWriteBack } from './shopifyWriteBack';
 import { sendOrderStatusWhatsApp } from '../utils/integrations/whatsapp';
 import { initializeOrderConfirmation, logConfirmationEvent } from './confirmationEngine';
 import { db } from '../db';
-import { orders } from '@shared/schema';
-import { eq } from 'drizzle-orm';
+import { orders, robocallQueue, merchants } from '@shared/schema';
+import { eq, and } from 'drizzle-orm';
+import { formatPhoneForWhatsApp } from '../utils/integrations/whatsapp/sender';
 
-async function db_updateWaSentAt(orderId: string) {
+async function db_updateWaSentAt(orderId: string, waAttemptCount: number = 1, templateName?: string) {
   try {
-    await db.update(orders).set({ waConfirmationSentAt: new Date() }).where(eq(orders.id, orderId));
+    const now = new Date();
+    await db.update(orders).set({
+      waConfirmationSentAt: now,
+      waAttemptCount,
+      waLastTemplateUsed: templateName || null,
+    }).where(eq(orders.id, orderId));
   } catch {}
+}
+
+async function db_setNotOnWhatsApp(orderId: string) {
+  try {
+    await db.update(orders).set({
+      waNotOnWhatsApp: true,
+      waAttemptCount: 0,
+      waNextAttemptAt: null,
+    }).where(eq(orders.id, orderId));
+  } catch {}
+}
+
+function isWithinCallWindow(startTime: string, endTime: string): boolean {
+  const now = new Date();
+  const hours = now.getHours();
+  const minutes = now.getMinutes();
+  const currentMinutes = hours * 60 + minutes;
+  const [startH, startM] = startTime.split(":").map(Number);
+  const [endH, endM] = endTime.split(":").map(Number);
+  return currentMinutes >= startH * 60 + startM && currentMinutes < endH * 60 + endM;
+}
+
+function getNextCallWindowStart(startTime: string): Date {
+  const [startH, startM] = startTime.split(":").map(Number);
+  const now = new Date();
+  const target = new Date(now);
+  target.setHours(startH, startM, 0, 0);
+  if (target <= now) target.setDate(target.getDate() + 1);
+  return target;
+}
+
+async function queueForRobocall(params: {
+  merchantId: string;
+  orderId: string;
+  orderNumber: string;
+  customerName: string;
+  customerPhone: string | null;
+  totalAmount: string | null;
+  reason: string;
+}): Promise<boolean> {
+  const { merchantId, orderId, orderNumber, customerName, customerPhone, totalAmount, reason } = params;
+  const [merchant] = await db.select().from(merchants).where(eq(merchants.id, merchantId)).limit(1);
+  if (!merchant?.robocallEmail || !merchant?.robocallApiKey || !customerPhone) return false;
+
+  const formattedPhone = formatPhoneForWhatsApp(customerPhone);
+  if (!formattedPhone) return false;
+
+  const existingQueue = await db.select({ id: robocallQueue.id }).from(robocallQueue)
+    .where(and(eq(robocallQueue.orderId, orderId), eq(robocallQueue.status, "waiting")))
+    .limit(1);
+  if (existingQueue.length > 0) return false;
+
+  const startTime = merchant.robocallStartTime || "10:00";
+  const endTime = merchant.robocallEndTime || "20:00";
+  const withinWindow = isWithinCallWindow(startTime, endTime);
+  const scheduledAt = withinWindow ? new Date() : getNextCallWindowStart(startTime);
+
+  await db.insert(robocallQueue).values({
+    merchantId,
+    orderId,
+    orderNumber,
+    customerName,
+    phone: formattedPhone,
+    amount: totalAmount,
+    brandName: merchant.name,
+    status: "waiting",
+    reason,
+    scheduledAt,
+    attemptCount: 0,
+    maxAttempts: merchant.robocallMaxAttempts || 3,
+    waResponseArrived: false,
+  });
+
+  await logConfirmationEvent({
+    merchantId,
+    orderId,
+    eventType: "CALL_QUEUED",
+    note: withinWindow
+      ? `RoboCall queued — ${reason}`
+      : `RoboCall queued — scheduled for ${scheduledAt.toISOString()} (${reason})`,
+  });
+
+  return true;
 }
 
 interface WebhookProcessResult {
@@ -272,7 +361,7 @@ export class WebhookHandler {
         }).catch(err => console.error(`[Webhook] Confirmation init failed for ${created.orderNumber}:`, err));
 
         try {
-          await sendOrderStatusWhatsApp({
+          const waResult = await sendOrderStatusWhatsApp({
             merchantId,
             orderId: created.id,
             orderNumber: created.orderNumber,
@@ -288,15 +377,78 @@ export class WebhookHandler {
             shopDomain: (created as any).shopDomain || null,
           });
 
-          await logConfirmationEvent({
-            merchantId,
-            orderId: created.id,
-            eventType: "WA_SENT",
-            channel: "whatsapp",
-            note: `Confirmation WhatsApp sent to ${created.customerPhone}`,
-          }).catch(() => {});
+          if (waResult?.notOnWhatsApp) {
+            await db_setNotOnWhatsApp(created.id);
 
-          await db_updateWaSentAt(created.id);
+            await logConfirmationEvent({
+              merchantId,
+              orderId: created.id,
+              eventType: "WA_NOT_AVAILABLE",
+              channel: "whatsapp",
+              note: `Number ${created.customerPhone} not on WhatsApp — bypassing to RoboCall`,
+              errorDetails: waResult.error,
+            }).catch(() => {});
+
+            await db.update(orders).set({
+              workflowStatus: "PENDING",
+              previousWorkflowStatus: "NEW",
+              pendingReason: "Number not on WhatsApp — routed to RoboCall",
+              pendingReasonType: "confirmation_pending",
+              lastStatusChangedAt: new Date(),
+              updatedAt: new Date(),
+            }).where(eq(orders.id, created.id));
+
+            await queueForRobocall({
+              merchantId,
+              orderId: created.id,
+              orderNumber: created.orderNumber,
+              customerName: created.customerName,
+              customerPhone: created.customerPhone,
+              totalAmount: created.totalAmount,
+              reason: "WhatsApp unavailable — direct bypass to RoboCall",
+            });
+
+            console.log(`[Webhook] Order #${created.orderNumber}: number not on WhatsApp, bypassed to RoboCall`);
+          } else if (waResult?.sent) {
+            await logConfirmationEvent({
+              merchantId,
+              orderId: created.id,
+              eventType: "WA_SENT",
+              channel: "whatsapp",
+              note: `Confirmation WhatsApp sent to ${created.customerPhone}`,
+            }).catch(() => {});
+
+            const [merchantData] = await db.select({
+              waAttempt2DelayHours: merchants.waAttempt2DelayHours,
+            }).from(merchants).where(eq(merchants.id, merchantId)).limit(1);
+            const delayHours = merchantData?.waAttempt2DelayHours || 4;
+            const nextAttempt = new Date(Date.now() + delayHours * 60 * 60 * 1000);
+
+            await db_updateWaSentAt(created.id, 1);
+            await db.update(orders).set({
+              waNextAttemptAt: nextAttempt,
+            }).where(eq(orders.id, created.id));
+          } else {
+            const [merchantData2] = await db.select({
+              waAttempt2DelayHours: merchants.waAttempt2DelayHours,
+            }).from(merchants).where(eq(merchants.id, merchantId)).limit(1);
+            const retryDelay = merchantData2?.waAttempt2DelayHours || 4;
+            const retryAt = new Date(Date.now() + retryDelay * 60 * 60 * 1000);
+
+            await db.update(orders).set({
+              waAttemptCount: 0,
+              waNextAttemptAt: retryAt,
+            }).where(eq(orders.id, created.id));
+
+            await logConfirmationEvent({
+              merchantId,
+              orderId: created.id,
+              eventType: "WA_SENT",
+              channel: "whatsapp",
+              errorDetails: waResult?.error || "Unknown error",
+              note: `WhatsApp confirmation send failed (transient error) — will retry at ${retryAt.toISOString()}`,
+            }).catch(() => {});
+          }
         } catch (waErr) {
           console.error(`[Webhook] WhatsApp notification failed for order ${created.orderNumber}:`, waErr);
           await logConfirmationEvent({

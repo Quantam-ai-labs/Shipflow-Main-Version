@@ -15299,6 +15299,14 @@ export async function registerRoutes(
         startTime: merchant.robocallStartTime || "10:00",
         endTime: merchant.robocallEndTime || "20:00",
         voiceId: merchant.robocallVoiceId || "735",
+        waMaxAttempts: merchant.waMaxAttempts ?? 3,
+        waAttempt2DelayHours: merchant.waAttempt2DelayHours ?? 4,
+        waAttempt3DelayHours: merchant.waAttempt3DelayHours ?? 12,
+        robocallMaxAttempts: merchant.robocallMaxAttempts ?? 3,
+        robocallRetryGapMinutes: merchant.robocallRetryGapMinutes ?? 45,
+        waConfirmTemplate1: merchant.waConfirmTemplate1 || "",
+        waConfirmTemplate2: merchant.waConfirmTemplate2 || "",
+        waConfirmTemplate3: merchant.waConfirmTemplate3 || "",
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -15309,13 +15317,27 @@ export async function registerRoutes(
     try {
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
-      const { startTime, endTime, voiceId } = req.body;
-      await db.update(merchants).set({
+      const {
+        startTime, endTime, voiceId,
+        waMaxAttempts, waAttempt2DelayHours, waAttempt3DelayHours,
+        robocallMaxAttempts, robocallRetryGapMinutes,
+        waConfirmTemplate1, waConfirmTemplate2, waConfirmTemplate3,
+      } = req.body;
+      const updateData: Record<string, any> = {
         robocallStartTime: startTime || "10:00",
         robocallEndTime: endTime || "20:00",
         robocallVoiceId: voiceId || "735",
         updatedAt: new Date(),
-      }).where(eq(merchants.id, merchantId));
+      };
+      if (waMaxAttempts !== undefined) updateData.waMaxAttempts = parseInt(waMaxAttempts) || 3;
+      if (waAttempt2DelayHours !== undefined) updateData.waAttempt2DelayHours = parseInt(waAttempt2DelayHours) || 4;
+      if (waAttempt3DelayHours !== undefined) updateData.waAttempt3DelayHours = parseInt(waAttempt3DelayHours) || 12;
+      if (robocallMaxAttempts !== undefined) updateData.robocallMaxAttempts = parseInt(robocallMaxAttempts) || 3;
+      if (robocallRetryGapMinutes !== undefined) updateData.robocallRetryGapMinutes = parseInt(robocallRetryGapMinutes) || 45;
+      if (waConfirmTemplate1 !== undefined) updateData.waConfirmTemplate1 = waConfirmTemplate1 || null;
+      if (waConfirmTemplate2 !== undefined) updateData.waConfirmTemplate2 = waConfirmTemplate2 || null;
+      if (waConfirmTemplate3 !== undefined) updateData.waConfirmTemplate3 = waConfirmTemplate3 || null;
+      await db.update(merchants).set(updateData).where(eq(merchants.id, merchantId));
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ error: error.message });

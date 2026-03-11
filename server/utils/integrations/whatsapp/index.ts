@@ -53,21 +53,29 @@ function releaseClaim(key: string) {
   waSendingInProgress.delete(key);
 }
 
+export interface WaSendOutcome {
+  sent: boolean;
+  notOnWhatsApp: boolean;
+  error?: string;
+}
+
 export async function sendOrderStatusWhatsApp(
   params: OrderNotificationParams,
-): Promise<void> {
+): Promise<WaSendOutcome> {
+  const SKIP = { sent: false, notOnWhatsApp: false } as WaSendOutcome;
+
   if (!(WA_NOTIFY_STATUSES as readonly string[]).includes(params.toStatus))
-    return;
+    return SKIP;
 
   const merchant = await storage.getMerchant(params.merchantId);
   if (!merchant) {
     console.log(`${LOG_PREFIX} Merchant ${params.merchantId} not found, skipping`);
-    return;
+    return SKIP;
   }
 
   if (merchant.waNotificationsEnabled === false) {
     console.log(`${LOG_PREFIX} [DISABLED] WA notifications disabled for merchant ${params.merchantId}, skipping order ${params.orderNumber}`);
-    return;
+    return SKIP;
   }
 
   const allowedDomain = process.env.LALA_IMPORT;
@@ -78,7 +86,7 @@ export async function sendOrderStatusWhatsApp(
       console.log(
         `${LOG_PREFIX} [ENV FILTER] Skipping order ${params.orderNumber} — shop_domain "${orderShopDomain}" does not match allowed "${allowedDomain}"`,
       );
-      return;
+      return SKIP;
     }
   }
 
@@ -101,14 +109,14 @@ export async function sendOrderStatusWhatsApp(
         error: `Invalid or missing phone: ${params.customerPhone}`,
       },
     });
-    return;
+    return SKIP;
   }
 
   try {
     const automations = await storage.getWaAutomationsByTrigger(params.merchantId, params.toStatus);
     if (automations.length === 0) {
       console.log(`${LOG_PREFIX} No active automations for status "${params.toStatus}" on order ${params.orderNumber}, skipping`);
-      return;
+      return SKIP;
     }
 
     const [merchantRow] = await db.select({
@@ -119,6 +127,10 @@ export async function sendOrderStatusWhatsApp(
     const vars = buildVarsFromParams(params);
     const fromLabel = getStatusLabel(params.fromStatus);
     const toLabel = getStatusLabel(params.toStatus);
+
+    let anySent = false;
+    let anyNotOnWA = false;
+    let lastError: string | undefined;
 
     for (const automation of automations) {
       const fireAutomation = async () => {
@@ -207,6 +219,7 @@ export async function sendOrderStatusWhatsApp(
           });
 
           if (result.success) {
+            anySent = true;
             console.log(`${LOG_PREFIX} Automation "${automation.title}" sent successfully for order ${params.orderNumber}`);
             try {
               const conv = await storage.upsertConversation({
@@ -230,6 +243,8 @@ export async function sendOrderStatusWhatsApp(
             }
           } else {
             releaseClaim(dedupeKey);
+            if (result.notOnWhatsApp) anyNotOnWA = true;
+            lastError = result.error;
             console.error(`${LOG_PREFIX} Automation "${automation.title}" failed for order ${params.orderNumber}: ${result.error}`);
           }
 
@@ -281,10 +296,13 @@ export async function sendOrderStatusWhatsApp(
         await fireAutomation();
       }
     }
+
+    return { sent: anySent, notOnWhatsApp: anyNotOnWA, error: lastError };
   } catch (err: any) {
     console.error(
       `${LOG_PREFIX} Unexpected error for order ${params.orderId}:`,
       err.message || err,
     );
+    return { sent: false, notOnWhatsApp: false, error: err.message };
   }
 }

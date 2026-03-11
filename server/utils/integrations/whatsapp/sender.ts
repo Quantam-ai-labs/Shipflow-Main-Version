@@ -3,6 +3,23 @@ import type { SendResult } from "./types";
 const LOG_PREFIX = "[WhatsApp]";
 const WHATSAPP_REQUEST_TIMEOUT_MS = 10_000;
 
+const NOT_ON_WHATSAPP_CODES = [131026, 131047, 131021];
+
+function isNotOnWhatsAppError(errorBody: string): boolean {
+  try {
+    const parsed = JSON.parse(errorBody);
+    const code = parsed?.error?.code;
+    if (code && NOT_ON_WHATSAPP_CODES.includes(code)) return true;
+    const subcode = parsed?.error?.error_subcode;
+    if (subcode && NOT_ON_WHATSAPP_CODES.includes(subcode)) return true;
+  } catch {}
+  const lower = errorBody.toLowerCase();
+  return lower.includes("not a valid whatsapp") ||
+    lower.includes("recipient is not a valid") ||
+    lower.includes("not a whatsapp user") ||
+    lower.includes("incapable_number");
+}
+
 export function formatPhoneForWhatsApp(
   phone: string | null | undefined
 ): string | null {
@@ -142,10 +159,17 @@ export async function sendWhatsAppApiRequest(params: {
     console.error(
       `${LOG_PREFIX} API error ${response.status} for order ${orderNumber} to ${formattedPhone}: ${errBody}`
     );
+
+    const notOnWA = isNotOnWhatsAppError(errBody);
+    if (notOnWA) {
+      console.warn(`${LOG_PREFIX} Number ${formattedPhone} is NOT on WhatsApp (order ${orderNumber})`);
+    }
+
     return {
       success: false,
       error: `API error ${response.status}: ${errBody}`,
       phone: formattedPhone,
+      notOnWhatsApp: notOnWA,
     };
   }
 

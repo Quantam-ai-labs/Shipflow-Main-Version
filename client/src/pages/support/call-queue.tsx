@@ -33,6 +33,8 @@ interface QueueEntry {
   queuedAt: string;
   scheduledAt: string | null;
   attemptCount: number;
+  maxAttempts: number;
+  lastCallResult: string | null;
   waResponseArrived: boolean;
 }
 
@@ -43,6 +45,7 @@ const STATUS_BADGE: Record<string, { label: string; className: string }> = {
   processed: { label: "Processed", className: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-300" },
   failed: { label: "Failed", className: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300" },
   skipped: { label: "Skipped", className: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300" },
+  exhausted: { label: "Exhausted", className: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300" },
 };
 
 function formatDate(dateStr: string | null) {
@@ -68,6 +71,7 @@ export default function CallQueuePage() {
     completed: entries.filter((e) => e.status === "completed").length,
     failed: entries.filter((e) => e.status === "failed").length,
     skipped: entries.filter((e) => e.status === "skipped").length,
+    exhausted: entries.filter((e) => e.status === "exhausted").length,
   };
 
   return (
@@ -90,7 +94,7 @@ export default function CallQueuePage() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <Card data-testid="card-count-waiting">
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Waiting</CardTitle>
@@ -136,6 +140,15 @@ export default function CallQueuePage() {
             <div className="text-2xl font-bold" data-testid="text-count-skipped">{isLoading ? <Skeleton className="h-8 w-12" /> : counts.skipped}</div>
           </CardContent>
         </Card>
+        <Card data-testid="card-count-exhausted">
+          <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Exhausted</CardTitle>
+            <XCircle className="w-4 h-4 text-orange-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold" data-testid="text-count-exhausted">{isLoading ? <Skeleton className="h-8 w-12" /> : counts.exhausted}</div>
+          </CardContent>
+        </Card>
       </div>
 
       <Card data-testid="card-queue-table">
@@ -171,6 +184,7 @@ export default function CallQueuePage() {
                     <TableHead>Queued At</TableHead>
                     <TableHead>Scheduled At</TableHead>
                     <TableHead>Attempts</TableHead>
+                    <TableHead>Last Result</TableHead>
                     <TableHead>WA Response</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -191,7 +205,14 @@ export default function CallQueuePage() {
                         <TableCell className="max-w-[200px] truncate" data-testid={`text-reason-${index}`}>{entry.reason || "-"}</TableCell>
                         <TableCell className="whitespace-nowrap" data-testid={`text-queued-at-${index}`}>{formatDate(entry.queuedAt)}</TableCell>
                         <TableCell className="whitespace-nowrap" data-testid={`text-scheduled-at-${index}`}>{formatDate(entry.scheduledAt)}</TableCell>
-                        <TableCell data-testid={`text-attempts-${index}`}>{entry.attemptCount}</TableCell>
+                        <TableCell data-testid={`text-attempts-${index}`}>{entry.attemptCount}/{entry.maxAttempts || 3}</TableCell>
+                        <TableCell data-testid={`text-last-result-${index}`}>
+                          {entry.lastCallResult ? (
+                            <span className="text-sm">{entry.lastCallResult}</span>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
                         <TableCell data-testid={`text-wa-response-${index}`}>
                           {entry.waResponseArrived ? (
                             <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300">Yes</Badge>

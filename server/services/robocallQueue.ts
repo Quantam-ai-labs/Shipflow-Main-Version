@@ -1,12 +1,14 @@
 import { db } from "../db";
 import { orders, merchants, robocallQueue, robocallLogs } from "@shared/schema";
-import { eq, and, lte, isNotNull } from "drizzle-orm";
+import { eq, and, lte, or, isNotNull, isNull } from "drizzle-orm";
 import { logConfirmationEvent, processConfirmationResponse, createNotification } from "./confirmationEngine";
 import { storage } from "../storage";
+import { transitionOrder } from "./workflowTransition";
 
 const LOG_PREFIX = "[RobocallQueue]";
 const PROCESS_INTERVAL_MS = 2 * 60 * 1000;
 const ROBOCALL_API_BASE = "https://api.robocall.pk/api/v1";
+const NO_DTMF_STATUSES = [2, 3, 5, 6];
 
 function isWithinCallWindow(startTime: string, endTime: string): boolean {
   const now = new Date();
@@ -16,6 +18,35 @@ function isWithinCallWindow(startTime: string, endTime: string): boolean {
   const [startH, startM] = startTime.split(":").map(Number);
   const [endH, endM] = endTime.split(":").map(Number);
   return currentMinutes >= (startH * 60 + startM) && currentMinutes < (endH * 60 + endM);
+}
+
+function getNextCallWindowStart(startTime: string): Date {
+  const [startH, startM] = startTime.split(":").map(Number);
+  const now = new Date();
+  const target = new Date(now);
+  target.setHours(startH, startM, 0, 0);
+  if (target <= now) {
+    target.setDate(target.getDate() + 1);
+  }
+  return target;
+}
+
+function computeNextRetryAt(retryGapMinutes: number, startTime: string, endTime: string): Date {
+  const candidate = new Date(Date.now() + retryGapMinutes * 60 * 1000);
+  const candidateMinutes = candidate.getHours() * 60 + candidate.getMinutes();
+  const [endH, endM] = endTime.split(":").map(Number);
+  const endMinutes = endH * 60 + endM;
+  if (candidateMinutes >= endMinutes) {
+    return getNextCallWindowStart(startTime);
+  }
+  const [startH, startM] = startTime.split(":").map(Number);
+  const startMinutes = startH * 60 + startM;
+  if (candidateMinutes < startMinutes) {
+    const target = new Date(candidate);
+    target.setHours(startH, startM, 0, 0);
+    return target;
+  }
+  return candidate;
 }
 
 async function safeFetchJson(url: string): Promise<any> {
@@ -39,7 +70,10 @@ async function processQueue() {
     const queueEntries = await db.select().from(robocallQueue)
       .where(and(
         eq(robocallQueue.status, "waiting"),
-        lte(robocallQueue.scheduledAt, now),
+        or(
+          and(lte(robocallQueue.scheduledAt, now), isNull(robocallQueue.nextRetryAt)),
+          lte(robocallQueue.nextRetryAt, now),
+        ),
       ))
       .limit(10);
 
@@ -211,6 +245,27 @@ async function checkRobocallResponses() {
           await storage.updateRobocallLog(log.id, { status: statusLabel, dtmf: dtmfValue });
         }
 
+        const [currentOrder] = await db.select({
+          confirmationStatus: orders.confirmationStatus,
+          workflowStatus: orders.workflowStatus,
+          confirmationLocked: orders.confirmationLocked,
+        }).from(orders).where(eq(orders.id, entry.orderId)).limit(1);
+
+        const orderAlreadyResolved = !currentOrder ||
+          currentOrder.confirmationStatus !== "pending" ||
+          currentOrder.confirmationLocked ||
+          !["NEW", "PENDING"].includes(currentOrder.workflowStatus || "");
+
+        if (orderAlreadyResolved) {
+          await db.update(robocallQueue).set({
+            status: "skipped",
+            lastCallResult: `${statusLabel} (order already resolved)`,
+            completedAt: new Date(),
+          }).where(eq(robocallQueue.id, entry.id));
+          console.log(`${LOG_PREFIX} Skipping response for #${entry.orderNumber} — order already resolved (${currentOrder?.confirmationStatus}/${currentOrder?.workflowStatus})`);
+          continue;
+        }
+
         if (smsData.voice_status === 4 && dtmfValue) {
           const action = dtmfValue === 1 ? "confirm" : dtmfValue === 2 ? "cancel" : null;
           if (action) {
@@ -219,14 +274,17 @@ async function checkRobocallResponses() {
               orderId: entry.orderId,
               source: "robocall",
               action,
-              payload: { callId: entry.callId, dtmf: dtmfValue, voiceStatus: smsData.voice_status },
+              payload: { callId: entry.callId, dtmf: dtmfValue, voiceStatus: smsData.voice_status, voiceSec: smsData.voice_sec },
             });
 
             console.log(`${LOG_PREFIX} DTMF ${dtmfValue} for #${entry.orderNumber} → ${action}`);
           }
 
-          await db.update(robocallQueue).set({ status: "processed", completedAt: new Date() })
-            .where(eq(robocallQueue.id, entry.id));
+          await db.update(robocallQueue).set({
+            status: "processed",
+            lastCallResult: statusLabel,
+            completedAt: new Date(),
+          }).where(eq(robocallQueue.id, entry.id));
         } else if (FINAL_VOICE_STATUSES.includes(smsData.voice_status)) {
           await logConfirmationEvent({
             merchantId: entry.merchantId,
@@ -234,11 +292,68 @@ async function checkRobocallResponses() {
             eventType: "CALL_RESPONSE",
             channel: "robocall",
             responseClassification: statusLabel,
-            note: `Call ${statusLabel} — no DTMF input`,
+            note: `Call ${statusLabel} — no DTMF input (attempt ${entry.attemptCount}/${entry.maxAttempts || 3}, duration: ${smsData.voice_sec || 0}s)`,
+            apiResponse: { voiceStatus: smsData.voice_status, voiceSec: smsData.voice_sec, dtmf: dtmfValue },
           });
 
-          await db.update(robocallQueue).set({ status: "processed", completedAt: new Date() })
-            .where(eq(robocallQueue.id, entry.id));
+          const maxAttempts = entry.maxAttempts || 3;
+          const currentAttempts = entry.attemptCount || 0;
+
+          if (NO_DTMF_STATUSES.includes(smsData.voice_status) && currentAttempts < maxAttempts) {
+            const startTime = merchant.robocallStartTime || "10:00";
+            const endTime = merchant.robocallEndTime || "20:00";
+            const retryGap = merchant.robocallRetryGapMinutes || 45;
+            const nextRetry = computeNextRetryAt(retryGap, startTime, endTime);
+
+            await db.update(robocallQueue).set({
+              status: "waiting",
+              lastCallResult: statusLabel,
+              nextRetryAt: nextRetry,
+              callId: null,
+            }).where(eq(robocallQueue.id, entry.id));
+
+            console.log(`${LOG_PREFIX} Call ${statusLabel} for #${entry.orderNumber} — retry ${currentAttempts}/${maxAttempts}, next at ${nextRetry.toISOString()}`);
+          } else if (currentAttempts >= maxAttempts) {
+            await db.update(robocallQueue).set({
+              status: "exhausted",
+              lastCallResult: statusLabel,
+              completedAt: new Date(),
+            }).where(eq(robocallQueue.id, entry.id));
+
+            await transitionOrder({
+              merchantId: entry.merchantId,
+              orderId: entry.orderId,
+              toStatus: "HOLD",
+              action: "robocall_exhausted",
+              actorType: "system",
+              reason: `All ${maxAttempts} robocall attempts exhausted — last result: ${statusLabel}`,
+            });
+
+            await logConfirmationEvent({
+              merchantId: entry.merchantId,
+              orderId: entry.orderId,
+              eventType: "ROBO_EXHAUSTED",
+              channel: "robocall",
+              note: `All ${maxAttempts} robocall attempts exhausted — moved to Hold`,
+            });
+
+            await createNotification({
+              merchantId: entry.merchantId,
+              type: "robocall_exhausted",
+              title: `All robocall attempts exhausted for #${entry.orderNumber}`,
+              message: `${maxAttempts} call attempts failed (last: ${statusLabel}). Order moved to Hold for manual resolution.`,
+              orderId: entry.orderId,
+              orderNumber: entry.orderNumber || undefined,
+            });
+
+            console.log(`${LOG_PREFIX} All ${maxAttempts} attempts exhausted for #${entry.orderNumber} — moved to HOLD`);
+          } else {
+            await db.update(robocallQueue).set({
+              status: "processed",
+              lastCallResult: statusLabel,
+              completedAt: new Date(),
+            }).where(eq(robocallQueue.id, entry.id));
+          }
         }
 
         await new Promise(r => setTimeout(r, 200));

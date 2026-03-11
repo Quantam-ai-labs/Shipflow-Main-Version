@@ -315,15 +315,53 @@ export async function processConfirmationResponse(params: {
         .catch(e => console.error(`${LOG_PREFIX} Tag write-back error:`, e));
     }
 
-    if (source !== "manual" && (action === "confirm" || action === "cancel")) {
-      await db.update(robocallQueue).set({
-        waResponseArrived: true,
-        status: "skipped",
-        completedAt: now,
-      }).where(and(
-        eq(robocallQueue.orderId, orderId),
-        eq(robocallQueue.status, "waiting"),
-      ));
+    if (action === "confirm" || action === "cancel") {
+      if (source === "whatsapp") {
+        const cancelledRobo = await db.update(robocallQueue).set({
+          waResponseArrived: true,
+          status: "skipped",
+          completedAt: now,
+        }).where(and(
+          eq(robocallQueue.orderId, orderId),
+          eq(robocallQueue.status, "waiting"),
+        ));
+
+        await db.update(orders).set({ waNextAttemptAt: null }).where(eq(orders.id, orderId));
+
+        await logConfirmationEvent({
+          merchantId, orderId,
+          eventType: "ROBO_QUEUE_CANCELLED",
+          channel: "whatsapp",
+          note: `RoboCall queue cancelled — WhatsApp ${action} response received`,
+        });
+      } else if (source === "robocall") {
+        await db.update(orders).set({ waNextAttemptAt: null }).where(eq(orders.id, orderId));
+
+        await logConfirmationEvent({
+          merchantId, orderId,
+          eventType: "WA_REMINDERS_CANCELLED",
+          channel: "robocall",
+          note: `WhatsApp reminders cancelled — RoboCall ${action} response received`,
+        });
+      } else if (source === "manual") {
+        await db.update(robocallQueue).set({
+          waResponseArrived: true,
+          status: "skipped",
+          completedAt: now,
+        }).where(and(
+          eq(robocallQueue.orderId, orderId),
+          eq(robocallQueue.status, "waiting"),
+        ));
+
+        await db.update(orders).set({ waNextAttemptAt: null }).where(eq(orders.id, orderId));
+
+        await logConfirmationEvent({
+          merchantId, orderId,
+          eventType: "CHANNELS_CANCELLED",
+          channel: "manual",
+          note: `All automation channels cancelled — manual ${action} override`,
+        });
+      }
     }
 
     console.log(`${LOG_PREFIX} Processed ${source} ${action} for order ${order.orderNumber} → ${targetStatus}${hasConflict ? " (CONFLICT → HOLD)" : ""}`);

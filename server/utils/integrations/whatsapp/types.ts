@@ -3,6 +3,7 @@ export interface SendResult {
   messageId?: string;
   phone?: string;
   error?: string;
+  notOnWhatsApp?: boolean;
 }
 
 export interface OrderNotificationParams {

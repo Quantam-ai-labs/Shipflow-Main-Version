@@ -57,6 +57,8 @@ import {
   X,
   Smartphone,
   MessageCircle,
+  PhoneOff,
+  BellOff,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -507,11 +509,28 @@ function ConfirmationStatusCard({ order, orderId }: { order: OrderDetails; order
         )}
 
         <div className="space-y-1 text-sm">
+          {(order as any).waNotOnWhatsApp && (
+            <div className="flex justify-between gap-2">
+              <span className="text-muted-foreground">WA Status</span>
+              <Badge variant="outline" className="text-red-600 border-red-300 dark:border-red-700 gap-1" data-testid="badge-not-on-whatsapp">
+                <PhoneOff className="w-3 h-3" />
+                Not on WhatsApp
+              </Badge>
+            </div>
+          )}
           {(order as any).waConfirmationSentAt && (
             <div className="flex justify-between gap-2">
               <span className="text-muted-foreground">WA Sent</span>
               <span data-testid="text-wa-sent-time">
                 {formatDistanceToNow(new Date((order as any).waConfirmationSentAt), { addSuffix: true })}
+              </span>
+            </div>
+          )}
+          {typeof (order as any).waAttemptCount === "number" && (order as any).waAttemptCount > 0 && (
+            <div className="flex justify-between gap-2">
+              <span className="text-muted-foreground">WA Attempts</span>
+              <span data-testid="text-wa-attempt-count">
+                {(order as any).waAttemptCount}/3
               </span>
             </div>
           )}
@@ -571,6 +590,12 @@ function getTimelineEventIcon(eventType: string): React.ElementType {
     ORDER_IMPORTED: Clock,
     WA_SENT: MessageCircle,
     WA_RESPONSE: MessageCircle,
+    WA_NOT_AVAILABLE: PhoneOff,
+    WA_REMINDER_SENT: MessageCircle,
+    WA_REMINDERS_CANCELLED: BellOff,
+    ROBO_QUEUE_CANCELLED: PhoneOff,
+    ROBO_EXHAUSTED: AlertTriangle,
+    CHANNELS_CANCELLED: Ban,
     MOVED_TO_PENDING: Clock,
     CALL_QUEUED: Phone,
     CALL_ATTEMPTED: Phone,
@@ -589,6 +614,12 @@ function getTimelineEventLabel(eventType: string): string {
     ORDER_IMPORTED: "Order Imported",
     WA_SENT: "WhatsApp Sent",
     WA_RESPONSE: "WhatsApp Response",
+    WA_NOT_AVAILABLE: "Not on WhatsApp",
+    WA_REMINDER_SENT: "WA Reminder Sent",
+    WA_REMINDERS_CANCELLED: "WA Reminders Cancelled",
+    ROBO_QUEUE_CANCELLED: "RoboCall Queue Cancelled",
+    ROBO_EXHAUSTED: "RoboCall Exhausted",
+    CHANNELS_CANCELLED: "All Channels Cancelled",
     MOVED_TO_PENDING: "Moved to Pending",
     CALL_QUEUED: "Call Queued",
     CALL_ATTEMPTED: "Call Attempted",
@@ -607,6 +638,12 @@ function getTimelineEventColor(eventType: string): string {
     ORDER_IMPORTED: "text-blue-500 bg-blue-100 dark:bg-blue-950",
     WA_SENT: "text-green-500 bg-green-100 dark:bg-green-950",
     WA_RESPONSE: "text-green-600 bg-green-100 dark:bg-green-950",
+    WA_NOT_AVAILABLE: "text-red-500 bg-red-100 dark:bg-red-950",
+    WA_REMINDER_SENT: "text-teal-500 bg-teal-100 dark:bg-teal-950",
+    WA_REMINDERS_CANCELLED: "text-gray-500 bg-gray-100 dark:bg-gray-950",
+    ROBO_QUEUE_CANCELLED: "text-gray-500 bg-gray-100 dark:bg-gray-950",
+    ROBO_EXHAUSTED: "text-red-600 bg-red-100 dark:bg-red-950",
+    CHANNELS_CANCELLED: "text-gray-600 bg-gray-100 dark:bg-gray-950",
     MOVED_TO_PENDING: "text-yellow-500 bg-yellow-100 dark:bg-yellow-950",
     CALL_QUEUED: "text-blue-500 bg-blue-100 dark:bg-blue-950",
     CALL_ATTEMPTED: "text-indigo-500 bg-indigo-100 dark:bg-indigo-950",
