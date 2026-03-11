@@ -165,7 +165,8 @@ async function _transitionOrderInner(params: TransitionParams): Promise<Transiti
   }
 
   if (order.shopifyOrderId && action !== 'courier_status_sync') {
-    if (toStatus === "CANCELLED" && action !== 'robo_cancel') {
+    const AUTO_CANCEL_ACTIONS = ['robo_cancel', 'whatsapp_cancel', 'robocall_cancel', 'conflict_hold', 'robocall_exhausted'];
+    if (toStatus === "CANCELLED" && !AUTO_CANCEL_ACTIONS.includes(action)) {
       writeBackCancel(merchantId, order.shopifyOrderId, reason || "Cancelled in 1SOL.AI")
         .then(r => { if (!r.success) console.warn(`[ShopifyWriteBack] Cancel failed for ${orderId}: ${r.error}`); })
         .catch(e => console.error(`[ShopifyWriteBack] Cancel error:`, e));
@@ -303,7 +304,8 @@ export async function bulkTransitionOrders(params: {
       for (let i = 0; i < shopifyOrders.length; i++) {
         const o = shopifyOrders[i];
         try {
-          if (toStatus === "CANCELLED" && action !== 'robo_cancel') {
+          const AUTO_CANCEL_ACTIONS_BULK = ['robo_cancel', 'whatsapp_cancel', 'robocall_cancel', 'conflict_hold', 'robocall_exhausted'];
+          if (toStatus === "CANCELLED" && !AUTO_CANCEL_ACTIONS_BULK.includes(action)) {
             const r = await writeBackCancel(merchantId, o.shopifyOrderId!, reason || "Cancelled in 1SOL.AI");
             if (!r.success) console.warn(`[ShopifyWriteBack] Bulk cancel failed for ${o.id}: ${r.error}`);
           }
