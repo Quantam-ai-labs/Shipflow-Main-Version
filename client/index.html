@@ -22,7 +22,17 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   </head>
   <body>
-    <div id="root"></div>
+    <script>
+      (function(){var t=localStorage.getItem('shipflow-theme')||'light';if(t==='system'){t=window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'}document.documentElement.classList.add(t)})();
+    </script>
+    <div id="root">
+      <div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--background,#fff)">
+        <div style="width:48px;height:48px;border-radius:8px;background:#3b82f6;display:flex;align-items:center;justify-content:center;animation:pulse 2s ease-in-out infinite">
+          <svg style="width:28px;height:28px;color:#fff" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+        </div>
+      </div>
+      <style>@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}</style>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

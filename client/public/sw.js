@@ -1,4 +1,4 @@
-const CACHE_NAME = '1sol-pwa-v3';
+const CACHE_NAME = '1sol-pwa-v4';
 const MEDIA_CACHE_NAME = '1sol-media-v1';
 const MAX_MEDIA_ENTRIES = 100;
 
@@ -88,30 +88,29 @@ self.addEventListener('fetch', (event) => {
 
   if (url.pathname.startsWith('/api/')) return;
 
+  if (url.pathname.includes('vite-hmr') || url.pathname.startsWith('/@') || url.pathname.startsWith('/node_modules/') || url.pathname.startsWith('/src/')) return;
+
+  if (url.pathname === '/' || url.pathname === '' || event.request.mode === 'navigate') {
+    if (url.pathname.startsWith('/agent-chat') || url.pathname.startsWith('/warehouse')) {
+      event.respondWith(
+        fetch(event.request)
+          .then((response) => {
+            if (response && response.ok) {
+              const clone = response.clone();
+              caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+            }
+            return response;
+          })
+          .catch(() => caches.match(event.request).then((cached) => cached || caches.match('/')))
+      );
+    }
+    return;
+  }
+
   if (isStaticAsset(url)) {
     event.respondWith(staleWhileRevalidate(event.request));
     return;
   }
-
-  event.respondWith(
-    fetch(event.request)
-      .then((response) => {
-        if (response && response.ok) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-        }
-        return response;
-      })
-      .catch(() => {
-        return caches.match(event.request).then((cached) => {
-          if (cached) return cached;
-          if (url.pathname.startsWith('/agent-chat')) {
-            return caches.match('/agent-chat/');
-          }
-          return caches.match('/');
-        });
-      })
-  );
 });
 
 self.addEventListener('push', (event) => {
