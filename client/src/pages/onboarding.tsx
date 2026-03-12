@@ -132,6 +132,7 @@ export default function Onboarding() {
     },
   });
 
+  const canonicalHost = window.location.host;
   const isNonCanonicalHost = false;
 
   const advanceStepMutation = useMutation({
