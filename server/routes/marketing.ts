@@ -1500,6 +1500,8 @@ export function registerMarketingRoutes(app: Express) {
         "business_management",
         "pages_show_list",
         "pages_read_engagement",
+        "instagram_basic",
+        "instagram_manage_insights",
       ].join(",");
 
       const stateToken = createOauthState(merchantId);
@@ -1817,6 +1819,8 @@ export function registerMarketingRoutes(app: Express) {
         metaSelectedPageId: merchants.metaSelectedPageId,
       }).from(merchants).where(eq(merchants.id, merchantId));
 
+      console.log("[IG-accounts] merchantId:", merchantId, "selectedPageId:", merchant?.metaSelectedPageId, "tokenLength:", token?.length);
+
       const igAccounts: any[] = [];
 
       if (merchant?.metaSelectedPageId) {
@@ -1826,6 +1830,7 @@ export function registerMarketingRoutes(app: Express) {
 
         const response = await fetch(url.toString());
         const data = await response.json();
+        console.log("[IG-accounts] Selected page IG response:", JSON.stringify(data));
         if (data.instagram_business_account) {
           igAccounts.push(data.instagram_business_account);
         }
@@ -1839,6 +1844,10 @@ export function registerMarketingRoutes(app: Express) {
       const pagesRes = await fetch(pagesUrl.toString());
       const pagesData = await pagesRes.json();
       const pages = pagesData.data || [];
+      console.log("[IG-accounts] Pages count:", pages.length, "Pages with IG:", pages.filter((p: any) => p.instagram_business_account).length);
+      if (pagesData.error) {
+        console.log("[IG-accounts] Pages API error:", JSON.stringify(pagesData.error));
+      }
 
       for (const page of pages) {
         if (page.instagram_business_account) {
@@ -1852,8 +1861,10 @@ export function registerMarketingRoutes(app: Express) {
         }
       }
 
+      console.log("[IG-accounts] Total IG accounts found:", igAccounts.length);
       res.json({ instagramAccounts: igAccounts });
     } catch (error: any) {
+      console.error("[IG-accounts] Error:", error.message);
       res.status(500).json({ error: error.message });
     }
   });
