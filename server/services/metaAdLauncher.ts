@@ -369,53 +369,40 @@ export async function bulkLaunchAds(
 
   for (const ad of ads) {
     try {
-      const creds = await getWriteCredentials(merchantId);
-      const actId = `act_${creds.adAccountId.replace("act_", "")}`;
-
-      const campaignResult = await createCampaign(creds, {
+      const campaignId = await createCampaign(merchantId, {
         name: ad.campaignName,
         objective: ad.objective,
         status: "PAUSED",
-        special_ad_categories: [],
       });
 
-      const adSetResult = await createAdSet(creds, {
-        campaign_id: campaignResult.id,
+      const adSetId = await createAdSet(merchantId, {
         name: `${ad.campaignName} - AdSet`,
-        daily_budget: Math.round(parseFloat(ad.dailyBudget) * 100),
-        billing_event: "IMPRESSIONS",
-        optimization_goal: "OFFSITE_CONVERSIONS",
+        campaignId,
+        dailyBudget: ad.dailyBudget,
+        optimizationGoal: "OFFSITE_CONVERSIONS",
         targeting: ad.targeting || { geo_locations: { countries: ["PK"] } },
         status: "PAUSED",
       });
 
-      const creativeData: any = {
+      const creativeId = await createAdCreative(merchantId, {
         name: `${ad.campaignName} - Creative`,
-        object_story_spec: {
-          page_id: ad.pageId,
-          link_data: {
-            message: ad.creative.primaryText,
-            link: ad.creative.linkUrl,
-            name: ad.creative.headline,
-            description: ad.creative.description,
-            call_to_action: { type: ad.creative.callToAction || "SHOP_NOW" },
-          },
-        },
-      };
-      if (ad.creative.imageUrl) {
-        creativeData.object_story_spec.link_data.picture = ad.creative.imageUrl;
-      }
+        pageId: ad.pageId,
+        primaryText: ad.creative.primaryText,
+        headline: ad.creative.headline,
+        description: ad.creative.description,
+        linkUrl: ad.creative.linkUrl,
+        imageUrl: ad.creative.imageUrl,
+        callToAction: ad.creative.callToAction,
+      });
 
-      const creativeResult = await createAdCreative(creds, creativeData);
-
-      const adResult = await createAd(creds, {
+      const adId = await createAd(merchantId, {
         name: `${ad.campaignName} - Ad`,
-        adset_id: adSetResult.id,
-        creative: { creative_id: creativeResult.id },
+        adsetId: adSetId,
+        creativeId,
         status: "PAUSED",
       });
 
-      results.push({ success: true, campaignId: campaignResult.id, adSetId: adSetResult.id, adId: adResult.id });
+      results.push({ success: true, campaignId, adSetId, adId });
       succeeded++;
     } catch (error: any) {
       results.push({ success: false, error: error.message });
@@ -424,20 +411,4 @@ export async function bulkLaunchAds(
   }
 
   return { total: ads.length, succeeded, failed, results };
-}
-
-async function getWriteCredentials(merchantId: string): Promise<MetaWriteOptions> {
-  const [merchant] = await db.select({
-    facebookAccessToken: merchants.facebookAccessToken,
-    facebookAdAccountId: merchants.facebookAdAccountId,
-  }).from(merchants).where(eq(merchants.id, merchantId));
-
-  if (!merchant?.facebookAccessToken || !merchant?.facebookAdAccountId) {
-    throw new Error("Facebook not connected or ad account not configured");
-  }
-
-  return {
-    accessToken: decryptToken(merchant.facebookAccessToken),
-    adAccountId: merchant.facebookAdAccountId,
-  };
 }
