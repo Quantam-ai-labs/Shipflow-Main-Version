@@ -90,22 +90,63 @@ interface CarouselCard {
 }
 
 const MEDIA_LIMITS = {
-  image: { maxSizeMB: 30, recommendedWidth: 1080, recommendedHeight: 1080, aspectRatios: ["1:1", "4:5", "9:16"] },
-  video: { maxSizeMB: 4000, maxLengthSec: 240 },
+  image: { maxSizeMB: 30, minWidth: 600, recommendedWidth: 1080, recommendedHeight: 1080, validRatios: ["1:1", "4:5", "9:16", "16:9", "1.91:1"], validFormats: ["jpg", "jpeg", "png", "webp", "gif"] },
+  video: { maxSizeMB: 4096, maxLengthSec: 240, minWidth: 500, validFormats: ["mp4", "mov"] },
 };
+
+function validateMediaFile(file: File | null, type: "image" | "video"): string[] {
+  const warnings: string[] = [];
+  if (!file) return warnings;
+  const ext = file.name.split(".").pop()?.toLowerCase() || "";
+  const limits = type === "image" ? MEDIA_LIMITS.image : MEDIA_LIMITS.video;
+  if (!limits.validFormats.includes(ext)) {
+    warnings.push(`File should be ${limits.validFormats.join(", ").toUpperCase()} format (got .${ext})`);
+  }
+  const sizeMB = file.size / (1024 * 1024);
+  if (sizeMB > limits.maxSizeMB) {
+    warnings.push(`File size ${sizeMB.toFixed(1)}MB exceeds maximum ${limits.maxSizeMB}MB`);
+  }
+  return warnings;
+}
 
 function validateMediaUrl(url: string, type: "image" | "video"): string[] {
   const warnings: string[] = [];
   if (!url) return warnings;
-  const ext = url.split(".").pop()?.toLowerCase() || "";
-  if (type === "image" && !["jpg", "jpeg", "png", "webp", "gif"].includes(ext) && !url.startsWith("data:")) {
-    warnings.push("Image should be JPG, PNG, WebP, or GIF format");
-  }
-  if (type === "video" && !["mp4", "mov", "avi", "mkv"].includes(ext) && !url.startsWith("data:")) {
-    warnings.push("Video should be MP4 or MOV format");
+  const ext = url.split("?")[0].split(".").pop()?.toLowerCase() || "";
+  const limits = type === "image" ? MEDIA_LIMITS.image : MEDIA_LIMITS.video;
+  if (ext && !limits.validFormats.includes(ext) && !url.startsWith("data:")) {
+    warnings.push(`${type === "image" ? "Image" : "Video"} should be ${limits.validFormats.join(", ").toUpperCase()} format`);
   }
   return warnings;
 }
+
+function validateImageDimensions(width: number, height: number): string[] {
+  const warnings: string[] = [];
+  if (width < MEDIA_LIMITS.image.minWidth) {
+    warnings.push(`Image width ${width}px is below minimum ${MEDIA_LIMITS.image.minWidth}px`);
+  }
+  const ratio = width / height;
+  const validRanges = [
+    { label: "1:1", min: 0.95, max: 1.05 },
+    { label: "4:5", min: 0.75, max: 0.85 },
+    { label: "9:16", min: 0.52, max: 0.62 },
+    { label: "16:9", min: 1.7, max: 1.85 },
+    { label: "1.91:1", min: 1.85, max: 1.97 },
+  ];
+  const matchesAny = validRanges.some(r => ratio >= r.min && ratio <= r.max);
+  if (!matchesAny) {
+    warnings.push(`Aspect ratio ${ratio.toFixed(2)} may not be optimal. Recommended: ${MEDIA_LIMITS.image.validRatios.join(", ")}`);
+  }
+  return warnings;
+}
+
+const TIME_OPTIONS = Array.from({ length: 24 }, (_, h) => {
+  const hh = h.toString().padStart(2, "0");
+  return [
+    { value: `${hh}:00`, label: `${hh}:00` },
+    { value: `${hh}:30`, label: `${hh}:30` },
+  ];
+}).flat();
 
 function uid() {
   return Math.random().toString(36).slice(2, 10);
@@ -161,7 +202,9 @@ export default function MetaAdLauncher() {
   const [bidStrategy, setBidStrategy] = useState("LOWEST_COST_WITHOUT_CAP");
   const [bidAmount, setBidAmount] = useState("");
   const [startDate, setStartDate] = useState<Date | undefined>(undefined);
+  const [startTime, setStartTime] = useState("00:00");
   const [endDate, setEndDate] = useState<Date | undefined>(undefined);
+  const [endTime, setEndTime] = useState("23:59");
 
   const [minAge, setMinAge] = useState("18");
   const [maxAge, setMaxAge] = useState("65");
@@ -186,6 +229,7 @@ export default function MetaAdLauncher() {
     { id: uid(), imageUrl: "", headline: "", description: "", linkUrl: "" },
   ]);
   const [showPreview, setShowPreview] = useState(false);
+  const [imageDimWarnings, setImageDimWarnings] = useState<string[]>([]);
 
   const { data: oauthStatus } = useQuery<any>({ queryKey: ["/api/meta/oauth/status"] });
   const { data: pagesData } = useQuery<any>({ queryKey: ["/api/meta/pages"], enabled: !!oauthStatus?.connected });
@@ -212,7 +256,15 @@ export default function MetaAdLauncher() {
   const pixelId = oauthStatus?.pixelId || pixelsData?.pixels?.[0]?.id || "";
   const pageName = oauthStatus?.pageName || pagesData?.pages?.[0]?.name || "";
 
-  const mediaWarnings = adFormat === "single_image" ? validateMediaUrl(imageUrl, "image") : [];
+  const mediaWarnings = adFormat === "single_image" ? [...validateMediaUrl(imageUrl, "image"), ...imageDimWarnings] : [];
+
+  useEffect(() => {
+    if (adFormat !== "single_image" || !imageUrl) { setImageDimWarnings([]); return; }
+    const img = new Image();
+    img.onload = () => setImageDimWarnings(validateImageDimensions(img.naturalWidth, img.naturalHeight));
+    img.onerror = () => setImageDimWarnings([]);
+    img.src = imageUrl;
+  }, [imageUrl, adFormat]);
   const budgetValue = budgetType === "daily" ? dailyBudget : lifetimeBudget;
   const budgetMin = budgetType === "daily" ? 100 : 1000;
   const budgetWarning = parseFloat(budgetValue) < budgetMin ? `Minimum ${budgetType} budget is PKR ${budgetMin}` : "";
@@ -278,8 +330,18 @@ export default function MetaAdLauncher() {
         payload.bidStrategy = bidStrategy;
         if (bidAmount) payload.bidAmount = bidAmount;
       }
-      if (startDate) payload.startTime = startDate.toISOString();
-      if (endDate) payload.endTime = endDate.toISOString();
+      if (startDate) {
+        const [sh, sm] = startTime.split(":").map(Number);
+        const sd = new Date(startDate);
+        sd.setHours(sh, sm, 0, 0);
+        payload.startTime = sd.toISOString();
+      }
+      if (endDate) {
+        const [eh, em] = endTime.split(":").map(Number);
+        const ed = new Date(endDate);
+        ed.setHours(eh, em, 0, 0);
+        payload.endTime = ed.toISOString();
+      }
 
       const res = await apiRequest("POST", "/api/meta/launch", payload);
       return res.json();
@@ -439,6 +501,12 @@ export default function MetaAdLauncher() {
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={startDate} onSelect={setStartDate} initialFocus /></PopoverContent>
                 </Popover>
+                {startDate && (
+                  <Select value={startTime} onValueChange={setStartTime}>
+                    <SelectTrigger data-testid="select-start-time"><SelectValue placeholder="Start Time" /></SelectTrigger>
+                    <SelectContent>{TIME_OPTIONS.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
+                  </Select>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label>End Date</Label>
@@ -451,6 +519,12 @@ export default function MetaAdLauncher() {
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={endDate} onSelect={setEndDate} initialFocus /></PopoverContent>
                 </Popover>
+                {endDate && (
+                  <Select value={endTime} onValueChange={setEndTime}>
+                    <SelectTrigger data-testid="select-end-time"><SelectValue placeholder="End Time" /></SelectTrigger>
+                    <SelectContent>{TIME_OPTIONS.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
+                  </Select>
+                )}
               </div>
             </div>
 
@@ -676,7 +750,7 @@ export default function MetaAdLauncher() {
                 <div className="space-y-1.5">
                   <Label htmlFor="video-id">Video ID (from Media Library upload)</Label>
                   <Input id="video-id" placeholder="Meta Video ID" value={videoId} onChange={e => setVideoId(e.target.value)} data-testid="input-video-id" />
-                  <p className="text-xs text-muted-foreground">Upload a video in the Media Library first, then paste the Meta Video ID here. Max {MEDIA_LIMITS.video.maxLengthSec}s, {MEDIA_LIMITS.video.maxSizeMB / 1000}GB.</p>
+                  <p className="text-xs text-muted-foreground">Upload a video via the <a href="/meta/media-library" className="text-primary underline">Media Library</a> first. The Meta Video ID will appear after upload. Max {MEDIA_LIMITS.video.maxLengthSec}s, {MEDIA_LIMITS.video.maxSizeMB / 1024}GB. Accepted formats: MP4, MOV.</p>
                   {mediaData?.media?.length > 0 && (
                     <div className="mt-2">
                       <p className="text-xs text-muted-foreground mb-1.5">Videos from Media Library:</p>
@@ -718,8 +792,9 @@ export default function MetaAdLauncher() {
                     <Input placeholder="Image URL" value={card.imageUrl} onChange={e => updateCarouselCard(card.id, "imageUrl", e.target.value)} className="text-xs h-8" data-testid={`input-card-image-${card.id}`} />
                     <div className="grid grid-cols-2 gap-2">
                       <Input placeholder="Card Headline" value={card.headline} onChange={e => updateCarouselCard(card.id, "headline", e.target.value)} className="text-xs h-8" data-testid={`input-card-headline-${card.id}`} />
-                      <Input placeholder="Card URL (optional)" value={card.linkUrl} onChange={e => updateCarouselCard(card.id, "linkUrl", e.target.value)} className="text-xs h-8" data-testid={`input-card-url-${card.id}`} />
+                      <Input placeholder="Card Description" value={card.description} onChange={e => updateCarouselCard(card.id, "description", e.target.value)} className="text-xs h-8" data-testid={`input-card-description-${card.id}`} />
                     </div>
+                    <Input placeholder="Card URL (optional)" value={card.linkUrl} onChange={e => updateCarouselCard(card.id, "linkUrl", e.target.value)} className="text-xs h-8" data-testid={`input-card-url-${card.id}`} />
                   </div>
                 ))}
               </div>
@@ -763,8 +838,8 @@ export default function MetaAdLauncher() {
                   <div className="flex justify-between"><span className="text-muted-foreground">Objective</span><span>{OBJECTIVES.find(o => o.value === objective)?.label}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Budget</span><span>PKR {budgetValue}/{budgetType === "daily" ? "day" : "total"}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Bid Strategy</span><span>{BID_STRATEGIES.find(b => b.value === bidStrategy)?.label}</span></div>
-                  {startDate && <div className="flex justify-between"><span className="text-muted-foreground">Start</span><span>{format(startDate, "PPP")}</span></div>}
-                  {endDate && <div className="flex justify-between"><span className="text-muted-foreground">End</span><span>{format(endDate, "PPP")}</span></div>}
+                  {startDate && <div className="flex justify-between"><span className="text-muted-foreground">Start</span><span>{format(startDate, "PPP")} {startTime}</span></div>}
+                  {endDate && <div className="flex justify-between"><span className="text-muted-foreground">End</span><span>{format(endDate, "PPP")} {endTime}</span></div>}
                 </div>
 
                 <Separator />
