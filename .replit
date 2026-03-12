@@ -53,7 +53,6 @@ SHOPIFY_APP_SCOPES = "read_all_orders,read_analytics,read_customers,write_custom
 SHOPIFY_APP_CLIENT_ID = "9e891f161c95eaf450f5c9bd30576253"
 POSTEX_WEBHOOK_SECRET = "721b67b80a4c4b1ab0d1c59b8b5fdb9a1e3528e381304e02adf2e6126655821a"
 SUPER_ADMIN_PASSWORD = "ShipFlow@Admin2026!"
-WHATSAPP_VERIFY_TOKEN = "1sol_whatsapp_verify"
 LEOPARDS_WEBHOOK_SECRET = "f73748bb48c469af83596770a53aa9a9915eaf78c98f97058aa6a29bed7a2877"
 WA_ALLOWED_SHOP_DOMAINS = "t30ipf-3g.myshopify.com"
 LALAIMPORT = "t30ipf-3g.myshopify.com"
