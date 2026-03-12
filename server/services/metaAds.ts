@@ -14,6 +14,14 @@ interface MetaApiOptions {
 export async function getCredentialsForMerchant(merchantId: string): Promise<MetaApiOptions> {
   const [merchant] = await db.select().from(merchants).where(eq(merchants.id, merchantId));
 
+  if (merchant?.metaOauthAccessToken && merchant?.metaSelectedAdAccountId) {
+    const adAccountId = merchant.metaSelectedAdAccountId;
+    return {
+      accessToken: decryptToken(merchant.metaOauthAccessToken),
+      adAccountId: adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`,
+    };
+  }
+
   if (merchant?.facebookAccessToken && merchant?.facebookAdAccountId) {
     const adAccountId = merchant.facebookAdAccountId;
     return {

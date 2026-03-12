@@ -1573,23 +1573,23 @@ export function registerMarketingRoutes(app: Express) {
       const pagesList = pagesData.data || [];
 
       const updates: Record<string, any> = {
-        facebookAccessToken: encryptToken(accessToken),
+        metaOauthAccessToken: encryptToken(accessToken),
         facebookOAuthConnected: true,
         updatedAt: new Date(),
       };
 
       if (expiresIn) {
-        updates.facebookTokenExpiresAt = new Date(Date.now() + expiresIn * 1000);
+        updates.metaOauthTokenExpiresAt = new Date(Date.now() + expiresIn * 1000);
       }
 
       if (adAccountsList.length > 0) {
         const firstAccount = adAccountsList[0];
-        updates.facebookAdAccountId = firstAccount.account_id;
+        updates.metaSelectedAdAccountId = firstAccount.account_id;
       }
 
       if (pagesList.length > 0) {
-        updates.facebookPageId = pagesList[0].id;
-        updates.facebookPageName = pagesList[0].name;
+        updates.metaSelectedPageId = pagesList[0].id;
+        updates.metaSelectedPageName = pagesList[0].name;
       }
 
       await db.update(merchants).set(updates).where(eq(merchants.id, merchantId));
@@ -1613,14 +1613,14 @@ export function registerMarketingRoutes(app: Express) {
       const merchantId = await getMerchantId(req);
       const [merchant] = await db.select({
         facebookOAuthConnected: merchants.facebookOAuthConnected,
-        facebookTokenExpiresAt: merchants.facebookTokenExpiresAt,
-        facebookPageId: merchants.facebookPageId,
-        facebookPageName: merchants.facebookPageName,
-        facebookPixelId: merchants.facebookPixelId,
-        facebookAdAccountId: merchants.facebookAdAccountId,
-        facebookAccessToken: merchants.facebookAccessToken,
-        instagramAccountId: merchants.instagramAccountId,
-        instagramAccountName: merchants.instagramAccountName,
+        metaOauthAccessToken: merchants.metaOauthAccessToken,
+        metaOauthTokenExpiresAt: merchants.metaOauthTokenExpiresAt,
+        metaSelectedAdAccountId: merchants.metaSelectedAdAccountId,
+        metaSelectedPageId: merchants.metaSelectedPageId,
+        metaSelectedPageName: merchants.metaSelectedPageName,
+        metaSelectedPixelId: merchants.metaSelectedPixelId,
+        metaSelectedIgAccountId: merchants.metaSelectedIgAccountId,
+        metaSelectedIgAccountName: merchants.metaSelectedIgAccountName,
       }).from(merchants).where(eq(merchants.id, merchantId));
 
       if (!merchant) {
@@ -1629,14 +1629,14 @@ export function registerMarketingRoutes(app: Express) {
 
       res.json({
         connected: !!merchant.facebookOAuthConnected,
-        hasToken: !!merchant.facebookAccessToken,
-        tokenExpiresAt: merchant.facebookTokenExpiresAt,
-        pageId: merchant.facebookPageId,
-        pageName: merchant.facebookPageName,
-        pixelId: merchant.facebookPixelId,
-        adAccountId: merchant.facebookAdAccountId,
-        instagramAccountId: merchant.instagramAccountId,
-        instagramAccountName: merchant.instagramAccountName,
+        hasToken: !!merchant.metaOauthAccessToken,
+        tokenExpiresAt: merchant.metaOauthTokenExpiresAt,
+        pageId: merchant.metaSelectedPageId,
+        pageName: merchant.metaSelectedPageName,
+        pixelId: merchant.metaSelectedPixelId,
+        adAccountId: merchant.metaSelectedAdAccountId,
+        instagramAccountId: merchant.metaSelectedIgAccountId,
+        instagramAccountName: merchant.metaSelectedIgAccountName,
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -1647,12 +1647,15 @@ export function registerMarketingRoutes(app: Express) {
     try {
       const merchantId = await getMerchantId(req);
       await db.update(merchants).set({
-        facebookAccessToken: null,
+        metaOauthAccessToken: null,
+        metaOauthTokenExpiresAt: null,
+        metaSelectedAdAccountId: null,
+        metaSelectedPageId: null,
+        metaSelectedPageName: null,
+        metaSelectedPixelId: null,
+        metaSelectedIgAccountId: null,
+        metaSelectedIgAccountName: null,
         facebookOAuthConnected: false,
-        facebookTokenExpiresAt: null,
-        facebookPageId: null,
-        facebookPageName: null,
-        facebookPixelId: null,
         updatedAt: new Date(),
       }).where(eq(merchants.id, merchantId));
 
@@ -1677,12 +1680,12 @@ export function registerMarketingRoutes(app: Express) {
       if (!parsed.success) return res.status(400).json({ error: "Invalid data" });
 
       const updates: Record<string, any> = { updatedAt: new Date() };
-      if (parsed.data.adAccountId !== undefined) updates.facebookAdAccountId = parsed.data.adAccountId;
-      if (parsed.data.pageId !== undefined) updates.facebookPageId = parsed.data.pageId;
-      if (parsed.data.pageName !== undefined) updates.facebookPageName = parsed.data.pageName;
-      if (parsed.data.pixelId !== undefined) updates.facebookPixelId = parsed.data.pixelId;
-      if (parsed.data.instagramAccountId !== undefined) updates.instagramAccountId = parsed.data.instagramAccountId;
-      if (parsed.data.instagramAccountName !== undefined) updates.instagramAccountName = parsed.data.instagramAccountName;
+      if (parsed.data.adAccountId !== undefined) updates.metaSelectedAdAccountId = parsed.data.adAccountId;
+      if (parsed.data.pageId !== undefined) updates.metaSelectedPageId = parsed.data.pageId;
+      if (parsed.data.pageName !== undefined) updates.metaSelectedPageName = parsed.data.pageName;
+      if (parsed.data.pixelId !== undefined) updates.metaSelectedPixelId = parsed.data.pixelId;
+      if (parsed.data.instagramAccountId !== undefined) updates.metaSelectedIgAccountId = parsed.data.instagramAccountId;
+      if (parsed.data.instagramAccountName !== undefined) updates.metaSelectedIgAccountName = parsed.data.instagramAccountName;
 
       await db.update(merchants).set(updates).where(eq(merchants.id, merchantId));
       res.json({ success: true });
@@ -1695,10 +1698,10 @@ export function registerMarketingRoutes(app: Express) {
     try {
       const merchantId = await getMerchantId(req);
       const [merchant] = await db.select({
-        facebookAccessToken: merchants.facebookAccessToken,
+        metaOauthAccessToken: merchants.metaOauthAccessToken,
       }).from(merchants).where(eq(merchants.id, merchantId));
 
-      if (!merchant?.facebookAccessToken) {
+      if (!merchant?.metaOauthAccessToken) {
         return res.status(400).json({ error: "No access token to refresh" });
       }
 
@@ -1709,7 +1712,7 @@ export function registerMarketingRoutes(app: Express) {
         return res.status(400).json({ error: "Facebook App credentials not configured" });
       }
 
-      const currentToken = decryptToken(merchant.facebookAccessToken);
+      const currentToken = decryptToken(merchant.metaOauthAccessToken);
 
       const refreshUrl = new URL("https://graph.facebook.com/v21.0/oauth/access_token");
       refreshUrl.searchParams.set("grant_type", "fb_exchange_token");
@@ -1725,12 +1728,12 @@ export function registerMarketingRoutes(app: Express) {
       }
 
       const updates: Record<string, any> = {
-        facebookAccessToken: encryptToken(refreshData.access_token),
+        metaOauthAccessToken: encryptToken(refreshData.access_token),
         updatedAt: new Date(),
       };
 
       if (refreshData.expires_in) {
-        updates.facebookTokenExpiresAt = new Date(Date.now() + refreshData.expires_in * 1000);
+        updates.metaOauthTokenExpiresAt = new Date(Date.now() + refreshData.expires_in * 1000);
       }
 
       await db.update(merchants).set(updates).where(eq(merchants.id, merchantId));
@@ -1748,14 +1751,14 @@ export function registerMarketingRoutes(app: Express) {
     try {
       const merchantId = await getMerchantId(req);
       const [merchant] = await db.select({
-        facebookAccessToken: merchants.facebookAccessToken,
+        metaOauthAccessToken: merchants.metaOauthAccessToken,
       }).from(merchants).where(eq(merchants.id, merchantId));
 
-      if (!merchant?.facebookAccessToken) {
+      if (!merchant?.metaOauthAccessToken) {
         return res.status(400).json({ error: "Facebook not connected" });
       }
 
-      const token = decryptToken(merchant.facebookAccessToken);
+      const token = decryptToken(merchant.metaOauthAccessToken);
       const url = new URL("https://graph.facebook.com/v21.0/me/adaccounts");
       url.searchParams.set("access_token", token);
       url.searchParams.set("fields", "account_id,name,account_status,currency");
@@ -1779,19 +1782,19 @@ export function registerMarketingRoutes(app: Express) {
     try {
       const merchantId = await getMerchantId(req);
       const [merchant] = await db.select({
-        facebookAccessToken: merchants.facebookAccessToken,
-        facebookPageId: merchants.facebookPageId,
+        metaOauthAccessToken: merchants.metaOauthAccessToken,
+        metaSelectedPageId: merchants.metaSelectedPageId,
       }).from(merchants).where(eq(merchants.id, merchantId));
 
-      if (!merchant?.facebookAccessToken) {
+      if (!merchant?.metaOauthAccessToken) {
         return res.status(400).json({ error: "Facebook not connected" });
       }
 
-      const token = decryptToken(merchant.facebookAccessToken);
+      const token = decryptToken(merchant.metaOauthAccessToken);
       const igAccounts: any[] = [];
 
-      if (merchant.facebookPageId) {
-        const url = new URL(`https://graph.facebook.com/v21.0/${merchant.facebookPageId}`);
+      if (merchant.metaSelectedPageId) {
+        const url = new URL(`https://graph.facebook.com/v21.0/${merchant.metaSelectedPageId}`);
         url.searchParams.set("access_token", token);
         url.searchParams.set("fields", "instagram_business_account{id,name,username,profile_picture_url}");
 
