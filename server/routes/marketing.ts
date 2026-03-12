@@ -1538,49 +1538,61 @@ export function registerMarketingRoutes(app: Express) {
 
       const redirectUri = `${req.protocol}://${req.get("host")}/api/meta/oauth/callback`;
 
-      const tokenUrl = new URL(`https://graph.facebook.com/${META_API_VERSION}/oauth/access_token`);
+      const tokenUrl = new URL(`${META_BASE_URL}/oauth/access_token`);
       tokenUrl.searchParams.set("client_id", appId);
       tokenUrl.searchParams.set("redirect_uri", redirectUri);
       tokenUrl.searchParams.set("client_secret", appSecretRaw);
       tokenUrl.searchParams.set("code", code as string);
 
       const tokenRes = await fetch(tokenUrl.toString());
-      const tokenData = await tokenRes.json();
-
-      if (tokenData.error) {
-        console.error("[MetaOAuth] Token exchange error:", tokenData.error);
-        return res.redirect(`/settings?tab=marketing&oauth=error&message=${encodeURIComponent(tokenData.error.message || "Token exchange failed")}`);
+      if (!tokenRes.ok) {
+        const errorText = await tokenRes.text().catch(() => "Unknown error");
+        console.error("[MetaOAuth] Token exchange HTTP error:", tokenRes.status, errorText);
+        return res.redirect(`/settings?tab=marketing&oauth=error&message=${encodeURIComponent("Token exchange failed: " + tokenRes.status)}`);
+      }
+      const tokenData = await tokenRes.json().catch(() => null);
+      if (!tokenData || tokenData.error) {
+        console.error("[MetaOAuth] Token exchange error:", tokenData?.error);
+        return res.redirect(`/settings?tab=marketing&oauth=error&message=${encodeURIComponent(tokenData?.error?.message || "Token exchange failed")}`);
       }
 
       const shortToken = tokenData.access_token;
 
-      const longTokenUrl = new URL(`https://graph.facebook.com/${META_API_VERSION}/oauth/access_token`);
+      const longTokenUrl = new URL(`${META_BASE_URL}/oauth/access_token`);
       longTokenUrl.searchParams.set("grant_type", "fb_exchange_token");
       longTokenUrl.searchParams.set("client_id", appId);
       longTokenUrl.searchParams.set("client_secret", appSecretRaw);
       longTokenUrl.searchParams.set("fb_exchange_token", shortToken);
 
       const longTokenRes = await fetch(longTokenUrl.toString());
-      const longTokenData = await longTokenRes.json();
-      const accessToken = longTokenData.access_token || shortToken;
-      const expiresIn = longTokenData.expires_in;
+      let accessToken = shortToken;
+      let expiresIn: number | undefined;
+      if (longTokenRes.ok) {
+        const longTokenData = await longTokenRes.json().catch(() => null);
+        if (longTokenData?.access_token) {
+          accessToken = longTokenData.access_token;
+          expiresIn = longTokenData.expires_in;
+        }
+      } else {
+        console.warn("[MetaOAuth] Long-lived token exchange failed, using short-lived token:", longTokenRes.status);
+      }
 
-      const adAccountsUrl = new URL(`https://graph.facebook.com/${META_API_VERSION}/me/adaccounts`);
+      const adAccountsUrl = new URL(`${META_BASE_URL}/me/adaccounts`);
       adAccountsUrl.searchParams.set("access_token", accessToken);
       adAccountsUrl.searchParams.set("fields", "account_id,name,account_status,currency");
       adAccountsUrl.searchParams.set("limit", "50");
 
       const adAccountsRes = await fetch(adAccountsUrl.toString());
-      const adAccountsData = await adAccountsRes.json();
+      const adAccountsData = adAccountsRes.ok ? await adAccountsRes.json().catch(() => ({ data: [] })) : { data: [] };
       const adAccountsList = adAccountsData.data || [];
 
-      const pagesUrl = new URL(`https://graph.facebook.com/${META_API_VERSION}/me/accounts`);
+      const pagesUrl = new URL(`${META_BASE_URL}/me/accounts`);
       pagesUrl.searchParams.set("access_token", accessToken);
       pagesUrl.searchParams.set("fields", "id,name");
       pagesUrl.searchParams.set("limit", "50");
 
       const pagesRes = await fetch(pagesUrl.toString());
-      const pagesData = await pagesRes.json();
+      const pagesData = pagesRes.ok ? await pagesRes.json().catch(() => ({ data: [] })) : { data: [] };
       const pagesList = pagesData.data || [];
 
       const updates: Record<string, any> = {
@@ -1725,17 +1737,22 @@ export function registerMarketingRoutes(app: Express) {
 
       const currentToken = decryptToken(merchant.metaOauthAccessToken);
 
-      const refreshUrl = new URL(`https://graph.facebook.com/${META_API_VERSION}/oauth/access_token`);
+      const refreshUrl = new URL(`${META_BASE_URL}/oauth/access_token`);
       refreshUrl.searchParams.set("grant_type", "fb_exchange_token");
       refreshUrl.searchParams.set("client_id", appId);
       refreshUrl.searchParams.set("client_secret", appSecretRaw);
       refreshUrl.searchParams.set("fb_exchange_token", currentToken);
 
       const refreshRes = await fetch(refreshUrl.toString());
-      const refreshData = await refreshRes.json();
+      if (!refreshRes.ok) {
+        const errorText = await refreshRes.text().catch(() => "Unknown error");
+        console.error("[MetaOAuth] Token refresh HTTP error:", refreshRes.status, errorText);
+        return res.status(400).json({ error: `Token refresh failed (HTTP ${refreshRes.status})` });
+      }
+      const refreshData = await refreshRes.json().catch(() => null);
 
-      if (refreshData.error) {
-        return res.status(400).json({ error: refreshData.error.message || "Token refresh failed" });
+      if (!refreshData || refreshData.error) {
+        return res.status(400).json({ error: refreshData?.error?.message || "Token refresh failed" });
       }
 
       const updates: Record<string, any> = {
@@ -1761,16 +1778,8 @@ export function registerMarketingRoutes(app: Express) {
   app.get("/api/meta/ad-accounts", isAuthenticated, async (req: any, res) => {
     try {
       const merchantId = await getMerchantId(req);
-      const [merchant] = await db.select({
-        metaOauthAccessToken: merchants.metaOauthAccessToken,
-      }).from(merchants).where(eq(merchants.id, merchantId));
-
-      if (!merchant?.metaOauthAccessToken) {
-        return res.status(400).json({ error: "Facebook not connected" });
-      }
-
-      const token = decryptToken(merchant.metaOauthAccessToken);
-      const url = new URL(`https://graph.facebook.com/${META_API_VERSION}/me/adaccounts`);
+      const token = await getOauthTokenForMerchant(merchantId);
+      const url = new URL(`${META_BASE_URL}/me/adaccounts`);
       url.searchParams.set("access_token", token);
       url.searchParams.set("fields", "account_id,name,account_status,currency");
       url.searchParams.set("limit", "50");
@@ -1792,20 +1801,16 @@ export function registerMarketingRoutes(app: Express) {
   app.get("/api/meta/instagram-accounts", isAuthenticated, async (req: any, res) => {
     try {
       const merchantId = await getMerchantId(req);
+      const token = await getOauthTokenForMerchant(merchantId);
+
       const [merchant] = await db.select({
-        metaOauthAccessToken: merchants.metaOauthAccessToken,
         metaSelectedPageId: merchants.metaSelectedPageId,
       }).from(merchants).where(eq(merchants.id, merchantId));
 
-      if (!merchant?.metaOauthAccessToken) {
-        return res.status(400).json({ error: "Facebook not connected" });
-      }
-
-      const token = decryptToken(merchant.metaOauthAccessToken);
       const igAccounts: any[] = [];
 
-      if (merchant.metaSelectedPageId) {
-        const url = new URL(`https://graph.facebook.com/${META_API_VERSION}/${merchant.metaSelectedPageId}`);
+      if (merchant?.metaSelectedPageId) {
+        const url = new URL(`${META_BASE_URL}/${merchant.metaSelectedPageId}`);
         url.searchParams.set("access_token", token);
         url.searchParams.set("fields", "instagram_business_account{id,name,username,profile_picture_url}");
 
@@ -1816,7 +1821,7 @@ export function registerMarketingRoutes(app: Express) {
         }
       }
 
-      const pagesUrl = new URL(`https://graph.facebook.com/${META_API_VERSION}/me/accounts`);
+      const pagesUrl = new URL(`${META_BASE_URL}/me/accounts`);
       pagesUrl.searchParams.set("access_token", token);
       pagesUrl.searchParams.set("fields", "id,name,instagram_business_account{id,name,username,profile_picture_url}");
       pagesUrl.searchParams.set("limit", "50");
@@ -2207,7 +2212,7 @@ export function registerMarketingRoutes(app: Express) {
         formBody.set("access_token", token);
         formBody.set("bytes", data);
 
-        const uploadRes = await fetch(`https://graph.facebook.com/${META_API_VERSION}/${actId}/adimages`, {
+        const uploadRes = await fetch(`${META_BASE_URL}/${actId}/adimages`, {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
           body: formBody.toString(),
@@ -2236,7 +2241,7 @@ export function registerMarketingRoutes(app: Express) {
 
         const body = Buffer.concat(parts);
 
-        const uploadRes = await fetch(`https://graph.facebook.com/${META_API_VERSION}/${actId}/advideos`, {
+        const uploadRes = await fetch(`${META_BASE_URL}/${actId}/advideos`, {
           method: "POST",
           headers: { "Content-Type": `multipart/form-data; boundary=${boundary}` },
           body,
