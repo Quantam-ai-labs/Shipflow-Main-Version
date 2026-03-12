@@ -50,6 +50,7 @@ import {
 import {
   and,
   eq,
+  ne,
   inArray,
   ilike,
   or,
@@ -15104,6 +15105,26 @@ export async function registerRoutes(
       if (!merchantId) return;
       const { apiKey, email, to, amount, voiceId, brandName, orderNumber } = req.body;
       if (!apiKey || !email || !to || !voiceId) return res.status(400).json({ error: "apiKey, email, phone number, and voiceId are required" });
+
+      if (orderNumber) {
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const existingCall = await db.select({ id: robocallLogs.id })
+          .from(robocallLogs)
+          .where(
+            and(
+              eq(robocallLogs.merchantId, merchantId),
+              eq(robocallLogs.orderNumber, String(orderNumber)),
+              ne(robocallLogs.status, "Error"),
+              gte(robocallLogs.createdAt, todayStart),
+            )
+          )
+          .limit(1);
+        if (existingCall.length > 0) {
+          return res.status(400).json({ error: `A call was already sent for order ${orderNumber} today` });
+        }
+      }
+
       const params = new URLSearchParams({
         email,
         key: apiKey,
