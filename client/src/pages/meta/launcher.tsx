@@ -320,8 +320,10 @@ export default function MetaAdLauncher() {
         targeting.publisher_platforms = platforms;
         const fbPositions = selectedPlacements.filter(id => PLACEMENTS.find(p => p.id === id)?.platform === "facebook").map(id => PLACEMENTS.find(p => p.id === id)?.position).filter(Boolean);
         const igPositions = selectedPlacements.filter(id => PLACEMENTS.find(p => p.id === id)?.platform === "instagram").map(id => PLACEMENTS.find(p => p.id === id)?.position).filter(Boolean);
+        const anPositions = selectedPlacements.filter(id => PLACEMENTS.find(p => p.id === id)?.platform === "audience_network").map(id => PLACEMENTS.find(p => p.id === id)?.position).filter(Boolean);
         if (fbPositions.length) targeting.facebook_positions = fbPositions;
         if (igPositions.length) targeting.instagram_positions = igPositions;
+        if (anPositions.length) targeting.audience_network_positions = anPositions;
       }
 
       const creative: any = {

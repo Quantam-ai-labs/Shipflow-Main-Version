@@ -323,7 +323,19 @@ export default function MetaMediaLibrary() {
                       if (file) {
                         setUploadFile(file);
                         const errors = validateUploadFile(file);
-                        if (!file.type.startsWith("video/") && errors.length === 0) {
+                        if (file.type.startsWith("video/") && errors.length === 0) {
+                          const video = document.createElement("video");
+                          video.preload = "metadata";
+                          video.onloadedmetadata = () => {
+                            const durErrors: string[] = [];
+                            if (video.duration > 240) durErrors.push(`Video duration ${Math.round(video.duration)}s exceeds maximum 240s (4 minutes).`);
+                            if (video.videoWidth < 500) durErrors.push(`Video width ${video.videoWidth}px below minimum 500px.`);
+                            URL.revokeObjectURL(video.src);
+                            setUploadValidationErrors([...errors, ...durErrors]);
+                          };
+                          video.onerror = () => setUploadValidationErrors(errors);
+                          video.src = URL.createObjectURL(file);
+                        } else if (!file.type.startsWith("video/") && errors.length === 0) {
                           const img = new window.Image();
                           img.onload = () => {
                             const dimErrors: string[] = [];
