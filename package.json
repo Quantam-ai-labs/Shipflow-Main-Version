@@ -85,6 +85,7 @@
     "react-icons": "^5.4.0",
     "react-markdown": "^10.1.0",
     "react-resizable-panels": "^2.1.7",
+    "read-excel-file": "^7.0.2",
     "recharts": "^2.15.2",
     "resend": "^4.0.0",
     "sharp": "^0.34.5",
@@ -94,8 +95,8 @@
     "vaul": "^1.1.2",
     "web-push": "^3.6.7",
     "wouter": "^3.3.5",
+    "write-excel-file": "^3.0.6",
     "ws": "^8.18.0",
-    "xlsx": "^0.18.5",
     "zod": "^3.25.76",
     "zod-validation-error": "^3.5.4"
   },
