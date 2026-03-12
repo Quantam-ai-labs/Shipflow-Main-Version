@@ -34,10 +34,22 @@ const CTA_OPTIONS = [
   { value: "SEND_MESSAGE", label: "Send Message" },
 ];
 
-const PK_CITIES = [
-  "Karachi", "Lahore", "Islamabad", "Rawalpindi", "Faisalabad",
-  "Multan", "Peshawar", "Quetta", "Sialkot", "Gujranwala",
-  "Hyderabad", "Bahawalpur", "Sargodha", "Abbottabad", "Mardan",
+const PK_CITIES: { name: string; key: string }[] = [
+  { name: "Karachi", key: "2514980" },
+  { name: "Lahore", key: "2514964" },
+  { name: "Islamabad", key: "2514937" },
+  { name: "Rawalpindi", key: "2514997" },
+  { name: "Faisalabad", key: "2514927" },
+  { name: "Multan", key: "2514977" },
+  { name: "Peshawar", key: "2514988" },
+  { name: "Quetta", key: "2514994" },
+  { name: "Sialkot", key: "2515008" },
+  { name: "Gujranwala", key: "2514932" },
+  { name: "Hyderabad", key: "2514935" },
+  { name: "Bahawalpur", key: "2514906" },
+  { name: "Sargodha", key: "2515002" },
+  { name: "Abbottabad", key: "2514901" },
+  { name: "Mardan", key: "2514973" },
 ];
 
 export default function MetaAdLauncher() {
@@ -87,11 +99,14 @@ export default function MetaAdLauncher() {
       const targeting: any = {
         geo_locations: {
           countries: ["PK"],
-          cities: selectedCities.map(city => ({
-            key: city.toLowerCase().replace(/\s+/g, "_"),
-            name: city,
-            country: "PK",
-          })),
+          cities: selectedCities.map(cityName => {
+            const cityData = PK_CITIES.find(c => c.name === cityName);
+            return {
+              key: cityData?.key || "",
+              name: cityName,
+              country: "PK",
+            };
+          }),
         },
         age_min: parseInt(minAge),
         age_max: parseInt(maxAge),
@@ -323,21 +338,21 @@ export default function MetaAdLauncher() {
             <div className="space-y-2">
               <Label>Target Cities</Label>
               <div className="flex flex-wrap gap-2">
-                {PK_CITIES.map(city => {
-                  const isSelected = selectedCities.includes(city);
+                {PK_CITIES.map(({ name: cityName }) => {
+                  const isSelected = selectedCities.includes(cityName);
                   return (
                     <Badge
-                      key={city}
+                      key={cityName}
                       variant={isSelected ? "default" : "outline"}
                       className="cursor-pointer select-none"
                       onClick={() => {
                         setSelectedCities(prev =>
-                          isSelected ? prev.filter(c => c !== city) : [...prev, city]
+                          isSelected ? prev.filter(c => c !== cityName) : [...prev, cityName]
                         );
                       }}
-                      data-testid={`badge-city-${city.toLowerCase()}`}
+                      data-testid={`badge-city-${cityName.toLowerCase()}`}
                     >
-                      {city}
+                      {cityName}
                     </Badge>
                   );
                 })}

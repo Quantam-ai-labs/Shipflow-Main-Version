@@ -1,11 +1,8 @@
 import { db } from "../db";
 import { adLaunchJobs, adMediaLibrary, merchants } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
-import { getCredentialsForMerchant } from "./metaAds";
+import { getCredentialsForMerchant, META_API_VERSION, META_BASE_URL } from "./metaAds";
 import { decryptToken } from "./encryption";
-
-const META_API_VERSION = "v21.0";
-const META_BASE_URL = `https://graph.facebook.com/${META_API_VERSION}`;
 
 interface MetaWriteOptions {
   accessToken: string;

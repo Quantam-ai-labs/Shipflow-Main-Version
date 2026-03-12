@@ -17,7 +17,10 @@ import {
   getLastSyncInfo,
   getSyncRunStatus,
   getCredentialsForMerchant,
+  getOauthTokenForMerchant,
   testFacebookConnection,
+  META_API_VERSION,
+  META_BASE_URL,
 } from "../services/metaAds";
 import { encryptToken } from "../services/encryption";
 import {
@@ -30,14 +33,33 @@ import {
 import { generateChatResponse, generateDashboardInsights, generateQuickStrategy } from "../services/aiInsights";
 import crypto from "crypto";
 
-const oauthStateStore = new Map<string, { merchantId: string; createdAt: number }>();
+function getOauthStateSecret(): string {
+  const secret = process.env.FACEBOOK_APP_SECRET;
+  if (!secret) throw new Error("FACEBOOK_APP_SECRET is required for OAuth state signing");
+  return secret;
+}
 
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, val] of oauthStateStore) {
-    if (now - val.createdAt > 10 * 60 * 1000) oauthStateStore.delete(key);
+function createOauthState(merchantId: string): string {
+  const timestamp = Date.now().toString();
+  const secret = getOauthStateSecret();
+  const payload = `${merchantId}:${timestamp}`;
+  const hmac = crypto.createHmac("sha256", secret).update(payload).digest("hex");
+  return Buffer.from(JSON.stringify({ merchantId, timestamp, hmac })).toString("base64url");
+}
+
+function verifyOauthState(state: string): { merchantId: string } | null {
+  try {
+    const { merchantId, timestamp, hmac } = JSON.parse(Buffer.from(state, "base64url").toString());
+    const secret = getOauthStateSecret();
+    const payload = `${merchantId}:${timestamp}`;
+    const expected = crypto.createHmac("sha256", secret).update(payload).digest("hex");
+    if (!crypto.timingSafeEqual(Buffer.from(hmac), Buffer.from(expected))) return null;
+    if (Date.now() - parseInt(timestamp) > 10 * 60 * 1000) return null;
+    return { merchantId };
+  } catch {
+    return null;
   }
-}, 60 * 1000);
+}
 import { attributeOrdersToCampaigns, getAttributionSummary } from "../services/adAttribution";
 import { parseUtmParams } from "../services/shopify";
 
@@ -238,15 +260,12 @@ export function registerMarketingRoutes(app: Express) {
       let hasCredentials = false;
       let credentialSource: "merchant" | "environment" | "none" = "none";
       try {
-        const [merchant] = await db.select({
-          facebookAccessToken: merchants.facebookAccessToken,
-          facebookAdAccountId: merchants.facebookAdAccountId,
-        }).from(merchants).where(eq(merchants.id, merchantId));
-        if (merchant?.facebookAccessToken && merchant?.facebookAdAccountId) {
-          hasCredentials = true;
-          credentialSource = "merchant";
-        }
-      } catch {}
+        await getCredentialsForMerchant(merchantId);
+        hasCredentials = true;
+        credentialSource = "merchant";
+      } catch (credErr: any) {
+        console.log(`[Marketing] No credentials for merchant ${merchantId}: ${credErr.message}`);
+      }
 
       res.json({
         hasCredentials,
@@ -328,15 +347,12 @@ export function registerMarketingRoutes(app: Express) {
       let hasCredentials = false;
       let credentialSource: "merchant" | "environment" | "none" = "none";
       try {
-        const [merchant] = await db.select({
-          facebookAccessToken: merchants.facebookAccessToken,
-          facebookAdAccountId: merchants.facebookAdAccountId,
-        }).from(merchants).where(eq(merchants.id, merchantId));
-        if (merchant?.facebookAccessToken && merchant?.facebookAdAccountId) {
-          hasCredentials = true;
-          credentialSource = "merchant";
-        }
-      } catch {}
+        await getCredentialsForMerchant(merchantId);
+        hasCredentials = true;
+        credentialSource = "merchant";
+      } catch (credErr: any) {
+        console.log(`[Marketing] No credentials for sync-status: ${credErr.message}`);
+      }
       res.json({ lastSync, hasCredentials, credentialSource });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -1464,8 +1480,9 @@ export function registerMarketingRoutes(app: Express) {
       const merchantId = await getMerchantId(req);
 
       const appId = process.env.FACEBOOK_APP_ID;
-      if (!appId) {
-        return res.status(400).json({ error: "Facebook App ID not configured. Contact your platform administrator." });
+      const appSecret = process.env.FACEBOOK_APP_SECRET;
+      if (!appId || !appSecret) {
+        return res.status(400).json({ error: "Facebook App credentials not configured. Contact your platform administrator." });
       }
 
       const redirectUri = `${req.protocol}://${req.get("host")}/api/meta/oauth/callback`;
@@ -1477,10 +1494,9 @@ export function registerMarketingRoutes(app: Express) {
         "pages_read_engagement",
       ].join(",");
 
-      const stateToken = crypto.randomBytes(32).toString("hex");
-      oauthStateStore.set(stateToken, { merchantId, createdAt: Date.now() });
+      const stateToken = createOauthState(merchantId);
 
-      const oauthUrl = new URL("https://www.facebook.com/v21.0/dialog/oauth");
+      const oauthUrl = new URL(`https://www.facebook.com/${META_API_VERSION}/dialog/oauth`);
       oauthUrl.searchParams.set("client_id", appId);
       oauthUrl.searchParams.set("redirect_uri", redirectUri);
       oauthUrl.searchParams.set("scope", scopes);
@@ -1506,14 +1522,9 @@ export function registerMarketingRoutes(app: Express) {
         return res.redirect("/settings?tab=marketing&oauth=error&message=Missing+authorization+code");
       }
 
-      const stateEntry = oauthStateStore.get(state as string);
+      const stateEntry = verifyOauthState(state as string);
       if (!stateEntry) {
         return res.redirect("/settings?tab=marketing&oauth=error&message=Invalid+or+expired+state+parameter");
-      }
-      oauthStateStore.delete(state as string);
-
-      if (Date.now() - stateEntry.createdAt > 10 * 60 * 1000) {
-        return res.redirect("/settings?tab=marketing&oauth=error&message=OAuth+state+expired");
       }
 
       const merchantId = stateEntry.merchantId;
@@ -1527,7 +1538,7 @@ export function registerMarketingRoutes(app: Express) {
 
       const redirectUri = `${req.protocol}://${req.get("host")}/api/meta/oauth/callback`;
 
-      const tokenUrl = new URL(`https://graph.facebook.com/v21.0/oauth/access_token`);
+      const tokenUrl = new URL(`https://graph.facebook.com/${META_API_VERSION}/oauth/access_token`);
       tokenUrl.searchParams.set("client_id", appId);
       tokenUrl.searchParams.set("redirect_uri", redirectUri);
       tokenUrl.searchParams.set("client_secret", appSecretRaw);
@@ -1543,7 +1554,7 @@ export function registerMarketingRoutes(app: Express) {
 
       const shortToken = tokenData.access_token;
 
-      const longTokenUrl = new URL(`https://graph.facebook.com/v21.0/oauth/access_token`);
+      const longTokenUrl = new URL(`https://graph.facebook.com/${META_API_VERSION}/oauth/access_token`);
       longTokenUrl.searchParams.set("grant_type", "fb_exchange_token");
       longTokenUrl.searchParams.set("client_id", appId);
       longTokenUrl.searchParams.set("client_secret", appSecretRaw);
@@ -1554,7 +1565,7 @@ export function registerMarketingRoutes(app: Express) {
       const accessToken = longTokenData.access_token || shortToken;
       const expiresIn = longTokenData.expires_in;
 
-      const adAccountsUrl = new URL(`https://graph.facebook.com/v21.0/me/adaccounts`);
+      const adAccountsUrl = new URL(`https://graph.facebook.com/${META_API_VERSION}/me/adaccounts`);
       adAccountsUrl.searchParams.set("access_token", accessToken);
       adAccountsUrl.searchParams.set("fields", "account_id,name,account_status,currency");
       adAccountsUrl.searchParams.set("limit", "50");
@@ -1563,7 +1574,7 @@ export function registerMarketingRoutes(app: Express) {
       const adAccountsData = await adAccountsRes.json();
       const adAccountsList = adAccountsData.data || [];
 
-      const pagesUrl = new URL(`https://graph.facebook.com/v21.0/me/accounts`);
+      const pagesUrl = new URL(`https://graph.facebook.com/${META_API_VERSION}/me/accounts`);
       pagesUrl.searchParams.set("access_token", accessToken);
       pagesUrl.searchParams.set("fields", "id,name");
       pagesUrl.searchParams.set("limit", "50");
@@ -1714,7 +1725,7 @@ export function registerMarketingRoutes(app: Express) {
 
       const currentToken = decryptToken(merchant.metaOauthAccessToken);
 
-      const refreshUrl = new URL("https://graph.facebook.com/v21.0/oauth/access_token");
+      const refreshUrl = new URL(`https://graph.facebook.com/${META_API_VERSION}/oauth/access_token`);
       refreshUrl.searchParams.set("grant_type", "fb_exchange_token");
       refreshUrl.searchParams.set("client_id", appId);
       refreshUrl.searchParams.set("client_secret", appSecretRaw);
@@ -1759,7 +1770,7 @@ export function registerMarketingRoutes(app: Express) {
       }
 
       const token = decryptToken(merchant.metaOauthAccessToken);
-      const url = new URL("https://graph.facebook.com/v21.0/me/adaccounts");
+      const url = new URL(`https://graph.facebook.com/${META_API_VERSION}/me/adaccounts`);
       url.searchParams.set("access_token", token);
       url.searchParams.set("fields", "account_id,name,account_status,currency");
       url.searchParams.set("limit", "50");
@@ -1794,7 +1805,7 @@ export function registerMarketingRoutes(app: Express) {
       const igAccounts: any[] = [];
 
       if (merchant.metaSelectedPageId) {
-        const url = new URL(`https://graph.facebook.com/v21.0/${merchant.metaSelectedPageId}`);
+        const url = new URL(`https://graph.facebook.com/${META_API_VERSION}/${merchant.metaSelectedPageId}`);
         url.searchParams.set("access_token", token);
         url.searchParams.set("fields", "instagram_business_account{id,name,username,profile_picture_url}");
 
@@ -1805,7 +1816,7 @@ export function registerMarketingRoutes(app: Express) {
         }
       }
 
-      const pagesUrl = new URL("https://graph.facebook.com/v21.0/me/accounts");
+      const pagesUrl = new URL(`https://graph.facebook.com/${META_API_VERSION}/me/accounts`);
       pagesUrl.searchParams.set("access_token", token);
       pagesUrl.searchParams.set("fields", "id,name,instagram_business_account{id,name,username,profile_picture_url}");
       pagesUrl.searchParams.set("limit", "50");
@@ -2032,19 +2043,11 @@ export function registerMarketingRoutes(app: Express) {
   app.get("/api/meta/campaigns", isAuthenticated, async (req: any, res) => {
     try {
       const merchantId = await getMerchantId(req);
-      const [merchant] = await db.select({
-        facebookAccessToken: merchants.facebookAccessToken,
-        facebookAdAccountId: merchants.facebookAdAccountId,
-      }).from(merchants).where(eq(merchants.id, merchantId));
+      const creds = await getCredentialsForMerchant(merchantId);
+      const token = creds.accessToken;
+      const actId = `act_${creds.adAccountId.replace("act_", "")}`;
 
-      if (!merchant?.facebookAccessToken || !merchant?.facebookAdAccountId) {
-        return res.status(400).json({ error: "Facebook not connected or no ad account selected" });
-      }
-
-      const token = decryptToken(merchant.facebookAccessToken);
-      const actId = `act_${merchant.facebookAdAccountId.replace("act_", "")}`;
-
-      const url = new URL(`https://graph.facebook.com/v21.0/${actId}/campaigns`);
+      const url = new URL(`${META_BASE_URL}/${actId}/campaigns`);
       url.searchParams.set("access_token", token);
       url.searchParams.set("fields", "id,name,status,objective,daily_budget,lifetime_budget,created_time,updated_time,start_time,stop_time");
       url.searchParams.set("limit", "100");
@@ -2072,17 +2075,9 @@ export function registerMarketingRoutes(app: Express) {
       const parsed = statusSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid status" });
 
-      const [merchant] = await db.select({
-        facebookAccessToken: merchants.facebookAccessToken,
-      }).from(merchants).where(eq(merchants.id, merchantId));
+      const token = await getOauthTokenForMerchant(merchantId);
 
-      if (!merchant?.facebookAccessToken) {
-        return res.status(400).json({ error: "Facebook not connected" });
-      }
-
-      const token = decryptToken(merchant.facebookAccessToken);
-
-      const response = await fetch(`https://graph.facebook.com/v21.0/${campaignId}`, {
+      const response = await fetch(`${META_BASE_URL}/${campaignId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -2212,7 +2207,7 @@ export function registerMarketingRoutes(app: Express) {
         formBody.set("access_token", token);
         formBody.set("bytes", data);
 
-        const uploadRes = await fetch(`https://graph.facebook.com/v21.0/${actId}/adimages`, {
+        const uploadRes = await fetch(`https://graph.facebook.com/${META_API_VERSION}/${actId}/adimages`, {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
           body: formBody.toString(),
@@ -2241,7 +2236,7 @@ export function registerMarketingRoutes(app: Express) {
 
         const body = Buffer.concat(parts);
 
-        const uploadRes = await fetch(`https://graph.facebook.com/v21.0/${actId}/advideos`, {
+        const uploadRes = await fetch(`https://graph.facebook.com/${META_API_VERSION}/${actId}/advideos`, {
           method: "POST",
           headers: { "Content-Type": `multipart/form-data; boundary=${boundary}` },
           body,

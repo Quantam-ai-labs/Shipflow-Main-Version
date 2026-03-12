@@ -3,12 +3,27 @@ import { adAccounts, adCampaigns, adSets, adCreatives, adInsights, metaSyncRuns,
 import { eq, and, sql, desc, gte, lte, inArray, like } from "drizzle-orm";
 import { decryptToken } from "./encryption";
 
-const META_API_VERSION = "v21.0";
-const META_BASE_URL = `https://graph.facebook.com/${META_API_VERSION}`;
+export const META_API_VERSION = "v21.0";
+export const META_BASE_URL = `https://graph.facebook.com/${META_API_VERSION}`;
 
 interface MetaApiOptions {
   accessToken: string;
   adAccountId: string;
+}
+
+export async function getOauthTokenForMerchant(merchantId: string): Promise<string> {
+  const [merchant] = await db.select({
+    metaOauthAccessToken: merchants.metaOauthAccessToken,
+    facebookAccessToken: merchants.facebookAccessToken,
+  }).from(merchants).where(eq(merchants.id, merchantId));
+
+  if (merchant?.metaOauthAccessToken) {
+    return decryptToken(merchant.metaOauthAccessToken);
+  }
+  if (merchant?.facebookAccessToken) {
+    return decryptToken(merchant.facebookAccessToken);
+  }
+  throw new Error("Facebook not connected. Go to Settings > Marketing to connect your account.");
 }
 
 export async function getCredentialsForMerchant(merchantId: string): Promise<MetaApiOptions> {
