@@ -64,6 +64,8 @@ export default function MarketingSettings() {
     pageName: string | null;
     pixelId: string | null;
     adAccountId: string | null;
+    instagramAccountId: string | null;
+    instagramAccountName: string | null;
   }>({
     queryKey: ["/api/meta/oauth/status"],
   });
@@ -148,6 +150,11 @@ export default function MarketingSettings() {
 
   const { data: pagesList } = useQuery<{ pages: { id: string; name: string }[] }>({
     queryKey: ["/api/meta/pages"],
+    enabled: !!oauthStatus?.connected,
+  });
+
+  const { data: igAccountsList } = useQuery<{ instagramAccounts: { id: string; name?: string; username?: string }[] }>({
+    queryKey: ["/api/meta/instagram-accounts"],
     enabled: !!oauthStatus?.connected,
   });
 
@@ -258,7 +265,7 @@ export default function MarketingSettings() {
         <CardContent className="space-y-3">
           {oauthStatus?.connected ? (
             <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Ad Account</Label>
                   <Select
@@ -297,6 +304,28 @@ export default function MarketingSettings() {
                       {pagesList?.pages?.map((page) => (
                         <SelectItem key={page.id} value={page.id} data-testid={`select-page-${page.id}`}>
                           {page.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Instagram Account</Label>
+                  <Select
+                    value={oauthStatus.instagramAccountId || ""}
+                    onValueChange={(val) => {
+                      const ig = igAccountsList?.instagramAccounts?.find((a) => a.id === val);
+                      updateOAuthSettingsMutation.mutate({ instagramAccountId: val, instagramAccountName: ig?.username || ig?.name || val });
+                    }}
+                    data-testid="select-ig-account"
+                  >
+                    <SelectTrigger className="h-8 text-sm" data-testid="select-ig-account-trigger">
+                      <SelectValue placeholder="Select Instagram account" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {igAccountsList?.instagramAccounts?.map((ig) => (
+                        <SelectItem key={ig.id} value={ig.id} data-testid={`select-ig-${ig.id}`}>
+                          {ig.username || ig.name || ig.id}
                         </SelectItem>
                       ))}
                     </SelectContent>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,7 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Loader2, Plus, Trash2, Upload, ImageIcon, ExternalLink } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Loader2, Plus, Trash2, Upload, ImageIcon, ExternalLink, Film } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -14,9 +15,12 @@ import { useToast } from "@/hooks/use-toast";
 export default function MetaMediaLibrary() {
   const { toast } = useToast();
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [addMode, setAddMode] = useState<"url" | "upload">("url");
   const [newName, setNewName] = useState("");
   const [newUrl, setNewUrl] = useState("");
   const [newTags, setNewTags] = useState("");
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data, isLoading } = useQuery<any>({
     queryKey: ["/api/meta/media-library"],
@@ -53,6 +57,42 @@ export default function MetaMediaLibrary() {
     onSuccess: () => {
       toast({ title: "Deleted", description: "Media removed from library." });
       queryClient.invalidateQueries({ queryKey: ["/api/meta/media-library"] });
+    },
+  });
+
+  const fileUploadMutation = useMutation({
+    mutationFn: async () => {
+      if (!uploadFile) throw new Error("No file selected");
+      const reader = new FileReader();
+      const base64 = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => {
+          const result = reader.result as string;
+          const base64Data = result.split(",")[1];
+          resolve(base64Data);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(uploadFile);
+      });
+
+      const isVideo = uploadFile.type.startsWith("video/");
+      const res = await apiRequest("POST", "/api/meta/media-library/upload", {
+        name: newName || uploadFile.name,
+        type: isVideo ? "video" : "image",
+        data: base64,
+        mimeType: uploadFile.type,
+        fileSize: uploadFile.size,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Media Uploaded", description: "File has been uploaded to Meta and added to your library." });
+      queryClient.invalidateQueries({ queryKey: ["/api/meta/media-library"] });
+      setShowAddDialog(false);
+      setNewName("");
+      setUploadFile(null);
+    },
+    onError: (error: any) => {
+      toast({ title: "Upload Failed", description: error.message, variant: "destructive" });
     },
   });
 
@@ -164,57 +204,125 @@ export default function MetaMediaLibrary() {
           <DialogHeader>
             <DialogTitle>Add Media</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="media-name">Name</Label>
-              <Input
-                id="media-name"
-                placeholder="e.g. Summer Banner"
-                value={newName}
-                onChange={e => setNewName(e.target.value)}
-                data-testid="input-media-name"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="media-url">Image URL</Label>
-              <Input
-                id="media-url"
-                type="url"
-                placeholder="https://example.com/image.jpg"
-                value={newUrl}
-                onChange={e => setNewUrl(e.target.value)}
-                data-testid="input-media-url"
-              />
-            </div>
-            {newUrl && (
-              <div className="border rounded overflow-hidden max-h-48">
-                <img src={newUrl} alt="Preview" className="w-full h-full object-contain" />
+          <Tabs value={addMode} onValueChange={(v) => setAddMode(v as "url" | "upload")}>
+            <TabsList className="w-full">
+              <TabsTrigger value="url" className="flex-1" data-testid="tab-url">From URL</TabsTrigger>
+              <TabsTrigger value="upload" className="flex-1" data-testid="tab-upload">Upload File</TabsTrigger>
+            </TabsList>
+            <TabsContent value="url" className="space-y-4 mt-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="media-name">Name</Label>
+                <Input
+                  id="media-name"
+                  placeholder="e.g. Summer Banner"
+                  value={newName}
+                  onChange={e => setNewName(e.target.value)}
+                  data-testid="input-media-name"
+                />
               </div>
-            )}
-            <div className="space-y-1.5">
-              <Label htmlFor="media-tags">Tags (comma separated)</Label>
-              <Input
-                id="media-tags"
-                placeholder="e.g. summer, banner, sale"
-                value={newTags}
-                onChange={e => setNewTags(e.target.value)}
-                data-testid="input-media-tags"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAddDialog(false)} data-testid="button-cancel-add">
-              Cancel
-            </Button>
-            <Button
-              onClick={() => addMutation.mutate()}
-              disabled={!newName.trim() || !newUrl.trim() || addMutation.isPending}
-              data-testid="button-save-media"
-            >
-              {addMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Plus className="w-4 h-4 mr-1" />}
-              Add
-            </Button>
-          </DialogFooter>
+              <div className="space-y-1.5">
+                <Label htmlFor="media-url">Image URL</Label>
+                <Input
+                  id="media-url"
+                  type="url"
+                  placeholder="https://example.com/image.jpg"
+                  value={newUrl}
+                  onChange={e => setNewUrl(e.target.value)}
+                  data-testid="input-media-url"
+                />
+              </div>
+              {newUrl && (
+                <div className="border rounded overflow-hidden max-h-48">
+                  <img src={newUrl} alt="Preview" className="w-full h-full object-contain" />
+                </div>
+              )}
+              <div className="space-y-1.5">
+                <Label htmlFor="media-tags">Tags (comma separated)</Label>
+                <Input
+                  id="media-tags"
+                  placeholder="e.g. summer, banner, sale"
+                  value={newTags}
+                  onChange={e => setNewTags(e.target.value)}
+                  data-testid="input-media-tags"
+                />
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowAddDialog(false)} data-testid="button-cancel-add">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => addMutation.mutate()}
+                  disabled={!newName.trim() || !newUrl.trim() || addMutation.isPending}
+                  data-testid="button-save-media"
+                >
+                  {addMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Plus className="w-4 h-4 mr-1" />}
+                  Add
+                </Button>
+              </DialogFooter>
+            </TabsContent>
+            <TabsContent value="upload" className="space-y-4 mt-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="upload-name">Name (optional)</Label>
+                <Input
+                  id="upload-name"
+                  placeholder="Auto-detected from filename"
+                  value={newName}
+                  onChange={e => setNewName(e.target.value)}
+                  data-testid="input-upload-name"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>File (image or video)</Label>
+                <div
+                  className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => fileInputRef.current?.click()}
+                  data-testid="dropzone-upload"
+                >
+                  {uploadFile ? (
+                    <div className="space-y-1">
+                      {uploadFile.type.startsWith("video/") ? (
+                        <Film className="w-8 h-8 mx-auto text-muted-foreground" />
+                      ) : (
+                        <ImageIcon className="w-8 h-8 mx-auto text-muted-foreground" />
+                      )}
+                      <p className="text-sm font-medium">{uploadFile.name}</p>
+                      <p className="text-xs text-muted-foreground">{(uploadFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <Upload className="w-8 h-8 mx-auto text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground">Click to select an image or video</p>
+                      <p className="text-xs text-muted-foreground">JPG, PNG, MP4, MOV up to 30MB</p>
+                    </div>
+                  )}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*,video/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) setUploadFile(file);
+                    }}
+                    data-testid="input-file-upload"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowAddDialog(false)} data-testid="button-cancel-upload">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => fileUploadMutation.mutate()}
+                  disabled={!uploadFile || fileUploadMutation.isPending}
+                  data-testid="button-upload-media"
+                >
+                  {fileUploadMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Upload className="w-4 h-4 mr-1" />}
+                  Upload to Meta
+                </Button>
+              </DialogFooter>
+            </TabsContent>
+          </Tabs>
         </DialogContent>
       </Dialog>
     </div>

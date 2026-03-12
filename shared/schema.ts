@@ -34,6 +34,8 @@ export const merchants = pgTable("merchants", {
   facebookPageId: varchar("facebook_page_id", { length: 255 }),
   facebookPageName: varchar("facebook_page_name", { length: 500 }),
   facebookPixelId: varchar("facebook_pixel_id", { length: 255 }),
+  instagramAccountId: varchar("instagram_account_id", { length: 255 }),
+  instagramAccountName: varchar("instagram_account_name", { length: 500 }),
   facebookTokenExpiresAt: timestamp("facebook_token_expires_at"),
   facebookOAuthConnected: boolean("facebook_oauth_connected").default(false),
   timezone: varchar("timezone", { length: 100 }).default("Asia/Karachi"),

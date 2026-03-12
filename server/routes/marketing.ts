@@ -1641,6 +1641,8 @@ export function registerMarketingRoutes(app: Express) {
         facebookPixelId: merchants.facebookPixelId,
         facebookAdAccountId: merchants.facebookAdAccountId,
         facebookAccessToken: merchants.facebookAccessToken,
+        instagramAccountId: merchants.instagramAccountId,
+        instagramAccountName: merchants.instagramAccountName,
       }).from(merchants).where(eq(merchants.id, merchantId));
 
       if (!merchant) {
@@ -1655,6 +1657,8 @@ export function registerMarketingRoutes(app: Express) {
         pageName: merchant.facebookPageName,
         pixelId: merchant.facebookPixelId,
         adAccountId: merchant.facebookAdAccountId,
+        instagramAccountId: merchant.instagramAccountId,
+        instagramAccountName: merchant.instagramAccountName,
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -1688,6 +1692,8 @@ export function registerMarketingRoutes(app: Express) {
         pageId: z.string().optional(),
         pageName: z.string().optional(),
         pixelId: z.string().optional(),
+        instagramAccountId: z.string().optional(),
+        instagramAccountName: z.string().optional(),
       });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid data" });
@@ -1697,6 +1703,8 @@ export function registerMarketingRoutes(app: Express) {
       if (parsed.data.pageId !== undefined) updates.facebookPageId = parsed.data.pageId;
       if (parsed.data.pageName !== undefined) updates.facebookPageName = parsed.data.pageName;
       if (parsed.data.pixelId !== undefined) updates.facebookPixelId = parsed.data.pixelId;
+      if (parsed.data.instagramAccountId !== undefined) updates.instagramAccountId = parsed.data.instagramAccountId;
+      if (parsed.data.instagramAccountName !== undefined) updates.instagramAccountName = parsed.data.instagramAccountName;
 
       await db.update(merchants).set(updates).where(eq(merchants.id, merchantId));
       res.json({ success: true });
@@ -1788,6 +1796,60 @@ export function registerMarketingRoutes(app: Express) {
         status: a.account_status,
         currency: a.currency,
       })) });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/meta/instagram-accounts", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const [merchant] = await db.select({
+        facebookAccessToken: merchants.facebookAccessToken,
+        facebookPageId: merchants.facebookPageId,
+      }).from(merchants).where(eq(merchants.id, merchantId));
+
+      if (!merchant?.facebookAccessToken) {
+        return res.status(400).json({ error: "Facebook not connected" });
+      }
+
+      const token = decryptToken(merchant.facebookAccessToken);
+      const igAccounts: any[] = [];
+
+      if (merchant.facebookPageId) {
+        const url = new URL(`https://graph.facebook.com/v21.0/${merchant.facebookPageId}`);
+        url.searchParams.set("access_token", token);
+        url.searchParams.set("fields", "instagram_business_account{id,name,username,profile_picture_url}");
+
+        const response = await fetch(url.toString());
+        const data = await response.json();
+        if (data.instagram_business_account) {
+          igAccounts.push(data.instagram_business_account);
+        }
+      }
+
+      const pagesUrl = new URL("https://graph.facebook.com/v21.0/me/accounts");
+      pagesUrl.searchParams.set("access_token", token);
+      pagesUrl.searchParams.set("fields", "id,name,instagram_business_account{id,name,username,profile_picture_url}");
+      pagesUrl.searchParams.set("limit", "50");
+
+      const pagesRes = await fetch(pagesUrl.toString());
+      const pagesData = await pagesRes.json();
+      const pages = pagesData.data || [];
+
+      for (const page of pages) {
+        if (page.instagram_business_account) {
+          const existing = igAccounts.find((ig) => ig.id === page.instagram_business_account.id);
+          if (!existing) {
+            igAccounts.push({
+              ...page.instagram_business_account,
+              pageName: page.name,
+            });
+          }
+        }
+      }
+
+      res.json({ instagramAccounts: igAccounts });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -2137,6 +2199,93 @@ export function registerMarketingRoutes(app: Express) {
 
       res.json({ success: true, hash: result.hash });
     } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/meta/media-library/upload", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const schema = z.object({
+        name: z.string().min(1),
+        type: z.enum(["image", "video"]).default("image"),
+        data: z.string().min(1),
+        mimeType: z.string().min(1),
+        fileSize: z.number().optional(),
+        width: z.number().optional(),
+        height: z.number().optional(),
+      });
+
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid upload data", details: parsed.error.flatten() });
+      }
+
+      const { name, type, data, mimeType, fileSize, width, height } = parsed.data;
+
+      const creds = await getCredentialsForMerchant(merchantId);
+      const actId = `act_${creds.adAccountId.replace("act_", "")}`;
+      const token = creds.accessToken;
+
+      let metaHash: string | undefined;
+      let metaUrl: string | undefined;
+
+      if (type === "image") {
+        const formBody = new URLSearchParams();
+        formBody.set("access_token", token);
+        formBody.set("bytes", data);
+
+        const uploadRes = await fetch(`https://graph.facebook.com/v21.0/${actId}/adimages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: formBody.toString(),
+        });
+        const uploadData = await uploadRes.json();
+
+        if (uploadData.error) {
+          return res.status(400).json({ error: uploadData.error.message });
+        }
+
+        const images = uploadData.images;
+        if (images) {
+          const firstKey = Object.keys(images)[0];
+          metaHash = images[firstKey]?.hash;
+          metaUrl = images[firstKey]?.url;
+        }
+      } else if (type === "video") {
+        const buffer = Buffer.from(data, "base64");
+        const formData = new FormData();
+        const blob = new Blob([buffer], { type: mimeType });
+        formData.append("access_token", token);
+        formData.append("source", blob, name);
+
+        const uploadRes = await fetch(`https://graph.facebook.com/v21.0/${actId}/advideos`, {
+          method: "POST",
+          body: formData as any,
+        });
+        const uploadData = await uploadRes.json();
+
+        if (uploadData.error) {
+          return res.status(400).json({ error: uploadData.error.message });
+        }
+
+        metaHash = uploadData.id;
+      }
+
+      const [media] = await db.insert(adMediaLibrary).values({
+        merchantId,
+        name,
+        type,
+        url: metaUrl || `data:${mimeType};base64,${data.substring(0, 100)}...`,
+        metaMediaHash: metaHash || null,
+        width: width || null,
+        height: height || null,
+        fileSize: fileSize || null,
+      }).returning();
+
+      res.json({ media, metaHash, metaUrl });
+    } catch (error: any) {
+      console.error("[MetaMedia] Upload error:", error.message);
       res.status(500).json({ error: error.message });
     }
   });
