@@ -76,3 +76,20 @@ Preferred communication style: Simple, everyday language.
     - Resend (for email services)
     - OpenAI via Replit AI Integrations (GPT-4o)
     - RoboCall Pakistan API (robocall.pk)
+    - Meta Marketing API v21.0 (ad creation, management, insights sync)
+
+## Meta Ads Integration
+
+### OAuth Connect
+- Facebook OAuth 2.0 flow via `/api/meta/oauth/url` (generates auth URL) and `/api/meta/oauth/callback` (exchanges code for long-lived token)
+- Permissions: `ads_management`, `ads_read`, `business_management`, `pages_show_list`, `pages_read_engagement`
+- Token exchange: short-lived → long-lived, auto-fetches ad accounts & pages
+- Settings: `/settings?tab=marketing` shows "One-Click Connect" card with OAuth button
+
+### Ad Launcher
+- **Service**: `server/services/metaAdLauncher.ts` — write functions: `createCampaign`, `createAdSet`, `createAdCreative`, `createAd`, `uploadImageToMeta`, `launchAd`, `bulkLaunchAds`
+- **Routes**: `POST /api/meta/launch` (single), `POST /api/meta/bulk-launch` (bulk), `GET /api/meta/launch-jobs`, media library CRUD at `/api/meta/media-library`
+- **Frontend Pages**: `/meta/launcher` (wizard: Campaign→Targeting→Creative→Review), `/meta/bulk-launch` (spreadsheet-style), `/meta/media-library` (image management)
+- **Schema**: `ad_launch_jobs` (tracks launch status), `ad_media_library` (stored creatives)
+- **Sidebar**: "Meta Ads" group between Growth and Support with Launcher, Bulk Launch, Media Library items
+- All ads created in PAUSED state by default for safety

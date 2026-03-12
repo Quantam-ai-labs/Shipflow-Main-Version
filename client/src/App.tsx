@@ -107,6 +107,9 @@ import SupportChatPage from "@/pages/support/chat";
 import SupportConnectionPage from "@/pages/support/connection";
 import SupportRoboCallPage from "@/pages/support/robocall";
 import SupportCallQueuePage from "@/pages/support/call-queue";
+import MetaAdLauncher from "@/pages/meta/launcher";
+import MetaMediaLibrary from "@/pages/meta/media-library";
+import MetaBulkLaunch from "@/pages/meta/bulk-launch";
 import NotFound from "@/pages/not-found";
 import LoadsheetPage from "@/pages/loadsheet";
 import WarehousePage from "@/pages/warehouse";
@@ -176,6 +179,9 @@ const routeToPageId: Record<string, string> = {
   "/support/connection": "support-connection",
   "/support/robocall": "support-robocall",
   "/support/call-queue": "support-call-queue",
+  "/meta/launcher": "meta-launcher",
+  "/meta/bulk-launch": "meta-bulk-launch",
+  "/meta/media-library": "meta-media-library",
 };
 
 function getPageIdForRoute(path: string): string | null {
@@ -282,6 +288,9 @@ function AppRoutes() {
       <Route path="/support/connection">{() => <ProtectedRoute component={SupportConnectionPage} path="/support/connection" />}</Route>
       <Route path="/support/robocall">{() => <ProtectedRoute component={SupportRoboCallPage} path="/support/robocall" />}</Route>
       <Route path="/support/call-queue">{() => <ProtectedRoute component={SupportCallQueuePage} path="/support/call-queue" />}</Route>
+      <Route path="/meta/launcher">{() => <ProtectedRoute component={MetaAdLauncher} path="/meta/launcher" />}</Route>
+      <Route path="/meta/bulk-launch">{() => <ProtectedRoute component={MetaBulkLaunch} path="/meta/bulk-launch" />}</Route>
+      <Route path="/meta/media-library">{() => <ProtectedRoute component={MetaMediaLibrary} path="/meta/media-library" />}</Route>
       <Route path="/accounting/settings">{() => <ProtectedRoute component={AccountingSettings} path="/accounting/settings" />}</Route>
       <Route path="/loadsheet">{() => <ProtectedRoute component={LoadsheetPage} path="/loadsheet" />}</Route>
       <Route path="/warehouse/:slug" component={WarehousePage} />

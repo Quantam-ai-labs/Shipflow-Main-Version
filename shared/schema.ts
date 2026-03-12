@@ -31,6 +31,11 @@ export const merchants = pgTable("merchants", {
   facebookAppSecret: text("facebook_app_secret"),
   facebookAccessToken: text("facebook_access_token"),
   facebookAdAccountId: varchar("facebook_ad_account_id", { length: 255 }),
+  facebookPageId: varchar("facebook_page_id", { length: 255 }),
+  facebookPageName: varchar("facebook_page_name", { length: 500 }),
+  facebookPixelId: varchar("facebook_pixel_id", { length: 255 }),
+  facebookTokenExpiresAt: timestamp("facebook_token_expires_at"),
+  facebookOAuthConnected: boolean("facebook_oauth_connected").default(false),
   timezone: varchar("timezone", { length: 100 }).default("Asia/Karachi"),
   roboTags: jsonb("robo_tags").default({ confirm: "Robo-Confirm", pending: "Robo-Pending", cancel: "Robo-Cancel" }),
   otpRequired: boolean("otp_required").default(true),
@@ -2208,3 +2213,57 @@ export const robocallQueue = pgTable("robocall_queue", {
 export const insertRobocallQueueSchema = createInsertSchema(robocallQueue).omit({ id: true, queuedAt: true, completedAt: true });
 export type InsertRobocallQueue = z.infer<typeof insertRobocallQueueSchema>;
 export type RobocallQueue = typeof robocallQueue.$inferSelect;
+
+// ============================================
+// META ADS: MEDIA LIBRARY
+// ============================================
+export const adMediaLibrary = pgTable("ad_media_library", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 500 }).notNull(),
+  type: varchar("type", { length: 20 }).notNull().default("image"),
+  url: text("url").notNull(),
+  metaMediaHash: varchar("meta_media_hash", { length: 255 }),
+  metaMediaId: varchar("meta_media_id", { length: 100 }),
+  width: integer("width"),
+  height: integer("height"),
+  fileSize: integer("file_size"),
+  tags: text("tags").array(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_ad_media_merchant").on(table.merchantId),
+]);
+
+export const insertAdMediaLibrarySchema = createInsertSchema(adMediaLibrary).omit({ id: true, createdAt: true });
+export type InsertAdMediaLibrary = z.infer<typeof insertAdMediaLibrarySchema>;
+export type AdMediaLibrary = typeof adMediaLibrary.$inferSelect;
+
+// ============================================
+// META ADS: AD LAUNCH JOBS
+// ============================================
+export const adLaunchJobs = pgTable("ad_launch_jobs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  status: varchar("status", { length: 30 }).notNull().default("pending"),
+  launchType: varchar("launch_type", { length: 20 }).notNull().default("single"),
+  campaignName: varchar("campaign_name", { length: 500 }).notNull(),
+  objective: varchar("objective", { length: 100 }).notNull().default("OUTCOME_SALES"),
+  dailyBudget: decimal("daily_budget", { precision: 14, scale: 2 }).notNull(),
+  targeting: jsonb("targeting").notNull(),
+  creativeConfig: jsonb("creative_config").notNull(),
+  pageId: varchar("page_id", { length: 255 }),
+  pixelId: varchar("pixel_id", { length: 255 }),
+  metaCampaignId: varchar("meta_campaign_id", { length: 100 }),
+  metaAdsetId: varchar("meta_adset_id", { length: 100 }),
+  metaAdId: varchar("meta_ad_id", { length: 100 }),
+  errorMessage: text("error_message"),
+  launchedAt: timestamp("launched_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_ad_launch_merchant").on(table.merchantId),
+  index("idx_ad_launch_status").on(table.status),
+]);
+
+export const insertAdLaunchJobSchema = createInsertSchema(adLaunchJobs).omit({ id: true, createdAt: true });
+export type InsertAdLaunchJob = z.infer<typeof insertAdLaunchJobSchema>;
+export type AdLaunchJob = typeof adLaunchJobs.$inferSelect;

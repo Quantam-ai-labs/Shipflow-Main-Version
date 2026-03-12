@@ -1,9 +1,9 @@
 import { Express, Response } from "express";
 import { db } from "../db";
-import { eq, and, sql, gte, lte, inArray, isNull, isNotNull } from "drizzle-orm";
+import { eq, and, sql, gte, lte, inArray, isNull, isNotNull, desc } from "drizzle-orm";
 import { z } from "zod";
 import { toMerchantStartOfDay, toMerchantEndOfDay, DEFAULT_TIMEZONE } from "../utils/timezone";
-import { adCampaigns, adAccounts, adCreatives, adInsights, teamMembers, merchants, adProfitabilityEntries, orders, products, insertCampaignJourneyEventSchema, campaignJourneyEvents } from "@shared/schema";
+import { adCampaigns, adAccounts, adCreatives, adInsights, teamMembers, merchants, adProfitabilityEntries, orders, products, insertCampaignJourneyEventSchema, campaignJourneyEvents, adLaunchJobs, adMediaLibrary } from "@shared/schema";
 import { storage } from "../storage";
 import { decryptToken } from "../services/encryption";
 import {
@@ -20,6 +20,13 @@ import {
   testFacebookConnection,
 } from "../services/metaAds";
 import { encryptToken } from "../services/encryption";
+import {
+  fetchFacebookPages,
+  fetchAdAccountPixels,
+  launchAd,
+  bulkLaunchAds,
+  uploadImageToMeta,
+} from "../services/metaAdLauncher";
 import { generateChatResponse, generateDashboardInsights, generateQuickStrategy } from "../services/aiInsights";
 import { attributeOrdersToCampaigns, getAttributionSummary } from "../services/adAttribution";
 import { parseUtmParams } from "../services/shopify";
@@ -1446,6 +1453,440 @@ export function registerMarketingRoutes(app: Express) {
       });
     } catch (error: any) {
       console.error("[RevenueTruth] Dark traffic error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // META OAUTH CONNECT
+  // ============================================
+
+  app.get("/api/meta/oauth/url", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const [merchant] = await db.select({
+        facebookAppId: merchants.facebookAppId,
+      }).from(merchants).where(eq(merchants.id, merchantId));
+
+      const appId = merchant?.facebookAppId || process.env.FACEBOOK_APP_ID;
+      if (!appId) {
+        return res.status(400).json({ error: "Facebook App ID not configured. Set it in Settings > Marketing or as an environment variable." });
+      }
+
+      const redirectUri = `${req.protocol}://${req.get("host")}/api/meta/oauth/callback`;
+      const scopes = [
+        "ads_management",
+        "ads_read",
+        "business_management",
+        "pages_show_list",
+        "pages_read_engagement",
+      ].join(",");
+
+      const state = Buffer.from(JSON.stringify({ merchantId })).toString("base64url");
+
+      const oauthUrl = new URL("https://www.facebook.com/v21.0/dialog/oauth");
+      oauthUrl.searchParams.set("client_id", appId);
+      oauthUrl.searchParams.set("redirect_uri", redirectUri);
+      oauthUrl.searchParams.set("scope", scopes);
+      oauthUrl.searchParams.set("state", state);
+      oauthUrl.searchParams.set("response_type", "code");
+
+      res.json({ url: oauthUrl.toString(), redirectUri });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/meta/oauth/callback", async (req: any, res) => {
+    try {
+      const { code, state, error: fbError, error_description } = req.query;
+
+      if (fbError) {
+        console.error(`[MetaOAuth] Facebook error: ${fbError} - ${error_description}`);
+        return res.redirect(`/settings?tab=marketing&oauth=error&message=${encodeURIComponent(error_description || fbError)}`);
+      }
+
+      if (!code || !state) {
+        return res.redirect("/settings?tab=marketing&oauth=error&message=Missing+authorization+code");
+      }
+
+      let merchantId: string;
+      try {
+        const decoded = JSON.parse(Buffer.from(state as string, "base64url").toString());
+        merchantId = decoded.merchantId;
+      } catch {
+        return res.redirect("/settings?tab=marketing&oauth=error&message=Invalid+state+parameter");
+      }
+
+      const [merchant] = await db.select({
+        facebookAppId: merchants.facebookAppId,
+        facebookAppSecret: merchants.facebookAppSecret,
+      }).from(merchants).where(eq(merchants.id, merchantId));
+
+      const appId = merchant?.facebookAppId || process.env.FACEBOOK_APP_ID;
+      const appSecretRaw = merchant?.facebookAppSecret
+        ? decryptToken(merchant.facebookAppSecret)
+        : process.env.FACEBOOK_APP_SECRET;
+
+      if (!appId || !appSecretRaw) {
+        return res.redirect("/settings?tab=marketing&oauth=error&message=Facebook+App+credentials+not+configured");
+      }
+
+      const redirectUri = `${req.protocol}://${req.get("host")}/api/meta/oauth/callback`;
+
+      const tokenUrl = new URL(`https://graph.facebook.com/v21.0/oauth/access_token`);
+      tokenUrl.searchParams.set("client_id", appId);
+      tokenUrl.searchParams.set("redirect_uri", redirectUri);
+      tokenUrl.searchParams.set("client_secret", appSecretRaw);
+      tokenUrl.searchParams.set("code", code as string);
+
+      const tokenRes = await fetch(tokenUrl.toString());
+      const tokenData = await tokenRes.json();
+
+      if (tokenData.error) {
+        console.error("[MetaOAuth] Token exchange error:", tokenData.error);
+        return res.redirect(`/settings?tab=marketing&oauth=error&message=${encodeURIComponent(tokenData.error.message || "Token exchange failed")}`);
+      }
+
+      const shortToken = tokenData.access_token;
+
+      const longTokenUrl = new URL(`https://graph.facebook.com/v21.0/oauth/access_token`);
+      longTokenUrl.searchParams.set("grant_type", "fb_exchange_token");
+      longTokenUrl.searchParams.set("client_id", appId);
+      longTokenUrl.searchParams.set("client_secret", appSecretRaw);
+      longTokenUrl.searchParams.set("fb_exchange_token", shortToken);
+
+      const longTokenRes = await fetch(longTokenUrl.toString());
+      const longTokenData = await longTokenRes.json();
+      const accessToken = longTokenData.access_token || shortToken;
+      const expiresIn = longTokenData.expires_in;
+
+      const adAccountsUrl = new URL(`https://graph.facebook.com/v21.0/me/adaccounts`);
+      adAccountsUrl.searchParams.set("access_token", accessToken);
+      adAccountsUrl.searchParams.set("fields", "account_id,name,account_status,currency");
+      adAccountsUrl.searchParams.set("limit", "50");
+
+      const adAccountsRes = await fetch(adAccountsUrl.toString());
+      const adAccountsData = await adAccountsRes.json();
+      const adAccountsList = adAccountsData.data || [];
+
+      const pagesUrl = new URL(`https://graph.facebook.com/v21.0/me/accounts`);
+      pagesUrl.searchParams.set("access_token", accessToken);
+      pagesUrl.searchParams.set("fields", "id,name");
+      pagesUrl.searchParams.set("limit", "50");
+
+      const pagesRes = await fetch(pagesUrl.toString());
+      const pagesData = await pagesRes.json();
+      const pagesList = pagesData.data || [];
+
+      const updates: Record<string, any> = {
+        facebookAccessToken: encryptToken(accessToken),
+        facebookOAuthConnected: true,
+        updatedAt: new Date(),
+      };
+
+      if (expiresIn) {
+        updates.facebookTokenExpiresAt = new Date(Date.now() + expiresIn * 1000);
+      }
+
+      if (adAccountsList.length > 0) {
+        const firstAccount = adAccountsList[0];
+        updates.facebookAdAccountId = firstAccount.account_id;
+      }
+
+      if (pagesList.length > 0) {
+        updates.facebookPageId = pagesList[0].id;
+        updates.facebookPageName = pagesList[0].name;
+      }
+
+      await db.update(merchants).set(updates).where(eq(merchants.id, merchantId));
+
+      console.log(`[MetaOAuth] OAuth connected for merchant ${merchantId}. Ad accounts: ${adAccountsList.length}, Pages: ${pagesList.length}`);
+
+      const adAccountsParam = encodeURIComponent(JSON.stringify(adAccountsList.map((a: any) => ({
+        id: a.account_id,
+        name: a.name,
+      }))));
+
+      res.redirect(`/settings?tab=marketing&oauth=success&adAccounts=${adAccountsParam}`);
+    } catch (error: any) {
+      console.error("[MetaOAuth] Callback error:", error);
+      res.redirect(`/settings?tab=marketing&oauth=error&message=${encodeURIComponent(error.message)}`);
+    }
+  });
+
+  app.get("/api/meta/oauth/status", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const [merchant] = await db.select({
+        facebookOAuthConnected: merchants.facebookOAuthConnected,
+        facebookTokenExpiresAt: merchants.facebookTokenExpiresAt,
+        facebookPageId: merchants.facebookPageId,
+        facebookPageName: merchants.facebookPageName,
+        facebookPixelId: merchants.facebookPixelId,
+        facebookAdAccountId: merchants.facebookAdAccountId,
+        facebookAccessToken: merchants.facebookAccessToken,
+      }).from(merchants).where(eq(merchants.id, merchantId));
+
+      if (!merchant) {
+        return res.status(404).json({ error: "Merchant not found" });
+      }
+
+      res.json({
+        connected: !!merchant.facebookOAuthConnected,
+        hasToken: !!merchant.facebookAccessToken,
+        tokenExpiresAt: merchant.facebookTokenExpiresAt,
+        pageId: merchant.facebookPageId,
+        pageName: merchant.facebookPageName,
+        pixelId: merchant.facebookPixelId,
+        adAccountId: merchant.facebookAdAccountId,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/meta/oauth/disconnect", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      await db.update(merchants).set({
+        facebookAccessToken: null,
+        facebookOAuthConnected: false,
+        facebookTokenExpiresAt: null,
+        facebookPageId: null,
+        facebookPageName: null,
+        facebookPixelId: null,
+        updatedAt: new Date(),
+      }).where(eq(merchants.id, merchantId));
+
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.put("/api/meta/oauth/settings", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const schema = z.object({
+        adAccountId: z.string().optional(),
+        pageId: z.string().optional(),
+        pageName: z.string().optional(),
+        pixelId: z.string().optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid data" });
+
+      const updates: Record<string, any> = { updatedAt: new Date() };
+      if (parsed.data.adAccountId !== undefined) updates.facebookAdAccountId = parsed.data.adAccountId;
+      if (parsed.data.pageId !== undefined) updates.facebookPageId = parsed.data.pageId;
+      if (parsed.data.pageName !== undefined) updates.facebookPageName = parsed.data.pageName;
+      if (parsed.data.pixelId !== undefined) updates.facebookPixelId = parsed.data.pixelId;
+
+      await db.update(merchants).set(updates).where(eq(merchants.id, merchantId));
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // META AD LAUNCHER ROUTES
+  // ============================================
+
+  app.get("/api/meta/pages", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const pages = await fetchFacebookPages(merchantId);
+      res.json({ pages });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/meta/pixels", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const pixels = await fetchAdAccountPixels(merchantId);
+      res.json({ pixels });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/meta/launch", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const schema = z.object({
+        campaignName: z.string().min(1),
+        objective: z.string().default("OUTCOME_SALES"),
+        dailyBudget: z.string().min(1),
+        targeting: z.any(),
+        creative: z.object({
+          primaryText: z.string().min(1),
+          headline: z.string().optional(),
+          description: z.string().optional(),
+          linkUrl: z.string().url(),
+          imageUrl: z.string().optional(),
+          imageHash: z.string().optional(),
+          callToAction: z.string().optional(),
+        }),
+        pageId: z.string().min(1),
+        pixelId: z.string().optional(),
+        status: z.string().optional(),
+      });
+
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid launch config", details: parsed.error.flatten() });
+      }
+
+      const config = parsed.data;
+
+      const [job] = await db.insert(adLaunchJobs).values({
+        merchantId,
+        launchType: "single",
+        campaignName: config.campaignName,
+        objective: config.objective,
+        dailyBudget: config.dailyBudget,
+        targeting: config.targeting,
+        creativeConfig: config.creative,
+        pageId: config.pageId,
+        pixelId: config.pixelId,
+        status: "pending",
+      }).returning();
+
+      const result = await launchAd(merchantId, job.id, config);
+      res.json({ success: true, jobId: job.id, ...result });
+    } catch (error: any) {
+      console.error("[MetaAdLauncher] Launch error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/meta/bulk-launch", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const schema = z.object({
+        ads: z.array(z.object({
+          campaignName: z.string().min(1),
+          objective: z.string().default("OUTCOME_SALES"),
+          dailyBudget: z.string().min(1),
+          targeting: z.any(),
+          creative: z.object({
+            primaryText: z.string().min(1),
+            headline: z.string().optional(),
+            description: z.string().optional(),
+            linkUrl: z.string().url(),
+            imageUrl: z.string().optional(),
+            callToAction: z.string().optional(),
+          }),
+          pageId: z.string().min(1),
+          pixelId: z.string().optional(),
+        })).min(1).max(50),
+      });
+
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid bulk launch config", details: parsed.error.flatten() });
+      }
+
+      const result = await bulkLaunchAds(merchantId, parsed.data.ads);
+      res.json({ success: true, ...result });
+    } catch (error: any) {
+      console.error("[MetaAdLauncher] Bulk launch error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/meta/launch-jobs", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const jobs = await db.select()
+        .from(adLaunchJobs)
+        .where(eq(adLaunchJobs.merchantId, merchantId))
+        .orderBy(desc(adLaunchJobs.createdAt))
+        .limit(100);
+      res.json({ jobs });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // META MEDIA LIBRARY
+  // ============================================
+
+  app.get("/api/meta/media-library", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const media = await db.select()
+        .from(adMediaLibrary)
+        .where(eq(adMediaLibrary.merchantId, merchantId))
+        .orderBy(desc(adMediaLibrary.createdAt));
+      res.json({ media });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/meta/media-library", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const schema = z.object({
+        name: z.string().min(1),
+        type: z.enum(["image", "video"]).default("image"),
+        url: z.string().url(),
+        width: z.number().optional(),
+        height: z.number().optional(),
+        fileSize: z.number().optional(),
+        tags: z.array(z.string()).optional(),
+      });
+
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid media data", details: parsed.error.flatten() });
+      }
+
+      const [media] = await db.insert(adMediaLibrary).values({
+        merchantId,
+        ...parsed.data,
+      }).returning();
+
+      res.json({ media });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/meta/media-library/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      await db.delete(adMediaLibrary)
+        .where(and(eq(adMediaLibrary.id, req.params.id), eq(adMediaLibrary.merchantId, merchantId)));
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/meta/media-library/:id/upload-to-meta", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const [media] = await db.select()
+        .from(adMediaLibrary)
+        .where(and(eq(adMediaLibrary.id, req.params.id), eq(adMediaLibrary.merchantId, merchantId)));
+
+      if (!media) return res.status(404).json({ error: "Media not found" });
+
+      const result = await uploadImageToMeta(merchantId, media.url);
+
+      await db.update(adMediaLibrary)
+        .set({ metaMediaHash: result.hash })
+        .where(eq(adMediaLibrary.id, media.id));
+
+      res.json({ success: true, hash: result.hash });
+    } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
   });

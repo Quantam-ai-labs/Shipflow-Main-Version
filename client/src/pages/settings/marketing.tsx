@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
-import { RefreshCw, Megaphone, CheckCircle2, XCircle, Clock, Loader2, Save, Plug, Eye, EyeOff, Key } from "lucide-react";
+import { RefreshCw, Megaphone, CheckCircle2, XCircle, Clock, Loader2, Save, Plug, Eye, EyeOff, Key, LogIn, Unplug } from "lucide-react";
 import { SiFacebook } from "react-icons/si";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -53,6 +53,18 @@ export default function MarketingSettings() {
 
   const { data: campaigns } = useQuery<any[]>({
     queryKey: ["/api/marketing/all-campaigns"],
+  });
+
+  const { data: oauthStatus } = useQuery<{
+    connected: boolean;
+    hasToken: boolean;
+    tokenExpiresAt: string | null;
+    pageId: string | null;
+    pageName: string | null;
+    pixelId: string | null;
+    adAccountId: string | null;
+  }>({
+    queryKey: ["/api/meta/oauth/status"],
   });
 
   useEffect(() => {
@@ -103,6 +115,47 @@ export default function MarketingSettings() {
     },
   });
 
+  const oauthConnectMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("GET", "/api/meta/oauth/url");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      window.location.href = data.url;
+    },
+    onError: (error: any) => {
+      toast({ title: "OAuth Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const oauthDisconnectMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/meta/oauth/disconnect");
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Disconnected", description: "Facebook OAuth has been disconnected." });
+      queryClient.invalidateQueries({ queryKey: ["/api/meta/oauth/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/marketing/sync-status"] });
+    },
+  });
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const oauthResult = params.get("oauth");
+    if (oauthResult === "success") {
+      toast({ title: "Facebook Connected!", description: "Your Facebook account has been connected via OAuth." });
+      queryClient.invalidateQueries({ queryKey: ["/api/meta/oauth/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/marketing/sync-status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/marketing/credentials"] });
+      window.history.replaceState({}, "", window.location.pathname + "?tab=marketing");
+    } else if (oauthResult === "error") {
+      const message = params.get("message") || "OAuth connection failed.";
+      toast({ title: "OAuth Failed", description: message, variant: "destructive" });
+      window.history.replaceState({}, "", window.location.pathname + "?tab=marketing");
+    }
+  }, []);
+
   const syncMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/marketing/sync");
@@ -140,6 +193,101 @@ export default function MarketingSettings() {
           Manage your Facebook / Meta Ads integration and campaign sync settings.
         </p>
       </div>
+
+      <Card data-testid="card-oauth-connect">
+        <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <SiFacebook className="w-5 h-5 text-[#1877F2]" />
+            <div>
+              <CardTitle className="text-base">One-Click Connect</CardTitle>
+              <CardDescription className="text-xs">
+                Connect your Facebook account with OAuth — no need to manually enter tokens.
+              </CardDescription>
+            </div>
+          </div>
+          {oauthStatus?.connected ? (
+            <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" data-testid="badge-oauth-status">
+              <CheckCircle2 className="w-3 h-3 mr-1" />
+              OAuth Connected
+            </Badge>
+          ) : (
+            <Badge className="bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300" data-testid="badge-oauth-status">
+              Not Connected
+            </Badge>
+          )}
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {oauthStatus?.connected ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                {oauthStatus.pageName && (
+                  <div>
+                    <span className="text-muted-foreground text-xs">Facebook Page</span>
+                    <p className="font-medium" data-testid="text-oauth-page">{oauthStatus.pageName}</p>
+                  </div>
+                )}
+                {oauthStatus.adAccountId && (
+                  <div>
+                    <span className="text-muted-foreground text-xs">Ad Account</span>
+                    <p className="font-medium" data-testid="text-oauth-ad-account">{oauthStatus.adAccountId}</p>
+                  </div>
+                )}
+                {oauthStatus.tokenExpiresAt && (
+                  <div>
+                    <span className="text-muted-foreground text-xs">Token Expires</span>
+                    <p className="font-medium text-xs" data-testid="text-token-expires">
+                      {formatPkDateTime(oauthStatus.tokenExpiresAt)}
+                    </p>
+                  </div>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => oauthConnectMutation.mutate()}
+                  disabled={oauthConnectMutation.isPending}
+                  data-testid="button-reconnect-oauth"
+                >
+                  {oauthConnectMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <LogIn className="w-3.5 h-3.5 mr-1" />}
+                  Reconnect
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => oauthDisconnectMutation.mutate()}
+                  disabled={oauthDisconnectMutation.isPending}
+                  className="text-destructive hover:text-destructive"
+                  data-testid="button-disconnect-oauth"
+                >
+                  <Unplug className="w-3.5 h-3.5 mr-1" />
+                  Disconnect
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Click the button below to connect your Facebook account. This will grant 1SOL.AI permission to manage your ads.
+                Make sure you have your Facebook App ID and App Secret configured below first.
+              </p>
+              <Button
+                onClick={() => oauthConnectMutation.mutate()}
+                disabled={oauthConnectMutation.isPending}
+                className="bg-[#1877F2] hover:bg-[#166FE5] text-white"
+                data-testid="button-connect-oauth"
+              >
+                {oauthConnectMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                ) : (
+                  <SiFacebook className="w-4 h-4 mr-2" />
+                )}
+                Connect with Facebook
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card data-testid="card-facebook-credentials">
         <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">

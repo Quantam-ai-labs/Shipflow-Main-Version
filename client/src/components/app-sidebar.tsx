@@ -86,6 +86,9 @@ import {
   Target,
   PhoneCall,
   ListOrdered,
+  Rocket,
+  ImageIcon,
+  Layers,
   type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -158,6 +161,16 @@ const allNavGroups: NavGroup[] = [
       { id: "ads-profitability", title: "Profitability", url: "/marketing/profitability", icon: TrendingUp },
       { id: "ads-attribution", title: "Attribution", url: "/marketing/attribution", icon: Target },
       { id: "revenue-truth", title: "Revenue Truth", url: "/marketing/revenue-truth", icon: BarChart3 },
+    ],
+  },
+  {
+    id: "meta",
+    title: "Meta Ads",
+    icon: Rocket,
+    items: [
+      { id: "meta-launcher", title: "Ad Launcher", url: "/meta/launcher", icon: Rocket },
+      { id: "meta-bulk-launch", title: "Bulk Launch", url: "/meta/bulk-launch", icon: Layers },
+      { id: "meta-media-library", title: "Media Library", url: "/meta/media-library", icon: ImageIcon },
     ],
   },
   {
