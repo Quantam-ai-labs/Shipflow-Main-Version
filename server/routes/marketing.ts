@@ -28,6 +28,16 @@ import {
   uploadImageToMeta,
 } from "../services/metaAdLauncher";
 import { generateChatResponse, generateDashboardInsights, generateQuickStrategy } from "../services/aiInsights";
+import crypto from "crypto";
+
+const oauthStateStore = new Map<string, { merchantId: string; createdAt: number }>();
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, val] of oauthStateStore) {
+    if (now - val.createdAt > 10 * 60 * 1000) oauthStateStore.delete(key);
+  }
+}, 60 * 1000);
 import { attributeOrdersToCampaigns, getAttributionSummary } from "../services/adAttribution";
 import { parseUtmParams } from "../services/shopify";
 
@@ -1482,13 +1492,14 @@ export function registerMarketingRoutes(app: Express) {
         "pages_read_engagement",
       ].join(",");
 
-      const state = Buffer.from(JSON.stringify({ merchantId })).toString("base64url");
+      const stateToken = crypto.randomBytes(32).toString("hex");
+      oauthStateStore.set(stateToken, { merchantId, createdAt: Date.now() });
 
       const oauthUrl = new URL("https://www.facebook.com/v21.0/dialog/oauth");
       oauthUrl.searchParams.set("client_id", appId);
       oauthUrl.searchParams.set("redirect_uri", redirectUri);
       oauthUrl.searchParams.set("scope", scopes);
-      oauthUrl.searchParams.set("state", state);
+      oauthUrl.searchParams.set("state", stateToken);
       oauthUrl.searchParams.set("response_type", "code");
 
       res.json({ url: oauthUrl.toString(), redirectUri });
@@ -1510,13 +1521,17 @@ export function registerMarketingRoutes(app: Express) {
         return res.redirect("/settings?tab=marketing&oauth=error&message=Missing+authorization+code");
       }
 
-      let merchantId: string;
-      try {
-        const decoded = JSON.parse(Buffer.from(state as string, "base64url").toString());
-        merchantId = decoded.merchantId;
-      } catch {
-        return res.redirect("/settings?tab=marketing&oauth=error&message=Invalid+state+parameter");
+      const stateEntry = oauthStateStore.get(state as string);
+      if (!stateEntry) {
+        return res.redirect("/settings?tab=marketing&oauth=error&message=Invalid+or+expired+state+parameter");
       }
+      oauthStateStore.delete(state as string);
+
+      if (Date.now() - stateEntry.createdAt > 10 * 60 * 1000) {
+        return res.redirect("/settings?tab=marketing&oauth=error&message=OAuth+state+expired");
+      }
+
+      const merchantId = stateEntry.merchantId;
 
       const [merchant] = await db.select({
         facebookAppId: merchants.facebookAppId,
@@ -1685,6 +1700,94 @@ export function registerMarketingRoutes(app: Express) {
 
       await db.update(merchants).set(updates).where(eq(merchants.id, merchantId));
       res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/meta/oauth/refresh-token", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const [merchant] = await db.select({
+        facebookAppId: merchants.facebookAppId,
+        facebookAppSecret: merchants.facebookAppSecret,
+        facebookAccessToken: merchants.facebookAccessToken,
+      }).from(merchants).where(eq(merchants.id, merchantId));
+
+      if (!merchant?.facebookAccessToken) {
+        return res.status(400).json({ error: "No access token to refresh" });
+      }
+
+      const appId = merchant.facebookAppId || process.env.FACEBOOK_APP_ID;
+      const appSecretRaw = merchant.facebookAppSecret
+        ? decryptToken(merchant.facebookAppSecret)
+        : process.env.FACEBOOK_APP_SECRET;
+
+      if (!appId || !appSecretRaw) {
+        return res.status(400).json({ error: "Facebook App credentials not configured" });
+      }
+
+      const currentToken = decryptToken(merchant.facebookAccessToken);
+
+      const refreshUrl = new URL("https://graph.facebook.com/v21.0/oauth/access_token");
+      refreshUrl.searchParams.set("grant_type", "fb_exchange_token");
+      refreshUrl.searchParams.set("client_id", appId);
+      refreshUrl.searchParams.set("client_secret", appSecretRaw);
+      refreshUrl.searchParams.set("fb_exchange_token", currentToken);
+
+      const refreshRes = await fetch(refreshUrl.toString());
+      const refreshData = await refreshRes.json();
+
+      if (refreshData.error) {
+        return res.status(400).json({ error: refreshData.error.message || "Token refresh failed" });
+      }
+
+      const updates: Record<string, any> = {
+        facebookAccessToken: encryptToken(refreshData.access_token),
+        updatedAt: new Date(),
+      };
+
+      if (refreshData.expires_in) {
+        updates.facebookTokenExpiresAt = new Date(Date.now() + refreshData.expires_in * 1000);
+      }
+
+      await db.update(merchants).set(updates).where(eq(merchants.id, merchantId));
+
+      res.json({
+        success: true,
+        expiresAt: updates.facebookTokenExpiresAt || null,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/meta/ad-accounts", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const [merchant] = await db.select({
+        facebookAccessToken: merchants.facebookAccessToken,
+      }).from(merchants).where(eq(merchants.id, merchantId));
+
+      if (!merchant?.facebookAccessToken) {
+        return res.status(400).json({ error: "Facebook not connected" });
+      }
+
+      const token = decryptToken(merchant.facebookAccessToken);
+      const url = new URL("https://graph.facebook.com/v21.0/me/adaccounts");
+      url.searchParams.set("access_token", token);
+      url.searchParams.set("fields", "account_id,name,account_status,currency");
+      url.searchParams.set("limit", "50");
+
+      const response = await fetch(url.toString());
+      const data = await response.json();
+
+      res.json({ adAccounts: (data.data || []).map((a: any) => ({
+        id: a.account_id,
+        name: a.name,
+        status: a.account_status,
+        currency: a.currency,
+      })) });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

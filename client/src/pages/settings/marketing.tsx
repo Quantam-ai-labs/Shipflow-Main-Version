@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RefreshCw, Megaphone, CheckCircle2, XCircle, Clock, Loader2, Save, Plug, Eye, EyeOff, Key, LogIn, Unplug } from "lucide-react";
 import { SiFacebook } from "react-icons/si";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -140,6 +141,44 @@ export default function MarketingSettings() {
     },
   });
 
+  const { data: adAccountsList } = useQuery<{ adAccounts: { id: string; name: string; status: number; currency: string }[] }>({
+    queryKey: ["/api/meta/ad-accounts"],
+    enabled: !!oauthStatus?.connected,
+  });
+
+  const { data: pagesList } = useQuery<{ pages: { id: string; name: string }[] }>({
+    queryKey: ["/api/meta/pages"],
+    enabled: !!oauthStatus?.connected,
+  });
+
+  const refreshTokenMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/meta/oauth/refresh-token");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Token Refreshed", description: "Your Facebook access token has been refreshed." });
+      queryClient.invalidateQueries({ queryKey: ["/api/meta/oauth/status"] });
+    },
+    onError: (error: any) => {
+      toast({ title: "Refresh Failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const updateOAuthSettingsMutation = useMutation({
+    mutationFn: async (settings: { adAccountId?: string; pageId?: string; pageName?: string; pixelId?: string }) => {
+      const res = await apiRequest("PUT", "/api/meta/oauth/settings", settings);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Settings Updated" });
+      queryClient.invalidateQueries({ queryKey: ["/api/meta/oauth/status"] });
+    },
+    onError: (error: any) => {
+      toast({ title: "Update Failed", description: error.message, variant: "destructive" });
+    },
+  });
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const oauthResult = params.get("oauth");
@@ -218,29 +257,68 @@ export default function MarketingSettings() {
         </CardHeader>
         <CardContent className="space-y-3">
           {oauthStatus?.connected ? (
-            <div className="space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                {oauthStatus.pageName && (
-                  <div>
-                    <span className="text-muted-foreground text-xs">Facebook Page</span>
-                    <p className="font-medium" data-testid="text-oauth-page">{oauthStatus.pageName}</p>
-                  </div>
-                )}
-                {oauthStatus.adAccountId && (
-                  <div>
-                    <span className="text-muted-foreground text-xs">Ad Account</span>
-                    <p className="font-medium" data-testid="text-oauth-ad-account">{oauthStatus.adAccountId}</p>
-                  </div>
-                )}
-                {oauthStatus.tokenExpiresAt && (
-                  <div>
-                    <span className="text-muted-foreground text-xs">Token Expires</span>
-                    <p className="font-medium text-xs" data-testid="text-token-expires">
-                      {formatPkDateTime(oauthStatus.tokenExpiresAt)}
-                    </p>
-                  </div>
-                )}
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Ad Account</Label>
+                  <Select
+                    value={oauthStatus.adAccountId || ""}
+                    onValueChange={(val) => {
+                      updateOAuthSettingsMutation.mutate({ adAccountId: val });
+                    }}
+                    data-testid="select-ad-account"
+                  >
+                    <SelectTrigger className="h-8 text-sm" data-testid="select-ad-account-trigger">
+                      <SelectValue placeholder="Select ad account" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {adAccountsList?.adAccounts?.map((acc) => (
+                        <SelectItem key={acc.id} value={acc.id} data-testid={`select-ad-account-${acc.id}`}>
+                          {acc.name || acc.id} ({acc.currency})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Facebook Page</Label>
+                  <Select
+                    value={oauthStatus.pageId || ""}
+                    onValueChange={(val) => {
+                      const page = pagesList?.pages?.find((p) => p.id === val);
+                      updateOAuthSettingsMutation.mutate({ pageId: val, pageName: page?.name || val });
+                    }}
+                    data-testid="select-page"
+                  >
+                    <SelectTrigger className="h-8 text-sm" data-testid="select-page-trigger">
+                      <SelectValue placeholder="Select page" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {pagesList?.pages?.map((page) => (
+                        <SelectItem key={page.id} value={page.id} data-testid={`select-page-${page.id}`}>
+                          {page.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
+              {oauthStatus.tokenExpiresAt && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Clock className="w-3 h-3" />
+                  <span data-testid="text-token-expires">Token expires {formatPkDateTime(oauthStatus.tokenExpiresAt)}</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-xs"
+                    onClick={() => refreshTokenMutation.mutate()}
+                    disabled={refreshTokenMutation.isPending}
+                    data-testid="button-refresh-token"
+                  >
+                    {refreshTokenMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                  </Button>
+                </div>
+              )}
               <div className="flex gap-2">
                 <Button
                   variant="outline"
