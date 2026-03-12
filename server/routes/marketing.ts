@@ -17,7 +17,6 @@ import {
   getLastSyncInfo,
   getSyncRunStatus,
   getCredentialsForMerchant,
-  getOauthTokenForMerchant,
   testFacebookConnection,
   META_API_VERSION,
   META_BASE_URL,
@@ -1778,7 +1777,8 @@ export function registerMarketingRoutes(app: Express) {
   app.get("/api/meta/ad-accounts", isAuthenticated, async (req: any, res) => {
     try {
       const merchantId = await getMerchantId(req);
-      const token = await getOauthTokenForMerchant(merchantId);
+      const creds = await getCredentialsForMerchant(merchantId);
+      const token = creds.accessToken;
       const url = new URL(`${META_BASE_URL}/me/adaccounts`);
       url.searchParams.set("access_token", token);
       url.searchParams.set("fields", "account_id,name,account_status,currency");
@@ -1801,7 +1801,8 @@ export function registerMarketingRoutes(app: Express) {
   app.get("/api/meta/instagram-accounts", isAuthenticated, async (req: any, res) => {
     try {
       const merchantId = await getMerchantId(req);
-      const token = await getOauthTokenForMerchant(merchantId);
+      const creds = await getCredentialsForMerchant(merchantId);
+      const token = creds.accessToken;
 
       const [merchant] = await db.select({
         metaSelectedPageId: merchants.metaSelectedPageId,
@@ -2080,7 +2081,8 @@ export function registerMarketingRoutes(app: Express) {
       const parsed = statusSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid status" });
 
-      const token = await getOauthTokenForMerchant(merchantId);
+      const creds = await getCredentialsForMerchant(merchantId);
+      const token = creds.accessToken;
 
       const response = await fetch(`${META_BASE_URL}/${campaignId}`, {
         method: "POST",
