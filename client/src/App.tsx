@@ -309,6 +309,9 @@ function AppRoutes() {
       <Route path="/settings/status-mapping"><Redirect to="/settings?tab=mapping" /></Route>
       <Route path="/settings/marketing"><Redirect to="/settings?tab=marketing" /></Route>
       <Route path="/settings">{() => <ProtectedRoute component={Settings} path="/settings" />}</Route>
+      <Route path="/privacy-policy" component={PrivacyPolicy} />
+      <Route path="/terms-of-service" component={TermsOfService} />
+      <Route path="/data-deletion" component={DataDeletion} />
       <Route path="/onboarding" component={Onboarding} />
       <Route path="/admin" component={AdminPanel} />
       <Route component={NotFound} />
@@ -513,9 +516,9 @@ function MainApp() {
     return <AgentChatPage />;
   }
 
-  if (location === "/privacy-policy") return <PrivacyPolicy />;
-  if (location === "/terms-of-service") return <TermsOfService />;
-  if (location === "/data-deletion") return <DataDeletion />;
+  if (location.startsWith("/privacy-policy")) return <PrivacyPolicy />;
+  if (location.startsWith("/terms-of-service")) return <TermsOfService />;
+  if (location.startsWith("/data-deletion")) return <DataDeletion />;
 
   if (!isAuthenticated) {
     return <AuthPage />;
