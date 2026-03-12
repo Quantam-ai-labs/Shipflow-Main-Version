@@ -32,7 +32,8 @@ import {
   Plus, Pencil, Trash2, ChevronDown, ChevronRight, Upload,
   Download, Search, FileSpreadsheet, AlertCircle, CheckCircle2,
 } from "lucide-react";
-import * as XLSX from "xlsx";
+import readXlsxFile from "read-excel-file/browser";
+import writeXlsxFile from "write-excel-file/browser";
 
 interface Product {
   id: string;
@@ -234,7 +235,7 @@ export default function AccountingProducts() {
     }
   }
 
-  function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -243,28 +244,32 @@ export default function AccountingProducts() {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (ev) => {
+    try {
+      let rowsArray: any[][];
       try {
-        const data = new Uint8Array(ev.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: "array" });
-        let sheetName = "Products";
-        if (!workbook.SheetNames.includes(sheetName)) {
-          sheetName = workbook.SheetNames[0];
-        }
-        const sheet = workbook.Sheets[sheetName];
-        const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
-        if (rows.length === 0) {
-          toast({ title: "Empty file", description: "No rows found in the file.", variant: "destructive" });
-          return;
-        }
-        setImportRows(rows);
-        parseImportRows(rows);
+        rowsArray = await readXlsxFile(file, { sheet: "Products" });
       } catch {
-        toast({ title: "Failed to read file", description: "Make sure it's a valid CSV or Excel file.", variant: "destructive" });
+        rowsArray = await readXlsxFile(file);
       }
-    };
-    reader.readAsArrayBuffer(file);
+
+      if (rowsArray.length < 2) {
+        toast({ title: "Empty file", description: "No rows found in the file.", variant: "destructive" });
+        return;
+      }
+
+      const [headers, ...dataRows] = rowsArray;
+      const rows = dataRows.map((row) => {
+        const obj: Record<string, any> = {};
+        (headers as any[]).forEach((h, i) => { obj[String(h)] = row[i] ?? ""; });
+        return obj;
+      });
+
+      setImportRows(rows);
+      parseImportRows(rows);
+    } catch {
+      toast({ title: "Failed to read file", description: "Make sure it's a valid CSV or Excel file.", variant: "destructive" });
+    }
+
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
@@ -283,13 +288,13 @@ export default function AccountingProducts() {
     }
   }
 
-  function downloadTemplate() {
+  async function downloadTemplate() {
     const headers = ["name", "sku", "sale_price", "unit", "track_inventory", "purchase_cost", "category", "barcode"];
     const example = ["Sample Product", "", "500", "pcs", "YES", "300", "General", ""];
-    const ws = XLSX.utils.aoa_to_sheet([headers, example]);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Products");
-    XLSX.writeFile(wb, "product_import_template.xlsx");
+    await writeXlsxFile([headers, example] as any, {
+      sheet: "Products",
+      fileName: "product_import_template.xlsx",
+    });
   }
 
   const filtered = products.filter((p) => {

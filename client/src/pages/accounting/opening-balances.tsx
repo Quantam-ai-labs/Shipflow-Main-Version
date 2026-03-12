@@ -28,7 +28,8 @@ import {
   Plus, Trash2, Upload, FileSpreadsheet, RotateCcw, AlertTriangle,
   CheckCircle, XCircle, Lock, LockOpen, Loader2, Download,
 } from "lucide-react";
-import * as XLSX from "xlsx";
+import readXlsxFile from "read-excel-file/browser";
+import writeXlsxFile from "write-excel-file/browser";
 
 interface PreviewRow {
   row: number;
@@ -229,7 +230,7 @@ export default function OpeningBalancesPage() {
     parseMutation.mutate(rows);
   }
 
-  function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) {
@@ -243,68 +244,61 @@ export default function OpeningBalancesPage() {
     }
     setImportFileName(file.name);
 
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const data = ev.target?.result;
-        let rows: any[] = [];
+    try {
+      let rows: any[] = [];
 
-        if (ext === "csv") {
-          const text = data as string;
-          const lines = text.split(/\r?\n/).filter(l => l.trim());
-          if (lines.length < 2) {
-            toast({ title: "Empty file", description: "File must have headers and at least one data row.", variant: "destructive" });
-            return;
-          }
-          const headers = lines[0].split(",").map(h => h.trim().toLowerCase().replace(/['"]/g, ""));
-          const requiredCols = ["entity_type", "entity_name", "balance_type", "amount"];
-          const missing = requiredCols.filter(c => !headers.includes(c));
-          if (missing.length > 0) {
-            toast({ title: "Missing columns", description: `Required columns missing: ${missing.join(", ")}`, variant: "destructive" });
-            return;
-          }
-          for (let i = 1; i < lines.length; i++) {
-            const vals = lines[i].split(",").map(v => v.trim().replace(/^["']|["']$/g, ""));
-            const row: any = {};
-            headers.forEach((h, j) => { row[h] = vals[j] || ""; });
-            rows.push(row);
-          }
-        } else {
-          const workbook = XLSX.read(data, { type: "array" });
-          let sheetName = workbook.SheetNames.find(s => s.toLowerCase() === "openingbalances") || workbook.SheetNames[0];
-          const sheet = workbook.Sheets[sheetName];
-          const jsonData = XLSX.utils.sheet_to_json(sheet, { defval: "" });
-          const requiredCols = ["entity_type", "entity_name", "balance_type", "amount"];
-          if (jsonData.length === 0) {
-            toast({ title: "Empty file", description: "No data rows found.", variant: "destructive" });
-            return;
-          }
-          const firstRow = jsonData[0] as any;
-          const actualHeaders = Object.keys(firstRow).map(k => k.toLowerCase().trim());
-          const missing = requiredCols.filter(c => !actualHeaders.some(h => h === c));
-          if (missing.length > 0) {
-            toast({ title: "Missing columns", description: `Required columns missing: ${missing.join(", ")}`, variant: "destructive" });
-            return;
-          }
-          rows = jsonData.map((r: any) => {
-            const normalized: any = {};
-            Object.keys(r).forEach(k => { normalized[k.toLowerCase().trim()] = r[k]; });
-            return normalized;
-          });
+      if (ext === "csv") {
+        const text = await file.text();
+        const lines = text.split(/\r?\n/).filter(l => l.trim());
+        if (lines.length < 2) {
+          toast({ title: "Empty file", description: "File must have headers and at least one data row.", variant: "destructive" });
+          return;
         }
-
-        setParsedRows(rows);
-        parseMutation.mutate(rows);
-      } catch (err: any) {
-        toast({ title: "Parse Error", description: err.message || "Failed to parse file.", variant: "destructive" });
+        const headers = lines[0].split(",").map(h => h.trim().toLowerCase().replace(/['"]/g, ""));
+        const requiredCols = ["entity_type", "entity_name", "balance_type", "amount"];
+        const missing = requiredCols.filter(c => !headers.includes(c));
+        if (missing.length > 0) {
+          toast({ title: "Missing columns", description: `Required columns missing: ${missing.join(", ")}`, variant: "destructive" });
+          return;
+        }
+        for (let i = 1; i < lines.length; i++) {
+          const vals = lines[i].split(",").map(v => v.trim().replace(/^["']|["']$/g, ""));
+          const row: any = {};
+          headers.forEach((h, j) => { row[h] = vals[j] || ""; });
+          rows.push(row);
+        }
+      } else {
+        let rowsArray: any[][];
+        try {
+          rowsArray = await readXlsxFile(file, { sheet: "OpeningBalances" });
+        } catch {
+          rowsArray = await readXlsxFile(file);
+        }
+        const requiredCols = ["entity_type", "entity_name", "balance_type", "amount"];
+        if (rowsArray.length < 2) {
+          toast({ title: "Empty file", description: "No data rows found.", variant: "destructive" });
+          return;
+        }
+        const [headerRow, ...dataRows] = rowsArray;
+        const actualHeaders = (headerRow as any[]).map(h => String(h).toLowerCase().trim());
+        const missing = requiredCols.filter(c => !actualHeaders.includes(c));
+        if (missing.length > 0) {
+          toast({ title: "Missing columns", description: `Required columns missing: ${missing.join(", ")}`, variant: "destructive" });
+          return;
+        }
+        rows = dataRows.map(row => {
+          const normalized: any = {};
+          actualHeaders.forEach((h, i) => { normalized[h] = row[i] ?? ""; });
+          return normalized;
+        });
       }
-    };
 
-    if (ext === "csv") {
-      reader.readAsText(file);
-    } else {
-      reader.readAsArrayBuffer(file);
+      setParsedRows(rows);
+      parseMutation.mutate(rows);
+    } catch (err: any) {
+      toast({ title: "Parse Error", description: err.message || "Failed to parse file.", variant: "destructive" });
     }
+
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
@@ -319,17 +313,17 @@ export default function OpeningBalancesPage() {
     postBatchMutation.mutate({ openingDate: new Date(date).toISOString(), lines });
   }
 
-  function downloadTemplate() {
-    const ws = XLSX.utils.aoa_to_sheet([
+  async function downloadTemplate() {
+    await writeXlsxFile([
       ["entity_type", "entity_name", "balance_type", "amount"],
       ["ACCOUNT", "Cash Register", "INCREASE", "50000"],
       ["ACCOUNT", "Bank Account", "INCREASE", "150000"],
       ["PARTY", "Customer ABC", "RECEIVABLE", "25000"],
       ["PARTY", "Supplier XYZ", "PAYABLE", "10000"],
-    ]);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "OpeningBalances");
-    XLSX.writeFile(wb, "opening_balances_template.xlsx");
+    ] as any, {
+      sheet: "OpeningBalances",
+      fileName: "opening_balances_template.xlsx",
+    });
   }
 
   return (
