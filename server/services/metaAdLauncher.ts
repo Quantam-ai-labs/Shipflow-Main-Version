@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { adLaunchJobs, adMediaLibrary, merchants, customAudiences, adAutomationRules, adInsights, adCampaigns } from "@shared/schema";
+import { adLaunchJobs, adMediaLibrary, merchants, customAudiences, adAutomationRules, adInsights, adCampaigns, adSets } from "@shared/schema";
 import { eq, and, sql, gte, lte, inArray } from "drizzle-orm";
 import { getCredentialsForMerchant, META_API_VERSION, META_BASE_URL } from "./metaAds";
 import { decryptToken } from "./encryption";
@@ -694,13 +694,21 @@ export async function evaluateAutomationRules(merchantId: string): Promise<{ tri
       const dateTo = new Date().toISOString().split("T")[0];
       const dateFrom = new Date(Date.now() - windowDays * 86400000).toISOString().split("T")[0];
 
-      const campaigns = await db.select().from(adCampaigns)
-        .where(and(
-          eq(adCampaigns.merchantId, merchantId),
-          eq(adCampaigns.effectiveStatus, "ACTIVE"),
-        ));
+      const ruleEntityType = (rule as any).entityType || "campaign";
 
-      for (const campaign of campaigns) {
+      let entities: { entityId: string; entityName: string; insightEntityType: string }[] = [];
+
+      if (ruleEntityType === "adset") {
+        const sets = await db.select().from(adSets)
+          .where(and(eq(adSets.merchantId, merchantId), eq(adSets.effectiveStatus, "ACTIVE")));
+        entities = sets.map(s => ({ entityId: s.adSetId, entityName: s.name, insightEntityType: "adset" }));
+      } else {
+        const campaigns = await db.select().from(adCampaigns)
+          .where(and(eq(adCampaigns.merchantId, merchantId), eq(adCampaigns.effectiveStatus, "ACTIVE")));
+        entities = campaigns.map(c => ({ entityId: c.campaignId, entityName: c.name, insightEntityType: "campaign" }));
+      }
+
+      for (const entity of entities) {
         const insights = await db.select({
           totalSpend: sql<string>`COALESCE(SUM(${adInsights.spend}::numeric), 0)`,
           totalPurchases: sql<number>`COALESCE(SUM(${adInsights.purchases}), 0)`,
@@ -710,8 +718,8 @@ export async function evaluateAutomationRules(merchantId: string): Promise<{ tri
         }).from(adInsights)
           .where(and(
             eq(adInsights.merchantId, merchantId),
-            eq(adInsights.entityId, campaign.campaignId),
-            eq(adInsights.entityType, "campaign"),
+            eq(adInsights.entityId, entity.entityId),
+            eq(adInsights.entityType, entity.insightEntityType),
             gte(adInsights.date, dateFrom),
             lte(adInsights.date, dateTo),
           ));
@@ -747,37 +755,38 @@ export async function evaluateAutomationRules(merchantId: string): Promise<{ tri
 
         if (!conditionMet) continue;
 
+        const entityLabel = ruleEntityType === "adset" ? "ad set" : "campaign";
         let actionDesc = "";
         try {
           switch (rule.actionType) {
             case "pause":
-              await metaApiPost(creds, campaign.campaignId, { status: "PAUSED" });
-              actionDesc = `Paused campaign "${campaign.name}" (${rule.conditionMetric} ${rule.conditionOperator} ${threshold}, actual: ${metricValue.toFixed(2)})`;
+              await metaApiPost(creds, entity.entityId, { status: "PAUSED" });
+              actionDesc = `Paused ${entityLabel} "${entity.entityName}" (${rule.conditionMetric} ${rule.conditionOperator} ${threshold}, actual: ${metricValue.toFixed(2)})`;
               break;
             case "increase_budget": {
               const pct = parseFloat(String(rule.actionValue)) || 20;
-              const currentData = await metaApiGet(creds, campaign.campaignId, { fields: "daily_budget" });
+              const currentData = await metaApiGet(creds, entity.entityId, { fields: "daily_budget" });
               const currentBudget = parseFloat(currentData.daily_budget) || 0;
               const newBudget = Math.round(currentBudget * (1 + pct / 100));
-              await metaApiPost(creds, campaign.campaignId, { daily_budget: newBudget });
-              actionDesc = `Increased budget ${pct}% for "${campaign.name}" (${currentBudget / 100} → ${newBudget / 100})`;
+              await metaApiPost(creds, entity.entityId, { daily_budget: newBudget });
+              actionDesc = `Increased budget ${pct}% for ${entityLabel} "${entity.entityName}" (${currentBudget / 100} → ${newBudget / 100})`;
               break;
             }
             case "decrease_budget": {
               const pct = parseFloat(String(rule.actionValue)) || 20;
-              const currentData = await metaApiGet(creds, campaign.campaignId, { fields: "daily_budget" });
+              const currentData = await metaApiGet(creds, entity.entityId, { fields: "daily_budget" });
               const currentBudget = parseFloat(currentData.daily_budget) || 0;
               const newBudget = Math.max(Math.round(currentBudget * (1 - pct / 100)), 100);
-              await metaApiPost(creds, campaign.campaignId, { daily_budget: newBudget });
-              actionDesc = `Decreased budget ${pct}% for "${campaign.name}" (${currentBudget / 100} → ${newBudget / 100})`;
+              await metaApiPost(creds, entity.entityId, { daily_budget: newBudget });
+              actionDesc = `Decreased budget ${pct}% for ${entityLabel} "${entity.entityName}" (${currentBudget / 100} → ${newBudget / 100})`;
               break;
             }
             case "notify":
-              actionDesc = `Rule triggered for "${campaign.name}": ${rule.conditionMetric} ${rule.conditionOperator} ${threshold} (actual: ${metricValue.toFixed(2)})`;
+              actionDesc = `Rule triggered for ${entityLabel} "${entity.entityName}": ${rule.conditionMetric} ${rule.conditionOperator} ${threshold} (actual: ${metricValue.toFixed(2)})`;
               break;
           }
         } catch (actionErr: any) {
-          actionDesc = `Failed action on "${campaign.name}": ${actionErr.message}`;
+          actionDesc = `Failed action on ${entityLabel} "${entity.entityName}": ${actionErr.message}`;
         }
 
         if (actionDesc) {

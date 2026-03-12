@@ -2333,8 +2333,16 @@ export function registerMarketingRoutes(app: Express) {
         emails: z.array(z.string()).optional(),
         phones: z.array(z.string()).optional(),
         pixelId: z.string().optional(),
-        retentionDays: z.number().optional(),
-      });
+        retentionDays: z.number().min(1).max(180).optional(),
+      }).refine((data) => {
+        if (data.audienceType === "website") {
+          return !!data.pixelId && !!data.retentionDays;
+        }
+        if (data.audienceType === "customer_list") {
+          return (data.emails && data.emails.length > 0) || (data.phones && data.phones.length > 0);
+        }
+        return true;
+      }, { message: "Website audiences require pixelId and retentionDays. Customer list audiences require emails or phones." });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid data", details: parsed.error.flatten() });
 
