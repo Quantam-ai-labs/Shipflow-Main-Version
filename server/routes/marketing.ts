@@ -2687,4 +2687,175 @@ export function registerMarketingRoutes(app: Express) {
       res.status(500).json({ error: error.message });
     }
   });
+
+  // ============================================
+  // WHATSAPP EMBEDDED SIGNUP
+  // ============================================
+
+  app.post("/api/whatsapp/embedded-signup", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const { code } = req.body;
+
+      if (!code) {
+        return res.status(400).json({ error: "Authorization code is required" });
+      }
+
+      const appId = process.env.FACEBOOK_APP_ID;
+      const appSecret = process.env.FACEBOOK_APP_SECRET;
+      if (!appId || !appSecret) {
+        return res.status(400).json({ error: "Facebook App credentials not configured" });
+      }
+
+      const tokenUrl = new URL(`${META_BASE_URL}/oauth/access_token`);
+      tokenUrl.searchParams.set("client_id", appId);
+      tokenUrl.searchParams.set("client_secret", appSecret);
+      tokenUrl.searchParams.set("code", code);
+
+      const tokenRes = await fetch(tokenUrl.toString());
+      if (!tokenRes.ok) {
+        const errText = await tokenRes.text().catch(() => "Unknown error");
+        console.error("[WA-Signup] Token exchange failed:", tokenRes.status, errText);
+        return res.status(400).json({ error: "Token exchange failed" });
+      }
+
+      const tokenData = await tokenRes.json() as any;
+      if (!tokenData?.access_token) {
+        return res.status(400).json({ error: "No access token received from Meta" });
+      }
+
+      const userToken = tokenData.access_token;
+
+      const debugUrl = new URL(`${META_BASE_URL}/debug_token`);
+      debugUrl.searchParams.set("input_token", userToken);
+      debugUrl.searchParams.set("access_token", `${appId}|${appSecret}`);
+      const debugRes = await fetch(debugUrl.toString());
+      const debugData = debugRes.ok ? await debugRes.json().catch(() => null) : null;
+      const granularScopes = debugData?.data?.granular_scopes || [];
+      const waScope = granularScopes.find((s: any) => s.scope === "whatsapp_business_management");
+      let wabaId: string | null = null;
+
+      if (waScope?.target_ids?.length > 0) {
+        wabaId = waScope.target_ids[0];
+        console.log(`[WA-Signup] Found WABA ID from token debug: ${wabaId}`);
+      }
+
+      if (!wabaId) {
+        const sharedWabaUrl = new URL(`${META_BASE_URL}/me/businesses`);
+        sharedWabaUrl.searchParams.set("access_token", userToken);
+        sharedWabaUrl.searchParams.set("fields", "id,name");
+        const bizRes = await fetch(sharedWabaUrl.toString());
+        const bizData = bizRes.ok ? await bizRes.json().catch(() => ({ data: [] })) : { data: [] };
+
+        for (const biz of (bizData.data || [])) {
+          const wabaListUrl = new URL(`${META_BASE_URL}/${biz.id}/owned_whatsapp_business_accounts`);
+          wabaListUrl.searchParams.set("access_token", userToken);
+          wabaListUrl.searchParams.set("fields", "id,name");
+          const wabaRes = await fetch(wabaListUrl.toString());
+          const wabaData = wabaRes.ok ? await wabaRes.json().catch(() => ({ data: [] })) : { data: [] };
+          if (wabaData.data?.length > 0) {
+            wabaId = wabaData.data[0].id;
+            console.log(`[WA-Signup] Found WABA ID from business lookup: ${wabaId}`);
+            break;
+          }
+        }
+      }
+
+      if (!wabaId) {
+        return res.status(400).json({ error: "Could not find a WhatsApp Business Account. Please make sure you completed the signup." });
+      }
+
+      const phonesUrl = new URL(`${META_BASE_URL}/${wabaId}/phone_numbers`);
+      phonesUrl.searchParams.set("access_token", userToken);
+      phonesUrl.searchParams.set("fields", "id,display_phone_number,verified_name,quality_rating");
+      const phonesRes = await fetch(phonesUrl.toString());
+      const phonesData = phonesRes.ok ? await phonesRes.json().catch(() => ({ data: [] })) : { data: [] };
+      const phoneNumbers = phonesData.data || [];
+
+      if (phoneNumbers.length === 0) {
+        return res.status(400).json({ error: "No phone numbers found on this WhatsApp Business Account." });
+      }
+
+      const phone = phoneNumbers[0];
+      const phoneNumberId = phone.id;
+      const displayPhone = phone.display_phone_number || "";
+      const verifiedName = phone.verified_name || "";
+
+      const { randomUUID } = await import("crypto");
+      let existingVerifyToken: string | null = null;
+      const [existingMerchant] = await db.select({ waVerifyToken: merchants.waVerifyToken })
+        .from(merchants).where(eq(merchants.id, merchantId)).limit(1);
+      existingVerifyToken = existingMerchant?.waVerifyToken || randomUUID();
+
+      await db.update(merchants).set({
+        waPhoneNumberId: phoneNumberId,
+        waAccessToken: userToken,
+        waWabaId: wabaId,
+        waVerifyToken: existingVerifyToken,
+        waDisconnected: false,
+        updatedAt: new Date(),
+      }).where(eq(merchants.id, merchantId));
+
+      const canonicalHost = "https://lala-logistics.replit.app";
+
+      console.log(`[WA-Signup] WhatsApp Embedded Signup completed for merchant ${merchantId}. WABA: ${wabaId}, Phone: ${phoneNumberId} (${displayPhone})`);
+
+      try {
+        const subscribeUrl = new URL(`${META_BASE_URL}/${wabaId}/subscribed_apps`);
+        const subscribeRes = await fetch(subscribeUrl.toString(), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ access_token: userToken }),
+        });
+        const subscribeData = subscribeRes.ok ? await subscribeRes.json().catch(() => null) : null;
+        console.log(`[WA-Signup] App subscription result:`, subscribeData);
+      } catch (subErr: any) {
+        console.warn(`[WA-Signup] App subscription failed (non-blocking):`, subErr.message);
+      }
+
+      try {
+        const registerUrl = new URL(`${META_BASE_URL}/${phoneNumberId}/register`);
+        const registerRes = await fetch(registerUrl.toString(), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            access_token: userToken,
+            messaging_product: "whatsapp",
+            pin: "000000",
+          }),
+        });
+        if (registerRes.ok) {
+          console.log(`[WA-Signup] Phone number registered for Cloud API`);
+        }
+      } catch (regErr: any) {
+        console.warn(`[WA-Signup] Phone registration skipped:`, regErr.message);
+      }
+
+      res.json({
+        success: true,
+        wabaId,
+        phoneNumberId,
+        displayPhone,
+        verifiedName,
+        webhookUrl: `${canonicalHost}/webhooks/whatsapp/${merchantId}`,
+        verifyToken: existingVerifyToken,
+      });
+    } catch (error: any) {
+      console.error("[WA-Signup] Error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/whatsapp/embedded-signup/config", isAuthenticated, async (req: any, res) => {
+    try {
+      const appId = process.env.FACEBOOK_APP_ID;
+      if (!appId) {
+        return res.status(400).json({ error: "Facebook App not configured" });
+      }
+      const configId = process.env.WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID || "";
+      res.json({ appId, configId });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
 }

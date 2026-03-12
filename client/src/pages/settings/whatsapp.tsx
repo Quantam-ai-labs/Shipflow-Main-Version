@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -9,9 +9,18 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Wifi, WifiOff, Eye, EyeOff, FlaskConical, Save, Copy, Check, Lock, Smartphone, QrCode, Shield, XCircle, Unplug, PlugZap } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Wifi, WifiOff, Eye, EyeOff, FlaskConical, Save, Copy, Check, Lock, Smartphone, QrCode, Shield, XCircle, Unplug, PlugZap, MessageSquare, ChevronDown, Settings2, Zap } from "lucide-react";
+import { SiWhatsapp, SiFacebook } from "react-icons/si";
 import { format } from "date-fns";
 import QRCode from "qrcode";
+
+declare global {
+  interface Window {
+    FB: any;
+    fbAsyncInit: () => void;
+  }
+}
 
 interface ConnectionData {
   waPhoneNumberId: string;
@@ -21,6 +30,16 @@ interface ConnectionData {
   waDisconnected: boolean;
   waVerifyToken: string;
   webhookUrl: string;
+}
+
+interface EmbeddedSignupResult {
+  success: boolean;
+  wabaId: string;
+  phoneNumberId: string;
+  displayPhone: string;
+  verifiedName: string;
+  webhookUrl: string;
+  verifyToken: string;
 }
 
 function CopyButton({ value, testId }: { value: string; testId: string }) {
@@ -44,6 +63,40 @@ function CopyButton({ value, testId }: { value: string; testId: string }) {
   );
 }
 
+function useLoadFacebookSDK(appId: string | null) {
+  const [sdkReady, setSdkReady] = useState(false);
+
+  useEffect(() => {
+    if (!appId) return;
+
+    if (window.FB) {
+      setSdkReady(true);
+      return;
+    }
+
+    window.fbAsyncInit = function () {
+      window.FB.init({
+        appId,
+        autoLogAppEvents: true,
+        xfbml: false,
+        version: "v22.0",
+      });
+      setSdkReady(true);
+    };
+
+    if (!document.getElementById("facebook-jssdk")) {
+      const script = document.createElement("script");
+      script.id = "facebook-jssdk";
+      script.src = "https://connect.facebook.net/en_US/sdk.js";
+      script.async = true;
+      script.defer = true;
+      document.body.appendChild(script);
+    }
+  }, [appId]);
+
+  return sdkReady;
+}
+
 export default function SettingsWhatsApp() {
   const { toast } = useToast();
   const [showToken, setShowToken] = useState(false);
@@ -51,12 +104,21 @@ export default function SettingsWhatsApp() {
   const [loaded, setLoaded] = useState(false);
   const [testing, setTesting] = useState(false);
   const [chatPin, setChatPin] = useState("");
+  const [manualOpen, setManualOpen] = useState(false);
+  const [signupInProgress, setSignupInProgress] = useState(false);
   const agentChatQrRef = useRef<HTMLCanvasElement>(null);
 
   const { data, isLoading } = useQuery<ConnectionData>({
     queryKey: ["/api/support/connection"],
     refetchOnWindowFocus: false,
   });
+
+  const { data: sdkConfig } = useQuery<{ appId: string; configId: string }>({
+    queryKey: ["/api/whatsapp/embedded-signup/config"],
+    refetchOnWindowFocus: false,
+  });
+
+  const sdkReady = useLoadFacebookSDK(sdkConfig?.appId ?? null);
 
   if (data && !loaded) {
     setForm({
@@ -129,6 +191,75 @@ export default function SettingsWhatsApp() {
     },
   });
 
+  const embeddedSignupMutation = useMutation({
+    mutationFn: async (code: string) => {
+      const res = await apiRequest("POST", "/api/whatsapp/embedded-signup", { code });
+      return res as unknown as EmbeddedSignupResult;
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/support/connection"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/support/dashboard-stats"] });
+      setLoaded(false);
+      toast({
+        title: "WhatsApp Connected!",
+        description: `Phone ${result.displayPhone || result.phoneNumberId} connected successfully.`,
+      });
+    },
+    onError: (err: any) => {
+      toast({ title: "Connection Failed", description: err.message || "Failed to complete WhatsApp signup", variant: "destructive" });
+    },
+  });
+
+  const handleEmbeddedSignup = useCallback(() => {
+    if (!window.FB || !sdkReady) {
+      toast({ title: "Not ready", description: "Facebook SDK is still loading. Please try again.", variant: "destructive" });
+      return;
+    }
+
+    setSignupInProgress(true);
+
+    const configId = sdkConfig?.configId;
+
+    if (configId) {
+      window.FB.login(
+        (response: any) => {
+          if (response.authResponse?.code) {
+            embeddedSignupMutation.mutate(response.authResponse.code);
+          } else {
+            toast({ title: "Cancelled", description: "WhatsApp signup was cancelled.", variant: "destructive" });
+          }
+          setSignupInProgress(false);
+        },
+        {
+          config_id: configId,
+          response_type: "code",
+          override_default_response_type: true,
+          extras: {
+            setup: {},
+            featureType: "whatsapp_embedded_signup",
+            sessionInfoVersion: "3",
+          },
+        }
+      );
+    } else {
+      window.FB.login(
+        (response: any) => {
+          if (response.authResponse?.code) {
+            embeddedSignupMutation.mutate(response.authResponse.code);
+          } else {
+            toast({ title: "Cancelled", description: "WhatsApp signup was cancelled.", variant: "destructive" });
+          }
+          setSignupInProgress(false);
+        },
+        {
+          scope: "whatsapp_business_management,whatsapp_business_messaging,business_management",
+          response_type: "code",
+          override_default_response_type: true,
+        }
+      );
+    }
+  }, [sdkReady, sdkConfig, embeddedSignupMutation, toast]);
+
   const handleTest = async () => {
     const phoneId = form.waPhoneNumberId.trim();
     const token = form.waAccessToken.trim();
@@ -154,32 +285,35 @@ export default function SettingsWhatsApp() {
     }
   };
 
+  const isConnected = data?.connected && !data?.waDisconnected;
+  const isDisconnected = data?.waDisconnected;
+
   return (
     <div className="space-y-6 max-w-3xl">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold tracking-tight" data-testid="text-wa-settings-title">WhatsApp Business API</h2>
-          <p className="text-muted-foreground text-sm mt-0.5">Configure your Meta WhatsApp Business API credentials and webhook</p>
+          <p className="text-muted-foreground text-sm mt-0.5">Connect your WhatsApp Business account for automated messaging</p>
         </div>
         {isLoading ? (
           <Skeleton className="h-7 w-28" />
         ) : (
           <div className="flex items-center gap-2 flex-wrap">
             <Badge
-              variant={data?.connected && !data?.waDisconnected ? "default" : "secondary"}
+              variant={isConnected ? "default" : "secondary"}
               className={
-                data?.connected && !data?.waDisconnected
+                isConnected
                   ? "bg-green-500 text-white gap-1.5 no-default-hover-elevate no-default-active-elevate"
-                  : data?.waDisconnected
+                  : isDisconnected
                     ? "bg-amber-500 text-white gap-1.5 no-default-hover-elevate no-default-active-elevate"
                     : "gap-1.5"
               }
               data-testid="status-wa-connection"
             >
-              {data?.connected && !data?.waDisconnected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-              {data?.waDisconnected ? "Disconnected" : data?.connected ? "Connected" : "Not Connected"}
+              {isConnected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
+              {isDisconnected ? "Paused" : isConnected ? "Connected" : "Not Connected"}
             </Badge>
-            {data?.connected && !data?.waDisconnected && (
+            {isConnected && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button
@@ -189,14 +323,14 @@ export default function SettingsWhatsApp() {
                     data-testid="button-disconnect-wa"
                   >
                     <Unplug className="w-3.5 h-3.5 mr-1.5" />
-                    Disconnect
+                    Pause
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>Disconnect WhatsApp?</AlertDialogTitle>
+                    <AlertDialogTitle>Pause WhatsApp?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      This will pause all WhatsApp message sending (order confirmations, status updates, etc.). Your credentials will be preserved and you can reconnect at any time.
+                      This will pause all WhatsApp message sending (order confirmations, status updates, etc.). Your credentials will be preserved and you can resume at any time.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
@@ -206,13 +340,13 @@ export default function SettingsWhatsApp() {
                       className="bg-destructive text-destructive-foreground"
                       data-testid="button-confirm-disconnect"
                     >
-                      {disconnectMutation.isPending ? "Disconnecting..." : "Disconnect"}
+                      {disconnectMutation.isPending ? "Pausing..." : "Pause Messaging"}
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
             )}
-            {data?.waDisconnected && (
+            {isDisconnected && (
               <Button
                 variant="outline"
                 size="sm"
@@ -221,100 +355,83 @@ export default function SettingsWhatsApp() {
                 data-testid="button-reconnect-wa"
               >
                 <PlugZap className="w-3.5 h-3.5 mr-1.5" />
-                {reconnectMutation.isPending ? "Reconnecting..." : "Reconnect"}
+                {reconnectMutation.isPending ? "Resuming..." : "Resume"}
               </Button>
             )}
           </div>
         )}
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">API Credentials</CardTitle>
-          <CardDescription>
-            Get these values from the <a href="https://developers.facebook.com/apps/" target="_blank" rel="noopener noreferrer" className="text-primary underline">Meta Developer Portal</a> under your WhatsApp Business app.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {isLoading ? (
-            <div className="space-y-4">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <Skeleton key={i} className="h-10 w-full" />
-              ))}
+      {!isLoading && !data?.connected && (
+        <Card className="border-2 border-dashed border-green-500/30 bg-green-50/50 dark:bg-green-950/10">
+          <CardContent className="pt-6">
+            <div className="flex flex-col items-center text-center space-y-4">
+              <div className="w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center">
+                <SiWhatsapp className="w-8 h-8 text-green-500" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold">Connect WhatsApp Business</h3>
+                <p className="text-sm text-muted-foreground mt-1 max-w-md">
+                  Connect your WhatsApp Business Account with one click. Sign in with Facebook, select your business, and you're all set — no API keys needed.
+                </p>
+              </div>
+              <Button
+                size="lg"
+                className="bg-[#1877F2] hover:bg-[#166FE5] text-white gap-2 px-8"
+                onClick={handleEmbeddedSignup}
+                disabled={signupInProgress || embeddedSignupMutation.isPending || !sdkReady}
+                data-testid="button-connect-whatsapp-embedded"
+              >
+                <SiFacebook className="w-5 h-5" />
+                {signupInProgress || embeddedSignupMutation.isPending
+                  ? "Connecting..."
+                  : !sdkReady
+                    ? "Loading..."
+                    : "Connect with Facebook"}
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Powered by Meta's Embedded Signup — securely connect your WhatsApp Business Account
+              </p>
             </div>
-          ) : (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="phoneNumberId">Phone Number ID</Label>
-                <Input
-                  id="phoneNumberId"
-                  placeholder="e.g. 123456789012345"
-                  value={form.waPhoneNumberId}
-                  onChange={(e) => setForm(f => ({ ...f, waPhoneNumberId: e.target.value }))}
-                  data-testid="input-phone-number-id"
-                />
-                <p className="text-xs text-muted-foreground">Found in WhatsApp → Getting Started → Phone Number ID</p>
-              </div>
+          </CardContent>
+        </Card>
+      )}
 
-              <div className="space-y-2">
-                <Label htmlFor="accessToken">Access Token</Label>
-                <div className="relative">
-                  <Input
-                    id="accessToken"
-                    type={showToken ? "text" : "password"}
-                    placeholder="Enter your permanent access token"
-                    value={form.waAccessToken}
-                    onChange={(e) => setForm(f => ({ ...f, waAccessToken: e.target.value }))}
-                    className="pr-10"
-                    data-testid="input-access-token"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowToken(v => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    data-testid="button-toggle-token"
-                  >
-                    {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-                <p className="text-xs text-muted-foreground">Use a permanent (system user) token for production use</p>
+      {!isLoading && data?.connected && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <SiWhatsapp className="w-4 h-4 text-green-500" />
+              Connected Account
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label className="text-xs text-muted-foreground">Phone Number ID</Label>
+                <p className="text-sm font-mono mt-0.5" data-testid="text-connected-phone-id">{data.waPhoneNumberId || "—"}</p>
               </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="wabaId">WhatsApp Business Account ID</Label>
-                <Input
-                  id="wabaId"
-                  placeholder="e.g. 987654321098765"
-                  value={form.waWabaId}
-                  onChange={(e) => setForm(f => ({ ...f, waWabaId: e.target.value }))}
-                  data-testid="input-waba-id"
-                />
-                <p className="text-xs text-muted-foreground">Found in the WhatsApp Business Manager → Account Info</p>
+              <div>
+                <Label className="text-xs text-muted-foreground">WABA ID</Label>
+                <p className="text-sm font-mono mt-0.5" data-testid="text-connected-waba-id">{data.waWabaId || "—"}</p>
               </div>
-
-              <div className="flex gap-3 pt-2">
-                <Button
-                  variant="outline"
-                  onClick={handleTest}
-                  disabled={testing}
-                  data-testid="button-test-connection"
-                >
-                  <FlaskConical className="w-4 h-4 mr-2" />
-                  {testing ? "Testing..." : "Test Connection"}
-                </Button>
-                <Button
-                  onClick={() => saveMutation.mutate(form)}
-                  disabled={saveMutation.isPending}
-                  data-testid="button-save-credentials"
-                >
-                  <Save className="w-4 h-4 mr-2" />
-                  {saveMutation.isPending ? "Saving..." : "Save Credentials"}
-                </Button>
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
+            </div>
+            <div className="flex items-center gap-2 pt-1">
+              <Button
+                variant="outline"
+                size="sm"
+                className="bg-[#1877F2] hover:bg-[#166FE5] text-white border-0 gap-1.5"
+                onClick={handleEmbeddedSignup}
+                disabled={signupInProgress || embeddedSignupMutation.isPending || !sdkReady}
+                data-testid="button-reconnect-whatsapp-embedded"
+              >
+                <SiFacebook className="w-3.5 h-3.5" />
+                {signupInProgress || embeddedSignupMutation.isPending ? "Connecting..." : "Reconnect via Facebook"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
@@ -364,6 +481,108 @@ export default function SettingsWhatsApp() {
           )}
         </CardContent>
       </Card>
+
+      <Collapsible open={manualOpen} onOpenChange={setManualOpen}>
+        <Card>
+          <CollapsibleTrigger asChild>
+            <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Settings2 className="w-4 h-4" />
+                    Manual API Credentials
+                  </CardTitle>
+                  <CardDescription className="mt-1">
+                    Advanced: Enter credentials manually if you prefer not to use the one-click connect
+                  </CardDescription>
+                </div>
+                <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${manualOpen ? "rotate-180" : ""}`} />
+              </div>
+            </CardHeader>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <CardContent className="space-y-4 pt-0">
+              {isLoading ? (
+                <div className="space-y-4">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <Skeleton key={i} className="h-10 w-full" />
+                  ))}
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="phoneNumberId">Phone Number ID</Label>
+                    <Input
+                      id="phoneNumberId"
+                      placeholder="e.g. 123456789012345"
+                      value={form.waPhoneNumberId}
+                      onChange={(e) => setForm(f => ({ ...f, waPhoneNumberId: e.target.value }))}
+                      data-testid="input-phone-number-id"
+                    />
+                    <p className="text-xs text-muted-foreground">Found in WhatsApp → Getting Started → Phone Number ID</p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="accessToken">Access Token</Label>
+                    <div className="relative">
+                      <Input
+                        id="accessToken"
+                        type={showToken ? "text" : "password"}
+                        placeholder="Enter your permanent access token"
+                        value={form.waAccessToken}
+                        onChange={(e) => setForm(f => ({ ...f, waAccessToken: e.target.value }))}
+                        className="pr-10"
+                        data-testid="input-access-token"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowToken(v => !v)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        data-testid="button-toggle-token"
+                      >
+                        {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Use a permanent (system user) token for production use</p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="wabaId">WhatsApp Business Account ID</Label>
+                    <Input
+                      id="wabaId"
+                      placeholder="e.g. 987654321098765"
+                      value={form.waWabaId}
+                      onChange={(e) => setForm(f => ({ ...f, waWabaId: e.target.value }))}
+                      data-testid="input-waba-id"
+                    />
+                    <p className="text-xs text-muted-foreground">Found in the WhatsApp Business Manager → Account Info</p>
+                  </div>
+
+                  <div className="flex gap-3 pt-2">
+                    <Button
+                      variant="outline"
+                      onClick={handleTest}
+                      disabled={testing}
+                      data-testid="button-test-connection"
+                    >
+                      <FlaskConical className="w-4 h-4 mr-2" />
+                      {testing ? "Testing..." : "Test Connection"}
+                    </Button>
+                    <Button
+                      onClick={() => saveMutation.mutate(form)}
+                      disabled={saveMutation.isPending}
+                      data-testid="button-save-credentials"
+                    >
+                      <Save className="w-4 h-4 mr-2" />
+                      {saveMutation.isPending ? "Saving..." : "Save Credentials"}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
 
       <Card>
         <CardHeader>
@@ -549,34 +768,30 @@ function AgentChatSessionsCard() {
               <div
                 key={session.id}
                 className={`rounded-lg border p-3 flex items-center gap-3 ${session.isRevoked ? "opacity-50" : ""}`}
-                data-testid={`session-row-${session.id}`}
+                data-testid={`row-session-${session.id}`}
               >
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-medium truncate">{session.loginEmail}</span>
-                    <Badge variant={session.isRevoked ? "secondary" : "default"} className="text-[10px]">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium truncate">{session.deviceInfo || "Unknown device"}</span>
+                    <Badge variant={session.isRevoked ? "secondary" : "default"} className={session.isRevoked ? "" : "bg-green-500 text-white"}>
                       {session.isRevoked ? "Revoked" : "Active"}
                     </Badge>
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5 flex-wrap">
-                    <span className="truncate max-w-[200px]">{session.deviceName || "Unknown device"}</span>
-                    <span>{session.deviceIp || ""}</span>
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-0.5">
-                    Logged in: {session.createdAt ? format(new Date(session.createdAt), "MMM d, yyyy HH:mm") : "—"}
-                    {session.lastActiveAt && ` · Last active: ${format(new Date(session.lastActiveAt), "MMM d, HH:mm")}`}
-                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Last seen: {session.lastSeenAt ? format(new Date(session.lastSeenAt), "PPp") : "Never"}
+                  </p>
                 </div>
                 {!session.isRevoked && (
                   <Button
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
-                    className="text-destructive hover:text-destructive shrink-0"
+                    className="text-destructive shrink-0"
                     onClick={() => revokeMutation.mutate(session.id)}
                     disabled={revokeMutation.isPending}
                     data-testid={`button-revoke-session-${session.id}`}
                   >
-                    <XCircle className="w-4 h-4" />
+                    <XCircle className="w-3.5 h-3.5 mr-1" />
+                    Revoke
                   </Button>
                 )}
               </div>
