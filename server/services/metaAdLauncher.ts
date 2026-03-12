@@ -362,37 +362,82 @@ export async function bulkLaunchAds(
     pageId: string;
     pixelId?: string;
   }>
-): Promise<{ total: number; succeeded: number; failed: number; jobs: any[] }> {
-  const results: any[] = [];
+): Promise<{ total: number; succeeded: number; failed: number; results: Array<{ success: boolean; campaignId?: string; adSetId?: string; adId?: string; error?: string }> }> {
+  const results: Array<{ success: boolean; campaignId?: string; adSetId?: string; adId?: string; error?: string }> = [];
   let succeeded = 0;
   let failed = 0;
 
   for (const ad of ads) {
-    const [job] = await db.insert(adLaunchJobs).values({
-      merchantId,
-      launchType: "bulk",
-      campaignName: ad.campaignName,
-      objective: ad.objective,
-      dailyBudget: ad.dailyBudget,
-      targeting: ad.targeting,
-      creativeConfig: ad.creative,
-      pageId: ad.pageId,
-      pixelId: ad.pixelId,
-      status: "pending",
-    }).returning();
-
     try {
-      const result = await launchAd(merchantId, job.id, {
-        ...ad,
+      const creds = await getWriteCredentials(merchantId);
+      const actId = `act_${creds.adAccountId.replace("act_", "")}`;
+
+      const campaignResult = await createCampaign(creds, {
+        name: ad.campaignName,
+        objective: ad.objective,
+        status: "PAUSED",
+        special_ad_categories: [],
+      });
+
+      const adSetResult = await createAdSet(creds, {
+        campaign_id: campaignResult.id,
+        name: `${ad.campaignName} - AdSet`,
+        daily_budget: Math.round(parseFloat(ad.dailyBudget) * 100),
+        billing_event: "IMPRESSIONS",
+        optimization_goal: "OFFSITE_CONVERSIONS",
+        targeting: ad.targeting || { geo_locations: { countries: ["PK"] } },
         status: "PAUSED",
       });
-      results.push({ jobId: job.id, status: "launched", ...result });
+
+      const creativeData: any = {
+        name: `${ad.campaignName} - Creative`,
+        object_story_spec: {
+          page_id: ad.pageId,
+          link_data: {
+            message: ad.creative.primaryText,
+            link: ad.creative.linkUrl,
+            name: ad.creative.headline,
+            description: ad.creative.description,
+            call_to_action: { type: ad.creative.callToAction || "SHOP_NOW" },
+          },
+        },
+      };
+      if (ad.creative.imageUrl) {
+        creativeData.object_story_spec.link_data.picture = ad.creative.imageUrl;
+      }
+
+      const creativeResult = await createAdCreative(creds, creativeData);
+
+      const adResult = await createAd(creds, {
+        name: `${ad.campaignName} - Ad`,
+        adset_id: adSetResult.id,
+        creative: { creative_id: creativeResult.id },
+        status: "PAUSED",
+      });
+
+      results.push({ success: true, campaignId: campaignResult.id, adSetId: adSetResult.id, adId: adResult.id });
       succeeded++;
     } catch (error: any) {
-      results.push({ jobId: job.id, status: "failed", error: error.message });
+      results.push({ success: false, error: error.message });
       failed++;
     }
   }
 
-  return { total: ads.length, succeeded, failed, jobs: results };
+  return { total: ads.length, succeeded, failed, results };
+}
+
+async function getWriteCredentials(merchantId: string): Promise<MetaWriteOptions> {
+  const [merchant] = await db.select({
+    facebookAccessToken: merchants.facebookAccessToken,
+    facebookAdAccountId: merchants.facebookAdAccountId,
+  }).from(merchants).where(eq(merchants.id, merchantId));
+
+  if (!merchant?.facebookAccessToken || !merchant?.facebookAdAccountId) {
+    throw new Error("Facebook not connected or ad account not configured");
+  }
+
+  return {
+    accessToken: decryptToken(merchant.facebookAccessToken),
+    adAccountId: merchant.facebookAdAccountId,
+  };
 }
