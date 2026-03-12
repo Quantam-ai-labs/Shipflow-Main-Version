@@ -2253,15 +2253,21 @@ export function registerMarketingRoutes(app: Express) {
           metaUrl = images[firstKey]?.url;
         }
       } else if (type === "video") {
+        const boundary = `----FormBoundary${crypto.randomBytes(16).toString("hex")}`;
         const buffer = Buffer.from(data, "base64");
-        const formData = new FormData();
-        const blob = new Blob([buffer], { type: mimeType });
-        formData.append("access_token", token);
-        formData.append("source", blob, name);
+
+        const parts: Buffer[] = [];
+        parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="access_token"\r\n\r\n${token}\r\n`));
+        parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="source"; filename="${name}"\r\nContent-Type: ${mimeType}\r\n\r\n`));
+        parts.push(buffer);
+        parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
+
+        const body = Buffer.concat(parts);
 
         const uploadRes = await fetch(`https://graph.facebook.com/v21.0/${actId}/advideos`, {
           method: "POST",
-          body: formData as any,
+          headers: { "Content-Type": `multipart/form-data; boundary=${boundary}` },
+          body,
         });
         const uploadData = await uploadRes.json();
 

@@ -6,37 +6,50 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Plus, Trash2, Rocket, CheckCircle2, XCircle, Clock } from "lucide-react";
+import { Loader2, Plus, Trash2, Rocket, CheckCircle2, XCircle, Clock, Image as ImageIcon, Type, Grid3X3 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
-interface BulkAdRow {
+interface Creative {
   id: string;
-  campaignName: string;
-  dailyBudget: string;
-  primaryText: string;
-  headline: string;
-  linkUrl: string;
   imageUrl: string;
+  label: string;
 }
 
-function createEmptyRow(): BulkAdRow {
-  return {
-    id: Math.random().toString(36).slice(2),
-    campaignName: "",
-    dailyBudget: "500",
-    primaryText: "",
-    headline: "",
-    linkUrl: "",
-    imageUrl: "",
-  };
+interface CopyVariant {
+  id: string;
+  primaryText: string;
+  headline: string;
+}
+
+interface CombinationRow {
+  creativeId: string;
+  copyId: string;
+  selected: boolean;
+}
+
+function uid() {
+  return Math.random().toString(36).slice(2);
 }
 
 export default function MetaBulkLaunch() {
   const { toast } = useToast();
-  const [rows, setRows] = useState<BulkAdRow[]>([createEmptyRow(), createEmptyRow()]);
+
+  const [campaignName, setCampaignName] = useState("");
+  const [dailyBudget, setDailyBudget] = useState("500");
+  const [linkUrl, setLinkUrl] = useState("");
+
+  const [creatives, setCreatives] = useState<Creative[]>([
+    { id: uid(), imageUrl: "", label: "Creative 1" },
+  ]);
+  const [copyVariants, setCopyVariants] = useState<CopyVariant[]>([
+    { id: uid(), primaryText: "", headline: "" },
+  ]);
+  const [combinations, setCombinations] = useState<CombinationRow[]>([]);
+  const [showMatrix, setShowMatrix] = useState(false);
 
   const { data: oauthStatus } = useQuery<any>({
     queryKey: ["/api/meta/oauth/status"],
@@ -49,42 +62,86 @@ export default function MetaBulkLaunch() {
   const pageId = oauthStatus?.pageId || "";
   const pixelId = oauthStatus?.pixelId || "";
 
-  const updateRow = (id: string, field: keyof BulkAdRow, value: string) => {
-    setRows(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
+  const addCreative = () => {
+    setCreatives(prev => [...prev, { id: uid(), imageUrl: "", label: `Creative ${prev.length + 1}` }]);
   };
 
-  const addRow = () => setRows(prev => [...prev, createEmptyRow()]);
-
-  const removeRow = (id: string) => {
-    if (rows.length <= 1) return;
-    setRows(prev => prev.filter(r => r.id !== id));
+  const removeCreative = (id: string) => {
+    if (creatives.length <= 1) return;
+    setCreatives(prev => prev.filter(c => c.id !== id));
   };
 
-  const validRows = rows.filter(r =>
-    r.campaignName.trim() && r.dailyBudget && r.primaryText.trim() && r.linkUrl.trim()
-  );
+  const updateCreative = (id: string, field: keyof Creative, value: string) => {
+    setCreatives(prev => prev.map(c => c.id === id ? { ...c, [field]: value } : c));
+  };
+
+  const addCopyVariant = () => {
+    setCopyVariants(prev => [...prev, { id: uid(), primaryText: "", headline: "" }]);
+  };
+
+  const removeCopyVariant = (id: string) => {
+    if (copyVariants.length <= 1) return;
+    setCopyVariants(prev => prev.filter(c => c.id !== id));
+  };
+
+  const updateCopyVariant = (id: string, field: keyof CopyVariant, value: string) => {
+    setCopyVariants(prev => prev.map(c => c.id === id ? { ...c, [field]: value } : c));
+  };
+
+  const validCreatives = creatives.filter(c => c.imageUrl.trim());
+  const validCopy = copyVariants.filter(c => c.primaryText.trim());
+
+  const generateCombinations = () => {
+    const combos: CombinationRow[] = [];
+    for (const cr of validCreatives) {
+      for (const cp of validCopy) {
+        combos.push({ creativeId: cr.id, copyId: cp.id, selected: true });
+      }
+    }
+    setCombinations(combos);
+    setShowMatrix(true);
+  };
+
+  const toggleCombination = (creativeId: string, copyId: string) => {
+    setCombinations(prev =>
+      prev.map(c =>
+        c.creativeId === creativeId && c.copyId === copyId
+          ? { ...c, selected: !c.selected }
+          : c
+      )
+    );
+  };
+
+  const selectAll = () => setCombinations(prev => prev.map(c => ({ ...c, selected: true })));
+  const deselectAll = () => setCombinations(prev => prev.map(c => ({ ...c, selected: false })));
+
+  const selectedCombos = combinations.filter(c => c.selected);
 
   const bulkLaunchMutation = useMutation({
     mutationFn: async () => {
-      const ads = validRows.map(r => ({
-        campaignName: r.campaignName,
-        objective: "OUTCOME_SALES",
-        dailyBudget: r.dailyBudget,
-        targeting: {
-          geo_locations: { countries: ["PK"] },
-          age_min: 18,
-          age_max: 65,
-        },
-        creative: {
-          primaryText: r.primaryText,
-          headline: r.headline || undefined,
-          linkUrl: r.linkUrl,
-          imageUrl: r.imageUrl || undefined,
-          callToAction: "SHOP_NOW",
-        },
-        pageId,
-        pixelId: pixelId || undefined,
-      }));
+      const ads = selectedCombos.map((combo, idx) => {
+        const creative = creatives.find(c => c.id === combo.creativeId)!;
+        const copy = copyVariants.find(c => c.id === combo.copyId)!;
+        return {
+          campaignName: `${campaignName} - ${creative.label} × ${copy.headline || `Copy ${idx + 1}`}`,
+          objective: "OUTCOME_SALES",
+          dailyBudget,
+          targeting: {
+            geo_locations: { countries: ["PK"] },
+            age_min: 18,
+            age_max: 65,
+          },
+          creative: {
+            primaryText: copy.primaryText,
+            headline: copy.headline || undefined,
+            linkUrl,
+            imageUrl: creative.imageUrl,
+            callToAction: "SHOP_NOW",
+          },
+          pageId,
+          pixelId: pixelId || undefined,
+        };
+      });
 
       const res = await apiRequest("POST", "/api/meta/bulk-launch", { ads });
       return res.json();
@@ -108,127 +165,266 @@ export default function MetaBulkLaunch() {
       <div>
         <h1 className="text-2xl font-bold" data-testid="text-page-title">Bulk Ad Launcher</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Create multiple Facebook ads at once. All ads use Pakistan targeting with Sales objective.
+          Create N creatives × M copy variations to generate a combination matrix of ads.
         </p>
       </div>
 
-      <Card data-testid="card-bulk-ads">
+      <Card data-testid="card-campaign-settings">
         <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base">Ad Configurations</CardTitle>
-            <Button variant="outline" size="sm" onClick={addRow} data-testid="button-add-row">
-              <Plus className="w-3.5 h-3.5 mr-1" /> Add Row
-            </Button>
-          </div>
+          <CardTitle className="text-base">Campaign Settings</CardTitle>
+          <CardDescription>Shared settings across all generated ads</CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="min-w-[180px]">Campaign Name</TableHead>
-                  <TableHead className="min-w-[100px]">Budget (PKR)</TableHead>
-                  <TableHead className="min-w-[200px]">Primary Text</TableHead>
-                  <TableHead className="min-w-[150px]">Headline</TableHead>
-                  <TableHead className="min-w-[200px]">Link URL</TableHead>
-                  <TableHead className="min-w-[200px]">Image URL</TableHead>
-                  <TableHead className="w-[50px]"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell>
-                      <Input
-                        value={row.campaignName}
-                        onChange={e => updateRow(row.id, "campaignName", e.target.value)}
-                        placeholder="Campaign name"
-                        className="text-xs h-8"
-                        data-testid={`input-bulk-name-${row.id}`}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        type="number"
-                        value={row.dailyBudget}
-                        onChange={e => updateRow(row.id, "dailyBudget", e.target.value)}
-                        className="text-xs h-8 w-20"
-                        data-testid={`input-bulk-budget-${row.id}`}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        value={row.primaryText}
-                        onChange={e => updateRow(row.id, "primaryText", e.target.value)}
-                        placeholder="Ad copy"
-                        className="text-xs h-8"
-                        data-testid={`input-bulk-text-${row.id}`}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        value={row.headline}
-                        onChange={e => updateRow(row.id, "headline", e.target.value)}
-                        placeholder="Headline"
-                        className="text-xs h-8"
-                        data-testid={`input-bulk-headline-${row.id}`}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        value={row.linkUrl}
-                        onChange={e => updateRow(row.id, "linkUrl", e.target.value)}
-                        placeholder="https://..."
-                        className="text-xs h-8"
-                        data-testid={`input-bulk-url-${row.id}`}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        value={row.imageUrl}
-                        onChange={e => updateRow(row.id, "imageUrl", e.target.value)}
-                        placeholder="https://...jpg"
-                        className="text-xs h-8"
-                        data-testid={`input-bulk-image-${row.id}`}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeRow(row.id)}
-                        disabled={rows.length <= 1}
-                        data-testid={`button-remove-row-${row.id}`}
-                      >
-                        <Trash2 className="w-3.5 h-3.5 text-muted-foreground" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+        <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="campaign-name">Campaign Name Prefix</Label>
+            <Input
+              id="campaign-name"
+              placeholder="e.g. Summer Sale"
+              value={campaignName}
+              onChange={e => setCampaignName(e.target.value)}
+              data-testid="input-campaign-name"
+            />
           </div>
-
-          <div className="flex items-center justify-between mt-4 pt-4 border-t">
-            <p className="text-xs text-muted-foreground">
-              {validRows.length} of {rows.length} ads ready to launch
-            </p>
-            <Button
-              onClick={() => bulkLaunchMutation.mutate()}
-              disabled={validRows.length === 0 || bulkLaunchMutation.isPending || !pageId}
-              className="gap-2"
-              data-testid="button-bulk-launch"
-            >
-              {bulkLaunchMutation.isPending ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Rocket className="w-4 h-4" />
-              )}
-              Launch {validRows.length} Ads (Paused)
-            </Button>
+          <div className="space-y-1.5">
+            <Label htmlFor="daily-budget">Daily Budget (PKR)</Label>
+            <Input
+              id="daily-budget"
+              type="number"
+              value={dailyBudget}
+              onChange={e => setDailyBudget(e.target.value)}
+              data-testid="input-daily-budget"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="link-url">Landing Page URL</Label>
+            <Input
+              id="link-url"
+              placeholder="https://yourshop.com/product"
+              value={linkUrl}
+              onChange={e => setLinkUrl(e.target.value)}
+              data-testid="input-link-url"
+            />
           </div>
         </CardContent>
       </Card>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card data-testid="card-creatives">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ImageIcon className="w-4 h-4 text-muted-foreground" />
+                <CardTitle className="text-base">Creatives ({creatives.length})</CardTitle>
+              </div>
+              <Button variant="outline" size="sm" onClick={addCreative} data-testid="button-add-creative">
+                <Plus className="w-3.5 h-3.5 mr-1" /> Add
+              </Button>
+            </div>
+            <CardDescription>Add image URLs for your ad creatives</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {creatives.map((cr, idx) => (
+              <div key={cr.id} className="flex gap-2 items-start" data-testid={`creative-row-${cr.id}`}>
+                <div className="flex-1 space-y-1.5">
+                  <Input
+                    placeholder={`Label (e.g. Product Shot ${idx + 1})`}
+                    value={cr.label}
+                    onChange={e => updateCreative(cr.id, "label", e.target.value)}
+                    className="text-xs h-8"
+                    data-testid={`input-creative-label-${cr.id}`}
+                  />
+                  <Input
+                    placeholder="https://...image.jpg"
+                    value={cr.imageUrl}
+                    onChange={e => updateCreative(cr.id, "imageUrl", e.target.value)}
+                    className="text-xs h-8"
+                    data-testid={`input-creative-url-${cr.id}`}
+                  />
+                </div>
+                {cr.imageUrl && (
+                  <div className="w-16 h-16 border rounded overflow-hidden flex-shrink-0">
+                    <img src={cr.imageUrl} alt={cr.label} className="w-full h-full object-cover" />
+                  </div>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => removeCreative(cr.id)}
+                  disabled={creatives.length <= 1}
+                  className="mt-1"
+                  data-testid={`button-remove-creative-${cr.id}`}
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-muted-foreground" />
+                </Button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card data-testid="card-copy-variants">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Type className="w-4 h-4 text-muted-foreground" />
+                <CardTitle className="text-base">Ad Copy Variants ({copyVariants.length})</CardTitle>
+              </div>
+              <Button variant="outline" size="sm" onClick={addCopyVariant} data-testid="button-add-copy">
+                <Plus className="w-3.5 h-3.5 mr-1" /> Add
+              </Button>
+            </div>
+            <CardDescription>Write different text variations for your ads</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {copyVariants.map((cp, idx) => (
+              <div key={cp.id} className="flex gap-2 items-start" data-testid={`copy-row-${cp.id}`}>
+                <div className="flex-1 space-y-1.5">
+                  <Input
+                    placeholder={`Headline ${idx + 1}`}
+                    value={cp.headline}
+                    onChange={e => updateCopyVariant(cp.id, "headline", e.target.value)}
+                    className="text-xs h-8"
+                    data-testid={`input-copy-headline-${cp.id}`}
+                  />
+                  <Textarea
+                    placeholder="Primary text / ad body..."
+                    value={cp.primaryText}
+                    onChange={e => updateCopyVariant(cp.id, "primaryText", e.target.value)}
+                    className="text-xs min-h-[60px]"
+                    data-testid={`input-copy-text-${cp.id}`}
+                  />
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => removeCopyVariant(cp.id)}
+                  disabled={copyVariants.length <= 1}
+                  className="mt-1"
+                  data-testid={`button-remove-copy-${cp.id}`}
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-muted-foreground" />
+                </Button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="flex justify-center">
+        <Button
+          size="lg"
+          variant="outline"
+          onClick={generateCombinations}
+          disabled={validCreatives.length === 0 || validCopy.length === 0}
+          className="gap-2"
+          data-testid="button-generate-matrix"
+        >
+          <Grid3X3 className="w-4 h-4" />
+          Generate {validCreatives.length} × {validCopy.length} = {validCreatives.length * validCopy.length} Combinations
+        </Button>
+      </div>
+
+      {showMatrix && combinations.length > 0 && (
+        <Card data-testid="card-combination-matrix">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base">Combination Matrix</CardTitle>
+                <CardDescription>
+                  {selectedCombos.length} of {combinations.length} combinations selected
+                </CardDescription>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={selectAll} data-testid="button-select-all">
+                  Select All
+                </Button>
+                <Button variant="outline" size="sm" onClick={deselectAll} data-testid="button-deselect-all">
+                  Deselect All
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10"></TableHead>
+                    <TableHead>Creative</TableHead>
+                    <TableHead>Headline</TableHead>
+                    <TableHead>Primary Text</TableHead>
+                    <TableHead>Preview</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {combinations.map((combo) => {
+                    const creative = creatives.find(c => c.id === combo.creativeId);
+                    const copy = copyVariants.find(c => c.id === combo.copyId);
+                    if (!creative || !copy) return null;
+                    const key = `${combo.creativeId}-${combo.copyId}`;
+                    return (
+                      <TableRow
+                        key={key}
+                        className={!combo.selected ? "opacity-40" : ""}
+                        data-testid={`row-combo-${key}`}
+                      >
+                        <TableCell>
+                          <Checkbox
+                            checked={combo.selected}
+                            onCheckedChange={() => toggleCombination(combo.creativeId, combo.copyId)}
+                            data-testid={`checkbox-combo-${key}`}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            {creative.imageUrl && (
+                              <img src={creative.imageUrl} alt="" className="w-8 h-8 rounded object-cover" />
+                            )}
+                            <span className="text-xs font-medium">{creative.label}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-xs">{copy.headline || "—"}</TableCell>
+                        <TableCell className="text-xs max-w-[200px] truncate">{copy.primaryText}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-[10px]">
+                            {creative.label} × {copy.headline || "Copy"}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+
+            <Separator className="my-4" />
+
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">
+                {selectedCombos.length} ad{selectedCombos.length !== 1 ? "s" : ""} will be created under campaign "{campaignName || "Untitled"}"
+              </p>
+              <Button
+                onClick={() => bulkLaunchMutation.mutate()}
+                disabled={
+                  selectedCombos.length === 0 ||
+                  bulkLaunchMutation.isPending ||
+                  !pageId ||
+                  !campaignName.trim() ||
+                  !linkUrl.trim()
+                }
+                className="gap-2"
+                data-testid="button-bulk-launch"
+              >
+                {bulkLaunchMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Rocket className="w-4 h-4" />
+                )}
+                Launch {selectedCombos.length} Ads (Paused)
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card data-testid="card-launch-history">
         <CardHeader className="pb-2">
@@ -244,7 +440,7 @@ export default function MetaBulkLaunch() {
             </div>
           ) : recentJobs.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-4">
-              No launch jobs yet. Create your first ad above.
+              No launch jobs yet. Create your first bulk launch above.
             </p>
           ) : (
             <Table>
