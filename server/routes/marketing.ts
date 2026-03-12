@@ -2414,6 +2414,31 @@ export function registerMarketingRoutes(app: Express) {
     }
   });
 
+  app.get("/api/meta/adsets", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const creds = await getCredentialsForMerchant(merchantId);
+      const token = creds.accessToken;
+      const actId = `act_${creds.adAccountId.replace("act_", "")}`;
+
+      const url = new URL(`${META_BASE_URL}/${actId}/adsets`);
+      url.searchParams.set("access_token", token);
+      url.searchParams.set("fields", "id,name,status,effective_status,daily_budget,lifetime_budget,targeting,campaign_id,optimization_goal,bid_strategy");
+      url.searchParams.set("limit", "200");
+
+      const response = await fetch(url.toString());
+      const data = await response.json();
+
+      if (data.error) {
+        return res.status(400).json({ error: data.error.message });
+      }
+
+      res.json({ adSets: data.data || [] });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.post("/api/meta/adsets/bulk-status", isAuthenticated, async (req: any, res) => {
     try {
       const merchantId = await getMerchantId(req);
