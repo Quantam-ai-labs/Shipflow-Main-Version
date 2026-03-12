@@ -509,8 +509,10 @@ async function getMerchantTimezone(merchantId: string): Promise<string> {
   return tz;
 }
 
-function serveLegalPage(res: Response, title: string, bodyHtml: string) {
-  const host = "lala-logistics.replit.app";
+function serveLegalPage(req: Request, res: Response, title: string, bodyHtml: string) {
+  const proto = req.headers["x-forwarded-proto"] || req.protocol || "https";
+  const host = req.get("host") || "lala-logistics.replit.app";
+  const pageUrl = `${proto}://${host}${req.originalUrl}`;
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.send(`<!DOCTYPE html>
 <html lang="en">
@@ -520,7 +522,7 @@ function serveLegalPage(res: Response, title: string, bodyHtml: string) {
 <title>${title} - 1SOL.AI</title>
 <meta property="og:title" content="${title} - 1SOL.AI"/>
 <meta property="og:type" content="website"/>
-<meta property="og:url" content="https://${host}/"/>
+<meta property="og:url" content="${pageUrl}"/>
 <meta property="og:description" content="${title} for the 1SOL.AI logistics and marketing automation platform."/>
 <style>body{font-family:system-ui,sans-serif;max-width:48rem;margin:0 auto;padding:2rem;line-height:1.6;color:#222}h1{font-size:1.8rem}h2{font-size:1.2rem;margin-top:1.5rem}ul,ol{padding-left:1.5rem}li{margin:.25rem 0}</style>
 </head>
@@ -535,8 +537,8 @@ export async function registerRoutes(
   app: Express,
 ): Promise<Server> {
 
-  app.get("/privacy-policy", (_req: Request, res: Response) => {
-    serveLegalPage(res, "Privacy Policy", `
+  app.get("/privacy-policy", (req: Request, res: Response) => {
+    serveLegalPage(req, res, "Privacy Policy", `
 <h1>Privacy Policy</h1>
 <p><small>Last updated: March 12, 2026</small></p>
 <h2>1. Introduction</h2>
@@ -580,8 +582,8 @@ export async function registerRoutes(
 `);
   });
 
-  app.get("/terms-of-service", (_req: Request, res: Response) => {
-    serveLegalPage(res, "Terms of Service", `
+  app.get("/terms-of-service", (req: Request, res: Response) => {
+    serveLegalPage(req, res, "Terms of Service", `
 <h1>Terms of Service</h1>
 <p><small>Last updated: March 12, 2026</small></p>
 <h2>1. Acceptance of Terms</h2>
@@ -610,8 +612,8 @@ export async function registerRoutes(
 `);
   });
 
-  app.get("/data-deletion", (_req: Request, res: Response) => {
-    serveLegalPage(res, "Data Deletion Instructions", `
+  app.get("/data-deletion", (req: Request, res: Response) => {
+    serveLegalPage(req, res, "Data Deletion Instructions", `
 <h1>Data Deletion Instructions</h1>
 <p><small>Last updated: March 12, 2026</small></p>
 <h2>How to Request Data Deletion</h2>
