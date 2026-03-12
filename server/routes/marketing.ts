@@ -1873,6 +1873,105 @@ export function registerMarketingRoutes(app: Express) {
     }
   });
 
+  app.get("/api/meta/targeting-search", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const q = (req.query.q as string || "").trim();
+      const type = (req.query.type as string) || "adinterest";
+      if (!q || q.length < 2) {
+        return res.json({ data: [] });
+      }
+      const creds = await getCredentialsForMerchant(merchantId);
+      const url = new URL(`${META_BASE_URL}/search`);
+      url.searchParams.set("access_token", creds.accessToken);
+      url.searchParams.set("type", type);
+      url.searchParams.set("q", q);
+      url.searchParams.set("limit", "15");
+      const response = await fetch(url.toString());
+      if (!response.ok) {
+        return res.json({ data: [] });
+      }
+      const data = await response.json();
+      res.json({ data: (data.data || []).map((item: any) => ({ id: item.id, name: item.name, audience_size: item.audience_size, path: item.path, topic: item.topic })) });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/meta/bulk-launch/:jobId/retry-failed", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const { jobId } = req.params;
+
+      const [job] = await db.select().from(adLaunchJobs).where(and(eq(adLaunchJobs.id, jobId), eq(adLaunchJobs.merchantId, merchantId)));
+      if (!job) {
+        return res.status(404).json({ error: "Job not found" });
+      }
+
+      const failedItems = await db.select().from(adLaunchItems)
+        .where(and(eq(adLaunchItems.jobId, jobId), eq(adLaunchItems.status, "failed")));
+
+      if (failedItems.length === 0) {
+        return res.json({ success: true, retried: 0, message: "No failed items to retry" });
+      }
+
+      const pageId = job.pageId || "";
+      let succeeded = 0;
+      let failed = 0;
+
+      for (const item of failedItems) {
+        try {
+          const ad = {
+            campaignName: item.campaignName || "Retry",
+            objective: job.objective || "OUTCOME_SALES",
+            dailyBudget: job.dailyBudget || "500",
+            targeting: job.targeting || { geo_locations: { countries: ["PK"] } },
+            creative: {
+              primaryText: item.primaryText || "",
+              headline: item.headline || undefined,
+              description: item.description || undefined,
+              linkUrl: item.linkUrl || "",
+              imageUrl: item.imageUrl || undefined,
+              callToAction: item.callToAction || "SHOP_NOW",
+            },
+            pageId,
+            pixelId: job.pixelId || undefined,
+          };
+
+          const result = await bulkLaunchAds(merchantId, [ad]);
+          if (result.succeeded > 0) {
+            await db.update(adLaunchItems).set({
+              status: "completed",
+              metaCampaignId: result.results[0]?.campaignId || null,
+              metaAdsetId: result.results[0]?.adSetId || null,
+              metaAdId: result.results[0]?.adId || null,
+              errorMessage: null,
+              launchedAt: new Date(),
+            }).where(eq(adLaunchItems.id, item.id));
+            succeeded++;
+          } else {
+            await db.update(adLaunchItems).set({
+              errorMessage: result.results[0]?.error || "Retry failed",
+            }).where(eq(adLaunchItems.id, item.id));
+            failed++;
+          }
+        } catch (err: any) {
+          await db.update(adLaunchItems).set({
+            errorMessage: err.message,
+          }).where(eq(adLaunchItems.id, item.id));
+          failed++;
+        }
+      }
+
+      const newStatus = failed === 0 ? "completed" : succeeded > 0 ? "partial" : "failed";
+      await db.update(adLaunchJobs).set({ status: newStatus }).where(eq(adLaunchJobs.id, jobId));
+
+      res.json({ success: true, retried: failedItems.length, succeeded, failed });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.post("/api/meta/launch", isAuthenticated, async (req: any, res) => {
     try {
       const merchantId = await getMerchantId(req);
@@ -1880,19 +1979,35 @@ export function registerMarketingRoutes(app: Express) {
         campaignName: z.string().min(1),
         objective: z.string().default("OUTCOME_SALES"),
         dailyBudget: z.string().min(1),
+        lifetimeBudget: z.string().optional(),
+        budgetType: z.enum(["daily", "lifetime"]).optional(),
+        bidStrategy: z.string().optional(),
+        bidAmount: z.string().optional(),
         targeting: z.any(),
         creative: z.object({
+          format: z.enum(["single_image", "video", "carousel"]).optional(),
           primaryText: z.string().min(1),
           headline: z.string().optional(),
           description: z.string().optional(),
           linkUrl: z.string().url(),
           imageUrl: z.string().optional(),
           imageHash: z.string().optional(),
+          videoId: z.string().optional(),
+          thumbnailUrl: z.string().optional(),
           callToAction: z.string().optional(),
+          carouselCards: z.array(z.object({
+            imageUrl: z.string().optional(),
+            imageHash: z.string().optional(),
+            headline: z.string().optional(),
+            description: z.string().optional(),
+            linkUrl: z.string().url(),
+          })).optional(),
         }),
         pageId: z.string().min(1),
         pixelId: z.string().optional(),
         status: z.string().optional(),
+        startTime: z.string().optional(),
+        endTime: z.string().optional(),
       });
 
       const parsed = schema.safeParse(req.body);

@@ -88,9 +88,9 @@ Preferred communication style: Simple, everyday language.
 - Settings: `/settings?tab=marketing` shows "One-Click Connect" card with OAuth button
 
 ### Ad Launcher
-- **Service**: `server/services/metaAdLauncher.ts` — write functions: `createCampaign`, `createAdSet`, `createAdCreative`, `createAd`, `uploadImageToMeta`, `launchAd`, `bulkLaunchAds`
-- **Routes**: `POST /api/meta/launch` (single), `POST /api/meta/bulk-launch` (bulk), `GET /api/meta/launch-jobs`, media library CRUD at `/api/meta/media-library`
-- **Frontend Pages**: `/meta/launcher` (wizard: Campaign→Targeting→Creative→Review), `/meta/bulk-launch` (spreadsheet-style), `/meta/media-library` (image management)
-- **Schema**: `ad_launch_jobs` (tracks launch status), `ad_media_library` (stored creatives)
+- **Service**: `server/services/metaAdLauncher.ts` — write functions: `createCampaign`, `createAdSet` (daily/lifetime budget, bid strategy, scheduling), `createAdCreative` (single image, video, carousel formats), `createAd`, `uploadImageToMeta`, `launchAd`, `bulkLaunchAds`
+- **Routes**: `POST /api/meta/launch` (single), `POST /api/meta/bulk-launch` (bulk), `GET /api/meta/launch-jobs`, `GET /api/meta/targeting-search` (interest search), `POST /api/meta/bulk-launch/:jobId/retry-failed` (retry failed items), media library CRUD at `/api/meta/media-library`
+- **Frontend Pages**: `/meta/launcher` (4-step wizard with interests targeting, scheduling, video/carousel/image formats, placement controls, budget type toggle, bid strategy, ad preview), `/meta/bulk-launch` (spreadsheet-style with retry failed button), `/meta/media-library` (image management)
+- **Schema**: `ad_launch_jobs` (tracks launch status), `ad_launch_items` (individual ad items), `ad_media_library` (stored creatives)
 - **Sidebar**: "Meta Ads" group between Growth and Support with Launcher, Bulk Launch, Media Library items
 - All ads created in PAUSED state by default for safety

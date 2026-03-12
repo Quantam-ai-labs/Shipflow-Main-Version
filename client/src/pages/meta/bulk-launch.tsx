@@ -9,7 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, Plus, Trash2, Rocket, CheckCircle2, XCircle, Clock, Image as ImageIcon, Type, Grid3X3, FolderOpen } from "lucide-react";
+import { Loader2, Plus, Trash2, Rocket, CheckCircle2, XCircle, Clock, Image as ImageIcon, Type, Grid3X3, FolderOpen, RotateCw } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -178,6 +178,24 @@ export default function MetaBulkLaunch() {
     },
     onError: (error: any) => {
       toast({ title: "Bulk Launch Failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const [retryingJobId, setRetryingJobId] = useState<string | null>(null);
+  const retryMutation = useMutation({
+    mutationFn: async (jobId: string) => {
+      setRetryingJobId(jobId);
+      const res = await apiRequest("POST", `/api/meta/bulk-launch/${jobId}/retry-failed`, {});
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Retry Complete", description: `${data.succeeded} of ${data.retried} failed items retried successfully.` });
+      queryClient.invalidateQueries({ queryKey: ["/api/meta/launch-jobs"] });
+      setRetryingJobId(null);
+    },
+    onError: (error: any) => {
+      toast({ title: "Retry Failed", description: error.message, variant: "destructive" });
+      setRetryingJobId(null);
     },
   });
 
@@ -486,6 +504,7 @@ export default function MetaBulkLaunch() {
                   <TableHead>Status</TableHead>
                   <TableHead>Budget</TableHead>
                   <TableHead>Created</TableHead>
+                  <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -518,6 +537,18 @@ export default function MetaBulkLaunch() {
                     <TableCell className="text-sm">PKR {job.dailyBudget}/day</TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {new Date(job.createdAt).toLocaleString("en-PK", { timeZone: "Asia/Karachi" })}
+                    </TableCell>
+                    <TableCell>
+                      {(job.status === "failed" || job.status === "partial") && (
+                        <Button variant="outline" size="sm" className="h-7 text-xs gap-1"
+                          onClick={() => retryMutation.mutate(job.id)}
+                          disabled={retryingJobId === job.id}
+                          data-testid={`button-retry-${job.id}`}
+                        >
+                          {retryingJobId === job.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCw className="w-3 h-3" />}
+                          Retry Failed
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
