@@ -36,6 +36,7 @@ Preferred communication style: Simple, everyday language.
 - **Print & Logs System**: Generates native courier airway bills, batch loadsheets, and picklist PDFs.
 - **CSV Export**: Client-side CSV export available on major data pages.
 - **Webhook Resilience**: Immediate 200 responses, health check API, per-merchant HMAC verification.
+- **Meta Ads OAuth & Ad Launcher**: One-click Facebook OAuth connect (platform-level App ID/Secret via env vars, CSRF-safe state tokens), ad account/page/IG account selection, token refresh. 4-step Ad Launcher wizard, Bulk Ad Launcher with N creatives × M copy variants combination matrix, Media Library (URL + file upload to Meta), Campaign management with status toggle. Legal pages (privacy policy, terms of service, data deletion) at public routes.
 - **Ads Profitability Calculator**: Tracks Facebook/Meta campaign profitability with auto-sync and financial metrics.
 - **AI Marketing Intelligence**: AI-powered analytics with auto-generated insights and a conversational chat interface.
 - **Universal AI Assistant**: Dedicated AI page with alerts, chat, voice I/O, and multi-language support.

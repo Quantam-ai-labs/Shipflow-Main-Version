@@ -2,39 +2,18 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RefreshCw, Megaphone, CheckCircle2, XCircle, Clock, Loader2, Save, Plug, Eye, EyeOff, Key, LogIn, Unplug } from "lucide-react";
+import { RefreshCw, Megaphone, CheckCircle2, XCircle, Clock, Loader2, Plug, LogIn, Unplug } from "lucide-react";
 import { SiFacebook } from "react-icons/si";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { formatPkDateTime } from "@/lib/dateFormat";
 
-interface CredentialsData {
-  facebookAppId: string;
-  facebookAppSecret: string;
-  facebookAccessToken: string;
-  facebookAdAccountId: string;
-  hasAppId: boolean;
-  hasAppSecret: boolean;
-  hasAccessToken: boolean;
-  hasAdAccountId: boolean;
-}
-
 export default function MarketingSettings() {
   const { toast } = useToast();
-
-  const [appId, setAppId] = useState("");
-  const [appSecret, setAppSecret] = useState("");
-  const [accessToken, setAccessToken] = useState("");
-  const [adAccountId, setAdAccountId] = useState("");
-  const [showAppSecret, setShowAppSecret] = useState(false);
-  const [showAccessToken, setShowAccessToken] = useState(false);
-  const [credsDirty, setCredsDirty] = useState(false);
 
   const { data: syncStatus, isLoading: statusLoading } = useQuery<{
     hasCredentials: boolean;
@@ -46,10 +25,6 @@ export default function MarketingSettings() {
     } | null;
   }>({
     queryKey: ["/api/marketing/sync-status"],
-  });
-
-  const { data: credentials, isLoading: credsLoading } = useQuery<CredentialsData>({
-    queryKey: ["/api/marketing/credentials"],
   });
 
   const { data: campaigns } = useQuery<any[]>({
@@ -68,54 +43,6 @@ export default function MarketingSettings() {
     instagramAccountName: string | null;
   }>({
     queryKey: ["/api/meta/oauth/status"],
-  });
-
-  useEffect(() => {
-    if (credentials) {
-      setAppId(credentials.facebookAppId || "");
-      setAppSecret(credentials.facebookAppSecret || "");
-      setAccessToken(credentials.facebookAccessToken || "");
-      setAdAccountId(credentials.facebookAdAccountId || "");
-      setCredsDirty(false);
-    }
-  }, [credentials]);
-
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("PUT", "/api/marketing/credentials", {
-        facebookAppId: appId,
-        facebookAppSecret: appSecret,
-        facebookAccessToken: accessToken,
-        facebookAdAccountId: adAccountId,
-      });
-      return res.json();
-    },
-    onSuccess: () => {
-      toast({ title: "Credentials Saved", description: "Your Facebook credentials have been saved." });
-      queryClient.invalidateQueries({ queryKey: ["/api/marketing/credentials"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/marketing/sync-status"] });
-      setCredsDirty(false);
-    },
-    onError: (error: any) => {
-      toast({ title: "Save Failed", description: error.message, variant: "destructive" });
-    },
-  });
-
-  const testMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/marketing/test-connection");
-      return res.json();
-    },
-    onSuccess: (data) => {
-      if (data.success) {
-        toast({ title: "Connection Successful", description: `Connected to ad account: ${data.accountName}` });
-      } else {
-        toast({ title: "Connection Failed", description: data.error || "Could not connect to Facebook.", variant: "destructive" });
-      }
-    },
-    onError: (error: any) => {
-      toast({ title: "Connection Test Failed", description: error.message, variant: "destructive" });
-    },
   });
 
   const oauthConnectMutation = useMutation({
@@ -137,7 +64,7 @@ export default function MarketingSettings() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Disconnected", description: "Facebook OAuth has been disconnected." });
+      toast({ title: "Disconnected", description: "Facebook account has been disconnected." });
       queryClient.invalidateQueries({ queryKey: ["/api/meta/oauth/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/marketing/sync-status"] });
     },
@@ -163,7 +90,7 @@ export default function MarketingSettings() {
       const res = await apiRequest("POST", "/api/meta/oauth/refresh-token");
       return res.json();
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
       toast({ title: "Token Refreshed", description: "Your Facebook access token has been refreshed." });
       queryClient.invalidateQueries({ queryKey: ["/api/meta/oauth/status"] });
     },
@@ -173,7 +100,7 @@ export default function MarketingSettings() {
   });
 
   const updateOAuthSettingsMutation = useMutation({
-    mutationFn: async (settings: { adAccountId?: string; pageId?: string; pageName?: string; pixelId?: string }) => {
+    mutationFn: async (settings: { adAccountId?: string; pageId?: string; pageName?: string; pixelId?: string; instagramAccountId?: string; instagramAccountName?: string }) => {
       const res = await apiRequest("PUT", "/api/meta/oauth/settings", settings);
       return res.json();
     },
@@ -186,21 +113,22 @@ export default function MarketingSettings() {
     },
   });
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const oauthResult = params.get("oauth");
-    if (oauthResult === "success") {
-      toast({ title: "Facebook Connected!", description: "Your Facebook account has been connected via OAuth." });
-      queryClient.invalidateQueries({ queryKey: ["/api/meta/oauth/status"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/marketing/sync-status"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/marketing/credentials"] });
-      window.history.replaceState({}, "", window.location.pathname + "?tab=marketing");
-    } else if (oauthResult === "error") {
-      const message = params.get("message") || "OAuth connection failed.";
-      toast({ title: "OAuth Failed", description: message, variant: "destructive" });
-      window.history.replaceState({}, "", window.location.pathname + "?tab=marketing");
-    }
-  }, []);
+  const testMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/marketing/test-connection");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      if (data.success) {
+        toast({ title: "Connection Successful", description: `Connected to ad account: ${data.accountName}` });
+      } else {
+        toast({ title: "Connection Failed", description: data.error || "Could not connect to Facebook.", variant: "destructive" });
+      }
+    },
+    onError: (error: any) => {
+      toast({ title: "Connection Test Failed", description: error.message, variant: "destructive" });
+    },
+  });
 
   const syncMutation = useMutation({
     mutationFn: async () => {
@@ -208,10 +136,7 @@ export default function MarketingSettings() {
       return res.json();
     },
     onSuccess: (data) => {
-      toast({
-        title: "Sync Complete",
-        description: `Synced ${data.campaigns} campaigns and ${data.insights} insights from Facebook Ads.`,
-      });
+      toast({ title: "Sync Complete", description: `Synced ${data.campaigns ?? 0} campaigns.` });
       queryClient.invalidateQueries({ queryKey: ["/api/marketing/sync-status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/marketing/all-campaigns"] });
     },
@@ -220,122 +145,72 @@ export default function MarketingSettings() {
     },
   });
 
-  const isConnected = syncStatus?.hasCredentials ?? false;
-  const credentialSource = syncStatus?.credentialSource ?? "none";
-  const lastSync = syncStatus?.lastSync;
-  const activeCampaigns = campaigns?.filter((c: any) => c.status === "ACTIVE").length ?? 0;
-  const totalCampaigns = campaigns?.length ?? 0;
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const oauthResult = params.get("oauth");
+    if (oauthResult === "success") {
+      toast({ title: "Facebook Connected!", description: "Your Facebook account has been connected successfully." });
+      queryClient.invalidateQueries({ queryKey: ["/api/meta/oauth/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/marketing/sync-status"] });
+      window.history.replaceState({}, "", window.location.pathname + "?tab=marketing");
+    } else if (oauthResult === "error") {
+      const message = params.get("message") || "OAuth connection failed.";
+      toast({ title: "Connection Failed", description: decodeURIComponent(message), variant: "destructive" });
+      window.history.replaceState({}, "", window.location.pathname + "?tab=marketing");
+    }
+  }, []);
 
-  const handleFieldChange = (setter: (v: string) => void) => (e: React.ChangeEvent<HTMLInputElement>) => {
-    setter(e.target.value);
-    setCredsDirty(true);
-  };
+  const isConnected = oauthStatus?.connected || syncStatus?.hasCredentials;
+  const lastSync = syncStatus?.lastSync;
+  const totalCampaigns = campaigns?.length || 0;
+  const activeCampaigns = campaigns?.filter((c: any) => c.status === "ACTIVE" || c.effectiveStatus === "ACTIVE").length || 0;
+
+  const tokenExpiry = oauthStatus?.tokenExpiresAt ? new Date(oauthStatus.tokenExpiresAt) : null;
+  const isTokenExpiringSoon = tokenExpiry && (tokenExpiry.getTime() - Date.now()) < 7 * 24 * 60 * 60 * 1000;
 
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-[900px] mx-auto" data-testid="marketing-settings">
-      <div>
-        <h1 className="text-2xl font-bold" data-testid="text-page-title">Marketing Integration</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Manage your Facebook / Meta Ads integration and campaign sync settings.
-        </p>
-      </div>
-
-      <Card data-testid="card-oauth-connect">
+    <div className="space-y-6" data-testid="marketing-settings-page">
+      <Card data-testid="card-facebook-oauth">
         <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
             <SiFacebook className="w-5 h-5 text-[#1877F2]" />
             <div>
-              <CardTitle className="text-base">One-Click Connect</CardTitle>
+              <CardTitle className="text-base">Facebook & Instagram</CardTitle>
               <CardDescription className="text-xs">
-                Connect your Facebook account with OAuth — no need to manually enter tokens.
+                Connect your Facebook account to manage ads, pages, and Instagram.
               </CardDescription>
             </div>
           </div>
-          {oauthStatus?.connected ? (
-            <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" data-testid="badge-oauth-status">
+          {statusLoading ? (
+            <Skeleton className="h-5 w-20" />
+          ) : oauthStatus?.connected ? (
+            <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" data-testid="badge-connection-status">
               <CheckCircle2 className="w-3 h-3 mr-1" />
-              OAuth Connected
+              Connected
             </Badge>
           ) : (
-            <Badge className="bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300" data-testid="badge-oauth-status">
+            <Badge className="bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300" data-testid="badge-connection-status">
+              <XCircle className="w-3 h-3 mr-1" />
               Not Connected
             </Badge>
           )}
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-4">
           {oauthStatus?.connected ? (
             <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Ad Account</Label>
-                  <Select
-                    value={oauthStatus.adAccountId || ""}
-                    onValueChange={(val) => {
-                      updateOAuthSettingsMutation.mutate({ adAccountId: val });
-                    }}
-                    data-testid="select-ad-account"
-                  >
-                    <SelectTrigger className="h-8 text-sm" data-testid="select-ad-account-trigger">
-                      <SelectValue placeholder="Select ad account" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {adAccountsList?.adAccounts?.map((acc) => (
-                        <SelectItem key={acc.id} value={acc.id} data-testid={`select-ad-account-${acc.id}`}>
-                          {acc.name || acc.id} ({acc.currency})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+              {oauthStatus.pageName && (
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-muted-foreground">Page:</span>
+                  <span className="font-medium" data-testid="text-page-name">{oauthStatus.pageName}</span>
                 </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Facebook Page</Label>
-                  <Select
-                    value={oauthStatus.pageId || ""}
-                    onValueChange={(val) => {
-                      const page = pagesList?.pages?.find((p) => p.id === val);
-                      updateOAuthSettingsMutation.mutate({ pageId: val, pageName: page?.name || val });
-                    }}
-                    data-testid="select-page"
-                  >
-                    <SelectTrigger className="h-8 text-sm" data-testid="select-page-trigger">
-                      <SelectValue placeholder="Select page" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {pagesList?.pages?.map((page) => (
-                        <SelectItem key={page.id} value={page.id} data-testid={`select-page-${page.id}`}>
-                          {page.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Instagram Account</Label>
-                  <Select
-                    value={oauthStatus.instagramAccountId || ""}
-                    onValueChange={(val) => {
-                      const ig = igAccountsList?.instagramAccounts?.find((a) => a.id === val);
-                      updateOAuthSettingsMutation.mutate({ instagramAccountId: val, instagramAccountName: ig?.username || ig?.name || val });
-                    }}
-                    data-testid="select-ig-account"
-                  >
-                    <SelectTrigger className="h-8 text-sm" data-testid="select-ig-account-trigger">
-                      <SelectValue placeholder="Select Instagram account" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {igAccountsList?.instagramAccounts?.map((ig) => (
-                        <SelectItem key={ig.id} value={ig.id} data-testid={`select-ig-${ig.id}`}>
-                          {ig.username || ig.name || ig.id}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              {oauthStatus.tokenExpiresAt && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Clock className="w-3 h-3" />
-                  <span data-testid="text-token-expires">Token expires {formatPkDateTime(oauthStatus.tokenExpiresAt)}</span>
+              )}
+
+              {tokenExpiry && (
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-muted-foreground">Token expires:</span>
+                  <span className={isTokenExpiringSoon ? "text-amber-600 dark:text-amber-400 font-medium" : ""} data-testid="text-token-expiry">
+                    {formatPkDateTime(tokenExpiry.toISOString())}
+                  </span>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -348,7 +223,85 @@ export default function MarketingSettings() {
                   </Button>
                 </div>
               )}
-              <div className="flex gap-2">
+
+              <Separator />
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Ad Account</label>
+                  <Select
+                    value={oauthStatus.adAccountId || ""}
+                    onValueChange={(val) => updateOAuthSettingsMutation.mutate({ adAccountId: val })}
+                    data-testid="select-ad-account"
+                  >
+                    <SelectTrigger className="h-9 text-sm" data-testid="trigger-ad-account">
+                      <SelectValue placeholder="Select ad account" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(adAccountsList?.adAccounts || []).map((acc) => (
+                        <SelectItem key={acc.id} value={acc.id}>{acc.name} ({acc.id})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Facebook Page</label>
+                  <Select
+                    value={oauthStatus.pageId || ""}
+                    onValueChange={(val) => {
+                      const page = pagesList?.pages?.find(p => p.id === val);
+                      updateOAuthSettingsMutation.mutate({ pageId: val, pageName: page?.name || "" });
+                    }}
+                    data-testid="select-page"
+                  >
+                    <SelectTrigger className="h-9 text-sm" data-testid="trigger-page">
+                      <SelectValue placeholder="Select page" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(pagesList?.pages || []).map((p) => (
+                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Instagram Account</label>
+                  <Select
+                    value={oauthStatus.instagramAccountId || ""}
+                    onValueChange={(val) => {
+                      const ig = igAccountsList?.instagramAccounts?.find(a => a.id === val);
+                      updateOAuthSettingsMutation.mutate({ instagramAccountId: val, instagramAccountName: ig?.username || ig?.name || "" });
+                    }}
+                    data-testid="select-instagram"
+                  >
+                    <SelectTrigger className="h-9 text-sm" data-testid="trigger-instagram">
+                      <SelectValue placeholder="Select Instagram account" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(igAccountsList?.instagramAccounts || []).map((ig) => (
+                        <SelectItem key={ig.id} value={ig.id}>{ig.username || ig.name || ig.id}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => testMutation.mutate()}
+                  disabled={testMutation.isPending}
+                  data-testid="button-test-connection"
+                >
+                  {testMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Plug className="w-3.5 h-3.5 mr-1" />}
+                  Test Connection
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
@@ -375,8 +328,7 @@ export default function MarketingSettings() {
           ) : (
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                Click the button below to connect your Facebook account. This will grant 1SOL.AI permission to manage your ads.
-                Make sure you have your Facebook App ID and App Secret configured below first.
+                Connect your Facebook account to manage your ads, select your pages, and run campaigns through 1SOL.AI.
               </p>
               <Button
                 onClick={() => oauthConnectMutation.mutate()}
@@ -392,165 +344,6 @@ export default function MarketingSettings() {
                 Connect with Facebook
               </Button>
             </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card data-testid="card-facebook-credentials">
-        <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-          <div className="flex items-center gap-2 flex-wrap">
-            <SiFacebook className="w-5 h-5 text-[#1877F2]" />
-            <div>
-              <CardTitle className="text-base">Facebook App Credentials</CardTitle>
-              <CardDescription className="text-xs">
-                Enter your Facebook App credentials to connect your Meta Ads account.
-              </CardDescription>
-            </div>
-          </div>
-          {statusLoading ? (
-            <Skeleton className="h-5 w-20" />
-          ) : isConnected ? (
-            <div className="flex flex-col items-end gap-1">
-              <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" data-testid="badge-connection-status">
-                <CheckCircle2 className="w-3 h-3 mr-1" />
-                Connected
-              </Badge>
-              {credentialSource === "environment" && (
-                <span className="text-[10px] text-muted-foreground" data-testid="text-credential-source">via system config</span>
-              )}
-            </div>
-          ) : (
-            <Badge className="bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300" data-testid="badge-connection-status">
-              <XCircle className="w-3 h-3 mr-1" />
-              Not Connected
-            </Badge>
-          )}
-        </CardHeader>
-        <CardContent className="space-y-5">
-          {credsLoading ? (
-            <div className="space-y-3">
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
-            </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="fb-app-id" className="text-xs font-medium">
-                    <Key className="w-3 h-3 inline mr-1" />
-                    App ID
-                  </Label>
-                  <Input
-                    id="fb-app-id"
-                    placeholder="e.g. 123456789012345"
-                    value={appId}
-                    onChange={handleFieldChange(setAppId)}
-                    data-testid="input-facebook-app-id"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="fb-app-secret" className="text-xs font-medium">
-                    <Key className="w-3 h-3 inline mr-1" />
-                    App Secret
-                  </Label>
-                  <div className="relative">
-                    <Input
-                      id="fb-app-secret"
-                      type={showAppSecret ? "text" : "password"}
-                      placeholder="Enter app secret"
-                      value={appSecret}
-                      onChange={handleFieldChange(setAppSecret)}
-                      data-testid="input-facebook-app-secret"
-                    />
-                    <button
-                      type="button"
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                      onClick={() => setShowAppSecret(!showAppSecret)}
-                      data-testid="button-toggle-app-secret"
-                    >
-                      {showAppSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="fb-access-token" className="text-xs font-medium">
-                    <Key className="w-3 h-3 inline mr-1" />
-                    Access Token
-                  </Label>
-                  <div className="relative">
-                    <Input
-                      id="fb-access-token"
-                      type={showAccessToken ? "text" : "password"}
-                      placeholder="Enter access token"
-                      value={accessToken}
-                      onChange={handleFieldChange(setAccessToken)}
-                      data-testid="input-facebook-access-token"
-                    />
-                    <button
-                      type="button"
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                      onClick={() => setShowAccessToken(!showAccessToken)}
-                      data-testid="button-toggle-access-token"
-                    >
-                      {showAccessToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="fb-ad-account-id" className="text-xs font-medium">
-                    <Key className="w-3 h-3 inline mr-1" />
-                    Ad Account ID
-                  </Label>
-                  <Input
-                    id="fb-ad-account-id"
-                    placeholder="e.g. act_123456789 or 123456789"
-                    value={adAccountId}
-                    onChange={handleFieldChange(setAdAccountId)}
-                    data-testid="input-facebook-ad-account-id"
-                  />
-                </div>
-              </div>
-
-              <Separator />
-
-              <div className="flex flex-wrap items-center gap-3">
-                <Button
-                  onClick={() => saveMutation.mutate()}
-                  disabled={saveMutation.isPending || !credsDirty}
-                  data-testid="button-save-credentials"
-                >
-                  {saveMutation.isPending ? (
-                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  ) : (
-                    <Save className="w-4 h-4 mr-2" />
-                  )}
-                  Save Credentials
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => testMutation.mutate()}
-                  disabled={testMutation.isPending || credsDirty}
-                  data-testid="button-test-connection"
-                >
-                  {testMutation.isPending ? (
-                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  ) : (
-                    <Plug className="w-4 h-4 mr-2" />
-                  )}
-                  Test Connection
-                </Button>
-                {credsDirty && (
-                  <p className="text-xs text-amber-600 dark:text-amber-400">
-                    You have unsaved changes. Save first to test the connection.
-                  </p>
-                )}
-              </div>
-            </>
           )}
         </CardContent>
       </Card>
@@ -638,7 +431,7 @@ export default function MarketingSettings() {
                 </Button>
                 {!isConnected && (
                   <p className="text-xs text-muted-foreground">
-                    Connect your Facebook Ads account first to enable syncing.
+                    Connect your Facebook account first to enable syncing.
                   </p>
                 )}
               </div>

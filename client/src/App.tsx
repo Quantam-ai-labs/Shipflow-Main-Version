@@ -111,6 +111,9 @@ import MetaAdLauncher from "@/pages/meta/launcher";
 import MetaMediaLibrary from "@/pages/meta/media-library";
 import MetaBulkLaunch from "@/pages/meta/bulk-launch";
 import MetaCampaigns from "@/pages/meta/campaigns";
+import PrivacyPolicy from "@/pages/legal/privacy-policy";
+import TermsOfService from "@/pages/legal/terms-of-service";
+import DataDeletion from "@/pages/legal/data-deletion";
 import NotFound from "@/pages/not-found";
 import LoadsheetPage from "@/pages/loadsheet";
 import WarehousePage from "@/pages/warehouse";
@@ -505,6 +508,10 @@ function MainApp() {
   if (location.startsWith("/agent-chat")) {
     return <AgentChatPage />;
   }
+
+  if (location === "/privacy-policy") return <PrivacyPolicy />;
+  if (location === "/terms-of-service") return <TermsOfService />;
+  if (location === "/data-deletion") return <DataDeletion />;
 
   if (!isAuthenticated) {
     return <AuthPage />;

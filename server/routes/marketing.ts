@@ -353,72 +353,6 @@ export function registerMarketingRoutes(app: Express) {
     }
   });
 
-  app.get("/api/marketing/credentials", isAuthenticated, async (req: any, res) => {
-    try {
-      const merchantId = await getMerchantId(req);
-      const [merchant] = await db.select({
-        facebookAppId: merchants.facebookAppId,
-        facebookAppSecret: merchants.facebookAppSecret,
-        facebookAccessToken: merchants.facebookAccessToken,
-        facebookAdAccountId: merchants.facebookAdAccountId,
-      }).from(merchants).where(eq(merchants.id, merchantId));
-
-      if (!merchant) {
-        return res.status(404).json({ error: "Merchant not found" });
-      }
-
-      const mask = (val: string | null) => val ? `${"•".repeat(Math.min(val.length, 20))}${val.slice(-4)}` : "";
-
-      res.json({
-        facebookAppId: merchant.facebookAppId || "",
-        facebookAppSecret: merchant.facebookAppSecret ? mask(merchant.facebookAppSecret) : "",
-        facebookAccessToken: merchant.facebookAccessToken ? mask(merchant.facebookAccessToken) : "",
-        facebookAdAccountId: merchant.facebookAdAccountId || "",
-        hasAppId: !!merchant.facebookAppId,
-        hasAppSecret: !!merchant.facebookAppSecret,
-        hasAccessToken: !!merchant.facebookAccessToken,
-        hasAdAccountId: !!merchant.facebookAdAccountId,
-      });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  const credentialsSchema = z.object({
-    facebookAppId: z.string().optional(),
-    facebookAppSecret: z.string().optional(),
-    facebookAccessToken: z.string().optional(),
-    facebookAdAccountId: z.string().optional(),
-  });
-
-  app.put("/api/marketing/credentials", isAuthenticated, async (req: any, res) => {
-    try {
-      const merchantId = await getMerchantId(req);
-      const parsed = credentialsSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid request body", details: parsed.error.flatten() });
-      }
-
-      const updates: Record<string, any> = { updatedAt: new Date() };
-      const data = parsed.data;
-
-      if (data.facebookAppId !== undefined) updates.facebookAppId = data.facebookAppId || null;
-      if (data.facebookAdAccountId !== undefined) updates.facebookAdAccountId = data.facebookAdAccountId || null;
-      if (data.facebookAppSecret !== undefined && !data.facebookAppSecret.includes("•")) {
-        updates.facebookAppSecret = data.facebookAppSecret ? encryptToken(data.facebookAppSecret) : null;
-      }
-      if (data.facebookAccessToken !== undefined && !data.facebookAccessToken.includes("•")) {
-        updates.facebookAccessToken = data.facebookAccessToken ? encryptToken(data.facebookAccessToken) : null;
-      }
-
-      await db.update(merchants).set(updates).where(eq(merchants.id, merchantId));
-
-      res.json({ success: true, message: "Facebook credentials saved successfully" });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
   app.post("/api/marketing/test-connection", isAuthenticated, async (req: any, res) => {
     try {
       const merchantId = await getMerchantId(req);
@@ -1474,13 +1408,10 @@ export function registerMarketingRoutes(app: Express) {
   app.get("/api/meta/oauth/url", isAuthenticated, async (req: any, res) => {
     try {
       const merchantId = await getMerchantId(req);
-      const [merchant] = await db.select({
-        facebookAppId: merchants.facebookAppId,
-      }).from(merchants).where(eq(merchants.id, merchantId));
 
-      const appId = merchant?.facebookAppId || process.env.FACEBOOK_APP_ID;
+      const appId = process.env.FACEBOOK_APP_ID;
       if (!appId) {
-        return res.status(400).json({ error: "Facebook App ID not configured. Set it in Settings > Marketing or as an environment variable." });
+        return res.status(400).json({ error: "Facebook App ID not configured. Contact your platform administrator." });
       }
 
       const redirectUri = `${req.protocol}://${req.get("host")}/api/meta/oauth/callback`;
@@ -1533,15 +1464,8 @@ export function registerMarketingRoutes(app: Express) {
 
       const merchantId = stateEntry.merchantId;
 
-      const [merchant] = await db.select({
-        facebookAppId: merchants.facebookAppId,
-        facebookAppSecret: merchants.facebookAppSecret,
-      }).from(merchants).where(eq(merchants.id, merchantId));
-
-      const appId = merchant?.facebookAppId || process.env.FACEBOOK_APP_ID;
-      const appSecretRaw = merchant?.facebookAppSecret
-        ? decryptToken(merchant.facebookAppSecret)
-        : process.env.FACEBOOK_APP_SECRET;
+      const appId = process.env.FACEBOOK_APP_ID;
+      const appSecretRaw = process.env.FACEBOOK_APP_SECRET;
 
       if (!appId || !appSecretRaw) {
         return res.redirect("/settings?tab=marketing&oauth=error&message=Facebook+App+credentials+not+configured");
@@ -1717,8 +1641,6 @@ export function registerMarketingRoutes(app: Express) {
     try {
       const merchantId = await getMerchantId(req);
       const [merchant] = await db.select({
-        facebookAppId: merchants.facebookAppId,
-        facebookAppSecret: merchants.facebookAppSecret,
         facebookAccessToken: merchants.facebookAccessToken,
       }).from(merchants).where(eq(merchants.id, merchantId));
 
@@ -1726,10 +1648,8 @@ export function registerMarketingRoutes(app: Express) {
         return res.status(400).json({ error: "No access token to refresh" });
       }
 
-      const appId = merchant.facebookAppId || process.env.FACEBOOK_APP_ID;
-      const appSecretRaw = merchant.facebookAppSecret
-        ? decryptToken(merchant.facebookAppSecret)
-        : process.env.FACEBOOK_APP_SECRET;
+      const appId = process.env.FACEBOOK_APP_ID;
+      const appSecretRaw = process.env.FACEBOOK_APP_SECRET;
 
       if (!appId || !appSecretRaw) {
         return res.status(400).json({ error: "Facebook App credentials not configured" });
