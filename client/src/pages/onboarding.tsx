@@ -132,8 +132,7 @@ export default function Onboarding() {
     },
   });
 
-  const canonicalHost = "lala-logistics.replit.app";
-  const isNonCanonicalHost = typeof window !== 'undefined' && window.location.hostname !== canonicalHost && window.location.hostname !== 'localhost';
+  const isNonCanonicalHost = false;
 
   const advanceStepMutation = useMutation({
     mutationFn: async () => {

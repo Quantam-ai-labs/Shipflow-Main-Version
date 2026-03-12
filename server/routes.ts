@@ -7810,9 +7810,7 @@ export async function registerRoutes(
         await db.update(merchants).set({ waVerifyToken: verifyToken }).where(eq(merchants.id, merchantId));
       }
 
-      const canonicalHost = process.env.REPL_SLUG
-        ? `https://lala-logistics.replit.app`
-        : `https://lala-logistics.replit.app`;
+      const canonicalHost = `${req.protocol}://${req.get("host")}`;
 
       const [disconnectRow] = await db.select({ waDisconnected: merchants.waDisconnected }).from(merchants).where(eq(merchants.id, merchantId)).limit(1);
       res.json({

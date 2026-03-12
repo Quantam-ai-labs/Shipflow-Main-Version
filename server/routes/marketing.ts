@@ -2796,7 +2796,7 @@ export function registerMarketingRoutes(app: Express) {
         updatedAt: new Date(),
       }).where(eq(merchants.id, merchantId));
 
-      const canonicalHost = "https://lala-logistics.replit.app";
+      const canonicalHost = `${req.protocol}://${req.get("host")}`;
 
       console.log(`[WA-Signup] WhatsApp Embedded Signup completed for merchant ${merchantId}. WABA: ${wabaId}, Phone: ${phoneNumberId} (${displayPhone})`);
 
