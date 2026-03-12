@@ -794,3 +794,90 @@ export async function evaluateAutomationRules(merchantId: string): Promise<{ tri
 
   return { triggered: triggeredActions.length, actions: triggeredActions };
 }
+
+export async function bulkUpdateAdSetStatus(
+  merchantId: string,
+  adSetIds: string[],
+  status: "ACTIVE" | "PAUSED"
+): Promise<{ succeeded: number; failed: number; errors: string[] }> {
+  const creds = await getCredentialsForMerchant(merchantId);
+  let succeeded = 0;
+  let failed = 0;
+  const errors: string[] = [];
+
+  for (const adSetId of adSetIds) {
+    try {
+      await metaApiPost(creds, adSetId, { status });
+      succeeded++;
+    } catch (error: any) {
+      failed++;
+      errors.push(`${adSetId}: ${error.message}`);
+    }
+  }
+
+  return { succeeded, failed, errors };
+}
+
+export async function bulkUpdateAdSetBudget(
+  merchantId: string,
+  adSetIds: string[],
+  action: "increase" | "decrease" | "set",
+  value: number,
+  budgetType: "daily" | "lifetime"
+): Promise<{ succeeded: number; failed: number; errors: string[] }> {
+  const creds = await getCredentialsForMerchant(merchantId);
+  let succeeded = 0;
+  let failed = 0;
+  const errors: string[] = [];
+
+  for (const adSetId of adSetIds) {
+    try {
+      if (action === "set") {
+        const body: Record<string, any> = {};
+        if (budgetType === "daily") body.daily_budget = Math.round(value * 100);
+        else body.lifetime_budget = Math.round(value * 100);
+        await metaApiPost(creds, adSetId, body);
+      } else {
+        const currentData = await metaApiGet(creds, adSetId, { fields: "daily_budget,lifetime_budget" });
+        const currentBudget = parseFloat(budgetType === "daily" ? currentData.daily_budget : currentData.lifetime_budget) || 0;
+        const multiplier = action === "increase" ? (1 + value / 100) : (1 - value / 100);
+        const newBudget = Math.max(Math.round(currentBudget * multiplier), 100);
+        const body: Record<string, any> = {};
+        if (budgetType === "daily") body.daily_budget = newBudget;
+        else body.lifetime_budget = newBudget;
+        await metaApiPost(creds, adSetId, body);
+      }
+      succeeded++;
+    } catch (error: any) {
+      failed++;
+      errors.push(`${adSetId}: ${error.message}`);
+    }
+  }
+
+  return { succeeded, failed, errors };
+}
+
+export async function bulkUpdateTargeting(
+  merchantId: string,
+  adSetIds: string[],
+  targetingUpdate: Record<string, any>
+): Promise<{ succeeded: number; failed: number; errors: string[] }> {
+  const creds = await getCredentialsForMerchant(merchantId);
+  let succeeded = 0;
+  let failed = 0;
+  const errors: string[] = [];
+
+  for (const adSetId of adSetIds) {
+    try {
+      const currentData = await metaApiGet(creds, adSetId, { fields: "targeting" });
+      const mergedTargeting = { ...currentData.targeting, ...targetingUpdate };
+      await metaApiPost(creds, adSetId, { targeting: JSON.stringify(mergedTargeting) });
+      succeeded++;
+    } catch (error: any) {
+      failed++;
+      errors.push(`${adSetId}: ${error.message}`);
+    }
+  }
+
+  return { succeeded, failed, errors };
+}

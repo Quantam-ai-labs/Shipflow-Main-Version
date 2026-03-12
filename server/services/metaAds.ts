@@ -1079,4 +1079,26 @@ export function startMarketingSyncScheduler() {
       console.error("[MetaAds] Scheduler error:", err.message);
     }
   }, 120 * 1000);
+
+  let automationCycleCount = 0;
+  setInterval(async () => {
+    automationCycleCount++;
+    if (automationCycleCount % 5 !== 0) return;
+    try {
+      const { evaluateAutomationRules } = await import("./metaAdLauncher");
+      const accounts = await db.select().from(adAccounts);
+      for (const account of accounts) {
+        try {
+          const result = await evaluateAutomationRules(account.merchantId);
+          if (result.triggered > 0) {
+            console.log(`[AutomationRules] Merchant ${account.merchantId}: ${result.triggered} rules triggered — ${result.actions.join("; ")}`);
+          }
+        } catch (err: any) {
+          console.error(`[AutomationRules] Failed for merchant ${account.merchantId}:`, err.message);
+        }
+      }
+    } catch (err: any) {
+      console.error("[AutomationRules] Scheduler error:", err.message);
+    }
+  }, 120 * 1000);
 }

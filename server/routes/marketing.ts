@@ -33,6 +33,9 @@ import {
   deleteCustomAudience,
   bulkUpdateCampaignStatus,
   bulkUpdateCampaignBudget,
+  bulkUpdateAdSetStatus,
+  bulkUpdateAdSetBudget,
+  bulkUpdateTargeting,
   evaluateAutomationRules,
 } from "../services/metaAdLauncher";
 import { generateChatResponse, generateDashboardInsights, generateQuickStrategy } from "../services/aiInsights";
@@ -2405,6 +2408,59 @@ export function registerMarketingRoutes(app: Express) {
       if (!parsed.success) return res.status(400).json({ error: "Invalid data", details: parsed.error.flatten() });
 
       const result = await bulkUpdateCampaignBudget(merchantId, parsed.data.campaignIds, parsed.data.action, parsed.data.value, parsed.data.budgetType);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/meta/adsets/bulk-status", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const schema = z.object({
+        adSetIds: z.array(z.string()).min(1),
+        status: z.enum(["ACTIVE", "PAUSED"]),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid data", details: parsed.error.flatten() });
+
+      const result = await bulkUpdateAdSetStatus(merchantId, parsed.data.adSetIds, parsed.data.status);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/meta/adsets/bulk-budget", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const schema = z.object({
+        adSetIds: z.array(z.string()).min(1),
+        action: z.enum(["increase", "decrease", "set"]),
+        value: z.number().positive(),
+        budgetType: z.enum(["daily", "lifetime"]).default("daily"),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid data", details: parsed.error.flatten() });
+
+      const result = await bulkUpdateAdSetBudget(merchantId, parsed.data.adSetIds, parsed.data.action, parsed.data.value, parsed.data.budgetType);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/meta/adsets/bulk-targeting", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const schema = z.object({
+        adSetIds: z.array(z.string()).min(1),
+        targeting: z.record(z.any()),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid data", details: parsed.error.flatten() });
+
+      const result = await bulkUpdateTargeting(merchantId, parsed.data.adSetIds, parsed.data.targeting);
       res.json(result);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
