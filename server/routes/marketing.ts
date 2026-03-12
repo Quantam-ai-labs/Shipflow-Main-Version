@@ -1740,7 +1740,7 @@ export function registerMarketingRoutes(app: Express) {
 
       res.json({
         success: true,
-        expiresAt: updates.facebookTokenExpiresAt || null,
+        expiresAt: updates.metaOauthTokenExpiresAt || null,
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
