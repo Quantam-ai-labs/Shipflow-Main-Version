@@ -243,6 +243,8 @@ export default function MetaAdLauncher() {
   const [interestSearch, setInterestSearch] = useState("");
   const [selectedPlacements, setSelectedPlacements] = useState<string[]>([]);
   const [autoPlacement, setAutoPlacement] = useState(true);
+  const [selectedAudiences, setSelectedAudiences] = useState<{ id: string; name: string }[]>([]);
+  const [excludedAudiences, setExcludedAudiences] = useState<{ id: string; name: string }[]>([]);
 
   const [adFormat, setAdFormat] = useState<AdFormat>("single_image");
   const [primaryText, setPrimaryText] = useState("");
@@ -264,6 +266,10 @@ export default function MetaAdLauncher() {
   const { data: pagesData } = useQuery<any>({ queryKey: ["/api/meta/pages"], enabled: !!oauthStatus?.connected });
   const { data: pixelsData } = useQuery<any>({ queryKey: ["/api/meta/pixels"], enabled: !!oauthStatus?.connected });
   const { data: mediaData } = useQuery<any>({ queryKey: ["/api/meta/media-library"], enabled: !!oauthStatus?.connected });
+  const { data: audiencesData } = useQuery<{ audiences: { id: string; metaAudienceId: string | null; name: string; audienceType: string }[] }>({
+    queryKey: ["/api/meta/audiences"],
+    enabled: !!oauthStatus?.connected,
+  });
 
   const [interestDebounce, setInterestDebounce] = useState("");
   useEffect(() => {
@@ -314,6 +320,12 @@ export default function MetaAdLauncher() {
       if (gender !== "all") targeting.genders = gender === "male" ? [1] : [2];
       if (interests.length > 0) {
         targeting.flexible_spec = [{ interests: interests.map(i => ({ id: i.id, name: i.name })) }];
+      }
+      if (selectedAudiences.length > 0) {
+        targeting.custom_audiences = selectedAudiences.map(a => ({ id: a.id, name: a.name }));
+      }
+      if (excludedAudiences.length > 0) {
+        targeting.excluded_custom_audiences = excludedAudiences.map(a => ({ id: a.id, name: a.name }));
       }
       if (!autoPlacement && selectedPlacements.length > 0) {
         const platforms = [...new Set(selectedPlacements.map(id => PLACEMENTS.find(p => p.id === id)?.platform).filter(Boolean))];
@@ -660,6 +672,62 @@ export default function MetaAdLauncher() {
                 </div>
               )}
             </div>
+
+            {(audiencesData?.audiences?.length ?? 0) > 0 && (
+              <>
+                <Separator />
+                <div className="space-y-2">
+                  <Label>Custom Audiences (Include)</Label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {audiencesData?.audiences?.filter(a => a.metaAudienceId).map(a => {
+                      const isSelected = selectedAudiences.some(s => s.id === a.metaAudienceId);
+                      return (
+                        <Badge
+                          key={a.id}
+                          variant={isSelected ? "default" : "outline"}
+                          className="cursor-pointer"
+                          onClick={() => {
+                            if (isSelected) setSelectedAudiences(prev => prev.filter(s => s.id !== a.metaAudienceId));
+                            else {
+                              setSelectedAudiences(prev => [...prev, { id: a.metaAudienceId!, name: a.name }]);
+                              setExcludedAudiences(prev => prev.filter(s => s.id !== a.metaAudienceId));
+                            }
+                          }}
+                          data-testid={`audience-include-${a.id}`}
+                        >
+                          {a.name}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Custom Audiences (Exclude)</Label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {audiencesData?.audiences?.filter(a => a.metaAudienceId).map(a => {
+                      const isExcluded = excludedAudiences.some(s => s.id === a.metaAudienceId);
+                      return (
+                        <Badge
+                          key={a.id}
+                          variant={isExcluded ? "destructive" : "outline"}
+                          className="cursor-pointer"
+                          onClick={() => {
+                            if (isExcluded) setExcludedAudiences(prev => prev.filter(s => s.id !== a.metaAudienceId));
+                            else {
+                              setExcludedAudiences(prev => [...prev, { id: a.metaAudienceId!, name: a.name }]);
+                              setSelectedAudiences(prev => prev.filter(s => s.id !== a.metaAudienceId));
+                            }
+                          }}
+                          data-testid={`audience-exclude-${a.id}`}
+                        >
+                          {a.name}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
 
             <Separator />
 

@@ -67,6 +67,67 @@ export async function testFacebookConnection(creds: MetaApiOptions): Promise<{ s
   }
 }
 
+function parseRateLimitHeaders(headers: Headers): { shouldBackoff: boolean; waitMs: number } {
+  const usageHeader = headers.get("x-business-use-case-usage") || headers.get("x-app-usage");
+  if (!usageHeader) return { shouldBackoff: false, waitMs: 0 };
+
+  try {
+    const usage = JSON.parse(usageHeader);
+    let maxPct = 0;
+
+    if (typeof usage === "object" && !Array.isArray(usage)) {
+      for (const key of Object.keys(usage)) {
+        const entries = Array.isArray(usage[key]) ? usage[key] : [usage[key]];
+        for (const entry of entries) {
+          const callPct = entry.call_count ?? entry.call_volume ?? 0;
+          const cpuPct = entry.total_cputime ?? 0;
+          const timePct = entry.total_time ?? 0;
+          maxPct = Math.max(maxPct, callPct, cpuPct, timePct);
+        }
+      }
+    }
+
+    if (maxPct >= 90) return { shouldBackoff: true, waitMs: 60000 };
+    if (maxPct >= 75) return { shouldBackoff: true, waitMs: 15000 };
+    if (maxPct >= 50) return { shouldBackoff: false, waitMs: 2000 };
+    return { shouldBackoff: false, waitMs: 0 };
+  } catch {
+    return { shouldBackoff: false, waitMs: 0 };
+  }
+}
+
+async function fetchWithRetry(url: string, maxRetries = 3): Promise<globalThis.Response> {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (attempt > 0) {
+      const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 30000) + Math.random() * 1000;
+      console.log(`[MetaAds] Retry ${attempt}/${maxRetries}, waiting ${Math.round(backoffMs)}ms`);
+      await new Promise(resolve => setTimeout(resolve, backoffMs));
+    }
+
+    const response = await fetch(url);
+    const rateLimit = parseRateLimitHeaders(response.headers);
+
+    if (response.status === 429 || (response.status >= 500 && response.status < 600)) {
+      const waitMs = response.status === 429 ? Math.max(rateLimit.waitMs, 60000) : rateLimit.waitMs || 5000;
+      console.warn(`[MetaAds] Rate limited (${response.status}), waiting ${waitMs}ms before retry`);
+      await new Promise(resolve => setTimeout(resolve, waitMs));
+      lastError = new Error(`Meta API error: ${response.status}`);
+      continue;
+    }
+
+    if (rateLimit.shouldBackoff) {
+      console.log(`[MetaAds] Rate limit approaching (wait ${rateLimit.waitMs}ms)`);
+      await new Promise(resolve => setTimeout(resolve, rateLimit.waitMs));
+    } else if (rateLimit.waitMs > 0) {
+      await new Promise(resolve => setTimeout(resolve, rateLimit.waitMs));
+    }
+
+    return response;
+  }
+  throw lastError || new Error("Max retries exceeded for Meta API call");
+}
+
 async function metaApiFetch(creds: MetaApiOptions, endpoint: string, params: Record<string, string> = {}): Promise<any> {
   const url = new URL(`${META_BASE_URL}/${endpoint}`);
   url.searchParams.set("access_token", creds.accessToken);
@@ -74,7 +135,7 @@ async function metaApiFetch(creds: MetaApiOptions, endpoint: string, params: Rec
     url.searchParams.set(k, v);
   }
 
-  const response = await fetch(url.toString());
+  const response = await fetchWithRetry(url.toString());
   if (!response.ok) {
     const errorBody = await response.text();
     console.error(`[MetaAds] API error ${response.status}: ${errorBody}`);
@@ -95,7 +156,7 @@ async function fetchAllPages(creds: MetaApiOptions, endpoint: string, params: Re
 
   let pageCount = 0;
   while (url && pageCount < 50) {
-    const resp: globalThis.Response = await fetch(url);
+    const resp = await fetchWithRetry(url);
     if (!resp.ok) {
       const errorBody = await resp.text();
       console.error(`[MetaAds] Paginated API error: ${errorBody}`);
@@ -362,27 +423,73 @@ function matchProductFromUrl(
 
     const productsIdx = pathParts.indexOf("products");
     if (productsIdx !== -1 && productsIdx < pathParts.length - 1) {
-      const handle = pathParts[productsIdx + 1].split("?")[0].toLowerCase();
+      let handle = pathParts[productsIdx + 1].split("?")[0].toLowerCase();
+      handle = handle.split("#")[0];
       const match = productsList.find(p => p.handle && p.handle.toLowerCase() === handle);
       if (match) return match.id;
     }
 
+    const utmContent = parsed.searchParams.get("utm_content");
+    if (utmContent) {
+      const utcLower = utmContent.toLowerCase();
+      const utmMatch = productsList.find(p => p.handle && p.handle.toLowerCase() === utcLower);
+      if (utmMatch) return utmMatch.id;
+      const utmIdMatch = productsList.find(p => String(p.shopifyProductId) === utmContent);
+      if (utmIdMatch) return utmIdMatch.id;
+    }
+
+    const utmCampaign = parsed.searchParams.get("utm_campaign");
+    if (utmCampaign) {
+      const ucLower = utmCampaign.toLowerCase();
+      const ucMatch = productsList.find(p => p.handle && p.handle.toLowerCase() === ucLower);
+      if (ucMatch) return ucMatch.id;
+    }
+
+    const variantId = parsed.searchParams.get("variant");
+    if (variantId) {
+      const variantPathIdx = pathParts.indexOf("products");
+      if (variantPathIdx !== -1 && variantPathIdx < pathParts.length - 1) {
+        const handle = pathParts[variantPathIdx + 1].split("?")[0].toLowerCase();
+        const match = productsList.find(p => p.handle && p.handle.toLowerCase() === handle);
+        if (match) return match.id;
+      }
+    }
+
     for (const part of pathParts) {
-      const cleanPart = part.split("?")[0].toLowerCase();
+      const cleanPart = part.split("?")[0].split("#")[0].toLowerCase();
+      if (["collections", "pages", "blogs", "cart", "checkout", "account"].includes(cleanPart)) continue;
       const match = productsList.find(p => p.handle && p.handle.toLowerCase() === cleanPart);
       if (match) return match.id;
     }
 
-    const lastSegment = pathParts[pathParts.length - 1]?.split("?")[0].toLowerCase().replace(/-/g, " ");
-    if (lastSegment) {
-      const match = productsList.find(p => p.title.toLowerCase() === lastSegment);
-      if (match) return match.id;
+    const allSegments = pathParts.map(p => p.split("?")[0].split("#")[0].toLowerCase().replace(/-/g, " "));
+    for (const segment of allSegments) {
+      if (segment.length < 3) continue;
+      const exactTitle = productsList.find(p => p.title.toLowerCase() === segment);
+      if (exactTitle) return exactTitle.id;
+    }
 
+    const lastSegment = allSegments[allSegments.length - 1];
+    if (lastSegment && lastSegment.length >= 3) {
       const fuzzy = productsList.find(p => {
         const titleLower = p.title.toLowerCase();
         return titleLower.includes(lastSegment) || lastSegment.includes(titleLower);
       });
       if (fuzzy) return fuzzy.id;
+
+      const keywords = lastSegment.split(/[\s\-]+/).filter(w => w.length > 2);
+      if (keywords.length >= 2) {
+        let bestMatch: { id: string; score: number } | null = null;
+        for (const p of productsList) {
+          const titleWords = p.title.toLowerCase().split(/[\s\-]+/).filter(w => w.length > 2);
+          const matching = keywords.filter(kw => titleWords.some(tw => tw.includes(kw) || kw.includes(tw)));
+          const score = matching.length / keywords.length;
+          if (score >= 0.5 && (!bestMatch || score > bestMatch.score)) {
+            bestMatch = { id: p.id, score };
+          }
+        }
+        if (bestMatch) return bestMatch.id;
+      }
     }
   } catch {}
   return null;

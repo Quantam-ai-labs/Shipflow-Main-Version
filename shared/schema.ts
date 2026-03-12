@@ -2306,3 +2306,62 @@ export const adLaunchItems = pgTable("ad_launch_items", {
 export const insertAdLaunchItemSchema = createInsertSchema(adLaunchItems).omit({ id: true, createdAt: true });
 export type InsertAdLaunchItem = z.infer<typeof insertAdLaunchItemSchema>;
 export type AdLaunchItem = typeof adLaunchItems.$inferSelect;
+
+// ============================================
+// META ADS: CUSTOM AUDIENCES
+// ============================================
+export const customAudiences = pgTable("custom_audiences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  metaAudienceId: varchar("meta_audience_id", { length: 100 }),
+  name: varchar("name", { length: 500 }).notNull(),
+  description: text("description"),
+  audienceType: varchar("audience_type", { length: 50 }).notNull().default("customer_list"),
+  subtype: varchar("subtype", { length: 50 }),
+  source: varchar("source", { length: 50 }),
+  approximateCount: integer("approximate_count"),
+  status: varchar("status", { length: 30 }).default("pending"),
+  retentionDays: integer("retention_days"),
+  rule: jsonb("rule"),
+  pixelId: varchar("pixel_id", { length: 100 }),
+  lookalikeSpec: jsonb("lookalike_spec"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_custom_audiences_merchant").on(table.merchantId),
+  index("idx_custom_audiences_type").on(table.audienceType),
+]);
+
+export const insertCustomAudienceSchema = createInsertSchema(customAudiences).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertCustomAudience = z.infer<typeof insertCustomAudienceSchema>;
+export type CustomAudience = typeof customAudiences.$inferSelect;
+
+// ============================================
+// META ADS: AUTOMATION RULES
+// ============================================
+export const adAutomationRules = pgTable("ad_automation_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  enabled: boolean("enabled").default(true),
+  entityType: varchar("entity_type", { length: 20 }).notNull().default("campaign"),
+  entityFilter: jsonb("entity_filter"),
+  conditionMetric: varchar("condition_metric", { length: 50 }).notNull(),
+  conditionOperator: varchar("condition_operator", { length: 10 }).notNull(),
+  conditionValue: decimal("condition_value", { precision: 14, scale: 2 }).notNull(),
+  conditionWindow: varchar("condition_window", { length: 20 }).notNull().default("last_7d"),
+  actionType: varchar("action_type", { length: 50 }).notNull(),
+  actionValue: decimal("action_value", { precision: 14, scale: 2 }),
+  notifyOnTrigger: boolean("notify_on_trigger").default(true),
+  lastTriggeredAt: timestamp("last_triggered_at"),
+  triggerCount: integer("trigger_count").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_ad_automation_rules_merchant").on(table.merchantId),
+  index("idx_ad_automation_rules_enabled").on(table.enabled),
+]);
+
+export const insertAdAutomationRuleSchema = createInsertSchema(adAutomationRules).omit({ id: true, createdAt: true, updatedAt: true, lastTriggeredAt: true, triggerCount: true });
+export type InsertAdAutomationRule = z.infer<typeof insertAdAutomationRuleSchema>;
+export type AdAutomationRule = typeof adAutomationRules.$inferSelect;

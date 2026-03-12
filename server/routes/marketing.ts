@@ -3,7 +3,7 @@ import { db } from "../db";
 import { eq, and, sql, gte, lte, inArray, isNull, isNotNull, desc } from "drizzle-orm";
 import { z } from "zod";
 import { toMerchantStartOfDay, toMerchantEndOfDay, DEFAULT_TIMEZONE } from "../utils/timezone";
-import { adCampaigns, adAccounts, adCreatives, adInsights, teamMembers, merchants, adProfitabilityEntries, orders, products, insertCampaignJourneyEventSchema, campaignJourneyEvents, adLaunchJobs, adLaunchItems, adMediaLibrary } from "@shared/schema";
+import { adCampaigns, adAccounts, adCreatives, adInsights, teamMembers, merchants, adProfitabilityEntries, orders, products, insertCampaignJourneyEventSchema, campaignJourneyEvents, adLaunchJobs, adLaunchItems, adMediaLibrary, customAudiences, adAutomationRules } from "@shared/schema";
 import { storage } from "../storage";
 import { decryptToken } from "../services/encryption";
 import {
@@ -28,6 +28,12 @@ import {
   launchAd,
   bulkLaunchAds,
   uploadImageToMeta,
+  createCustomAudience,
+  createLookalikeAudience,
+  deleteCustomAudience,
+  bulkUpdateCampaignStatus,
+  bulkUpdateCampaignBudget,
+  evaluateAutomationRules,
 } from "../services/metaAdLauncher";
 import { generateChatResponse, generateDashboardInsights, generateQuickStrategy } from "../services/aiInsights";
 import crypto from "crypto";
@@ -2292,6 +2298,209 @@ export function registerMarketingRoutes(app: Express) {
         .where(eq(adMediaLibrary.id, media.id));
 
       res.json({ success: true, hash: result.hash });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // CUSTOM AUDIENCES
+  // ============================================
+
+  app.get("/api/meta/audiences", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const audiences = await db.select()
+        .from(customAudiences)
+        .where(eq(customAudiences.merchantId, merchantId))
+        .orderBy(desc(customAudiences.createdAt));
+      res.json({ audiences });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/meta/audiences", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const schema = z.object({
+        name: z.string().min(1),
+        description: z.string().optional(),
+        audienceType: z.enum(["customer_list", "website"]),
+        emails: z.array(z.string()).optional(),
+        phones: z.array(z.string()).optional(),
+        pixelId: z.string().optional(),
+        retentionDays: z.number().optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid data", details: parsed.error.flatten() });
+
+      const result = await createCustomAudience(merchantId, parsed.data);
+      res.json({ success: true, ...result });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/meta/audiences/lookalike", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const schema = z.object({
+        name: z.string().min(1),
+        sourceAudienceId: z.string().min(1),
+        country: z.string().default("PK"),
+        ratio: z.number().min(0.01).max(0.2).default(0.01),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid data", details: parsed.error.flatten() });
+
+      const result = await createLookalikeAudience(merchantId, parsed.data);
+      res.json({ success: true, ...result });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/meta/audiences/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      await deleteCustomAudience(merchantId, req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // BULK CAMPAIGN OPERATIONS
+  // ============================================
+
+  app.post("/api/meta/campaigns/bulk-status", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const schema = z.object({
+        campaignIds: z.array(z.string()).min(1),
+        status: z.enum(["ACTIVE", "PAUSED"]),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid data", details: parsed.error.flatten() });
+
+      const result = await bulkUpdateCampaignStatus(merchantId, parsed.data.campaignIds, parsed.data.status);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/meta/campaigns/bulk-budget", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const schema = z.object({
+        campaignIds: z.array(z.string()).min(1),
+        action: z.enum(["increase", "decrease", "set"]),
+        value: z.number().positive(),
+        budgetType: z.enum(["daily", "lifetime"]).default("daily"),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid data", details: parsed.error.flatten() });
+
+      const result = await bulkUpdateCampaignBudget(merchantId, parsed.data.campaignIds, parsed.data.action, parsed.data.value, parsed.data.budgetType);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // AUTOMATION RULES
+  // ============================================
+
+  app.get("/api/meta/automation-rules", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const rules = await db.select()
+        .from(adAutomationRules)
+        .where(eq(adAutomationRules.merchantId, merchantId))
+        .orderBy(desc(adAutomationRules.createdAt));
+      res.json({ rules });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/meta/automation-rules", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const schema = z.object({
+        name: z.string().min(1),
+        entityType: z.enum(["campaign", "adset"]).default("campaign"),
+        conditionMetric: z.enum(["cpa", "roas", "spend", "cpc", "cpm", "ctr", "purchases"]),
+        conditionOperator: z.enum([">", "<", ">=", "<=", "="]),
+        conditionValue: z.string().refine(v => !isNaN(Number(v))),
+        conditionWindow: z.enum(["last_3d", "last_7d", "last_14d", "last_30d"]).default("last_7d"),
+        actionType: z.enum(["pause", "increase_budget", "decrease_budget", "notify"]),
+        actionValue: z.string().optional(),
+        notifyOnTrigger: z.boolean().default(true),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid data", details: parsed.error.flatten() });
+
+      const [rule] = await db.insert(adAutomationRules).values({
+        merchantId,
+        ...parsed.data,
+      }).returning();
+
+      res.json({ rule });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.put("/api/meta/automation-rules/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const schema = z.object({
+        name: z.string().min(1).optional(),
+        enabled: z.boolean().optional(),
+        conditionMetric: z.enum(["cpa", "roas", "spend", "cpc", "cpm", "ctr", "purchases"]).optional(),
+        conditionOperator: z.enum([">", "<", ">=", "<=", "="]).optional(),
+        conditionValue: z.string().refine(v => !isNaN(Number(v))).optional(),
+        conditionWindow: z.enum(["last_3d", "last_7d", "last_14d", "last_30d"]).optional(),
+        actionType: z.enum(["pause", "increase_budget", "decrease_budget", "notify"]).optional(),
+        actionValue: z.string().optional(),
+        notifyOnTrigger: z.boolean().optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid data", details: parsed.error.flatten() });
+
+      const [rule] = await db.update(adAutomationRules)
+        .set({ ...parsed.data, updatedAt: new Date() })
+        .where(and(eq(adAutomationRules.id, req.params.id), eq(adAutomationRules.merchantId, merchantId)))
+        .returning();
+
+      if (!rule) return res.status(404).json({ error: "Rule not found" });
+      res.json({ rule });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/meta/automation-rules/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      await db.delete(adAutomationRules)
+        .where(and(eq(adAutomationRules.id, req.params.id), eq(adAutomationRules.merchantId, merchantId)));
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/meta/automation-rules/evaluate", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const result = await evaluateAutomationRules(merchantId);
+      res.json(result);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

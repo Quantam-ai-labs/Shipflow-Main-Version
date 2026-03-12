@@ -67,6 +67,10 @@ import {
   Eye,
   AlertTriangle,
   Plus,
+  ChevronDown,
+  ChevronUp,
+  BarChart3,
+  Layers,
 } from "lucide-react";
 import type { Product, CampaignJourneyEvent } from "@shared/schema";
 import CampaignJourney, { isEvidenceReady } from "./campaign-journey";
@@ -203,6 +207,8 @@ export default function AdsProfitability() {
   } | null>(null);
   const [signalNote, setSignalNote] = useState("");
   const [signalWindow, setSignalWindow] = useState("48");
+  const [showProductSummary, setShowProductSummary] = useState(false);
+  const [productSortBy, setProductSortBy] = useState<"netProfit" | "adSpend" | "orders" | "roas">("netProfit");
 
   const { data: journeyEventsData } = useQuery<{ events: CampaignJourneyEvent[] }>({
     queryKey: ["/api/marketing/journey/events"],
@@ -534,6 +540,72 @@ export default function AdsProfitability() {
     { adSpend: 0, totalOrders: 0, dispatched: 0, delivered: 0, netProfit: 0 }
   );
 
+  const productSummary = useMemo(() => {
+    const map = new Map<string, {
+      productId: string;
+      title: string;
+      imageUrl: string | null;
+      salePrice: number;
+      costPrice: number;
+      adSpend: number;
+      orders: number;
+      dispatched: number;
+      delivered: number;
+      netProfit: number;
+      campaignCount: number;
+      roas: number;
+    }>();
+
+    for (const row of computedRows) {
+      if (!row.product) continue;
+      const key = row.product.id;
+      const existing = map.get(key);
+      const selectedOrders = getOrderCount(row.orders);
+      const rowCpa = selectedOrders > 0 ? (row.adSpend / selectedOrders) * dRate : 0;
+      const rowProfit = selectedOrders > 0
+        ? (row.product.salePrice - row.product.costPrice - rowCpa - delCharges - packExp) * selectedOrders
+        : -(row.adSpend * dRate);
+      if (existing) {
+        existing.adSpend += row.adSpend;
+        existing.orders += row.orders.total;
+        existing.dispatched += row.orders.dispatched;
+        existing.delivered += row.orders.delivered;
+        existing.netProfit += rowProfit;
+        existing.campaignCount += 1;
+        const totalRevenue = existing.salePrice * existing.orders;
+        const totalSpend = existing.adSpend * dRate;
+        existing.roas = totalSpend > 0 ? totalRevenue / totalSpend : 0;
+      } else {
+        const spendPkr = row.adSpend * dRate;
+        const revenue = row.product.salePrice * row.orders.total;
+        map.set(key, {
+          productId: key,
+          title: row.product.title,
+          imageUrl: row.product.imageUrl,
+          salePrice: row.product.salePrice,
+          costPrice: row.product.costPrice,
+          adSpend: row.adSpend,
+          orders: row.orders.total,
+          dispatched: row.orders.dispatched,
+          delivered: row.orders.delivered,
+          netProfit: rowProfit,
+          campaignCount: 1,
+          roas: spendPkr > 0 ? revenue / spendPkr : 0,
+        });
+      }
+    }
+
+    const arr = Array.from(map.values());
+    arr.sort((a, b) => {
+      if (productSortBy === "netProfit") return b.netProfit - a.netProfit;
+      if (productSortBy === "adSpend") return b.adSpend - a.adSpend;
+      if (productSortBy === "orders") return b.orders - a.orders;
+      if (productSortBy === "roas") return b.roas - a.roas;
+      return 0;
+    });
+    return arr;
+  }, [computedRows, dRate, productSortBy, delCharges, packExp, orderTypeForCalc]);
+
   const handleProductOverride = (campaignId: string, productId: string) => {
     if (productId === "none") {
       setManualOverrides(prev => { const n = { ...prev }; delete n[campaignId]; return n; });
@@ -733,6 +805,33 @@ export default function AdsProfitability() {
                   align="start"
                   className="w-full"
                 />
+                <div className="flex flex-wrap gap-1 pt-1">
+                  {[
+                    { label: "7D", days: 7 },
+                    { label: "14D", days: 14 },
+                    { label: "30D", days: 30 },
+                    { label: "90D", days: 90 },
+                    { label: "All", days: 0 },
+                  ].map(({ label, days }) => (
+                    <button
+                      key={label}
+                      className="text-[10px] px-2 py-0.5 rounded border hover:bg-muted transition-colors"
+                      onClick={() => {
+                        if (days === 0) {
+                          setDateRange(undefined);
+                        } else {
+                          const to = new Date();
+                          const from = new Date();
+                          from.setDate(from.getDate() - days);
+                          setDateRange({ from, to });
+                        }
+                      }}
+                      data-testid={`button-period-${label.toLowerCase()}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div className="space-y-1.5">
                 <Label className="flex items-center gap-1.5">
@@ -1086,6 +1185,89 @@ export default function AdsProfitability() {
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {productSummary.length > 0 && (
+        <Card data-testid="card-product-summary">
+          <CardHeader className="pb-2">
+            <button
+              className="flex items-center justify-between w-full"
+              onClick={() => setShowProductSummary(!showProductSummary)}
+              data-testid="button-toggle-product-summary"
+            >
+              <CardTitle className="text-base flex items-center gap-2">
+                <Layers className="w-4 h-4" />
+                Product-Level Breakdown ({productSummary.length} products)
+              </CardTitle>
+              {showProductSummary ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
+          </CardHeader>
+          {showProductSummary && (
+            <CardContent className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Label className="text-xs text-muted-foreground whitespace-nowrap">Sort by</Label>
+                <Select value={productSortBy} onValueChange={(v) => setProductSortBy(v as typeof productSortBy)}>
+                  <SelectTrigger className="h-7 text-xs w-[140px]" data-testid="select-product-sort">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="netProfit">Net Profit</SelectItem>
+                    <SelectItem value="adSpend">Ad Spend</SelectItem>
+                    <SelectItem value="orders">Orders</SelectItem>
+                    <SelectItem value="roas">ROAS</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="border rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      <th className="text-left px-3 py-2 text-xs font-medium">Product</th>
+                      <th className="text-right px-3 py-2 text-xs font-medium">Campaigns</th>
+                      <th className="text-right px-3 py-2 text-xs font-medium">Ad Spend</th>
+                      <th className="text-right px-3 py-2 text-xs font-medium">Orders</th>
+                      <th className="text-right px-3 py-2 text-xs font-medium">Delivered</th>
+                      <th className="text-right px-3 py-2 text-xs font-medium">CPA</th>
+                      <th className="text-right px-3 py-2 text-xs font-medium">ROAS</th>
+                      <th className="text-right px-3 py-2 text-xs font-medium">Net Profit</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {productSummary.map((p) => {
+                      const cpa = p.orders > 0 ? (p.adSpend * dRate) / p.orders : 0;
+                      return (
+                        <tr key={p.productId} className="border-t hover:bg-muted/30" data-testid={`row-product-${p.productId}`}>
+                          <td className="px-3 py-2">
+                            <div className="flex items-center gap-2">
+                              <Avatar className="h-6 w-6 rounded flex-shrink-0">
+                                <AvatarImage src={p.imageUrl || undefined} alt={p.title} />
+                                <AvatarFallback className="rounded text-[8px]">{p.title.charAt(0)}</AvatarFallback>
+                              </Avatar>
+                              <span className="text-xs font-medium truncate max-w-[200px]" data-testid={`text-product-title-${p.productId}`}>{p.title}</span>
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 text-right text-xs tabular-nums">{p.campaignCount}</td>
+                          <td className="px-3 py-2 text-right text-xs tabular-nums">{formatUsd(p.adSpend)}</td>
+                          <td className="px-3 py-2 text-right text-xs tabular-nums">{p.orders}</td>
+                          <td className="px-3 py-2 text-right text-xs tabular-nums">{p.delivered}</td>
+                          <td className="px-3 py-2 text-right text-xs tabular-nums">{formatCurrency(cpa)}</td>
+                          <td className="px-3 py-2 text-right text-xs tabular-nums">
+                            <Badge variant={p.roas >= 2 ? "default" : p.roas >= 1 ? "secondary" : "destructive"} className="text-[10px] px-1.5">
+                              {p.roas.toFixed(2)}x
+                            </Badge>
+                          </td>
+                          <td className={`px-3 py-2 text-right text-xs font-medium tabular-nums ${p.netProfit >= 0 ? "text-green-600" : "text-red-600"}`}>
+                            {formatCurrency(p.netProfit)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          )}
+        </Card>
       )}
 
       {campaigns.length > 0 && (

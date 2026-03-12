@@ -89,6 +89,7 @@ import {
   Rocket,
   ImageIcon,
   Layers,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -172,6 +173,8 @@ const allNavGroups: NavGroup[] = [
       { id: "meta-campaigns", title: "Campaigns", url: "/meta/campaigns", icon: Megaphone },
       { id: "meta-bulk-launch", title: "Bulk Launch", url: "/meta/bulk-launch", icon: Layers },
       { id: "meta-media-library", title: "Media Library", url: "/meta/media-library", icon: ImageIcon },
+      { id: "meta-audiences", title: "Audiences", url: "/meta/audiences", icon: Users },
+      { id: "meta-automation-rules", title: "Automation Rules", url: "/meta/automation-rules", icon: Zap },
     ],
   },
   {

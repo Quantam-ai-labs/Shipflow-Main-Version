@@ -111,6 +111,8 @@ import MetaAdLauncher from "@/pages/meta/launcher";
 import MetaMediaLibrary from "@/pages/meta/media-library";
 import MetaBulkLaunch from "@/pages/meta/bulk-launch";
 import MetaCampaigns from "@/pages/meta/campaigns";
+import MetaAudiences from "@/pages/meta/audiences";
+import MetaAutomationRules from "@/pages/meta/automation-rules";
 import PrivacyPolicy from "@/pages/legal/privacy-policy";
 import TermsOfService from "@/pages/legal/terms-of-service";
 import DataDeletion from "@/pages/legal/data-deletion";
@@ -297,6 +299,8 @@ function AppRoutes() {
       <Route path="/meta/bulk-launch">{() => <ProtectedRoute component={MetaBulkLaunch} path="/meta/bulk-launch" />}</Route>
       <Route path="/meta/media-library">{() => <ProtectedRoute component={MetaMediaLibrary} path="/meta/media-library" />}</Route>
       <Route path="/meta/campaigns">{() => <ProtectedRoute component={MetaCampaigns} path="/meta/campaigns" />}</Route>
+      <Route path="/meta/audiences">{() => <ProtectedRoute component={MetaAudiences} path="/meta/audiences" />}</Route>
+      <Route path="/meta/automation-rules">{() => <ProtectedRoute component={MetaAutomationRules} path="/meta/automation-rules" />}</Route>
       <Route path="/accounting/settings">{() => <ProtectedRoute component={AccountingSettings} path="/accounting/settings" />}</Route>
       <Route path="/loadsheet">{() => <ProtectedRoute component={LoadsheetPage} path="/loadsheet" />}</Route>
       <Route path="/warehouse/:slug" component={WarehousePage} />

@@ -1,8 +1,9 @@
 import { db } from "../db";
-import { adLaunchJobs, adMediaLibrary, merchants } from "@shared/schema";
-import { eq, and } from "drizzle-orm";
+import { adLaunchJobs, adMediaLibrary, merchants, customAudiences, adAutomationRules, adInsights, adCampaigns } from "@shared/schema";
+import { eq, and, sql, gte, lte, inArray } from "drizzle-orm";
 import { getCredentialsForMerchant, META_API_VERSION, META_BASE_URL } from "./metaAds";
 import { decryptToken } from "./encryption";
+import crypto from "crypto";
 
 interface MetaWriteOptions {
   accessToken: string;
@@ -467,4 +468,329 @@ export async function bulkLaunchAds(
   }
 
   return { total: ads.length, succeeded, failed, results };
+}
+
+export async function createCustomAudience(
+  merchantId: string,
+  params: {
+    name: string;
+    description?: string;
+    audienceType: "customer_list" | "website";
+    emails?: string[];
+    phones?: string[];
+    pixelId?: string;
+    retentionDays?: number;
+    rule?: any;
+  }
+): Promise<{ audienceId: string; dbId: string }> {
+  const creds = await getCredentialsForMerchant(merchantId);
+
+  const body: Record<string, any> = {
+    name: params.name,
+    description: params.description || "",
+  };
+
+  if (params.audienceType === "customer_list") {
+    body.subtype = "CUSTOM";
+    body.customer_file_source = "USER_PROVIDED_ONLY";
+  } else if (params.audienceType === "website") {
+    body.subtype = "WEBSITE";
+    body.rule = params.rule || {
+      inclusions: {
+        operator: "or",
+        rules: [{ event_sources: [{ id: params.pixelId, type: "pixel" }], retention_seconds: (params.retentionDays || 30) * 86400 }],
+      },
+    };
+    body.prefill = true;
+  }
+
+  const result = await metaApiPost(creds, `${creds.adAccountId}/customaudiences`, body);
+  const metaAudienceId = result.id;
+
+  if (params.audienceType === "customer_list" && (params.emails?.length || params.phones?.length)) {
+    const schema = [];
+    const data: string[][] = [];
+
+    if (params.emails?.length) {
+      schema.push("EMAIL");
+      for (const email of params.emails) {
+        const hashed = crypto.createHash("sha256").update(email.trim().toLowerCase()).digest("hex");
+        data.push([hashed]);
+      }
+    }
+    if (params.phones?.length) {
+      const phoneIdx = schema.length;
+      schema.push("PHONE");
+      let i = 0;
+      for (const phone of params.phones) {
+        const normalized = phone.replace(/[^0-9+]/g, "");
+        const hashed = crypto.createHash("sha256").update(normalized).digest("hex");
+        if (i < data.length) {
+          data[i].push(hashed);
+        } else {
+          const row = schema.map(() => "");
+          row[phoneIdx] = hashed;
+          data.push(row);
+        }
+        i++;
+      }
+    }
+
+    const payload = { schema, data };
+    await metaApiPost(creds, `${metaAudienceId}/users`, { payload });
+  }
+
+  const [dbRecord] = await db.insert(customAudiences).values({
+    merchantId,
+    metaAudienceId,
+    name: params.name,
+    description: params.description || null,
+    audienceType: params.audienceType === "customer_list" ? "customer_list" : "website",
+    subtype: params.audienceType === "customer_list" ? "CUSTOM" : "WEBSITE",
+    source: params.audienceType,
+    status: "active",
+    retentionDays: params.retentionDays || null,
+    pixelId: params.pixelId || null,
+    rule: params.rule || null,
+  }).returning();
+
+  return { audienceId: metaAudienceId, dbId: dbRecord.id };
+}
+
+export async function createLookalikeAudience(
+  merchantId: string,
+  params: {
+    name: string;
+    sourceAudienceId: string;
+    country: string;
+    ratio: number;
+  }
+): Promise<{ audienceId: string; dbId: string }> {
+  const creds = await getCredentialsForMerchant(merchantId);
+
+  const body: Record<string, any> = {
+    name: params.name,
+    subtype: "LOOKALIKE",
+    origin_audience_id: params.sourceAudienceId,
+    lookalike_spec: JSON.stringify({
+      type: "custom_ratio",
+      ratio: params.ratio,
+      country: params.country,
+    }),
+  };
+
+  const result = await metaApiPost(creds, `${creds.adAccountId}/customaudiences`, body);
+  const metaAudienceId = result.id;
+
+  const [dbRecord] = await db.insert(customAudiences).values({
+    merchantId,
+    metaAudienceId,
+    name: params.name,
+    audienceType: "lookalike",
+    subtype: "LOOKALIKE",
+    source: "lookalike",
+    status: "active",
+    lookalikeSpec: { sourceAudienceId: params.sourceAudienceId, country: params.country, ratio: params.ratio },
+  }).returning();
+
+  return { audienceId: metaAudienceId, dbId: dbRecord.id };
+}
+
+export async function deleteCustomAudience(merchantId: string, audienceDbId: string): Promise<void> {
+  const [audience] = await db.select().from(customAudiences)
+    .where(and(eq(customAudiences.id, audienceDbId), eq(customAudiences.merchantId, merchantId)));
+
+  if (!audience) throw new Error("Audience not found");
+
+  if (audience.metaAudienceId) {
+    const creds = await getCredentialsForMerchant(merchantId);
+    try {
+      const url = `${META_BASE_URL}/${audience.metaAudienceId}`;
+      const formData = new URLSearchParams();
+      formData.set("access_token", creds.accessToken);
+      await fetch(url, { method: "DELETE", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: formData.toString() });
+    } catch (err: any) {
+      console.warn(`[MetaAdLauncher] Failed to delete Meta audience ${audience.metaAudienceId}: ${err.message}`);
+    }
+  }
+
+  await db.delete(customAudiences).where(eq(customAudiences.id, audienceDbId));
+}
+
+export async function bulkUpdateCampaignStatus(
+  merchantId: string,
+  campaignIds: string[],
+  status: "ACTIVE" | "PAUSED"
+): Promise<{ succeeded: number; failed: number; errors: string[] }> {
+  const creds = await getCredentialsForMerchant(merchantId);
+  let succeeded = 0;
+  let failed = 0;
+  const errors: string[] = [];
+
+  for (const campaignId of campaignIds) {
+    try {
+      await metaApiPost(creds, campaignId, { status });
+      succeeded++;
+    } catch (error: any) {
+      failed++;
+      errors.push(`${campaignId}: ${error.message}`);
+    }
+  }
+
+  return { succeeded, failed, errors };
+}
+
+export async function bulkUpdateCampaignBudget(
+  merchantId: string,
+  campaignIds: string[],
+  action: "increase" | "decrease" | "set",
+  value: number,
+  budgetType: "daily" | "lifetime"
+): Promise<{ succeeded: number; failed: number; errors: string[] }> {
+  const creds = await getCredentialsForMerchant(merchantId);
+  let succeeded = 0;
+  let failed = 0;
+  const errors: string[] = [];
+
+  for (const campaignId of campaignIds) {
+    try {
+      if (action === "set") {
+        const body: Record<string, any> = {};
+        if (budgetType === "daily") body.daily_budget = Math.round(value * 100);
+        else body.lifetime_budget = Math.round(value * 100);
+        await metaApiPost(creds, campaignId, body);
+      } else {
+        const currentData = await metaApiGet(creds, campaignId, { fields: "daily_budget,lifetime_budget" });
+        const currentBudget = parseFloat(budgetType === "daily" ? currentData.daily_budget : currentData.lifetime_budget) || 0;
+        const multiplier = action === "increase" ? (1 + value / 100) : (1 - value / 100);
+        const newBudget = Math.max(Math.round(currentBudget * multiplier), 100);
+        const body: Record<string, any> = {};
+        if (budgetType === "daily") body.daily_budget = newBudget;
+        else body.lifetime_budget = newBudget;
+        await metaApiPost(creds, campaignId, body);
+      }
+      succeeded++;
+    } catch (error: any) {
+      failed++;
+      errors.push(`${campaignId}: ${error.message}`);
+    }
+  }
+
+  return { succeeded, failed, errors };
+}
+
+export async function evaluateAutomationRules(merchantId: string): Promise<{ triggered: number; actions: string[] }> {
+  const rules = await db.select().from(adAutomationRules)
+    .where(and(eq(adAutomationRules.merchantId, merchantId), eq(adAutomationRules.enabled, true)));
+
+  if (rules.length === 0) return { triggered: 0, actions: [] };
+
+  const triggeredActions: string[] = [];
+  const creds = await getCredentialsForMerchant(merchantId);
+
+  for (const rule of rules) {
+    try {
+      const windowDays = rule.conditionWindow === "last_3d" ? 3 : rule.conditionWindow === "last_7d" ? 7 : rule.conditionWindow === "last_14d" ? 14 : rule.conditionWindow === "last_30d" ? 30 : 7;
+      const dateTo = new Date().toISOString().split("T")[0];
+      const dateFrom = new Date(Date.now() - windowDays * 86400000).toISOString().split("T")[0];
+
+      const campaigns = await db.select().from(adCampaigns)
+        .where(and(
+          eq(adCampaigns.merchantId, merchantId),
+          eq(adCampaigns.effectiveStatus, "ACTIVE"),
+        ));
+
+      for (const campaign of campaigns) {
+        const insights = await db.select({
+          totalSpend: sql<string>`COALESCE(SUM(${adInsights.spend}::numeric), 0)`,
+          totalPurchases: sql<number>`COALESCE(SUM(${adInsights.purchases}), 0)`,
+          totalPurchaseValue: sql<string>`COALESCE(SUM(${adInsights.purchaseValue}::numeric), 0)`,
+          totalImpressions: sql<number>`COALESCE(SUM(${adInsights.impressions}), 0)`,
+          totalClicks: sql<number>`COALESCE(SUM(${adInsights.clicks}), 0)`,
+        }).from(adInsights)
+          .where(and(
+            eq(adInsights.merchantId, merchantId),
+            eq(adInsights.entityId, campaign.campaignId),
+            eq(adInsights.entityType, "campaign"),
+            gte(adInsights.date, dateFrom),
+            lte(adInsights.date, dateTo),
+          ));
+
+        if (!insights[0]) continue;
+        const spend = parseFloat(String(insights[0].totalSpend)) || 0;
+        const purchases = insights[0].totalPurchases || 0;
+        const purchaseValue = parseFloat(String(insights[0].totalPurchaseValue)) || 0;
+        const impressions = insights[0].totalImpressions || 0;
+        const clicks = insights[0].totalClicks || 0;
+
+        let metricValue = 0;
+        switch (rule.conditionMetric) {
+          case "cpa": metricValue = purchases > 0 ? spend / purchases : spend > 0 ? Infinity : 0; break;
+          case "roas": metricValue = spend > 0 ? purchaseValue / spend : 0; break;
+          case "spend": metricValue = spend; break;
+          case "cpc": metricValue = clicks > 0 ? spend / clicks : 0; break;
+          case "cpm": metricValue = impressions > 0 ? (spend / impressions) * 1000 : 0; break;
+          case "ctr": metricValue = impressions > 0 ? (clicks / impressions) * 100 : 0; break;
+          case "purchases": metricValue = purchases; break;
+          default: continue;
+        }
+
+        const threshold = parseFloat(String(rule.conditionValue)) || 0;
+        let conditionMet = false;
+        switch (rule.conditionOperator) {
+          case ">": conditionMet = metricValue > threshold; break;
+          case "<": conditionMet = metricValue < threshold; break;
+          case ">=": conditionMet = metricValue >= threshold; break;
+          case "<=": conditionMet = metricValue <= threshold; break;
+          case "=": conditionMet = Math.abs(metricValue - threshold) < 0.01; break;
+        }
+
+        if (!conditionMet) continue;
+
+        let actionDesc = "";
+        try {
+          switch (rule.actionType) {
+            case "pause":
+              await metaApiPost(creds, campaign.campaignId, { status: "PAUSED" });
+              actionDesc = `Paused campaign "${campaign.name}" (${rule.conditionMetric} ${rule.conditionOperator} ${threshold}, actual: ${metricValue.toFixed(2)})`;
+              break;
+            case "increase_budget": {
+              const pct = parseFloat(String(rule.actionValue)) || 20;
+              const currentData = await metaApiGet(creds, campaign.campaignId, { fields: "daily_budget" });
+              const currentBudget = parseFloat(currentData.daily_budget) || 0;
+              const newBudget = Math.round(currentBudget * (1 + pct / 100));
+              await metaApiPost(creds, campaign.campaignId, { daily_budget: newBudget });
+              actionDesc = `Increased budget ${pct}% for "${campaign.name}" (${currentBudget / 100} → ${newBudget / 100})`;
+              break;
+            }
+            case "decrease_budget": {
+              const pct = parseFloat(String(rule.actionValue)) || 20;
+              const currentData = await metaApiGet(creds, campaign.campaignId, { fields: "daily_budget" });
+              const currentBudget = parseFloat(currentData.daily_budget) || 0;
+              const newBudget = Math.max(Math.round(currentBudget * (1 - pct / 100)), 100);
+              await metaApiPost(creds, campaign.campaignId, { daily_budget: newBudget });
+              actionDesc = `Decreased budget ${pct}% for "${campaign.name}" (${currentBudget / 100} → ${newBudget / 100})`;
+              break;
+            }
+            case "notify":
+              actionDesc = `Rule triggered for "${campaign.name}": ${rule.conditionMetric} ${rule.conditionOperator} ${threshold} (actual: ${metricValue.toFixed(2)})`;
+              break;
+          }
+        } catch (actionErr: any) {
+          actionDesc = `Failed action on "${campaign.name}": ${actionErr.message}`;
+        }
+
+        if (actionDesc) {
+          triggeredActions.push(actionDesc);
+          await db.update(adAutomationRules)
+            .set({ lastTriggeredAt: new Date(), triggerCount: sql`${adAutomationRules.triggerCount} + 1`, updatedAt: new Date() })
+            .where(eq(adAutomationRules.id, rule.id));
+        }
+      }
+    } catch (ruleErr: any) {
+      console.error(`[AutomationRules] Error evaluating rule ${rule.id}: ${ruleErr.message}`);
+    }
+  }
+
+  return { triggered: triggeredActions.length, actions: triggeredActions };
 }
