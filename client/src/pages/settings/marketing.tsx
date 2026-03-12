@@ -321,7 +321,7 @@ export default function MarketingSettings() {
                     <SelectTrigger className="h-9 text-sm" data-testid="trigger-instagram">
                       <SelectValue placeholder="Select Instagram account" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent position="popper" side="top" className="max-h-60">
                       {(igAccountsList?.instagramAccounts || []).map((ig) => (
                         <SelectItem key={ig.id} value={ig.id}>{ig.username || ig.name || ig.id}</SelectItem>
                       ))}
