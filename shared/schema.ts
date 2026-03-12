@@ -2267,3 +2267,32 @@ export const adLaunchJobs = pgTable("ad_launch_jobs", {
 export const insertAdLaunchJobSchema = createInsertSchema(adLaunchJobs).omit({ id: true, createdAt: true });
 export type InsertAdLaunchJob = z.infer<typeof insertAdLaunchJobSchema>;
 export type AdLaunchJob = typeof adLaunchJobs.$inferSelect;
+
+export const adLaunchItems = pgTable("ad_launch_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull().references(() => adLaunchJobs.id, { onDelete: "cascade" }),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  status: varchar("status", { length: 30 }).notNull().default("pending"),
+  campaignName: varchar("campaign_name", { length: 500 }).notNull(),
+  primaryText: text("primary_text").notNull(),
+  headline: varchar("headline", { length: 500 }),
+  description: text("description"),
+  imageUrl: varchar("image_url", { length: 2000 }),
+  imageHash: varchar("image_hash", { length: 255 }),
+  linkUrl: varchar("link_url", { length: 2000 }),
+  callToAction: varchar("call_to_action", { length: 100 }),
+  metaCampaignId: varchar("meta_campaign_id", { length: 100 }),
+  metaAdsetId: varchar("meta_adset_id", { length: 100 }),
+  metaCreativeId: varchar("meta_creative_id", { length: 100 }),
+  metaAdId: varchar("meta_ad_id", { length: 100 }),
+  errorMessage: text("error_message"),
+  launchedAt: timestamp("launched_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_ad_launch_items_job").on(table.jobId),
+  index("idx_ad_launch_items_merchant").on(table.merchantId),
+]);
+
+export const insertAdLaunchItemSchema = createInsertSchema(adLaunchItems).omit({ id: true, createdAt: true });
+export type InsertAdLaunchItem = z.infer<typeof insertAdLaunchItemSchema>;
+export type AdLaunchItem = typeof adLaunchItems.$inferSelect;

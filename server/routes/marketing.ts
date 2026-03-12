@@ -3,7 +3,7 @@ import { db } from "../db";
 import { eq, and, sql, gte, lte, inArray, isNull, isNotNull, desc } from "drizzle-orm";
 import { z } from "zod";
 import { toMerchantStartOfDay, toMerchantEndOfDay, DEFAULT_TIMEZONE } from "../utils/timezone";
-import { adCampaigns, adAccounts, adCreatives, adInsights, teamMembers, merchants, adProfitabilityEntries, orders, products, insertCampaignJourneyEventSchema, campaignJourneyEvents, adLaunchJobs, adMediaLibrary } from "@shared/schema";
+import { adCampaigns, adAccounts, adCreatives, adInsights, teamMembers, merchants, adProfitabilityEntries, orders, products, insertCampaignJourneyEventSchema, campaignJourneyEvents, adLaunchJobs, adLaunchItems, adMediaLibrary } from "@shared/schema";
 import { storage } from "../storage";
 import { decryptToken } from "../services/encryption";
 import {
@@ -1894,8 +1894,68 @@ export function registerMarketingRoutes(app: Express) {
         return res.status(400).json({ error: "Invalid bulk launch config", details: parsed.error.flatten() });
       }
 
+      const [job] = await db.insert(adLaunchJobs).values({
+        merchantId,
+        launchType: "bulk",
+        campaignName: `Bulk Launch - ${parsed.data.ads.length} ads`,
+        objective: parsed.data.ads[0]?.objective || "OUTCOME_SALES",
+        dailyBudget: parsed.data.ads[0]?.dailyBudget || "0",
+        targeting: parsed.data.ads[0]?.targeting || {},
+        creativeConfig: { adCount: parsed.data.ads.length },
+        pageId: parsed.data.ads[0]?.pageId,
+        status: "processing",
+      }).returning();
+
+      const itemInserts = parsed.data.ads.map((ad) => ({
+        jobId: job.id,
+        merchantId,
+        campaignName: ad.campaignName,
+        primaryText: ad.creative.primaryText,
+        headline: ad.creative.headline,
+        description: ad.creative.description,
+        imageUrl: ad.creative.imageUrl,
+        linkUrl: ad.creative.linkUrl,
+        callToAction: ad.creative.callToAction,
+        status: "pending" as const,
+      }));
+
+      await db.insert(adLaunchItems).values(itemInserts);
+
       const result = await bulkLaunchAds(merchantId, parsed.data.ads);
-      res.json({ success: true, ...result });
+
+      const completedItems = await db.select().from(adLaunchItems).where(eq(adLaunchItems.jobId, job.id));
+      let successCount = 0;
+      let failCount = 0;
+
+      for (let i = 0; i < result.results.length; i++) {
+        const r = result.results[i];
+        const item = completedItems[i];
+        if (!item) continue;
+
+        if (r.success) {
+          successCount++;
+          await db.update(adLaunchItems).set({
+            status: "completed",
+            metaCampaignId: r.campaignId,
+            metaAdsetId: r.adSetId,
+            metaAdId: r.adId,
+            launchedAt: new Date(),
+          }).where(eq(adLaunchItems.id, item.id));
+        } else {
+          failCount++;
+          await db.update(adLaunchItems).set({
+            status: "failed",
+            errorMessage: r.error,
+          }).where(eq(adLaunchItems.id, item.id));
+        }
+      }
+
+      await db.update(adLaunchJobs).set({
+        status: failCount === 0 ? "completed" : successCount > 0 ? "partial" : "failed",
+        launchedAt: new Date(),
+      }).where(eq(adLaunchJobs.id, job.id));
+
+      res.json({ success: true, jobId: job.id, ...result });
     } catch (error: any) {
       console.error("[MetaAdLauncher] Bulk launch error:", error.message);
       res.status(500).json({ error: error.message });
@@ -1911,6 +1971,93 @@ export function registerMarketingRoutes(app: Express) {
         .orderBy(desc(adLaunchJobs.createdAt))
         .limit(100);
       res.json({ jobs });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/meta/launch-jobs/:jobId/items", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const { jobId } = req.params;
+      const items = await db.select()
+        .from(adLaunchItems)
+        .where(and(eq(adLaunchItems.jobId, jobId), eq(adLaunchItems.merchantId, merchantId)))
+        .orderBy(adLaunchItems.createdAt);
+      res.json({ items });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/meta/campaigns", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const [merchant] = await db.select({
+        facebookAccessToken: merchants.facebookAccessToken,
+        facebookAdAccountId: merchants.facebookAdAccountId,
+      }).from(merchants).where(eq(merchants.id, merchantId));
+
+      if (!merchant?.facebookAccessToken || !merchant?.facebookAdAccountId) {
+        return res.status(400).json({ error: "Facebook not connected or no ad account selected" });
+      }
+
+      const token = decryptToken(merchant.facebookAccessToken);
+      const actId = `act_${merchant.facebookAdAccountId.replace("act_", "")}`;
+
+      const url = new URL(`https://graph.facebook.com/v21.0/${actId}/campaigns`);
+      url.searchParams.set("access_token", token);
+      url.searchParams.set("fields", "id,name,status,objective,daily_budget,lifetime_budget,created_time,updated_time,start_time,stop_time");
+      url.searchParams.set("limit", "100");
+
+      const response = await fetch(url.toString());
+      const data = await response.json();
+
+      if (data.error) {
+        return res.status(400).json({ error: data.error.message });
+      }
+
+      res.json({ campaigns: data.data || [] });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/meta/campaigns/:campaignId/status", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const { campaignId } = req.params;
+      const statusSchema = z.object({
+        status: z.enum(["ACTIVE", "PAUSED"]),
+      });
+      const parsed = statusSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid status" });
+
+      const [merchant] = await db.select({
+        facebookAccessToken: merchants.facebookAccessToken,
+      }).from(merchants).where(eq(merchants.id, merchantId));
+
+      if (!merchant?.facebookAccessToken) {
+        return res.status(400).json({ error: "Facebook not connected" });
+      }
+
+      const token = decryptToken(merchant.facebookAccessToken);
+
+      const response = await fetch(`https://graph.facebook.com/v21.0/${campaignId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: parsed.data.status,
+          access_token: token,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.error) {
+        return res.status(400).json({ error: data.error.message });
+      }
+
+      res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

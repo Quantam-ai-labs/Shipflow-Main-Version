@@ -110,6 +110,7 @@ import SupportCallQueuePage from "@/pages/support/call-queue";
 import MetaAdLauncher from "@/pages/meta/launcher";
 import MetaMediaLibrary from "@/pages/meta/media-library";
 import MetaBulkLaunch from "@/pages/meta/bulk-launch";
+import MetaCampaigns from "@/pages/meta/campaigns";
 import NotFound from "@/pages/not-found";
 import LoadsheetPage from "@/pages/loadsheet";
 import WarehousePage from "@/pages/warehouse";
@@ -182,6 +183,7 @@ const routeToPageId: Record<string, string> = {
   "/meta/launcher": "meta-launcher",
   "/meta/bulk-launch": "meta-bulk-launch",
   "/meta/media-library": "meta-media-library",
+  "/meta/campaigns": "meta-campaigns",
 };
 
 function getPageIdForRoute(path: string): string | null {
@@ -291,6 +293,7 @@ function AppRoutes() {
       <Route path="/meta/launcher">{() => <ProtectedRoute component={MetaAdLauncher} path="/meta/launcher" />}</Route>
       <Route path="/meta/bulk-launch">{() => <ProtectedRoute component={MetaBulkLaunch} path="/meta/bulk-launch" />}</Route>
       <Route path="/meta/media-library">{() => <ProtectedRoute component={MetaMediaLibrary} path="/meta/media-library" />}</Route>
+      <Route path="/meta/campaigns">{() => <ProtectedRoute component={MetaCampaigns} path="/meta/campaigns" />}</Route>
       <Route path="/accounting/settings">{() => <ProtectedRoute component={AccountingSettings} path="/accounting/settings" />}</Route>
       <Route path="/loadsheet">{() => <ProtectedRoute component={LoadsheetPage} path="/loadsheet" />}</Route>
       <Route path="/warehouse/:slug" component={WarehousePage} />
