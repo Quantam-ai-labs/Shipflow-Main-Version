@@ -8,7 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Plus, Trash2, Rocket, CheckCircle2, XCircle, Clock, Image as ImageIcon, Type, Grid3X3 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Loader2, Plus, Trash2, Rocket, CheckCircle2, XCircle, Clock, Image as ImageIcon, Type, Grid3X3, FolderOpen } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -51,6 +52,9 @@ export default function MetaBulkLaunch() {
   const [combinations, setCombinations] = useState<CombinationRow[]>([]);
   const [showMatrix, setShowMatrix] = useState(false);
 
+  const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
+  const [mediaPickerTarget, setMediaPickerTarget] = useState<string | null>(null);
+
   const { data: oauthStatus } = useQuery<any>({
     queryKey: ["/api/meta/oauth/status"],
   });
@@ -59,8 +63,27 @@ export default function MetaBulkLaunch() {
     queryKey: ["/api/meta/launch-jobs"],
   });
 
+  const { data: mediaData } = useQuery<{ media: { id: string; name: string; url: string; type: string; metaMediaHash?: string }[] }>({
+    queryKey: ["/api/meta/media-library"],
+  });
+
+  const mediaImages = (mediaData?.media || []).filter(m => m.type === "image");
+
   const pageId = oauthStatus?.pageId || "";
   const pixelId = oauthStatus?.pixelId || "";
+
+  const openMediaPicker = (creativeId: string) => {
+    setMediaPickerTarget(creativeId);
+    setMediaPickerOpen(true);
+  };
+
+  const selectMediaForCreative = (mediaUrl: string, mediaName: string) => {
+    if (mediaPickerTarget) {
+      setCreatives(prev => prev.map(c => c.id === mediaPickerTarget ? { ...c, imageUrl: mediaUrl, label: c.label || mediaName } : c));
+    }
+    setMediaPickerOpen(false);
+    setMediaPickerTarget(null);
+  };
 
   const addCreative = () => {
     setCreatives(prev => [...prev, { id: uid(), imageUrl: "", label: `Creative ${prev.length + 1}` }]);
@@ -220,7 +243,7 @@ export default function MetaBulkLaunch() {
                 <Plus className="w-3.5 h-3.5 mr-1" /> Add
               </Button>
             </div>
-            <CardDescription>Add image URLs for your ad creatives</CardDescription>
+            <CardDescription>Add images from your Media Library or paste URLs</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {creatives.map((cr, idx) => (
@@ -233,13 +256,25 @@ export default function MetaBulkLaunch() {
                     className="text-xs h-8"
                     data-testid={`input-creative-label-${cr.id}`}
                   />
-                  <Input
-                    placeholder="https://...image.jpg"
-                    value={cr.imageUrl}
-                    onChange={e => updateCreative(cr.id, "imageUrl", e.target.value)}
-                    className="text-xs h-8"
-                    data-testid={`input-creative-url-${cr.id}`}
-                  />
+                  <div className="flex gap-1.5">
+                    <Input
+                      placeholder="https://...image.jpg"
+                      value={cr.imageUrl}
+                      onChange={e => updateCreative(cr.id, "imageUrl", e.target.value)}
+                      className="text-xs h-8 flex-1"
+                      data-testid={`input-creative-url-${cr.id}`}
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-2 text-xs shrink-0"
+                      onClick={() => openMediaPicker(cr.id)}
+                      data-testid={`button-pick-media-${cr.id}`}
+                    >
+                      <FolderOpen className="w-3.5 h-3.5 mr-1" />
+                      Library
+                    </Button>
+                  </div>
                 </div>
                 {cr.imageUrl && (
                   <div className="w-16 h-16 border rounded overflow-hidden flex-shrink-0">
@@ -491,6 +526,37 @@ export default function MetaBulkLaunch() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={mediaPickerOpen} onOpenChange={setMediaPickerOpen}>
+        <DialogContent className="max-w-2xl max-h-[70vh] overflow-y-auto" data-testid="dialog-media-picker">
+          <DialogHeader>
+            <DialogTitle>Select from Media Library</DialogTitle>
+          </DialogHeader>
+          {mediaImages.length === 0 ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              <ImageIcon className="w-8 h-8 mx-auto mb-2 opacity-40" />
+              <p>No images in your media library yet.</p>
+              <p className="text-xs mt-1">Upload images in the Media Library page first.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+              {mediaImages.map((media) => (
+                <button
+                  key={media.id}
+                  className="group relative border rounded-lg overflow-hidden hover:ring-2 hover:ring-primary transition-all aspect-square"
+                  onClick={() => selectMediaForCreative(media.url, media.name)}
+                  data-testid={`media-pick-${media.id}`}
+                >
+                  <img src={media.url} alt={media.name} className="w-full h-full object-cover" />
+                  <div className="absolute inset-x-0 bottom-0 bg-black/60 px-1.5 py-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <p className="text-[10px] text-white truncate">{media.name}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

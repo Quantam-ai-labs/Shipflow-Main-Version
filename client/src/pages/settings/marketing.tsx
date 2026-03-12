@@ -4,8 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RefreshCw, Megaphone, CheckCircle2, XCircle, Clock, Loader2, Plug, LogIn, Unplug } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { RefreshCw, Megaphone, CheckCircle2, XCircle, Clock, Loader2, Plug, LogIn, Unplug, ChevronDown, Settings2, Save } from "lucide-react";
 import { SiFacebook } from "react-icons/si";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -159,6 +162,44 @@ export default function MarketingSettings() {
       window.history.replaceState({}, "", window.location.pathname + "?tab=marketing");
     }
   }, []);
+
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [manualAccessToken, setManualAccessToken] = useState("");
+  const [manualAdAccountId, setManualAdAccountId] = useState("");
+
+  const { data: manualCreds } = useQuery<{
+    facebookAccessToken: string;
+    facebookAdAccountId: string;
+    hasAccessToken: boolean;
+    hasAdAccountId: boolean;
+  }>({
+    queryKey: ["/api/marketing/credentials"],
+  });
+
+  useEffect(() => {
+    if (manualCreds) {
+      setManualAccessToken(manualCreds.facebookAccessToken || "");
+      setManualAdAccountId(manualCreds.facebookAdAccountId || "");
+    }
+  }, [manualCreds]);
+
+  const saveCredentialsMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("PUT", "/api/marketing/credentials", {
+        facebookAccessToken: manualAccessToken,
+        facebookAdAccountId: manualAdAccountId,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Credentials Saved", description: "Manual credentials have been updated." });
+      queryClient.invalidateQueries({ queryKey: ["/api/marketing/credentials"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/marketing/sync-status"] });
+    },
+    onError: (error: any) => {
+      toast({ title: "Save Failed", description: error.message, variant: "destructive" });
+    },
+  });
 
   const isConnected = oauthStatus?.connected || syncStatus?.hasCredentials;
   const lastSync = syncStatus?.lastSync;
@@ -346,6 +387,71 @@ export default function MarketingSettings() {
             </div>
           )}
         </CardContent>
+      </Card>
+
+      <Card data-testid="card-advanced-credentials">
+        <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+          <CardHeader className="pb-2">
+            <CollapsibleTrigger className="flex items-center justify-between w-full text-left" data-testid="trigger-advanced-credentials">
+              <div className="flex items-center gap-2">
+                <Settings2 className="w-4 h-4 text-muted-foreground" />
+                <div>
+                  <CardTitle className="text-base">Advanced: Manual Credentials</CardTitle>
+                  <CardDescription className="text-xs">
+                    Override with your own access token or ad account ID
+                  </CardDescription>
+                </div>
+              </div>
+              <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${advancedOpen ? "rotate-180" : ""}`} />
+            </CollapsibleTrigger>
+          </CardHeader>
+          <CollapsibleContent>
+            <CardContent className="space-y-4">
+              <p className="text-xs text-muted-foreground">
+                Only use these fields if you need to manually override the OAuth-connected credentials. OAuth is the recommended method.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="manual-access-token" className="text-xs">Access Token</Label>
+                  <Input
+                    id="manual-access-token"
+                    type="password"
+                    placeholder="Paste Facebook access token"
+                    value={manualAccessToken}
+                    onChange={e => setManualAccessToken(e.target.value)}
+                    data-testid="input-manual-access-token"
+                  />
+                  {manualCreds?.hasAccessToken && (
+                    <p className="text-xs text-green-600 dark:text-green-400">Token is set</p>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="manual-ad-account" className="text-xs">Ad Account ID</Label>
+                  <Input
+                    id="manual-ad-account"
+                    placeholder="act_123456789"
+                    value={manualAdAccountId}
+                    onChange={e => setManualAdAccountId(e.target.value)}
+                    data-testid="input-manual-ad-account"
+                  />
+                </div>
+              </div>
+              <Button
+                size="sm"
+                onClick={() => saveCredentialsMutation.mutate()}
+                disabled={saveCredentialsMutation.isPending}
+                data-testid="button-save-manual-credentials"
+              >
+                {saveCredentialsMutation.isPending ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />
+                ) : (
+                  <Save className="w-3.5 h-3.5 mr-1" />
+                )}
+                Save Credentials
+              </Button>
+            </CardContent>
+          </CollapsibleContent>
+        </Collapsible>
       </Card>
 
       <Card data-testid="card-campaign-summary">

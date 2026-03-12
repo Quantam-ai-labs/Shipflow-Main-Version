@@ -353,6 +353,60 @@ export function registerMarketingRoutes(app: Express) {
     }
   });
 
+  app.get("/api/marketing/credentials", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const [merchant] = await db.select({
+        facebookAccessToken: merchants.facebookAccessToken,
+        facebookAdAccountId: merchants.facebookAdAccountId,
+      }).from(merchants).where(eq(merchants.id, merchantId));
+
+      if (!merchant) {
+        return res.status(404).json({ error: "Merchant not found" });
+      }
+
+      const mask = (val: string | null) => val ? `${"•".repeat(Math.min(val.length, 20))}${val.slice(-4)}` : "";
+
+      res.json({
+        facebookAccessToken: merchant.facebookAccessToken ? mask(merchant.facebookAccessToken) : "",
+        facebookAdAccountId: merchant.facebookAdAccountId || "",
+        hasAccessToken: !!merchant.facebookAccessToken,
+        hasAdAccountId: !!merchant.facebookAdAccountId,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  const credentialsSchema = z.object({
+    facebookAccessToken: z.string().optional(),
+    facebookAdAccountId: z.string().optional(),
+  });
+
+  app.put("/api/marketing/credentials", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const parsed = credentialsSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request body", details: parsed.error.flatten() });
+      }
+
+      const updates: Record<string, any> = { updatedAt: new Date() };
+      const data = parsed.data;
+
+      if (data.facebookAdAccountId !== undefined) updates.facebookAdAccountId = data.facebookAdAccountId || null;
+      if (data.facebookAccessToken !== undefined && !data.facebookAccessToken.includes("•")) {
+        updates.facebookAccessToken = data.facebookAccessToken ? encryptToken(data.facebookAccessToken) : null;
+      }
+
+      await db.update(merchants).set(updates).where(eq(merchants.id, merchantId));
+
+      res.json({ success: true, message: "Credentials saved successfully" });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.post("/api/marketing/test-connection", isAuthenticated, async (req: any, res) => {
     try {
       const merchantId = await getMerchantId(req);
