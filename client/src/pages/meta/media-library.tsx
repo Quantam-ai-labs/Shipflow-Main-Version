@@ -60,9 +60,27 @@ export default function MetaMediaLibrary() {
     },
   });
 
+  const [uploadValidationErrors, setUploadValidationErrors] = useState<string[]>([]);
+
+  const validateUploadFile = (file: File): string[] => {
+    const errors: string[] = [];
+    const isVideo = file.type.startsWith("video/");
+    const ext = file.name.split(".").pop()?.toLowerCase() || "";
+    if (isVideo) {
+      if (!["mp4", "mov"].includes(ext)) errors.push(`Video format .${ext} not supported. Use MP4 or MOV.`);
+      if (file.size > 4096 * 1024 * 1024) errors.push(`Video file size ${(file.size / 1024 / 1024).toFixed(0)}MB exceeds 4GB limit.`);
+    } else {
+      if (!["jpg", "jpeg", "png", "webp", "gif"].includes(ext)) errors.push(`Image format .${ext} not supported. Use JPG, PNG, WebP, or GIF.`);
+      if (file.size > 30 * 1024 * 1024) errors.push(`Image file size ${(file.size / 1024 / 1024).toFixed(1)}MB exceeds 30MB limit.`);
+    }
+    return errors;
+  };
+
   const fileUploadMutation = useMutation({
     mutationFn: async () => {
       if (!uploadFile) throw new Error("No file selected");
+      const validationErrors = validateUploadFile(uploadFile);
+      if (validationErrors.length > 0) throw new Error(validationErrors.join("; "));
       const reader = new FileReader();
       const base64 = await new Promise<string>((resolve, reject) => {
         reader.onload = () => {
@@ -302,19 +320,51 @@ export default function MetaMediaLibrary() {
                     className="hidden"
                     onChange={(e) => {
                       const file = e.target.files?.[0];
-                      if (file) setUploadFile(file);
+                      if (file) {
+                        setUploadFile(file);
+                        const errors = validateUploadFile(file);
+                        if (!file.type.startsWith("video/") && errors.length === 0) {
+                          const img = new window.Image();
+                          img.onload = () => {
+                            const dimErrors: string[] = [];
+                            if (img.naturalWidth < 600) dimErrors.push(`Image width ${img.naturalWidth}px below minimum 600px.`);
+                            const ratio = img.naturalWidth / img.naturalHeight;
+                            const validRanges = [
+                              { min: 0.95, max: 1.05 },
+                              { min: 0.75, max: 0.85 },
+                              { min: 0.52, max: 0.62 },
+                              { min: 1.7, max: 1.85 },
+                              { min: 1.85, max: 1.97 },
+                            ];
+                            if (!validRanges.some(r => ratio >= r.min && ratio <= r.max)) {
+                              dimErrors.push(`Aspect ratio ${ratio.toFixed(2)} may not be optimal. Use 1:1, 4:5, 9:16, 16:9, or 1.91:1.`);
+                            }
+                            setUploadValidationErrors([...errors, ...dimErrors]);
+                          };
+                          img.src = URL.createObjectURL(file);
+                        } else {
+                          setUploadValidationErrors(errors);
+                        }
+                      }
                     }}
                     data-testid="input-file-upload"
                   />
                 </div>
               </div>
+              {uploadValidationErrors.length > 0 && (
+                <div className="space-y-1 p-2 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded">
+                  {uploadValidationErrors.map((err, i) => (
+                    <p key={i} className="text-xs text-red-600 dark:text-red-400">{err}</p>
+                  ))}
+                </div>
+              )}
               <DialogFooter>
                 <Button variant="outline" onClick={() => setShowAddDialog(false)} data-testid="button-cancel-upload">
                   Cancel
                 </Button>
                 <Button
                   onClick={() => fileUploadMutation.mutate()}
-                  disabled={!uploadFile || fileUploadMutation.isPending}
+                  disabled={!uploadFile || fileUploadMutation.isPending || uploadValidationErrors.length > 0}
                   data-testid="button-upload-media"
                 >
                   {fileUploadMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Upload className="w-4 h-4 mr-1" />}

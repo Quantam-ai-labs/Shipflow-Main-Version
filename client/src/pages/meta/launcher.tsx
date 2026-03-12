@@ -152,12 +152,14 @@ function uid() {
   return Math.random().toString(36).slice(2, 10);
 }
 
-function AdPreview({ primaryText, headline, imageUrl, linkUrl, callToAction, pageName }: {
-  primaryText: string; headline?: string; imageUrl?: string; linkUrl: string; callToAction: string; pageName?: string;
+function AdPreview({ primaryText, headline, imageUrl, thumbnailUrl, linkUrl, callToAction, pageName, format, carouselCards }: {
+  primaryText: string; headline?: string; imageUrl?: string; thumbnailUrl?: string; linkUrl: string; callToAction: string; pageName?: string; format?: AdFormat; carouselCards?: CarouselCard[];
 }) {
   const ctaLabel = CTA_OPTIONS.find(c => c.value === callToAction)?.label || "Shop Now";
   let domain = "yourstore.com";
   try { if (linkUrl) domain = new URL(linkUrl).hostname.replace("www.", ""); } catch {};
+  const previewImage = format === "video" ? (thumbnailUrl || imageUrl) : imageUrl;
+  const isCarousel = format === "carousel" && carouselCards && carouselCards.length >= 2;
   return (
     <div className="border rounded-lg overflow-hidden bg-white dark:bg-zinc-900 max-w-sm mx-auto shadow-sm" data-testid="ad-preview">
       <div className="p-3 flex items-center gap-2">
@@ -172,8 +174,35 @@ function AdPreview({ primaryText, headline, imageUrl, linkUrl, callToAction, pag
       <div className="px-3 pb-2">
         <p className="text-sm whitespace-pre-wrap">{primaryText || "Your ad text will appear here..."}</p>
       </div>
-      {imageUrl ? (
-        <img src={imageUrl} alt="Ad" className="w-full aspect-square object-cover" />
+      {isCarousel ? (
+        <div className="flex overflow-x-auto gap-0.5 snap-x snap-mandatory">
+          {carouselCards!.filter(c => c.imageUrl).map((card, idx) => (
+            <div key={card.id || idx} className="snap-start shrink-0 w-48 border-r last:border-r-0">
+              <img src={card.imageUrl} alt={card.headline || `Card ${idx + 1}`} className="w-48 h-48 object-cover" />
+              <div className="p-2">
+                {card.headline && <p className="text-xs font-semibold truncate">{card.headline}</p>}
+                {card.description && <p className="text-[10px] text-muted-foreground truncate">{card.description}</p>}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : format === "video" ? (
+        <div className="relative">
+          {previewImage ? (
+            <img src={previewImage} alt="Video thumbnail" className="w-full aspect-video object-cover" />
+          ) : (
+            <div className="w-full aspect-video bg-muted flex items-center justify-center">
+              <Film className="w-12 h-12 text-muted-foreground/30" />
+            </div>
+          )}
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-12 h-12 rounded-full bg-black/50 flex items-center justify-center">
+              <div className="w-0 h-0 border-t-[8px] border-t-transparent border-l-[14px] border-l-white border-b-[8px] border-b-transparent ml-1" />
+            </div>
+          </div>
+        </div>
+      ) : previewImage ? (
+        <img src={previewImage} alt="Ad" className="w-full aspect-square object-cover" />
       ) : (
         <div className="w-full aspect-square bg-muted flex items-center justify-center">
           <ImageIcon className="w-12 h-12 text-muted-foreground/30" />
@@ -816,7 +845,7 @@ export default function MetaAdLauncher() {
               <>
                 <Separator />
                 <h3 className="font-medium text-sm text-center">Ad Preview</h3>
-                <AdPreview primaryText={primaryText} headline={headline} imageUrl={adFormat === "single_image" ? imageUrl : carouselCards[0]?.imageUrl || ""} linkUrl={linkUrl} callToAction={callToAction} pageName={pageName} />
+                <AdPreview primaryText={primaryText} headline={headline} imageUrl={imageUrl} thumbnailUrl={thumbnailUrl} linkUrl={linkUrl} callToAction={callToAction} pageName={pageName} format={adFormat} carouselCards={carouselCards} />
               </>
             )}
           </CardContent>
@@ -870,7 +899,7 @@ export default function MetaAdLauncher() {
 
             <Separator />
 
-            <AdPreview primaryText={primaryText} headline={headline} imageUrl={adFormat === "single_image" ? imageUrl : carouselCards[0]?.imageUrl || ""} linkUrl={linkUrl} callToAction={callToAction} pageName={pageName} />
+            <AdPreview primaryText={primaryText} headline={headline} imageUrl={imageUrl} thumbnailUrl={thumbnailUrl} linkUrl={linkUrl} callToAction={callToAction} pageName={pageName} format={adFormat} carouselCards={carouselCards} />
 
             <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-3 flex items-start gap-2">
               <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
