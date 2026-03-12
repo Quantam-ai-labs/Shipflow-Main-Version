@@ -2796,7 +2796,8 @@ export function registerMarketingRoutes(app: Express) {
         updatedAt: new Date(),
       }).where(eq(merchants.id, merchantId));
 
-      const canonicalHost = `${req.protocol}://${req.get("host")}`;
+      const proto = req.headers["x-forwarded-proto"] || req.protocol || "https";
+      const canonicalHost = `${proto}://${req.get("host")}`;
 
       console.log(`[WA-Signup] WhatsApp Embedded Signup completed for merchant ${merchantId}. WABA: ${wabaId}, Phone: ${phoneNumberId} (${displayPhone})`);
 

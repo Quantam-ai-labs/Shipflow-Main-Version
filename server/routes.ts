@@ -7810,7 +7810,8 @@ export async function registerRoutes(
         await db.update(merchants).set({ waVerifyToken: verifyToken }).where(eq(merchants.id, merchantId));
       }
 
-      const canonicalHost = `${req.protocol}://${req.get("host")}`;
+      const proto = req.headers["x-forwarded-proto"] || req.protocol || "https";
+      const canonicalHost = `${proto}://${req.get("host")}`;
 
       const [disconnectRow] = await db.select({ waDisconnected: merchants.waDisconnected }).from(merchants).where(eq(merchants.id, merchantId)).limit(1);
       res.json({
