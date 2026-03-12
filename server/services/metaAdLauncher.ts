@@ -701,7 +701,7 @@ export async function evaluateAutomationRules(merchantId: string): Promise<{ tri
       if (ruleEntityType === "adset") {
         const sets = await db.select().from(adSets)
           .where(and(eq(adSets.merchantId, merchantId), eq(adSets.effectiveStatus, "ACTIVE")));
-        entities = sets.map(s => ({ entityId: s.adSetId, entityName: s.name, insightEntityType: "adset" }));
+        entities = sets.map(s => ({ entityId: s.adsetId, entityName: s.name, insightEntityType: "adset" }));
       } else {
         const campaigns = await db.select().from(adCampaigns)
           .where(and(eq(adCampaigns.merchantId, merchantId), eq(adCampaigns.effectiveStatus, "ACTIVE")));
