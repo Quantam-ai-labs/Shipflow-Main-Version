@@ -39,6 +39,7 @@ import {
   X,
   Loader2,
   Filter,
+  CalendarDays,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -122,6 +123,7 @@ export default function Orders() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [useBookingDateFilter, setUseBookingDateFilter] = useState(false);
   const [courierFilter, setCourierFilter] = useState("all");
   const [cityFilter, setCityFilter] = useState("");
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
@@ -160,7 +162,7 @@ export default function Orders() {
   const isPostBookingFilter = POST_BOOKING_STATUSES.has(statusFilter);
 
   const { data, isLoading, isFetching } = useQuery<OrdersResponse>({
-    queryKey: ["/api/orders", { search: debouncedSearch, status: statusFilter, courier: courierFilter, city: cityFilter, dateFrom: debouncedSearch ? undefined : dateParams.dateFrom, dateTo: debouncedSearch ? undefined : dateParams.dateTo, page, pageSize, dateFilterField: isPostBookingFilter ? "bookedAt" : undefined, sortBy: isPostBookingFilter ? "bookedAt" : undefined }],
+    queryKey: ["/api/orders", { search: debouncedSearch, status: statusFilter, courier: courierFilter, city: cityFilter, dateFrom: debouncedSearch ? undefined : dateParams.dateFrom, dateTo: debouncedSearch ? undefined : dateParams.dateTo, page, pageSize, dateFilterField: useBookingDateFilter ? "bookedAt" : undefined, sortBy: useBookingDateFilter ? "bookedAt" : undefined }],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (debouncedSearch) params.set("search", debouncedSearch);
@@ -171,7 +173,7 @@ export default function Orders() {
       if (!debouncedSearch && dateParams.dateTo) params.set("dateTo", dateParams.dateTo);
       params.set("page", String(page));
       params.set("pageSize", String(pageSize));
-      if (isPostBookingFilter) {
+      if (useBookingDateFilter) {
         params.set("dateFilterField", "bookedAt");
         params.set("sortBy", "bookedAt");
         params.set("sortDir", "desc");
@@ -417,7 +419,7 @@ export default function Orders() {
             />
           </div>
           
-          <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
+          <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); setUseBookingDateFilter(false); }}>
             <SelectTrigger className="w-[180px] h-9" data-testid="select-status-filter">
               <Filter className="w-4 h-4 mr-1" />
               <SelectValue placeholder="Status" />
@@ -518,10 +520,17 @@ export default function Orders() {
           dateRange={dateRange}
           onDateRangeChange={(range) => { setDateRange(range); setPage(1); }}
         />
-        {statusFilter !== "all" && (
-          <span className="text-[11px] text-muted-foreground/70 font-normal tracking-wide" data-testid="badge-booking-date-filter">
-            {isPostBookingFilter ? "Dates: Booking Date" : "Dates: Order Date"}
-          </span>
+        {isPostBookingFilter && (
+          <Button
+            variant={useBookingDateFilter ? "default" : "outline"}
+            size="sm"
+            className="h-7 text-xs gap-1.5 px-2.5"
+            onClick={() => { setUseBookingDateFilter(v => !v); setPage(1); }}
+            data-testid="button-toggle-booking-date"
+          >
+            <CalendarDays className="w-3.5 h-3.5" />
+            {useBookingDateFilter ? "Booking Date" : "Order Date"}
+          </Button>
         )}
       </div>
 
@@ -578,14 +587,14 @@ export default function Orders() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="start" className="w-[200px] max-h-[300px] overflow-y-auto">
                         <DropdownMenuItem 
-                          onSelect={() => { setStatusFilter("all"); setPage(1); }}
+                          onSelect={() => { setStatusFilter("all"); setPage(1); setUseBookingDateFilter(false); }}
                           className={statusFilter === "all" ? "bg-muted font-medium" : ""}
                           data-testid="status-option-all"
                         >
                           All Statuses
                         </DropdownMenuItem>
                         <DropdownMenuItem 
-                          onSelect={() => { setStatusFilter("Unfulfilled"); setPage(1); }}
+                          onSelect={() => { setStatusFilter("Unfulfilled"); setPage(1); setUseBookingDateFilter(false); }}
                           className={statusFilter === "Unfulfilled" ? "bg-muted font-medium" : ""}
                           data-testid="status-option-unfulfilled"
                         >
@@ -594,7 +603,7 @@ export default function Orders() {
                         {universalStatuses.map((s) => (
                           <DropdownMenuItem 
                             key={s.value} 
-                            onSelect={() => { setStatusFilter(s.value); setPage(1); }}
+                            onSelect={() => { setStatusFilter(s.value); setPage(1); setUseBookingDateFilter(false); }}
                             className={statusFilter === s.value ? "bg-muted font-medium" : ""}
                             data-testid={`status-option-${s.value.toLowerCase().replace(/\s+/g, '-')}`}
                           >

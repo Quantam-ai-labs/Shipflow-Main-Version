@@ -82,6 +82,7 @@ import {
   X,
   AlertTriangle,
   Lock,
+  CalendarDays,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -545,6 +546,8 @@ export default function Pipeline() {
     queryKey: ["/api/settings/robo-tags"],
   });
 
+  const [useBookingDateFilter, setUseBookingDateFilter] = useState(false);
+
   useEffect(() => {
     setPage(1);
     setSelectedIds(new Set());
@@ -562,13 +565,14 @@ export default function Pipeline() {
     setShowAdvancedFilters(false);
     setAllSortBy("orderDate");
     setAllSortDir("desc");
+    setUseBookingDateFilter(false);
   }, [activeTab]);
 
   const POST_BOOKING_TABS = new Set(["BOOKED", "FULFILLED", "DELIVERED", "RETURN", "CANCELLED"]);
   const isPostBookingTab = POST_BOOKING_TABS.has(activeTab);
 
   const { data, isLoading, isFetching } = useQuery<{ orders: Order[]; total: number }>({
-    queryKey: ["/api/orders", { workflowStatus: activeTab, search: debouncedSearch, page, pageSize, pendingReasonType: activeTab === "PENDING" ? pendingReasonFilter : undefined, shipmentStatus: shipmentSubFilter !== "all" ? shipmentSubFilter : undefined, paymentFilter, dateFrom: debouncedSearch ? undefined : dateParams.dateFrom, dateTo: debouncedSearch ? undefined : dateParams.dateTo, dateFilterField: isPostBookingTab ? "bookedAt" : undefined, ...(activeTab === "ALL" ? { allOrderIds: debouncedAllOrderIds, allFilterTag: debouncedAllFilterTag, allFilterStatuses: allFilterStatuses.join(","), allFilterCourier, allFilterCourierStatus, allMinItems, allMaxItems, allSortBy, allSortDir } : {}) }],
+    queryKey: ["/api/orders", { workflowStatus: activeTab, search: debouncedSearch, page, pageSize, pendingReasonType: activeTab === "PENDING" ? pendingReasonFilter : undefined, shipmentStatus: shipmentSubFilter !== "all" ? shipmentSubFilter : undefined, paymentFilter, dateFrom: debouncedSearch ? undefined : dateParams.dateFrom, dateTo: debouncedSearch ? undefined : dateParams.dateTo, dateFilterField: useBookingDateFilter ? "bookedAt" : undefined, ...(activeTab === "ALL" ? { allOrderIds: debouncedAllOrderIds, allFilterTag: debouncedAllFilterTag, allFilterStatuses: allFilterStatuses.join(","), allFilterCourier, allFilterCourierStatus, allMinItems, allMaxItems, allSortBy, allSortDir } : {}) }],
     queryFn: async () => {
       const params = new URLSearchParams();
       params.set("workflowStatus", activeTab);
@@ -581,7 +585,7 @@ export default function Pipeline() {
       if (paymentFilter !== "all") params.set("filterPayment", paymentFilter);
       if (!debouncedSearch && dateParams.dateFrom) params.set("dateFrom", dateParams.dateFrom);
       if (!debouncedSearch && dateParams.dateTo) params.set("dateTo", dateParams.dateTo);
-      if (isPostBookingTab) {
+      if (useBookingDateFilter) {
         params.set("dateFilterField", "bookedAt");
         params.set("sortBy", "bookedAt");
         params.set("sortDir", "desc");
@@ -1278,9 +1282,18 @@ export default function Pipeline() {
           )}
 
           {isFetching && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
-          <span className="text-[11px] text-muted-foreground/70 font-normal tracking-wide" data-testid="badge-booking-date-filter">
-            {isPostBookingTab ? "Dates: Booking Date" : "Dates: Order Date"}
-          </span>
+          {isPostBookingTab && (
+            <Button
+              variant={useBookingDateFilter ? "default" : "outline"}
+              size="sm"
+              className="h-7 text-xs gap-1.5 px-2.5"
+              onClick={() => { setUseBookingDateFilter(v => !v); setPage(1); }}
+              data-testid="button-toggle-booking-date"
+            >
+              <CalendarDays className="w-3.5 h-3.5" />
+              {useBookingDateFilter ? "Booking Date" : "Order Date"}
+            </Button>
+          )}
         </div>
 
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
