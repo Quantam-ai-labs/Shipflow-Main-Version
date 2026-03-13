@@ -2098,6 +2098,8 @@ export function registerMarketingRoutes(app: Express) {
         dailyBudget: z.string().min(1),
         lifetimeBudget: z.string().optional(),
         budgetType: z.enum(["daily", "lifetime"]).optional(),
+        budgetLevel: z.enum(["adset", "campaign"]).optional(),
+        spendingLimit: z.string().optional(),
         bidStrategy: z.string().optional(),
         bidAmount: z.string().optional(),
         targeting: z.any(),
@@ -2127,6 +2129,8 @@ export function registerMarketingRoutes(app: Express) {
         }, { message: "Existing post requires postId; other formats require primaryText and linkUrl" }),
         pageId: z.string().min(1),
         pixelId: z.string().optional(),
+        conversionEvent: z.enum(["PURCHASE", "ADD_TO_CART", "INITIATE_CHECKOUT", "LEAD", "COMPLETE_REGISTRATION", "SEARCH", "VIEW_CONTENT", "CONTACT", "SUBSCRIBE"]).optional(),
+        optimizationGoal: z.enum(["OFFSITE_CONVERSIONS", "LINK_CLICKS", "LANDING_PAGE_VIEWS", "IMPRESSIONS", "REACH", "POST_ENGAGEMENT", "VIDEO_VIEWS", "LEAD_GENERATION"]).optional(),
         status: z.string().optional(),
         startTime: z.string().optional(),
         endTime: z.string().optional(),
@@ -2162,7 +2166,10 @@ export function registerMarketingRoutes(app: Express) {
       res.json({ success: true, jobId: job.id, ...result });
     } catch (error: any) {
       console.error("[MetaAdLauncher] Launch error:", error.message);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({
+        error: error.message,
+        step: (error as any).step || "Unknown",
+      });
     }
   });
 

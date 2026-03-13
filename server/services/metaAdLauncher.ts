@@ -292,7 +292,10 @@ export async function createCampaign(
     specialAdCategories?: string[];
     dailyBudget?: string;
     lifetimeBudget?: string;
+    budgetType?: "daily" | "lifetime";
     buyingType?: string;
+    isCbo?: boolean;
+    spendingLimit?: string;
   }
 ): Promise<string> {
   const creds = await getCredentialsForMerchant(merchantId);
@@ -303,6 +306,17 @@ export async function createCampaign(
     special_ad_categories: params.specialAdCategories || [],
     buying_type: params.buyingType || "AUCTION",
   };
+
+  if (params.isCbo) {
+    if (params.budgetType === "lifetime" && params.lifetimeBudget) {
+      body.lifetime_budget = Math.round(parseFloat(params.lifetimeBudget) * 100);
+    } else if (params.dailyBudget) {
+      body.daily_budget = Math.round(parseFloat(params.dailyBudget) * 100);
+    }
+    if (params.spendingLimit) {
+      body.spend_cap = Math.round(parseFloat(params.spendingLimit) * 100);
+    }
+  }
 
   const result = await metaApiPost(creds, `${creds.adAccountId}/campaigns`, body);
   console.log(`[MetaAdLauncher] Campaign created: ${result.id}`);
@@ -326,6 +340,7 @@ export async function createAdSet(
     status?: string;
     startTime?: string;
     endTime?: string;
+    isCbo?: boolean;
   }
 ): Promise<string> {
   const creds = await getCredentialsForMerchant(merchantId);
@@ -338,11 +353,13 @@ export async function createAdSet(
     status: params.status || "PAUSED",
   };
 
-  if (params.budgetType === "lifetime" && params.lifetimeBudget) {
-    body.lifetime_budget = Math.round(parseFloat(params.lifetimeBudget) * 100);
-  } else {
-    const budget = params.dailyBudget || "500";
-    body.daily_budget = Math.round(parseFloat(budget) * 100);
+  if (!params.isCbo) {
+    if (params.budgetType === "lifetime" && params.lifetimeBudget) {
+      body.lifetime_budget = Math.round(parseFloat(params.lifetimeBudget) * 100);
+    } else {
+      const budget = params.dailyBudget || "500";
+      body.daily_budget = Math.round(parseFloat(budget) * 100);
+    }
   }
 
   if (params.bidStrategy) {
@@ -407,6 +424,12 @@ export async function createAdCreative(
       }
     } else {
       body.object_story_id = params.existingPostId;
+    }
+    if (params.linkUrl) {
+      body.call_to_action = {
+        type: params.callToAction || "SHOP_NOW",
+        value: { link: params.linkUrl },
+      };
     }
     console.log(`[MetaAdLauncher] Creating AdCreative (existing post) with body:`, JSON.stringify(body));
     const result = await metaApiPost(creds, `${creds.adAccountId}/adcreatives`, body);
@@ -518,6 +541,8 @@ export async function launchAd(
     dailyBudget: string;
     lifetimeBudget?: string;
     budgetType?: "daily" | "lifetime";
+    budgetLevel?: "adset" | "campaign";
+    spendingLimit?: string;
     bidStrategy?: string;
     bidAmount?: string;
     targeting: any;
@@ -545,11 +570,15 @@ export async function launchAd(
     pageId: string;
     instagramActorId?: string;
     pixelId?: string;
+    conversionEvent?: string;
+    optimizationGoal?: string;
     status?: string;
     startTime?: string;
     endTime?: string;
   }
 ): Promise<{ campaignId: string; adsetId: string; adId: string }> {
+  const isCbo = config.budgetLevel === "campaign";
+  let currentStep = "Campaign";
   try {
     await db.update(adLaunchJobs)
       .set({ status: "launching" })
@@ -559,22 +588,37 @@ export async function launchAd(
 
     let imageHash = config.creative.imageHash;
     if (!isExistingPost && !imageHash && config.creative.imageUrl && config.creative.format !== "carousel") {
+      currentStep = "Image Upload";
       const uploaded = await uploadImageToMeta(merchantId, config.creative.imageUrl);
       imageHash = uploaded.hash;
     }
 
+    currentStep = "Campaign";
     const campaignId = await createCampaign(merchantId, {
       name: config.campaignName,
       objective: config.objective,
       status: config.status || "PAUSED",
+      isCbo,
+      dailyBudget: config.dailyBudget,
+      lifetimeBudget: config.lifetimeBudget,
+      budgetType: config.budgetType,
+      spendingLimit: config.spendingLimit,
     });
 
-    const promotedObject: Record<string, any> = {};
-    if (config.pixelId) {
-      promotedObject.pixel_id = config.pixelId;
-      promotedObject.custom_event_type = "PURCHASE";
+    let optimizationGoal = config.optimizationGoal;
+    if (!optimizationGoal) {
+      optimizationGoal = config.pixelId ? "OFFSITE_CONVERSIONS" : "LINK_CLICKS";
     }
 
+    const conversionGoals = ["OFFSITE_CONVERSIONS", "LEAD_GENERATION"];
+    const needsPromotedObject = config.pixelId && conversionGoals.includes(optimizationGoal);
+    const promotedObject: Record<string, any> = {};
+    if (needsPromotedObject) {
+      promotedObject.pixel_id = config.pixelId;
+      promotedObject.custom_event_type = config.conversionEvent || "PURCHASE";
+    }
+
+    currentStep = "Ad Set";
     const adsetId = await createAdSet(merchantId, {
       name: `${config.campaignName} - AdSet`,
       campaignId,
@@ -583,14 +627,16 @@ export async function launchAd(
       budgetType: config.budgetType,
       bidStrategy: config.bidStrategy,
       bidAmount: config.bidAmount,
-      optimizationGoal: config.pixelId ? "OFFSITE_CONVERSIONS" : "LINK_CLICKS",
+      optimizationGoal,
       targeting: config.targeting,
       promotedObject: Object.keys(promotedObject).length > 0 ? promotedObject : undefined,
       status: config.status || "PAUSED",
       startTime: config.startTime,
       endTime: config.endTime,
+      isCbo,
     });
 
+    currentStep = "Ad Creative";
     const creativeId = await createAdCreative(merchantId, {
       name: `${config.campaignName} - Creative`,
       pageId: config.pageId,
@@ -610,6 +656,7 @@ export async function launchAd(
       carouselCards: isExistingPost ? undefined : config.creative.carouselCards,
     });
 
+    currentStep = "Ad";
     const adId = await createAd(merchantId, {
       name: `${config.campaignName} - Ad`,
       adsetId,
@@ -629,10 +676,13 @@ export async function launchAd(
 
     return { campaignId, adsetId, adId };
   } catch (error: any) {
+    const stepMsg = `[${currentStep}] ${error.message}`;
     await db.update(adLaunchJobs)
-      .set({ status: "failed", errorMessage: error.message })
+      .set({ status: "failed", errorMessage: stepMsg })
       .where(eq(adLaunchJobs.id, jobId));
-    throw error;
+    const enrichedError = new Error(stepMsg);
+    (enrichedError as any).step = currentStep;
+    throw enrichedError;
   }
 }
 

@@ -63,22 +63,99 @@ const BID_STRATEGIES = [
   { value: "BID_CAP", label: "Bid Cap" },
 ];
 
-const PK_CITIES: { name: string; key: string }[] = [
-  { name: "Karachi", key: "2514980" },
-  { name: "Lahore", key: "2514964" },
-  { name: "Islamabad", key: "2514937" },
-  { name: "Rawalpindi", key: "2514997" },
-  { name: "Faisalabad", key: "2514927" },
-  { name: "Multan", key: "2514977" },
-  { name: "Peshawar", key: "2514988" },
-  { name: "Quetta", key: "2514994" },
-  { name: "Sialkot", key: "2515008" },
-  { name: "Gujranwala", key: "2514932" },
-  { name: "Hyderabad", key: "2514935" },
-  { name: "Bahawalpur", key: "2514906" },
-  { name: "Sargodha", key: "2515002" },
-  { name: "Abbottabad", key: "2514901" },
-  { name: "Mardan", key: "2514973" },
+type BudgetLevel = "adset" | "campaign";
+
+const CONVERSION_EVENTS = [
+  { value: "PURCHASE", label: "Purchase" },
+  { value: "ADD_TO_CART", label: "Add to Cart" },
+  { value: "INITIATE_CHECKOUT", label: "Initiate Checkout" },
+  { value: "LEAD", label: "Lead" },
+  { value: "COMPLETE_REGISTRATION", label: "Complete Registration" },
+  { value: "SEARCH", label: "Search" },
+  { value: "VIEW_CONTENT", label: "View Content" },
+  { value: "CONTACT", label: "Contact" },
+  { value: "SUBSCRIBE", label: "Subscribe" },
+];
+
+const OPTIMIZATION_GOALS = [
+  { value: "OFFSITE_CONVERSIONS", label: "Conversions (Offsite)" },
+  { value: "LINK_CLICKS", label: "Link Clicks" },
+  { value: "LANDING_PAGE_VIEWS", label: "Landing Page Views" },
+  { value: "IMPRESSIONS", label: "Impressions" },
+  { value: "REACH", label: "Reach" },
+  { value: "POST_ENGAGEMENT", label: "Post Engagement" },
+  { value: "VIDEO_VIEWS", label: "Video Views (ThruPlay)" },
+  { value: "LEAD_GENERATION", label: "Lead Generation" },
+];
+
+const PK_CITIES: { name: string; key: string; province: string }[] = [
+  { name: "Karachi", key: "2514980", province: "Sindh" },
+  { name: "Lahore", key: "2514964", province: "Punjab" },
+  { name: "Islamabad", key: "2514937", province: "Federal" },
+  { name: "Rawalpindi", key: "2514997", province: "Punjab" },
+  { name: "Faisalabad", key: "2514927", province: "Punjab" },
+  { name: "Multan", key: "2514977", province: "Punjab" },
+  { name: "Peshawar", key: "2514988", province: "KPK" },
+  { name: "Quetta", key: "2514994", province: "Balochistan" },
+  { name: "Sialkot", key: "2515008", province: "Punjab" },
+  { name: "Gujranwala", key: "2514932", province: "Punjab" },
+  { name: "Hyderabad", key: "2514935", province: "Sindh" },
+  { name: "Bahawalpur", key: "2514906", province: "Punjab" },
+  { name: "Sargodha", key: "2515002", province: "Punjab" },
+  { name: "Abbottabad", key: "2514901", province: "KPK" },
+  { name: "Mardan", key: "2514973", province: "KPK" },
+  { name: "Sukkur", key: "2515014", province: "Sindh" },
+  { name: "Larkana", key: "2514966", province: "Sindh" },
+  { name: "Nawabshah", key: "2514982", province: "Sindh" },
+  { name: "Mirpur Khas", key: "2514975", province: "Sindh" },
+  { name: "Jacobabad", key: "2514942", province: "Sindh" },
+  { name: "Shikarpur", key: "2515006", province: "Sindh" },
+  { name: "Khairpur", key: "2514953", province: "Sindh" },
+  { name: "Gujrat", key: "2514933", province: "Punjab" },
+  { name: "Sahiwal", key: "2515000", province: "Punjab" },
+  { name: "Jhang", key: "2514944", province: "Punjab" },
+  { name: "Rahim Yar Khan", key: "2514996", province: "Punjab" },
+  { name: "Sheikhupura", key: "2515005", province: "Punjab" },
+  { name: "Kasur", key: "2514949", province: "Punjab" },
+  { name: "Jhelum", key: "2514945", province: "Punjab" },
+  { name: "Dera Ghazi Khan", key: "2514921", province: "Punjab" },
+  { name: "Okara", key: "2514984", province: "Punjab" },
+  { name: "Chiniot", key: "2514917", province: "Punjab" },
+  { name: "Khanewal", key: "2514952", province: "Punjab" },
+  { name: "Hafizabad", key: "2514934", province: "Punjab" },
+  { name: "Mandi Bahauddin", key: "2514972", province: "Punjab" },
+  { name: "Toba Tek Singh", key: "2515017", province: "Punjab" },
+  { name: "Vehari", key: "2515020", province: "Punjab" },
+  { name: "Muzaffargarh", key: "2514979", province: "Punjab" },
+  { name: "Layyah", key: "2514967", province: "Punjab" },
+  { name: "Swat", key: "2515015", province: "KPK" },
+  { name: "Kohat", key: "2514959", province: "KPK" },
+  { name: "Dera Ismail Khan", key: "2514922", province: "KPK" },
+  { name: "Bannu", key: "2514907", province: "KPK" },
+  { name: "Mansehra", key: "2514974", province: "KPK" },
+  { name: "Charsadda", key: "2514916", province: "KPK" },
+  { name: "Nowshera", key: "2514983", province: "KPK" },
+  { name: "Swabi", key: "2515013", province: "KPK" },
+  { name: "Mingora", key: "2787834", province: "KPK" },
+  { name: "Turbat", key: "2515018", province: "Balochistan" },
+  { name: "Khuzdar", key: "2514955", province: "Balochistan" },
+  { name: "Hub", key: "2753551", province: "Balochistan" },
+  { name: "Chaman", key: "2514915", province: "Balochistan" },
+  { name: "Gwadar", key: "2514931", province: "Balochistan" },
+  { name: "Muzaffarabad", key: "2514978", province: "AJK" },
+  { name: "Mirpur", key: "2514976", province: "AJK" },
+  { name: "Gilgit", key: "2514929", province: "GB" },
+  { name: "Skardu", key: "2515009", province: "GB" },
+];
+
+const PK_PROVINCES = [
+  { name: "Punjab", label: "Punjab" },
+  { name: "Sindh", label: "Sindh" },
+  { name: "KPK", label: "Khyber Pakhtunkhwa" },
+  { name: "Balochistan", label: "Balochistan" },
+  { name: "Federal", label: "Federal Capital" },
+  { name: "AJK", label: "Azad Kashmir" },
+  { name: "GB", label: "Gilgit-Baltistan" },
 ];
 
 const PLACEMENTS = [
@@ -386,10 +463,15 @@ export default function MetaAdLauncher() {
   const [campaignName, setCampaignName] = useState("");
   const [objective, setObjective] = useState("OUTCOME_SALES");
   const [budgetType, setBudgetType] = useState<BudgetType>("daily");
+  const [budgetLevel, setBudgetLevel] = useState<BudgetLevel>("adset");
   const [dailyBudget, setDailyBudget] = useState("500");
   const [lifetimeBudget, setLifetimeBudget] = useState("5000");
+  const [spendingLimit, setSpendingLimit] = useState("");
   const [bidStrategy, setBidStrategy] = useState("LOWEST_COST_WITHOUT_CAP");
   const [bidAmount, setBidAmount] = useState("");
+  const [selectedPixelId, setSelectedPixelId] = useState("");
+  const [conversionEvent, setConversionEvent] = useState("PURCHASE");
+  const [optimizationGoal, setOptimizationGoal] = useState("");
   const [startDate, setStartDate] = useState<Date | undefined>(undefined);
   const [startTime, setStartTime] = useState("00:00");
   const [endDate, setEndDate] = useState<Date | undefined>(undefined);
@@ -398,11 +480,14 @@ export default function MetaAdLauncher() {
   const [minAge, setMinAge] = useState("18");
   const [maxAge, setMaxAge] = useState("65");
   const [gender, setGender] = useState("all");
+  const [allPakistan, setAllPakistan] = useState(false);
   const [selectedCities, setSelectedCities] = useState<string[]>(["Karachi", "Lahore"]);
+  const [cityFilter, setCityFilter] = useState("");
   const [interests, setInterests] = useState<Interest[]>([]);
   const [interestSearch, setInterestSearch] = useState("");
   const [selectedPlacements, setSelectedPlacements] = useState<string[]>([]);
   const [autoPlacement, setAutoPlacement] = useState(true);
+  const [advantagePlusAudience, setAdvantagePlusAudience] = useState(false);
   const [selectedAudiences, setSelectedAudiences] = useState<{ id: string; name: string }[]>([]);
   const [excludedAudiences, setExcludedAudiences] = useState<{ id: string; name: string }[]>([]);
 
@@ -487,8 +572,15 @@ export default function MetaAdLauncher() {
   });
 
   const pageId = oauthStatus?.pageId || pagesData?.pages?.[0]?.id || "";
-  const pixelId = oauthStatus?.pixelId || pixelsData?.pixels?.[0]?.id || "";
   const pageName = oauthStatus?.pageName || pagesData?.pages?.[0]?.name || "";
+  const availablePixels: { id: string; name: string }[] = pixelsData?.pixels || [];
+  const effectivePixelId = selectedPixelId || oauthStatus?.pixelId || availablePixels[0]?.id || "";
+
+  useEffect(() => {
+    if (!selectedPixelId && effectivePixelId) {
+      setSelectedPixelId(effectivePixelId);
+    }
+  }, [effectivePixelId]);
 
   const mediaWarnings = adFormat === "single_image" ? [...validateMediaUrl(imageUrl, "image"), ...imageDimWarnings] : [];
 
@@ -506,13 +598,15 @@ export default function MetaAdLauncher() {
   const launchMutation = useMutation({
     mutationFn: async () => {
       const targeting: any = {
-        geo_locations: {
-          countries: ["PK"],
-          cities: selectedCities.map(cityName => {
-            const cityData = PK_CITIES.find(c => c.name === cityName);
-            return { key: cityData?.key || "", name: cityName, country: "PK" };
-          }),
-        },
+        geo_locations: allPakistan
+          ? { countries: ["PK"] }
+          : {
+              countries: ["PK"],
+              cities: selectedCities.map(cityName => {
+                const cityData = PK_CITIES.find(c => c.name === cityName);
+                return { key: cityData?.key || "", name: cityName, country: "PK" };
+              }),
+            },
         age_min: parseInt(minAge),
         age_max: parseInt(maxAge),
       };
@@ -526,8 +620,11 @@ export default function MetaAdLauncher() {
       if (excludedAudiences.length > 0) {
         targeting.excluded_custom_audiences = excludedAudiences.map(a => ({ id: a.id, name: a.name }));
       }
+      if (advantagePlusAudience) {
+        targeting.targeting_optimization = "expansion_all";
+      }
       if (!autoPlacement && selectedPlacements.length > 0) {
-        const platforms = [...new Set(selectedPlacements.map(id => PLACEMENTS.find(p => p.id === id)?.platform).filter(Boolean))];
+        const platforms = Array.from(new Set(selectedPlacements.map(id => PLACEMENTS.find(p => p.id === id)?.platform).filter(Boolean)));
         targeting.publisher_platforms = platforms;
         const fbPositions = selectedPlacements.filter(id => PLACEMENTS.find(p => p.id === id)?.platform === "facebook").map(id => PLACEMENTS.find(p => p.id === id)?.position).filter(Boolean);
         const igPositions = selectedPlacements.filter(id => PLACEMENTS.find(p => p.id === id)?.platform === "instagram").map(id => PLACEMENTS.find(p => p.id === id)?.position).filter(Boolean);
@@ -543,6 +640,10 @@ export default function MetaAdLauncher() {
       if (adFormat === "existing_post" && selectedPost) {
         creative.existingPostId = selectedPost.id;
         creative.existingPostSource = selectedPost.source;
+        if (linkUrl) {
+          creative.linkUrl = linkUrl;
+          creative.callToAction = callToAction;
+        }
       } else {
         creative.primaryText = primaryText;
         creative.headline = headline || undefined;
@@ -568,10 +669,20 @@ export default function MetaAdLauncher() {
         campaignName, objective,
         dailyBudget: budgetType === "daily" ? dailyBudget : "500",
         budgetType,
+        budgetLevel,
         targeting, creative, pageId,
-        pixelId: pixelId || undefined,
+        pixelId: (selectedPixelId && selectedPixelId !== "none") ? selectedPixelId : undefined,
         status: "PAUSED",
       };
+      if (selectedPixelId && selectedPixelId !== "none") {
+        payload.conversionEvent = conversionEvent;
+      }
+      if (optimizationGoal) {
+        payload.optimizationGoal = optimizationGoal;
+      }
+      if (budgetLevel === "campaign" && spendingLimit) {
+        payload.spendingLimit = spendingLimit;
+      }
       if (budgetType === "lifetime") payload.lifetimeBudget = lifetimeBudget;
       if (bidStrategy !== "LOWEST_COST_WITHOUT_CAP") {
         payload.bidStrategy = bidStrategy;
@@ -598,7 +709,8 @@ export default function MetaAdLauncher() {
       queryClient.invalidateQueries({ queryKey: ["/api/meta/launch-jobs"] });
     },
     onError: (error: any) => {
-      toast({ title: "Launch Failed", description: error.message, variant: "destructive" });
+      const msg = error.message || "Unknown error";
+      toast({ title: "Launch Failed", description: msg, variant: "destructive" });
     },
   });
 
@@ -632,7 +744,7 @@ export default function MetaAdLauncher() {
   const currentIdx = steps.findIndex(s => s.key === step);
   const needsBidAmount = bidStrategy === "COST_CAP" || bidStrategy === "BID_CAP";
   const canProceedFromCampaign = campaignName.trim() && parseFloat(budgetValue) >= budgetMin && (!needsBidAmount || (bidAmount && parseFloat(bidAmount) > 0));
-  const canProceedFromTargeting = selectedCities.length > 0;
+  const canProceedFromTargeting = allPakistan || selectedCities.length > 0;
   let isValidUrl = false;
   try { isValidUrl = !!linkUrl.trim() && !!new URL(linkUrl); } catch {}
   const canProceedFromCreative = adFormat === "existing_post"
@@ -680,7 +792,7 @@ export default function MetaAdLauncher() {
         <Card data-testid="card-campaign-step">
           <CardHeader>
             <CardTitle className="text-base">Campaign Setup</CardTitle>
-            <CardDescription>Configure your campaign name, objective, budget and schedule</CardDescription>
+            <CardDescription>Configure your campaign name, objective, budget, pixel and schedule</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-1.5">
@@ -697,6 +809,59 @@ export default function MetaAdLauncher() {
                 </Select>
               </div>
               <div className="space-y-1.5">
+                <Label>Optimization Goal</Label>
+                <Select value={optimizationGoal || (selectedPixelId ? "OFFSITE_CONVERSIONS" : "LINK_CLICKS")} onValueChange={setOptimizationGoal}>
+                  <SelectTrigger data-testid="select-optimization-goal"><SelectValue /></SelectTrigger>
+                  <SelectContent>{OPTIMIZATION_GOALS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Auto-selected based on pixel. Override if needed.</p>
+              </div>
+            </div>
+
+            <Separator />
+            <h3 className="font-medium text-sm">Pixel & Conversion Tracking</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Facebook Pixel</Label>
+                {availablePixels.length > 0 ? (
+                  <Select value={selectedPixelId} onValueChange={setSelectedPixelId}>
+                    <SelectTrigger data-testid="select-pixel"><SelectValue placeholder="Select pixel" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No Pixel</SelectItem>
+                      {availablePixels.map(p => <SelectItem key={p.id} value={p.id}>{p.name || p.id}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <div className="text-sm text-muted-foreground border rounded-md p-2">
+                    {selectedPixelId ? `Pixel: ${selectedPixelId}` : "No pixels found. Set up a pixel in Facebook Business Manager."}
+                  </div>
+                )}
+              </div>
+              {selectedPixelId && selectedPixelId !== "none" && (
+                <div className="space-y-1.5">
+                  <Label>Conversion Event</Label>
+                  <Select value={conversionEvent} onValueChange={setConversionEvent}>
+                    <SelectTrigger data-testid="select-conversion-event"><SelectValue /></SelectTrigger>
+                    <SelectContent>{CONVERSION_EVENTS.map(e => <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+
+            <Separator />
+            <h3 className="font-medium text-sm">Budget</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="space-y-1.5">
+                <Label>Budget Level</Label>
+                <Select value={budgetLevel} onValueChange={(v) => setBudgetLevel(v as BudgetLevel)}>
+                  <SelectTrigger data-testid="select-budget-level"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="adset">Ad Set Budget (ABO)</SelectItem>
+                    <SelectItem value="campaign">Campaign Budget (CBO)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
                 <Label>Budget Type</Label>
                 <Select value={budgetType} onValueChange={(v) => setBudgetType(v as BudgetType)}>
                   <SelectTrigger data-testid="select-budget-type"><SelectValue /></SelectTrigger>
@@ -706,9 +871,6 @@ export default function MetaAdLauncher() {
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label htmlFor="budget-amount">{budgetType === "daily" ? "Daily" : "Lifetime"} Budget (PKR)</Label>
                 <Input
@@ -719,6 +881,16 @@ export default function MetaAdLauncher() {
                 />
                 {budgetWarning && <p className="text-xs text-destructive">{budgetWarning}</p>}
               </div>
+            </div>
+            {budgetLevel === "campaign" && (
+              <div className="space-y-1.5">
+                <Label htmlFor="spending-limit">Campaign Spending Limit (PKR, optional)</Label>
+                <Input id="spending-limit" type="number" placeholder="Leave empty for no limit" value={spendingLimit} onChange={e => setSpendingLimit(e.target.value)} data-testid="input-spending-limit" />
+                <p className="text-xs text-muted-foreground">CBO: Meta distributes budget across ad sets automatically for best results.</p>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label>Bid Strategy</Label>
                 <Select value={bidStrategy} onValueChange={setBidStrategy}>
@@ -726,15 +898,14 @@ export default function MetaAdLauncher() {
                   <SelectContent>{BID_STRATEGIES.map(b => <SelectItem key={b.value} value={b.value}>{b.label}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
+              {(bidStrategy === "COST_CAP" || bidStrategy === "BID_CAP") && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="bid-amount">{bidStrategy === "COST_CAP" ? "Cost Cap" : "Bid Cap"} (PKR) *</Label>
+                  <Input id="bid-amount" type="number" placeholder="e.g. 50" value={bidAmount} onChange={e => setBidAmount(e.target.value)} data-testid="input-bid-amount" />
+                  {(!bidAmount || parseFloat(bidAmount) <= 0) && <p className="text-xs text-destructive">Required when using {bidStrategy === "COST_CAP" ? "Cost Cap" : "Bid Cap"} strategy</p>}
+                </div>
+              )}
             </div>
-
-            {(bidStrategy === "COST_CAP" || bidStrategy === "BID_CAP") && (
-              <div className="space-y-1.5">
-                <Label htmlFor="bid-amount">{bidStrategy === "COST_CAP" ? "Cost Cap" : "Bid Cap"} (PKR) *</Label>
-                <Input id="bid-amount" type="number" placeholder="e.g. 50" value={bidAmount} onChange={e => setBidAmount(e.target.value)} data-testid="input-bid-amount" />
-                {(!bidAmount || parseFloat(bidAmount) <= 0) && <p className="text-xs text-destructive">Required when using {bidStrategy === "COST_CAP" ? "Cost Cap" : "Bid Cap"} strategy</p>}
-              </div>
-            )}
 
             <Separator />
             <h3 className="font-medium text-sm">Schedule (Optional)</h3>
@@ -822,20 +993,81 @@ export default function MetaAdLauncher() {
               </div>
             </div>
 
+            <Separator />
+
             <div className="space-y-2">
-              <Label>Target Cities</Label>
-              <div className="flex flex-wrap gap-2">
-                {PK_CITIES.map(({ name: cityName }) => {
-                  const isSelected = selectedCities.includes(cityName);
-                  return (
-                    <Badge key={cityName} variant={isSelected ? "default" : "outline"} className="cursor-pointer select-none"
-                      onClick={() => setSelectedCities(prev => isSelected ? prev.filter(c => c !== cityName) : [...prev, cityName])}
-                      data-testid={`badge-city-${cityName.toLowerCase()}`}
-                    >{cityName}</Badge>
-                  );
-                })}
+              <div className="flex items-center justify-between">
+                <Label>Location Targeting</Label>
+                <div className="flex items-center gap-2">
+                  <Switch checked={allPakistan} onCheckedChange={(v) => { setAllPakistan(v); if (v) setSelectedCities([]); }} data-testid="switch-all-pakistan" />
+                  <span className="text-sm font-medium">{allPakistan ? "All Pakistan" : "Select Cities"}</span>
+                </div>
               </div>
-              <p className="text-xs text-muted-foreground">{selectedCities.length} cities selected</p>
+              {allPakistan ? (
+                <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg p-3">
+                  <p className="text-sm text-green-700 dark:text-green-400">Targeting all of Pakistan (country-level). Your ads will reach audiences nationwide.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap gap-1.5">
+                      {PK_PROVINCES.map(prov => {
+                        const provinceCities = PK_CITIES.filter(c => c.province === prov.name).map(c => c.name);
+                        const allSelected = provinceCities.every(c => selectedCities.includes(c));
+                        return (
+                          <Badge key={prov.name} variant={allSelected ? "default" : "outline"} className="cursor-pointer select-none text-xs"
+                            onClick={() => {
+                              if (allSelected) setSelectedCities(prev => prev.filter(c => !provinceCities.includes(c)));
+                              else setSelectedCities(prev => Array.from(new Set([...prev, ...provinceCities])));
+                            }}
+                            data-testid={`badge-province-${prov.name.toLowerCase()}`}
+                          >{prov.label}</Badge>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-muted-foreground">Click a province to select/deselect all its cities</p>
+                  </div>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Filter cities..."
+                      value={cityFilter} onChange={e => setCityFilter(e.target.value)}
+                      className="pl-9 h-8 text-sm" data-testid="input-city-filter"
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto">
+                    {PK_CITIES
+                      .filter(c => !cityFilter || c.name.toLowerCase().includes(cityFilter.toLowerCase()))
+                      .map(({ name: cityName, province }) => {
+                        const isSelected = selectedCities.includes(cityName);
+                        return (
+                          <Badge key={cityName} variant={isSelected ? "default" : "outline"} className="cursor-pointer select-none text-xs"
+                            onClick={() => setSelectedCities(prev => isSelected ? prev.filter(c => c !== cityName) : [...prev, cityName])}
+                            data-testid={`badge-city-${cityName.toLowerCase().replace(/\s+/g, "-")}`}
+                          >{cityName}</Badge>
+                        );
+                      })}
+                  </div>
+                  <p className="text-xs text-muted-foreground">{selectedCities.length} of {PK_CITIES.length} cities selected</p>
+                </>
+              )}
+            </div>
+
+            <Separator />
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Advantage+ Audience</Label>
+                <div className="flex items-center gap-2">
+                  <Switch checked={advantagePlusAudience} onCheckedChange={setAdvantagePlusAudience} data-testid="switch-advantage-plus" />
+                  <span className="text-sm text-muted-foreground">{advantagePlusAudience ? "On" : "Off"}</span>
+                </div>
+              </div>
+              {advantagePlusAudience && (
+                <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                  <p className="text-sm text-blue-700 dark:text-blue-400">Meta will use your targeting as a suggestion and automatically expand the audience beyond your selections for better results.</p>
+                </div>
+              )}
             </div>
 
             <Separator />
@@ -1066,6 +1298,26 @@ export default function MetaAdLauncher() {
               </div>
             )}
 
+            {adFormat === "existing_post" && selectedPost && (
+              <div className="space-y-3 border rounded-lg p-3 bg-muted/30">
+                <h4 className="text-sm font-medium">Conversion Link (Optional)</h4>
+                <p className="text-xs text-muted-foreground">Add a website URL for conversion tracking. Meta will show this as a CTA button on your promoted post.</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ep-link-url">Website URL</Label>
+                    <Input id="ep-link-url" type="url" placeholder="https://yourstore.com" value={linkUrl} onChange={e => setLinkUrl(e.target.value)} data-testid="input-existing-post-link-url" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Call to Action</Label>
+                    <Select value={callToAction} onValueChange={setCallToAction}>
+                      <SelectTrigger data-testid="select-existing-post-cta"><SelectValue /></SelectTrigger>
+                      <SelectContent>{CTA_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {adFormat !== "existing_post" && (
             <div className="space-y-1.5">
               <Label htmlFor="primary-text">Primary Text *</Label>
@@ -1216,8 +1468,17 @@ export default function MetaAdLauncher() {
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between"><span className="text-muted-foreground">Name</span><span className="font-medium" data-testid="review-campaign-name">{campaignName}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Objective</span><span>{OBJECTIVES.find(o => o.value === objective)?.label}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Budget Level</span><Badge variant="outline">{budgetLevel === "campaign" ? "CBO" : "ABO"}</Badge></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Budget</span><span>PKR {budgetValue}/{budgetType === "daily" ? "day" : "total"}</span></div>
+                  {budgetLevel === "campaign" && spendingLimit && <div className="flex justify-between"><span className="text-muted-foreground">Spending Limit</span><span>PKR {spendingLimit}</span></div>}
                   <div className="flex justify-between"><span className="text-muted-foreground">Bid Strategy</span><span>{BID_STRATEGIES.find(b => b.value === bidStrategy)?.label}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Optimization</span><span>{OPTIMIZATION_GOALS.find(o => o.value === (optimizationGoal || (selectedPixelId ? "OFFSITE_CONVERSIONS" : "LINK_CLICKS")))?.label}</span></div>
+                  {selectedPixelId && selectedPixelId !== "none" && (
+                    <>
+                      <div className="flex justify-between"><span className="text-muted-foreground">Pixel</span><span className="font-mono text-xs">{availablePixels.find(p => p.id === selectedPixelId)?.name || selectedPixelId}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">Conv. Event</span><span>{CONVERSION_EVENTS.find(e => e.value === conversionEvent)?.label}</span></div>
+                    </>
+                  )}
                   {startDate && <div className="flex justify-between"><span className="text-muted-foreground">Start</span><span>{format(startDate, "PPP")} {startTime}</span></div>}
                   {endDate && <div className="flex justify-between"><span className="text-muted-foreground">End</span><span>{format(endDate, "PPP")} {endTime}</span></div>}
                 </div>
@@ -1228,8 +1489,10 @@ export default function MetaAdLauncher() {
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between"><span className="text-muted-foreground">Age</span><span>{minAge} - {maxAge}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Gender</span><span className="capitalize">{gender}</span></div>
-                  <div><span className="text-muted-foreground">Cities: </span><span>{selectedCities.join(", ")}</span></div>
+                  <div><span className="text-muted-foreground">Location: </span><span>{allPakistan ? "All Pakistan" : `${selectedCities.length} cities`}</span></div>
+                  {!allPakistan && selectedCities.length > 0 && <div className="text-xs text-muted-foreground pl-2">{selectedCities.join(", ")}</div>}
                   {interests.length > 0 && <div><span className="text-muted-foreground">Interests: </span><span>{interests.map(i => i.name).join(", ")}</span></div>}
+                  {advantagePlusAudience && <div className="flex justify-between"><span className="text-muted-foreground">Advantage+</span><Badge variant="secondary" className="text-xs">Enabled</Badge></div>}
                   <div className="flex justify-between"><span className="text-muted-foreground">Placements</span><span>{autoPlacement ? "Automatic" : `${selectedPlacements.length} selected`}</span></div>
                 </div>
               </div>
@@ -1252,6 +1515,12 @@ export default function MetaAdLauncher() {
                           <p className="text-[10px] text-muted-foreground font-mono mt-0.5">ID: {selectedPost.id}</p>
                         </div>
                       </div>
+                      {linkUrl && (
+                        <div className="text-xs mt-1">
+                          <span className="text-muted-foreground">CTA Link: </span>
+                          <a href={linkUrl} target="_blank" rel="noreferrer" className="text-primary break-all">{linkUrl}</a>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <>
