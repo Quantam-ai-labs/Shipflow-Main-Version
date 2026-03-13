@@ -443,7 +443,7 @@ export default function MetaAdLauncher() {
   const { data: fbPostsData, isLoading: fbPostsLoading } = useQuery<{ posts: ExistingPost[] }>({
     queryKey: ["/api/meta/page-posts", postSearchDebounce],
     queryFn: async () => {
-      const url = postSearchDebounce ? `/api/meta/page-posts?search=${encodeURIComponent(postSearchDebounce)}` : `/api/meta/page-posts`;
+      const url = postSearchDebounce ? `/api/meta/page-posts?includeVideos=true&search=${encodeURIComponent(postSearchDebounce)}` : `/api/meta/page-posts?includeVideos=true`;
       const res = await fetch(url, { credentials: "include" });
       return res.json();
     },

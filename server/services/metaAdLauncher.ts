@@ -170,6 +170,79 @@ export async function fetchBrandedContentPosts(merchantId: string, pageId: strin
   }
 }
 
+export async function fetchPageVideos(merchantId: string, pageId: string, search?: string): Promise<any[]> {
+  try {
+    const pageToken = await getPageAccessToken(merchantId, pageId);
+    const url = new URL(`${META_BASE_URL}/${pageId}/videos`);
+    url.searchParams.set("access_token", pageToken);
+    url.searchParams.set("fields", "id,title,description,source,picture,created_time,length,likes.summary(true),comments.summary(true)");
+    url.searchParams.set("limit", "50");
+    const response = await fetch(url.toString());
+    const data = await response.json();
+    if (!response.ok) return [];
+    let videos = data.data || [];
+    if (search && search.trim()) {
+      const q = search.toLowerCase();
+      videos = videos.filter((v: any) =>
+        (v.title || "").toLowerCase().includes(q) ||
+        (v.description || "").toLowerCase().includes(q) ||
+        (v.id || "").toLowerCase().includes(q)
+      );
+    }
+    return videos.map((v: any) => ({
+      id: `${pageId}_${v.id}`,
+      message: v.title || v.description || "",
+      fullPicture: v.picture || "",
+      createdTime: v.created_time,
+      type: "video",
+      statusType: "added_video",
+      permalinkUrl: v.source || "",
+      likes: v.likes?.summary?.total_count || 0,
+      comments: v.comments?.summary?.total_count || 0,
+      shares: 0,
+      source: "facebook",
+      videoSource: v.source || "",
+      duration: v.length || 0,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchAdAccountImages(merchantId: string): Promise<any[]> {
+  const creds = await getCredentialsForMerchant(merchantId);
+  const data = await metaApiGet(creds, `${creds.adAccountId}/adimages`, {
+    fields: "hash,name,url,width,height,created_time,status",
+  });
+  const images = data.data || [];
+  return Object.values(images).filter((img: any) => img && typeof img === "object" && img.hash).map((img: any) => ({
+    hash: img.hash,
+    name: img.name || "",
+    url: img.url || img.url_128 || "",
+    width: img.width || 0,
+    height: img.height || 0,
+    createdTime: img.created_time,
+    status: img.status || "ACTIVE",
+  }));
+}
+
+export async function fetchAdAccountVideos(merchantId: string): Promise<any[]> {
+  const creds = await getCredentialsForMerchant(merchantId);
+  const data = await metaApiGet(creds, `${creds.adAccountId}/advideos`, {
+    fields: "id,title,source,picture,created_time,length,status",
+  });
+  const videos = data.data || [];
+  return videos.map((v: any) => ({
+    id: v.id,
+    title: v.title || "",
+    source: v.source || "",
+    picture: v.picture || "",
+    createdTime: v.created_time,
+    duration: v.length || 0,
+    status: v.status || "ACTIVE",
+  }));
+}
+
 export async function fetchAdAccountPixels(merchantId: string): Promise<any[]> {
   const creds = await getCredentialsForMerchant(merchantId);
   const data = await metaApiGet(creds, `${creds.adAccountId}/adspixels`, {
@@ -312,10 +385,10 @@ export async function createAdCreative(
       if (params.instagramActorId) {
         body.instagram_actor_id = params.instagramActorId;
       }
-      body.object_story_spec = { page_id: params.pageId, instagram_actor_id: params.instagramActorId || params.pageId };
     } else {
       body.object_story_id = params.existingPostId;
     }
+    console.log(`[MetaAdLauncher] Creating AdCreative (existing post) with body:`, JSON.stringify(body));
     const result = await metaApiPost(creds, `${creds.adAccountId}/adcreatives`, body);
     console.log(`[MetaAdLauncher] AdCreative (existing post) created: ${result.id}`);
     return result.id;

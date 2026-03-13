@@ -26,8 +26,11 @@ import {
   fetchFacebookPages,
   fetchAdAccountPixels,
   fetchPagePosts,
+  fetchPageVideos,
   fetchInstagramMedia,
   fetchBrandedContentPosts,
+  fetchAdAccountImages,
+  fetchAdAccountVideos,
   launchAd,
   bulkLaunchAds,
   uploadImageToMeta,
@@ -2001,8 +2004,17 @@ export function registerMarketingRoutes(app: Express) {
       const [merchant] = await db.select({ pageId: merchants.metaSelectedPageId }).from(merchants).where(eq(merchants.id, merchantId));
       if (!merchant?.pageId) return res.status(400).json({ error: "No Facebook page connected" });
       const search = req.query.search as string | undefined;
-      const posts = await fetchPagePosts(merchantId, merchant.pageId, search);
-      res.json({ posts });
+      const includeVideos = req.query.includeVideos === "true";
+      const [posts, videos] = await Promise.all([
+        fetchPagePosts(merchantId, merchant.pageId, search),
+        includeVideos ? fetchPageVideos(merchantId, merchant.pageId, search) : Promise.resolve([]),
+      ]);
+      const postIds = new Set(posts.map((p: any) => p.id));
+      const uniqueVideos = videos.filter((v: any) => !postIds.has(v.id));
+      const combined = [...posts, ...uniqueVideos].sort((a: any, b: any) =>
+        new Date(b.createdTime).getTime() - new Date(a.createdTime).getTime()
+      );
+      res.json({ posts: combined });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -2029,6 +2041,39 @@ export function registerMarketingRoutes(app: Express) {
       const search = req.query.search as string | undefined;
       const posts = await fetchBrandedContentPosts(merchantId, merchant.pageId, search);
       res.json({ posts });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/meta/page-videos", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const [merchant] = await db.select({ pageId: merchants.metaSelectedPageId }).from(merchants).where(eq(merchants.id, merchantId));
+      if (!merchant?.pageId) return res.json({ videos: [] });
+      const search = req.query.search as string | undefined;
+      const videos = await fetchPageVideos(merchantId, merchant.pageId, search);
+      res.json({ videos });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/meta/ad-account-images", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const images = await fetchAdAccountImages(merchantId);
+      res.json({ images });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/meta/ad-account-videos", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const videos = await fetchAdAccountVideos(merchantId);
+      res.json({ videos });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
