@@ -193,6 +193,16 @@ export async function executeSalesLaunch(
     }
     stages[stages.length - 1] = { stage: "diagnostics", status: "success", data: { checks: diagnostics.checks } };
 
+    stages.push({ stage: "media_validation", status: "running" });
+    const mediaIssues = await validateMediaReadiness(input, creds.accessToken, merchantId);
+    if (mediaIssues.length > 0) {
+      const mediaMsg = mediaIssues.map(i => i.message).join("; ");
+      stages[stages.length - 1] = { stage: "media_validation", status: "failed", message: mediaMsg };
+      await updateJobStage(jobId, "media_validation", { status: "failed", errorMessage: mediaMsg, errorSummary: "Media validation failed" });
+      return { success: false, jobId, stages, validationIssues: mediaIssues, error: mediaMsg, errorStage: "media_validation" };
+    }
+    stages[stages.length - 1] = { stage: "media_validation", status: "success" };
+
     if (input.publishMode === "VALIDATE") {
       await updateJobStage(jobId, "complete", { status: "validated" });
       stages.push({ stage: "complete", status: "success", message: "Validation and diagnostics passed. No objects created." });

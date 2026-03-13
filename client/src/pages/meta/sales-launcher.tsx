@@ -93,6 +93,7 @@ const STAGE_LABELS: Record<string, string> = {
   normalize: "Normalizing Input",
   validate: "Validating Fields",
   diagnostics: "Running Diagnostics",
+  media_validation: "Validating Media",
   media_upload: "Uploading Media",
   media_readiness: "Checking Video Readiness",
   campaign: "Creating Campaign",
