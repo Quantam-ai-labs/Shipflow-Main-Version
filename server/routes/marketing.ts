@@ -1918,7 +1918,20 @@ export function registerMarketingRoutes(app: Express) {
         return res.json({ data: [] });
       }
       const data = await response.json();
-      res.json({ data: (data.data || []).map((item: any) => ({ id: item.id, name: item.name, audience_size: item.audience_size, path: item.path, topic: item.topic })) });
+      if (type === "adgeolocation") {
+        res.json({ data: (data.data || []).map((item: any) => ({
+          key: item.key,
+          name: item.name,
+          type: item.type,
+          country_code: item.country_code,
+          region: item.region,
+          region_id: item.region_id,
+          supports_city: item.supports_city,
+          supports_region: item.supports_region,
+        })) });
+      } else {
+        res.json({ data: (data.data || []).map((item: any) => ({ id: item.id, name: item.name, audience_size: item.audience_size, path: item.path, topic: item.topic })) });
+      }
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

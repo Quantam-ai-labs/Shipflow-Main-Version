@@ -633,7 +633,7 @@ export default function MetaAdLauncher() {
           ? { countries: ["PK"] }
           : {
               countries: ["PK"],
-              cities: selectedGeoLocations.map(loc => ({
+              cities: selectedGeoLocations.filter(loc => loc.key).map(loc => ({
                 key: loc.key,
                 name: loc.name,
                 country: loc.country_code || "PK",
