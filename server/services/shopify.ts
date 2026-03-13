@@ -310,7 +310,7 @@ export class ShopifyService {
     const clientSecret = process.env.SHOPIFY_APP_CLIENT_SECRET || '';
     const appUrl = (process.env.SHOPIFY_APP_URL || '').replace(/\/$/, '');
     const redirectUrl = process.env.SHOPIFY_APP_REDIRECT_URL || '';
-    const scopes = process.env.SHOPIFY_APP_SCOPES || 'read_all_orders,read_analytics,read_customers,write_customers,write_draft_orders,read_draft_orders,read_fulfillments,write_fulfillments,read_orders,write_orders,read_products,write_products,read_inventory,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders';
+    const scopes = process.env.SHOPIFY_APP_SCOPES || 'read_all_orders,read_analytics,read_customers,write_customers,write_draft_orders,read_draft_orders,read_fulfillments,write_fulfillments,read_orders,write_orders,read_order_edits,write_order_edits,read_products,write_products,read_inventory,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders';
 
     const missing: string[] = [];
     if (!clientId) missing.push('SHOPIFY_APP_CLIENT_ID');

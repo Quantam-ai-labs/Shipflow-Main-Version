@@ -5386,7 +5386,7 @@ export async function registerRoutes(
         merchantCreds,
       );
 
-      const requestedScopes = (process.env.SHOPIFY_APP_SCOPES || 'read_orders,write_orders,read_fulfillments,write_fulfillments,read_inventory,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders').split(',').map(s => s.trim());
+      const requestedScopes = (process.env.SHOPIFY_APP_SCOPES || 'read_orders,write_orders,read_order_edits,write_order_edits,read_fulfillments,write_fulfillments,read_inventory,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders').split(',').map(s => s.trim());
       const grantedScopes = scope ? scope.split(',').map((s: string) => s.trim()) : [];
       const isScopeSatisfied = (required: string, granted: string[]): boolean => {
         if (granted.includes(required)) return true;
@@ -6457,7 +6457,7 @@ export async function registerRoutes(
         return res.json({ connected: false, grantedScopes: [], missingScopes: [], requiredScopes: [] });
       }
 
-      const requiredScopes = (process.env.SHOPIFY_APP_SCOPES || 'read_orders,write_orders,read_fulfillments,write_fulfillments,read_inventory,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders').split(',').map(s => s.trim());
+      const requiredScopes = (process.env.SHOPIFY_APP_SCOPES || 'read_orders,write_orders,read_order_edits,write_order_edits,read_fulfillments,write_fulfillments,read_inventory,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders').split(',').map(s => s.trim());
       const grantedScopes = store.scopes ? store.scopes.split(',').map(s => s.trim()) : [];
 
       const isScopeSatisfied = (required: string, granted: string[]): boolean => {
