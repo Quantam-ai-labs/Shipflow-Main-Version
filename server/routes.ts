@@ -510,146 +510,11 @@ async function getMerchantTimezone(merchantId: string): Promise<string> {
   return tz;
 }
 
-function serveLegalPage(req: Request, res: Response, title: string, bodyHtml: string) {
-  const proto = req.headers["x-forwarded-proto"] || req.protocol || "https";
-  const host = req.get("host") || "lala-logistics.replit.app";
-  const pageUrl = `${proto}://${host}${req.originalUrl}`;
-  res.setHeader("Content-Type", "text/html; charset=utf-8");
-  res.send(`<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>${title} - 1SOL.AI</title>
-<meta property="og:title" content="${title} - 1SOL.AI"/>
-<meta property="og:type" content="website"/>
-<meta property="og:url" content="${pageUrl}"/>
-<meta property="og:description" content="${title} for the 1SOL.AI logistics and marketing automation platform."/>
-<style>body{font-family:system-ui,sans-serif;max-width:48rem;margin:0 auto;padding:2rem;line-height:1.6;color:#222}h1{font-size:1.8rem}h2{font-size:1.2rem;margin-top:1.5rem}ul,ol{padding-left:1.5rem}li{margin:.25rem 0}</style>
-</head>
-<body>
-${bodyHtml}
-</body>
-</html>`);
-}
-
 export async function registerRoutes(
   httpServer: Server,
   app: Express,
 ): Promise<Server> {
 
-  app.get("/privacy-policy", (req: Request, res: Response) => {
-    serveLegalPage(req, res, "Privacy Policy", `
-<h1>Privacy Policy</h1>
-<p><small>Last updated: March 12, 2026</small></p>
-<h2>1. Introduction</h2>
-<p>1SOL.AI ("we", "us", or "our") operates a logistics and marketing automation platform for e-commerce merchants. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our platform.</p>
-<h2>2. Information We Collect</h2>
-<p>We collect information that you provide directly to us, including:</p>
-<ul>
-<li>Account information (name, email address, business details)</li>
-<li>Shopify store data (orders, products, customer information) via authorized API access</li>
-<li>Facebook/Meta account information when you connect via OAuth (ad accounts, pages, Instagram accounts)</li>
-<li>WhatsApp Business API credentials when you connect your WhatsApp account</li>
-<li>Usage data and analytics about how you interact with our platform</li>
-</ul>
-<h2>3. How We Use Your Information</h2>
-<p>We use the information we collect to:</p>
-<ul>
-<li>Provide, maintain, and improve our platform services</li>
-<li>Process and manage your orders and order confirmations</li>
-<li>Send WhatsApp and voice-based order confirmation messages on your behalf</li>
-<li>Create and manage Facebook/Instagram advertising campaigns on your behalf</li>
-<li>Generate analytics and reports about your business performance</li>
-<li>Communicate with you about your account and our services</li>
-</ul>
-<h2>4. Data Sharing</h2>
-<p>We do not sell your personal information. We may share data with third-party service providers necessary to operate our platform, including Meta (Facebook/Instagram) for advertising services, WhatsApp for messaging services, and Shopify for e-commerce integration. All third-party providers are bound by their own privacy policies and applicable data protection laws.</p>
-<h2>5. Data Security</h2>
-<p>We implement appropriate technical and organizational security measures to protect your data, including encryption of sensitive credentials (access tokens, API keys) and secure server-side storage.</p>
-<h2>6. Data Retention</h2>
-<p>We retain your data for as long as your account is active or as needed to provide our services. You may request deletion of your data at any time by contacting us.</p>
-<h2>7. Your Rights</h2>
-<p>You have the right to:</p>
-<ul>
-<li>Access the personal data we hold about you</li>
-<li>Request correction of inaccurate data</li>
-<li>Request deletion of your data</li>
-<li>Disconnect third-party integrations (Facebook, WhatsApp) at any time</li>
-<li>Export your data in a portable format</li>
-</ul>
-<h2>8. Contact Us</h2>
-<p>If you have questions about this Privacy Policy or wish to exercise your data rights, please contact us at: <strong>usamax.mail@gmail.com</strong></p>
-`);
-  });
-
-  app.get("/terms-of-service", (req: Request, res: Response) => {
-    serveLegalPage(req, res, "Terms of Service", `
-<h1>Terms of Service</h1>
-<p><small>Last updated: March 12, 2026</small></p>
-<h2>1. Acceptance of Terms</h2>
-<p>By accessing or using the 1SOL.AI platform ("Service"), you agree to be bound by these Terms of Service. If you do not agree to these terms, you may not use the Service.</p>
-<h2>2. Description of Service</h2>
-<p>1SOL.AI provides a logistics and marketing automation platform for e-commerce merchants. Our services include order confirmation automation (via WhatsApp and voice calls), Facebook/Instagram advertising management, and analytics.</p>
-<h2>3. Account Registration</h2>
-<p>You must provide accurate and complete information when creating an account. You are responsible for maintaining the confidentiality of your account credentials and for all activities that occur under your account.</p>
-<h2>4. Third-Party Integrations</h2>
-<p>The Service integrates with third-party platforms including Shopify, Meta (Facebook/Instagram), and WhatsApp. Your use of these integrations is subject to the respective third-party terms of service. You authorize 1SOL.AI to access and manage your accounts on these platforms as necessary to provide the Service.</p>
-<h2>5. Acceptable Use</h2>
-<p>You agree not to:</p>
-<ul>
-<li>Use the Service for any unlawful purpose</li>
-<li>Send spam or unsolicited messages through the platform</li>
-<li>Violate any applicable advertising policies (Meta, WhatsApp, etc.)</li>
-<li>Attempt to gain unauthorized access to any part of the Service</li>
-<li>Interfere with the proper working of the Service</li>
-</ul>
-<h2>6. Limitation of Liability</h2>
-<p>The Service is provided "as is" without warranties of any kind. 1SOL.AI shall not be liable for any indirect, incidental, special, or consequential damages arising from your use of the Service, including any losses resulting from third-party service disruptions.</p>
-<h2>7. Termination</h2>
-<p>We may terminate or suspend your access to the Service at any time for violation of these terms. You may discontinue use of the Service and request deletion of your account at any time.</p>
-<h2>8. Contact</h2>
-<p>For questions about these Terms of Service, contact us at: <strong>usamax.mail@gmail.com</strong></p>
-`);
-  });
-
-  app.get("/data-deletion", (req: Request, res: Response) => {
-    serveLegalPage(req, res, "Data Deletion Instructions", `
-<h1>Data Deletion Instructions</h1>
-<p><small>Last updated: March 12, 2026</small></p>
-<h2>How to Request Data Deletion</h2>
-<p>If you wish to delete your data from the 1SOL.AI platform, you have the following options:</p>
-<h2>Option 1: Disconnect from Settings</h2>
-<p>You can disconnect your Facebook/Instagram account at any time by going to <strong>Settings &gt; Marketing</strong> and clicking the <strong>"Disconnect"</strong> button. This will remove your Facebook access token and associated data from our platform.</p>
-<h2>Option 2: Email Request</h2>
-<p>Send an email to <strong>usamax.mail@gmail.com</strong> with the subject line "Data Deletion Request" and include:</p>
-<ul>
-<li>Your account email address</li>
-<li>Your business/store name</li>
-<li>Whether you want partial deletion (specific integrations only) or full account deletion</li>
-</ul>
-<p>We will process your request within 30 days and confirm deletion via email.</p>
-<h2>What Gets Deleted</h2>
-<p>Upon a full deletion request, we will remove:</p>
-<ul>
-<li>Your account profile and credentials</li>
-<li>All stored Facebook/Instagram/WhatsApp access tokens</li>
-<li>Order confirmation logs and history</li>
-<li>Ad campaign data and media library items</li>
-<li>Any other personal data associated with your account</li>
-</ul>
-<p>Note: Data that has already been sent to third-party platforms (Meta, WhatsApp, Shopify) is governed by their respective data deletion policies.</p>
-<h2>Facebook Data</h2>
-<p>To revoke 1SOL.AI's access to your Facebook data, you can also remove our app from your Facebook settings:</p>
-<ol>
-<li>Go to Facebook Settings &gt; Security and Login &gt; Apps and Websites</li>
-<li>Find "1SOL.AI" in the list of active apps</li>
-<li>Click "Remove" to revoke access</li>
-</ol>
-<h2>Contact</h2>
-<p>For any questions about data deletion, contact us at: <strong>usamax.mail@gmail.com</strong></p>
-`);
-  });
 
   app.post("/api/contact", async (req: Request, res: Response) => {
     try {
@@ -657,11 +522,11 @@ export async function registerRoutes(
       if (!name || !email || !message) {
         return res.status(400).json({ message: "Name, email, and message are required" });
       }
-      try {
-        const { sendContactEmail } = await import("./services/email");
-        await sendContactEmail({ name, email, phone, company, message });
-      } catch (emailErr: any) {
-        console.warn("[Contact] Email send failed:", emailErr.message);
+      const { sendContactEmail } = await import("./services/email");
+      const result = await sendContactEmail({ name, email, phone, company, message });
+      if (!result.success) {
+        console.error("[Contact] Email send failed:", result.error);
+        return res.status(500).json({ message: "Failed to send message. Please try again later." });
       }
       res.json({ success: true });
     } catch (err: any) {

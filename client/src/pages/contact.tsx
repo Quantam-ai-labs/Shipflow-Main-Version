@@ -260,6 +260,23 @@ export default function ContactPage() {
                   </div>
                 </CardContent>
               </Card>
+              <Card className="overflow-hidden" data-testid="card-location-map">
+                <div className="relative w-full h-40 bg-muted">
+                  <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-primary/5 to-primary/10">
+                    <div className="text-center">
+                      <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-2">
+                        <MapPin className="w-6 h-6 text-primary" />
+                      </div>
+                      <p className="font-semibold text-sm">Lahore, Pakistan</p>
+                      <p className="text-xs text-muted-foreground">Punjab, PK 54000</p>
+                    </div>
+                  </div>
+                  <div className="absolute inset-0 opacity-[0.08]" style={{
+                    backgroundImage: "radial-gradient(circle, currentColor 1px, transparent 1px)",
+                    backgroundSize: "20px 20px",
+                  }} />
+                </div>
+              </Card>
               <Card className="bg-primary/5 border-primary/20">
                 <CardContent className="p-6">
                   <h3 className="font-semibold text-sm mb-2">Need help right away?</h3>

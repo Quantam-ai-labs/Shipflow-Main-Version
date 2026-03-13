@@ -594,12 +594,20 @@ const integrations = [
 ];
 
 function IntegrationSlider() {
+  const [isPaused, setIsPaused] = useState(false);
+
   return (
-    <div className="overflow-hidden py-8">
-      <motion.div
-        animate={{ x: ["0%", "-50%"] }}
-        transition={{ duration: 25, repeat: Infinity, ease: "linear" }}
+    <div
+      className="overflow-hidden py-8"
+      onMouseEnter={() => setIsPaused(true)}
+      onMouseLeave={() => setIsPaused(false)}
+    >
+      <div
         className="flex gap-8 w-max"
+        style={{
+          animation: "slider-scroll 25s linear infinite",
+          animationPlayState: isPaused ? "paused" : "running",
+        }}
       >
         {[...integrations, ...integrations].map((item, i) => {
           const Icon = item.icon;
@@ -615,7 +623,13 @@ function IntegrationSlider() {
             </div>
           );
         })}
-      </motion.div>
+      </div>
+      <style>{`
+        @keyframes slider-scroll {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+      `}</style>
     </div>
   );
 }
