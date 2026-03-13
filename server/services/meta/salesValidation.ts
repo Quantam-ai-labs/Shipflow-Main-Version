@@ -50,7 +50,9 @@ async function logValidationCall(merchantId: string | undefined, endpoint: strin
       httpStatus: status,
       success: ok,
     });
-  } catch {}
+  } catch (logErr) {
+    console.warn("[Validation] Failed to write API log:", logErr instanceof Error ? logErr.message : logErr);
+  }
 }
 
 export async function validateConnection(accessToken: string, adAccountId: string, pageId: string, merchantId?: string): Promise<ValidationIssue[]> {
@@ -121,7 +123,7 @@ export async function validateConnection(accessToken: string, adAccountId: strin
   return issues;
 }
 
-export function validateMediaReadiness(input: SalesLaunchInput): ValidationIssue[] {
+export function validateMediaFields(input: SalesLaunchInput): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
 
   if (input.mode === "UPLOAD_IMAGE" && !input.imageHash && !input.imageUrl) {
@@ -157,11 +159,146 @@ export function validateMediaReadiness(input: SalesLaunchInput): ValidationIssue
   return issues;
 }
 
+export async function validateMediaReadiness(
+  input: SalesLaunchInput,
+  accessToken: string,
+  merchantId?: string,
+): Promise<ValidationIssue[]> {
+  const fieldIssues = validateMediaFields(input);
+  if (fieldIssues.length > 0) return fieldIssues;
+
+  const issues: ValidationIssue[] = [];
+
+  if (input.mode === "UPLOAD_IMAGE" && input.imageHash) {
+    try {
+      const actId = input.adAccountId.startsWith("act_") ? input.adAccountId : `act_${input.adAccountId}`;
+      const url = new URL(`${META_BASE_URL}/${actId}/adimages`);
+      url.searchParams.set("access_token", accessToken);
+      url.searchParams.set("hashes", JSON.stringify([input.imageHash]));
+      const response = await fetch(url.toString());
+      const data = await response.json();
+      await logValidationCall(merchantId, `${actId}/adimages?hashes`, response.status, response.ok, data);
+
+      if (!response.ok) {
+        issues.push({
+          code: "IMAGE_HASH_NOT_FOUND",
+          field: "imageHash",
+          stage: "media",
+          message: "Could not verify image hash on Meta. The image may not have been uploaded successfully.",
+          fixSuggestion: "Re-upload the image and try again.",
+        });
+      } else {
+        const images = data?.data;
+        if (!images || (Array.isArray(images) && images.length === 0)) {
+          issues.push({
+            code: "IMAGE_HASH_NOT_FOUND",
+            field: "imageHash",
+            stage: "media",
+            message: "Image hash does not exist on Meta. It may have been deleted or the upload failed.",
+            fixSuggestion: "Re-upload the image and try again.",
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("[Validation] Image hash check failed:", err instanceof Error ? err.message : err);
+      issues.push({
+        code: "IMAGE_CHECK_FAILED",
+        field: "imageHash",
+        stage: "media",
+        message: "Could not verify image on Meta. Please check your connection and try again.",
+        fixSuggestion: "Check your internet connection, then re-try validation.",
+      });
+    }
+  }
+
+  if (input.mode === "UPLOAD_VIDEO" && input.videoId) {
+    try {
+      const url = new URL(`${META_BASE_URL}/${input.videoId}`);
+      url.searchParams.set("access_token", accessToken);
+      url.searchParams.set("fields", "id,status");
+      const response = await fetch(url.toString());
+      const data = await response.json();
+      await logValidationCall(merchantId, input.videoId, response.status, response.ok, data);
+
+      if (!response.ok) {
+        issues.push({
+          code: "VIDEO_NOT_FOUND",
+          field: "videoId",
+          stage: "media",
+          message: "Video could not be found on Meta. It may have been deleted.",
+          fixSuggestion: "Re-upload the video and try again.",
+        });
+      } else {
+        const videoStatus = data?.status?.video_status;
+        if (videoStatus === "error") {
+          issues.push({
+            code: "VIDEO_PROCESSING_FAILED",
+            field: "videoId",
+            stage: "media",
+            message: "Video processing failed on Meta's side.",
+            fixSuggestion: "Upload a different video file.",
+          });
+        } else if (videoStatus && videoStatus !== "ready") {
+          issues.push({
+            code: "VIDEO_NOT_READY",
+            field: "videoId",
+            stage: "media",
+            message: `Video is still processing (status: ${videoStatus}). Please wait for it to finish.`,
+            fixSuggestion: "Wait a few minutes and re-run validation.",
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("[Validation] Video readiness check failed:", err instanceof Error ? err.message : err);
+      issues.push({
+        code: "VIDEO_CHECK_FAILED",
+        field: "videoId",
+        stage: "media",
+        message: "Could not verify video status on Meta.",
+        fixSuggestion: "Check your internet connection, then re-try validation.",
+      });
+    }
+  }
+
+  if (input.mode === "EXISTING_POST" && input.existingPostId) {
+    try {
+      const url = new URL(`${META_BASE_URL}/${input.existingPostId}`);
+      url.searchParams.set("access_token", accessToken);
+      url.searchParams.set("fields", "id,message,created_time");
+      const response = await fetch(url.toString());
+      const data = await response.json();
+      await logValidationCall(merchantId, input.existingPostId, response.status, response.ok, data);
+
+      if (!response.ok) {
+        const errMsg = data?.error?.message || "Post not accessible";
+        issues.push({
+          code: "POST_NOT_ACCESSIBLE",
+          field: "existingPostId",
+          stage: "media",
+          message: `Cannot access the selected post: ${errMsg}`,
+          fixSuggestion: "Ensure the post exists and you have admin access to the Page it belongs to.",
+        });
+      }
+    } catch (err) {
+      console.warn("[Validation] Post accessibility check failed:", err instanceof Error ? err.message : err);
+      issues.push({
+        code: "POST_CHECK_FAILED",
+        field: "existingPostId",
+        stage: "media",
+        message: "Could not verify post accessibility on Meta.",
+        fixSuggestion: "Check your internet connection, then re-try validation.",
+      });
+    }
+  }
+
+  return issues;
+}
+
 export function validateLaunchInput(input: SalesLaunchInput): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
 
   issues.push(...validateConnectionFields(input));
-  issues.push(...validateMediaReadiness(input));
+  issues.push(...validateMediaFields(input));
 
   if (!input.adName || !input.adName.trim()) {
     issues.push({

@@ -46,7 +46,7 @@ import {
 } from "../services/metaAdLauncher";
 import { executeSalesLaunch } from "../services/meta/salesLaunchService";
 import { runDiagnostics } from "../services/meta/salesDiagnostics";
-import { normalizeInput, validateLaunchInput, type ValidationIssue } from "../services/meta/salesValidation";
+import { normalizeInput, validateLaunchInput, validateMediaReadiness, type ValidationIssue } from "../services/meta/salesValidation";
 import { generateChatResponse, generateDashboardInsights, generateQuickStrategy } from "../services/aiInsights";
 import crypto from "crypto";
 
@@ -3036,16 +3036,21 @@ export function registerMarketingRoutes(app: Express) {
       const fieldIssues = validateLaunchInput(normalized);
 
       let connectionIssues: ValidationIssue[] = [];
+      let mediaIssues: ValidationIssue[] = [];
       try {
         const creds = await getCredentialsForMerchant(merchantId);
         const { validateConnection } = await import("../services/meta/salesValidation");
         connectionIssues = await validateConnection(creds.accessToken, creds.adAccountId, normalized.pageId, merchantId);
+
+        if (connectionIssues.length === 0) {
+          mediaIssues = await validateMediaReadiness(normalized, creds.accessToken, merchantId);
+        }
       } catch (connErr: unknown) {
         const errMsg = connErr instanceof Error ? connErr.message : String(connErr);
         connectionIssues = [{ code: "CONNECTION_ERROR", field: "connection", stage: "connection" as const, message: errMsg, fixSuggestion: "Ensure your Meta account is connected." }];
       }
 
-      const allIssues = [...fieldIssues, ...connectionIssues];
+      const allIssues = [...fieldIssues, ...connectionIssues, ...mediaIssues];
       res.json({ valid: allIssues.length === 0, issues: allIssues, normalized });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -3098,7 +3103,9 @@ export function registerMarketingRoutes(app: Express) {
             httpStatus: response.status,
             success: response.ok,
           });
-        } catch {}
+        } catch (logErr) {
+          console.warn("[Marketing] Failed to write image file upload log:", logErr instanceof Error ? logErr.message : logErr);
+        }
 
         if (!response.ok) throw new Error(data?.error?.message || "Image file upload failed");
         const images = data?.images;
@@ -3121,7 +3128,9 @@ export function registerMarketingRoutes(app: Express) {
             httpStatus: 200,
             success: true,
           });
-        } catch {}
+        } catch (logErr) {
+          console.warn("[Marketing] Failed to write image upload log:", logErr instanceof Error ? logErr.message : logErr);
+        }
       }
 
       res.json({ success: true, imageHash: result.hash, imageUrl: result.url });
@@ -3193,12 +3202,16 @@ export function registerMarketingRoutes(app: Express) {
           httpStatus: response.status,
           success: response.ok,
         });
-      } catch {}
+      } catch (logErr) {
+        console.warn("[Marketing] Failed to write video upload log:", logErr instanceof Error ? logErr.message : logErr);
+      }
 
       if (!response.ok) {
         throw new Error(data?.error?.message || "Video upload failed");
       }
-      res.json({ success: true, videoId: data.id });
+
+      const videoStatus = data.status?.video_status || "processing";
+      res.json({ success: true, videoId: data.id, status: videoStatus, pollRequired: videoStatus !== "ready" });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -3228,7 +3241,9 @@ export function registerMarketingRoutes(app: Express) {
           httpStatus: response.status,
           success: response.ok,
         });
-      } catch {}
+      } catch (logErr) {
+        console.warn("[Marketing] Failed to write video status log:", logErr instanceof Error ? logErr.message : logErr);
+      }
 
       if (!response.ok) {
         throw new Error(data?.error?.message || "Failed to check video status");

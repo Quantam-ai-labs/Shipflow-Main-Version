@@ -217,10 +217,13 @@ export async function executeSalesLaunch(
             httpStatus: 200,
             success: true,
           });
-        } catch {}
+        } catch (logErr) {
+          console.warn("[SalesLaunch] Failed to write image upload log:", logErr instanceof Error ? logErr.message : logErr);
+        }
 
         stages[stages.length - 1] = { stage: "media_upload", status: "success", message: `Image hash: ${uploadResult.hash}` };
-      } catch (uploadErr: any) {
+      } catch (uploadErr: unknown) {
+        const uploadError = uploadErr instanceof Error ? uploadErr : new Error(String(uploadErr));
         try {
           await db.insert(metaApiLogs).values({
             merchantId,
@@ -229,15 +232,17 @@ export async function executeSalesLaunch(
             endpoint: `${creds.adAccountId}/adimages`,
             method: "POST",
             requestJson: { url: input.imageUrl },
-            responseJson: { error: uploadErr.message },
+            responseJson: { error: uploadError.message },
             httpStatus: 0,
             success: false,
           });
-        } catch {}
+        } catch (logErr) {
+          console.warn("[SalesLaunch] Failed to write image upload error log:", logErr instanceof Error ? logErr.message : logErr);
+        }
 
-        stages[stages.length - 1] = { stage: "media_upload", status: "failed", message: uploadErr.message };
-        await updateJobStage(jobId, "media_upload", { status: "failed", errorMessage: uploadErr.message, errorSummary: "Media upload failed" });
-        return { success: false, jobId, stages, error: `Image upload failed: ${uploadErr.message}`, errorStage: "media_upload" };
+        stages[stages.length - 1] = { stage: "media_upload", status: "failed", message: uploadError.message };
+        await updateJobStage(jobId, "media_upload", { status: "failed", errorMessage: uploadError.message, errorSummary: "Media upload failed" });
+        return { success: false, jobId, stages, error: `Image upload failed: ${uploadError.message}`, errorStage: "media_upload" };
       }
     }
 
@@ -267,15 +272,18 @@ export async function executeSalesLaunch(
             httpStatus: response.status,
             success: response.ok,
           });
-        } catch {}
+        } catch (logErr) {
+          console.warn("[SalesLaunch] Failed to write video upload log:", logErr instanceof Error ? logErr.message : logErr);
+        }
 
         if (!response.ok) throw new Error(data?.error?.message || "Video upload failed");
         input.videoId = data.id;
         stages[stages.length - 1] = { stage: "media_upload", status: "success", message: `Video ID: ${data.id}` };
-      } catch (uploadErr: any) {
-        stages[stages.length - 1] = { stage: "media_upload", status: "failed", message: uploadErr.message };
-        await updateJobStage(jobId, "media_upload", { status: "failed", errorMessage: uploadErr.message, errorSummary: "Media upload failed" });
-        return { success: false, jobId, stages, error: `Video upload failed: ${uploadErr.message}`, errorStage: "media_upload" };
+      } catch (uploadErr: unknown) {
+        const uploadError = uploadErr instanceof Error ? uploadErr : new Error(String(uploadErr));
+        stages[stages.length - 1] = { stage: "media_upload", status: "failed", message: uploadError.message };
+        await updateJobStage(jobId, "media_upload", { status: "failed", errorMessage: uploadError.message, errorSummary: "Media upload failed" });
+        return { success: false, jobId, stages, error: `Video upload failed: ${uploadError.message}`, errorStage: "media_upload" };
       }
     }
 
@@ -305,7 +313,9 @@ export async function executeSalesLaunch(
               httpStatus: statusRes.status,
               success: statusRes.ok,
             });
-          } catch {}
+          } catch (logErr) {
+            console.warn("[SalesLaunch] Failed to write poll log:", logErr instanceof Error ? logErr.message : logErr);
+          }
 
           if (videoStatus === "ready") {
             videoReady = true;
@@ -322,10 +332,11 @@ export async function executeSalesLaunch(
           throw new Error("Video processing timed out (2.5 minutes). The video may still be processing — try again in a few minutes.");
         }
         stages[stages.length - 1] = { stage: "media_readiness", status: "success", message: "Video is ready" };
-      } catch (pollErr: any) {
-        stages[stages.length - 1] = { stage: "media_readiness", status: "failed", message: pollErr.message };
-        await updateJobStage(jobId, "media_readiness", { status: "failed", errorMessage: pollErr.message, errorSummary: "Video not ready" });
-        return { success: false, jobId, stages, error: pollErr.message, errorStage: "media_readiness" };
+      } catch (pollErr: unknown) {
+        const pollError = pollErr instanceof Error ? pollErr : new Error(String(pollErr));
+        stages[stages.length - 1] = { stage: "media_readiness", status: "failed", message: pollError.message };
+        await updateJobStage(jobId, "media_readiness", { status: "failed", errorMessage: pollError.message, errorSummary: "Video not ready" });
+        return { success: false, jobId, stages, error: pollError.message, errorStage: "media_readiness" };
       }
     }
 
@@ -345,7 +356,7 @@ export async function executeSalesLaunch(
     await updateJobStage(jobId, "adset", { metaAdsetId: adsetId });
 
     stages.push({ stage: "creative", status: "running" });
-    let creativePayload: Record<string, any>;
+    let creativePayload: Record<string, unknown>;
     if (input.mode === "UPLOAD_IMAGE") {
       creativePayload = buildImageSalesCreativePayload(input);
     } else if (input.mode === "UPLOAD_VIDEO") {

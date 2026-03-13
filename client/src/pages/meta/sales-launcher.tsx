@@ -19,6 +19,11 @@ import {
 type CreativeMode = "UPLOAD_IMAGE" | "UPLOAD_VIDEO" | "EXISTING_POST";
 type PublishMode = "VALIDATE" | "DRAFT" | "PUBLISH";
 
+interface MetaPage { id: string; name: string; }
+interface MetaPixel { id: string; name: string; }
+interface MetaPost { id: string; message?: string; created_time?: string; full_picture?: string; }
+interface LaunchJob { id: number; adName: string; mode: string; publishMode: string; status: string; createdAt: string; metaCampaignId?: string; metaAdsetId?: string; metaAdId?: string; errorMessage?: string; }
+
 interface DiagnosticCheck {
   name: string;
   status: "pass" | "fail" | "warn" | "skip";
@@ -37,7 +42,7 @@ interface LaunchStage {
   stage: string;
   status: "pending" | "running" | "success" | "failed" | "skipped";
   message?: string;
-  data?: any;
+  data?: Record<string, unknown>;
 }
 
 interface LaunchResult {
@@ -51,7 +56,7 @@ interface LaunchResult {
   validationIssues?: ValidationIssue[];
   error?: string;
   errorStage?: string;
-  rawError?: any;
+  rawError?: Record<string, unknown>;
 }
 
 const CTA_OPTIONS = [
@@ -168,7 +173,7 @@ export default function SalesLauncher() {
         variant: data.passed ? "default" : "destructive",
       });
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast({ title: "Diagnostics failed", description: err.message, variant: "destructive" });
     },
   });
@@ -188,7 +193,7 @@ export default function SalesLauncher() {
       if (!imagePreview && data.imageUrl) setImagePreview(data.imageUrl);
       toast({ title: "Image uploaded to Meta" });
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast({ title: "Image upload failed", description: err.message, variant: "destructive" });
     },
   });
@@ -209,7 +214,7 @@ export default function SalesLauncher() {
       toast({ title: "Video uploaded, processing..." });
       pollVideoStatus(data.videoId);
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast({ title: "Video upload failed", description: err.message, variant: "destructive" });
     },
   });
@@ -236,7 +241,7 @@ export default function SalesLauncher() {
 
   const launchMutation = useMutation({
     mutationFn: async () => {
-      const body: any = {
+      const body: Record<string, unknown> = {
         adName,
         mode,
         adAccountId: metaStatus?.adAccountId || "",
@@ -286,7 +291,7 @@ export default function SalesLauncher() {
         });
       }
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast({ title: "Launch error", description: err.message, variant: "destructive" });
     },
   });
@@ -360,7 +365,7 @@ export default function SalesLauncher() {
                   <SelectValue placeholder="Select page" />
                 </SelectTrigger>
                 <SelectContent>
-                  {pages.map((p: any) => (
+                  {pages.map((p: MetaPage) => (
                     <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -374,7 +379,7 @@ export default function SalesLauncher() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">No pixel</SelectItem>
-                  {pixels.map((p: any) => (
+                  {pixels.map((p: MetaPixel) => (
                     <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -627,7 +632,7 @@ export default function SalesLauncher() {
                   </div>
                 )}
                 <div className="max-h-64 overflow-y-auto space-y-2" data-testid="post-list">
-                  {posts.map((post: any) => (
+                  {posts.map((post: MetaPost) => (
                     <div
                       key={post.id}
                       className={`flex gap-3 p-2 border rounded-md cursor-pointer hover:bg-muted/50 transition-colors ${selectedPostId === post.id ? "ring-2 ring-primary bg-muted/30" : ""}`}
@@ -911,7 +916,7 @@ function LaunchJobHistory() {
       </CardHeader>
       <CardContent>
         <div className="space-y-2">
-          {jobs.slice(0, 20).map((job: any) => (
+          {jobs.slice(0, 20).map((job: LaunchJob) => (
             <Collapsible key={job.id} open={expandedJob === job.id} onOpenChange={open => setExpandedJob(open ? job.id : null)}>
               <CollapsibleTrigger asChild>
                 <div className="flex items-center gap-2 text-sm p-2 border rounded-md cursor-pointer hover:bg-muted/50" data-testid={`job-row-${job.id}`}>

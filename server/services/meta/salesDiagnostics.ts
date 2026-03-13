@@ -40,7 +40,9 @@ async function metaGet(accessToken: string, endpoint: string, params: Record<str
         httpStatus: response.status,
         success: response.ok,
       });
-    } catch {}
+    } catch (logErr) {
+      console.warn("[Diagnostics] Failed to write API log:", logErr instanceof Error ? logErr.message : logErr);
+    }
   }
 
   return { ok: response.ok, data, status: response.status };
