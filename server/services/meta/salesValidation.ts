@@ -1,3 +1,4 @@
+import { META_BASE_URL } from "../metaAds";
 import type { SalesLaunchInput } from "./salesPayloadBuilder";
 
 export interface ValidationIssue {
@@ -8,7 +9,7 @@ export interface ValidationIssue {
   fixSuggestion: string;
 }
 
-export function validateConnection(input: SalesLaunchInput): ValidationIssue[] {
+export function validateConnectionFields(input: SalesLaunchInput): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
 
   if (!input.adAccountId) {
@@ -29,6 +30,71 @@ export function validateConnection(input: SalesLaunchInput): ValidationIssue[] {
       message: "Facebook Page is required.",
       fixSuggestion: "Select a connected Facebook Page before launch.",
     });
+  }
+
+  return issues;
+}
+
+export async function validateConnection(accessToken: string, adAccountId: string, pageId: string): Promise<ValidationIssue[]> {
+  const issues: ValidationIssue[] = [];
+
+  if (!accessToken) {
+    issues.push({ code: "MISSING_TOKEN", field: "accessToken", stage: "connection", message: "Access token is missing.", fixSuggestion: "Reconnect your Meta account." });
+    return issues;
+  }
+
+  if (!adAccountId) {
+    issues.push({ code: "MISSING_AD_ACCOUNT", field: "adAccountId", stage: "connection", message: "Ad Account ID is required.", fixSuggestion: "Select an ad account in Meta settings." });
+    return issues;
+  }
+
+  if (!pageId) {
+    issues.push({ code: "MISSING_PAGE", field: "pageId", stage: "connection", message: "Facebook Page is required.", fixSuggestion: "Select a connected Facebook Page before launch." });
+    return issues;
+  }
+
+  try {
+    const tokenUrl = new URL(`${META_BASE_URL}/me`);
+    tokenUrl.searchParams.set("access_token", accessToken);
+    tokenUrl.searchParams.set("fields", "id,name");
+    const tokenRes = await fetch(tokenUrl.toString());
+    if (!tokenRes.ok) {
+      const tokenData = await tokenRes.json();
+      issues.push({ code: "TOKEN_INVALID", field: "accessToken", stage: "connection", message: tokenData?.error?.message || "Access token is invalid or expired.", fixSuggestion: "Reconnect your Meta account in Settings." });
+      return issues;
+    }
+  } catch {
+    issues.push({ code: "TOKEN_CHECK_FAILED", field: "accessToken", stage: "connection", message: "Could not verify access token.", fixSuggestion: "Check your internet connection and try again." });
+    return issues;
+  }
+
+  try {
+    const actId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`;
+    const acctUrl = new URL(`${META_BASE_URL}/${actId}`);
+    acctUrl.searchParams.set("access_token", accessToken);
+    acctUrl.searchParams.set("fields", "account_status");
+    const acctRes = await fetch(acctUrl.toString());
+    const acctData = await acctRes.json();
+    if (!acctRes.ok) {
+      issues.push({ code: "AD_ACCOUNT_INACCESSIBLE", field: "adAccountId", stage: "connection", message: acctData?.error?.message || "Cannot access ad account.", fixSuggestion: "Check your ad account permissions." });
+    } else if (acctData.account_status !== 1) {
+      issues.push({ code: "AD_ACCOUNT_NOT_ACTIVE", field: "adAccountId", stage: "connection", message: "Ad account is not active.", fixSuggestion: "Ensure your ad account is active and in good standing." });
+    }
+  } catch {
+    issues.push({ code: "AD_ACCOUNT_CHECK_FAILED", field: "adAccountId", stage: "connection", message: "Could not verify ad account.", fixSuggestion: "Check your internet connection and try again." });
+  }
+
+  try {
+    const pageUrl = new URL(`${META_BASE_URL}/${pageId}`);
+    pageUrl.searchParams.set("access_token", accessToken);
+    pageUrl.searchParams.set("fields", "id,name,is_published");
+    const pageRes = await fetch(pageUrl.toString());
+    if (!pageRes.ok) {
+      const pageData = await pageRes.json();
+      issues.push({ code: "PAGE_INACCESSIBLE", field: "pageId", stage: "connection", message: pageData?.error?.message || "Cannot access Facebook Page.", fixSuggestion: "Ensure you have admin access to this page." });
+    }
+  } catch {
+    issues.push({ code: "PAGE_CHECK_FAILED", field: "pageId", stage: "connection", message: "Could not verify Facebook Page.", fixSuggestion: "Check your internet connection and try again." });
   }
 
   return issues;
@@ -73,7 +139,7 @@ export function validateMediaReadiness(input: SalesLaunchInput): ValidationIssue
 export function validateLaunchInput(input: SalesLaunchInput): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
 
-  issues.push(...validateConnection(input));
+  issues.push(...validateConnectionFields(input));
   issues.push(...validateMediaReadiness(input));
 
   if (!input.adName || !input.adName.trim()) {

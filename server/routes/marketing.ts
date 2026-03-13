@@ -3019,6 +3019,7 @@ export function registerMarketingRoutes(app: Express) {
         adAccountId: creds.adAccountId,
         pageId,
         pixelId: pixelId === "none" ? null : pixelId,
+        merchantId,
       });
 
       res.json(result);
@@ -3029,11 +3030,22 @@ export function registerMarketingRoutes(app: Express) {
 
   app.post("/api/meta/sales/validate", isAuthenticated, async (req: any, res) => {
     try {
-      await getMerchantId(req);
+      const merchantId = await getMerchantId(req);
 
       const normalized = normalizeInput(req.body);
-      const issues = validateLaunchInput(normalized);
-      res.json({ valid: issues.length === 0, issues, normalized });
+      const fieldIssues = validateLaunchInput(normalized);
+
+      let connectionIssues: any[] = [];
+      try {
+        const creds = await getCredentialsForMerchant(merchantId);
+        const { validateConnection } = await import("../services/meta/salesValidation");
+        connectionIssues = await validateConnection(creds.accessToken, creds.adAccountId, normalized.pageId);
+      } catch (connErr: any) {
+        connectionIssues = [{ code: "CONNECTION_ERROR", field: "connection", stage: "connection", message: connErr.message, fixSuggestion: "Ensure your Meta account is connected." }];
+      }
+
+      const allIssues = [...fieldIssues, ...connectionIssues];
+      res.json({ valid: allIssues.length === 0, issues: allIssues, normalized });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -3053,25 +3065,63 @@ export function registerMarketingRoutes(app: Express) {
   app.post("/api/meta/sales/upload-image", isAuthenticated, async (req: any, res) => {
     try {
       const merchantId = await getMerchantId(req);
+      const creds = await getCredentialsForMerchant(merchantId);
+      const endpoint = `${creds.adAccountId}/adimages`;
 
-      const { imageUrl } = req.body;
-      if (!imageUrl) return res.status(400).json({ error: "imageUrl is required" });
+      const { imageUrl, imageBase64, filename } = req.body;
+      if (!imageUrl && !imageBase64) return res.status(400).json({ error: "imageUrl or imageBase64 is required" });
 
-      const result = await uploadImageToMeta(merchantId, imageUrl);
+      let result: { hash: string; url: string };
 
-      try {
-        const creds = await getCredentialsForMerchant(merchantId);
-        await db.insert(metaApiLogs).values({
-          merchantId,
-          stage: "upload_image",
-          endpoint: `${creds.adAccountId}/adimages`,
+      if (imageBase64) {
+        const formData = new URLSearchParams();
+        formData.set("access_token", creds.accessToken);
+        formData.set("bytes", imageBase64);
+        if (filename) formData.set("name", filename);
+
+        const response = await fetch(`${META_BASE_URL}/${endpoint}`, {
           method: "POST",
-          requestJson: { url: imageUrl },
-          responseJson: { hash: result.hash, url: result.url },
-          httpStatus: 200,
-          success: true,
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: formData.toString(),
         });
-      } catch {}
+        const data = await response.json();
+
+        try {
+          await db.insert(metaApiLogs).values({
+            merchantId,
+            stage: "upload_image_file",
+            endpoint,
+            method: "POST",
+            requestJson: { filename, bytes_length: imageBase64.length },
+            responseJson: data,
+            httpStatus: response.status,
+            success: response.ok,
+          });
+        } catch {}
+
+        if (!response.ok) throw new Error(data?.error?.message || "Image file upload failed");
+        const images = data?.images;
+        if (!images || typeof images !== "object" || Object.keys(images).length === 0) {
+          throw new Error("Meta returned success but no image data. Please try again.");
+        }
+        const firstKey = Object.keys(images)[0];
+        result = { hash: images[firstKey].hash, url: images[firstKey].url };
+      } else {
+        result = await uploadImageToMeta(merchantId, imageUrl);
+
+        try {
+          await db.insert(metaApiLogs).values({
+            merchantId,
+            stage: "upload_image_url",
+            endpoint,
+            method: "POST",
+            requestJson: { url: imageUrl },
+            responseJson: { hash: result.hash, url: result.url },
+            httpStatus: 200,
+            success: true,
+          });
+        } catch {}
+      }
 
       res.json({ success: true, imageHash: result.hash, imageUrl: result.url });
     } catch (error: any) {
@@ -3083,29 +3133,61 @@ export function registerMarketingRoutes(app: Express) {
     try {
       const merchantId = await getMerchantId(req);
 
-      const { videoUrl } = req.body;
-      if (!videoUrl) return res.status(400).json({ error: "videoUrl is required" });
+      const { videoUrl, videoBase64, filename } = req.body;
+      if (!videoUrl && !videoBase64) return res.status(400).json({ error: "videoUrl or videoBase64 is required" });
 
       const creds = await getCredentialsForMerchant(merchantId);
       const endpoint = `${creds.adAccountId}/advideos`;
-      const formData = new URLSearchParams();
-      formData.set("access_token", creds.accessToken);
-      formData.set("file_url", videoUrl);
 
-      const response = await fetch(`${META_BASE_URL}/${endpoint}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: formData.toString(),
-      });
-      const data = await response.json();
+      let response: Response;
+      let data: any;
+
+      if (videoBase64) {
+        const binaryBuffer = Buffer.from(videoBase64, "base64");
+        const boundary = `----FormBoundary${Date.now()}`;
+        const fname = filename || "video.mp4";
+        const bodyParts = [
+          `--${boundary}\r\n`,
+          `Content-Disposition: form-data; name="access_token"\r\n\r\n`,
+          `${creds.accessToken}\r\n`,
+          `--${boundary}\r\n`,
+          `Content-Disposition: form-data; name="title"\r\n\r\n`,
+          `${fname}\r\n`,
+          `--${boundary}\r\n`,
+          `Content-Disposition: form-data; name="source"; filename="${fname}"\r\n`,
+          `Content-Type: video/mp4\r\n\r\n`,
+        ];
+        const prefix = Buffer.from(bodyParts.join(""));
+        const suffix = Buffer.from(`\r\n--${boundary}--\r\n`);
+        const fullBody = Buffer.concat([prefix, binaryBuffer, suffix]);
+
+        response = await fetch(`${META_BASE_URL}/${endpoint}`, {
+          method: "POST",
+          headers: { "Content-Type": `multipart/form-data; boundary=${boundary}` },
+          body: fullBody,
+        });
+        data = await response.json();
+      } else {
+        const formData = new URLSearchParams();
+        formData.set("access_token", creds.accessToken);
+        formData.set("file_url", videoUrl);
+        if (filename) formData.set("title", filename);
+
+        response = await fetch(`${META_BASE_URL}/${endpoint}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: formData.toString(),
+        });
+        data = await response.json();
+      }
 
       try {
         await db.insert(metaApiLogs).values({
           merchantId,
-          stage: "upload_video",
+          stage: videoBase64 ? "upload_video_file" : "upload_video_url",
           endpoint,
           method: "POST",
-          requestJson: { file_url: videoUrl },
+          requestJson: videoBase64 ? { filename, bytes_length: videoBase64.length } : { file_url: videoUrl },
           responseJson: data,
           httpStatus: response.status,
           success: response.ok,

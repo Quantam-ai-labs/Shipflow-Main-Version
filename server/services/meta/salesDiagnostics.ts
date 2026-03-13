@@ -1,4 +1,6 @@
 import { META_BASE_URL } from "../metaAds";
+import { db } from "../../db";
+import { metaApiLogs } from "@shared/schema";
 
 export interface DiagnosticCheck {
   name: string;
@@ -11,7 +13,7 @@ export interface DiagnosticsResult {
   checks: DiagnosticCheck[];
 }
 
-async function metaGet(accessToken: string, endpoint: string, params: Record<string, string> = {}): Promise<{ ok: boolean; data: any; status: number }> {
+async function metaGet(accessToken: string, endpoint: string, params: Record<string, string> = {}, merchantId?: string): Promise<{ ok: boolean; data: any; status: number }> {
   const url = new URL(`${META_BASE_URL}/${endpoint}`);
   url.searchParams.set("access_token", accessToken);
   for (const [k, v] of Object.entries(params)) {
@@ -19,6 +21,22 @@ async function metaGet(accessToken: string, endpoint: string, params: Record<str
   }
   const response = await fetch(url.toString());
   const data = await response.json();
+
+  if (merchantId) {
+    try {
+      await db.insert(metaApiLogs).values({
+        merchantId,
+        stage: "diagnostics",
+        endpoint,
+        method: "GET",
+        requestJson: params,
+        responseJson: data,
+        httpStatus: response.status,
+        success: response.ok,
+      });
+    } catch {}
+  }
+
   return { ok: response.ok, data, status: response.status };
 }
 
@@ -27,10 +45,13 @@ export async function runDiagnostics(config: {
   adAccountId: string;
   pageId: string;
   pixelId?: string | null;
+  merchantId?: string;
 }): Promise<DiagnosticsResult> {
   const checks: DiagnosticCheck[] = [];
 
-  const tokenResult = await metaGet(config.accessToken, "me", { fields: "id,name" });
+  const mid = config.merchantId;
+
+  const tokenResult = await metaGet(config.accessToken, "me", { fields: "id,name" }, mid);
   if (tokenResult.ok) {
     checks.push({ name: "Token Health", status: "pass", message: `Authenticated as ${tokenResult.data.name}` });
   } else {
@@ -39,7 +60,7 @@ export async function runDiagnostics(config: {
   }
 
   const adAccountId = config.adAccountId.startsWith("act_") ? config.adAccountId : `act_${config.adAccountId}`;
-  const accountResult = await metaGet(config.accessToken, adAccountId, { fields: "account_id,name,account_status,currency,timezone_name" });
+  const accountResult = await metaGet(config.accessToken, adAccountId, { fields: "account_id,name,account_status,currency,timezone_name" }, mid);
   if (accountResult.ok) {
     const statusMap: Record<number, string> = { 1: "ACTIVE", 2: "DISABLED", 3: "UNSETTLED", 7: "PENDING_RISK_REVIEW", 8: "PENDING_SETTLEMENT", 9: "IN_GRACE_PERIOD", 100: "PENDING_CLOSURE", 101: "CLOSED" };
     const statusCode = accountResult.data.account_status;
@@ -54,7 +75,7 @@ export async function runDiagnostics(config: {
   }
 
   if (config.pageId) {
-    const pageResult = await metaGet(config.accessToken, config.pageId, { fields: "id,name,is_published" });
+    const pageResult = await metaGet(config.accessToken, config.pageId, { fields: "id,name,is_published" }, mid);
     if (pageResult.ok) {
       if (pageResult.data.is_published === false) {
         checks.push({ name: "Facebook Page", status: "warn", message: `${pageResult.data.name} is unpublished` });
@@ -69,7 +90,7 @@ export async function runDiagnostics(config: {
   }
 
   if (config.pixelId) {
-    const pixelResult = await metaGet(config.accessToken, config.pixelId, { fields: "id,name,last_fired_time" });
+    const pixelResult = await metaGet(config.accessToken, config.pixelId, { fields: "id,name,last_fired_time" }, mid);
     if (pixelResult.ok) {
       const lastFired = pixelResult.data.last_fired_time ? new Date(pixelResult.data.last_fired_time * 1000).toISOString() : "Never";
       checks.push({ name: "Pixel", status: "pass", message: `${pixelResult.data.name} (Last fired: ${lastFired})` });
@@ -80,7 +101,7 @@ export async function runDiagnostics(config: {
     checks.push({ name: "Pixel", status: "warn", message: "No pixel selected. Ads will optimize for LINK_CLICKS instead of conversions." });
   }
 
-  const permResult = await metaGet(config.accessToken, "me/permissions");
+  const permResult = await metaGet(config.accessToken, "me/permissions", {}, mid);
   if (permResult.ok) {
     const granted = (permResult.data.data || []).filter((p: any) => p.status === "granted").map((p: any) => p.permission);
     const required = ["ads_management", "ads_read", "pages_show_list", "pages_read_engagement"];

@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   CheckCircle2, XCircle, AlertTriangle, Loader2, Rocket, Activity, Image, Video,
-  FileText, Search, ChevronDown, RefreshCw, ExternalLink, Info,
+  FileText, Search, ChevronDown, RefreshCw, ExternalLink, Info, Upload,
 } from "lucide-react";
 
 type CreativeMode = "UPLOAD_IMAGE" | "UPLOAD_VIDEO" | "EXISTING_POST";
@@ -89,6 +89,7 @@ const STAGE_LABELS: Record<string, string> = {
   validate: "Validating Fields",
   diagnostics: "Running Diagnostics",
   media_upload: "Uploading Media",
+  media_readiness: "Checking Video Readiness",
   campaign: "Creating Campaign",
   adset: "Creating Ad Set",
   creative: "Creating Creative",
@@ -173,13 +174,18 @@ export default function SalesLauncher() {
   });
 
   const uploadImageMutation = useMutation({
-    mutationFn: async (url: string) => {
-      const res = await apiRequest("POST", "/api/meta/sales/upload-image", { imageUrl: url });
-      return res.json();
+    mutationFn: async (payload: { type: "url"; url: string } | { type: "file"; base64: string; filename: string }) => {
+      if (payload.type === "url") {
+        const res = await apiRequest("POST", "/api/meta/sales/upload-image", { imageUrl: payload.url });
+        return res.json();
+      } else {
+        const res = await apiRequest("POST", "/api/meta/sales/upload-image", { imageBase64: payload.base64, filename: payload.filename });
+        return res.json();
+      }
     },
     onSuccess: (data) => {
       setImageHash(data.imageHash);
-      setImagePreview(data.imageUrl || imageUrl);
+      if (!imagePreview && data.imageUrl) setImagePreview(data.imageUrl);
       toast({ title: "Image uploaded to Meta" });
     },
     onError: (err: any) => {
@@ -188,9 +194,14 @@ export default function SalesLauncher() {
   });
 
   const uploadVideoMutation = useMutation({
-    mutationFn: async (url: string) => {
-      const res = await apiRequest("POST", "/api/meta/sales/upload-video", { videoUrl: url });
-      return res.json();
+    mutationFn: async (payload: { type: "url"; url: string } | { type: "file"; base64: string; filename: string }) => {
+      if (payload.type === "url") {
+        const res = await apiRequest("POST", "/api/meta/sales/upload-video", { videoUrl: payload.url });
+        return res.json();
+      } else {
+        const res = await apiRequest("POST", "/api/meta/sales/upload-video", { videoBase64: payload.base64, filename: payload.filename });
+        return res.json();
+      }
     },
     onSuccess: (data) => {
       setVideoId(data.videoId);
@@ -296,8 +307,8 @@ export default function SalesLauncher() {
       : [
           { label: "Destination URL", ok: !!destinationUrl.trim() },
           { label: "Primary text", ok: !!primaryText.trim() },
-          ...(mode === "UPLOAD_IMAGE" ? [{ label: "Image uploaded", ok: !!imageHash || !!imageUrl.trim() }] : []),
-          ...(mode === "UPLOAD_VIDEO" ? [{ label: "Video ready", ok: videoStatus === "ready" || !!videoUrl.trim() }] : []),
+          ...(mode === "UPLOAD_IMAGE" ? [{ label: "Image uploaded", ok: !!imageHash }] : []),
+          ...(mode === "UPLOAD_VIDEO" ? [{ label: "Video ready", ok: videoStatus === "ready" }] : []),
         ]),
   ];
   const allValid = validationChecklist.every(c => c.ok);
@@ -433,28 +444,77 @@ export default function SalesLauncher() {
 
               <TabsContent value="UPLOAD_IMAGE" className="space-y-3 mt-3">
                 <div>
-                  <Label htmlFor="imageUrl">Image URL</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="imageUrl"
-                      value={imageUrl}
-                      onChange={e => setImageUrl(e.target.value)}
-                      placeholder="https://example.com/image.jpg"
-                      data-testid="input-image-url"
-                    />
-                    <Button
-                      size="sm"
-                      onClick={() => uploadImageMutation.mutate(imageUrl)}
-                      disabled={!imageUrl || uploadImageMutation.isPending}
-                      data-testid="button-upload-image"
+                  <Label>Upload Image</Label>
+                  <div className="flex flex-col gap-2">
+                    <div
+                      className="border-2 border-dashed rounded-md p-4 text-center cursor-pointer hover:bg-muted/50 transition-colors"
+                      onClick={() => document.getElementById("imageFileInput")?.click()}
+                      data-testid="dropzone-image"
                     >
-                      {uploadImageMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Upload"}
-                    </Button>
+                      <Upload className="h-6 w-6 mx-auto text-muted-foreground mb-1" />
+                      <p className="text-sm text-muted-foreground">Click to select an image file</p>
+                      <p className="text-xs text-muted-foreground mt-1">JPG, PNG, or WebP (max 30MB)</p>
+                    </div>
+                    <input
+                      id="imageFileInput"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="hidden"
+                      data-testid="input-image-file"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        if (file.size > 30 * 1024 * 1024) {
+                          toast({ title: "File too large", description: "Image must be under 30MB.", variant: "destructive" });
+                          return;
+                        }
+                        const preview = URL.createObjectURL(file);
+                        setImagePreview(preview);
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                          const base64 = (reader.result as string).split(",")[1];
+                          uploadImageMutation.mutate({ type: "file", base64, filename: file.name });
+                        };
+                        reader.readAsDataURL(file);
+                      }}
+                    />
+                    <Collapsible>
+                      <CollapsibleTrigger asChild>
+                        <Button variant="ghost" size="sm" className="text-xs gap-1 h-7" data-testid="toggle-image-url">
+                          <ExternalLink className="h-3 w-3" /> Or use image URL
+                        </Button>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="mt-1">
+                        <div className="flex gap-2">
+                          <Input
+                            id="imageUrl"
+                            value={imageUrl}
+                            onChange={e => setImageUrl(e.target.value)}
+                            placeholder="https://example.com/image.jpg"
+                            data-testid="input-image-url"
+                          />
+                          <Button
+                            size="sm"
+                            onClick={() => uploadImageMutation.mutate({ type: "url", url: imageUrl })}
+                            disabled={!imageUrl || uploadImageMutation.isPending}
+                            data-testid="button-upload-image-url"
+                          >
+                            {uploadImageMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Upload"}
+                          </Button>
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
                   </div>
+                  {uploadImageMutation.isPending && (
+                    <div className="mt-2 flex items-center gap-2 text-sm text-blue-600">
+                      <Loader2 className="h-3 w-3 animate-spin" /> Uploading image to Meta...
+                    </div>
+                  )}
                   {imageHash && (
                     <div className="mt-2 flex items-center gap-2 text-sm text-green-600">
                       <CheckCircle2 className="h-3 w-3" />
                       Image uploaded (hash: {imageHash.substring(0, 12)}...)
+                      <Button variant="ghost" size="sm" className="h-6 text-xs ml-auto" onClick={() => { setImageHash(""); setImagePreview(""); setImageUrl(""); }} data-testid="button-remove-image">Remove</Button>
                     </div>
                   )}
                   {imagePreview && (
@@ -465,28 +525,75 @@ export default function SalesLauncher() {
 
               <TabsContent value="UPLOAD_VIDEO" className="space-y-3 mt-3">
                 <div>
-                  <Label htmlFor="videoUrl">Video URL</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="videoUrl"
-                      value={videoUrl}
-                      onChange={e => setVideoUrl(e.target.value)}
-                      placeholder="https://example.com/video.mp4"
-                      data-testid="input-video-url"
-                    />
-                    <Button
-                      size="sm"
-                      onClick={() => uploadVideoMutation.mutate(videoUrl)}
-                      disabled={!videoUrl || uploadVideoMutation.isPending}
-                      data-testid="button-upload-video"
+                  <Label>Upload Video</Label>
+                  <div className="flex flex-col gap-2">
+                    <div
+                      className="border-2 border-dashed rounded-md p-4 text-center cursor-pointer hover:bg-muted/50 transition-colors"
+                      onClick={() => document.getElementById("videoFileInput")?.click()}
+                      data-testid="dropzone-video"
                     >
-                      {uploadVideoMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Upload"}
-                    </Button>
+                      <Upload className="h-6 w-6 mx-auto text-muted-foreground mb-1" />
+                      <p className="text-sm text-muted-foreground">Click to select a video file</p>
+                      <p className="text-xs text-muted-foreground mt-1">MP4, MOV, or AVI (max 100MB)</p>
+                    </div>
+                    <input
+                      id="videoFileInput"
+                      type="file"
+                      accept="video/mp4,video/quicktime,video/x-msvideo"
+                      className="hidden"
+                      data-testid="input-video-file"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        if (file.size > 100 * 1024 * 1024) {
+                          toast({ title: "File too large", description: "Video must be under 100MB for file upload. Use the URL option for larger files.", variant: "destructive" });
+                          return;
+                        }
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                          const base64 = (reader.result as string).split(",")[1];
+                          uploadVideoMutation.mutate({ type: "file", base64, filename: file.name });
+                        };
+                        reader.readAsDataURL(file);
+                      }}
+                    />
+                    <Collapsible>
+                      <CollapsibleTrigger asChild>
+                        <Button variant="ghost" size="sm" className="text-xs gap-1 h-7" data-testid="toggle-video-url">
+                          <ExternalLink className="h-3 w-3" /> Or use video URL
+                        </Button>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="mt-1">
+                        <div className="flex gap-2">
+                          <Input
+                            id="videoUrl"
+                            value={videoUrl}
+                            onChange={e => setVideoUrl(e.target.value)}
+                            placeholder="https://example.com/video.mp4"
+                            data-testid="input-video-url"
+                          />
+                          <Button
+                            size="sm"
+                            onClick={() => uploadVideoMutation.mutate({ type: "url", url: videoUrl })}
+                            disabled={!videoUrl || uploadVideoMutation.isPending}
+                            data-testid="button-upload-video-url"
+                          >
+                            {uploadVideoMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Upload"}
+                          </Button>
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
                   </div>
+                  {uploadVideoMutation.isPending && (
+                    <div className="mt-2 flex items-center gap-2 text-sm text-blue-600">
+                      <Loader2 className="h-3 w-3 animate-spin" /> Uploading video to Meta...
+                    </div>
+                  )}
                   {videoId && (
                     <div className="mt-2 flex items-center gap-2 text-sm">
                       <StatusIcon status={videoStatus === "ready" ? "pass" : videoStatus === "timeout" ? "fail" : "running"} />
                       Video ID: {videoId} — Status: {videoStatus || "pending"}
+                      <Button variant="ghost" size="sm" className="h-6 text-xs ml-auto" onClick={() => { setVideoId(""); setVideoStatus(""); setVideoUrl(""); }} data-testid="button-remove-video">Remove</Button>
                     </div>
                   )}
                 </div>

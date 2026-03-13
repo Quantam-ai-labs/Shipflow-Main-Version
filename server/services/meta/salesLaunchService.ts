@@ -176,6 +176,7 @@ export async function executeSalesLaunch(
       adAccountId: creds.adAccountId,
       pageId: input.pageId,
       pixelId: input.pixelId,
+      merchantId,
     });
 
     if (!diagnostics.passed) {
@@ -209,15 +210,31 @@ export async function executeSalesLaunch(
     if (input.mode === "UPLOAD_VIDEO" && input.videoUrl && !input.videoId) {
       stages.push({ stage: "media_upload", status: "running" });
       try {
+        const videoEndpoint = `${creds.adAccountId}/advideos`;
         const formData = new URLSearchParams();
         formData.set("access_token", creds.accessToken);
         formData.set("file_url", input.videoUrl);
-        const response = await fetch(`${META_BASE_URL}/${creds.adAccountId}/advideos`, {
+        const response = await fetch(`${META_BASE_URL}/${videoEndpoint}`, {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
           body: formData.toString(),
         });
         const data = await response.json();
+
+        try {
+          await db.insert(metaApiLogs).values({
+            merchantId,
+            launchJobId: jobId,
+            stage: "media_upload_video",
+            endpoint: videoEndpoint,
+            method: "POST",
+            requestJson: { file_url: input.videoUrl },
+            responseJson: data,
+            httpStatus: response.status,
+            success: response.ok,
+          });
+        } catch {}
+
         if (!response.ok) throw new Error(data?.error?.message || "Video upload failed");
         input.videoId = data.id;
         stages[stages.length - 1] = { stage: "media_upload", status: "success", message: `Video ID: ${data.id}` };
@@ -225,6 +242,56 @@ export async function executeSalesLaunch(
         stages[stages.length - 1] = { stage: "media_upload", status: "failed", message: uploadErr.message };
         await updateJobStage(jobId, "media_upload", { status: "failed", errorMessage: uploadErr.message, errorSummary: "Media upload failed" });
         return { success: false, jobId, stages, error: `Video upload failed: ${uploadErr.message}`, errorStage: "media_upload" };
+      }
+    }
+
+    if (input.mode === "UPLOAD_VIDEO" && input.videoId) {
+      stages.push({ stage: "media_readiness", status: "running" });
+      try {
+        const maxPolls = 30;
+        const pollInterval = 5000;
+        let videoReady = false;
+        for (let i = 0; i < maxPolls; i++) {
+          const statusUrl = new URL(`${META_BASE_URL}/${input.videoId}`);
+          statusUrl.searchParams.set("access_token", creds.accessToken);
+          statusUrl.searchParams.set("fields", "id,status");
+          const statusRes = await fetch(statusUrl.toString());
+          const statusData = await statusRes.json();
+          const videoStatus = statusData?.status?.video_status;
+
+          try {
+            await db.insert(metaApiLogs).values({
+              merchantId,
+              launchJobId: jobId,
+              stage: "media_readiness_poll",
+              endpoint: input.videoId!,
+              method: "GET",
+              requestJson: { poll_attempt: i + 1, fields: "id,status" },
+              responseJson: statusData,
+              httpStatus: statusRes.status,
+              success: statusRes.ok,
+            });
+          } catch {}
+
+          if (videoStatus === "ready") {
+            videoReady = true;
+            break;
+          }
+          if (videoStatus === "error") {
+            throw new Error("Video processing failed on Meta's side. Please try a different video.");
+          }
+          if (i < maxPolls - 1) {
+            await new Promise(resolve => setTimeout(resolve, pollInterval));
+          }
+        }
+        if (!videoReady) {
+          throw new Error("Video processing timed out (2.5 minutes). The video may still be processing — try again in a few minutes.");
+        }
+        stages[stages.length - 1] = { stage: "media_readiness", status: "success", message: "Video is ready" };
+      } catch (pollErr: any) {
+        stages[stages.length - 1] = { stage: "media_readiness", status: "failed", message: pollErr.message };
+        await updateJobStage(jobId, "media_readiness", { status: "failed", errorMessage: pollErr.message, errorSummary: "Video not ready" });
+        return { success: false, jobId, stages, error: pollErr.message, errorStage: "media_readiness" };
       }
     }
 
