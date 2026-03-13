@@ -651,6 +651,25 @@ export async function registerRoutes(
 `);
   });
 
+  app.post("/api/contact", async (req: Request, res: Response) => {
+    try {
+      const { name, email, phone, company, message } = req.body;
+      if (!name || !email || !message) {
+        return res.status(400).json({ message: "Name, email, and message are required" });
+      }
+      try {
+        const { sendContactEmail } = await import("./services/email");
+        await sendContactEmail({ name, email, phone, company, message });
+      } catch (emailErr: any) {
+        console.warn("[Contact] Email send failed:", emailErr.message);
+      }
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("[Contact] Error:", err);
+      res.status(500).json({ message: "Failed to process contact form" });
+    }
+  });
+
   // Setup authentication
   await setupAuth(app);
   registerAuthRoutes(app);

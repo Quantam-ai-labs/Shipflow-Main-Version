@@ -116,6 +116,9 @@ import MetaAutomationRules from "@/pages/meta/automation-rules";
 import PrivacyPolicy from "@/pages/legal/privacy-policy";
 import TermsOfService from "@/pages/legal/terms-of-service";
 import DataDeletion from "@/pages/legal/data-deletion";
+import Landing from "@/pages/landing";
+import PricingPage from "@/pages/pricing";
+import ContactPage from "@/pages/contact";
 import NotFound from "@/pages/not-found";
 import LoadsheetPage from "@/pages/loadsheet";
 import WarehousePage from "@/pages/warehouse";
@@ -519,8 +522,11 @@ function MainApp() {
   if (location.startsWith("/privacy-policy")) return <PrivacyPolicy />;
   if (location.startsWith("/terms-of-service")) return <TermsOfService />;
   if (location.startsWith("/data-deletion")) return <DataDeletion />;
+  if (location === "/pricing") return <PricingPage />;
+  if (location === "/contact") return <ContactPage />;
 
   if (!isAuthenticated) {
+    if (location === "/" || location === "") return <Landing />;
     return <AuthPage />;
   }
 

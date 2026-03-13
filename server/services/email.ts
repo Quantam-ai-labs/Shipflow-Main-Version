@@ -272,3 +272,64 @@ export async function sendTestEmail(toEmail: string): Promise<{ success: boolean
     return { success: false, error: err.message, provider: 'resend' };
   }
 }
+
+interface ContactEmailParams {
+  name: string;
+  email: string;
+  phone?: string;
+  company?: string;
+  message: string;
+}
+
+export async function sendContactEmail(params: ContactEmailParams): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { client, fromEmail } = await getResendClient();
+    const { name, email, phone, company, message } = params;
+
+    const htmlBody = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;padding:40px 20px;">
+    <tr><td align="center">
+      <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <tr><td style="background-color:#18181b;padding:20px 32px;text-align:center;">
+          <h1 style="color:#ffffff;margin:0;font-size:18px;font-weight:700;">1SOL.AI — Contact Form</h1>
+        </td></tr>
+        <tr><td style="padding:32px;">
+          <p style="margin:0 0 16px;color:#3f3f46;font-size:14px;"><strong>New contact form submission</strong></p>
+          <table style="width:100%;border-collapse:collapse;">
+            <tr><td style="padding:8px 0;color:#71717a;font-size:13px;width:100px;">Name:</td><td style="padding:8px 0;color:#18181b;font-size:13px;">${name}</td></tr>
+            <tr><td style="padding:8px 0;color:#71717a;font-size:13px;">Email:</td><td style="padding:8px 0;color:#18181b;font-size:13px;">${email}</td></tr>
+            ${phone ? `<tr><td style="padding:8px 0;color:#71717a;font-size:13px;">Phone:</td><td style="padding:8px 0;color:#18181b;font-size:13px;">${phone}</td></tr>` : ''}
+            ${company ? `<tr><td style="padding:8px 0;color:#71717a;font-size:13px;">Company:</td><td style="padding:8px 0;color:#18181b;font-size:13px;">${company}</td></tr>` : ''}
+          </table>
+          <div style="margin:16px 0 0;padding:16px;background:#f4f4f5;border-radius:6px;">
+            <p style="margin:0 0 4px;color:#71717a;font-size:12px;">Message:</p>
+            <p style="margin:0;color:#18181b;font-size:13px;white-space:pre-wrap;">${message}</p>
+          </div>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+    const result = await client.emails.send({
+      from: fromEmail,
+      to: ['usamax.mail@gmail.com'],
+      replyTo: email,
+      subject: `[1SOL.AI Contact] ${name}${company ? ` — ${company}` : ''}`,
+      html: htmlBody,
+      text: `Contact from ${name} (${email})${phone ? `, Phone: ${phone}` : ''}${company ? `, Company: ${company}` : ''}\n\nMessage:\n${message}`,
+    });
+
+    if (result.error) {
+      return { success: false, error: result.error.message };
+    }
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
