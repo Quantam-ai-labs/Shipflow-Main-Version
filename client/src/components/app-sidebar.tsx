@@ -169,7 +169,7 @@ const allNavGroups: NavGroup[] = [
     title: "Meta Ads",
     icon: Rocket,
     items: [
-      { id: "meta-launcher", title: "Ad Launcher", url: "/meta/launcher", icon: Rocket },
+      { id: "meta-sales-launcher", title: "Sales Launcher", url: "/meta/launcher", icon: Rocket },
       { id: "meta-campaigns", title: "Campaigns", url: "/meta/campaigns", icon: Megaphone },
       { id: "meta-bulk-launch", title: "Bulk Launch", url: "/meta/bulk-launch", icon: Layers },
       { id: "meta-media-library", title: "Media Library", url: "/meta/media-library", icon: ImageIcon },

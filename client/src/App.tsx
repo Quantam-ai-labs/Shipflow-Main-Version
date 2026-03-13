@@ -107,7 +107,7 @@ import SupportChatPage from "@/pages/support/chat";
 import SupportConnectionPage from "@/pages/support/connection";
 import SupportRoboCallPage from "@/pages/support/robocall";
 import SupportCallQueuePage from "@/pages/support/call-queue";
-import MetaAdLauncher from "@/pages/meta/launcher";
+import SalesLauncher from "@/pages/meta/sales-launcher";
 import MetaMediaLibrary from "@/pages/meta/media-library";
 import MetaBulkLaunch from "@/pages/meta/bulk-launch";
 import MetaCampaigns from "@/pages/meta/campaigns";
@@ -188,7 +188,7 @@ const routeToPageId: Record<string, string> = {
   "/support/connection": "support-connection",
   "/support/robocall": "support-robocall",
   "/support/call-queue": "support-call-queue",
-  "/meta/launcher": "meta-launcher",
+  "/meta/launcher": "meta-sales-launcher",
   "/meta/bulk-launch": "meta-bulk-launch",
   "/meta/media-library": "meta-media-library",
   "/meta/campaigns": "meta-campaigns",
@@ -298,7 +298,7 @@ function AppRoutes() {
       <Route path="/support/connection">{() => <ProtectedRoute component={SupportConnectionPage} path="/support/connection" />}</Route>
       <Route path="/support/robocall">{() => <ProtectedRoute component={SupportRoboCallPage} path="/support/robocall" />}</Route>
       <Route path="/support/call-queue">{() => <ProtectedRoute component={SupportCallQueuePage} path="/support/call-queue" />}</Route>
-      <Route path="/meta/launcher">{() => <ProtectedRoute component={MetaAdLauncher} path="/meta/launcher" />}</Route>
+      <Route path="/meta/launcher">{() => <ProtectedRoute component={SalesLauncher} path="/meta/launcher" />}</Route>
       <Route path="/meta/bulk-launch">{() => <ProtectedRoute component={MetaBulkLaunch} path="/meta/bulk-launch" />}</Route>
       <Route path="/meta/media-library">{() => <ProtectedRoute component={MetaMediaLibrary} path="/meta/media-library" />}</Route>
       <Route path="/meta/campaigns">{() => <ProtectedRoute component={MetaCampaigns} path="/meta/campaigns" />}</Route>

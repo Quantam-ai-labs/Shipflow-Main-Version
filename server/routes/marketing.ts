@@ -3,7 +3,7 @@ import { db } from "../db";
 import { eq, and, sql, gte, lte, inArray, isNull, isNotNull, desc } from "drizzle-orm";
 import { z } from "zod";
 import { toMerchantStartOfDay, toMerchantEndOfDay, DEFAULT_TIMEZONE } from "../utils/timezone";
-import { adCampaigns, adAccounts, adCreatives, adInsights, teamMembers, merchants, adProfitabilityEntries, orders, products, insertCampaignJourneyEventSchema, campaignJourneyEvents, adLaunchJobs, adLaunchItems, adMediaLibrary, customAudiences, adAutomationRules } from "@shared/schema";
+import { adCampaigns, adAccounts, adCreatives, adInsights, teamMembers, merchants, adProfitabilityEntries, orders, products, insertCampaignJourneyEventSchema, campaignJourneyEvents, adLaunchJobs, adLaunchItems, adMediaLibrary, customAudiences, adAutomationRules, metaApiLogs } from "@shared/schema";
 import { storage } from "../storage";
 import { decryptToken } from "../services/encryption";
 import {
@@ -44,6 +44,9 @@ import {
   bulkUpdateTargeting,
   evaluateAutomationRules,
 } from "../services/metaAdLauncher";
+import { executeSalesLaunch } from "../services/meta/salesLaunchService";
+import { runDiagnostics } from "../services/meta/salesDiagnostics";
+import { normalizeInput, validateLaunchInput } from "../services/meta/salesValidation";
 import { generateChatResponse, generateDashboardInsights, generateQuickStrategy } from "../services/aiInsights";
 import crypto from "crypto";
 
@@ -2989,6 +2992,163 @@ export function registerMarketingRoutes(app: Express) {
       }
       const configId = process.env.WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID || "";
       res.json({ appId, configId });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // SALES LAUNCHER — Clean rebuild
+  // ============================================
+
+  app.post("/api/meta/sales/diagnostics", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+
+      const creds = await getCredentialsForMerchant(merchantId);
+      const [merchant] = await db.select({
+        pageId: merchants.metaSelectedPageId,
+        pixelId: merchants.metaSelectedPixelId,
+      }).from(merchants).where(eq(merchants.id, merchantId));
+
+      const pageId = req.body.pageId || merchant?.pageId || "";
+      const pixelId = req.body.pixelId || merchant?.pixelId || null;
+
+      const result = await runDiagnostics({
+        accessToken: creds.accessToken,
+        adAccountId: creds.adAccountId,
+        pageId,
+        pixelId: pixelId === "none" ? null : pixelId,
+      });
+
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/meta/sales/validate", isAuthenticated, async (req: any, res) => {
+    try {
+      await getMerchantId(req);
+
+      const normalized = normalizeInput(req.body);
+      const issues = validateLaunchInput(normalized);
+      res.json({ valid: issues.length === 0, issues, normalized });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/meta/sales/launch", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+
+      const result = await executeSalesLaunch(merchantId, req.body);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/meta/sales/upload-image", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+
+      const { imageUrl } = req.body;
+      if (!imageUrl) return res.status(400).json({ error: "imageUrl is required" });
+
+      const result = await uploadImageToMeta(merchantId, imageUrl);
+      res.json({ success: true, imageHash: result.hash, imageUrl: result.url });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/meta/sales/upload-video", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+
+      const { videoUrl } = req.body;
+      if (!videoUrl) return res.status(400).json({ error: "videoUrl is required" });
+
+      const creds = await getCredentialsForMerchant(merchantId);
+      const formData = new URLSearchParams();
+      formData.set("access_token", creds.accessToken);
+      formData.set("file_url", videoUrl);
+
+      const response = await fetch(`${META_BASE_URL}/${creds.adAccountId}/advideos`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: formData.toString(),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error?.message || "Video upload failed");
+      }
+      res.json({ success: true, videoId: data.id });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/meta/sales/video-status/:videoId", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+
+      const creds = await getCredentialsForMerchant(merchantId);
+      const url = new URL(`${META_BASE_URL}/${req.params.videoId}`);
+      url.searchParams.set("access_token", creds.accessToken);
+      url.searchParams.set("fields", "id,status,title,picture,length");
+
+      const response = await fetch(url.toString());
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error?.message || "Failed to check video status");
+      }
+
+      const videoStatus = data.status?.video_status || "processing";
+      res.json({
+        videoId: data.id,
+        status: videoStatus,
+        ready: videoStatus === "ready",
+        title: data.title || "",
+        picture: data.picture || "",
+        length: data.length || 0,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/meta/sales/launch-jobs", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+
+      const jobs = await db.select().from(adLaunchJobs)
+        .where(eq(adLaunchJobs.merchantId, merchantId))
+        .orderBy(desc(adLaunchJobs.createdAt))
+        .limit(50);
+
+      res.json(jobs);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/meta/sales/launch-jobs/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+
+      const [job] = await db.select().from(adLaunchJobs)
+        .where(and(eq(adLaunchJobs.id, req.params.id), eq(adLaunchJobs.merchantId, merchantId)));
+
+      if (!job) return res.status(404).json({ error: "Launch job not found" });
+
+      const logs = await db.select().from(metaApiLogs)
+        .where(eq(metaApiLogs.launchJobId, req.params.id))
+        .orderBy(metaApiLogs.createdAt);
+
+      res.json({ job, apiLogs: logs });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

@@ -2266,9 +2266,17 @@ export const adLaunchJobs = pgTable("ad_launch_jobs", {
   metaCampaignId: varchar("meta_campaign_id", { length: 100 }),
   metaAdsetId: varchar("meta_adset_id", { length: 100 }),
   metaAdId: varchar("meta_ad_id", { length: 100 }),
+  metaCreativeId: varchar("meta_creative_id", { length: 100 }),
   errorMessage: text("error_message"),
   launchedAt: timestamp("launched_at"),
   createdAt: timestamp("created_at").defaultNow(),
+  mode: varchar("mode", { length: 30 }),
+  publishMode: varchar("publish_mode", { length: 20 }),
+  validationStatus: jsonb("validation_status"),
+  normalizedInput: jsonb("normalized_input"),
+  currentStage: varchar("current_stage", { length: 50 }),
+  resultJson: jsonb("result_json"),
+  errorSummary: text("error_summary"),
 }, (table) => [
   index("idx_ad_launch_merchant").on(table.merchantId),
   index("idx_ad_launch_status").on(table.status),
@@ -2277,6 +2285,32 @@ export const adLaunchJobs = pgTable("ad_launch_jobs", {
 export const insertAdLaunchJobSchema = createInsertSchema(adLaunchJobs).omit({ id: true, createdAt: true });
 export type InsertAdLaunchJob = z.infer<typeof insertAdLaunchJobSchema>;
 export type AdLaunchJob = typeof adLaunchJobs.$inferSelect;
+
+// ============================================
+// META ADS: API LOGS
+// ============================================
+export const metaApiLogs = pgTable("meta_api_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  launchJobId: varchar("launch_job_id").references(() => adLaunchJobs.id, { onDelete: "set null" }),
+  stage: varchar("stage", { length: 50 }).notNull(),
+  endpoint: varchar("endpoint", { length: 500 }).notNull(),
+  method: varchar("method", { length: 10 }).notNull().default("POST"),
+  requestJson: jsonb("request_json"),
+  responseJson: jsonb("response_json"),
+  httpStatus: integer("http_status"),
+  success: boolean("success").notNull().default(false),
+  fbtraceId: varchar("fbtrace_id", { length: 100 }),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_meta_api_logs_merchant").on(table.merchantId),
+  index("idx_meta_api_logs_job").on(table.launchJobId),
+  index("idx_meta_api_logs_stage").on(table.stage),
+]);
+
+export const insertMetaApiLogSchema = createInsertSchema(metaApiLogs).omit({ id: true, createdAt: true });
+export type InsertMetaApiLog = z.infer<typeof insertMetaApiLogSchema>;
+export type MetaApiLog = typeof metaApiLogs.$inferSelect;
 
 export const adLaunchItems = pgTable("ad_launch_items", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
