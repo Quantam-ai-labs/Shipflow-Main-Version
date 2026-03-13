@@ -1,0 +1,855 @@
+Rebuild the entire Meta Ads Launcher from scratch for ONE purpose only:
+
+========================
+PRODUCT GOAL
+========================
+
+Build a production-ready “Sales Campaign Launcher” inside the Meta Ads section of our app.
+
+This launcher is ONLY for running SIMPLE SALES ADS.
+
+We are NOT building a full Meta Ads Manager clone.
+We are NOT supporting awareness, traffic, engagement, leads, app installs, or any other objective.
+We are NOT supporting manual targeting, manual placements, or advanced media combinations in this launcher.
+
+This launcher must support only one clean path:
+
+USER FLOW:
+1. Connect Meta account
+2. Select ad account
+3. Select Facebook Page
+4. Select Instagram account if available
+5. Choose creative source:
+   - Upload Image
+   - Upload Video
+   - Use Existing Page Post
+6. Add website / landing page URL
+7. Add ad copy
+8. Add budget
+9. Click Launch
+10. System validates everything
+11. System launches a SALES campaign correctly
+12. Store all data, logs, responses, and errors cleanly
+
+This system must be simple on frontend and very strict on backend.
+
+DO NOT patch current broken launch code.
+DO NOT try to fix the old logic.
+REPLACE the current Meta Ads launcher architecture, payload logic, validation flow, and frontend form structure with a clean production-ready rebuild.
+
+==================================================
+NON-NEGOTIABLE ARCHITECTURE RULES
+==================================================
+
+1. Frontend must NEVER build raw Meta payloads.
+2. Backend must be the single source of truth for all Meta payload generation.
+3. Every launch must go through diagnostics first.
+4. Every launch must go through validation first.
+5. Every launch must support VALIDATE mode before PUBLISH mode.
+6. Every Meta API request and response must be logged.
+7. Every launch must have structured stage-by-stage error reporting.
+8. Existing post flow and uploaded media flow must be completely separated.
+9. Never send empty strings, null junk fields, or unsupported field combinations to Meta.
+10. Support only ONE stable campaign type: SALES.
+11. Use the simplest reliable structure possible.
+12. Do not pretend unsupported features work. Disable them in UI.
+13. Make this SaaS-grade, modular, readable, and testable.
+
+==================================================
+SCOPE OF THIS LAUNCHER
+==================================================
+
+Only support:
+- SALES campaigns
+- Website conversion / website sales style launch path
+- Broad targeting
+- Automatic placements / Advantage+ style simplified setup where applicable
+- Minimal inputs only
+
+The user should NOT have to set:
+- audience interests
+- demographics
+- manual placements
+- detailed targeting
+- bidding strategy complexity
+- advanced campaign configuration
+
+Those should be handled by sensible backend defaults for this sales launcher.
+
+==================================================
+SUPPORTED CREATIVE MODES
+==================================================
+
+MODE 1: Upload Image
+- user uploads image
+- user adds destination URL
+- user adds primary text
+- user adds headline
+- user adds description if supported
+- user selects CTA
+- backend uploads image and creates ad creative correctly
+
+MODE 2: Upload Video
+- user uploads video
+- user adds destination URL
+- user adds primary text
+- user adds headline
+- user adds description if supported
+- user selects CTA
+- backend uploads video, waits until ready, and creates ad creative correctly
+
+MODE 3: Use Existing Page Post
+- user selects an existing Facebook Page post
+- backend uses existing post path only
+- if editable CTA/link/copy is not supported for this flow, UI must clearly say:
+  “Existing post ads use the post as-is”
+- do not fake-edit existing post creatives
+
+IMPORTANT:
+Do not mix these modes.
+Each mode must have its own backend builder and validation rules.
+
+==================================================
+MAIN PAGE TO BUILD
+==================================================
+
+Page: Meta Ads > Sales Launcher
+
+----------------------------------
+SECTION A: Connection & Diagnostics
+----------------------------------
+
+Show:
+- Meta connection status
+- selected business
+- selected ad account
+- selected Facebook Page
+- selected Instagram account if available
+- selected pixel / conversion source if required
+- token health
+- required permissions status
+- last sync time
+
+Buttons:
+- Sync Meta Assets
+- Run Diagnostics
+- Test Validate Mode
+
+Diagnostics must test:
+- token is valid
+- ad account is readable and usable
+- page is accessible
+- Instagram actor/account is accessible if selected
+- pixel / conversion source is available if required
+- required IDs are present
+- launch prerequisites are satisfied
+
+If diagnostics fail, show exact reason and block launch.
+
+----------------------------------
+SECTION B: Sales Launch Form
+----------------------------------
+
+Fields:
+- Ad / Campaign Name
+- Creative Source:
+  - Upload Image
+  - Upload Video
+  - Use Existing Post
+- Ad Account selector
+- Facebook Page selector
+- Instagram account selector (optional if supported)
+- Pixel selector / conversion source selector if needed
+- Destination URL
+- Primary Text
+- Headline
+- Description
+- CTA dropdown
+- Daily Budget
+- Start Mode:
+  - Start Now
+  - Schedule Start
+- Start DateTime if scheduled
+- Publish Mode:
+  - Validate Only
+  - Draft / Paused
+  - Publish Live
+
+Conditional UI:
+If Upload Image selected:
+- image upload field
+- preview
+- replace/remove file
+
+If Upload Video selected:
+- video upload field
+- preview
+- upload progress
+- processing status
+- launch must be blocked until video is ready
+
+If Existing Post selected:
+- fetch and display recent Page posts
+- searchable post selector
+- post preview
+- note that existing post will run as-is
+- if URL/copy editing is unsupported in this path, disable those fields or clearly label them not applicable
+
+----------------------------------
+SECTION C: Validation Checklist
+----------------------------------
+
+Before launch, show a structured checklist:
+- Meta connected
+- ad account selected
+- page selected
+- pixel/conversion source selected if required
+- valid destination URL
+- primary text valid
+- headline valid
+- CTA selected
+- budget valid
+- media uploaded and ready
+- existing post valid
+- diagnostics passed
+
+Use:
+- green for pass
+- red for fail
+- yellow for warning
+
+----------------------------------
+SECTION D: Launch Progress + Result
+----------------------------------
+
+After submit, show progress stages:
+- running diagnostics
+- normalizing input
+- validating fields
+- uploading media
+- waiting for video processing
+- building campaign payload
+- creating campaign
+- creating ad set
+- creating creative
+- creating ad
+- generating preview
+- publishing
+
+On success show:
+- campaign id
+- ad set id
+- creative id
+- ad id
+- status
+- preview link if available
+- launch summary
+
+On failure show:
+- exact failed stage
+- parsed error message
+- raw Meta error in expandable section
+- recommended fix
+
+Never show generic “Something went wrong”.
+
+==================================================
+BACKEND MODULES TO CREATE
+==================================================
+
+Replace existing messy logic with these modules:
+
+1. metaAuthService
+Responsibilities:
+- store encrypted Meta auth
+- manage token metadata
+- validate token
+- fetch businesses
+- fetch ad accounts
+- fetch pages
+- fetch Instagram accounts
+- fetch pixels / conversion assets
+- expose diagnostics
+
+2. metaAssetService
+Responsibilities:
+- sync ad accounts
+- sync pages
+- sync Instagram accounts
+- sync page posts
+- sync pixels / conversion assets
+- return normalized lists for frontend selectors
+
+3. metaMediaService
+Responsibilities:
+- validate uploaded file
+- upload image
+- upload video
+- poll video processing
+- store uploaded media reference
+- return normalized media result
+Examples:
+  {
+    mediaType: "IMAGE",
+    imageHash: "...",
+    thumbnailUrl: "...",
+    status: "READY"
+  }
+
+  {
+    mediaType: "VIDEO",
+    videoId: "...",
+    thumbnailUrl: "...",
+    status: "READY"
+  }
+
+4. metaValidationService
+Responsibilities:
+- validate launch input
+- validate required connections
+- validate account/page compatibility
+- validate destination URL
+- validate copy fields
+- validate CTA
+- validate budget
+- validate schedule
+- validate mode-specific rules
+- validate image/video readiness
+- validate existing post ownership
+- validate that unsupported combinations are blocked before Meta call
+
+Must return structured validation results:
+[
+  {
+    code: "MISSING_PAGE",
+    field: "pageId",
+    stage: "preflight",
+    message: "Facebook Page is required.",
+    fixSuggestion: "Select a connected Facebook Page before launch."
+  }
+]
+
+5. metaPayloadBuilder
+IMPORTANT:
+Do NOT make one giant payload builder.
+Create separate builders.
+
+Required builders:
+- buildSalesCampaignPayload()
+- buildSalesAdSetPayload()
+- buildImageSalesCreativePayload()
+- buildVideoSalesCreativePayload()
+- buildExistingPostSalesCreativePayload()
+- buildSalesAdPayload()
+
+These builders must accept only normalized input.
+No raw frontend junk.
+No optional random payload fragments.
+Only strict backend-controlled payload creation.
+
+6. metaLaunchService
+Responsibilities:
+- create launch job
+- run diagnostics
+- normalize input
+- validate input
+- upload media if needed
+- build payloads
+- create campaign
+- create ad set
+- create creative
+- create ad
+- optionally publish live
+- log every stage
+- handle partial failures safely
+- return structured result
+
+7. metaErrorParser
+Responsibilities:
+- parse Meta API errors
+- extract:
+  - message
+  - type
+  - code
+  - subcode
+  - error_user_title
+  - error_user_msg
+  - fbtrace_id
+- convert common invalid parameter issues into human-readable messages
+
+Example:
+Raw:
+“Invalid parameter”
+Converted:
+“Creative payload is invalid because the selected media type does not match the fields sent to Meta.”
+
+8. metaPreviewService
+Responsibilities:
+- generate preview if supported
+- validate preview state before publish
+- block live publish if preview generation shows creative issue
+
+==================================================
+DATABASE TABLES / SCHEMA
+==================================================
+
+Create or replace with clean schema:
+
+meta_connections
+- id
+- workspace_id
+- meta_user_id
+- business_id
+- access_token_encrypted
+- token_expires_at
+- scopes_json
+- status
+- created_at
+- updated_at
+
+meta_ad_accounts
+- id
+- workspace_id
+- meta_connection_id
+- ad_account_id
+- name
+- currency
+- timezone
+- status
+- selected_boolean
+- created_at
+- updated_at
+
+meta_pages
+- id
+- workspace_id
+- meta_connection_id
+- page_id
+- name
+- linked_instagram_id
+- selected_boolean
+- created_at
+- updated_at
+
+meta_pixels
+- id
+- workspace_id
+- ad_account_id
+- pixel_id
+- name
+- status
+- selected_boolean
+- created_at
+- updated_at
+
+meta_page_posts
+- id
+- workspace_id
+- page_id
+- post_id
+- message_excerpt
+- permalink_url
+- thumbnail_url
+- post_type
+- created_time
+- raw_json
+- synced_at
+
+meta_uploaded_media
+- id
+- workspace_id
+- media_type
+- mime_type
+- file_size
+- source_file_path
+- image_hash
+- video_id
+- thumbnail_url
+- processing_status
+- raw_json
+- created_at
+
+meta_launch_jobs
+- id
+- workspace_id
+- created_by
+- mode
+- status
+- validation_status
+- publish_mode
+- input_json
+- normalized_input_json
+- result_json
+- current_stage
+- error_summary
+- campaign_id
+- adset_id
+- creative_id
+- ad_id
+- created_at
+- updated_at
+
+meta_api_logs
+- id
+- workspace_id
+- launch_job_id
+- stage
+- endpoint
+- request_json
+- response_json
+- http_status
+- success_boolean
+- fbtrace_id
+- created_at
+
+==================================================
+FRONTEND -> BACKEND INPUT CONTRACT
+==================================================
+
+Frontend should submit ONLY this clean structure:
+
+{
+  "adName": "Summer Sale Campaign",
+  "mode": "UPLOAD_IMAGE" | "UPLOAD_VIDEO" | "EXISTING_POST",
+  "uploadedMediaId": "optional-media-id",
+  "existingPostId": "optional-post-id",
+  "adAccountId": "act_123",
+  "pageId": "123456",
+  "instagramActorId": "optional",
+  "pixelId": "optional-or-required-based-on-launch-path",
+  "destinationUrl": "https://example.com/product",
+  "primaryText": "Buy now",
+  "headline": "Limited Time Offer",
+  "description": "Shop today",
+  "cta": "SHOP_NOW",
+  "budgetType": "DAILY",
+  "dailyBudget": 2000,
+  "currency": "PKR",
+  "startMode": "NOW" | "SCHEDULED",
+  "startTime": "optional datetime",
+  "publishMode": "VALIDATE" | "DRAFT" | "PUBLISH"
+}
+
+Frontend must NOT send:
+- raw Meta payloads
+- object_story_spec fragments
+- targeting fragments
+- creative fragments
+- random settings blobs
+
+==================================================
+NORMALIZATION RULES
+==================================================
+
+Backend must normalize all input:
+- trim strings
+- convert empty strings to null
+- validate all IDs are strings
+- normalize budget format
+- ensure URL is valid
+- enforce mutually exclusive mode rules
+- remove fields that do not belong to selected mode
+
+Examples:
+- mode=UPLOAD_IMAGE => existingPostId must be null
+- mode=UPLOAD_VIDEO => existingPostId must be null
+- mode=EXISTING_POST => uploadedMediaId must be null
+- mode=EXISTING_POST => copy editing rules depend on supported path
+- mode=UPLOAD_IMAGE => media must resolve to image hash
+- mode=UPLOAD_VIDEO => media must resolve to video id
+
+==================================================
+SAFE LAUNCH FLOW
+==================================================
+
+Implement this exact sequence:
+
+STEP 1: Run Diagnostics
+- validate token
+- validate ad account
+- validate page
+- validate Instagram account if selected
+- validate pixel / conversion source if required
+- stop immediately if any fail
+
+STEP 2: Normalize Input
+- normalize fields
+- store normalized launch job
+
+STEP 3: Validate Input
+- validate all required fields
+- validate URL
+- validate budget
+- validate copy
+- validate mode-specific requirements
+- validate media readiness
+- validate existing post
+- return all validation issues before calling Meta
+
+STEP 4: Handle Creative Source
+
+If mode = UPLOAD_IMAGE:
+- validate image file
+- upload image
+- store image hash
+- block if upload fails
+
+If mode = UPLOAD_VIDEO:
+- validate video file
+- upload video
+- poll until processing = READY
+- block launch until ready
+- store video id
+
+If mode = EXISTING_POST:
+- verify selected post belongs to selected page
+- verify post is eligible for this sales launcher path
+- if not eligible, fail before launch
+
+STEP 5: Build SALES Campaign Payload
+- minimal stable campaign payload only
+- correct SALES objective handling only
+- default to paused if safer
+- no extra unsupported settings
+
+STEP 6: Build SALES Ad Set Payload
+- broad targeting
+- automatic placements
+- simplified setup
+- correct budget handling
+- correct schedule handling
+- correct sales/conversion related fields only
+- no manual targeting fields
+
+STEP 7: Build SALES Creative Payload
+Branch by mode:
+
+A. buildImageSalesCreativePayload()
+- page id
+- image hash
+- primary text
+- headline
+- description if supported
+- CTA
+- destination URL
+- correct object_story_spec for image ads
+
+B. buildVideoSalesCreativePayload()
+- page id
+- video id
+- primary text
+- headline
+- CTA
+- destination URL
+- correct object_story_spec for video ads
+
+C. buildExistingPostSalesCreativePayload()
+- page id
+- existing post id / object story id path
+- no fake editing of unsupported fields
+- if unsupported combination, block before Meta call
+
+IMPORTANT:
+Never send image fields in video mode.
+Never send video fields in image mode.
+Never send both object_story_spec and object_story_id together.
+Never send optional fields unless valid for that exact mode.
+
+STEP 8: Build Ad Payload
+- connect ad set
+- connect creative
+- create ad in paused state first if needed
+- only publish live after full success
+
+STEP 9: Preview / Final Validation
+- generate preview if supported
+- if preview fails, do not publish live
+
+STEP 10: Publish Logic
+If publishMode = VALIDATE:
+- do not create live objects unless required for validation path
+- return validation summary only
+
+If publishMode = DRAFT:
+- create paused objects only
+
+If publishMode = PUBLISH:
+- create safely
+- publish only after every stage succeeds
+
+==================================================
+STRICT INVALID PARAMETER DEFENSE RULES
+==================================================
+
+Build strong backend rules to prevent common Meta errors BEFORE launch.
+
+Validate these specifically:
+- missing ad account id
+- missing page id
+- missing destination URL
+- missing CTA where required
+- missing pixel / promoted object requirements
+- missing uploaded media id
+- missing image hash for image ads
+- missing video id for video ads
+- video still processing
+- existing post not from selected page
+- object_story_spec + object_story_id conflict
+- unsupported fields for selected creative mode
+- wrong budget format
+- empty strings being sent
+- null unsupported values being sent
+- invalid date/time
+- invalid URL protocol
+- page / Instagram mismatch
+- unsupported copy editing in existing post mode
+
+==================================================
+EXISTING POST MODE RULES
+==================================================
+
+When user selects Existing Post:
+- fetch posts from selected page
+- allow search and preview
+- show post created date
+- show post type if possible
+- use post as-is
+- if launcher cannot support editing copy / CTA / URL in existing-post mode, disable those fields and clearly explain it
+- never pretend those edits will work
+
+==================================================
+MEDIA UX RULES
+==================================================
+
+IMAGE UPLOAD UX
+- show accepted image formats
+- show file size limits
+- show preview
+- allow replace/remove
+- upload progress
+
+VIDEO UPLOAD UX
+- show accepted video formats
+- show file size limits
+- show upload progress
+- show processing state after upload
+- block launch until ready
+- show thumbnail if available
+
+==================================================
+SETTINGS REBUILD REQUIREMENT
+==================================================
+
+If current settings are not enough, replace them with a proper setup structure.
+
+Required settings areas:
+1. Meta connection
+2. Ad account selection
+3. Facebook Page selection
+4. Instagram account selection
+5. Pixel / conversion source selection
+6. Asset sync
+7. Diagnostics
+8. Validate-only test launch
+
+Do not keep hidden assumptions.
+Everything needed for launch must be visible, explicit, and stored properly.
+
+==================================================
+ERROR HANDLING UX
+==================================================
+
+For every failure show:
+- failed stage
+- concise summary
+- exact field if known
+- parsed Meta reason
+- recommended fix
+- raw API response in expandable debug section for admins
+
+Example:
+Stage: Creative Creation
+Reason: Video is not ready yet
+Fix: Wait until processing status becomes READY before launching
+
+==================================================
+SECURITY RULES
+==================================================
+
+- encrypt tokens at rest
+- never expose tokens to frontend
+- all permission checks server-side
+- workspace-level data isolation
+- audit logs for launch actions
+- sanitize logs for sensitive values
+
+==================================================
+TESTING REQUIREMENTS
+==================================================
+
+Write tests for:
+- diagnostics flow
+- input normalization
+- validation rules
+- image launch path
+- video launch path
+- existing post launch path
+- payload builders
+- budget normalization
+- URL validation
+- object_story_spec conflict prevention
+- empty field stripping
+- video processing polling
+- error parsing
+
+==================================================
+ADMIN / DEBUGGING TOOLS
+==================================================
+
+Build an admin troubleshooting screen for this Sales Launcher showing:
+- launch job list
+- current stage
+- normalized input
+- created object ids
+- API logs
+- parsed errors
+- raw responses
+- retry eligibility if safe
+
+==================================================
+DELIVERABLES I EXPECT
+==================================================
+
+I expect actual code changes, not just explanation.
+
+Provide:
+1. rebuilt Meta Sales Launcher page
+2. rebuilt backend modules
+3. new/updated database migrations
+4. API routes/endpoints
+5. service classes
+6. validators
+7. payload builders
+8. diagnostics tool
+9. validate-only mode
+10. launch job logs
+11. tests
+12. list of files created/updated
+13. explanation of final launch flow
+14. explanation of remaining manual Meta setup needed from user
+
+==================================================
+VERY IMPORTANT IMPLEMENTATION INSTRUCTIONS
+==================================================
+
+- Remove dependence on broken legacy launch logic
+- Do not guess field combinations from old code
+- Build one small stable sales launcher instead of trying to support everything
+- If something is unsupported, disable it in UI
+- Root-cause fix only, no patchwork
+- Keep code modular and readable
+- Optimize for reliability over feature count
+
+FINAL NOTE:
+This launcher must be ready for real use, not just UI-complete.
+Do the rebuild properly so image ads, video ads, and existing post sales ads can launch through one simplified sales-only system with strong validation and no invalid-parameter chaos.
