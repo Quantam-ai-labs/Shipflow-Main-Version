@@ -1,4 +1,6 @@
 import { META_BASE_URL } from "../metaAds";
+import { db } from "../../db";
+import { metaApiLogs } from "@shared/schema";
 import type { SalesLaunchInput } from "./salesPayloadBuilder";
 
 export interface ValidationIssue {
@@ -35,7 +37,23 @@ export function validateConnectionFields(input: SalesLaunchInput): ValidationIss
   return issues;
 }
 
-export async function validateConnection(accessToken: string, adAccountId: string, pageId: string): Promise<ValidationIssue[]> {
+async function logValidationCall(merchantId: string | undefined, endpoint: string, status: number, ok: boolean, data: unknown): Promise<void> {
+  if (!merchantId) return;
+  try {
+    await db.insert(metaApiLogs).values({
+      merchantId,
+      stage: "validation",
+      endpoint,
+      method: "GET",
+      requestJson: {},
+      responseJson: data as Record<string, unknown>,
+      httpStatus: status,
+      success: ok,
+    });
+  } catch {}
+}
+
+export async function validateConnection(accessToken: string, adAccountId: string, pageId: string, merchantId?: string): Promise<ValidationIssue[]> {
   const issues: ValidationIssue[] = [];
 
   if (!accessToken) {
@@ -58,8 +76,9 @@ export async function validateConnection(accessToken: string, adAccountId: strin
     tokenUrl.searchParams.set("access_token", accessToken);
     tokenUrl.searchParams.set("fields", "id,name");
     const tokenRes = await fetch(tokenUrl.toString());
+    const tokenData = await tokenRes.json();
+    await logValidationCall(merchantId, "me", tokenRes.status, tokenRes.ok, tokenData);
     if (!tokenRes.ok) {
-      const tokenData = await tokenRes.json();
       issues.push({ code: "TOKEN_INVALID", field: "accessToken", stage: "connection", message: tokenData?.error?.message || "Access token is invalid or expired.", fixSuggestion: "Reconnect your Meta account in Settings." });
       return issues;
     }
@@ -75,6 +94,7 @@ export async function validateConnection(accessToken: string, adAccountId: strin
     acctUrl.searchParams.set("fields", "account_status");
     const acctRes = await fetch(acctUrl.toString());
     const acctData = await acctRes.json();
+    await logValidationCall(merchantId, actId, acctRes.status, acctRes.ok, acctData);
     if (!acctRes.ok) {
       issues.push({ code: "AD_ACCOUNT_INACCESSIBLE", field: "adAccountId", stage: "connection", message: acctData?.error?.message || "Cannot access ad account.", fixSuggestion: "Check your ad account permissions." });
     } else if (acctData.account_status !== 1) {
@@ -89,8 +109,9 @@ export async function validateConnection(accessToken: string, adAccountId: strin
     pageUrl.searchParams.set("access_token", accessToken);
     pageUrl.searchParams.set("fields", "id,name,is_published");
     const pageRes = await fetch(pageUrl.toString());
+    const pageData = await pageRes.json();
+    await logValidationCall(merchantId, pageId, pageRes.status, pageRes.ok, pageData);
     if (!pageRes.ok) {
-      const pageData = await pageRes.json();
       issues.push({ code: "PAGE_INACCESSIBLE", field: "pageId", stage: "connection", message: pageData?.error?.message || "Cannot access Facebook Page.", fixSuggestion: "Ensure you have admin access to this page." });
     }
   } catch {
@@ -229,14 +250,15 @@ export function validateLaunchInput(input: SalesLaunchInput): ValidationIssue[] 
   return issues;
 }
 
-export function normalizeInput(raw: any): SalesLaunchInput {
-  const trimOrNull = (val: any): string | null => {
+export function normalizeInput(raw: Record<string, unknown>): SalesLaunchInput {
+  const trimOrNull = (val: unknown): string | null => {
     if (val === undefined || val === null) return null;
     const s = String(val).trim();
     return s === "" ? null : s;
   };
 
-  const mode = raw.mode as SalesLaunchInput["mode"];
+  const mode = String(raw.mode || "UPLOAD_IMAGE") as SalesLaunchInput["mode"];
+  const publishModeRaw = String(raw.publishMode || "VALIDATE");
 
   const base: SalesLaunchInput = {
     adName: trimOrNull(raw.adName) || "",
@@ -244,11 +266,11 @@ export function normalizeInput(raw: any): SalesLaunchInput {
     adAccountId: trimOrNull(raw.adAccountId) || "",
     pageId: trimOrNull(raw.pageId) || "",
     pixelId: trimOrNull(raw.pixelId),
-    dailyBudget: parseFloat(raw.dailyBudget) || 0,
+    dailyBudget: parseFloat(String(raw.dailyBudget || 0)) || 0,
     currency: trimOrNull(raw.currency) || "PKR",
     startMode: raw.startMode === "SCHEDULED" ? "SCHEDULED" : "NOW",
     startTime: trimOrNull(raw.startTime),
-    publishMode: (["VALIDATE", "DRAFT", "PUBLISH"].includes(raw.publishMode) ? raw.publishMode : "VALIDATE") as SalesLaunchInput["publishMode"],
+    publishMode: (["VALIDATE", "DRAFT", "PUBLISH"].includes(publishModeRaw) ? publishModeRaw : "VALIDATE") as SalesLaunchInput["publishMode"],
     imageHash: null,
     imageUrl: null,
     videoId: null,

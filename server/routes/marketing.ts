@@ -46,7 +46,7 @@ import {
 } from "../services/metaAdLauncher";
 import { executeSalesLaunch } from "../services/meta/salesLaunchService";
 import { runDiagnostics } from "../services/meta/salesDiagnostics";
-import { normalizeInput, validateLaunchInput } from "../services/meta/salesValidation";
+import { normalizeInput, validateLaunchInput, type ValidationIssue } from "../services/meta/salesValidation";
 import { generateChatResponse, generateDashboardInsights, generateQuickStrategy } from "../services/aiInsights";
 import crypto from "crypto";
 
@@ -3035,13 +3035,14 @@ export function registerMarketingRoutes(app: Express) {
       const normalized = normalizeInput(req.body);
       const fieldIssues = validateLaunchInput(normalized);
 
-      let connectionIssues: any[] = [];
+      let connectionIssues: ValidationIssue[] = [];
       try {
         const creds = await getCredentialsForMerchant(merchantId);
         const { validateConnection } = await import("../services/meta/salesValidation");
-        connectionIssues = await validateConnection(creds.accessToken, creds.adAccountId, normalized.pageId);
-      } catch (connErr: any) {
-        connectionIssues = [{ code: "CONNECTION_ERROR", field: "connection", stage: "connection", message: connErr.message, fixSuggestion: "Ensure your Meta account is connected." }];
+        connectionIssues = await validateConnection(creds.accessToken, creds.adAccountId, normalized.pageId, merchantId);
+      } catch (connErr: unknown) {
+        const errMsg = connErr instanceof Error ? connErr.message : String(connErr);
+        connectionIssues = [{ code: "CONNECTION_ERROR", field: "connection", stage: "connection" as const, message: errMsg, fixSuggestion: "Ensure your Meta account is connected." }];
       }
 
       const allIssues = [...fieldIssues, ...connectionIssues];

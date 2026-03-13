@@ -34,16 +34,16 @@ const CODE_FIXES: Record<number, string> = {
   368: "Temporary block due to excessive API calls. Wait a few minutes.",
 };
 
-export function parseMetaError(error: any): ParsedMetaError {
-  const metaError = error?.error || error;
+export function parseMetaError(error: Record<string, unknown> | null | undefined): ParsedMetaError {
+  const metaError = (error?.error as Record<string, unknown>) || error || {};
 
-  const code = metaError?.code ?? 0;
-  const subcode = metaError?.error_subcode ?? 0;
-  const message = metaError?.message || error?.message || "Unknown Meta API error";
-  const type = metaError?.type || "UnknownError";
-  const errorUserTitle = metaError?.error_user_title || "";
-  const errorUserMsg = metaError?.error_user_msg || "";
-  const fbtraceId = metaError?.fbtrace_id || "";
+  const code = (metaError?.code as number) ?? 0;
+  const subcode = (metaError?.error_subcode as number) ?? 0;
+  const message = (metaError?.message as string) || (error?.message as string) || "Unknown Meta API error";
+  const type = (metaError?.type as string) || "UnknownError";
+  const errorUserTitle = (metaError?.error_user_title as string) || "";
+  const errorUserMsg = (metaError?.error_user_msg as string) || "";
+  const fbtraceId = (metaError?.fbtrace_id as string) || "";
 
   let fixSuggestion = "";
   if (subcode && SUBCODE_FIXES[subcode]) {

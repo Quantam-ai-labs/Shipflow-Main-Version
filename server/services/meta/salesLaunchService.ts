@@ -14,13 +14,13 @@ import {
   buildSalesAdPayload,
   type SalesLaunchInput,
 } from "./salesPayloadBuilder";
-import { parseMetaError, formatMetaErrorForUser } from "./metaErrorParser";
+import { parseMetaError, formatMetaErrorForUser, type ParsedMetaError } from "./metaErrorParser";
 
 export interface LaunchStage {
   stage: string;
   status: "pending" | "running" | "success" | "failed" | "skipped";
   message?: string;
-  data?: any;
+  data?: Record<string, unknown>;
 }
 
 export interface LaunchResult {
@@ -34,11 +34,21 @@ export interface LaunchResult {
   validationIssues?: ValidationIssue[];
   error?: string;
   errorStage?: string;
-  rawError?: any;
+  rawError?: Record<string, unknown> | null;
 }
 
-function sanitizeForLog(body: Record<string, any>): Record<string, any> {
-  const safe: Record<string, any> = {};
+class MetaApiError extends Error {
+  metaError: Record<string, unknown> | null;
+  parsed: ParsedMetaError | null;
+  constructor(message: string, metaError: Record<string, unknown> | null = null, parsed: ParsedMetaError | null = null) {
+    super(message);
+    this.metaError = metaError;
+    this.parsed = parsed;
+  }
+}
+
+function sanitizeForLog(body: Record<string, unknown>): Record<string, unknown> {
+  const safe: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(body)) {
     if (k === "access_token") { safe[k] = "***REDACTED***"; continue; }
     safe[k] = v;
@@ -54,9 +64,9 @@ async function loggedMetaPost(
   stage: string,
   accessToken: string,
   endpoint: string,
-  body: Record<string, any>,
+  body: Record<string, unknown>,
   maxRetries = 1
-): Promise<any> {
+): Promise<Record<string, unknown>> {
   const url = `${META_BASE_URL}/${endpoint}`;
   const formData = new URLSearchParams();
   formData.set("access_token", accessToken);
@@ -66,7 +76,7 @@ async function loggedMetaPost(
     }
   }
 
-  let lastError: any = null;
+  let lastError: Record<string, unknown> | null = null;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     if (attempt > 0) {
       const delay = Math.min(1000 * Math.pow(2, attempt - 1), 4000);
@@ -79,8 +89,9 @@ async function loggedMetaPost(
       body: formData.toString(),
     });
 
-    const data = await response.json();
-    const fbtraceId = data?.error?.fbtrace_id || response.headers?.get("x-fb-trace-id") || null;
+    const data = await response.json() as Record<string, unknown>;
+    const errorObj = data?.error as Record<string, unknown> | undefined;
+    const fbtraceId = (errorObj?.fbtrace_id as string) || response.headers?.get("x-fb-trace-id") || null;
 
     try {
       await db.insert(metaApiLogs).values({
@@ -101,7 +112,7 @@ async function loggedMetaPost(
 
     if (response.ok) return data;
 
-    const errCode = data?.error?.code;
+    const errCode = (errorObj?.code as number) || 0;
     lastError = data;
 
     if (TRANSIENT_ERROR_CODES.includes(errCode) && attempt < maxRetries) {
@@ -109,20 +120,14 @@ async function loggedMetaPost(
     }
 
     const parsed = parseMetaError(data);
-    const err = new Error(formatMetaErrorForUser(parsed));
-    (err as any).metaError = data;
-    (err as any).parsed = parsed;
-    throw err;
+    throw new MetaApiError(formatMetaErrorForUser(parsed), data, parsed);
   }
 
   const parsed = parseMetaError(lastError);
-  const err = new Error(formatMetaErrorForUser(parsed));
-  (err as any).metaError = lastError;
-  (err as any).parsed = parsed;
-  throw err;
+  throw new MetaApiError(formatMetaErrorForUser(parsed), lastError, parsed);
 }
 
-async function updateJobStage(jobId: string, stage: string, updates: Record<string, any> = {}) {
+async function updateJobStage(jobId: string, stage: string, updates: Record<string, unknown> = {}) {
   await db.update(adLaunchJobs)
     .set({ currentStage: stage, ...updates })
     .where(eq(adLaunchJobs.id, jobId));
@@ -130,7 +135,7 @@ async function updateJobStage(jobId: string, stage: string, updates: Record<stri
 
 export async function executeSalesLaunch(
   merchantId: string,
-  rawInput: any
+  rawInput: Record<string, unknown>
 ): Promise<LaunchResult> {
   const stages: LaunchStage[] = [];
   let jobId = "";
@@ -153,17 +158,17 @@ export async function executeSalesLaunch(
       pixelId: input.pixelId || null,
       mode: input.mode,
       publishMode: input.publishMode,
-      normalizedInput: input as any,
+      normalizedInput: input as unknown as Record<string, unknown>,
       currentStage: "normalize",
     }).returning();
     jobId = job.id;
 
     stages.push({ stage: "validate", status: "running" });
     const issues = validateLaunchInput(input);
-    await updateJobStage(jobId, "validate", { validationStatus: issues as any });
+    await updateJobStage(jobId, "validate", { validationStatus: issues as unknown as Record<string, unknown>[] });
 
     if (issues.length > 0) {
-      stages[stages.length - 1] = { stage: "validate", status: "failed", message: `${issues.length} validation issue(s)`, data: issues };
+      stages[stages.length - 1] = { stage: "validate", status: "failed", message: `${issues.length} validation issue(s)`, data: { issues } };
       await updateJobStage(jobId, "validate", { status: "failed", errorMessage: issues.map(i => i.message).join("; "), errorSummary: "Validation failed" });
       return { success: false, jobId, stages, validationIssues: issues, error: "Validation failed", errorStage: "validate" };
     }
@@ -182,11 +187,11 @@ export async function executeSalesLaunch(
     if (!diagnostics.passed) {
       const failedChecks = diagnostics.checks.filter(c => c.status === "fail");
       const msg = failedChecks.map(c => `${c.name}: ${c.message}`).join("; ");
-      stages[stages.length - 1] = { stage: "diagnostics", status: "failed", message: msg, data: diagnostics.checks };
+      stages[stages.length - 1] = { stage: "diagnostics", status: "failed", message: msg, data: { checks: diagnostics.checks } };
       await updateJobStage(jobId, "diagnostics", { status: "failed", errorMessage: msg, errorSummary: "Diagnostics failed" });
       return { success: false, jobId, stages, error: msg, errorStage: "diagnostics" };
     }
-    stages[stages.length - 1] = { stage: "diagnostics", status: "success", data: diagnostics.checks };
+    stages[stages.length - 1] = { stage: "diagnostics", status: "success", data: { checks: diagnostics.checks } };
 
     if (input.publishMode === "VALIDATE") {
       await updateJobStage(jobId, "complete", { status: "validated" });
@@ -368,20 +373,21 @@ export async function executeSalesLaunch(
         await loggedMetaPost(merchantId, jobId, "publish_adset", creds.accessToken, adsetId, { status: "ACTIVE" });
         await loggedMetaPost(merchantId, jobId, "publish_ad", creds.accessToken, adId, { status: "ACTIVE" });
         stages[stages.length - 1] = { stage: "publish", status: "success" };
-      } catch (pubErr: any) {
-        stages[stages.length - 1] = { stage: "publish", status: "failed", message: `Created but failed to go live: ${pubErr.message}` };
+      } catch (pubErr: unknown) {
+        const pubError = pubErr instanceof MetaApiError ? pubErr : pubErr instanceof Error ? pubErr : new Error(String(pubErr));
+        stages[stages.length - 1] = { stage: "publish", status: "failed", message: `Created but failed to go live: ${pubError.message}` };
         await updateJobStage(jobId, "publish", {
           status: "partial",
           metaAdId: adId,
           metaCreativeId: creativeId,
-          errorMessage: `Publish failed: ${pubErr.message}`,
+          errorMessage: `Publish failed: ${pubError.message}`,
           resultJson: { campaignId, adsetId, creativeId, adId },
           launchedAt: new Date(),
         });
         return {
           success: false, jobId, stages, campaignId, adsetId, creativeId, adId,
-          error: `Objects created but publish failed: ${pubErr.message}`, errorStage: "publish",
-          rawError: (pubErr as any).metaError,
+          error: `Objects created but publish failed: ${pubError.message}`, errorStage: "publish",
+          rawError: pubError instanceof MetaApiError ? pubError.metaError : null,
         };
       }
     }
@@ -398,22 +404,24 @@ export async function executeSalesLaunch(
 
     return { success: true, jobId, stages, campaignId, adsetId, creativeId, adId };
 
-  } catch (err: any) {
+  } catch (caughtErr: unknown) {
+    const error = caughtErr instanceof MetaApiError ? caughtErr : caughtErr instanceof Error ? caughtErr : new Error(String(caughtErr));
     const currentStage = stages[stages.length - 1]?.stage || "unknown";
-    stages[stages.length - 1] = { stage: currentStage, status: "failed", message: err.message, data: (err as any).parsed || null };
+    const parsedData = error instanceof MetaApiError ? { parsed: error.parsed } : null;
+    stages[stages.length - 1] = { stage: currentStage, status: "failed", message: error.message, data: parsedData ?? undefined };
 
     if (jobId) {
       await updateJobStage(jobId, currentStage, {
         status: "failed",
-        errorMessage: err.message,
-        errorSummary: `Failed at ${currentStage}: ${err.message}`,
+        errorMessage: error.message,
+        errorSummary: `Failed at ${currentStage}: ${error.message}`,
       }).catch(() => {});
     }
 
     return {
       success: false, jobId, stages,
-      error: err.message, errorStage: currentStage,
-      rawError: (err as any).metaError || null,
+      error: error.message, errorStage: currentStage,
+      rawError: error instanceof MetaApiError ? error.metaError : null,
     };
   }
 }
