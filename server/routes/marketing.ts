@@ -2016,7 +2016,8 @@ export function registerMarketingRoutes(app: Express) {
       );
       res.json({ posts: combined });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      console.error("[page-posts] Error fetching Facebook posts:", error.message);
+      res.json({ posts: [], _error: true, errorMessage: error.message });
     }
   });
 
@@ -2029,7 +2030,8 @@ export function registerMarketingRoutes(app: Express) {
       const posts = await fetchInstagramMedia(merchantId, merchant.igAccountId, search);
       res.json({ posts });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      console.error("[ig-media] Error fetching Instagram media:", error.message);
+      res.json({ posts: [], _error: true, errorMessage: error.message });
     }
   });
 
@@ -2042,7 +2044,8 @@ export function registerMarketingRoutes(app: Express) {
       const posts = await fetchBrandedContentPosts(merchantId, merchant.pageId, search);
       res.json({ posts });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      console.error("[branded-content] Error fetching branded content:", error.message);
+      res.json({ posts: [], _error: true, errorMessage: error.message });
     }
   });
 
@@ -2055,7 +2058,8 @@ export function registerMarketingRoutes(app: Express) {
       const videos = await fetchPageVideos(merchantId, merchant.pageId, search);
       res.json({ videos });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      console.error("[page-videos] Error fetching page videos:", error.message);
+      res.json({ videos: [], _error: true, errorMessage: error.message });
     }
   });
 
@@ -2065,7 +2069,8 @@ export function registerMarketingRoutes(app: Express) {
       const images = await fetchAdAccountImages(merchantId);
       res.json({ images });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      console.error("[ad-account-images] Error fetching ad images:", error.message);
+      res.json({ images: [], _error: true, errorMessage: error.message });
     }
   });
 
@@ -2075,7 +2080,8 @@ export function registerMarketingRoutes(app: Express) {
       const videos = await fetchAdAccountVideos(merchantId);
       res.json({ videos });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      console.error("[ad-account-videos] Error fetching ad videos:", error.message);
+      res.json({ videos: [], _error: true, errorMessage: error.message });
     }
   });
 

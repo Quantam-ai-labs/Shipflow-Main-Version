@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Loader2, Plus, Trash2, Upload, ImageIcon, Film, Search, Download, ThumbsUp, MessageCircle, Share2, Calendar, Hash } from "lucide-react";
+import { Loader2, Plus, Trash2, Upload, ImageIcon, Film, Search, Download, ThumbsUp, MessageCircle, Share2, Calendar, Hash, AlertCircle } from "lucide-react";
 import { SiFacebook, SiInstagram, SiMeta } from "react-icons/si";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -35,11 +35,21 @@ export default function MetaMediaLibrary() {
 
   const { data: adImagesData, isLoading: adImagesLoading } = useQuery<any>({
     queryKey: ["/api/meta/ad-account-images"],
+    queryFn: async () => {
+      const res = await fetch("/api/meta/ad-account-images", { credentials: "include" });
+      if (!res.ok) return { images: [], _error: true, errorMessage: "Failed to connect to Meta API" };
+      return res.json();
+    },
     enabled: activeTab === "ad-account",
   });
 
   const { data: adVideosData, isLoading: adVideosLoading } = useQuery<any>({
     queryKey: ["/api/meta/ad-account-videos"],
+    queryFn: async () => {
+      const res = await fetch("/api/meta/ad-account-videos", { credentials: "include" });
+      if (!res.ok) return { videos: [], _error: true, errorMessage: "Failed to connect to Meta API" };
+      return res.json();
+    },
     enabled: activeTab === "ad-account",
   });
 
@@ -47,9 +57,8 @@ export default function MetaMediaLibrary() {
     queryKey: ["/api/meta/page-posts", "includeVideos"],
     queryFn: async () => {
       const res = await fetch("/api/meta/page-posts?includeVideos=true", { credentials: "include" });
-      if (!res.ok) return { posts: [], _notConnected: true };
-      const data = await res.json();
-      return data;
+      if (!res.ok) return { posts: [], _error: true, errorMessage: "Failed to connect to Meta API" };
+      return res.json();
     },
     enabled: activeTab === "facebook",
   });
@@ -58,9 +67,8 @@ export default function MetaMediaLibrary() {
     queryKey: ["/api/meta/ig-media", "library"],
     queryFn: async () => {
       const res = await fetch("/api/meta/ig-media", { credentials: "include" });
-      if (!res.ok) return { posts: [], _notConnected: true };
-      const data = await res.json();
-      return data;
+      if (!res.ok) return { posts: [], _error: true, errorMessage: "Failed to connect to Meta API" };
+      return res.json();
     },
     enabled: activeTab === "instagram",
   });
@@ -449,8 +457,8 @@ export default function MetaMediaLibrary() {
               {filteredAdImages.length === 0 && filteredAdVideos.length === 0 && (
                 searchQuery
                   ? renderEmptyState(Search, "No Results", "No ad account media matches your search.")
-                  : (!adImagesData && !adVideosData)
-                    ? renderEmptyState(SiMeta, "No Ad Account Connected", "Connect your Meta Ad Account in Settings to see your ad media here.")
+                  : (adImagesData?._error || adVideosData?._error)
+                    ? renderEmptyState(AlertCircle, "Failed to Load Ad Media", adImagesData?.errorMessage || adVideosData?.errorMessage || "Could not fetch media from your Meta Ad Account. Please check your connection in Meta Settings.")
                     : renderEmptyState(SiMeta, "No Ad Account Media", "No images or videos found in your Meta Ad Account.")
               )}
             </>
@@ -463,7 +471,9 @@ export default function MetaMediaLibrary() {
               ? renderEmptyState(Search, "No Results", "No Facebook posts match your search.")
               : fbPostsData?._notConnected
                 ? renderEmptyState(SiFacebook, "No Facebook Page Connected", "Connect your Facebook Page in Meta Settings to see your posts here.")
-                : renderEmptyState(SiFacebook, "No Facebook Posts", "No posts found on your connected Facebook Page.")
+                : fbPostsData?._error
+                  ? renderEmptyState(AlertCircle, "Failed to Load Facebook Posts", fbPostsData.errorMessage || "Could not fetch posts from your Facebook Page. Please check your connection in Meta Settings.")
+                  : renderEmptyState(SiFacebook, "No Facebook Posts", "No posts found on your connected Facebook Page.")
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
               {filteredFbPosts.map((post: any) => (
@@ -528,7 +538,9 @@ export default function MetaMediaLibrary() {
               ? renderEmptyState(Search, "No Results", "No Instagram media matches your search.")
               : igMediaData?._notConnected
                 ? renderEmptyState(SiInstagram, "No Instagram Account Connected", "Connect your Instagram account in Meta Settings to see your media here.")
-                : renderEmptyState(SiInstagram, "No Instagram Media", "No posts found on your connected Instagram account.")
+                : igMediaData?._error
+                  ? renderEmptyState(AlertCircle, "Failed to Load Instagram Media", igMediaData.errorMessage || "Could not fetch media from your Instagram account. Please check your connection in Meta Settings.")
+                  : renderEmptyState(SiInstagram, "No Instagram Media", "No posts found on your connected Instagram account.")
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
               {filteredIgMedia.map((item: any) => (
