@@ -58,6 +58,7 @@ async function metaApiPost(creds: MetaWriteOptions, endpoint: string, body: Reco
     }
 
     console.error(`[MetaAdLauncher] POST ${endpoint} failed (attempt ${attempt + 1}/${maxRetries + 1}):`, errMsg);
+    console.error(`[MetaAdLauncher] Full error response:`, JSON.stringify(data?.error));
     console.error(`[MetaAdLauncher] Request payload:`, JSON.stringify(sanitizePayload(body)));
     throw lastError;
   }
@@ -409,9 +410,7 @@ export async function createAdSet(
   if (params.endTime) {
     body.end_time = params.endTime;
   }
-  if (params.useAdvantageAudience) {
-    body.use_advantage_audience = true;
-  }
+  body.use_advantage_audience = true;
 
   const result = await metaApiPost(creds, `${creds.adAccountId}/adsets`, body);
   console.log(`[MetaAdLauncher] AdSet created: ${result.id}`);
