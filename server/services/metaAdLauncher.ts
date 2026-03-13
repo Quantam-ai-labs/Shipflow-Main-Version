@@ -396,11 +396,11 @@ export async function createAdSet(
     }
   }
 
-  if (params.bidStrategy && params.bidStrategy !== "LOWEST_COST_WITHOUT_CAP") {
-    if (params.bidAmount) {
-      body.bid_strategy = params.bidStrategy;
-      body.bid_amount = Math.round(parseFloat(params.bidAmount) * 100);
-    }
+  if (params.bidStrategy && params.bidStrategy !== "LOWEST_COST_WITHOUT_CAP" && params.bidAmount) {
+    body.bid_strategy = params.bidStrategy;
+    body.bid_amount = Math.round(parseFloat(params.bidAmount) * 100);
+  } else {
+    body.bid_strategy = "LOWEST_COST_WITHOUT_CAP";
   }
 
   if (params.promotedObject) {
