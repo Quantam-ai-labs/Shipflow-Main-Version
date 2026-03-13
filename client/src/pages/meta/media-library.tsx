@@ -47,8 +47,9 @@ export default function MetaMediaLibrary() {
     queryKey: ["/api/meta/page-posts", "includeVideos"],
     queryFn: async () => {
       const res = await fetch("/api/meta/page-posts?includeVideos=true", { credentials: "include" });
-      if (!res.ok) return { posts: [], _notConnected: res.status === 400 };
-      return res.json();
+      if (!res.ok) return { posts: [], _notConnected: true };
+      const data = await res.json();
+      return data;
     },
     enabled: activeTab === "facebook",
   });
@@ -58,7 +59,8 @@ export default function MetaMediaLibrary() {
     queryFn: async () => {
       const res = await fetch("/api/meta/ig-media", { credentials: "include" });
       if (!res.ok) return { posts: [], _notConnected: true };
-      return res.json();
+      const data = await res.json();
+      return data;
     },
     enabled: activeTab === "instagram",
   });

@@ -2002,7 +2002,7 @@ export function registerMarketingRoutes(app: Express) {
     try {
       const merchantId = await getMerchantId(req);
       const [merchant] = await db.select({ pageId: merchants.metaSelectedPageId }).from(merchants).where(eq(merchants.id, merchantId));
-      if (!merchant?.pageId) return res.status(400).json({ error: "No Facebook page connected" });
+      if (!merchant?.pageId) return res.json({ posts: [], _notConnected: true });
       const search = req.query.search as string | undefined;
       const includeVideos = req.query.includeVideos === "true";
       const [posts, videos] = await Promise.all([
@@ -2024,7 +2024,7 @@ export function registerMarketingRoutes(app: Express) {
     try {
       const merchantId = await getMerchantId(req);
       const [merchant] = await db.select({ igAccountId: merchants.metaSelectedIgAccountId }).from(merchants).where(eq(merchants.id, merchantId));
-      if (!merchant?.igAccountId) return res.json({ posts: [] });
+      if (!merchant?.igAccountId) return res.json({ posts: [], _notConnected: true });
       const search = req.query.search as string | undefined;
       const posts = await fetchInstagramMedia(merchantId, merchant.igAccountId, search);
       res.json({ posts });
