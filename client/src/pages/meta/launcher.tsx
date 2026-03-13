@@ -490,6 +490,8 @@ export default function MetaAdLauncher() {
   const [advantagePlusAudience, setAdvantagePlusAudience] = useState(false);
   const [selectedAudiences, setSelectedAudiences] = useState<{ id: string; name: string }[]>([]);
   const [excludedAudiences, setExcludedAudiences] = useState<{ id: string; name: string }[]>([]);
+  const [geoSearchQuery, setGeoSearchQuery] = useState("");
+  const [geoSearchResults, setGeoSearchResults] = useState<{ key: string; name: string; type: string; country_code: string; region: string }[]>([]);
 
   const [adFormat, setAdFormat] = useState<AdFormat>("single_image");
   const [primaryText, setPrimaryText] = useState("");
@@ -582,6 +584,14 @@ export default function MetaAdLauncher() {
     }
   }, [effectivePixelId]);
 
+  const conversionGoals = ["OFFSITE_CONVERSIONS", "LEAD_GENERATION"];
+  const hasPixel = selectedPixelId && selectedPixelId !== "none";
+  useEffect(() => {
+    if (!hasPixel && conversionGoals.includes(optimizationGoal)) {
+      setOptimizationGoal("LINK_CLICKS");
+    }
+  }, [hasPixel, optimizationGoal]);
+
   const mediaWarnings = adFormat === "single_image" ? [...validateMediaUrl(imageUrl, "image"), ...imageDimWarnings] : [];
 
   useEffect(() => {
@@ -591,6 +601,25 @@ export default function MetaAdLauncher() {
     img.onerror = () => setImageDimWarnings([]);
     img.src = imageUrl;
   }, [imageUrl, adFormat]);
+  useEffect(() => {
+    if (!geoSearchQuery || geoSearchQuery.length < 2) { setGeoSearchResults([]); return; }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/meta/targeting-search?type=adgeolocation&q=${encodeURIComponent(geoSearchQuery)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        setGeoSearchResults((data.data || []).map((item: any) => ({
+          key: item.key || item.id || item.name,
+          name: item.name,
+          type: item.type || "city",
+          country_code: item.country_code || "PK",
+          region: item.region || "",
+        })));
+      } catch { setGeoSearchResults([]); }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [geoSearchQuery]);
+
   const budgetValue = budgetType === "daily" ? dailyBudget : lifetimeBudget;
   const budgetMin = budgetType === "daily" ? 100 : 1000;
   const budgetWarning = parseFloat(budgetValue) < budgetMin ? `Minimum ${budgetType} budget is PKR ${budgetMin}` : "";
@@ -701,8 +730,18 @@ export default function MetaAdLauncher() {
         payload.endTime = ed.toISOString();
       }
 
-      const res = await apiRequest("POST", "/api/meta/launch", payload);
-      return res.json();
+      const res = await fetch("/api/meta/launch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        const step = data.step ? `[${data.step}] ` : "";
+        throw new Error(`${step}${data.error || "Unknown error"}`);
+      }
+      return data;
     },
     onSuccess: () => {
       toast({ title: "Ad Launched Successfully!", description: `Campaign "${campaignName}" created in PAUSED state.` });
@@ -810,11 +849,11 @@ export default function MetaAdLauncher() {
               </div>
               <div className="space-y-1.5">
                 <Label>Optimization Goal</Label>
-                <Select value={optimizationGoal || (selectedPixelId ? "OFFSITE_CONVERSIONS" : "LINK_CLICKS")} onValueChange={setOptimizationGoal}>
+                <Select value={optimizationGoal || (hasPixel ? "OFFSITE_CONVERSIONS" : "LINK_CLICKS")} onValueChange={setOptimizationGoal}>
                   <SelectTrigger data-testid="select-optimization-goal"><SelectValue /></SelectTrigger>
-                  <SelectContent>{OPTIMIZATION_GOALS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+                  <SelectContent>{OPTIMIZATION_GOALS.filter(o => hasPixel || !conversionGoals.includes(o.value)).map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">Auto-selected based on pixel. Override if needed.</p>
+                <p className="text-xs text-muted-foreground">{hasPixel ? "Auto-selected based on pixel. Override if needed." : "Select a pixel to unlock conversion optimization goals."}</p>
               </div>
             </div>
 
@@ -1030,15 +1069,29 @@ export default function MetaAdLauncher() {
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
-                      placeholder="Filter cities..."
-                      value={cityFilter} onChange={e => setCityFilter(e.target.value)}
-                      className="pl-9 h-8 text-sm" data-testid="input-city-filter"
+                      placeholder="Search cities via Meta or filter presets..."
+                      value={geoSearchQuery || cityFilter}
+                      onChange={e => { const v = e.target.value; setGeoSearchQuery(v); setCityFilter(v); }}
+                      className="pl-9 h-8 text-sm" data-testid="input-city-search"
                     />
                   </div>
+                  {geoSearchResults.length > 0 && (
+                    <div className="border rounded-md p-2 space-y-1 bg-muted/30">
+                      <p className="text-xs font-medium text-muted-foreground">Meta Location Results</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {geoSearchResults.filter(r => !selectedCities.includes(r.name)).map(r => (
+                          <Badge key={r.key} variant="outline" className="cursor-pointer select-none text-xs border-dashed"
+                            onClick={() => { setSelectedCities(prev => [...prev, r.name]); setGeoSearchQuery(""); setGeoSearchResults([]); }}
+                            data-testid={`badge-geo-${r.key}`}
+                          >{r.name}{r.region ? `, ${r.region}` : ""}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto">
                     {PK_CITIES
                       .filter(c => !cityFilter || c.name.toLowerCase().includes(cityFilter.toLowerCase()))
-                      .map(({ name: cityName, province }) => {
+                      .map(({ name: cityName }) => {
                         const isSelected = selectedCities.includes(cityName);
                         return (
                           <Badge key={cityName} variant={isSelected ? "default" : "outline"} className="cursor-pointer select-none text-xs"
@@ -1048,7 +1101,7 @@ export default function MetaAdLauncher() {
                         );
                       })}
                   </div>
-                  <p className="text-xs text-muted-foreground">{selectedCities.length} of {PK_CITIES.length} cities selected</p>
+                  <p className="text-xs text-muted-foreground">{selectedCities.length} cities selected ({PK_CITIES.length} presets + Meta search)</p>
                 </>
               )}
             </div>
@@ -1472,7 +1525,7 @@ export default function MetaAdLauncher() {
                   <div className="flex justify-between"><span className="text-muted-foreground">Budget</span><span>PKR {budgetValue}/{budgetType === "daily" ? "day" : "total"}</span></div>
                   {budgetLevel === "campaign" && spendingLimit && <div className="flex justify-between"><span className="text-muted-foreground">Spending Limit</span><span>PKR {spendingLimit}</span></div>}
                   <div className="flex justify-between"><span className="text-muted-foreground">Bid Strategy</span><span>{BID_STRATEGIES.find(b => b.value === bidStrategy)?.label}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Optimization</span><span>{OPTIMIZATION_GOALS.find(o => o.value === (optimizationGoal || (selectedPixelId ? "OFFSITE_CONVERSIONS" : "LINK_CLICKS")))?.label}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Optimization</span><span>{OPTIMIZATION_GOALS.find(o => o.value === (optimizationGoal || (hasPixel ? "OFFSITE_CONVERSIONS" : "LINK_CLICKS")))?.label}</span></div>
                   {selectedPixelId && selectedPixelId !== "none" && (
                     <>
                       <div className="flex justify-between"><span className="text-muted-foreground">Pixel</span><span className="font-mono text-xs">{availablePixels.find(p => p.id === selectedPixelId)?.name || selectedPixelId}</span></div>

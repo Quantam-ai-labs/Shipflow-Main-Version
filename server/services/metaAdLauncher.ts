@@ -611,6 +611,9 @@ export async function launchAd(
     }
 
     const conversionGoals = ["OFFSITE_CONVERSIONS", "LEAD_GENERATION"];
+    if (conversionGoals.includes(optimizationGoal) && !config.pixelId) {
+      optimizationGoal = "LINK_CLICKS";
+    }
     const needsPromotedObject = config.pixelId && conversionGoals.includes(optimizationGoal);
     const promotedObject: Record<string, any> = {};
     if (needsPromotedObject) {
