@@ -130,7 +130,8 @@ export default function SalesLauncher() {
   const [selectedPostSource, setSelectedPostSource] = useState<"facebook" | "instagram">("facebook");
   const [selectedPostPreview, setSelectedPostPreview] = useState<any>(null);
   const [postSearch, setPostSearch] = useState("");
-  const [diagnosticsResult, setDiagnosticsResult] = useState<{ passed: boolean; checks: DiagnosticCheck[] } | null>(null);
+  const [diagnosticsResult, setDiagnosticsResult] = useState<{ passed: boolean; checks: DiagnosticCheck[]; adAccountCurrency?: string } | null>(null);
+  const [accountCurrency, setAccountCurrency] = useState("USD");
   const [launchResult, setLaunchResult] = useState<LaunchResult | null>(null);
   const [showRawError, setShowRawError] = useState(false);
 
@@ -169,6 +170,9 @@ export default function SalesLauncher() {
     },
     onSuccess: (data) => {
       setDiagnosticsResult(data);
+      if (data.adAccountCurrency) {
+        setAccountCurrency(data.adAccountCurrency);
+      }
       toast({
         title: data.passed ? "Diagnostics passed" : "Diagnostics found issues",
         variant: data.passed ? "default" : "destructive",
@@ -249,7 +253,7 @@ export default function SalesLauncher() {
         pageId: selectedPageId,
         pixelId: selectedPixelId && selectedPixelId !== "none" ? selectedPixelId : null,
         dailyBudget: parseFloat(dailyBudget) || 500,
-        currency: "PKR",
+        currency: accountCurrency,
         startMode,
         startTime: startMode === "SCHEDULED" ? startTime : null,
         publishMode,
@@ -738,7 +742,7 @@ export default function SalesLauncher() {
                 </Select>
               </div>
               <div>
-                <Label htmlFor="dailyBudget">Daily Budget (PKR)</Label>
+                <Label htmlFor="dailyBudget">Daily Budget ({accountCurrency})</Label>
                 <Input
                   id="dailyBudget"
                   type="number"

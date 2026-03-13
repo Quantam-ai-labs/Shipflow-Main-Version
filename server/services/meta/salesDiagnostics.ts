@@ -11,6 +11,7 @@ export interface DiagnosticCheck {
 export interface DiagnosticsResult {
   passed: boolean;
   checks: DiagnosticCheck[];
+  adAccountCurrency?: string;
 }
 
 interface MetaGetResult {
@@ -57,7 +58,12 @@ export async function checkTokenHealth(accessToken: string, merchantId?: string)
   return { name: "Token Health", status: "fail", message: errData?.error?.message || "Token is invalid or expired" };
 }
 
-export async function checkAdAccountAccess(accessToken: string, rawAdAccountId: string, merchantId?: string): Promise<DiagnosticCheck> {
+export interface AdAccountCheckResult {
+  check: DiagnosticCheck;
+  currency?: string;
+}
+
+export async function checkAdAccountAccess(accessToken: string, rawAdAccountId: string, merchantId?: string): Promise<AdAccountCheckResult> {
   const adAccountId = rawAdAccountId.startsWith("act_") ? rawAdAccountId : `act_${rawAdAccountId}`;
   const result = await metaGet(accessToken, adAccountId, { fields: "account_id,name,account_status,currency,timezone_name" }, merchantId);
   if (result.ok) {
@@ -65,13 +71,14 @@ export async function checkAdAccountAccess(accessToken: string, rawAdAccountId: 
     const data = result.data as Record<string, unknown>;
     const statusCode = data.account_status as number;
     const statusLabel = statusMap[statusCode] || `UNKNOWN(${statusCode})`;
+    const currency = typeof data.currency === "string" ? data.currency : undefined;
     if (statusCode === 1) {
-      return { name: "Ad Account", status: "pass", message: `${data.name} (${statusLabel}, ${data.currency})` };
+      return { check: { name: "Ad Account", status: "pass", message: `${data.name} (${statusLabel}, ${data.currency})` }, currency };
     }
-    return { name: "Ad Account", status: "fail", message: `Account status: ${statusLabel}. Must be ACTIVE to launch ads.` };
+    return { check: { name: "Ad Account", status: "fail", message: `Account status: ${statusLabel}. Must be ACTIVE to launch ads.` }, currency };
   }
   const errData = result.data as Record<string, Record<string, string>>;
-  return { name: "Ad Account", status: "fail", message: errData?.error?.message || "Cannot access ad account" };
+  return { check: { name: "Ad Account", status: "fail", message: errData?.error?.message || "Cannot access ad account" } };
 }
 
 export async function checkPageAccess(accessToken: string, pageId: string, merchantId?: string): Promise<DiagnosticCheck> {
@@ -112,7 +119,15 @@ export async function checkPixelHealth(accessToken: string, pixelId: string | nu
   const result = await metaGet(accessToken, pixelId, { fields: "id,name,last_fired_time" }, merchantId);
   if (result.ok) {
     const data = result.data as Record<string, unknown>;
-    const lastFired = data.last_fired_time ? new Date((data.last_fired_time as number) * 1000).toISOString() : "Never";
+    let lastFired = "Never";
+    if (data.last_fired_time) {
+      try {
+        const parsed = new Date(String(data.last_fired_time));
+        lastFired = isNaN(parsed.getTime()) ? String(data.last_fired_time) : parsed.toISOString();
+      } catch {
+        lastFired = String(data.last_fired_time);
+      }
+    }
     return { name: "Pixel", status: "pass", message: `${data.name} (Last fired: ${lastFired})` };
   }
   return { name: "Pixel", status: "warn", message: "Pixel not accessible. Ads will use LINK_CLICKS optimization instead of conversions." };
@@ -154,12 +169,13 @@ export async function runDiagnostics(config: {
     return { passed: false, checks };
   }
 
-  checks.push(await checkAdAccountAccess(config.accessToken, config.adAccountId, mid));
+  const adAccountResult = await checkAdAccountAccess(config.accessToken, config.adAccountId, mid);
+  checks.push(adAccountResult.check);
   checks.push(await checkPageAccess(config.accessToken, config.pageId, mid));
   checks.push(await checkInstagramAccount(config.accessToken, config.pageId, mid));
   checks.push(await checkPixelHealth(config.accessToken, config.pixelId, mid));
   checks.push(await checkPermissions(config.accessToken, mid));
 
   const passed = checks.every(c => c.status !== "fail");
-  return { passed, checks };
+  return { passed, checks, adAccountCurrency: adAccountResult.currency };
 }
