@@ -1458,6 +1458,9 @@ export async function registerRoutes(
         const actorUserId = getSessionUserId(req) || null;
         const actorName = await getSessionUserName(req);
 
+        const numericDiffFields = new Set(["totalAmount", "subtotalAmount", "shippingAmount", "discountAmount", "prepaidAmount", "codRemaining", "courierWeight"]);
+        const normalizeNumStr = (v: string) => { const n = parseFloat(v); return isNaN(n) ? v : String(n); };
+        const changedFields: { field: string; oldValue: string | null; newValue: string | null }[] = [];
         for (const field of fieldsToCheck) {
           const oldValue = (order as any)[field.key];
           const newValStr =
@@ -1468,19 +1471,30 @@ export async function registerRoutes(
             field.key === "lineItems"
               ? JSON.stringify(oldValue)
               : String(oldValue ?? "");
-          if (oldValStr !== newValStr) {
-            await storage.createOrderChangeLog({
-              orderId,
-              merchantId,
-              changeType: "FIELD_EDIT",
-              fieldName: field.key,
+          const effectiveOld = numericDiffFields.has(field.key) ? normalizeNumStr(oldValStr) : oldValStr;
+          const effectiveNew = numericDiffFields.has(field.key) ? normalizeNumStr(newValStr) : newValStr;
+          if (effectiveOld !== effectiveNew) {
+            changedFields.push({
+              field: field.key,
               oldValue: oldValue != null ? oldValStr : null,
               newValue: field.newVal != null ? newValStr : null,
-              actorUserId,
-              actorName,
-              actorType: "user",
             });
           }
+        }
+        if (changedFields.length > 0) {
+          const fieldNames = changedFields.map(c => c.field).join(", ");
+          await storage.createOrderChangeLog({
+            orderId,
+            merchantId,
+            changeType: "FIELD_EDIT",
+            fieldName: fieldNames,
+            oldValue: null,
+            newValue: null,
+            actorUserId,
+            actorName,
+            actorType: "user",
+            metadata: { changes: changedFields },
+          });
         }
 
         if (order.shopifyOrderId) {
@@ -1493,8 +1507,9 @@ export async function registerRoutes(
             "province",
             "postalCode",
           ];
+          const changedFieldNames = new Set(changedFields.map(c => c.field));
           const hasAddressChange = addressFields.some(
-            (f) => updateData[f] !== undefined,
+            (f) => changedFieldNames.has(f),
           );
           if (hasAddressChange) {
             writeBackAddress(merchantId, order.shopifyOrderId, updateData)

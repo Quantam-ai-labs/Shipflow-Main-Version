@@ -292,7 +292,7 @@ function getActivityLabel(entry: any): string {
     case "BOOKING_CANCELLED": return "Booking Cancelled";
     case "SHOPIFY_CANCELLED": return "Shopify Cancelled";
     case "REMARK_ADDED": return "Remark Added";
-    case "FIELD_EDIT": return "Field Edited";
+    case "FIELD_EDIT": return "Order Edited";
     case "WHATSAPP_SENT": return entry.newValue === "sent" ? "WhatsApp Sent" : "WhatsApp Failed";
     case "WHATSAPP_CONFIRMED": return "WhatsApp Confirmed";
     case "WHATSAPP_CANCELLED": return "WhatsApp Cancelled";
@@ -404,16 +404,54 @@ function OrderTimeline({ orderId, auditLog, changeLog }: { orderId: string; audi
                       </div>
                     )}
                     {entry._type === "change" && entry.changeType === "FIELD_EDIT" && (
-                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                        <span className="text-xs font-medium capitalize">{(entry.fieldName || "").replace(/([A-Z])/g, ' $1').trim()}</span>
-                        {entry.oldValue && (
-                          <>
-                            <span className="text-xs text-muted-foreground">from</span>
-                            <span className="text-xs line-through text-muted-foreground/70 break-words">{entry.oldValue}</span>
-                          </>
+                      <div className="mt-1 space-y-0.5">
+                        {Array.isArray(entry.metadata?.changes) ? (
+                          (entry.metadata.changes as { field: string; oldValue: string | null; newValue: string | null }[]).map((c: { field: string; oldValue: string | null; newValue: string | null }, ci: number) => {
+                            const label = c.field.replace(/([A-Z])/g, ' $1').trim();
+                            if (c.field === "lineItems") {
+                              const summarize = (v: string | null) => {
+                                if (!v) return "";
+                                try {
+                                  const items = JSON.parse(v);
+                                  if (Array.isArray(items)) return items.map((i: any) => i.name || "Item").join(", ");
+                                } catch {}
+                                return v.length > 80 ? v.slice(0, 80) + "..." : v;
+                              };
+                              return (
+                                <div key={ci} className="flex flex-col gap-0.5">
+                                  <span className="text-xs font-medium capitalize">Line Items</span>
+                                  {c.oldValue && <span className="text-xs line-through text-muted-foreground/70 break-words">{summarize(c.oldValue)}</span>}
+                                  <span className="text-xs break-words">{summarize(c.newValue)}</span>
+                                </div>
+                              );
+                            }
+                            return (
+                              <div key={ci} className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-xs font-medium capitalize">{label}</span>
+                                {c.oldValue != null && (
+                                  <>
+                                    <span className="text-xs text-muted-foreground">from</span>
+                                    <span className="text-xs line-through text-muted-foreground/70">{c.oldValue}</span>
+                                  </>
+                                )}
+                                <span className="text-xs text-muted-foreground">to</span>
+                                <span className="text-xs font-medium">{c.newValue}</span>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs font-medium capitalize">{(entry.fieldName || "").replace(/([A-Z])/g, ' $1').trim()}</span>
+                            {entry.oldValue && (
+                              <>
+                                <span className="text-xs text-muted-foreground">from</span>
+                                <span className="text-xs line-through text-muted-foreground/70 break-words">{entry.oldValue}</span>
+                              </>
+                            )}
+                            <span className="text-xs text-muted-foreground">to</span>
+                            <span className="text-xs font-medium break-words">{entry.newValue}</span>
+                          </div>
                         )}
-                        <span className="text-xs text-muted-foreground">to</span>
-                        <span className="text-xs font-medium break-words">{entry.newValue}</span>
                       </div>
                     )}
                     {entry._type === "change" && (entry.changeType === "PAYMENT_ADDED" || entry.changeType === "PAYMENT_DELETED" || entry.changeType === "PAYMENT_REMOVED") && entry.metadata && (
