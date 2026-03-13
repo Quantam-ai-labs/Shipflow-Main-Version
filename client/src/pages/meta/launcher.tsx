@@ -700,7 +700,7 @@ export default function MetaAdLauncher() {
 
       const payload: any = {
         campaignName, objective,
-        dailyBudget: budgetType === "daily" ? dailyBudget : "500",
+        dailyBudget: budgetType === "daily" ? dailyBudget : undefined,
         budgetType,
         budgetLevel,
         targeting, creative, pageId,
@@ -720,9 +720,9 @@ export default function MetaAdLauncher() {
         payload.spendingLimit = spendingLimit;
       }
       if (budgetType === "lifetime") payload.lifetimeBudget = lifetimeBudget;
-      if (bidStrategy !== "LOWEST_COST_WITHOUT_CAP") {
+      if (bidStrategy && bidStrategy !== "LOWEST_COST_WITHOUT_CAP" && bidAmount) {
         payload.bidStrategy = bidStrategy;
-        if (bidAmount) payload.bidAmount = bidAmount;
+        payload.bidAmount = bidAmount;
       }
       if (startDate) {
         const [sh, sm] = startTime.split(":").map(Number);

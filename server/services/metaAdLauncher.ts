@@ -763,14 +763,18 @@ export async function bulkLaunchAds(
         name: ad.campaignName,
         objective: ad.objective,
         status: "PAUSED",
+        isCbo: false,
       });
 
+      const hasPixel = !!ad.pixelId;
+      const optGoal = hasPixel ? "OFFSITE_CONVERSIONS" : "LINK_CLICKS";
       const adSetId = await createAdSet(merchantId, {
         name: `${ad.campaignName} - AdSet`,
         campaignId,
         dailyBudget: ad.dailyBudget,
-        optimizationGoal: "OFFSITE_CONVERSIONS",
+        optimizationGoal: optGoal,
         targeting: ad.targeting || { geo_locations: { countries: ["PK"] } },
+        promotedObject: hasPixel ? { pixel_id: ad.pixelId, custom_event_type: "PURCHASE" } : undefined,
         status: "PAUSED",
       });
 

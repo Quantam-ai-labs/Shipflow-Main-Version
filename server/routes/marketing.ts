@@ -2108,7 +2108,7 @@ export function registerMarketingRoutes(app: Express) {
       const schema = z.object({
         campaignName: z.string().min(1),
         objective: z.string().default("OUTCOME_SALES"),
-        dailyBudget: z.string().min(1),
+        dailyBudget: z.string().optional(),
         lifetimeBudget: z.string().optional(),
         budgetType: z.enum(["daily", "lifetime"]).optional(),
         budgetLevel: z.enum(["adset", "campaign"]).optional(),
