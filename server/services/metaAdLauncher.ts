@@ -69,15 +69,36 @@ async function getPageAccessToken(merchantId: string, pageId: string): Promise<s
 export async function fetchPagePosts(merchantId: string, pageId: string, search?: string): Promise<any[]> {
   const creds = await getCredentialsForMerchant(merchantId);
   const pageToken = await getPageAccessToken(merchantId, pageId);
-  const url = new URL(`${META_BASE_URL}/${pageId}/promotable_posts`);
-  url.searchParams.set("access_token", pageToken);
-  url.searchParams.set("fields", "id,message,full_picture,created_time,type,permalink_url,status_type,likes.summary(true),comments.summary(true),shares");
-  url.searchParams.set("limit", "50");
-  const response = await fetch(url.toString());
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data?.error?.message || `Failed to fetch page posts`);
+  const fields = "id,message,full_picture,created_time,type,permalink_url,status_type,likes.summary(true),comments.summary(true),shares";
+
+  let data: any;
+  const promotableUrl = new URL(`${META_BASE_URL}/${pageId}/promotable_posts`);
+  promotableUrl.searchParams.set("access_token", pageToken);
+  promotableUrl.searchParams.set("fields", fields);
+  promotableUrl.searchParams.set("limit", "50");
+  const promotableRes = await fetch(promotableUrl.toString());
+  const promotableData = await promotableRes.json();
+
+  if (!promotableRes.ok) {
+    const errorCode = promotableData?.error?.code;
+    if (errorCode === 100) {
+      console.log("[fetchPagePosts] promotable_posts not available (error #100), falling back to feed endpoint");
+      const feedUrl = new URL(`${META_BASE_URL}/${pageId}/feed`);
+      feedUrl.searchParams.set("access_token", pageToken);
+      feedUrl.searchParams.set("fields", fields);
+      feedUrl.searchParams.set("limit", "50");
+      const feedRes = await fetch(feedUrl.toString());
+      data = await feedRes.json();
+      if (!feedRes.ok) {
+        throw new Error(data?.error?.message || "Failed to fetch page feed");
+      }
+    } else {
+      throw new Error(promotableData?.error?.message || "Failed to fetch page posts");
+    }
+  } else {
+    data = promotableData;
   }
+
   let posts = data.data || [];
   if (search && search.trim()) {
     const q = search.toLowerCase();
