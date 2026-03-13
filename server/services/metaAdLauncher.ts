@@ -172,42 +172,40 @@ export async function fetchBrandedContentPosts(merchantId: string, pageId: strin
 }
 
 export async function fetchPageVideos(merchantId: string, pageId: string, search?: string): Promise<any[]> {
-  try {
-    const pageToken = await getPageAccessToken(merchantId, pageId);
-    const url = new URL(`${META_BASE_URL}/${pageId}/videos`);
-    url.searchParams.set("access_token", pageToken);
-    url.searchParams.set("fields", "id,title,description,source,picture,created_time,length,likes.summary(true),comments.summary(true)");
-    url.searchParams.set("limit", "50");
-    const response = await fetch(url.toString());
-    const data = await response.json();
-    if (!response.ok) return [];
-    let videos = data.data || [];
-    if (search && search.trim()) {
-      const q = search.toLowerCase();
-      videos = videos.filter((v: any) =>
-        (v.title || "").toLowerCase().includes(q) ||
-        (v.description || "").toLowerCase().includes(q) ||
-        (v.id || "").toLowerCase().includes(q)
-      );
-    }
-    return videos.map((v: any) => ({
-      id: `${pageId}_${v.id}`,
-      message: v.title || v.description || "",
-      fullPicture: v.picture || "",
-      createdTime: v.created_time,
-      type: "video",
-      statusType: "added_video",
-      permalinkUrl: v.source || "",
-      likes: v.likes?.summary?.total_count || 0,
-      comments: v.comments?.summary?.total_count || 0,
-      shares: 0,
-      source: "facebook",
-      videoSource: v.source || "",
-      duration: v.length || 0,
-    }));
-  } catch {
-    return [];
+  const pageToken = await getPageAccessToken(merchantId, pageId);
+  const url = new URL(`${META_BASE_URL}/${pageId}/videos`);
+  url.searchParams.set("access_token", pageToken);
+  url.searchParams.set("fields", "id,title,description,source,picture,created_time,length,likes.summary(true),comments.summary(true)");
+  url.searchParams.set("limit", "50");
+  const response = await fetch(url.toString());
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data?.error?.message || "Failed to fetch page videos");
   }
+  let videos = data.data || [];
+  if (search && search.trim()) {
+    const q = search.toLowerCase();
+    videos = videos.filter((v: any) =>
+      (v.title || "").toLowerCase().includes(q) ||
+      (v.description || "").toLowerCase().includes(q) ||
+      (v.id || "").toLowerCase().includes(q)
+    );
+  }
+  return videos.map((v: any) => ({
+    id: `${pageId}_${v.id}`,
+    message: v.title || v.description || "",
+    fullPicture: v.picture || "",
+    createdTime: v.created_time,
+    type: "video",
+    statusType: "added_video",
+    permalinkUrl: v.source || "",
+    likes: v.likes?.summary?.total_count || 0,
+    comments: v.comments?.summary?.total_count || 0,
+    shares: 0,
+    source: "facebook",
+    videoSource: v.source || "",
+    duration: v.length || 0,
+  }));
 }
 
 export async function fetchAdAccountImages(merchantId: string): Promise<any[]> {
