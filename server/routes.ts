@@ -1539,9 +1539,8 @@ export async function registerRoutes(
           return res.status(400).json({ message: "Order is not linked to Shopify" });
         }
 
-        const hasVariantItems = lineItems.some((item: any) => item.variantId);
-        if (!hasVariantItems) {
-          return res.json({ success: true, message: "No Shopify-linked items to sync" });
+        if (lineItems.length === 0) {
+          return res.json({ success: true, message: "No line items to sync" });
         }
 
         writeBackLineItems(merchantId, order.shopifyOrderId, lineItems)
