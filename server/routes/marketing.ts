@@ -2157,12 +2157,6 @@ export function registerMarketingRoutes(app: Express) {
 
       const config = parsed.data;
 
-      let instagramActorId: string | undefined;
-      if (config.creative.existingPostSource === "instagram") {
-        const [merchant] = await db.select({ igId: merchants.metaSelectedIgAccountId }).from(merchants).where(eq(merchants.id, merchantId));
-        instagramActorId = merchant?.igId || undefined;
-      }
-
       const [job] = await db.insert(adLaunchJobs).values({
         merchantId,
         launchType: "single",
@@ -2176,7 +2170,7 @@ export function registerMarketingRoutes(app: Express) {
         status: "pending",
       }).returning();
 
-      const result = await launchAd(merchantId, job.id, { ...config, instagramActorId });
+      const result = await launchAd(merchantId, job.id, config);
       res.json({ success: true, jobId: job.id, ...result });
     } catch (error: any) {
       console.error("[MetaAdLauncher] Launch error:", error.message);

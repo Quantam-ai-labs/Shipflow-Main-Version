@@ -427,7 +427,6 @@ export async function createAdCreative(
     format?: "single_image" | "video" | "carousel" | "existing_post";
     existingPostId?: string;
     existingPostSource?: "facebook" | "instagram" | "partner";
-    instagramActorId?: string;
     imageHash?: string;
     imageUrl?: string;
     videoId?: string;
@@ -600,7 +599,6 @@ export async function launchAd(
       }>;
     };
     pageId: string;
-    instagramActorId?: string;
     pixelId?: string;
     conversionEvent?: string;
     optimizationGoal?: string;
@@ -688,7 +686,6 @@ export async function launchAd(
       format: config.creative.format,
       existingPostId: config.creative.existingPostId,
       existingPostSource: config.creative.existingPostSource,
-      instagramActorId: config.instagramActorId,
       imageHash: isExistingPost ? undefined : imageHash,
       imageUrl: isExistingPost ? undefined : (!imageHash ? config.creative.imageUrl : undefined),
       videoId: isExistingPost ? undefined : config.creative.videoId,
