@@ -518,9 +518,9 @@ export default function Orders() {
           dateRange={dateRange}
           onDateRangeChange={(range) => { setDateRange(range); setPage(1); }}
         />
-        {isPostBookingFilter && (
+        {statusFilter !== "all" && (
           <Badge variant="outline" className="text-xs text-muted-foreground" data-testid="badge-booking-date-filter">
-            Sorted by Booking Date
+            {isPostBookingFilter ? "Dates: Booking Date" : "Dates: Order Date"}
           </Badge>
         )}
       </div>

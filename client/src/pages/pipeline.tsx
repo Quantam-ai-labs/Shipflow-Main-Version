@@ -1278,11 +1278,9 @@ export default function Pipeline() {
           )}
 
           {isFetching && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
-          {isPostBookingTab && (
-            <Badge variant="outline" className="text-xs text-muted-foreground" data-testid="badge-booking-date-filter">
-              Sorted by Booking Date
-            </Badge>
-          )}
+          <Badge variant="outline" className="text-xs text-muted-foreground" data-testid="badge-booking-date-filter">
+            {isPostBookingTab ? "Dates: Booking Date" : "Dates: Order Date"}
+          </Badge>
         </div>
 
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
