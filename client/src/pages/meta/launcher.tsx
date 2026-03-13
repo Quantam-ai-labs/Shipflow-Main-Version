@@ -633,7 +633,7 @@ export default function MetaAdLauncher() {
         geo_locations: allPakistan
           ? { countries: ["PK"] }
           : (() => {
-              const geo: any = { countries: ["PK"] };
+              const geo: any = {};
               const valid = selectedGeoLocations.filter(loc => loc.key);
               const cities = valid.filter(loc => loc.type === "city" || !loc.type);
               const regions = valid.filter(loc => loc.type === "region" || loc.type === "subcity" || loc.type === "neighborhood");
@@ -655,9 +655,6 @@ export default function MetaAdLauncher() {
       }
       if (excludedAudiences.length > 0) {
         targeting.excluded_custom_audiences = excludedAudiences.map(a => ({ id: a.id, name: a.name }));
-      }
-      if (advantagePlusAudience) {
-        targeting.targeting_optimization = "expansion_all";
       }
       if (!autoPlacement && selectedPlacements.length > 0) {
         const platforms = Array.from(new Set(selectedPlacements.map(id => PLACEMENTS.find(p => p.id === id)?.platform).filter(Boolean)));
@@ -712,6 +709,9 @@ export default function MetaAdLauncher() {
       };
       if (selectedPixelId && selectedPixelId !== "none") {
         payload.conversionEvent = conversionEvent;
+      }
+      if (advantagePlusAudience) {
+        payload.targetingOptimization = "expansion_all";
       }
       if (optimizationGoal) {
         payload.optimizationGoal = optimizationGoal;
