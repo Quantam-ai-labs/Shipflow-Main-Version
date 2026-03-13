@@ -21,7 +21,8 @@ type PublishMode = "VALIDATE" | "DRAFT" | "PUBLISH";
 
 interface MetaPage { id: string; name: string; }
 interface MetaPixel { id: string; name: string; }
-interface MetaPost { id: string; message?: string; created_time?: string; full_picture?: string; }
+interface MetaIgAccount { id: string; name?: string; username?: string; profile_picture_url?: string; pageName?: string; }
+interface MetaPost { id: string; message?: string; fullPicture?: string; createdTime?: string; type?: string; likes?: number; comments?: number; shares?: number; source?: string; permalinkUrl?: string; }
 interface LaunchJob { id: number; adName: string; mode: string; publishMode: string; status: string; createdAt: string; metaCampaignId?: string; metaAdsetId?: string; metaAdId?: string; errorMessage?: string; }
 
 interface DiagnosticCheck {
@@ -153,12 +154,34 @@ export default function SalesLauncher() {
   const pixels = pixelsQuery.data?.pixels || [];
   const [selectedPixelId, setSelectedPixelId] = useState("");
 
+  const igAccountsQuery = useQuery<any>({
+    queryKey: ["/api/meta/instagram-accounts"],
+    enabled: isConnected,
+  });
+  const igAccounts: MetaIgAccount[] = igAccountsQuery.data?.instagramAccounts || [];
+  const [selectedIgAccountId, setSelectedIgAccountId] = useState("");
+
   const postSearchParam = postSearch ? `?search=${encodeURIComponent(postSearch)}` : "";
-  const postsQuery = useQuery<any>({
+  const fbPostsQuery = useQuery<any>({
     queryKey: [`/api/meta/page-posts${postSearchParam}`],
     enabled: isConnected && mode === "EXISTING_POST",
   });
-  const posts = postsQuery.data?.posts || [];
+  const igQueryParams = new URLSearchParams();
+  if (postSearch) igQueryParams.set("search", postSearch);
+  if (selectedIgAccountId && selectedIgAccountId !== "none") igQueryParams.set("igAccountId", selectedIgAccountId);
+  const igQueryString = igQueryParams.toString() ? `?${igQueryParams.toString()}` : "";
+  const igPostsQuery = useQuery<any>({
+    queryKey: [`/api/meta/ig-media${igQueryString}`],
+    enabled: isConnected && mode === "EXISTING_POST" && !!selectedIgAccountId && selectedIgAccountId !== "none",
+  });
+  const fbPosts: MetaPost[] = fbPostsQuery.data?.posts || [];
+  const igPosts: MetaPost[] = igPostsQuery.data?.posts || [];
+  const posts: MetaPost[] = [...fbPosts, ...igPosts].sort((a, b) => {
+    const ta = a.createdTime ? new Date(a.createdTime).getTime() : 0;
+    const tb = b.createdTime ? new Date(b.createdTime).getTime() : 0;
+    return tb - ta;
+  });
+  const postsLoading = fbPostsQuery.isLoading || igPostsQuery.isLoading;
 
   const diagnosticsMutation = useMutation({
     mutationFn: async () => {
@@ -251,6 +274,7 @@ export default function SalesLauncher() {
         mode,
         adAccountId: metaStatus?.adAccountId || "",
         pageId: selectedPageId,
+        instagramAccountId: selectedIgAccountId && selectedIgAccountId !== "none" ? selectedIgAccountId : null,
         pixelId: selectedPixelId && selectedPixelId !== "none" ? selectedPixelId : null,
         dailyBudget: parseFloat(dailyBudget) || 500,
         currency: accountCurrency,
@@ -358,7 +382,7 @@ export default function SalesLauncher() {
           <CardDescription>Verify your Meta account is ready to launch ads</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
             <div>
               <span className="text-muted-foreground">Ad Account</span>
               <p className="font-medium truncate">{metaStatus?.adAccountId || "—"}</p>
@@ -372,6 +396,22 @@ export default function SalesLauncher() {
                 <SelectContent>
                   {pages.map((p: MetaPage) => (
                     <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Instagram</span>
+              <Select value={selectedIgAccountId} onValueChange={setSelectedIgAccountId}>
+                <SelectTrigger className="h-8 text-xs mt-0.5" data-testid="select-ig-account">
+                  <SelectValue placeholder="None (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No Instagram</SelectItem>
+                  {igAccounts.map((ig: MetaIgAccount) => (
+                    <SelectItem key={ig.id} value={ig.id}>
+                      {ig.username ? `@${ig.username}` : ig.name || ig.id}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -626,12 +666,12 @@ export default function SalesLauncher() {
                       placeholder="Search by text..."
                       data-testid="input-post-search"
                     />
-                    <Button size="sm" variant="outline" disabled={postsQuery.isLoading}>
+                    <Button size="sm" variant="outline" disabled={postsLoading}>
                       <Search className="h-3 w-3" />
                     </Button>
                   </div>
                 </div>
-                {postsQuery.isLoading && (
+                {postsLoading && (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Loader2 className="h-3 w-3 animate-spin" /> Loading posts...
                   </div>
@@ -652,10 +692,15 @@ export default function SalesLauncher() {
                         <img src={post.fullPicture} alt="" className="w-16 h-16 rounded object-cover shrink-0" />
                       )}
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm truncate">{post.message || "(No text)"}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {post.createdTime ? new Date(post.createdTime).toLocaleDateString("en-PK") : ""} · {post.type}
-                          {post.likes > 0 && ` · ${post.likes} likes`}
+                        <div className="flex items-center gap-1.5">
+                          <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${post.source === "instagram" ? "border-pink-400 text-pink-600" : "border-blue-400 text-blue-600"}`}>
+                            {post.source === "instagram" ? "IG" : "FB"}
+                          </Badge>
+                          <p className="text-sm truncate">{post.message || "(No text)"}</p>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {post.createdTime ? new Date(post.createdTime).toLocaleDateString("en-PK") : ""} · {post.type || "post"}
+                          {(post.likes || 0) > 0 && ` · ${post.likes} likes`}
                         </p>
                       </div>
                       {selectedPostId === post.id && <CheckCircle2 className="h-4 w-4 text-primary shrink-0 self-center" />}

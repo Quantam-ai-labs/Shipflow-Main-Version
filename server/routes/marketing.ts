@@ -2040,10 +2040,15 @@ export function registerMarketingRoutes(app: Express) {
   app.get("/api/meta/ig-media", isAuthenticated, async (req: any, res) => {
     try {
       const merchantId = await getMerchantId(req);
-      const [merchant] = await db.select({ igAccountId: merchants.metaSelectedIgAccountId }).from(merchants).where(eq(merchants.id, merchantId));
-      if (!merchant?.igAccountId) return res.json({ posts: [], _notConnected: true });
+      const explicitIgId = req.query.igAccountId as string | undefined;
+      let igAccountId = explicitIgId || null;
+      if (!igAccountId) {
+        const [merchant] = await db.select({ igAccountId: merchants.metaSelectedIgAccountId }).from(merchants).where(eq(merchants.id, merchantId));
+        igAccountId = merchant?.igAccountId || null;
+      }
+      if (!igAccountId) return res.json({ posts: [], _notConnected: true });
       const search = req.query.search as string | undefined;
-      const posts = await fetchInstagramMedia(merchantId, merchant.igAccountId, search);
+      const posts = await fetchInstagramMedia(merchantId, igAccountId, search);
       res.json({ posts });
     } catch (error: any) {
       console.error("[ig-media] Error fetching Instagram media:", error.message);

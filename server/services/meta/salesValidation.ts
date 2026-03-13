@@ -262,9 +262,12 @@ export async function validateMediaReadiness(
 
   if (input.mode === "EXISTING_POST" && input.existingPostId) {
     try {
+      const fields = input.existingPostSource === "instagram"
+        ? "id,caption,timestamp,media_type"
+        : "id,message,created_time";
       const url = new URL(`${META_BASE_URL}/${input.existingPostId}`);
       url.searchParams.set("access_token", accessToken);
-      url.searchParams.set("fields", "id,message,created_time");
+      url.searchParams.set("fields", fields);
       const response = await fetch(url.toString());
       const data = await response.json();
       await logValidationCall(merchantId, input.existingPostId, response.status, response.ok, data);
@@ -402,6 +405,7 @@ export function normalizeInput(raw: Record<string, unknown>): SalesLaunchInput {
     mode,
     adAccountId: trimOrNull(raw.adAccountId) || "",
     pageId: trimOrNull(raw.pageId) || "",
+    instagramAccountId: trimOrNull(raw.instagramAccountId),
     pixelId: trimOrNull(raw.pixelId),
     dailyBudget: parseFloat(String(raw.dailyBudget || 0)) || 0,
     currency: trimOrNull(raw.currency) || "PKR",

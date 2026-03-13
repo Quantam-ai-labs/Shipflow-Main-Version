@@ -11,6 +11,7 @@ export interface SalesLaunchInput {
   existingPostSource?: "facebook" | "instagram" | null;
   adAccountId: string;
   pageId: string;
+  instagramAccountId?: string | null;
   pixelId?: string | null;
   destinationUrl?: string | null;
   primaryText?: string | null;
@@ -32,7 +33,6 @@ export function buildSalesCampaignPayload(input: SalesLaunchInput): Record<strin
     special_ad_categories: [],
     buying_type: "AUCTION",
     bid_strategy: "LOWEST_COST_WITHOUT_CAP",
-    is_adset_budget_sharing_enabled: false,
   };
 }
 
@@ -92,12 +92,17 @@ export function buildImageSalesCreativePayload(
   if (input.headline) linkData.name = input.headline;
   if (input.description) linkData.description = input.description;
 
+  const objectStorySpec: Record<string, unknown> = {
+    page_id: input.pageId,
+    link_data: linkData,
+  };
+  if (input.instagramAccountId) {
+    objectStorySpec.instagram_actor_id = input.instagramAccountId;
+  }
+
   return {
     name: `${input.adName} - Creative`,
-    object_story_spec: {
-      page_id: input.pageId,
-      link_data: linkData,
-    },
+    object_story_spec: objectStorySpec,
   };
 }
 
@@ -115,22 +120,32 @@ export function buildVideoSalesCreativePayload(
   if (input.headline) videoData.title = input.headline;
   if (input.description) videoData.link_description = input.description;
 
+  const objectStorySpec: Record<string, unknown> = {
+    page_id: input.pageId,
+    video_data: videoData,
+  };
+  if (input.instagramAccountId) {
+    objectStorySpec.instagram_actor_id = input.instagramAccountId;
+  }
+
   return {
     name: `${input.adName} - Creative`,
-    object_story_spec: {
-      page_id: input.pageId,
-      video_data: videoData,
-    },
+    object_story_spec: objectStorySpec,
   };
 }
 
 export function buildExistingPostSalesCreativePayload(
   input: SalesLaunchInput
 ): Record<string, any> {
-  return {
+  const payload: Record<string, unknown> = {
     name: `${input.adName} - Creative`,
-    object_story_id: input.existingPostId,
   };
+  if (input.existingPostSource === "instagram") {
+    payload.source_instagram_media_id = input.existingPostId;
+  } else {
+    payload.object_story_id = input.existingPostId;
+  }
+  return payload;
 }
 
 export function buildSalesAdPayload(
