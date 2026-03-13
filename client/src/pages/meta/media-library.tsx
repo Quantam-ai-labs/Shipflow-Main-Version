@@ -457,9 +457,11 @@ export default function MetaMediaLibrary() {
               {filteredAdImages.length === 0 && filteredAdVideos.length === 0 && (
                 searchQuery
                   ? renderEmptyState(Search, "No Results", "No ad account media matches your search.")
-                  : (adImagesData?._error || adVideosData?._error)
-                    ? renderEmptyState(AlertCircle, "Failed to Load Ad Media", adImagesData?.errorMessage || adVideosData?.errorMessage || "Could not fetch media from your Meta Ad Account. Please check your connection in Meta Settings.")
-                    : renderEmptyState(SiMeta, "No Ad Account Media", "No images or videos found in your Meta Ad Account.")
+                  : (adImagesData?._notConnected || adVideosData?._notConnected)
+                    ? renderEmptyState(SiMeta, "No Ad Account Connected", "Connect your Meta Ad Account in Settings to see your ad media here.")
+                    : (adImagesData?._error || adVideosData?._error)
+                      ? renderEmptyState(AlertCircle, "Failed to Load Ad Media", adImagesData?.errorMessage || adVideosData?.errorMessage || "Could not fetch media from your Meta Ad Account. Please check your connection in Meta Settings.")
+                      : renderEmptyState(SiMeta, "No Ad Account Media", "No images or videos found in your Meta Ad Account.")
               )}
             </>
           )}

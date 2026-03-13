@@ -2066,6 +2066,8 @@ export function registerMarketingRoutes(app: Express) {
   app.get("/api/meta/ad-account-images", isAuthenticated, async (req: any, res) => {
     try {
       const merchantId = await getMerchantId(req);
+      const [merchant] = await db.select({ adAccountId: merchants.metaSelectedAdAccountId }).from(merchants).where(eq(merchants.id, merchantId));
+      if (!merchant?.adAccountId) return res.json({ images: [], _notConnected: true });
       const images = await fetchAdAccountImages(merchantId);
       res.json({ images });
     } catch (error: any) {
@@ -2077,6 +2079,8 @@ export function registerMarketingRoutes(app: Express) {
   app.get("/api/meta/ad-account-videos", isAuthenticated, async (req: any, res) => {
     try {
       const merchantId = await getMerchantId(req);
+      const [merchant] = await db.select({ adAccountId: merchants.metaSelectedAdAccountId }).from(merchants).where(eq(merchants.id, merchantId));
+      if (!merchant?.adAccountId) return res.json({ videos: [], _notConnected: true });
       const videos = await fetchAdAccountVideos(merchantId);
       res.json({ videos });
     } catch (error: any) {
