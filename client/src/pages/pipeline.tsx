@@ -564,8 +564,11 @@ export default function Pipeline() {
     setAllSortDir("desc");
   }, [activeTab]);
 
+  const POST_BOOKING_TABS = new Set(["BOOKED", "FULFILLED", "DELIVERED", "RETURN", "CANCELLED"]);
+  const isPostBookingTab = POST_BOOKING_TABS.has(activeTab);
+
   const { data, isLoading, isFetching } = useQuery<{ orders: Order[]; total: number }>({
-    queryKey: ["/api/orders", { workflowStatus: activeTab, search: debouncedSearch, page, pageSize, pendingReasonType: activeTab === "PENDING" ? pendingReasonFilter : undefined, shipmentStatus: shipmentSubFilter !== "all" ? shipmentSubFilter : undefined, paymentFilter, dateFrom: debouncedSearch ? undefined : dateParams.dateFrom, dateTo: debouncedSearch ? undefined : dateParams.dateTo, ...(activeTab === "ALL" ? { allOrderIds: debouncedAllOrderIds, allFilterTag: debouncedAllFilterTag, allFilterStatuses: allFilterStatuses.join(","), allFilterCourier, allFilterCourierStatus, allMinItems, allMaxItems, allSortBy, allSortDir } : {}) }],
+    queryKey: ["/api/orders", { workflowStatus: activeTab, search: debouncedSearch, page, pageSize, pendingReasonType: activeTab === "PENDING" ? pendingReasonFilter : undefined, shipmentStatus: shipmentSubFilter !== "all" ? shipmentSubFilter : undefined, paymentFilter, dateFrom: debouncedSearch ? undefined : dateParams.dateFrom, dateTo: debouncedSearch ? undefined : dateParams.dateTo, dateFilterField: isPostBookingTab ? "bookedAt" : undefined, ...(activeTab === "ALL" ? { allOrderIds: debouncedAllOrderIds, allFilterTag: debouncedAllFilterTag, allFilterStatuses: allFilterStatuses.join(","), allFilterCourier, allFilterCourierStatus, allMinItems, allMaxItems, allSortBy, allSortDir } : {}) }],
     queryFn: async () => {
       const params = new URLSearchParams();
       params.set("workflowStatus", activeTab);
@@ -578,6 +581,11 @@ export default function Pipeline() {
       if (paymentFilter !== "all") params.set("filterPayment", paymentFilter);
       if (!debouncedSearch && dateParams.dateFrom) params.set("dateFrom", dateParams.dateFrom);
       if (!debouncedSearch && dateParams.dateTo) params.set("dateTo", dateParams.dateTo);
+      if (isPostBookingTab) {
+        params.set("dateFilterField", "bookedAt");
+        params.set("sortBy", "bookedAt");
+        params.set("sortDir", "desc");
+      }
       if (activeTab === "ALL") {
         if (debouncedAllOrderIds.trim()) params.set("searchOrderNumber", debouncedAllOrderIds);
         if (debouncedAllFilterTag.trim()) params.set("filterTag", debouncedAllFilterTag.trim());
@@ -1270,6 +1278,11 @@ export default function Pipeline() {
           )}
 
           {isFetching && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+          {isPostBookingTab && (
+            <Badge variant="outline" className="text-xs text-muted-foreground" data-testid="badge-booking-date-filter">
+              Sorted by Booking Date
+            </Badge>
+          )}
         </div>
 
         <div className="flex items-center gap-2 text-sm text-muted-foreground">

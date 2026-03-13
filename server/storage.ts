@@ -80,7 +80,7 @@ export interface IStorage {
   updateCourierAccount(id: string, data: Partial<InsertCourierAccount>): Promise<CourierAccount | undefined>;
 
   // Orders - All scoped by merchantId
-  getOrders(merchantId: string, options?: { search?: string; searchOrderNumber?: string; searchTracking?: string; searchName?: string; searchPhone?: string; status?: string; courier?: string; city?: string; month?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number; workflowStatus?: string; pendingReasonType?: string; shipmentStatus?: string; excludeHeavyFields?: boolean; timezone?: string; filterTag?: string; filterStatuses?: string; minItems?: number; maxItems?: number; sortBy?: string; sortDir?: string; filterPayment?: string }): Promise<{ orders: Order[]; total: number }>;
+  getOrders(merchantId: string, options?: { search?: string; searchOrderNumber?: string; searchTracking?: string; searchName?: string; searchPhone?: string; status?: string; courier?: string; city?: string; month?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number; workflowStatus?: string; pendingReasonType?: string; shipmentStatus?: string; excludeHeavyFields?: boolean; timezone?: string; filterTag?: string; filterStatuses?: string; minItems?: number; maxItems?: number; sortBy?: string; sortDir?: string; filterPayment?: string; dateFilterField?: string }): Promise<{ orders: Order[]; total: number }>;
   getUniqueCities(merchantId: string): Promise<string[]>;
   getUniqueStatuses(merchantId: string): Promise<string[]>;
   getOrderById(merchantId: string, id: string): Promise<Order | undefined>;
@@ -371,7 +371,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Orders - All scoped by merchantId
-  async getOrders(merchantId: string, options?: { search?: string; searchOrderNumber?: string; searchTracking?: string; searchName?: string; searchPhone?: string; status?: string; courier?: string; city?: string; month?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number; workflowStatus?: string; pendingReasonType?: string; shipmentStatus?: string; excludeHeavyFields?: boolean; timezone?: string; filterTag?: string; filterStatuses?: string; minItems?: number; maxItems?: number; sortBy?: string; sortDir?: string; filterPayment?: string }): Promise<{ orders: Order[]; total: number }> {
+  async getOrders(merchantId: string, options?: { search?: string; searchOrderNumber?: string; searchTracking?: string; searchName?: string; searchPhone?: string; status?: string; courier?: string; city?: string; month?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number; workflowStatus?: string; pendingReasonType?: string; shipmentStatus?: string; excludeHeavyFields?: boolean; timezone?: string; filterTag?: string; filterStatuses?: string; minItems?: number; maxItems?: number; sortBy?: string; sortDir?: string; filterPayment?: string; dateFilterField?: string }): Promise<{ orders: Order[]; total: number }> {
     const page = options?.page || 1;
     const pageSize = options?.pageSize || 20;
     const offset = (page - 1) * pageSize;
@@ -411,13 +411,14 @@ export class DatabaseStorage implements IStorage {
       conditions.push(eq(orders.city, options.city));
     }
 
+    const dateCol = options?.dateFilterField === "bookedAt" ? orders.bookedAt : orders.orderDate;
     if (options?.dateFrom) {
       const tz = options?.timezone || DEFAULT_TIMEZONE;
-      conditions.push(sql`${orders.orderDate} >= ${toMerchantStartOfDay(options.dateFrom, tz)}`);
+      conditions.push(sql`${dateCol} >= ${toMerchantStartOfDay(options.dateFrom, tz)}`);
     }
     if (options?.dateTo) {
       const tz = options?.timezone || DEFAULT_TIMEZONE;
-      conditions.push(sql`${orders.orderDate} <= ${toMerchantEndOfDay(options.dateTo, tz)}`);
+      conditions.push(sql`${dateCol} <= ${toMerchantEndOfDay(options.dateTo, tz)}`);
     }
 
     if (!options?.dateFrom && !options?.dateTo && options?.month && options.month !== "all") {
@@ -595,6 +596,7 @@ export class DatabaseStorage implements IStorage {
 
     const sortColumnMap: Record<string, any> = {
       orderDate: orders.orderDate,
+      bookedAt: orders.bookedAt,
       orderNumber: orders.orderNumber,
       totalAmount: orders.totalAmount,
       totalQuantity: orders.totalQuantity,

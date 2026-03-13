@@ -152,8 +152,15 @@ export default function Orders() {
 
   const dateParams = dateRangeToParams(dateRange);
 
+  const POST_BOOKING_STATUSES = new Set([
+    "BOOKED", "PICKED_UP", "ARRIVED_AT_ORIGIN", "IN_TRANSIT", "ARRIVED_AT_DESTINATION",
+    "OUT_FOR_DELIVERY", "DELIVERY_ATTEMPTED", "DELIVERED", "DELIVERY_FAILED",
+    "RETURNED_TO_SHIPPER", "READY_FOR_RETURN", "RETURN_IN_TRANSIT", "CANCELLED",
+  ]);
+  const isPostBookingFilter = POST_BOOKING_STATUSES.has(statusFilter);
+
   const { data, isLoading, isFetching } = useQuery<OrdersResponse>({
-    queryKey: ["/api/orders", { search: debouncedSearch, status: statusFilter, courier: courierFilter, city: cityFilter, dateFrom: debouncedSearch ? undefined : dateParams.dateFrom, dateTo: debouncedSearch ? undefined : dateParams.dateTo, page, pageSize }],
+    queryKey: ["/api/orders", { search: debouncedSearch, status: statusFilter, courier: courierFilter, city: cityFilter, dateFrom: debouncedSearch ? undefined : dateParams.dateFrom, dateTo: debouncedSearch ? undefined : dateParams.dateTo, page, pageSize, dateFilterField: isPostBookingFilter ? "bookedAt" : undefined, sortBy: isPostBookingFilter ? "bookedAt" : undefined }],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (debouncedSearch) params.set("search", debouncedSearch);
@@ -164,6 +171,11 @@ export default function Orders() {
       if (!debouncedSearch && dateParams.dateTo) params.set("dateTo", dateParams.dateTo);
       params.set("page", String(page));
       params.set("pageSize", String(pageSize));
+      if (isPostBookingFilter) {
+        params.set("dateFilterField", "bookedAt");
+        params.set("sortBy", "bookedAt");
+        params.set("sortDir", "desc");
+      }
       const res = await fetch(`/api/orders?${params.toString()}`, { credentials: "include" });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
@@ -506,6 +518,11 @@ export default function Orders() {
           dateRange={dateRange}
           onDateRangeChange={(range) => { setDateRange(range); setPage(1); }}
         />
+        {isPostBookingFilter && (
+          <Badge variant="outline" className="text-xs text-muted-foreground" data-testid="badge-booking-date-filter">
+            Sorted by Booking Date
+          </Badge>
+        )}
       </div>
 
       {selectedIds.size > 0 && (

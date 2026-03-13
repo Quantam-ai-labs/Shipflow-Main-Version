@@ -828,6 +828,7 @@ export async function registerRoutes(
         sortBy,
         sortDir,
         filterPayment,
+        dateFilterField,
       } = req.query;
 
       const timezone = await getMerchantTimezone(merchantId);
@@ -859,6 +860,7 @@ export async function registerRoutes(
         sortBy: sortBy as string,
         sortDir: sortDir as string,
         filterPayment: filterPayment as string,
+        dateFilterField: dateFilterField as string,
       });
 
       if (isCancelledQuery && isLight) {
