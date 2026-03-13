@@ -13,7 +13,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Rocket, ArrowRight, ArrowLeft, CheckCircle2, AlertCircle, ImageIcon, Film, Plus, Trash2, Search, X, CalendarIcon, Eye, FileText, ThumbsUp, MessageCircle, Share2, ExternalLink } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Loader2, Rocket, ArrowRight, ArrowLeft, CheckCircle2, AlertCircle, ImageIcon, Film, Plus, Trash2, Search, X, CalendarIcon, Eye, FileText, ThumbsUp, MessageCircle, Share2, ExternalLink, ChevronDown } from "lucide-react";
 import { SiFacebook, SiInstagram } from "react-icons/si";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -755,7 +756,10 @@ export default function MetaAdLauncher() {
     },
     onError: (error: any) => {
       const msg = error.message || "Unknown error";
-      toast({ title: "Launch Failed", description: msg, variant: "destructive" });
+      const stepMatch = msg.match(/^\[(.+?)\]\s*/);
+      const stepLabel = stepMatch ? stepMatch[1] : undefined;
+      const cleanMsg = stepMatch ? msg.replace(stepMatch[0], "") : msg;
+      toast({ title: stepLabel ? `Launch Failed at ${stepLabel}` : "Launch Failed", description: cleanMsg, variant: "destructive" });
     },
   });
 
@@ -1369,23 +1373,32 @@ export default function MetaAdLauncher() {
             )}
 
             {adFormat === "existing_post" && selectedPost && (
-              <div className="space-y-3 border rounded-lg p-3 bg-muted/30">
-                <h4 className="text-sm font-medium">Conversion Link (Optional)</h4>
-                <p className="text-xs text-muted-foreground">Add a website URL for conversion tracking. Meta will show this as a CTA button on your promoted post.</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="ep-link-url">Website URL</Label>
-                    <Input id="ep-link-url" type="url" placeholder="https://yourstore.com" value={linkUrl} onChange={e => setLinkUrl(e.target.value)} data-testid="input-existing-post-link-url" />
+              <Collapsible>
+                <CollapsibleTrigger asChild>
+                  <Button variant="ghost" size="sm" className="w-full justify-between text-sm font-medium p-3 h-auto" data-testid="btn-toggle-conversion-link">
+                    Conversion Link (Optional)
+                    <ChevronDown className="w-4 h-4" />
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="space-y-3 border rounded-lg p-3 bg-muted/30 mt-1">
+                    <p className="text-xs text-muted-foreground">Add a website URL for conversion tracking. Meta will show this as a CTA button on your promoted post.</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="ep-link-url">Website URL</Label>
+                        <Input id="ep-link-url" type="url" placeholder="https://yourstore.com" value={linkUrl} onChange={e => setLinkUrl(e.target.value)} data-testid="input-existing-post-link-url" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Call to Action</Label>
+                        <Select value={callToAction} onValueChange={setCallToAction}>
+                          <SelectTrigger data-testid="select-existing-post-cta"><SelectValue /></SelectTrigger>
+                          <SelectContent>{CTA_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+                    </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label>Call to Action</Label>
-                    <Select value={callToAction} onValueChange={setCallToAction}>
-                      <SelectTrigger data-testid="select-existing-post-cta"><SelectValue /></SelectTrigger>
-                      <SelectContent>{CTA_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
+                </CollapsibleContent>
+              </Collapsible>
             )}
 
             {adFormat !== "existing_post" && (
