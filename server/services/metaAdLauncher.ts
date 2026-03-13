@@ -454,9 +454,6 @@ export async function createAdCreative(
     };
     if (params.existingPostSource === "instagram") {
       body.source_instagram_media_id = params.existingPostId;
-      if (params.instagramActorId) {
-        body.instagram_actor_id = params.instagramActorId;
-      }
     } else {
       body.object_story_id = params.existingPostId;
     }
