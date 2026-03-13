@@ -199,8 +199,37 @@ export async function executeSalesLaunch(
       try {
         const uploadResult = await uploadImageToMeta(merchantId, input.imageUrl);
         input.imageHash = uploadResult.hash;
+
+        try {
+          await db.insert(metaApiLogs).values({
+            merchantId,
+            launchJobId: jobId,
+            stage: "media_upload_image",
+            endpoint: `${creds.adAccountId}/adimages`,
+            method: "POST",
+            requestJson: { url: input.imageUrl },
+            responseJson: { hash: uploadResult.hash, url: uploadResult.url },
+            httpStatus: 200,
+            success: true,
+          });
+        } catch {}
+
         stages[stages.length - 1] = { stage: "media_upload", status: "success", message: `Image hash: ${uploadResult.hash}` };
       } catch (uploadErr: any) {
+        try {
+          await db.insert(metaApiLogs).values({
+            merchantId,
+            launchJobId: jobId,
+            stage: "media_upload_image",
+            endpoint: `${creds.adAccountId}/adimages`,
+            method: "POST",
+            requestJson: { url: input.imageUrl },
+            responseJson: { error: uploadErr.message },
+            httpStatus: 0,
+            success: false,
+          });
+        } catch {}
+
         stages[stages.length - 1] = { stage: "media_upload", status: "failed", message: uploadErr.message };
         await updateJobStage(jobId, "media_upload", { status: "failed", errorMessage: uploadErr.message, errorSummary: "Media upload failed" });
         return { success: false, jobId, stages, error: `Image upload failed: ${uploadErr.message}`, errorStage: "media_upload" };

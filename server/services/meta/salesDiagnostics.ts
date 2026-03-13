@@ -89,6 +89,16 @@ export async function runDiagnostics(config: {
     checks.push({ name: "Facebook Page", status: "fail", message: "No Facebook Page selected" });
   }
 
+  if (config.pageId) {
+    const igResult = await metaGet(config.accessToken, config.pageId, { fields: "instagram_business_account{id,name,username}" }, mid);
+    if (igResult.ok && igResult.data?.instagram_business_account) {
+      const ig = igResult.data.instagram_business_account;
+      checks.push({ name: "Instagram Account", status: "pass", message: `@${ig.username || ig.name} linked` });
+    } else {
+      checks.push({ name: "Instagram Account", status: "warn", message: "No Instagram Business account linked. Ads will run on Facebook only." });
+    }
+  }
+
   if (config.pixelId) {
     const pixelResult = await metaGet(config.accessToken, config.pixelId, { fields: "id,name,last_fired_time" }, mid);
     if (pixelResult.ok) {
