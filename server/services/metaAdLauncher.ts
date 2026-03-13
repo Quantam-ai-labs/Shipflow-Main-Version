@@ -10,7 +10,18 @@ interface MetaWriteOptions {
   adAccountId: string;
 }
 
-async function metaApiPost(creds: MetaWriteOptions, endpoint: string, body: Record<string, any>): Promise<any> {
+function sanitizePayload(body: Record<string, any>): Record<string, any> {
+  const sanitized: Record<string, any> = {};
+  for (const [k, v] of Object.entries(body)) {
+    if (k === "access_token") { sanitized[k] = "***"; continue; }
+    sanitized[k] = v;
+  }
+  return sanitized;
+}
+
+const TRANSIENT_ERROR_CODES = [1, 2, 4, 17, 341, 368];
+
+async function metaApiPost(creds: MetaWriteOptions, endpoint: string, body: Record<string, any>, maxRetries = 2): Promise<any> {
   const url = `${META_BASE_URL}/${endpoint}`;
   const formData = new URLSearchParams();
   formData.set("access_token", creds.accessToken);
@@ -20,19 +31,38 @@ async function metaApiPost(creds: MetaWriteOptions, endpoint: string, body: Reco
     }
   }
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: formData.toString(),
-  });
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (attempt > 0) {
+      const delay = Math.min(1000 * Math.pow(2, attempt - 1), 4000);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      console.log(`[MetaAdLauncher] Retry ${attempt}/${maxRetries} for POST ${endpoint}`);
+    }
 
-  const data = await response.json();
-  if (!response.ok) {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: formData.toString(),
+    });
+
+    const data = await response.json();
+    if (response.ok) return data;
+
+    const errCode = data?.error?.code;
     const errMsg = data?.error?.message || `Meta API error ${response.status}`;
-    console.error(`[MetaAdLauncher] POST ${endpoint} failed:`, errMsg);
-    throw new Error(errMsg);
+    lastError = new Error(errMsg);
+
+    if (TRANSIENT_ERROR_CODES.includes(errCode) && attempt < maxRetries) {
+      console.warn(`[MetaAdLauncher] Transient error (code ${errCode}) on POST ${endpoint}, will retry. Payload:`, JSON.stringify(sanitizePayload(body)));
+      continue;
+    }
+
+    console.error(`[MetaAdLauncher] POST ${endpoint} failed (attempt ${attempt + 1}/${maxRetries + 1}):`, errMsg);
+    console.error(`[MetaAdLauncher] Request payload:`, JSON.stringify(sanitizePayload(body)));
+    throw lastError;
   }
-  return data;
+
+  throw lastError || new Error(`Meta API POST ${endpoint} failed after retries`);
 }
 
 async function metaApiGet(creds: MetaWriteOptions, endpoint: string, params: Record<string, string> = {}): Promise<any> {
@@ -607,7 +637,15 @@ export async function launchAd(
 
     let optimizationGoal = config.optimizationGoal;
     if (!optimizationGoal) {
-      optimizationGoal = config.pixelId ? "OFFSITE_CONVERSIONS" : "LINK_CLICKS";
+      const objectiveDefaults: Record<string, string> = {
+        OUTCOME_SALES: config.pixelId ? "OFFSITE_CONVERSIONS" : "LINK_CLICKS",
+        OUTCOME_LEADS: config.pixelId ? "LEAD_GENERATION" : "LINK_CLICKS",
+        OUTCOME_ENGAGEMENT: "POST_ENGAGEMENT",
+        OUTCOME_AWARENESS: "REACH",
+        OUTCOME_TRAFFIC: "LANDING_PAGE_VIEWS",
+        OUTCOME_APP_PROMOTION: "LINK_CLICKS",
+      };
+      optimizationGoal = objectiveDefaults[config.objective] || (config.pixelId ? "OFFSITE_CONVERSIONS" : "LINK_CLICKS");
     }
 
     const conversionGoals = ["OFFSITE_CONVERSIONS", "LEAD_GENERATION"];

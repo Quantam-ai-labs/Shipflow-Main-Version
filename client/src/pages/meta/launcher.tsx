@@ -481,7 +481,9 @@ export default function MetaAdLauncher() {
   const [maxAge, setMaxAge] = useState("65");
   const [gender, setGender] = useState("all");
   const [allPakistan, setAllPakistan] = useState(false);
-  const [selectedCities, setSelectedCities] = useState<string[]>(["Karachi", "Lahore"]);
+  const [selectedGeoLocations, setSelectedGeoLocations] = useState<{ key: string; name: string; type: string; country_code: string; region: string }[]>(
+    [{ key: "2211096", name: "Karachi", type: "city", country_code: "PK", region: "Sindh" }, { key: "2211177", name: "Lahore", type: "city", country_code: "PK", region: "Punjab" }]
+  );
   const [cityFilter, setCityFilter] = useState("");
   const [interests, setInterests] = useState<Interest[]>([]);
   const [interestSearch, setInterestSearch] = useState("");
@@ -631,10 +633,11 @@ export default function MetaAdLauncher() {
           ? { countries: ["PK"] }
           : {
               countries: ["PK"],
-              cities: selectedCities.map(cityName => {
-                const cityData = PK_CITIES.find(c => c.name === cityName);
-                return { key: cityData?.key || "", name: cityName, country: "PK" };
-              }),
+              cities: selectedGeoLocations.map(loc => ({
+                key: loc.key,
+                name: loc.name,
+                country: loc.country_code || "PK",
+              })),
             },
         age_min: parseInt(minAge),
         age_max: parseInt(maxAge),
@@ -783,7 +786,7 @@ export default function MetaAdLauncher() {
   const currentIdx = steps.findIndex(s => s.key === step);
   const needsBidAmount = bidStrategy === "COST_CAP" || bidStrategy === "BID_CAP";
   const canProceedFromCampaign = campaignName.trim() && parseFloat(budgetValue) >= budgetMin && (!needsBidAmount || (bidAmount && parseFloat(bidAmount) > 0));
-  const canProceedFromTargeting = allPakistan || selectedCities.length > 0;
+  const canProceedFromTargeting = allPakistan || selectedGeoLocations.length > 0;
   let isValidUrl = false;
   try { isValidUrl = !!linkUrl.trim() && !!new URL(linkUrl); } catch {}
   const canProceedFromCreative = adFormat === "existing_post"
@@ -849,7 +852,10 @@ export default function MetaAdLauncher() {
               </div>
               <div className="space-y-1.5">
                 <Label>Optimization Goal</Label>
-                <Select value={optimizationGoal || (hasPixel ? "OFFSITE_CONVERSIONS" : "LINK_CLICKS")} onValueChange={setOptimizationGoal}>
+                <Select value={optimizationGoal || (() => {
+                  const m: Record<string, string> = { OUTCOME_SALES: hasPixel ? "OFFSITE_CONVERSIONS" : "LINK_CLICKS", OUTCOME_LEADS: hasPixel ? "LEAD_GENERATION" : "LINK_CLICKS", OUTCOME_ENGAGEMENT: "POST_ENGAGEMENT", OUTCOME_AWARENESS: "REACH", OUTCOME_TRAFFIC: "LANDING_PAGE_VIEWS" };
+                  return m[objective] || (hasPixel ? "OFFSITE_CONVERSIONS" : "LINK_CLICKS");
+                })()} onValueChange={setOptimizationGoal}>
                   <SelectTrigger data-testid="select-optimization-goal"><SelectValue /></SelectTrigger>
                   <SelectContent>{OPTIMIZATION_GOALS.filter(o => hasPixel || !conversionGoals.includes(o.value)).map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
                 </Select>
@@ -1038,7 +1044,7 @@ export default function MetaAdLauncher() {
               <div className="flex items-center justify-between">
                 <Label>Location Targeting</Label>
                 <div className="flex items-center gap-2">
-                  <Switch checked={allPakistan} onCheckedChange={(v) => { setAllPakistan(v); if (v) setSelectedCities([]); }} data-testid="switch-all-pakistan" />
+                  <Switch checked={allPakistan} onCheckedChange={(v) => { setAllPakistan(v); if (v) setSelectedGeoLocations([]); }} data-testid="switch-all-pakistan" />
                   <span className="text-sm font-medium">{allPakistan ? "All Pakistan" : "Select Cities"}</span>
                 </div>
               </div>
@@ -1051,13 +1057,18 @@ export default function MetaAdLauncher() {
                   <div className="space-y-2">
                     <div className="flex flex-wrap gap-1.5">
                       {PK_PROVINCES.map(prov => {
-                        const provinceCities = PK_CITIES.filter(c => c.province === prov.name).map(c => c.name);
-                        const allSelected = provinceCities.every(c => selectedCities.includes(c));
+                        const provinceCityObjs = PK_CITIES.filter(c => c.province === prov.name).map(c => ({ key: c.key, name: c.name, type: "city" as const, country_code: "PK", region: c.province }));
+                        const provinceCityNames = provinceCityObjs.map(c => c.name);
+                        const selectedNames = selectedGeoLocations.map(g => g.name);
+                        const allSelected = provinceCityNames.every(n => selectedNames.includes(n));
                         return (
                           <Badge key={prov.name} variant={allSelected ? "default" : "outline"} className="cursor-pointer select-none text-xs"
                             onClick={() => {
-                              if (allSelected) setSelectedCities(prev => prev.filter(c => !provinceCities.includes(c)));
-                              else setSelectedCities(prev => Array.from(new Set([...prev, ...provinceCities])));
+                              if (allSelected) setSelectedGeoLocations(prev => prev.filter(g => !provinceCityNames.includes(g.name)));
+                              else setSelectedGeoLocations(prev => {
+                                const existing = prev.filter(g => !provinceCityNames.includes(g.name));
+                                return [...existing, ...provinceCityObjs];
+                              });
                             }}
                             data-testid={`badge-province-${prov.name.toLowerCase()}`}
                           >{prov.label}</Badge>
@@ -1079,9 +1090,9 @@ export default function MetaAdLauncher() {
                     <div className="border rounded-md p-2 space-y-1 bg-muted/30">
                       <p className="text-xs font-medium text-muted-foreground">Meta Location Results</p>
                       <div className="flex flex-wrap gap-1.5">
-                        {geoSearchResults.filter(r => !selectedCities.includes(r.name)).map(r => (
+                        {geoSearchResults.filter(r => !selectedGeoLocations.some(g => g.key === r.key)).map(r => (
                           <Badge key={r.key} variant="outline" className="cursor-pointer select-none text-xs border-dashed"
-                            onClick={() => { setSelectedCities(prev => [...prev, r.name]); setGeoSearchQuery(""); setGeoSearchResults([]); }}
+                            onClick={() => { setSelectedGeoLocations(prev => [...prev, r]); setGeoSearchQuery(""); setGeoSearchResults([]); }}
                             data-testid={`badge-geo-${r.key}`}
                           >{r.name}{r.region ? `, ${r.region}` : ""}</Badge>
                         ))}
@@ -1091,17 +1102,20 @@ export default function MetaAdLauncher() {
                   <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto">
                     {PK_CITIES
                       .filter(c => !cityFilter || c.name.toLowerCase().includes(cityFilter.toLowerCase()))
-                      .map(({ name: cityName }) => {
-                        const isSelected = selectedCities.includes(cityName);
+                      .map(({ name: cityName, key: cityKey, province }) => {
+                        const isSelected = selectedGeoLocations.some(g => g.key === cityKey);
                         return (
-                          <Badge key={cityName} variant={isSelected ? "default" : "outline"} className="cursor-pointer select-none text-xs"
-                            onClick={() => setSelectedCities(prev => isSelected ? prev.filter(c => c !== cityName) : [...prev, cityName])}
+                          <Badge key={cityKey} variant={isSelected ? "default" : "outline"} className="cursor-pointer select-none text-xs"
+                            onClick={() => setSelectedGeoLocations(prev => isSelected
+                              ? prev.filter(g => g.key !== cityKey)
+                              : [...prev, { key: cityKey, name: cityName, type: "city", country_code: "PK", region: province }]
+                            )}
                             data-testid={`badge-city-${cityName.toLowerCase().replace(/\s+/g, "-")}`}
                           >{cityName}</Badge>
                         );
                       })}
                   </div>
-                  <p className="text-xs text-muted-foreground">{selectedCities.length} cities selected ({PK_CITIES.length} presets + Meta search)</p>
+                  <p className="text-xs text-muted-foreground">{selectedGeoLocations.length} locations selected ({PK_CITIES.length} presets + Meta search)</p>
                 </>
               )}
             </div>
@@ -1525,7 +1539,10 @@ export default function MetaAdLauncher() {
                   <div className="flex justify-between"><span className="text-muted-foreground">Budget</span><span>PKR {budgetValue}/{budgetType === "daily" ? "day" : "total"}</span></div>
                   {budgetLevel === "campaign" && spendingLimit && <div className="flex justify-between"><span className="text-muted-foreground">Spending Limit</span><span>PKR {spendingLimit}</span></div>}
                   <div className="flex justify-between"><span className="text-muted-foreground">Bid Strategy</span><span>{BID_STRATEGIES.find(b => b.value === bidStrategy)?.label}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Optimization</span><span>{OPTIMIZATION_GOALS.find(o => o.value === (optimizationGoal || (hasPixel ? "OFFSITE_CONVERSIONS" : "LINK_CLICKS")))?.label}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Optimization</span><span>{OPTIMIZATION_GOALS.find(o => o.value === (optimizationGoal || (() => {
+                    const m: Record<string, string> = { OUTCOME_SALES: hasPixel ? "OFFSITE_CONVERSIONS" : "LINK_CLICKS", OUTCOME_LEADS: hasPixel ? "LEAD_GENERATION" : "LINK_CLICKS", OUTCOME_ENGAGEMENT: "POST_ENGAGEMENT", OUTCOME_AWARENESS: "REACH", OUTCOME_TRAFFIC: "LANDING_PAGE_VIEWS" };
+                    return m[objective] || (hasPixel ? "OFFSITE_CONVERSIONS" : "LINK_CLICKS");
+                  })()))?.label}</span></div>
                   {selectedPixelId && selectedPixelId !== "none" && (
                     <>
                       <div className="flex justify-between"><span className="text-muted-foreground">Pixel</span><span className="font-mono text-xs">{availablePixels.find(p => p.id === selectedPixelId)?.name || selectedPixelId}</span></div>
@@ -1542,8 +1559,8 @@ export default function MetaAdLauncher() {
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between"><span className="text-muted-foreground">Age</span><span>{minAge} - {maxAge}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Gender</span><span className="capitalize">{gender}</span></div>
-                  <div><span className="text-muted-foreground">Location: </span><span>{allPakistan ? "All Pakistan" : `${selectedCities.length} cities`}</span></div>
-                  {!allPakistan && selectedCities.length > 0 && <div className="text-xs text-muted-foreground pl-2">{selectedCities.join(", ")}</div>}
+                  <div><span className="text-muted-foreground">Location: </span><span>{allPakistan ? "All Pakistan" : `${selectedGeoLocations.length} locations`}</span></div>
+                  {!allPakistan && selectedGeoLocations.length > 0 && <div className="text-xs text-muted-foreground pl-2">{selectedGeoLocations.map(g => g.name).join(", ")}</div>}
                   {interests.length > 0 && <div><span className="text-muted-foreground">Interests: </span><span>{interests.map(i => i.name).join(", ")}</span></div>}
                   {advantagePlusAudience && <div className="flex justify-between"><span className="text-muted-foreground">Advantage+</span><Badge variant="secondary" className="text-xs">Enabled</Badge></div>}
                   <div className="flex justify-between"><span className="text-muted-foreground">Placements</span><span>{autoPlacement ? "Automatic" : `${selectedPlacements.length} selected`}</span></div>
