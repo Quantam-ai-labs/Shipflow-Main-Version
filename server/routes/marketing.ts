@@ -25,6 +25,9 @@ import { encryptToken } from "../services/encryption";
 import {
   fetchFacebookPages,
   fetchAdAccountPixels,
+  fetchPagePosts,
+  fetchInstagramMedia,
+  fetchBrandedContentPosts,
   launchAd,
   bulkLaunchAds,
   uploadImageToMeta,
@@ -1992,6 +1995,45 @@ export function registerMarketingRoutes(app: Express) {
     }
   });
 
+  app.get("/api/meta/page-posts", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const [merchant] = await db.select({ pageId: merchants.metaSelectedPageId }).from(merchants).where(eq(merchants.id, merchantId));
+      if (!merchant?.pageId) return res.status(400).json({ error: "No Facebook page connected" });
+      const search = req.query.search as string | undefined;
+      const posts = await fetchPagePosts(merchantId, merchant.pageId, search);
+      res.json({ posts });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/meta/ig-media", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const [merchant] = await db.select({ igAccountId: merchants.metaSelectedIgAccountId }).from(merchants).where(eq(merchants.id, merchantId));
+      if (!merchant?.igAccountId) return res.json({ posts: [] });
+      const search = req.query.search as string | undefined;
+      const posts = await fetchInstagramMedia(merchantId, merchant.igAccountId, search);
+      res.json({ posts });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/meta/branded-content-posts", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const [merchant] = await db.select({ pageId: merchants.metaSelectedPageId }).from(merchants).where(eq(merchants.id, merchantId));
+      if (!merchant?.pageId) return res.json({ posts: [] });
+      const search = req.query.search as string | undefined;
+      const posts = await fetchBrandedContentPosts(merchantId, merchant.pageId, search);
+      res.json({ posts });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.post("/api/meta/launch", isAuthenticated, async (req: any, res) => {
     try {
       const merchantId = await getMerchantId(req);
@@ -2005,11 +2047,13 @@ export function registerMarketingRoutes(app: Express) {
         bidAmount: z.string().optional(),
         targeting: z.any(),
         creative: z.object({
-          format: z.enum(["single_image", "video", "carousel"]).optional(),
-          primaryText: z.string().min(1),
+          format: z.enum(["single_image", "video", "carousel", "existing_post"]).optional(),
+          existingPostId: z.string().optional(),
+          existingPostSource: z.enum(["facebook", "instagram", "partner"]).optional(),
+          primaryText: z.string().optional(),
           headline: z.string().optional(),
           description: z.string().optional(),
-          linkUrl: z.string().url(),
+          linkUrl: z.string().url().optional(),
           imageUrl: z.string().optional(),
           imageHash: z.string().optional(),
           videoId: z.string().optional(),
@@ -2022,7 +2066,10 @@ export function registerMarketingRoutes(app: Express) {
             description: z.string().optional(),
             linkUrl: z.string().url(),
           })).optional(),
-        }),
+        }).refine(data => {
+          if (data.format === "existing_post") return !!data.existingPostId;
+          return !!data.primaryText && !!data.linkUrl;
+        }, { message: "Existing post requires postId; other formats require primaryText and linkUrl" }),
         pageId: z.string().min(1),
         pixelId: z.string().optional(),
         status: z.string().optional(),
@@ -2037,6 +2084,12 @@ export function registerMarketingRoutes(app: Express) {
 
       const config = parsed.data;
 
+      let instagramActorId: string | undefined;
+      if (config.creative.existingPostSource === "instagram") {
+        const [merchant] = await db.select({ igId: merchants.metaSelectedIgAccountId }).from(merchants).where(eq(merchants.id, merchantId));
+        instagramActorId = merchant?.igId || undefined;
+      }
+
       const [job] = await db.insert(adLaunchJobs).values({
         merchantId,
         launchType: "single",
@@ -2050,7 +2103,7 @@ export function registerMarketingRoutes(app: Express) {
         status: "pending",
       }).returning();
 
-      const result = await launchAd(merchantId, job.id, config);
+      const result = await launchAd(merchantId, job.id, { ...config, instagramActorId });
       res.json({ success: true, jobId: job.id, ...result });
     } catch (error: any) {
       console.error("[MetaAdLauncher] Launch error:", error.message);

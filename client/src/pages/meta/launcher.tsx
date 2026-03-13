@@ -11,7 +11,9 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { Loader2, Rocket, ArrowRight, ArrowLeft, CheckCircle2, AlertCircle, ImageIcon, Film, Plus, Trash2, Search, X, CalendarIcon, Eye } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Loader2, Rocket, ArrowRight, ArrowLeft, CheckCircle2, AlertCircle, ImageIcon, Film, Plus, Trash2, Search, X, CalendarIcon, Eye, FileText, ThumbsUp, MessageCircle, Share2, ExternalLink } from "lucide-react";
 import { SiFacebook, SiInstagram } from "react-icons/si";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -19,8 +21,22 @@ import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 
 type Step = "campaign" | "targeting" | "creative" | "review";
-type AdFormat = "single_image" | "video" | "carousel";
+type AdFormat = "single_image" | "video" | "carousel" | "existing_post";
 type BudgetType = "daily" | "lifetime";
+
+interface ExistingPost {
+  id: string;
+  message: string;
+  fullPicture: string;
+  createdTime: string;
+  type: string;
+  statusType?: string;
+  permalinkUrl: string;
+  likes: number;
+  comments: number;
+  shares: number;
+  source: "facebook" | "instagram" | "partner";
+}
 
 const OBJECTIVES = [
   { value: "OUTCOME_SALES", label: "Sales (Conversions)" },
@@ -219,6 +235,150 @@ function AdPreview({ primaryText, headline, imageUrl, thumbnailUrl, linkUrl, cal
   );
 }
 
+function PostListItem({ post, onSelect }: { post: ExistingPost; onSelect: (p: ExistingPost) => void }) {
+  return (
+    <button
+      onClick={() => onSelect(post)}
+      className="w-full flex items-start gap-3 p-3 border rounded-lg text-left hover:bg-muted/50 transition-colors"
+      data-testid={`post-item-${post.id}`}
+    >
+      {post.fullPicture ? (
+        <img src={post.fullPicture} alt="" className="w-16 h-16 rounded object-cover shrink-0" />
+      ) : (
+        <div className="w-16 h-16 rounded bg-muted flex items-center justify-center shrink-0">
+          <FileText className="w-6 h-6 text-muted-foreground/40" />
+        </div>
+      )}
+      <div className="flex-1 min-w-0">
+        <p className="text-sm line-clamp-2">{post.message || "(No text)"}</p>
+        <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground flex-wrap">
+          <span className="capitalize font-medium">{post.type}</span>
+          <span>·</span>
+          <span>{post.createdTime ? format(new Date(post.createdTime), "dd MMM yyyy HH:mm") : ""}</span>
+        </div>
+        <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+          <span className="flex items-center gap-0.5"><ThumbsUp className="w-3 h-3" /> {post.likes}</span>
+          <span className="flex items-center gap-0.5"><MessageCircle className="w-3 h-3" /> {post.comments}</span>
+          {post.shares > 0 && <span className="flex items-center gap-0.5"><Share2 className="w-3 h-3" /> {post.shares}</span>}
+          <span className="font-mono text-[10px] ml-auto">{post.id}</span>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function PostList({ posts, loading, onSelect, emptyMsg }: { posts: ExistingPost[]; loading: boolean; onSelect: (p: ExistingPost) => void; emptyMsg: string }) {
+  if (loading) return <div className="flex items-center justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>;
+  if (!posts.length) return <p className="text-sm text-muted-foreground text-center py-8">{emptyMsg}</p>;
+  return (
+    <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
+      {posts.map(p => <PostListItem key={p.id} post={p} onSelect={onSelect} />)}
+    </div>
+  );
+}
+
+function PostPickerDialog({
+  open, onOpenChange, searchQuery, onSearchChange,
+  fbPosts, igPosts, partnerPosts, mediaLibrary,
+  fbLoading, igLoading, partnerLoading,
+  onSelectPost, onSelectMedia,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  searchQuery: string;
+  onSearchChange: (v: string) => void;
+  fbPosts: ExistingPost[];
+  igPosts: ExistingPost[];
+  partnerPosts: ExistingPost[];
+  mediaLibrary: any[];
+  fbLoading: boolean;
+  igLoading: boolean;
+  partnerLoading: boolean;
+  onSelectPost: (post: ExistingPost) => void;
+  onSelectMedia: (media: any) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col" data-testid="post-picker-dialog">
+        <DialogHeader>
+          <DialogTitle>Select Existing Post</DialogTitle>
+        </DialogHeader>
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Search by text or post ID..."
+            className="pl-9"
+            value={searchQuery}
+            onChange={e => onSearchChange(e.target.value)}
+            data-testid="input-post-search"
+          />
+          {searchQuery && (
+            <button onClick={() => onSearchChange("")} className="absolute right-3 top-1/2 -translate-y-1/2">
+              <X className="w-4 h-4 text-muted-foreground" />
+            </button>
+          )}
+        </div>
+        <Tabs defaultValue="facebook" className="flex-1 overflow-hidden flex flex-col">
+          <TabsList className="w-full grid grid-cols-4">
+            <TabsTrigger value="facebook" className="gap-1 text-xs" data-testid="tab-facebook">
+              <SiFacebook className="w-3.5 h-3.5" /> Facebook
+            </TabsTrigger>
+            <TabsTrigger value="instagram" className="gap-1 text-xs" data-testid="tab-instagram">
+              <SiInstagram className="w-3.5 h-3.5" /> Instagram
+            </TabsTrigger>
+            <TabsTrigger value="partner" className="gap-1 text-xs" data-testid="tab-partner">
+              <Share2 className="w-3.5 h-3.5" /> Partner
+            </TabsTrigger>
+            <TabsTrigger value="media" className="gap-1 text-xs" data-testid="tab-media-library">
+              <ImageIcon className="w-3.5 h-3.5" /> Media Library
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="facebook" className="flex-1 overflow-auto mt-3">
+            <PostList posts={fbPosts} loading={fbLoading} onSelect={onSelectPost} emptyMsg="No Facebook page posts found. Make sure your Facebook page is connected." />
+          </TabsContent>
+          <TabsContent value="instagram" className="flex-1 overflow-auto mt-3">
+            <PostList posts={igPosts} loading={igLoading} onSelect={onSelectPost} emptyMsg="No Instagram posts found. Make sure your Instagram account is connected." />
+          </TabsContent>
+          <TabsContent value="partner" className="flex-1 overflow-auto mt-3">
+            <PostList posts={partnerPosts} loading={partnerLoading} onSelect={onSelectPost} emptyMsg="No partner/branded content posts found." />
+          </TabsContent>
+          <TabsContent value="media" className="flex-1 overflow-auto mt-3">
+            {mediaLibrary.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">No media in your library. Upload media via the <a href="/meta/media-library" className="text-primary underline">Media Library</a>.</p>
+            ) : (
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                {mediaLibrary.map((m: any) => (
+                  <button
+                    key={m.id}
+                    onClick={() => onSelectMedia(m)}
+                    className="group relative rounded-lg border overflow-hidden aspect-square hover:border-primary transition-colors"
+                    data-testid={`media-lib-item-${m.id}`}
+                  >
+                    {m.type === "video" ? (
+                      <div className="w-full h-full bg-muted flex items-center justify-center">
+                        <Film className="w-8 h-8 text-muted-foreground/40" />
+                      </div>
+                    ) : (
+                      <img src={m.url} alt={m.name} className="w-full h-full object-cover" />
+                    )}
+                    <div className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[10px] px-1.5 py-1 truncate opacity-0 group-hover:opacity-100 transition-opacity">
+                      {m.name}
+                    </div>
+                    <Badge variant="secondary" className="absolute top-1 right-1 text-[9px] px-1 py-0">{m.type}</Badge>
+                  </button>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
+        <div className="flex justify-end pt-2 border-t">
+          <Button variant="outline" onClick={() => onOpenChange(false)} data-testid="button-cancel-post-picker">Cancel</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function MetaAdLauncher() {
   const { toast } = useToast();
   const [step, setStep] = useState<Step>("campaign");
@@ -261,6 +421,9 @@ export default function MetaAdLauncher() {
   ]);
   const [showPreview, setShowPreview] = useState(false);
   const [imageDimWarnings, setImageDimWarnings] = useState<string[]>([]);
+  const [selectedPost, setSelectedPost] = useState<ExistingPost | null>(null);
+  const [showPostPicker, setShowPostPicker] = useState(false);
+  const [postSearchQuery, setPostSearchQuery] = useState("");
 
   const { data: oauthStatus } = useQuery<any>({ queryKey: ["/api/meta/oauth/status"] });
   const { data: pagesData } = useQuery<any>({ queryKey: ["/api/meta/pages"], enabled: !!oauthStatus?.connected });
@@ -269,6 +432,42 @@ export default function MetaAdLauncher() {
   const { data: audiencesData } = useQuery<{ audiences: { id: string; metaAudienceId: string | null; name: string; audienceType: string }[] }>({
     queryKey: ["/api/meta/audiences"],
     enabled: !!oauthStatus?.connected,
+  });
+
+  const [postSearchDebounce, setPostSearchDebounce] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setPostSearchDebounce(postSearchQuery), 300);
+    return () => clearTimeout(t);
+  }, [postSearchQuery]);
+
+  const { data: fbPostsData, isLoading: fbPostsLoading } = useQuery<{ posts: ExistingPost[] }>({
+    queryKey: ["/api/meta/page-posts", postSearchDebounce],
+    queryFn: async () => {
+      const url = postSearchDebounce ? `/api/meta/page-posts?search=${encodeURIComponent(postSearchDebounce)}` : `/api/meta/page-posts`;
+      const res = await fetch(url, { credentials: "include" });
+      return res.json();
+    },
+    enabled: showPostPicker && !!oauthStatus?.connected,
+  });
+
+  const { data: igPostsData, isLoading: igPostsLoading } = useQuery<{ posts: ExistingPost[] }>({
+    queryKey: ["/api/meta/ig-media", postSearchDebounce],
+    queryFn: async () => {
+      const url = postSearchDebounce ? `/api/meta/ig-media?search=${encodeURIComponent(postSearchDebounce)}` : `/api/meta/ig-media`;
+      const res = await fetch(url, { credentials: "include" });
+      return res.json();
+    },
+    enabled: showPostPicker && !!oauthStatus?.connected,
+  });
+
+  const { data: partnerPostsData, isLoading: partnerPostsLoading } = useQuery<{ posts: ExistingPost[] }>({
+    queryKey: ["/api/meta/branded-content-posts", postSearchDebounce],
+    queryFn: async () => {
+      const url = postSearchDebounce ? `/api/meta/branded-content-posts?search=${encodeURIComponent(postSearchDebounce)}` : `/api/meta/branded-content-posts`;
+      const res = await fetch(url, { credentials: "include" });
+      return res.json();
+    },
+    enabled: showPostPicker && !!oauthStatus?.connected,
   });
 
   const [interestDebounce, setInterestDebounce] = useState("");
@@ -340,24 +539,29 @@ export default function MetaAdLauncher() {
 
       const creative: any = {
         format: adFormat,
-        primaryText,
-        headline: headline || undefined,
-        description: description || undefined,
-        linkUrl,
-        callToAction,
       };
-      if (adFormat === "single_image") {
-        creative.imageUrl = imageUrl || undefined;
-      } else if (adFormat === "video") {
-        creative.videoId = videoId || undefined;
-        creative.thumbnailUrl = thumbnailUrl || undefined;
-      } else if (adFormat === "carousel") {
-        creative.carouselCards = carouselCards.filter(c => c.imageUrl || c.linkUrl).map(c => ({
-          imageUrl: c.imageUrl || undefined,
-          headline: c.headline || undefined,
-          description: c.description || undefined,
-          linkUrl: c.linkUrl || linkUrl,
-        }));
+      if (adFormat === "existing_post" && selectedPost) {
+        creative.existingPostId = selectedPost.id;
+        creative.existingPostSource = selectedPost.source;
+      } else {
+        creative.primaryText = primaryText;
+        creative.headline = headline || undefined;
+        creative.description = description || undefined;
+        creative.linkUrl = linkUrl;
+        creative.callToAction = callToAction;
+        if (adFormat === "single_image") {
+          creative.imageUrl = imageUrl || undefined;
+        } else if (adFormat === "video") {
+          creative.videoId = videoId || undefined;
+          creative.thumbnailUrl = thumbnailUrl || undefined;
+        } else if (adFormat === "carousel") {
+          creative.carouselCards = carouselCards.filter(c => c.imageUrl || c.linkUrl).map(c => ({
+            imageUrl: c.imageUrl || undefined,
+            headline: c.headline || undefined,
+            description: c.description || undefined,
+            linkUrl: c.linkUrl || linkUrl,
+          }));
+        }
       }
 
       const payload: any = {
@@ -431,11 +635,13 @@ export default function MetaAdLauncher() {
   const canProceedFromTargeting = selectedCities.length > 0;
   let isValidUrl = false;
   try { isValidUrl = !!linkUrl.trim() && !!new URL(linkUrl); } catch {}
-  const canProceedFromCreative = primaryText.trim() && isValidUrl && (
-    adFormat === "single_image" ||
-    adFormat === "video" && videoId.trim() ||
-    adFormat === "carousel" && carouselCards.filter(c => c.imageUrl).length >= 2
-  );
+  const canProceedFromCreative = adFormat === "existing_post"
+    ? !!selectedPost
+    : primaryText.trim() && isValidUrl && (
+      adFormat === "single_image" ||
+      adFormat === "video" && videoId.trim() ||
+      adFormat === "carousel" && carouselCards.filter(c => c.imageUrl).length >= 2
+    );
 
   const addCarouselCard = () => setCarouselCards(prev => [...prev, { id: uid(), imageUrl: "", headline: "", description: "", linkUrl: "" }]);
   const removeCarouselCard = (id: string) => { if (carouselCards.length > 2) setCarouselCards(prev => prev.filter(c => c.id !== id)); };
@@ -777,25 +983,98 @@ export default function MetaAdLauncher() {
           <CardContent className="space-y-4">
             <div className="space-y-1.5">
               <Label>Ad Format</Label>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 {([
                   { value: "single_image" as AdFormat, label: "Single Image", icon: ImageIcon },
                   { value: "video" as AdFormat, label: "Video", icon: Film },
                   { value: "carousel" as AdFormat, label: "Carousel", icon: Plus },
+                  { value: "existing_post" as AdFormat, label: "Existing Post", icon: FileText },
                 ]).map(f => (
                   <Button key={f.value} variant={adFormat === f.value ? "default" : "outline"} size="sm" className="gap-1.5"
-                    onClick={() => setAdFormat(f.value)} data-testid={`button-format-${f.value}`}>
+                    onClick={() => { setAdFormat(f.value); if (f.value === "existing_post" && !selectedPost) setShowPostPicker(true); }} data-testid={`button-format-${f.value}`}>
                     <f.icon className="w-3.5 h-3.5" /> {f.label}
                   </Button>
                 ))}
               </div>
             </div>
 
+            {adFormat === "existing_post" && (
+              <div className="space-y-3">
+                {selectedPost ? (
+                  <div className="border rounded-lg p-3 space-y-2" data-testid="selected-post-card">
+                    <div className="flex items-start gap-3">
+                      {selectedPost.fullPicture && (
+                        <img src={selectedPost.fullPicture} alt="Post" className="w-20 h-20 rounded object-cover shrink-0" />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          {selectedPost.source === "facebook" && <SiFacebook className="w-3.5 h-3.5 text-[#1877F2] shrink-0" />}
+                          {selectedPost.source === "instagram" && <SiInstagram className="w-3.5 h-3.5 text-[#E4405F] shrink-0" />}
+                          {selectedPost.source === "partner" && <Share2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
+                          <span className="text-xs text-muted-foreground capitalize">{selectedPost.source}</span>
+                          <span className="text-xs text-muted-foreground">·</span>
+                          <span className="text-xs text-muted-foreground">{selectedPost.createdTime ? format(new Date(selectedPost.createdTime), "dd MMM yyyy") : ""}</span>
+                        </div>
+                        <p className="text-sm line-clamp-2">{selectedPost.message || "(No text)"}</p>
+                        <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1"><ThumbsUp className="w-3 h-3" /> {selectedPost.likes}</span>
+                          <span className="flex items-center gap-1"><MessageCircle className="w-3 h-3" /> {selectedPost.comments}</span>
+                          {selectedPost.shares > 0 && <span className="flex items-center gap-1"><Share2 className="w-3 h-3" /> {selectedPost.shares}</span>}
+                        </div>
+                        <p className="text-[10px] text-muted-foreground mt-1 font-mono">ID: {selectedPost.id}</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={() => setShowPostPicker(true)} data-testid="button-change-post">Change Post</Button>
+                      <Button variant="ghost" size="sm" onClick={() => setSelectedPost(null)} data-testid="button-remove-post"><X className="w-3.5 h-3.5 mr-1" /> Remove</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <Button variant="outline" className="w-full h-24 border-dashed gap-2" onClick={() => setShowPostPicker(true)} data-testid="button-select-post">
+                    <Search className="w-4 h-4" /> Select an Existing Post
+                  </Button>
+                )}
+
+                <PostPickerDialog
+                  open={showPostPicker}
+                  onOpenChange={setShowPostPicker}
+                  searchQuery={postSearchQuery}
+                  onSearchChange={setPostSearchQuery}
+                  fbPosts={fbPostsData?.posts || []}
+                  igPosts={igPostsData?.posts || []}
+                  partnerPosts={partnerPostsData?.posts || []}
+                  mediaLibrary={mediaData?.media || []}
+                  fbLoading={fbPostsLoading}
+                  igLoading={igPostsLoading}
+                  partnerLoading={partnerPostsLoading}
+                  onSelectPost={(post) => {
+                    setSelectedPost(post);
+                    setShowPostPicker(false);
+                  }}
+                  onSelectMedia={(media) => {
+                    if (media.type === "video") {
+                      setAdFormat("video");
+                      setVideoId(media.metaMediaHash || "");
+                    } else {
+                      setAdFormat("single_image");
+                      setImageUrl(media.url);
+                    }
+                    setShowPostPicker(false);
+                    setSelectedPost(null);
+                  }}
+                />
+              </div>
+            )}
+
+            {adFormat !== "existing_post" && (
             <div className="space-y-1.5">
               <Label htmlFor="primary-text">Primary Text *</Label>
               <Textarea id="primary-text" placeholder="Write your ad copy here..." rows={3} value={primaryText} onChange={e => setPrimaryText(e.target.value)} data-testid="textarea-primary-text" />
             </div>
+            )}
 
+            {adFormat !== "existing_post" && (
+            <>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label htmlFor="headline">Headline</Label>
@@ -820,6 +1099,8 @@ export default function MetaAdLauncher() {
                 </Select>
               </div>
             </div>
+            </>
+            )}
 
             {adFormat === "single_image" && (
               <div className="space-y-1.5">
@@ -956,20 +1237,62 @@ export default function MetaAdLauncher() {
               <div className="space-y-3">
                 <h3 className="font-medium text-sm">Creative</h3>
                 <div className="space-y-2 text-sm">
-                  <div className="flex justify-between"><span className="text-muted-foreground">Format</span><Badge variant="outline">{adFormat === "single_image" ? "Image" : adFormat === "video" ? "Video" : "Carousel"}</Badge></div>
-                  <div><span className="text-muted-foreground block">Primary Text</span><p className="mt-0.5">{primaryText}</p></div>
-                  {headline && <div><span className="text-muted-foreground block">Headline</span><p className="mt-0.5 font-medium">{headline}</p></div>}
-                  <div className="flex justify-between"><span className="text-muted-foreground">CTA</span><span>{CTA_OPTIONS.find(c => c.value === callToAction)?.label}</span></div>
-                  <div><span className="text-muted-foreground block">URL</span><a href={linkUrl} target="_blank" rel="noreferrer" className="text-primary text-xs break-all">{linkUrl}</a></div>
-                  {adFormat === "single_image" && imageUrl && <div className="mt-2"><img src={imageUrl} alt="Ad preview" className="rounded border max-h-32 object-cover" /></div>}
-                  {adFormat === "carousel" && <p className="text-xs text-muted-foreground">{carouselCards.filter(c => c.imageUrl).length} carousel cards</p>}
+                  <div className="flex justify-between"><span className="text-muted-foreground">Format</span><Badge variant="outline">{adFormat === "existing_post" ? "Existing Post" : adFormat === "single_image" ? "Image" : adFormat === "video" ? "Video" : "Carousel"}</Badge></div>
+                  {adFormat === "existing_post" && selectedPost ? (
+                    <div className="border rounded p-2 space-y-1.5">
+                      <div className="flex items-start gap-2">
+                        {selectedPost.fullPicture && <img src={selectedPost.fullPicture} alt="Post" className="w-14 h-14 rounded object-cover shrink-0" />}
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1 mb-0.5">
+                            {selectedPost.source === "facebook" && <SiFacebook className="w-3 h-3 text-[#1877F2]" />}
+                            {selectedPost.source === "instagram" && <SiInstagram className="w-3 h-3 text-[#E4405F]" />}
+                            <span className="text-xs text-muted-foreground capitalize">{selectedPost.source}</span>
+                          </div>
+                          <p className="text-xs line-clamp-2">{selectedPost.message || "(No text)"}</p>
+                          <p className="text-[10px] text-muted-foreground font-mono mt-0.5">ID: {selectedPost.id}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div><span className="text-muted-foreground block">Primary Text</span><p className="mt-0.5">{primaryText}</p></div>
+                      {headline && <div><span className="text-muted-foreground block">Headline</span><p className="mt-0.5 font-medium">{headline}</p></div>}
+                      <div className="flex justify-between"><span className="text-muted-foreground">CTA</span><span>{CTA_OPTIONS.find(c => c.value === callToAction)?.label}</span></div>
+                      <div><span className="text-muted-foreground block">URL</span><a href={linkUrl} target="_blank" rel="noreferrer" className="text-primary text-xs break-all">{linkUrl}</a></div>
+                      {adFormat === "single_image" && imageUrl && <div className="mt-2"><img src={imageUrl} alt="Ad preview" className="rounded border max-h-32 object-cover" /></div>}
+                      {adFormat === "carousel" && <p className="text-xs text-muted-foreground">{carouselCards.filter(c => c.imageUrl).length} carousel cards</p>}
+                    </>
+                  )}
                 </div>
               </div>
             </div>
 
             <Separator />
 
-            <AdPreview primaryText={primaryText} headline={headline} imageUrl={imageUrl} thumbnailUrl={thumbnailUrl} linkUrl={linkUrl} callToAction={callToAction} pageName={pageName} format={adFormat} carouselCards={carouselCards} />
+            {adFormat === "existing_post" && selectedPost ? (
+              <div className="border rounded-lg overflow-hidden bg-white dark:bg-zinc-900 max-w-sm mx-auto shadow-sm" data-testid="existing-post-review-preview">
+                <div className="p-3 flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold">
+                    {(pageName || "P")[0]}
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold">{pageName || "Your Page"}</p>
+                    <p className="text-[10px] text-muted-foreground">Sponsored</p>
+                  </div>
+                </div>
+                <div className="px-3 pb-2"><p className="text-sm whitespace-pre-wrap">{selectedPost.message || "(No text)"}</p></div>
+                {selectedPost.fullPicture && <img src={selectedPost.fullPicture} alt="Post" className="w-full aspect-square object-cover" />}
+                <div className="p-3 border-t flex items-center justify-between">
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1"><ThumbsUp className="w-3 h-3" /> {selectedPost.likes}</span>
+                    <span className="flex items-center gap-1"><MessageCircle className="w-3 h-3" /> {selectedPost.comments}</span>
+                  </div>
+                  {selectedPost.permalinkUrl && <a href={selectedPost.permalinkUrl} target="_blank" rel="noreferrer" className="text-xs text-primary flex items-center gap-1"><ExternalLink className="w-3 h-3" /> View Post</a>}
+                </div>
+              </div>
+            ) : (
+              <AdPreview primaryText={primaryText} headline={headline} imageUrl={imageUrl} thumbnailUrl={thumbnailUrl} linkUrl={linkUrl} callToAction={callToAction} pageName={pageName} format={adFormat} carouselCards={carouselCards} />
+            )}
 
             <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-3 flex items-start gap-2">
               <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />

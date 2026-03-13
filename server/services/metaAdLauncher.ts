@@ -58,6 +58,118 @@ export async function fetchFacebookPages(merchantId: string): Promise<any[]> {
   return data.data || [];
 }
 
+async function getPageAccessToken(merchantId: string, pageId: string): Promise<string> {
+  const pages = await fetchFacebookPages(merchantId);
+  const page = pages.find((p: any) => p.id === pageId);
+  if (page?.access_token) return page.access_token;
+  const creds = await getCredentialsForMerchant(merchantId);
+  return creds.accessToken;
+}
+
+export async function fetchPagePosts(merchantId: string, pageId: string, search?: string): Promise<any[]> {
+  const creds = await getCredentialsForMerchant(merchantId);
+  const pageToken = await getPageAccessToken(merchantId, pageId);
+  const url = new URL(`${META_BASE_URL}/${pageId}/promotable_posts`);
+  url.searchParams.set("access_token", pageToken);
+  url.searchParams.set("fields", "id,message,full_picture,created_time,type,permalink_url,status_type,likes.summary(true),comments.summary(true),shares");
+  url.searchParams.set("limit", "50");
+  const response = await fetch(url.toString());
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data?.error?.message || `Failed to fetch page posts`);
+  }
+  let posts = data.data || [];
+  if (search && search.trim()) {
+    const q = search.toLowerCase();
+    posts = posts.filter((p: any) =>
+      (p.message || "").toLowerCase().includes(q) ||
+      (p.id || "").toLowerCase().includes(q)
+    );
+  }
+  return posts.map((p: any) => ({
+    id: p.id,
+    message: p.message || "",
+    fullPicture: p.full_picture || "",
+    createdTime: p.created_time,
+    type: p.type || "status",
+    statusType: p.status_type || "",
+    permalinkUrl: p.permalink_url || "",
+    likes: p.likes?.summary?.total_count || 0,
+    comments: p.comments?.summary?.total_count || 0,
+    shares: p.shares?.count || 0,
+    source: "facebook",
+  }));
+}
+
+export async function fetchInstagramMedia(merchantId: string, igAccountId: string, search?: string): Promise<any[]> {
+  const creds = await getCredentialsForMerchant(merchantId);
+  const url = new URL(`${META_BASE_URL}/${igAccountId}/media`);
+  url.searchParams.set("access_token", creds.accessToken);
+  url.searchParams.set("fields", "id,caption,media_type,media_url,thumbnail_url,timestamp,like_count,comments_count,permalink");
+  url.searchParams.set("limit", "50");
+  const response = await fetch(url.toString());
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data?.error?.message || `Failed to fetch Instagram media`);
+  }
+  let media = data.data || [];
+  if (search && search.trim()) {
+    const q = search.toLowerCase();
+    media = media.filter((m: any) =>
+      (m.caption || "").toLowerCase().includes(q) ||
+      (m.id || "").toLowerCase().includes(q)
+    );
+  }
+  return media.map((m: any) => ({
+    id: m.id,
+    message: m.caption || "",
+    fullPicture: m.media_type === "VIDEO" ? (m.thumbnail_url || "") : (m.media_url || ""),
+    createdTime: m.timestamp,
+    type: (m.media_type || "IMAGE").toLowerCase(),
+    permalinkUrl: m.permalink || "",
+    likes: m.like_count || 0,
+    comments: m.comments_count || 0,
+    shares: 0,
+    source: "instagram",
+  }));
+}
+
+export async function fetchBrandedContentPosts(merchantId: string, pageId: string, search?: string): Promise<any[]> {
+  try {
+    const creds = await getCredentialsForMerchant(merchantId);
+    const pageToken = await getPageAccessToken(merchantId, pageId);
+    const url = new URL(`${META_BASE_URL}/${pageId}/published_posts`);
+    url.searchParams.set("access_token", pageToken);
+    url.searchParams.set("fields", "id,message,full_picture,created_time,type,permalink_url,is_hidden,likes.summary(true),comments.summary(true),shares");
+    url.searchParams.set("limit", "50");
+    const response = await fetch(url.toString());
+    const data = await response.json();
+    if (!response.ok) return [];
+    let posts = (data.data || []).filter((p: any) => p.type === "branded_content" || (p.message && p.message.includes("Paid partnership")));
+    if (search && search.trim()) {
+      const q = search.toLowerCase();
+      posts = posts.filter((p: any) =>
+        (p.message || "").toLowerCase().includes(q) ||
+        (p.id || "").toLowerCase().includes(q)
+      );
+    }
+    return posts.map((p: any) => ({
+      id: p.id,
+      message: p.message || "",
+      fullPicture: p.full_picture || "",
+      createdTime: p.created_time,
+      type: p.type || "status",
+      permalinkUrl: p.permalink_url || "",
+      likes: p.likes?.summary?.total_count || 0,
+      comments: p.comments?.summary?.total_count || 0,
+      shares: p.shares?.count || 0,
+      source: "partner",
+    }));
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchAdAccountPixels(merchantId: string): Promise<any[]> {
   const creds = await getCredentialsForMerchant(merchantId);
   const data = await metaApiGet(creds, `${creds.adAccountId}/adspixels`, {
@@ -167,15 +279,18 @@ export async function createAdCreative(
   params: {
     name: string;
     pageId: string;
-    format?: "single_image" | "video" | "carousel";
+    format?: "single_image" | "video" | "carousel" | "existing_post";
+    existingPostId?: string;
+    existingPostSource?: "facebook" | "instagram" | "partner";
+    instagramActorId?: string;
     imageHash?: string;
     imageUrl?: string;
     videoId?: string;
     thumbnailUrl?: string;
-    primaryText: string;
+    primaryText?: string;
     headline?: string;
     description?: string;
-    linkUrl: string;
+    linkUrl?: string;
     callToAction?: string;
     carouselCards?: Array<{
       imageUrl?: string;
@@ -187,6 +302,25 @@ export async function createAdCreative(
   }
 ): Promise<string> {
   const creds = await getCredentialsForMerchant(merchantId);
+
+  if (params.existingPostId) {
+    const body: Record<string, any> = {
+      name: params.name,
+    };
+    if (params.existingPostSource === "instagram") {
+      body.source_instagram_media_id = params.existingPostId;
+      if (params.instagramActorId) {
+        body.instagram_actor_id = params.instagramActorId;
+      }
+      body.object_story_spec = { page_id: params.pageId, instagram_actor_id: params.instagramActorId || params.pageId };
+    } else {
+      body.object_story_id = params.existingPostId;
+    }
+    const result = await metaApiPost(creds, `${creds.adAccountId}/adcreatives`, body);
+    console.log(`[MetaAdLauncher] AdCreative (existing post) created: ${result.id}`);
+    return result.id;
+  }
+
   const objectStorySpec: Record<string, any> = {
     page_id: params.pageId,
   };
@@ -295,11 +429,13 @@ export async function launchAd(
     bidAmount?: string;
     targeting: any;
     creative: {
-      format?: "single_image" | "video" | "carousel";
-      primaryText: string;
+      format?: "single_image" | "video" | "carousel" | "existing_post";
+      existingPostId?: string;
+      existingPostSource?: "facebook" | "instagram" | "partner";
+      primaryText?: string;
       headline?: string;
       description?: string;
-      linkUrl: string;
+      linkUrl?: string;
       imageUrl?: string;
       imageHash?: string;
       videoId?: string;
@@ -314,6 +450,7 @@ export async function launchAd(
       }>;
     };
     pageId: string;
+    instagramActorId?: string;
     pixelId?: string;
     status?: string;
     startTime?: string;
@@ -325,8 +462,10 @@ export async function launchAd(
       .set({ status: "launching" })
       .where(eq(adLaunchJobs.id, jobId));
 
+    const isExistingPost = !!config.creative.existingPostId;
+
     let imageHash = config.creative.imageHash;
-    if (!imageHash && config.creative.imageUrl && config.creative.format !== "carousel") {
+    if (!isExistingPost && !imageHash && config.creative.imageUrl && config.creative.format !== "carousel") {
       const uploaded = await uploadImageToMeta(merchantId, config.creative.imageUrl);
       imageHash = uploaded.hash;
     }
@@ -363,16 +502,19 @@ export async function launchAd(
       name: `${config.campaignName} - Creative`,
       pageId: config.pageId,
       format: config.creative.format,
-      imageHash,
-      imageUrl: !imageHash ? config.creative.imageUrl : undefined,
-      videoId: config.creative.videoId,
-      thumbnailUrl: config.creative.thumbnailUrl,
+      existingPostId: config.creative.existingPostId,
+      existingPostSource: config.creative.existingPostSource,
+      instagramActorId: config.instagramActorId,
+      imageHash: isExistingPost ? undefined : imageHash,
+      imageUrl: isExistingPost ? undefined : (!imageHash ? config.creative.imageUrl : undefined),
+      videoId: isExistingPost ? undefined : config.creative.videoId,
+      thumbnailUrl: isExistingPost ? undefined : config.creative.thumbnailUrl,
       primaryText: config.creative.primaryText,
       headline: config.creative.headline,
       description: config.creative.description,
       linkUrl: config.creative.linkUrl,
       callToAction: config.creative.callToAction,
-      carouselCards: config.creative.carouselCards,
+      carouselCards: isExistingPost ? undefined : config.creative.carouselCards,
     });
 
     const adId = await createAd(merchantId, {
