@@ -711,7 +711,7 @@ export default function MetaAdLauncher() {
         payload.conversionEvent = conversionEvent;
       }
       if (advantagePlusAudience) {
-        payload.targetingOptimization = "expansion_all";
+        payload.useAdvantageAudience = true;
       }
       if (optimizationGoal) {
         payload.optimizationGoal = optimizationGoal;

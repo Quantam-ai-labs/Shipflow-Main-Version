@@ -371,7 +371,7 @@ export async function createAdSet(
     startTime?: string;
     endTime?: string;
     isCbo?: boolean;
-    targetingOptimization?: string;
+    useAdvantageAudience?: boolean;
   }
 ): Promise<string> {
   const creds = await getCredentialsForMerchant(merchantId);
@@ -409,8 +409,8 @@ export async function createAdSet(
   if (params.endTime) {
     body.end_time = params.endTime;
   }
-  if (params.targetingOptimization) {
-    body.targeting_optimization = params.targetingOptimization;
+  if (params.useAdvantageAudience) {
+    body.use_advantage_audience = true;
   }
 
   const result = await metaApiPost(creds, `${creds.adAccountId}/adsets`, body);
@@ -606,7 +606,7 @@ export async function launchAd(
     pixelId?: string;
     conversionEvent?: string;
     optimizationGoal?: string;
-    targetingOptimization?: string;
+    useAdvantageAudience?: boolean;
     status?: string;
     startTime?: string;
     endTime?: string;
@@ -675,7 +675,7 @@ export async function launchAd(
       bidAmount: config.bidAmount,
       optimizationGoal,
       targeting: config.targeting,
-      targetingOptimization: config.targetingOptimization,
+      useAdvantageAudience: config.useAdvantageAudience,
       promotedObject: Object.keys(promotedObject).length > 0 ? promotedObject : undefined,
       status: config.status || "PAUSED",
       startTime: config.startTime,

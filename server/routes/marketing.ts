@@ -2116,7 +2116,7 @@ export function registerMarketingRoutes(app: Express) {
         bidStrategy: z.string().optional(),
         bidAmount: z.string().optional(),
         targeting: z.any(),
-        targetingOptimization: z.string().optional(),
+        useAdvantageAudience: z.boolean().optional(),
         creative: z.object({
           format: z.enum(["single_image", "video", "carousel", "existing_post"]).optional(),
           existingPostId: z.string().optional(),
