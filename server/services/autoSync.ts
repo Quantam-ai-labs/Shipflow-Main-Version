@@ -1,4 +1,4 @@
-import { db } from '../db';
+import { db, withRetry } from '../db';
 import { shopifyStores, merchants } from '../../shared/schema';
 import { eq } from 'drizzle-orm';
 import { autoMoveStalePending } from './workflowTransition';
@@ -81,7 +81,7 @@ export async function waitForMerchantSyncLock(merchantId: string, timeoutMs: num
 
 async function runStaleOrderCheck() {
   try {
-    const allMerchants = await db.select({ id: merchants.id }).from(merchants);
+    const allMerchants = await withRetry(() => db.select({ id: merchants.id }).from(merchants), 'autoSync-staleMerchants');
     for (const m of allMerchants) {
       const moved = await autoMoveStalePending(m.id);
       if (moved > 0) {
@@ -109,10 +109,10 @@ async function runAutoSync() {
   isSyncing = true;
 
   try {
-    const connectedStores = await db
+    const connectedStores = await withRetry(() => db
       .select()
       .from(shopifyStores)
-      .where(eq(shopifyStores.isConnected, true));
+      .where(eq(shopifyStores.isConnected, true)), 'autoSync-connectedStores');
 
     if (connectedStores.length === 0) {
       isSyncing = false;

@@ -12,10 +12,15 @@ if (!process.env.DATABASE_URL) {
 
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000,
+  max: 10,
+  min: 2,
+  idleTimeoutMillis: 20000,
+  connectionTimeoutMillis: 15000,
   allowExitOnIdle: false,
+  keepAlive: true,
+  keepAliveInitialDelayMillis: 10000,
+  statement_timeout: 30000,
+  query_timeout: 30000,
 });
 
 pool.on('error', (err) => {
@@ -52,8 +57,8 @@ function isRetryableError(err: any): boolean {
 export async function withRetry<T>(
   fn: () => Promise<T>,
   label: string = 'db-operation',
-  maxRetries: number = 1,
-  delayMs: number = 500,
+  maxRetries: number = 2,
+  delayMs: number = 1000,
 ): Promise<T> {
   let lastError: any;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -62,8 +67,9 @@ export async function withRetry<T>(
     } catch (err: any) {
       lastError = err;
       if (attempt < maxRetries && isRetryableError(err)) {
-        console.warn(`[DB Retry] ${label} failed (attempt ${attempt + 1}/${maxRetries + 1}): ${err.message}. Retrying in ${delayMs}ms...`);
-        await new Promise(resolve => setTimeout(resolve, delayMs));
+        const backoff = delayMs * Math.pow(2, attempt);
+        console.warn(`[DB Retry] ${label} failed (attempt ${attempt + 1}/${maxRetries + 1}): ${err.message}. Retrying in ${backoff}ms...`);
+        await new Promise(resolve => setTimeout(resolve, backoff));
       } else {
         throw err;
       }

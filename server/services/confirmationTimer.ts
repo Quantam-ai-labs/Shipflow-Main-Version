@@ -1,4 +1,4 @@
-import { db } from "../db";
+import { db, withRetry } from "../db";
 import { orders, merchants, robocallQueue } from "@shared/schema";
 import { eq, and, lt, or, isNull, isNotNull, lte } from "drizzle-orm";
 import { logConfirmationEvent, createNotification } from "./confirmationEngine";
@@ -152,7 +152,7 @@ async function checkWaReattempts() {
   try {
     const now = new Date();
 
-    const pendingReminders = await db.select({
+    const pendingReminders = await withRetry(() => db.select({
       id: orders.id,
       merchantId: orders.merchantId,
       orderNumber: orders.orderNumber,
@@ -174,7 +174,7 @@ async function checkWaReattempts() {
         eq(orders.waNotOnWhatsApp, false),
         isNotNull(orders.waNextAttemptAt),
         lte(orders.waNextAttemptAt, now),
-      ));
+      )), 'confirmTimer-waReattempts');
 
     if (pendingReminders.length === 0) return;
 
@@ -337,7 +337,7 @@ async function checkExhaustedWaOrders() {
   try {
     const now = new Date();
 
-    const exhaustedOrders = await db.select({
+    const exhaustedOrders = await withRetry(() => db.select({
       id: orders.id,
       merchantId: orders.merchantId,
       orderNumber: orders.orderNumber,
@@ -353,7 +353,7 @@ async function checkExhaustedWaOrders() {
         isNull(orders.waResponseAt),
         isNull(orders.waNextAttemptAt),
         eq(orders.waNotOnWhatsApp, false),
-      ));
+      )), 'confirmTimer-exhaustedOrders');
 
     if (exhaustedOrders.length === 0) return;
 

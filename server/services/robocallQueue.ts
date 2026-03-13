@@ -1,4 +1,4 @@
-import { db } from "../db";
+import { db, withRetry } from "../db";
 import { orders, merchants, robocallQueue, robocallLogs } from "@shared/schema";
 import { eq, and, lte, or, isNotNull, isNull } from "drizzle-orm";
 import { logConfirmationEvent, processConfirmationResponse, createNotification } from "./confirmationEngine";
@@ -68,7 +68,7 @@ async function processQueue() {
   try {
     const now = new Date();
 
-    const queueEntries = await db.select().from(robocallQueue)
+    const queueEntries = await withRetry(() => db.select().from(robocallQueue)
       .where(and(
         eq(robocallQueue.status, "waiting"),
         or(
@@ -76,7 +76,7 @@ async function processQueue() {
           lte(robocallQueue.nextRetryAt, now),
         ),
       ))
-      .limit(10);
+      .limit(10), 'robocall-processQueue');
 
     if (queueEntries.length === 0) return;
 
@@ -257,12 +257,12 @@ async function checkRobocallResponses() {
   try {
     const FINAL_VOICE_STATUSES = [2, 3, 4, 5, 6, 7, 9, 10];
 
-    const recentCalls = await db.select().from(robocallQueue)
+    const recentCalls = await withRetry(() => db.select().from(robocallQueue)
       .where(and(
         eq(robocallQueue.status, "completed"),
         isNotNull(robocallQueue.callId),
       ))
-      .limit(20);
+      .limit(20), 'robocall-checkResponses');
 
     if (recentCalls.length === 0) return;
 

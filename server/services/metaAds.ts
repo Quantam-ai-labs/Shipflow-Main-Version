@@ -1,4 +1,4 @@
-import { db } from "../db";
+import { db, withRetry } from "../db";
 import { adAccounts, adCampaigns, adSets, adCreatives, adInsights, metaSyncRuns, marketingSyncLogs, merchants, products } from "@shared/schema";
 import { eq, and, sql, desc, gte, lte, inArray, like } from "drizzle-orm";
 import { decryptToken } from "./encryption";
@@ -1067,12 +1067,12 @@ export function startMarketingSyncScheduler() {
 
   syncIntervalId = setInterval(async () => {
     try {
-      const accounts = await db.select().from(adAccounts);
+      const accounts = await withRetry(() => db.select().from(adAccounts), 'metaAds-scheduler-accounts');
       for (const account of accounts) {
         try {
           await quickSyncToday(account.merchantId);
         } catch (err: any) {
-          console.error(`[MetaAds] Quick sync failed for merchant ${account.merchantId}:`, err.message);
+          console.error(`[MetaAds] Quick sync failed:`, err.message);
         }
       }
     } catch (err: any) {
@@ -1086,7 +1086,7 @@ export function startMarketingSyncScheduler() {
     if (automationCycleCount % 5 !== 0) return;
     try {
       const { evaluateAutomationRules } = await import("./metaAdLauncher");
-      const accounts = await db.select().from(adAccounts);
+      const accounts = await withRetry(() => db.select().from(adAccounts), 'automation-rules-accounts');
       for (const account of accounts) {
         try {
           const result = await evaluateAutomationRules(account.merchantId);

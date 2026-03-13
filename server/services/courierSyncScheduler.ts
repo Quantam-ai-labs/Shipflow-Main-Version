@@ -1,4 +1,4 @@
-import { db } from '../db';
+import { db, withRetry } from '../db';
 import { orders, merchants, courierAccounts } from '../../shared/schema';
 import { eq, and, or, isNull, sql, desc, notInArray } from 'drizzle-orm';
 import { trackShipment, getWorkflowStageMapping, detectCourierType, type CourierCredentials } from './couriers';
@@ -501,7 +501,7 @@ async function runCourierSync() {
   const includeLowPriority = syncCycleCounter % LOW_PRIORITY_CYCLE_INTERVAL === 0;
 
   try {
-    const allMerchants = await db.select({ id: merchants.id }).from(merchants);
+    const allMerchants = await withRetry(() => db.select({ id: merchants.id }).from(merchants), 'courierSync-merchants');
 
     const runTerminalSweep = syncCycleCounter % TERMINAL_SWEEP_CYCLE_INTERVAL === 0;
 
@@ -828,7 +828,7 @@ async function sweepTerminalOrders(merchantId: string): Promise<{ rechecked: num
 
 async function runTerminalOrderSweep() {
   try {
-    const allMerchants = await db.select({ id: merchants.id }).from(merchants);
+    const allMerchants = await withRetry(() => db.select({ id: merchants.id }).from(merchants), 'courierSync-terminalSweep');
 
     for (const m of allMerchants) {
       try {

@@ -193,12 +193,12 @@ function scheduleStartupRecovery() {
       log(`serving on port ${port}`);
       seedSuperAdmin();
       startAutoSync();
-      startCourierSyncScheduler();
-      startMarketingSyncScheduler();
-      startConfirmationTimer();
-      startRobocallQueueProcessor();
+      setTimeout(() => startCourierSyncScheduler(), 5000);
+      setTimeout(() => startMarketingSyncScheduler(), 15000);
+      setTimeout(() => startConfirmationTimer(), 25000);
+      setTimeout(() => startRobocallQueueProcessor(), 35000);
       scheduleStartupRecovery();
-      warmCourierCityCache();
+      setTimeout(() => warmCourierCityCache(), 10000);
     },
   );
 })();
