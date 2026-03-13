@@ -631,14 +631,17 @@ export default function MetaAdLauncher() {
       const targeting: any = {
         geo_locations: allPakistan
           ? { countries: ["PK"] }
-          : {
-              countries: ["PK"],
-              cities: selectedGeoLocations.filter(loc => loc.key).map(loc => ({
-                key: loc.key,
-                name: loc.name,
-                country: loc.country_code || "PK",
-              })),
-            },
+          : (() => {
+              const geo: any = { countries: ["PK"] };
+              const valid = selectedGeoLocations.filter(loc => loc.key);
+              const cities = valid.filter(loc => loc.type === "city" || !loc.type);
+              const regions = valid.filter(loc => loc.type === "region" || loc.type === "subcity" || loc.type === "neighborhood");
+              const zips = valid.filter(loc => loc.type === "zip");
+              if (cities.length > 0) geo.cities = cities.map(loc => ({ key: loc.key, name: loc.name, country: loc.country_code || "PK" }));
+              if (regions.length > 0) geo.regions = regions.map(loc => ({ key: loc.key, name: loc.name }));
+              if (zips.length > 0) geo.zips = zips.map(loc => ({ key: loc.key }));
+              return geo;
+            })(),
         age_min: parseInt(minAge),
         age_max: parseInt(maxAge),
       };
@@ -1094,7 +1097,7 @@ export default function MetaAdLauncher() {
                           <Badge key={r.key} variant="outline" className="cursor-pointer select-none text-xs border-dashed"
                             onClick={() => { setSelectedGeoLocations(prev => [...prev, r]); setGeoSearchQuery(""); setGeoSearchResults([]); }}
                             data-testid={`badge-geo-${r.key}`}
-                          >{r.name}{r.region ? `, ${r.region}` : ""}</Badge>
+                          >{r.name}{r.region ? `, ${r.region}` : ""}{r.type && r.type !== "city" ? ` (${r.type})` : ""}</Badge>
                         ))}
                       </div>
                     </div>
