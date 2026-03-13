@@ -347,6 +347,8 @@ export async function createCampaign(
     if (params.spendingLimit) {
       body.spend_cap = Math.round(parseFloat(params.spendingLimit) * 100);
     }
+  } else {
+    body.is_adset_budget_sharing_enabled = false;
   }
 
   const result = await metaApiPost(creds, `${creds.adAccountId}/campaigns`, body);
@@ -394,11 +396,11 @@ export async function createAdSet(
     }
   }
 
-  if (params.bidStrategy) {
-    body.bid_strategy = params.bidStrategy;
-  }
-  if (params.bidAmount) {
-    body.bid_amount = Math.round(parseFloat(params.bidAmount) * 100);
+  if (params.bidStrategy && params.bidStrategy !== "LOWEST_COST_WITHOUT_CAP") {
+    if (params.bidAmount) {
+      body.bid_strategy = params.bidStrategy;
+      body.bid_amount = Math.round(parseFloat(params.bidAmount) * 100);
+    }
   }
 
   if (params.promotedObject) {
