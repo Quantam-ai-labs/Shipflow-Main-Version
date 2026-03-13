@@ -1459,6 +1459,7 @@ export async function generatePicklistPdfBuffer(items: PicklistItem[]): Promise<
     if (row.variantTitle) {
       displayName = `${row.productName} - ${row.variantTitle}`;
     }
+    displayName = (displayName || "").replace(/[^\x20-\x7E\xA0-\xFF]/g, " ").replace(/\s{2,}/g, " ").trim();
     const nameX = margin + colImage + 5;
     const maxNameWidth = colName - 10;
     let truncatedName = displayName;
