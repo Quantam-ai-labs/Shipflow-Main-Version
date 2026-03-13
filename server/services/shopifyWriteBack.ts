@@ -557,3 +557,191 @@ export async function writeBackFulfillment(
     return { success: false, error: lastError };
   }) as Promise<{ success: boolean; fulfillmentId?: string; error?: string }>;
 }
+
+export async function writeBackLineItems(
+  merchantId: string,
+  shopifyOrderId: string,
+  lineItems: Array<{ name: string; quantity: number; price: string; productId?: string; variantId?: string }>,
+): Promise<{ success: boolean; error?: string }> {
+  return enqueueWriteBack(`lineitems:${shopifyOrderId}`, async () => {
+    const creds = await getShopifyCredentials(merchantId);
+    if (!creds) {
+      return { success: false, error: 'Shopify not connected' };
+    }
+
+    try {
+      const graphqlUrl = `https://${creds.shopDomain}/admin/api/${API_VERSION}/graphql.json`;
+      const headers = {
+        'X-Shopify-Access-Token': creds.accessToken,
+        'Content-Type': 'application/json',
+      };
+
+      const beginRes = await fetch(graphqlUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          query: `mutation orderEditBegin($id: ID!) {
+            orderEditBegin(id: $id) {
+              calculatedOrder {
+                id
+                lineItems(first: 100) {
+                  edges {
+                    node {
+                      id
+                      quantity
+                      variant { id }
+                    }
+                  }
+                }
+              }
+              userErrors { field message }
+            }
+          }`,
+          variables: { id: `gid://shopify/Order/${shopifyOrderId}` },
+        }),
+      });
+
+      if (!beginRes.ok) {
+        const errText = await beginRes.text();
+        return { success: false, error: `GraphQL error ${beginRes.status}: ${errText}` };
+      }
+
+      const beginData = await beginRes.json();
+      if (beginData?.errors?.length > 0) {
+        return { success: false, error: `GraphQL errors: ${beginData.errors.map((e: any) => e.message).join(', ')}` };
+      }
+      const userErrors = beginData?.data?.orderEditBegin?.userErrors;
+      if (userErrors?.length > 0) {
+        return { success: false, error: `Order edit begin failed: ${userErrors.map((e: any) => e.message).join(', ')}` };
+      }
+
+      const calculatedOrder = beginData?.data?.orderEditBegin?.calculatedOrder;
+      const calculatedOrderId = calculatedOrder?.id;
+      if (!calculatedOrderId) {
+        return { success: false, error: 'No calculated order ID returned' };
+      }
+
+      const existingCalcLines = (calculatedOrder?.lineItems?.edges || []).map((e: any) => e.node);
+
+      for (const calcLine of existingCalcLines) {
+        if (calcLine.quantity > 0) {
+          const setQtyRes = await fetch(graphqlUrl, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              query: `mutation orderEditSetQuantity($id: ID!, $lineItemId: ID!, $quantity: Int!) {
+                orderEditSetQuantity(id: $id, lineItemId: $lineItemId, quantity: $quantity) {
+                  calculatedOrder { id }
+                  userErrors { field message }
+                }
+              }`,
+              variables: {
+                id: calculatedOrderId,
+                lineItemId: calcLine.id,
+                quantity: 0,
+              },
+            }),
+          });
+          const setQtyData = await setQtyRes.json();
+          const setQtyErrors = setQtyData?.data?.orderEditSetQuantity?.userErrors;
+          if (setQtyErrors?.length > 0) {
+            console.warn(`[ShopifyWriteBack] setQuantity error for ${calcLine.id}: ${setQtyErrors.map((e: any) => e.message).join(', ')}`);
+          }
+          await new Promise(r => setTimeout(r, 250));
+        }
+      }
+
+      const mutationErrors: string[] = [];
+
+      for (const item of lineItems) {
+        if (item.variantId) {
+          const variantGid = `gid://shopify/ProductVariant/${item.variantId}`;
+          const addRes = await fetch(graphqlUrl, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              query: `mutation orderEditAddVariant($id: ID!, $variantId: ID!, $quantity: Int!) {
+                orderEditAddVariant(id: $id, variantId: $variantId, quantity: $quantity) {
+                  calculatedOrder { id }
+                  userErrors { field message }
+                }
+              }`,
+              variables: {
+                id: calculatedOrderId,
+                variantId: variantGid,
+                quantity: item.quantity || 1,
+              },
+            }),
+          });
+          const addData = await addRes.json();
+          const addErrors = addData?.data?.orderEditAddVariant?.userErrors;
+          if (addErrors?.length > 0) {
+            mutationErrors.push(`addVariant ${item.name}: ${addErrors.map((e: any) => e.message).join(', ')}`);
+          }
+        } else {
+          const addCustomRes = await fetch(graphqlUrl, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              query: `mutation orderEditAddCustomItem($id: ID!, $title: String!, $quantity: Int!, $price: MoneyInput!) {
+                orderEditAddCustomItem(id: $id, title: $title, quantity: $quantity, price: $price) {
+                  calculatedOrder { id }
+                  userErrors { field message }
+                }
+              }`,
+              variables: {
+                id: calculatedOrderId,
+                title: item.name || 'Custom Item',
+                quantity: item.quantity || 1,
+                price: { amount: item.price || '0', currencyCode: 'PKR' },
+              },
+            }),
+          });
+          const addCustomData = await addCustomRes.json();
+          const addCustomErrors = addCustomData?.data?.orderEditAddCustomItem?.userErrors;
+          if (addCustomErrors?.length > 0) {
+            mutationErrors.push(`addCustomItem ${item.name}: ${addCustomErrors.map((e: any) => e.message).join(', ')}`);
+          }
+        }
+        await new Promise(r => setTimeout(r, 250));
+      }
+
+      if (mutationErrors.length > 0) {
+        console.warn(`[ShopifyWriteBack] Line item mutation warnings for order ${shopifyOrderId}: ${mutationErrors.join('; ')}`);
+      }
+
+      markWriteBack(shopifyOrderId);
+
+      const commitRes = await fetch(graphqlUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          query: `mutation orderEditCommit($id: ID!) {
+            orderEditCommit(id: $id) {
+              order { id }
+              userErrors { field message }
+            }
+          }`,
+          variables: { id: calculatedOrderId },
+        }),
+      });
+
+      if (!commitRes.ok) {
+        const errText = await commitRes.text();
+        return { success: false, error: `Commit failed: ${commitRes.status}: ${errText}` };
+      }
+
+      const commitData = await commitRes.json();
+      const commitErrors = commitData?.data?.orderEditCommit?.userErrors;
+      if (commitErrors?.length > 0) {
+        return { success: false, error: `Commit errors: ${commitErrors.map((e: any) => e.message).join(', ')}` };
+      }
+
+      console.log(`[ShopifyWriteBack] Line items updated for order ${shopifyOrderId}`);
+      return { success: true };
+    } catch (error: any) {
+      console.error(`[ShopifyWriteBack] Line item update error:`, error);
+      return { success: false, error: error.message || 'Unknown error' };
+    }
+  });
+}

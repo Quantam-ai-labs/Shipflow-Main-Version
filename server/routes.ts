@@ -104,6 +104,7 @@ import {
   writeBackFulfillment,
   writeBackAddTag,
   writeBackRemoveTag,
+  writeBackLineItems,
 } from "./services/shopifyWriteBack";
 import { leopardsService } from "./services/couriers/leopards";
 import { postexService } from "./services/couriers/postex";
@@ -1514,6 +1515,47 @@ export async function registerRoutes(
       } catch (error) {
         console.error("Error updating order:", error);
         res.status(500).json({ message: "Failed to update order" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/orders/:id/line-items-writeback",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+        const orderId = req.params.id;
+        const { lineItems } = req.body;
+
+        if (!Array.isArray(lineItems)) {
+          return res.status(400).json({ message: "lineItems must be an array" });
+        }
+
+        const order = await storage.getOrderById(merchantId, orderId);
+        if (!order) return res.status(404).json({ message: "Order not found" });
+        if (!order.shopifyOrderId) {
+          return res.status(400).json({ message: "Order is not linked to Shopify" });
+        }
+
+        const hasVariantItems = lineItems.some((item: any) => item.variantId);
+        if (!hasVariantItems) {
+          return res.json({ success: true, message: "No Shopify-linked items to sync" });
+        }
+
+        writeBackLineItems(merchantId, order.shopifyOrderId, lineItems)
+          .then((result) => {
+            if (!result.success) {
+              console.warn(`[ShopifyWriteBack] Line items sync failed for order ${orderId}: ${result.error}`);
+            }
+          })
+          .catch((err) => console.error(`[ShopifyWriteBack] Line items sync error:`, err));
+
+        res.json({ success: true, message: "Line item sync queued" });
+      } catch (error) {
+        console.error("Error syncing line items:", error);
+        res.status(500).json({ message: "Failed to sync line items" });
       }
     },
   );

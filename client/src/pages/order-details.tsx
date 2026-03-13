@@ -63,6 +63,7 @@ import {
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Order, Shipment, ShipmentEvent, Remark } from "@shared/schema";
+import { ProductPicker, type PickedProduct } from "@/components/product-picker";
 import { Link, useParams } from "wouter";
 import { formatDistanceToNow } from "date-fns";
 import { formatPkDateTime, formatPkDate, formatPkShortDate } from "@/lib/dateFormat";
@@ -1000,7 +1001,9 @@ export default function OrderDetails() {
   const [editSubtotal, setEditSubtotal] = useState("");
   const [editShipping, setEditShipping] = useState("");
   const [editDiscount, setEditDiscount] = useState("");
-  const [editLineItems, setEditLineItems] = useState<Array<{ name: string; quantity: number; price: string }>>([]);
+  const [editLineItems, setEditLineItems] = useState<Array<{ name: string; quantity: number; price: string; productId?: string; variantId?: string; variantTitle?: string; image?: string | null; sku?: string }>>([]);
+  const [showProductPicker, setShowProductPicker] = useState(false);
+  const [productPickerTargetIndex, setProductPickerTargetIndex] = useState<number | null>(null);
 
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("CASH");
@@ -1268,13 +1271,51 @@ export default function OrderDetails() {
 
   const startEditingSummary = () => {
     if (!order) return;
-    const items = (order.lineItems as Array<{ name: string; quantity: number; price: string }>) || [];
+    const items = (order.lineItems as Array<{ name: string; quantity: number; price: string; productId?: string; variantId?: string; variantTitle?: string; image?: string | null; sku?: string }>) || [];
     setEditLineItems(items.map(i => ({ ...i })));
     setEditSubtotal(String(order.subtotalAmount || 0));
     setEditShipping(String(order.shippingAmount || 0));
     setEditDiscount(String(order.discountAmount || 0));
     setIsEditingSummary(true);
   };
+
+  const handleProductPicked = (picked: PickedProduct) => {
+    if (productPickerTargetIndex !== null && productPickerTargetIndex < editLineItems.length) {
+      const updated = [...editLineItems];
+      updated[productPickerTargetIndex] = {
+        ...updated[productPickerTargetIndex],
+        name: picked.name,
+        price: picked.price,
+        productId: picked.productId,
+        variantId: picked.variantId,
+        variantTitle: picked.variantTitle,
+        image: picked.image,
+        sku: picked.sku,
+      };
+      setEditLineItems(updated);
+    } else {
+      setEditLineItems([...editLineItems, {
+        name: picked.name,
+        price: picked.price,
+        quantity: picked.quantity,
+        productId: picked.productId,
+        variantId: picked.variantId,
+        variantTitle: picked.variantTitle,
+        image: picked.image,
+        sku: picked.sku,
+      }]);
+    }
+    setProductPickerTargetIndex(null);
+  };
+
+  const lineItemWriteBackMutation = useMutation({
+    mutationFn: async (lineItems: Array<{ name: string; quantity: number; price: string; productId?: string; variantId?: string }>) => {
+      return apiRequest("POST", `/api/orders/${id}/line-items-writeback`, { lineItems });
+    },
+    onError: (err: any) => {
+      toast({ title: "Shopify sync issue", description: "Order saved locally but Shopify sync failed: " + (err.message || "Unknown error"), variant: "destructive" });
+    },
+  });
 
   const handleSaveSummary = () => {
     const subtotal = parseFloat(editSubtotal) || 0;
@@ -1289,6 +1330,12 @@ export default function OrderDetails() {
       totalAmount: String(total),
       lineItems: editLineItems,
       totalQuantity: totalQty,
+    }, {
+      onSuccess: () => {
+        if (order?.shopifyOrderId) {
+          lineItemWriteBackMutation.mutate(editLineItems);
+        }
+      },
     });
   };
 
@@ -1398,6 +1445,12 @@ export default function OrderDetails() {
         </div>
       )}
 
+      <ProductPicker
+        open={showProductPicker}
+        onClose={() => { setShowProductPicker(false); setProductPickerTargetIndex(null); }}
+        onSelect={handleProductPicked}
+      />
+
       <ConfirmationStatusCard order={order} orderId={id!} />
 
       <div className="grid lg:grid-cols-3 gap-4">
@@ -1426,16 +1479,30 @@ export default function OrderDetails() {
                   <div className="space-y-2">
                     {editLineItems.map((item, index) => (
                       <div key={index} className="space-y-1 border rounded-md p-2">
-                        <Input
-                          value={item.name}
-                          onChange={(e) => {
-                            const updated = [...editLineItems];
-                            updated[index] = { ...updated[index], name: e.target.value };
-                            setEditLineItems(updated);
-                          }}
-                          placeholder="Item name"
-                          data-testid={`input-edit-line-item-name-${index}`}
-                        />
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setProductPickerTargetIndex(index);
+                              setShowProductPicker(true);
+                            }}
+                            className="flex-1 text-left px-3 py-2 border rounded-md text-sm hover:bg-accent transition-colors truncate"
+                            data-testid={`button-pick-product-${index}`}
+                          >
+                            {item.name || <span className="text-muted-foreground">Click to select product...</span>}
+                          </button>
+                          <Input
+                            value={item.name}
+                            onChange={(e) => {
+                              const updated = [...editLineItems];
+                              updated[index] = { ...updated[index], name: e.target.value, productId: undefined, variantId: undefined };
+                              setEditLineItems(updated);
+                            }}
+                            placeholder="Or type manually"
+                            className="w-32 text-xs"
+                            data-testid={`input-edit-line-item-name-${index}`}
+                          />
+                        </div>
                         <div className="flex gap-2">
                           <Input
                             type="number"
@@ -1475,16 +1542,30 @@ export default function OrderDetails() {
                         </div>
                       </div>
                     ))}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setEditLineItems([...editLineItems, { name: "", quantity: 1, price: "0" }])}
-                      className="w-full"
-                      data-testid="button-add-line-item"
-                    >
-                      <Plus className="w-3.5 h-3.5 mr-1" />
-                      Add Item
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setProductPickerTargetIndex(null);
+                          setShowProductPicker(true);
+                        }}
+                        className="flex-1"
+                        data-testid="button-add-line-item"
+                      >
+                        <Plus className="w-3.5 h-3.5 mr-1" />
+                        Add from Products
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setEditLineItems([...editLineItems, { name: "", quantity: 1, price: "0" }])}
+                        data-testid="button-add-manual-line-item"
+                      >
+                        <Plus className="w-3.5 h-3.5 mr-1" />
+                        Manual
+                      </Button>
+                    </div>
                   </div>
                   <Separator />
                   <div className="space-y-2 text-sm">
