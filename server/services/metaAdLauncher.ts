@@ -124,6 +124,7 @@ export async function fetchInstagramMedia(merchantId: string, igAccountId: strin
     id: m.id,
     message: m.caption || "",
     fullPicture: m.media_type === "VIDEO" ? (m.thumbnail_url || "") : (m.media_url || ""),
+    mediaUrl: m.media_url || "",
     createdTime: m.timestamp,
     type: (m.media_type || "IMAGE").toLowerCase(),
     permalinkUrl: m.permalink || "",

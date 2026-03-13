@@ -47,7 +47,7 @@ export default function MetaMediaLibrary() {
     queryKey: ["/api/meta/page-posts", "includeVideos"],
     queryFn: async () => {
       const res = await fetch("/api/meta/page-posts?includeVideos=true", { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch Facebook posts");
+      if (!res.ok) return { posts: [], _notConnected: res.status === 400 };
       return res.json();
     },
     enabled: activeTab === "facebook",
@@ -57,7 +57,7 @@ export default function MetaMediaLibrary() {
     queryKey: ["/api/meta/ig-media", "library"],
     queryFn: async () => {
       const res = await fetch("/api/meta/ig-media", { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch Instagram media");
+      if (!res.ok) return { posts: [], _notConnected: true };
       return res.json();
     },
     enabled: activeTab === "instagram",
@@ -422,7 +422,7 @@ export default function MetaMediaLibrary() {
                               variant="secondary"
                               size="sm"
                               className="gap-1"
-                              onClick={() => saveToLibraryMutation.mutate({ name: vid.title || `Video ${vid.id}`, type: "video", url: vid.source || vid.picture })}
+                              onClick={() => saveToLibraryMutation.mutate({ name: vid.title || `Video ${vid.id}`, type: "video", url: vid.source || vid.picture, tags: ["ad-account"] })}
                               disabled={saveToLibraryMutation.isPending}
                               data-testid={`button-save-ad-video-${vid.id}`}
                             >
@@ -459,7 +459,7 @@ export default function MetaMediaLibrary() {
           {fbPostsLoading ? renderSkeleton() : filteredFbPosts.length === 0 ? (
             searchQuery
               ? renderEmptyState(Search, "No Results", "No Facebook posts match your search.")
-              : !fbPostsData
+              : fbPostsData?._notConnected
                 ? renderEmptyState(SiFacebook, "No Facebook Page Connected", "Connect your Facebook Page in Meta Settings to see your posts here.")
                 : renderEmptyState(SiFacebook, "No Facebook Posts", "No posts found on your connected Facebook Page.")
           ) : (
@@ -491,6 +491,7 @@ export default function MetaMediaLibrary() {
                             name: (post.message || "Facebook post").slice(0, 80),
                             type: post.type === "video" ? "video" : "image",
                             url: post.type === "video" ? (post.videoSource || post.fullPicture) : post.fullPicture,
+                            tags: ["facebook"],
                           })}
                           disabled={saveToLibraryMutation.isPending}
                           data-testid={`button-save-fb-${post.id}`}
@@ -523,7 +524,7 @@ export default function MetaMediaLibrary() {
           {igMediaLoading ? renderSkeleton() : filteredIgMedia.length === 0 ? (
             searchQuery
               ? renderEmptyState(Search, "No Results", "No Instagram media matches your search.")
-              : !igMediaData
+              : igMediaData?._notConnected
                 ? renderEmptyState(SiInstagram, "No Instagram Account Connected", "Connect your Instagram account in Meta Settings to see your media here.")
                 : renderEmptyState(SiInstagram, "No Instagram Media", "No posts found on your connected Instagram account.")
           ) : (
@@ -546,7 +547,7 @@ export default function MetaMediaLibrary() {
                       </div>
                     )}
                     <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                      {item.fullPicture && (
+                      {(item.fullPicture || item.mediaUrl) && (
                         <Button
                           variant="secondary"
                           size="sm"
@@ -554,7 +555,8 @@ export default function MetaMediaLibrary() {
                           onClick={() => saveToLibraryMutation.mutate({
                             name: (item.message || "Instagram post").slice(0, 80),
                             type: item.type === "video" ? "video" : "image",
-                            url: item.fullPicture,
+                            url: item.type === "video" ? (item.mediaUrl || item.fullPicture) : (item.fullPicture || item.mediaUrl),
+                            tags: ["instagram"],
                           })}
                           disabled={saveToLibraryMutation.isPending}
                           data-testid={`button-save-ig-${item.id}`}
