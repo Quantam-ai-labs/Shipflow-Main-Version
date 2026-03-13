@@ -1482,12 +1482,11 @@ export async function registerRoutes(
           }
         }
         if (changedFields.length > 0) {
-          const fieldNames = changedFields.map(c => c.field).join(", ");
           await storage.createOrderChangeLog({
             orderId,
             merchantId,
             changeType: "FIELD_EDIT",
-            fieldName: fieldNames,
+            fieldName: changedFields.length === 1 ? changedFields[0].field : "multiple",
             oldValue: null,
             newValue: null,
             actorUserId,
