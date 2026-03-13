@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -160,6 +160,12 @@ export default function SalesLauncher() {
   });
   const igAccounts: MetaIgAccount[] = igAccountsQuery.data?.instagramAccounts || [];
   const [selectedIgAccountId, setSelectedIgAccountId] = useState("");
+
+  useEffect(() => {
+    if (igAccounts.length > 0 && !selectedIgAccountId) {
+      setSelectedIgAccountId(igAccounts[0].id);
+    }
+  }, [igAccounts, selectedIgAccountId]);
 
   const postSearchParam = postSearch ? `?search=${encodeURIComponent(postSearch)}` : "";
   const fbPostsQuery = useQuery<any>({
