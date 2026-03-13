@@ -88,6 +88,7 @@ const STAGE_LABELS: Record<string, string> = {
   normalize: "Normalizing Input",
   validate: "Validating Fields",
   diagnostics: "Running Diagnostics",
+  media_upload: "Uploading Media",
   campaign: "Creating Campaign",
   adset: "Creating Ad Set",
   creative: "Creating Creative",
@@ -239,6 +240,7 @@ export default function SalesLauncher() {
 
       if (mode === "UPLOAD_IMAGE") {
         body.imageHash = imageHash;
+        body.imageUrl = imageUrl;
         body.destinationUrl = destinationUrl;
         body.primaryText = primaryText;
         body.headline = headline;
@@ -246,6 +248,7 @@ export default function SalesLauncher() {
         body.cta = cta;
       } else if (mode === "UPLOAD_VIDEO") {
         body.videoId = videoId;
+        body.videoUrl = videoUrl;
         body.destinationUrl = destinationUrl;
         body.primaryText = primaryText;
         body.headline = headline;
@@ -279,10 +282,13 @@ export default function SalesLauncher() {
 
   const isExistingPost = mode === "EXISTING_POST";
 
+  const diagnosticsPassed = diagnosticsResult?.passed === true;
+
   const validationChecklist = [
     { label: "Meta connected", ok: isConnected },
     { label: "Ad account selected", ok: !!metaStatus?.adAccountId },
     { label: "Page selected", ok: !!selectedPageId },
+    { label: "Diagnostics passed", ok: diagnosticsPassed },
     { label: "Campaign name", ok: !!adName.trim() },
     { label: "Daily budget valid", ok: parseFloat(dailyBudget) >= 1 },
     ...(isExistingPost
@@ -290,8 +296,8 @@ export default function SalesLauncher() {
       : [
           { label: "Destination URL", ok: !!destinationUrl.trim() },
           { label: "Primary text", ok: !!primaryText.trim() },
-          ...(mode === "UPLOAD_IMAGE" ? [{ label: "Image uploaded", ok: !!imageHash }] : []),
-          ...(mode === "UPLOAD_VIDEO" ? [{ label: "Video ready", ok: videoStatus === "ready" }] : []),
+          ...(mode === "UPLOAD_IMAGE" ? [{ label: "Image uploaded", ok: !!imageHash || !!imageUrl.trim() }] : []),
+          ...(mode === "UPLOAD_VIDEO" ? [{ label: "Video ready", ok: videoStatus === "ready" || !!videoUrl.trim() }] : []),
         ]),
   ];
   const allValid = validationChecklist.every(c => c.ok);

@@ -3058,6 +3058,21 @@ export function registerMarketingRoutes(app: Express) {
       if (!imageUrl) return res.status(400).json({ error: "imageUrl is required" });
 
       const result = await uploadImageToMeta(merchantId, imageUrl);
+
+      try {
+        const creds = await getCredentialsForMerchant(merchantId);
+        await db.insert(metaApiLogs).values({
+          merchantId,
+          stage: "upload_image",
+          endpoint: `${creds.adAccountId}/adimages`,
+          method: "POST",
+          requestJson: { url: imageUrl },
+          responseJson: { hash: result.hash, url: result.url },
+          httpStatus: 200,
+          success: true,
+        });
+      } catch {}
+
       res.json({ success: true, imageHash: result.hash, imageUrl: result.url });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -3072,16 +3087,31 @@ export function registerMarketingRoutes(app: Express) {
       if (!videoUrl) return res.status(400).json({ error: "videoUrl is required" });
 
       const creds = await getCredentialsForMerchant(merchantId);
+      const endpoint = `${creds.adAccountId}/advideos`;
       const formData = new URLSearchParams();
       formData.set("access_token", creds.accessToken);
       formData.set("file_url", videoUrl);
 
-      const response = await fetch(`${META_BASE_URL}/${creds.adAccountId}/advideos`, {
+      const response = await fetch(`${META_BASE_URL}/${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: formData.toString(),
       });
       const data = await response.json();
+
+      try {
+        await db.insert(metaApiLogs).values({
+          merchantId,
+          stage: "upload_video",
+          endpoint,
+          method: "POST",
+          requestJson: { file_url: videoUrl },
+          responseJson: data,
+          httpStatus: response.status,
+          success: response.ok,
+        });
+      } catch {}
+
       if (!response.ok) {
         throw new Error(data?.error?.message || "Video upload failed");
       }
@@ -3096,12 +3126,27 @@ export function registerMarketingRoutes(app: Express) {
       const merchantId = await getMerchantId(req);
 
       const creds = await getCredentialsForMerchant(merchantId);
-      const url = new URL(`${META_BASE_URL}/${req.params.videoId}`);
+      const endpoint = `${req.params.videoId}`;
+      const url = new URL(`${META_BASE_URL}/${endpoint}`);
       url.searchParams.set("access_token", creds.accessToken);
       url.searchParams.set("fields", "id,status,title,picture,length");
 
       const response = await fetch(url.toString());
       const data = await response.json();
+
+      try {
+        await db.insert(metaApiLogs).values({
+          merchantId,
+          stage: "video_status",
+          endpoint,
+          method: "GET",
+          requestJson: { fields: "id,status,title,picture,length" },
+          responseJson: data,
+          httpStatus: response.status,
+          success: response.ok,
+        });
+      } catch {}
+
       if (!response.ok) {
         throw new Error(data?.error?.message || "Failed to check video status");
       }

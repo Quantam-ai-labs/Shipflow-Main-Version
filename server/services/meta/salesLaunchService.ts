@@ -2,8 +2,9 @@ import { db } from "../../db";
 import { adLaunchJobs, metaApiLogs } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { getCredentialsForMerchant, META_BASE_URL } from "../metaAds";
+import { uploadImageToMeta } from "../metaAdLauncher";
 import { runDiagnostics } from "./salesDiagnostics";
-import { normalizeInput, validateLaunchInput, type ValidationIssue } from "./salesValidation";
+import { normalizeInput, validateLaunchInput, validateConnection, validateMediaReadiness, type ValidationIssue } from "./salesValidation";
 import {
   buildSalesCampaignPayload,
   buildSalesAdSetPayload,
@@ -168,12 +169,6 @@ export async function executeSalesLaunch(
     }
     stages[stages.length - 1] = { stage: "validate", status: "success" };
 
-    if (input.publishMode === "VALIDATE") {
-      await updateJobStage(jobId, "complete", { status: "validated" });
-      stages.push({ stage: "complete", status: "success", message: "Validation passed. No objects created." });
-      return { success: true, jobId, stages };
-    }
-
     stages.push({ stage: "diagnostics", status: "running" });
     const creds = await getCredentialsForMerchant(merchantId);
     const diagnostics = await runDiagnostics({
@@ -191,6 +186,47 @@ export async function executeSalesLaunch(
       return { success: false, jobId, stages, error: msg, errorStage: "diagnostics" };
     }
     stages[stages.length - 1] = { stage: "diagnostics", status: "success", data: diagnostics.checks };
+
+    if (input.publishMode === "VALIDATE") {
+      await updateJobStage(jobId, "complete", { status: "validated" });
+      stages.push({ stage: "complete", status: "success", message: "Validation and diagnostics passed. No objects created." });
+      return { success: true, jobId, stages };
+    }
+
+    if (input.mode === "UPLOAD_IMAGE" && input.imageUrl && !input.imageHash) {
+      stages.push({ stage: "media_upload", status: "running" });
+      try {
+        const uploadResult = await uploadImageToMeta(merchantId, input.imageUrl);
+        input.imageHash = uploadResult.hash;
+        stages[stages.length - 1] = { stage: "media_upload", status: "success", message: `Image hash: ${uploadResult.hash}` };
+      } catch (uploadErr: any) {
+        stages[stages.length - 1] = { stage: "media_upload", status: "failed", message: uploadErr.message };
+        await updateJobStage(jobId, "media_upload", { status: "failed", errorMessage: uploadErr.message, errorSummary: "Media upload failed" });
+        return { success: false, jobId, stages, error: `Image upload failed: ${uploadErr.message}`, errorStage: "media_upload" };
+      }
+    }
+
+    if (input.mode === "UPLOAD_VIDEO" && input.videoUrl && !input.videoId) {
+      stages.push({ stage: "media_upload", status: "running" });
+      try {
+        const formData = new URLSearchParams();
+        formData.set("access_token", creds.accessToken);
+        formData.set("file_url", input.videoUrl);
+        const response = await fetch(`${META_BASE_URL}/${creds.adAccountId}/advideos`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: formData.toString(),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data?.error?.message || "Video upload failed");
+        input.videoId = data.id;
+        stages[stages.length - 1] = { stage: "media_upload", status: "success", message: `Video ID: ${data.id}` };
+      } catch (uploadErr: any) {
+        stages[stages.length - 1] = { stage: "media_upload", status: "failed", message: uploadErr.message };
+        await updateJobStage(jobId, "media_upload", { status: "failed", errorMessage: uploadErr.message, errorSummary: "Media upload failed" });
+        return { success: false, jobId, stages, error: `Video upload failed: ${uploadErr.message}`, errorStage: "media_upload" };
+      }
+    }
 
     await updateJobStage(jobId, "campaign", { status: "launching" });
     stages.push({ stage: "campaign", status: "running" });

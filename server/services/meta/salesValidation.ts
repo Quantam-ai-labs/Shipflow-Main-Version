@@ -8,28 +8,8 @@ export interface ValidationIssue {
   fixSuggestion: string;
 }
 
-export function validateLaunchInput(input: SalesLaunchInput): ValidationIssue[] {
+export function validateConnection(input: SalesLaunchInput): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
-
-  if (!input.adName || !input.adName.trim()) {
-    issues.push({
-      code: "MISSING_AD_NAME",
-      field: "adName",
-      stage: "input",
-      message: "Campaign / Ad name is required.",
-      fixSuggestion: "Enter a name for your campaign.",
-    });
-  }
-
-  if (!["UPLOAD_IMAGE", "UPLOAD_VIDEO", "EXISTING_POST"].includes(input.mode)) {
-    issues.push({
-      code: "INVALID_MODE",
-      field: "mode",
-      stage: "input",
-      message: "Creative mode must be UPLOAD_IMAGE, UPLOAD_VIDEO, or EXISTING_POST.",
-      fixSuggestion: "Select a valid creative mode.",
-    });
-  }
 
   if (!input.adAccountId) {
     issues.push({
@@ -51,22 +31,78 @@ export function validateLaunchInput(input: SalesLaunchInput): ValidationIssue[] 
     });
   }
 
-  if (input.mode === "UPLOAD_IMAGE") {
-    if (!input.imageHash) {
-      issues.push({
-        code: "MISSING_IMAGE_HASH",
-        field: "imageHash",
-        stage: "media",
-        message: "Image must be uploaded before launch.",
-        fixSuggestion: "Upload an image first.",
-      });
-    }
+  return issues;
+}
+
+export function validateMediaReadiness(input: SalesLaunchInput): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+
+  if (input.mode === "UPLOAD_IMAGE" && !input.imageHash && !input.imageUrl) {
+    issues.push({
+      code: "MISSING_IMAGE",
+      field: "imageHash",
+      stage: "media",
+      message: "Image must be uploaded or image URL must be provided before launch.",
+      fixSuggestion: "Upload an image first using the Upload Image tab.",
+    });
+  }
+
+  if (input.mode === "UPLOAD_VIDEO" && !input.videoId && !input.videoUrl) {
+    issues.push({
+      code: "MISSING_VIDEO",
+      field: "videoId",
+      stage: "media",
+      message: "Video must be uploaded or video URL must be provided before launch.",
+      fixSuggestion: "Upload a video first using the Upload Video tab.",
+    });
+  }
+
+  if (input.mode === "EXISTING_POST" && !input.existingPostId) {
+    issues.push({
+      code: "MISSING_POST_ID",
+      field: "existingPostId",
+      stage: "media",
+      message: "An existing post must be selected.",
+      fixSuggestion: "Select a post from your Facebook Page.",
+    });
+  }
+
+  return issues;
+}
+
+export function validateLaunchInput(input: SalesLaunchInput): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+
+  issues.push(...validateConnection(input));
+  issues.push(...validateMediaReadiness(input));
+
+  if (!input.adName || !input.adName.trim()) {
+    issues.push({
+      code: "MISSING_AD_NAME",
+      field: "adName",
+      stage: "input",
+      message: "Campaign / Ad name is required.",
+      fixSuggestion: "Enter a name for your campaign.",
+    });
+  }
+
+  if (!["UPLOAD_IMAGE", "UPLOAD_VIDEO", "EXISTING_POST"].includes(input.mode)) {
+    issues.push({
+      code: "INVALID_MODE",
+      field: "mode",
+      stage: "input",
+      message: "Creative mode must be UPLOAD_IMAGE, UPLOAD_VIDEO, or EXISTING_POST.",
+      fixSuggestion: "Select a valid creative mode.",
+    });
+  }
+
+  if (input.mode === "UPLOAD_IMAGE" || input.mode === "UPLOAD_VIDEO") {
     if (!input.destinationUrl) {
       issues.push({
         code: "MISSING_URL",
         field: "destinationUrl",
         stage: "input",
-        message: "Destination URL is required for image ads.",
+        message: `Destination URL is required for ${input.mode === "UPLOAD_IMAGE" ? "image" : "video"} ads.`,
         fixSuggestion: "Enter a website URL where users will be directed.",
       });
     }
@@ -75,50 +111,8 @@ export function validateLaunchInput(input: SalesLaunchInput): ValidationIssue[] 
         code: "MISSING_PRIMARY_TEXT",
         field: "primaryText",
         stage: "input",
-        message: "Primary text is required for image ads.",
+        message: `Primary text is required for ${input.mode === "UPLOAD_IMAGE" ? "image" : "video"} ads.`,
         fixSuggestion: "Add the main ad copy text.",
-      });
-    }
-  }
-
-  if (input.mode === "UPLOAD_VIDEO") {
-    if (!input.videoId) {
-      issues.push({
-        code: "MISSING_VIDEO_ID",
-        field: "videoId",
-        stage: "media",
-        message: "Video must be uploaded before launch.",
-        fixSuggestion: "Upload a video first.",
-      });
-    }
-    if (!input.destinationUrl) {
-      issues.push({
-        code: "MISSING_URL",
-        field: "destinationUrl",
-        stage: "input",
-        message: "Destination URL is required for video ads.",
-        fixSuggestion: "Enter a website URL where users will be directed.",
-      });
-    }
-    if (!input.primaryText) {
-      issues.push({
-        code: "MISSING_PRIMARY_TEXT",
-        field: "primaryText",
-        stage: "input",
-        message: "Primary text is required for video ads.",
-        fixSuggestion: "Add the main ad copy text.",
-      });
-    }
-  }
-
-  if (input.mode === "EXISTING_POST") {
-    if (!input.existingPostId) {
-      issues.push({
-        code: "MISSING_POST_ID",
-        field: "existingPostId",
-        stage: "media",
-        message: "An existing post must be selected.",
-        fixSuggestion: "Select a post from your Facebook Page.",
       });
     }
   }
@@ -190,7 +184,9 @@ export function normalizeInput(raw: any): SalesLaunchInput {
     startTime: trimOrNull(raw.startTime),
     publishMode: (["VALIDATE", "DRAFT", "PUBLISH"].includes(raw.publishMode) ? raw.publishMode : "VALIDATE") as SalesLaunchInput["publishMode"],
     imageHash: null,
+    imageUrl: null,
     videoId: null,
+    videoUrl: null,
     existingPostId: null,
     existingPostSource: null,
     destinationUrl: null,
@@ -202,6 +198,7 @@ export function normalizeInput(raw: any): SalesLaunchInput {
 
   if (mode === "UPLOAD_IMAGE") {
     base.imageHash = trimOrNull(raw.imageHash);
+    base.imageUrl = trimOrNull(raw.imageUrl);
     base.destinationUrl = trimOrNull(raw.destinationUrl);
     base.primaryText = trimOrNull(raw.primaryText);
     base.headline = trimOrNull(raw.headline);
@@ -209,6 +206,7 @@ export function normalizeInput(raw: any): SalesLaunchInput {
     base.cta = trimOrNull(raw.cta) || "SHOP_NOW";
   } else if (mode === "UPLOAD_VIDEO") {
     base.videoId = trimOrNull(raw.videoId);
+    base.videoUrl = trimOrNull(raw.videoUrl);
     base.destinationUrl = trimOrNull(raw.destinationUrl);
     base.primaryText = trimOrNull(raw.primaryText);
     base.headline = trimOrNull(raw.headline);
