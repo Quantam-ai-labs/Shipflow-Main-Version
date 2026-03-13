@@ -163,12 +163,14 @@ export default function MetaMediaLibrary() {
   });
 
   const saveToLibraryMutation = useMutation({
-    mutationFn: async (item: { name: string; type: "image" | "video"; url: string }) => {
+    mutationFn: async (item: { name: string; type: "image" | "video"; url: string; width?: number; height?: number; tags?: string[] }) => {
       const res = await apiRequest("POST", "/api/meta/media-library", {
         name: item.name,
         type: item.type,
         url: item.url,
-        tags: ["imported"],
+        width: item.width,
+        height: item.height,
+        tags: item.tags || ["imported"],
       });
       return res.json();
     },
@@ -363,7 +365,7 @@ export default function MetaMediaLibrary() {
                               variant="secondary"
                               size="sm"
                               className="gap-1"
-                              onClick={() => saveToLibraryMutation.mutate({ name: img.name || `Image ${img.hash.slice(0, 8)}`, type: "image", url: img.url })}
+                              onClick={() => saveToLibraryMutation.mutate({ name: img.name || `Image ${img.hash.slice(0, 8)}`, type: "image", url: img.url, width: img.width, height: img.height, tags: ["ad-account"] })}
                               disabled={saveToLibraryMutation.isPending}
                               data-testid={`button-save-ad-image-${img.hash}`}
                             >
@@ -377,6 +379,11 @@ export default function MetaMediaLibrary() {
                             {img.width > 0 && <span>{img.width}x{img.height}</span>}
                             <span className="flex items-center gap-0.5"><Hash className="w-2.5 h-2.5" />{img.hash.slice(0, 8)}</span>
                           </div>
+                          {img.createdTime && (
+                            <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                              <Calendar className="w-2.5 h-2.5" /> {format(new Date(img.createdTime), "dd MMM yyyy")}
+                            </p>
+                          )}
                         </CardContent>
                       </Card>
                     ))}
@@ -440,7 +447,9 @@ export default function MetaMediaLibrary() {
               {filteredAdImages.length === 0 && filteredAdVideos.length === 0 && (
                 searchQuery
                   ? renderEmptyState(Search, "No Results", "No ad account media matches your search.")
-                  : renderEmptyState(SiMeta, "No Ad Account Media", "No images or videos found in your Meta Ad Account.")
+                  : (!adImagesData && !adVideosData)
+                    ? renderEmptyState(SiMeta, "No Ad Account Connected", "Connect your Meta Ad Account in Settings to see your ad media here.")
+                    : renderEmptyState(SiMeta, "No Ad Account Media", "No images or videos found in your Meta Ad Account.")
               )}
             </>
           )}
@@ -450,7 +459,9 @@ export default function MetaMediaLibrary() {
           {fbPostsLoading ? renderSkeleton() : filteredFbPosts.length === 0 ? (
             searchQuery
               ? renderEmptyState(Search, "No Results", "No Facebook posts match your search.")
-              : renderEmptyState(SiFacebook, "No Facebook Posts", "No posts found on your connected Facebook Page.")
+              : !fbPostsData
+                ? renderEmptyState(SiFacebook, "No Facebook Page Connected", "Connect your Facebook Page in Meta Settings to see your posts here.")
+                : renderEmptyState(SiFacebook, "No Facebook Posts", "No posts found on your connected Facebook Page.")
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
               {filteredFbPosts.map((post: any) => (
@@ -512,7 +523,9 @@ export default function MetaMediaLibrary() {
           {igMediaLoading ? renderSkeleton() : filteredIgMedia.length === 0 ? (
             searchQuery
               ? renderEmptyState(Search, "No Results", "No Instagram media matches your search.")
-              : renderEmptyState(SiInstagram, "No Instagram Media", "No posts found on your connected Instagram account.")
+              : !igMediaData
+                ? renderEmptyState(SiInstagram, "No Instagram Account Connected", "Connect your Instagram account in Meta Settings to see your media here.")
+                : renderEmptyState(SiInstagram, "No Instagram Media", "No posts found on your connected Instagram account.")
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
               {filteredIgMedia.map((item: any) => (
