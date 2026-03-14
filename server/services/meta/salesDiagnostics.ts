@@ -140,10 +140,10 @@ export async function runDiagnostics(config: {
       const firstIg = adActIgList[0];
       checks.push({ name: "Instagram Account (Ad Account)", status: "pass", message: `@${firstIg.username || firstIg.id} linked to ad account` });
     } else {
-      checks.push({ name: "Instagram Account (Ad Account)", status: "fail", message: "No Instagram account linked to ad account. Instagram post ads require this — link your IG account in Meta Business Settings > Ad Accounts > Instagram Accounts." });
+      checks.push({ name: "Instagram Account (Ad Account)", status: "warn", message: "No Instagram account linked to ad account. Instagram post ads require this — link your IG account in Meta Business Settings > Ad Accounts > Instagram Accounts." });
     }
   } else {
-    checks.push({ name: "Instagram Account (Ad Account)", status: "fail", message: "Could not verify ad account Instagram accounts. Check your permissions." });
+    checks.push({ name: "Instagram Account (Ad Account)", status: "warn", message: "Could not verify ad account Instagram accounts." });
   }
 
   if (pageId) {
