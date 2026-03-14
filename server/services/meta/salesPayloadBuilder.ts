@@ -215,6 +215,7 @@ export function buildExistingPostCreativeFallback(input: SalesLaunchInput): Meta
   return {
     name: `${input.adName} - Creative`,
     source_instagram_media_id: input.existingPostId,
+    object_story_spec: { page_id: input.pageId },
   };
 }
 
