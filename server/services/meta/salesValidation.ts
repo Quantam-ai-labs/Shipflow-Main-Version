@@ -400,6 +400,9 @@ export function normalizeInput(raw: Record<string, unknown>): SalesLaunchInput {
   const mode = String(raw.mode || "UPLOAD_IMAGE") as SalesLaunchInput["mode"];
   const publishModeRaw = String(raw.publishMode || "VALIDATE");
 
+  const budgetLevelRaw = String(raw.budgetLevel || "ABO").toUpperCase();
+  const budgetLevel = (budgetLevelRaw === "CBO" ? "CBO" : "ABO") as SalesLaunchInput["budgetLevel"];
+
   const base: SalesLaunchInput = {
     adName: trimOrNull(raw.adName) || "",
     mode,
@@ -409,6 +412,7 @@ export function normalizeInput(raw: Record<string, unknown>): SalesLaunchInput {
     pixelId: trimOrNull(raw.pixelId),
     dailyBudget: parseFloat(String(raw.dailyBudget || 0)) || 0,
     currency: trimOrNull(raw.currency) || "PKR",
+    budgetLevel,
     startMode: raw.startMode === "SCHEDULED" ? "SCHEDULED" : "NOW",
     startTime: trimOrNull(raw.startTime),
     publishMode: (["VALIDATE", "DRAFT", "PUBLISH"].includes(publishModeRaw) ? publishModeRaw : "VALIDATE") as SalesLaunchInput["publishMode"],

@@ -1,5 +1,7 @@
 export type SalesCreativeMode = "UPLOAD_IMAGE" | "UPLOAD_VIDEO" | "EXISTING_POST";
 
+export type BudgetLevel = "CBO" | "ABO";
+
 export interface SalesLaunchInput {
   adName: string;
   mode: SalesCreativeMode;
@@ -20,20 +22,29 @@ export interface SalesLaunchInput {
   cta?: string | null;
   dailyBudget: number;
   currency: string;
+  budgetLevel: BudgetLevel;
   startMode: "NOW" | "SCHEDULED";
   startTime?: string | null;
   publishMode: "VALIDATE" | "DRAFT" | "PUBLISH";
 }
 
 export function buildSalesCampaignPayload(input: SalesLaunchInput): Record<string, any> {
-  return {
+  const isCBO = input.budgetLevel === "CBO";
+  const payload: Record<string, any> = {
     name: input.adName,
     objective: "OUTCOME_SALES",
     status: "PAUSED",
     special_ad_categories: [],
     buying_type: "AUCTION",
-    is_adset_budget_sharing_enabled: false,
+    is_adset_budget_sharing_enabled: isCBO,
   };
+
+  if (isCBO) {
+    payload.daily_budget = Math.round(input.dailyBudget * 100);
+    payload.bid_strategy = "LOWEST_COST_WITHOUT_CAP";
+  }
+
+  return payload;
 }
 
 export function sanitizePayload(obj: Record<string, any>): Record<string, any> {
@@ -52,7 +63,8 @@ export function sanitizePayload(obj: Record<string, any>): Record<string, any> {
 
 export function validateBudgetArchitecture(
   campaignPayload: Record<string, any>,
-  adsetPayload: Record<string, any>
+  adsetPayload: Record<string, any>,
+  budgetLevel: BudgetLevel
 ): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
 
@@ -60,15 +72,29 @@ export function validateBudgetArchitecture(
     errors.push("Campaign payload must include is_adset_budget_sharing_enabled as a boolean");
   }
 
-  const forbiddenCampaignFields = ["bid_strategy", "daily_budget", "lifetime_budget", "budget_optimization"];
-  for (const field of forbiddenCampaignFields) {
-    if (field in campaignPayload) {
-      errors.push(`Campaign payload must NOT include ${field} when using ad-set-level budget`);
+  if (budgetLevel === "CBO") {
+    if (!campaignPayload.daily_budget || campaignPayload.daily_budget <= 0) {
+      errors.push("CBO mode: campaign must have daily_budget > 0");
     }
-  }
-
-  if (!adsetPayload.daily_budget || adsetPayload.daily_budget <= 0) {
-    errors.push("Ad set payload must include daily_budget > 0");
+    if (!campaignPayload.bid_strategy) {
+      errors.push("CBO mode: campaign must have bid_strategy");
+    }
+    if (adsetPayload.daily_budget) {
+      errors.push("CBO mode: ad set must NOT have daily_budget (budget is on campaign)");
+    }
+    if (adsetPayload.bid_strategy) {
+      errors.push("CBO mode: ad set must NOT have bid_strategy (bid strategy is on campaign)");
+    }
+  } else {
+    const forbiddenCampaignFields = ["bid_strategy", "daily_budget", "lifetime_budget"];
+    for (const field of forbiddenCampaignFields) {
+      if (field in campaignPayload) {
+        errors.push(`ABO mode: campaign must NOT include ${field}`);
+      }
+    }
+    if (!adsetPayload.daily_budget || adsetPayload.daily_budget <= 0) {
+      errors.push("ABO mode: ad set must have daily_budget > 0");
+    }
   }
 
   return { valid: errors.length === 0, errors };
@@ -89,17 +115,22 @@ export function buildSalesAdSetPayload(
     },
   };
 
+  const isCBO = input.budgetLevel === "CBO";
+
   const payload: Record<string, any> = {
     name: `${input.adName} - Ad Set`,
     campaign_id: campaignId,
     optimization_goal: optimizationGoal,
     billing_event: "IMPRESSIONS",
-    bid_strategy: "LOWEST_COST_WITHOUT_CAP",
-    daily_budget: budgetCents,
     targeting,
     status: "PAUSED",
     use_advantage_audience: true,
   };
+
+  if (!isCBO) {
+    payload.bid_strategy = "LOWEST_COST_WITHOUT_CAP";
+    payload.daily_budget = budgetCents;
+  }
 
   if (hasPixel) {
     payload.promoted_object = {

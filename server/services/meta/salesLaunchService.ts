@@ -360,7 +360,7 @@ export async function executeSalesLaunch(
     const campaignPayload = sanitizePayload(rawCampaignPayload);
     const adsetPayloadForValidation = sanitizePayload(rawAdsetPayload);
 
-    const budgetCheck = validateBudgetArchitecture(campaignPayload, adsetPayloadForValidation);
+    const budgetCheck = validateBudgetArchitecture(campaignPayload, adsetPayloadForValidation, input.budgetLevel);
     if (!budgetCheck.valid) {
       const errMsg = `Budget architecture validation failed: ${budgetCheck.errors.join("; ")}`;
       console.error("[SalesLaunch] PRE-FLIGHT BLOCKED:", errMsg);

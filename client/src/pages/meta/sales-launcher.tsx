@@ -118,6 +118,7 @@ export default function SalesLauncher() {
   const [description, setDescription] = useState("");
   const [cta, setCta] = useState("SHOP_NOW");
   const [dailyBudget, setDailyBudget] = useState("500");
+  const [budgetLevel, setBudgetLevel] = useState<"CBO" | "ABO">("ABO");
   const [publishMode, setPublishMode] = useState<PublishMode>("VALIDATE");
   const [startMode, setStartMode] = useState<"NOW" | "SCHEDULED">("NOW");
   const [startTime, setStartTime] = useState("");
@@ -284,6 +285,7 @@ export default function SalesLauncher() {
         pixelId: selectedPixelId && selectedPixelId !== "none" ? selectedPixelId : null,
         dailyBudget: parseFloat(dailyBudget) || 500,
         currency: accountCurrency,
+        budgetLevel,
         startMode,
         startTime: startMode === "SCHEDULED" ? startTime : null,
         publishMode,
@@ -808,6 +810,23 @@ export default function SalesLauncher() {
                   data-testid="input-daily-budget"
                 />
               </div>
+            </div>
+            <div>
+              <Label>Budget Optimization</Label>
+              <Select value={budgetLevel} onValueChange={v => setBudgetLevel(v as "CBO" | "ABO")}>
+                <SelectTrigger data-testid="select-budget-level">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ABO">Ad Set Budget (ABO)</SelectItem>
+                  <SelectItem value="CBO">Campaign Budget Optimization (CBO)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">
+                {budgetLevel === "CBO"
+                  ? "Meta distributes your budget across ad sets automatically"
+                  : "You control the budget for each ad set individually"}
+              </p>
             </div>
           </div>
 
