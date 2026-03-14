@@ -228,7 +228,17 @@ async function executeSalesLaunchAsync(
         igUrl.searchParams.set("access_token", creds.accessToken);
         igUrl.searchParams.set("fields", "id,username");
         const igRes = await fetch(igUrl.toString());
-        const igData = await igRes.json() as { data?: Array<{ id: string; username?: string }> };
+        const igData = await igRes.json() as { data?: Array<{ id: string; username?: string }>; error?: { message?: string } };
+
+        if (!igRes.ok) {
+          const apiErr = igData?.error?.message || `HTTP ${igRes.status}`;
+          const errMsg = `Cannot access ad account Instagram accounts: ${apiErr}. Check your token permissions include instagram_basic and ads_management.`;
+          console.error(`[SalesLaunch] IG accounts API error: ${apiErr}`);
+          stages.push({ stage: "ig_resolution", status: "failed", message: errMsg });
+          await persistStages(jobId, stages, { status: "failed", errorMessage: errMsg, errorSummary: "Instagram account API error" });
+          return;
+        }
+
         const igAccounts = igData?.data || [];
         console.log(`[SalesLaunch] Ad account IG accounts: ${JSON.stringify(igAccounts)}`);
 
