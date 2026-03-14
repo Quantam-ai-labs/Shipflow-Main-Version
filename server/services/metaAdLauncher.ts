@@ -347,8 +347,6 @@ export async function createCampaign(
     if (params.spendingLimit) {
       body.spend_cap = Math.round(parseFloat(params.spendingLimit) * 100);
     }
-  } else {
-    body.is_adset_budget_sharing_enabled = false;
   }
 
   const result = await metaApiPost(creds, `${creds.adAccountId}/campaigns`, body);
