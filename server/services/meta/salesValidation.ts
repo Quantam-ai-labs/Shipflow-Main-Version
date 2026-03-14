@@ -444,6 +444,7 @@ export function normalizeInput(raw: Record<string, unknown>): SalesLaunchInput {
   } else if (mode === "EXISTING_POST") {
     base.existingPostId = trimOrNull(raw.existingPostId);
     base.existingPostSource = raw.existingPostSource === "instagram" ? "instagram" : "facebook";
+    base.destinationUrl = trimOrNull(raw.destinationUrl);
   }
 
   return base;
