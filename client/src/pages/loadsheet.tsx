@@ -51,7 +51,7 @@ interface BookedShipment {
   courierName: string;
 }
 
-type ScanStatus = "valid" | "duplicate" | "not_found" | "dispatched" | "wrong_courier";
+type ScanStatus = "valid" | "duplicate" | "not_found" | "dispatched" | "wrong_courier" | "already_loaded";
 
 interface ScannedItem {
   id: string;
@@ -214,10 +214,21 @@ export default function LoadsheetPage() {
   const COURIER_DISPLAY: Record<string, string> = { leopards: "Leopards", postex: "PostEx" };
   const courierDisplayName = (name: string) => COURIER_DISPLAY[name.toLowerCase()] ?? (name.charAt(0).toUpperCase() + name.slice(1));
 
-  // ---- Booked shipments query (no date filter — all booked) ----
+  // ---- Booked shipments query ----
   const { data, isLoading, refetch } = useQuery<{ shipments: BookedShipment[]; total: number }>({
     queryKey: ["/api/loadsheet/booked-shipments"],
   });
+
+  const previouslyLoadedRef = useRef<Set<string>>(new Set());
+  const { data: prevLoadedData } = useQuery<{ trackingNumbers: string[] }>({
+    queryKey: ["/api/loadsheet/previously-loaded-tracking"],
+  });
+
+  useEffect(() => {
+    if (prevLoadedData?.trackingNumbers) {
+      previouslyLoadedRef.current = new Set(prevLoadedData.trackingNumbers);
+    }
+  }, [prevLoadedData]);
 
   useEffect(() => {
     if (data?.shipments) {
@@ -334,7 +345,7 @@ export default function LoadsheetPage() {
   const showFeedback = useCallback((fb: ScanFeedback) => {
     setFeedback(fb);
     clearTimeout(feedbackTimeout.current);
-    const duration = fb.status === "wrong_courier" || fb.status === "not_found" ? 4000 : 2500;
+    const duration = fb.status === "wrong_courier" || fb.status === "not_found" || fb.status === "already_loaded" ? 4000 : 2500;
     feedbackTimeout.current = setTimeout(() => setFeedback(null), duration);
   }, []);
 
@@ -365,11 +376,22 @@ export default function LoadsheetPage() {
       showFeedback({ status: "not_found", message: `CN not found: "${value}" — not in booked orders or already fulfilled` });
       return;
     }
-    // Enforce single-courier loadsheet
-    const normalizeCourierName = (name: string) => name.trim().toLowerCase().replace(/\s+courier$/i, "");
-    if (lockedCourier && normalizeCourierName(shipment.courierName) !== normalizeCourierName(lockedCourier)) {
+    const normCourier = (name: string) => {
+      const n = name.toLowerCase().trim();
+      if (n.includes("leopard")) return "leopards";
+      if (n.includes("postex") || n.includes("post ex")) return "postex";
+      if (n.includes("tcs")) return "tcs";
+      return n;
+    };
+    if (lockedCourier && normCourier(shipment.courierName) !== normCourier(lockedCourier)) {
       playBeep(false);
       showFeedback({ status: "wrong_courier", message: `Wrong courier — this loadsheet is locked to ${lockedCourier}. "${value}" belongs to ${shipment.courierName}.` });
+      return;
+    }
+    if (previouslyLoadedRef.current.has(resolvedCN)) {
+      playBeep(false);
+      showFeedback({ status: "already_loaded", message: `CN "${resolvedCN}" was already included in a previous loadsheet. Scan again to add anyway.` });
+      previouslyLoadedRef.current.delete(resolvedCN);
       return;
     }
     playBeep(true);
@@ -440,20 +462,37 @@ export default function LoadsheetPage() {
   const totalCOD = scannedItems.reduce((sum, i) => sum + i.codAmount, 0);
 
   const generateMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (opts?: { allowDuplicateLoadsheet?: boolean }) => {
       const orderIds = scannedItems.map((i) => i.id);
-      const res = await apiRequest("POST", "/api/orders/generate-loadsheet", { orderIds });
+      const res = await apiRequest("POST", "/api/orders/generate-loadsheet", {
+        orderIds,
+        allowDuplicateLoadsheet: opts?.allowDuplicateLoadsheet ?? false,
+      });
       const data = await res.json();
+      if (res.status === 409) {
+        return { conflict: true, ...data };
+      }
       if (!res.ok) throw new Error(data.message || "Failed to generate loadsheet");
       return data;
     },
     onSuccess: (data) => {
+      if (data.conflict) {
+        const count = data.duplicateTrackingNumbers?.length ?? 0;
+        toast({
+          title: "Duplicate Tracking Numbers",
+          description: `${count} CN(s) already in a previous loadsheet. Generating again will proceed anyway.`,
+          variant: "destructive",
+        });
+        generateMutation.mutate({ allowDuplicateLoadsheet: true });
+        return;
+      }
       if (data.pdfUrl) window.open(data.pdfUrl, "_blank");
       toast({ title: "Loadsheet Generated", description: `${scannedItems.length} shipments. ${data.transitioned ?? 0} orders moved to Fulfilled. PDF opened.` });
       setScannedItems([]);
       setLockedCourier(null);
       setSelectedCourier(null);
       queryClient.invalidateQueries({ queryKey: ["/api/loadsheet/booked-shipments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/loadsheet/previously-loaded-tracking"] });
       queryClient.invalidateQueries({ queryKey: ["/api/shipment-batches", "loadsheet"] });
       refetch();
     },
@@ -644,6 +683,8 @@ export default function LoadsheetPage() {
                     className={`flex items-start gap-2 p-2.5 rounded-md text-sm transition-all ${
                       feedback.status === "valid"
                         ? "bg-green-500/10 text-green-700 dark:text-green-400 border border-green-500/20"
+                        : feedback.status === "already_loaded"
+                        ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20"
                         : "bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/20"
                     }`}
                     data-testid="scan-feedback"

@@ -46,12 +46,15 @@ import {
   robocallQueue,
   orderConfirmationLog,
   robocallLogs,
+  shipmentBatches,
+  shipmentBatchItems,
 } from "@shared/schema";
 import {
   and,
   eq,
   ne,
   inArray,
+  notInArray,
   ilike,
   or,
   sql,
@@ -61,7 +64,6 @@ import {
   isNull,
   gte,
   lte,
-  inArray,
 } from "drizzle-orm";
 import {
   setupAuth,
@@ -618,7 +620,7 @@ export async function registerRoutes(
   async function getCourierCredentials(
     merchantId: string,
     courierName: string,
-  ): Promise<{ apiKey: string | null; apiSecret: string | null } | null> {
+  ): Promise<{ apiKey: string | null; apiSecret: string | null; settings: Record<string, any> } | null> {
     const normalized = normalizeCourierName(courierName);
     const accounts = await storage.getCourierAccounts(merchantId);
     const account = accounts.find((a) => a.courierName === normalized);
@@ -628,13 +630,13 @@ export async function registerRoutes(
       const apiKey = account?.apiKey || null;
       const apiSecret = account?.apiSecret || null;
       if (!apiKey || !apiSecret) return null;
-      return { apiKey, apiSecret };
+      return { apiKey, apiSecret, settings };
     }
 
     if (normalized === "postex") {
       const apiKey = account?.apiKey || null;
       if (!apiKey) return null;
-      return { apiKey, apiSecret: null };
+      return { apiKey, apiSecret: null, settings };
     }
 
     return null;
@@ -10244,7 +10246,7 @@ export async function registerRoutes(
         const merchantId = await requireMerchant(req, res);
         if (!merchantId) return;
 
-        const { orderIds } = req.body;
+        const { orderIds, allowDuplicateLoadsheet } = req.body;
         if (!Array.isArray(orderIds) || orderIds.length === 0) {
           return res.status(400).json({ message: "No order IDs provided" });
         }
@@ -10273,6 +10275,30 @@ export async function registerRoutes(
           return res.status(400).json({ message: "No booked orders with tracking numbers found in selection" });
         }
 
+        if (!allowDuplicateLoadsheet) {
+          const trackingNums = bookedOrders.map((o) => o.courierTracking!.trim().toUpperCase());
+          const prevLoaded = await db
+            .select({ trackingNumber: shipmentBatchItems.trackingNumber })
+            .from(shipmentBatchItems)
+            .innerJoin(shipmentBatches, eq(shipmentBatchItems.batchId, shipmentBatches.id))
+            .where(
+              and(
+                eq(shipmentBatches.merchantId, merchantId),
+                eq(shipmentBatches.batchType, "LOADSHEET"),
+                eq(shipmentBatches.status, "COMPLETED"),
+                isNotNull(shipmentBatchItems.trackingNumber)
+              )
+            );
+          const prevSet = new Set(prevLoaded.map((r) => r.trackingNumber?.trim().toUpperCase()).filter(Boolean));
+          const duplicates = trackingNums.filter((tn) => prevSet.has(tn));
+          if (duplicates.length > 0) {
+            return res.status(409).json({
+              message: `${duplicates.length} tracking number(s) already in a previous loadsheet. Set allowDuplicateLoadsheet to proceed.`,
+              duplicateTrackingNumbers: duplicates,
+            });
+          }
+        }
+
         // Enforce single-courier loadsheet
         const courierNorms = [...new Set(bookedOrders.map((o) => normalizeCourierName(o.courierName || "")))];
         if (courierNorms.length > 1) {
@@ -10290,8 +10316,7 @@ export async function registerRoutes(
           return res.status(400).json({ message: `No credentials configured for courier: ${courierLabel}` });
         }
 
-        // Read dispatch metadata from courier integration settings (DB)
-        const settings = (creds as any).settings || {};
+        const settings = creds.settings;
 
         let pdfBuffer: Buffer;
         let courierLoadsheetId: string | undefined;
@@ -11144,8 +11169,8 @@ export async function registerRoutes(
         .where(
           and(
             eq(orders.merchantId, merchantId),
-            eq(orders.workflowStatus, "BOOKED"),
-            isNotNull(orders.courierTracking)
+            isNotNull(orders.courierTracking),
+            notInArray(orders.workflowStatus, ["DELIVERED", "RETURN", "CANCELLED"])
           )
         );
       res.json({ shipments: bookedOrders, total: bookedOrders.length });
@@ -11197,7 +11222,7 @@ export async function registerRoutes(
       }
 
       // Read dispatch metadata from courier integration settings (DB)
-      const whSettings = (whCreds as any).settings || {};
+      const whSettings = whCreds.settings;
 
       let whPdfBuffer: Buffer;
       if (courierNormWh === "leopards") {
@@ -11297,13 +11322,38 @@ export async function registerRoutes(
         .where(
           and(
             eq(orders.merchantId, merchantId),
-            eq(orders.workflowStatus, "BOOKED"),
-            isNotNull(orders.courierTracking)
+            isNotNull(orders.courierTracking),
+            notInArray(orders.workflowStatus, ["DELIVERED", "RETURN", "CANCELLED"])
           )
         );
       res.json({ shipments: bookedOrders, total: bookedOrders.length });
     } catch (error: any) {
       res.status(500).json({ message: "Failed to fetch booked shipments" });
+    }
+  });
+
+  app.get("/api/loadsheet/previously-loaded-tracking", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const rows = await db
+        .select({ trackingNumber: shipmentBatchItems.trackingNumber })
+        .from(shipmentBatchItems)
+        .innerJoin(shipmentBatches, eq(shipmentBatchItems.batchId, shipmentBatches.id))
+        .where(
+          and(
+            eq(shipmentBatches.merchantId, merchantId),
+            eq(shipmentBatches.batchType, "LOADSHEET"),
+            eq(shipmentBatches.status, "COMPLETED"),
+            isNotNull(shipmentBatchItems.trackingNumber)
+          )
+        );
+      const trackingNumbers = rows
+        .map((r) => r.trackingNumber?.trim().toUpperCase())
+        .filter(Boolean) as string[];
+      res.json({ trackingNumbers });
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to fetch loadsheet tracking numbers" });
     }
   });
 
