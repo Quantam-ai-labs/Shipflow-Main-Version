@@ -289,5 +289,14 @@ export function normalizeInput(raw: Record<string, unknown>): SalesLaunchInput {
     base.existingPostSource = raw.existingPostSource === "instagram" ? "instagram" : "facebook";
   }
 
+  if (Array.isArray(raw.targetCountries) && raw.targetCountries.length > 0) {
+    base.targetCountries = raw.targetCountries.filter((c: unknown) => typeof c === "string" && c.length === 2) as string[];
+  }
+  if (Array.isArray(raw.targetCities) && raw.targetCities.length > 0) {
+    base.targetCities = (raw.targetCities as Array<{ key: string; name?: string }>)
+      .filter((c: any) => c && typeof c.key === "string" && c.key.length > 0)
+      .map((c: any) => ({ key: c.key, name: c.name || undefined }));
+  }
+
   return base;
 }

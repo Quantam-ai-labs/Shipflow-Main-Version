@@ -173,7 +173,11 @@ export async function startSalesLaunch(
     campaignName: input.adName,
     objective: "OUTCOME_SALES",
     dailyBudget: String(input.dailyBudget),
-    targeting: { geo_locations: { countries: ["PK"] } },
+    targeting: {
+      geo_locations: input.targetCities && input.targetCities.length > 0
+        ? { cities: input.targetCities.map(c => ({ key: c.key })) }
+        : { countries: input.targetCountries || ["PK"] },
+    },
     creativeConfig: {},
     pageId: input.pageId,
     pixelId: input.pixelId || null,

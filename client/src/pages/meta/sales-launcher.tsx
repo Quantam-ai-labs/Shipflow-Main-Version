@@ -13,7 +13,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import {
   CheckCircle2, XCircle, AlertTriangle, Loader2, Rocket, Activity, Image, Video,
   FileText, Search, ChevronDown, RefreshCw, ExternalLink, Info, Upload, History,
-  Zap, Globe, Target, DollarSign,
+  Zap, Globe, Target, DollarSign, MapPin, X,
 } from "lucide-react";
 
 type CreativeMode = "UPLOAD_IMAGE" | "UPLOAD_VIDEO" | "EXISTING_POST";
@@ -71,6 +71,115 @@ const CTA_OPTIONS = [
   { value: "BOOK_NOW", label: "Book Now" },
   { value: "SEND_MESSAGE", label: "Send Message" },
   { value: "WHATSAPP_MESSAGE", label: "WhatsApp Message" },
+];
+
+type PostSourceFilter = "all" | "facebook" | "instagram" | "library";
+
+const ASIAN_COUNTRIES: { code: string; name: string }[] = [
+  { code: "AF", name: "Afghanistan" },
+  { code: "AM", name: "Armenia" },
+  { code: "AZ", name: "Azerbaijan" },
+  { code: "BH", name: "Bahrain" },
+  { code: "BD", name: "Bangladesh" },
+  { code: "BT", name: "Bhutan" },
+  { code: "BN", name: "Brunei" },
+  { code: "KH", name: "Cambodia" },
+  { code: "CN", name: "China" },
+  { code: "CY", name: "Cyprus" },
+  { code: "GE", name: "Georgia" },
+  { code: "IN", name: "India" },
+  { code: "ID", name: "Indonesia" },
+  { code: "IR", name: "Iran" },
+  { code: "IQ", name: "Iraq" },
+  { code: "IL", name: "Israel" },
+  { code: "JP", name: "Japan" },
+  { code: "JO", name: "Jordan" },
+  { code: "KZ", name: "Kazakhstan" },
+  { code: "KW", name: "Kuwait" },
+  { code: "KG", name: "Kyrgyzstan" },
+  { code: "LA", name: "Laos" },
+  { code: "LB", name: "Lebanon" },
+  { code: "MY", name: "Malaysia" },
+  { code: "MV", name: "Maldives" },
+  { code: "MN", name: "Mongolia" },
+  { code: "MM", name: "Myanmar" },
+  { code: "NP", name: "Nepal" },
+  { code: "KP", name: "North Korea" },
+  { code: "OM", name: "Oman" },
+  { code: "PK", name: "Pakistan" },
+  { code: "PS", name: "Palestine" },
+  { code: "PH", name: "Philippines" },
+  { code: "QA", name: "Qatar" },
+  { code: "SA", name: "Saudi Arabia" },
+  { code: "SG", name: "Singapore" },
+  { code: "KR", name: "South Korea" },
+  { code: "LK", name: "Sri Lanka" },
+  { code: "SY", name: "Syria" },
+  { code: "TW", name: "Taiwan" },
+  { code: "TJ", name: "Tajikistan" },
+  { code: "TH", name: "Thailand" },
+  { code: "TL", name: "Timor-Leste" },
+  { code: "TR", name: "Turkey" },
+  { code: "TM", name: "Turkmenistan" },
+  { code: "AE", name: "UAE" },
+  { code: "UZ", name: "Uzbekistan" },
+  { code: "VN", name: "Vietnam" },
+  { code: "YE", name: "Yemen" },
+];
+
+const PAKISTAN_CITIES: { key: string; name: string }[] = [
+  { key: "2514815", name: "Karachi" },
+  { key: "2514801", name: "Lahore" },
+  { key: "2514772", name: "Islamabad" },
+  { key: "2514832", name: "Rawalpindi" },
+  { key: "2514757", name: "Faisalabad" },
+  { key: "2514816", name: "Multan" },
+  { key: "2514825", name: "Peshawar" },
+  { key: "2514830", name: "Quetta" },
+  { key: "2514762", name: "Gujranwala" },
+  { key: "2514839", name: "Sialkot" },
+  { key: "2514769", name: "Hyderabad" },
+  { key: "2514735", name: "Bahawalpur" },
+  { key: "2514836", name: "Sargodha" },
+  { key: "2514726", name: "Abbottabad" },
+  { key: "2514812", name: "Mardan" },
+  { key: "2514842", name: "Sukkur" },
+  { key: "2514800", name: "Larkana" },
+  { key: "2514838", name: "Sheikhupura" },
+  { key: "2514831", name: "Rahim Yar Khan" },
+  { key: "2514775", name: "Jhang" },
+  { key: "2514751", name: "Dera Ghazi Khan" },
+  { key: "2514763", name: "Gujrat" },
+  { key: "2514835", name: "Sahiwal" },
+  { key: "2514847", name: "Wah Cantonment" },
+  { key: "2514814", name: "Mirpur" },
+  { key: "2514819", name: "Okara" },
+  { key: "2514743", name: "Chiniot" },
+  { key: "2514777", name: "Kamoke" },
+  { key: "2514764", name: "Hafizabad" },
+  { key: "2514833", name: "Sadiqabad" },
+  { key: "2514741", name: "Burewala" },
+  { key: "2514783", name: "Kohat" },
+  { key: "2514779", name: "Khanewal" },
+  { key: "2514750", name: "Dera Ismail Khan" },
+  { key: "2514817", name: "Muzaffargarh" },
+  { key: "2514728", name: "Attock" },
+  { key: "2514846", name: "Vehari" },
+  { key: "2514813", name: "Mianwali" },
+  { key: "2514776", name: "Jhelum" },
+  { key: "2514774", name: "Jaranwala" },
+  { key: "2514780", name: "Khairpur" },
+  { key: "2514742", name: "Chakwal" },
+  { key: "2514778", name: "Kasur" },
+  { key: "2514749", name: "Daska" },
+  { key: "2514758", name: "Gojra" },
+  { key: "2514811", name: "Mandi Bahauddin" },
+  { key: "2514843", name: "Tando Adam" },
+  { key: "2514818", name: "Nawabshah" },
+  { key: "2514784", name: "Kotri" },
+  { key: "2514844", name: "Swabi" },
+  { key: "2514737", name: "Bannu" },
+  { key: "2514820", name: "Nowshera" },
 ];
 
 const glassCard = "relative rounded-2xl border border-white/20 dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.04] backdrop-blur-xl";
@@ -148,6 +257,11 @@ export default function SalesLauncher() {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [showRawError, setShowRawError] = useState(false);
   const [budgetInitialized, setBudgetInitialized] = useState(false);
+  const [targetCountries, setTargetCountries] = useState<string[]>(["PK"]);
+  const [targetCities, setTargetCities] = useState<{ key: string; name: string }[]>([]);
+  const [postSourceFilter, setPostSourceFilter] = useState<PostSourceFilter>("all");
+  const [countrySearch, setCountrySearch] = useState("");
+  const [citySearch, setCitySearch] = useState("");
 
   const metaStatusQuery = useQuery<any>({ queryKey: ["/api/meta/oauth/status"] });
   const metaStatus = metaStatusQuery.data;
@@ -192,9 +306,11 @@ export default function SalesLauncher() {
     }
   }, [igAccounts, selectedIgAccountId]);
 
-  const postSearchParam = postSearch ? `?search=${encodeURIComponent(postSearch)}` : "";
+  const fbPostSearchParams = new URLSearchParams();
+  if (postSearch) fbPostSearchParams.set("search", postSearch);
+  fbPostSearchParams.set("includeVideos", "true");
   const fbPostsQuery = useQuery<any>({
-    queryKey: [`/api/meta/page-posts${postSearchParam}`],
+    queryKey: [`/api/meta/page-posts?${fbPostSearchParams.toString()}`],
     enabled: isConnected && mode === "EXISTING_POST",
   });
   const igQueryParams = new URLSearchParams();
@@ -205,14 +321,49 @@ export default function SalesLauncher() {
     queryKey: [`/api/meta/ig-media${igQueryString}`],
     enabled: isConnected && mode === "EXISTING_POST" && !!selectedIgAccountId && selectedIgAccountId !== "none",
   });
+  const adImagesQuery = useQuery<any>({
+    queryKey: ["/api/meta/ad-account-images"],
+    enabled: isConnected && mode === "EXISTING_POST",
+  });
+  const adVideosQuery = useQuery<any>({
+    queryKey: ["/api/meta/ad-account-videos"],
+    enabled: isConnected && mode === "EXISTING_POST",
+  });
   const fbPosts: MetaPost[] = fbPostsQuery.data?.posts || [];
+  const fbPostsError = fbPostsQuery.data?._error === true;
+  const fbPostsErrorMsg = fbPostsQuery.data?.errorMessage || "Could not load Facebook posts";
   const igPosts: MetaPost[] = igPostsQuery.data?.posts || [];
-  const posts: MetaPost[] = [...fbPosts, ...igPosts].sort((a, b) => {
+  const libraryImages: MetaPost[] = (adImagesQuery.data?.images || []).map((img: any) => ({
+    id: `lib_img_${img.hash}`,
+    message: img.name || "Ad Image",
+    fullPicture: img.url || "",
+    createdTime: img.createdTime,
+    type: "image",
+    source: "library",
+  }));
+  const libraryVideos: MetaPost[] = (adVideosQuery.data?.videos || []).map((v: any) => ({
+    id: `lib_vid_${v.id}`,
+    message: v.title || "Ad Video",
+    fullPicture: v.picture || "",
+    createdTime: v.createdTime,
+    type: "video",
+    source: "library",
+  }));
+  const allPosts: MetaPost[] = [...fbPosts, ...igPosts, ...libraryImages, ...libraryVideos].sort((a, b) => {
     const ta = a.createdTime ? new Date(a.createdTime).getTime() : 0;
     const tb = b.createdTime ? new Date(b.createdTime).getTime() : 0;
     return tb - ta;
   });
-  const postsLoading = fbPostsQuery.isLoading || igPostsQuery.isLoading;
+  const posts: MetaPost[] = postSourceFilter === "all"
+    ? allPosts
+    : allPosts.filter(p => p.source === postSourceFilter);
+  const postsLoading = fbPostsQuery.isLoading || igPostsQuery.isLoading || adImagesQuery.isLoading || adVideosQuery.isLoading;
+  const sourceCount = {
+    all: allPosts.length,
+    facebook: allPosts.filter(p => p.source === "facebook").length,
+    instagram: allPosts.filter(p => p.source === "instagram").length,
+    library: allPosts.filter(p => p.source === "library").length,
+  };
 
   const diagnosticsMutation = useMutation({
     mutationFn: async () => {
@@ -376,6 +527,8 @@ export default function SalesLauncher() {
         startMode,
         startTime: startMode === "SCHEDULED" ? startTime : null,
         publishMode,
+        targetCountries: targetCountries.length > 0 ? targetCountries : ["PK"],
+        targetCities: targetCities.length > 0 ? targetCities : undefined,
       };
 
       if (mode === "UPLOAD_IMAGE") {
@@ -462,7 +615,7 @@ export default function SalesLauncher() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight" data-testid="text-page-title">Sales Launcher</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Launch SALES campaigns with broad Pakistan targeting</p>
+          <p className="text-sm text-muted-foreground mt-0.5">Launch SALES campaigns with geo-targeted audiences</p>
         </div>
         <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200/60 dark:border-emerald-500/20">
           <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -786,6 +939,29 @@ export default function SalesLauncher() {
                     </Button>
                   </div>
                 </div>
+                <div className="flex gap-1.5 flex-wrap" data-testid="post-source-filters">
+                  {(["all", "facebook", "instagram", "library"] as PostSourceFilter[]).map(src => (
+                    <button
+                      key={src}
+                      onClick={() => setPostSourceFilter(src)}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-medium transition-all ${
+                        postSourceFilter === src
+                          ? "bg-blue-100 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300 ring-1 ring-blue-300/50"
+                          : "bg-black/[0.03] dark:bg-white/[0.06] text-muted-foreground hover:bg-black/[0.06] dark:hover:bg-white/[0.1]"
+                      }`}
+                      data-testid={`filter-${src}`}
+                    >
+                      {src === "all" ? "All" : src === "facebook" ? "Facebook" : src === "instagram" ? "Instagram" : "Media Library"}
+                      <span className="ml-1 opacity-60">{sourceCount[src]}</span>
+                    </button>
+                  ))}
+                </div>
+                {fbPostsError && (
+                  <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 rounded-lg px-3 py-2">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    <span>Facebook posts could not be loaded: {fbPostsErrorMsg}</span>
+                  </div>
+                )}
                 {postsLoading && (
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <Loader2 className="h-3 w-3 animate-spin" /> Loading posts...
@@ -795,12 +971,16 @@ export default function SalesLauncher() {
                   {posts.map((post: MetaPost) => (
                     <div
                       key={post.id}
-                      className={`flex gap-3 p-2.5 rounded-xl cursor-pointer transition-all ${
-                        selectedPostId === post.id
-                          ? "bg-blue-50/80 dark:bg-blue-500/10 border border-blue-200/60 dark:border-blue-500/20 ring-1 ring-blue-500/20"
-                          : `${glassInner} hover:bg-white/60 dark:hover:bg-white/[0.06]`
+                      className={`flex gap-3 p-2.5 rounded-xl transition-all ${
+                        post.source === "library"
+                          ? `${glassInner} opacity-60 cursor-default`
+                          : selectedPostId === post.id
+                            ? "bg-blue-50/80 dark:bg-blue-500/10 border border-blue-200/60 dark:border-blue-500/20 ring-1 ring-blue-500/20 cursor-pointer"
+                            : `${glassInner} hover:bg-white/60 dark:hover:bg-white/[0.06] cursor-pointer`
                       }`}
+                      title={post.source === "library" ? "Library assets cannot be used as existing posts — use Upload mode instead" : undefined}
                       onClick={() => {
+                        if (post.source === "library") return;
                         setSelectedPostId(post.id);
                         setSelectedPostSource(post.source === "instagram" ? "instagram" : "facebook");
                         setSelectedPostPreview(post);
@@ -812,9 +992,18 @@ export default function SalesLauncher() {
                       )}
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
-                          <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md ${post.source === "instagram" ? "bg-pink-100 dark:bg-pink-500/10 text-pink-600 dark:text-pink-400" : "bg-blue-100 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400"}`}>
-                            {post.source === "instagram" ? "IG" : "FB"}
+                          <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md ${
+                            post.source === "instagram" ? "bg-pink-100 dark:bg-pink-500/10 text-pink-600 dark:text-pink-400"
+                            : post.source === "library" ? "bg-purple-100 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400"
+                            : "bg-blue-100 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                          }`}>
+                            {post.source === "instagram" ? "IG" : post.source === "library" ? "LIB" : "FB"}
                           </span>
+                          {post.type && (
+                            <span className="text-[8px] uppercase tracking-wider text-muted-foreground bg-black/[0.04] dark:bg-white/[0.06] px-1 py-0.5 rounded">
+                              {post.type}
+                            </span>
+                          )}
                           <p className="text-xs truncate">{post.message || "(No text)"}</p>
                         </div>
                         <p className="text-[10px] text-muted-foreground mt-0.5">
@@ -822,7 +1011,10 @@ export default function SalesLauncher() {
                           {(post.likes || 0) > 0 && ` · ${post.likes} likes`}
                         </p>
                       </div>
-                      {selectedPostId === post.id && <CheckCircle2 className="h-4 w-4 text-blue-500 shrink-0 self-center" />}
+                      {post.source === "library" && (
+                        <span className="text-[8px] text-muted-foreground self-center shrink-0">View only</span>
+                      )}
+                      {selectedPostId === post.id && post.source !== "library" && <CheckCircle2 className="h-4 w-4 text-blue-500 shrink-0 self-center" />}
                     </div>
                   ))}
                 </div>
@@ -979,6 +1171,118 @@ export default function SalesLauncher() {
                 />
               )}
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* SECTION: Geo Targeting */}
+      <div className={glassCard} data-testid="section-targeting">
+        <div className="px-5 pt-4 pb-3">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-orange-50 dark:bg-orange-500/10 flex items-center justify-center">
+              <MapPin className="h-3.5 w-3.5 text-orange-600 dark:text-orange-400" />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold">Geo Targeting</h2>
+              <p className="text-xs text-muted-foreground">Select countries and cities to target</p>
+            </div>
+          </div>
+        </div>
+        <div className="px-5 pb-5 space-y-4">
+          <div>
+            <Label className="text-xs font-medium">Countries</Label>
+            <div className="flex flex-wrap gap-1.5 mt-1.5 mb-2">
+              {targetCountries.map(code => {
+                const c = ASIAN_COUNTRIES.find(a => a.code === code);
+                return (
+                  <span key={code} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300 text-[10px] font-medium" data-testid={`country-tag-${code}`}>
+                    {c?.name || code}
+                    <button onClick={() => setTargetCountries(prev => prev.filter(cc => cc !== code))} className="hover:text-red-500 transition-colors" data-testid={`remove-country-${code}`}>
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  </span>
+                );
+              })}
+            </div>
+            <div className="relative">
+              <Input
+                placeholder="Search countries..."
+                value={countrySearch}
+                onChange={e => setCountrySearch(e.target.value)}
+                className="h-8 text-xs bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]"
+                data-testid="input-country-search"
+              />
+              {countrySearch.trim() && (
+                <div className={`absolute top-full left-0 right-0 mt-1 z-20 ${glassCard} max-h-40 overflow-y-auto py-1 shadow-lg`}>
+                  {ASIAN_COUNTRIES
+                    .filter(c => !targetCountries.includes(c.code) && c.name.toLowerCase().includes(countrySearch.toLowerCase()))
+                    .map(c => (
+                      <button
+                        key={c.code}
+                        className="w-full text-left px-3 py-1.5 text-xs hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors"
+                        onClick={() => { setTargetCountries(prev => [...prev, c.code]); setCountrySearch(""); }}
+                        data-testid={`add-country-${c.code}`}
+                      >
+                        {c.name} ({c.code})
+                      </button>
+                    ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {targetCountries.includes("PK") && (
+            <div>
+              <Label className="text-xs font-medium">Pakistan Cities <span className="text-muted-foreground font-normal">(optional — leave empty for all of Pakistan)</span></Label>
+              <div className="flex flex-wrap gap-1.5 mt-1.5 mb-2">
+                {targetCities.map(city => (
+                  <span key={city.key} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-orange-50 dark:bg-orange-500/10 text-orange-700 dark:text-orange-300 text-[10px] font-medium" data-testid={`city-tag-${city.key}`}>
+                    {city.name}
+                    <button onClick={() => setTargetCities(prev => prev.filter(c => c.key !== city.key))} className="hover:text-red-500 transition-colors" data-testid={`remove-city-${city.key}`}>
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <div className="relative">
+                <Input
+                  placeholder="Search Pakistan cities..."
+                  value={citySearch}
+                  onChange={e => setCitySearch(e.target.value)}
+                  className="h-8 text-xs bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]"
+                  data-testid="input-city-search"
+                />
+                {citySearch.trim() && (
+                  <div className={`absolute top-full left-0 right-0 mt-1 z-20 ${glassCard} max-h-40 overflow-y-auto py-1 shadow-lg`}>
+                    {PAKISTAN_CITIES
+                      .filter(c => !targetCities.some(tc => tc.key === c.key) && c.name.toLowerCase().includes(citySearch.toLowerCase()))
+                      .map(c => (
+                        <button
+                          key={c.key}
+                          className="w-full text-left px-3 py-1.5 text-xs hover:bg-orange-50 dark:hover:bg-orange-500/10 transition-colors"
+                          onClick={() => { setTargetCities(prev => [...prev, c]); setCitySearch(""); }}
+                          data-testid={`add-city-${c.key}`}
+                        >
+                          {c.name}
+                        </button>
+                      ))}
+                  </div>
+                )}
+              </div>
+              {targetCities.length > 0 && (
+                <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1.5 flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3" />
+                  When cities are selected, targeting narrows to those cities only (not all of Pakistan)
+                </p>
+              )}
+            </div>
+          )}
+
+          <div className={`${glassInner} p-3 text-xs text-muted-foreground`}>
+            <span className="font-medium text-foreground">Targeting: </span>
+            {targetCities.length > 0
+              ? `${targetCities.map(c => c.name).join(", ")}${targetCountries.filter(c => c !== "PK").length > 0 ? ` + ${targetCountries.filter(c => c !== "PK").map(code => ASIAN_COUNTRIES.find(a => a.code === code)?.name || code).join(", ")}` : ""}`
+              : targetCountries.map(code => ASIAN_COUNTRIES.find(a => a.code === code)?.name || code).join(", ")}
           </div>
         </div>
       </div>

@@ -2,6 +2,11 @@ export type SalesCreativeMode = "UPLOAD_IMAGE" | "UPLOAD_VIDEO" | "EXISTING_POST
 
 export type BudgetLevel = "CBO" | "ABO";
 
+export interface GeoCity {
+  key: string;
+  name?: string;
+}
+
 export interface SalesLaunchInput {
   adName: string;
   mode: SalesCreativeMode;
@@ -26,6 +31,8 @@ export interface SalesLaunchInput {
   startTime?: string | null;
   publishMode: "VALIDATE" | "DRAFT" | "PUBLISH";
   instagramActorId?: string | null;
+  targetCountries?: string[];
+  targetCities?: GeoCity[];
 }
 
 export type MetaPayload = Record<string, unknown>;
@@ -71,6 +78,29 @@ export function buildCampaignPayload(input: SalesLaunchInput): MetaPayload {
   return payload;
 }
 
+function buildGeoTargeting(input: SalesLaunchInput): MetaPayload {
+  const cities = input.targetCities || [];
+  const countries = input.targetCountries || ["PK"];
+
+  if (cities.length > 0) {
+    const geoLocations: MetaPayload = {
+      cities: cities.map(c => ({ key: c.key })),
+    };
+    const countriesWithCities = new Set<string>(["PK"]);
+    const remainingCountries = countries.filter(c => !countriesWithCities.has(c));
+    if (remainingCountries.length > 0) {
+      geoLocations.countries = remainingCountries;
+    }
+    return { geo_locations: geoLocations };
+  }
+
+  return {
+    geo_locations: {
+      countries: countries.length > 0 ? countries : ["PK"],
+    },
+  };
+}
+
 export function buildAdSetPayload(
   input: SalesLaunchInput,
   campaignId: string
@@ -84,11 +114,7 @@ export function buildAdSetPayload(
     campaign_id: campaignId,
     optimization_goal: hasPixel ? "OFFSITE_CONVERSIONS" : "LINK_CLICKS",
     billing_event: "IMPRESSIONS",
-    targeting: {
-      geo_locations: {
-        countries: ["PK"],
-      },
-    },
+    targeting: buildGeoTargeting(input),
     status: "PAUSED",
   };
 
