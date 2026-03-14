@@ -28,15 +28,17 @@ export interface SalesLaunchInput {
   publishMode: "VALIDATE" | "DRAFT" | "PUBLISH";
 }
 
-export function sanitizePayload(obj: Record<string, any>): Record<string, any> {
-  const result: Record<string, any> = {};
+export type MetaPayload = Record<string, unknown>;
+
+export function sanitizePayload(obj: MetaPayload): MetaPayload {
+  const result: MetaPayload = {};
   for (const [key, value] of Object.entries(obj)) {
     if (value === undefined || value === null || value === "") continue;
     if (typeof value === "number" && isNaN(value)) continue;
     if (Array.isArray(value)) {
       result[key] = value;
     } else if (typeof value === "object") {
-      const cleaned = sanitizePayload(value);
+      const cleaned = sanitizePayload(value as MetaPayload);
       if (Object.keys(cleaned).length > 0) {
         result[key] = cleaned;
       }
@@ -47,21 +49,23 @@ export function sanitizePayload(obj: Record<string, any>): Record<string, any> {
   return result;
 }
 
-export function buildCampaignPayload(input: SalesLaunchInput): Record<string, any> {
+export function buildCampaignPayload(input: SalesLaunchInput): MetaPayload {
   const isCBO = input.budgetLevel === "CBO";
   const budgetCents = Math.round(input.dailyBudget * 100);
 
-  const payload: Record<string, any> = {
+  const payload: MetaPayload = {
     name: input.adName,
     objective: "OUTCOME_SALES",
     status: "PAUSED",
-    special_ad_categories: [],
+    special_ad_categories: [] as string[],
     buying_type: "AUCTION",
   };
 
   if (isCBO) {
     payload.daily_budget = budgetCents;
     payload.bid_strategy = "LOWEST_COST_WITHOUT_CAP";
+  } else {
+    payload.is_adset_budget_sharing_enabled = false;
   }
 
   return payload;
@@ -70,12 +74,12 @@ export function buildCampaignPayload(input: SalesLaunchInput): Record<string, an
 export function buildAdSetPayload(
   input: SalesLaunchInput,
   campaignId: string
-): Record<string, any> {
+): MetaPayload {
   const isABO = input.budgetLevel === "ABO";
   const budgetCents = Math.round(input.dailyBudget * 100);
   const hasPixel = !!input.pixelId;
 
-  const payload: Record<string, any> = {
+  const payload: MetaPayload = {
     name: `${input.adName} - Ad Set`,
     campaign_id: campaignId,
     optimization_goal: hasPixel ? "OFFSITE_CONVERSIONS" : "LINK_CLICKS",
@@ -107,7 +111,7 @@ export function buildAdSetPayload(
   return payload;
 }
 
-export function buildCreativePayload(input: SalesLaunchInput): Record<string, any> {
+export function buildCreativePayload(input: SalesLaunchInput): MetaPayload {
   if (input.mode === "UPLOAD_IMAGE") {
     return buildImageCreativePayload(input);
   } else if (input.mode === "UPLOAD_VIDEO") {
@@ -117,8 +121,32 @@ export function buildCreativePayload(input: SalesLaunchInput): Record<string, an
   }
 }
 
-function buildImageCreativePayload(input: SalesLaunchInput): Record<string, any> {
-  const linkData: Record<string, any> = {
+interface LinkData {
+  image_hash: string | null | undefined;
+  link: string | null | undefined;
+  message: string;
+  call_to_action: { type: string; value: { link: string | null | undefined } };
+  name?: string;
+  description?: string;
+}
+
+interface VideoData {
+  video_id: string | null | undefined;
+  message: string;
+  call_to_action: { type: string; value: { link: string | null | undefined } };
+  title?: string;
+  link_description?: string;
+}
+
+interface ObjectStorySpec {
+  page_id: string;
+  link_data?: LinkData;
+  video_data?: VideoData;
+  instagram_actor_id?: string;
+}
+
+function buildImageCreativePayload(input: SalesLaunchInput): MetaPayload {
+  const linkData: LinkData = {
     image_hash: input.imageHash,
     link: input.destinationUrl,
     message: input.primaryText || "",
@@ -130,7 +158,7 @@ function buildImageCreativePayload(input: SalesLaunchInput): Record<string, any>
   if (input.headline) linkData.name = input.headline;
   if (input.description) linkData.description = input.description;
 
-  const objectStorySpec: Record<string, unknown> = {
+  const objectStorySpec: ObjectStorySpec = {
     page_id: input.pageId,
     link_data: linkData,
   };
@@ -144,8 +172,8 @@ function buildImageCreativePayload(input: SalesLaunchInput): Record<string, any>
   };
 }
 
-function buildVideoCreativePayload(input: SalesLaunchInput): Record<string, any> {
-  const videoData: Record<string, any> = {
+function buildVideoCreativePayload(input: SalesLaunchInput): MetaPayload {
+  const videoData: VideoData = {
     video_id: input.videoId,
     message: input.primaryText || "",
     call_to_action: {
@@ -156,7 +184,7 @@ function buildVideoCreativePayload(input: SalesLaunchInput): Record<string, any>
   if (input.headline) videoData.title = input.headline;
   if (input.description) videoData.link_description = input.description;
 
-  const objectStorySpec: Record<string, unknown> = {
+  const objectStorySpec: ObjectStorySpec = {
     page_id: input.pageId,
     video_data: videoData,
   };
@@ -170,8 +198,8 @@ function buildVideoCreativePayload(input: SalesLaunchInput): Record<string, any>
   };
 }
 
-function buildExistingPostCreativePayload(input: SalesLaunchInput): Record<string, any> {
-  const payload: Record<string, unknown> = {
+function buildExistingPostCreativePayload(input: SalesLaunchInput): MetaPayload {
+  const payload: MetaPayload = {
     name: `${input.adName} - Creative`,
   };
 
@@ -192,8 +220,8 @@ export function buildAdPayload(
   input: SalesLaunchInput,
   adsetId: string,
   creativeId: string
-): Record<string, any> {
-  const payload: Record<string, any> = {
+): MetaPayload {
+  const payload: MetaPayload = {
     name: `${input.adName} - Ad`,
     adset_id: adsetId,
     creative: { creative_id: creativeId },
@@ -210,10 +238,10 @@ export function buildAdPayload(
 }
 
 export function validateAllPayloads(
-  campaignPayload: Record<string, any>,
-  adsetPayload: Record<string, any>,
-  creativePayload: Record<string, any>,
-  adPayload: Record<string, any>,
+  campaignPayload: MetaPayload,
+  adsetPayload: MetaPayload,
+  creativePayload: MetaPayload,
+  adPayload: MetaPayload,
   input: SalesLaunchInput
 ): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
@@ -222,7 +250,8 @@ export function validateAllPayloads(
   if (!campaignPayload.objective) errors.push("Campaign missing objective");
 
   if (input.budgetLevel === "CBO") {
-    if (!campaignPayload.daily_budget || campaignPayload.daily_budget <= 0) {
+    const budget = campaignPayload.daily_budget as number | undefined;
+    if (!budget || budget <= 0) {
       errors.push("CBO mode: campaign must have daily_budget > 0");
     }
     if (!campaignPayload.bid_strategy) {
@@ -234,17 +263,20 @@ export function validateAllPayloads(
     if (adsetPayload.bid_strategy) {
       errors.push("CBO mode: ad set must NOT have bid_strategy");
     }
+    if (campaignPayload.is_adset_budget_sharing_enabled !== undefined) {
+      errors.push("CBO mode: campaign must NOT include is_adset_budget_sharing_enabled");
+    }
   } else {
-    if (!adsetPayload.daily_budget || adsetPayload.daily_budget <= 0) {
+    const adsetBudget = adsetPayload.daily_budget as number | undefined;
+    if (!adsetBudget || adsetBudget <= 0) {
       errors.push("ABO mode: ad set must have daily_budget > 0");
     }
     if (campaignPayload.daily_budget) {
       errors.push("ABO mode: campaign must NOT have daily_budget");
     }
-  }
-
-  if (campaignPayload.is_adset_budget_sharing_enabled !== undefined) {
-    errors.push("Campaign must NOT include is_adset_budget_sharing_enabled (Meta infers from budget placement)");
+    if (campaignPayload.is_adset_budget_sharing_enabled !== false) {
+      errors.push("ABO mode: campaign must have is_adset_budget_sharing_enabled = false");
+    }
   }
 
   if (!adsetPayload.optimization_goal) errors.push("Ad set missing optimization_goal");
@@ -253,14 +285,16 @@ export function validateAllPayloads(
   if (!adPayload.adset_id) {
     errors.push("Ad missing adset_id");
   }
-  if (adPayload.adset_id && adPayload.adset_id !== "__PENDING__" && !adPayload.creative?.creative_id) {
+  const creative = adPayload.creative as { creative_id?: string } | undefined;
+  if (adPayload.adset_id && String(adPayload.adset_id) !== "__PENDING__" && !creative?.creative_id) {
     errors.push("Ad missing creative_id");
   }
 
-  if (input.mode === "UPLOAD_IMAGE" && !creativePayload.object_story_spec?.link_data?.image_hash) {
+  const storySpec = creativePayload.object_story_spec as ObjectStorySpec | undefined;
+  if (input.mode === "UPLOAD_IMAGE" && !storySpec?.link_data?.image_hash) {
     errors.push("Image creative missing image_hash");
   }
-  if (input.mode === "UPLOAD_VIDEO" && !creativePayload.object_story_spec?.video_data?.video_id) {
+  if (input.mode === "UPLOAD_VIDEO" && !storySpec?.video_data?.video_id) {
     errors.push("Video creative missing video_id");
   }
   if (input.mode === "EXISTING_POST" && !creativePayload.object_story_id && !creativePayload.source_instagram_media_id) {

@@ -1,4 +1,4 @@
-import { Express, Response } from "express";
+import { Express, Request, Response } from "express";
 import { db } from "../db";
 import { eq, and, sql, gte, lte, inArray, isNull, isNotNull, desc } from "drizzle-orm";
 import { z } from "zod";
@@ -44,7 +44,7 @@ import {
   bulkUpdateTargeting,
   evaluateAutomationRules,
 } from "../services/metaAdLauncher";
-import { executeSalesLaunch } from "../services/meta/salesLaunchService";
+import { startSalesLaunch } from "../services/meta/salesLaunchService";
 import { runDiagnostics } from "../services/meta/salesDiagnostics";
 import { normalizeInput, validateLaunchInput, validateMediaReadiness, type ValidationIssue } from "../services/meta/salesValidation";
 import { generateChatResponse, generateDashboardInsights, generateQuickStrategy } from "../services/aiInsights";
@@ -3062,14 +3062,15 @@ export function registerMarketingRoutes(app: Express) {
     }
   });
 
-  app.post("/api/meta/sales/launch", isAuthenticated, async (req: any, res) => {
+  app.post("/api/meta/sales/launch", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const merchantId = await getMerchantId(req);
 
-      const result = await executeSalesLaunch(merchantId, req.body);
+      const result = await startSalesLaunch(merchantId, req.body);
       res.json(result);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
+    } catch (error: unknown) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      res.status(500).json({ error: errMsg });
     }
   });
 

@@ -13,6 +13,7 @@ import {
   sanitizePayload,
   validateAllPayloads,
   type SalesLaunchInput,
+  type MetaPayload,
 } from "./salesPayloadBuilder";
 import { parseMetaError, formatMetaErrorForUser, type ParsedMetaError } from "./metaErrorParser";
 
@@ -64,7 +65,7 @@ async function loggedMetaPost(
   stage: string,
   accessToken: string,
   endpoint: string,
-  body: Record<string, unknown>,
+  body: MetaPayload,
   maxRetries = 1
 ): Promise<Record<string, unknown>> {
   const url = `${META_BASE_URL}/${endpoint}`;
@@ -133,48 +134,74 @@ async function updateJobStage(jobId: string, stage: string, updates: Record<stri
     .where(eq(adLaunchJobs.id, jobId));
 }
 
-export async function executeSalesLaunch(
+async function persistStages(jobId: string, stages: LaunchStage[], extraFields: Record<string, unknown> = {}) {
+  const currentStage = stages[stages.length - 1]?.stage || "unknown";
+  await db.update(adLaunchJobs)
+    .set({
+      currentStage,
+      resultJson: { stages, ...extraFields },
+      ...extraFields,
+    })
+    .where(eq(adLaunchJobs.id, jobId));
+}
+
+export async function startSalesLaunch(
   merchantId: string,
   rawInput: Record<string, unknown>
-): Promise<LaunchResult> {
+): Promise<{ jobId: string }> {
+  const input = normalizeInput(rawInput);
+
+  const [job] = await db.insert(adLaunchJobs).values({
+    merchantId,
+    status: "running",
+    launchType: "sales",
+    campaignName: input.adName,
+    objective: "OUTCOME_SALES",
+    dailyBudget: String(input.dailyBudget),
+    targeting: { geo_locations: { countries: ["PK"] } },
+    creativeConfig: {},
+    pageId: input.pageId,
+    pixelId: input.pixelId || null,
+    mode: input.mode,
+    publishMode: input.publishMode,
+    normalizedInput: input as unknown as Record<string, unknown>,
+    currentStage: "normalize",
+    resultJson: { stages: [{ stage: "normalize", status: "running" }] },
+  }).returning();
+
+  executeSalesLaunchAsync(merchantId, input, job.id).catch((err) => {
+    console.error("[SalesLaunch] Unhandled async error for job", job.id, err);
+  });
+
+  return { jobId: job.id };
+}
+
+async function executeSalesLaunchAsync(
+  merchantId: string,
+  input: SalesLaunchInput,
+  jobId: string
+): Promise<void> {
   const stages: LaunchStage[] = [];
-  let jobId = "";
 
   try {
-    stages.push({ stage: "normalize", status: "running" });
-    const input = normalizeInput(rawInput);
-    stages[stages.length - 1] = { stage: "normalize", status: "success" };
-
-    const [job] = await db.insert(adLaunchJobs).values({
-      merchantId,
-      status: "pending",
-      launchType: "sales",
-      campaignName: input.adName,
-      objective: "OUTCOME_SALES",
-      dailyBudget: String(input.dailyBudget),
-      targeting: { geo_locations: { countries: ["PK"] } },
-      creativeConfig: {},
-      pageId: input.pageId,
-      pixelId: input.pixelId || null,
-      mode: input.mode,
-      publishMode: input.publishMode,
-      normalizedInput: input as unknown as Record<string, unknown>,
-      currentStage: "normalize",
-    }).returning();
-    jobId = job.id;
+    stages.push({ stage: "normalize", status: "success" });
+    await persistStages(jobId, stages);
 
     stages.push({ stage: "validate", status: "running" });
+    await persistStages(jobId, stages);
     const issues = validateLaunchInput(input);
     await updateJobStage(jobId, "validate", { validationStatus: issues as unknown as Record<string, unknown>[] });
 
     if (issues.length > 0) {
       stages[stages.length - 1] = { stage: "validate", status: "failed", message: `${issues.length} validation issue(s)`, data: { issues } };
-      await updateJobStage(jobId, "validate", { status: "failed", errorMessage: issues.map(i => i.message).join("; "), errorSummary: "Validation failed" });
-      return { success: false, jobId, stages, validationIssues: issues, error: "Validation failed", errorStage: "validate" };
+      await persistStages(jobId, stages, { status: "failed", errorMessage: issues.map(i => i.message).join("; "), errorSummary: "Validation failed" });
+      return;
     }
     stages[stages.length - 1] = { stage: "validate", status: "success" };
+    await persistStages(jobId, stages);
 
     stages.push({ stage: "diagnostics", status: "running" });
+    await persistStages(jobId, stages);
     const creds = await getCredentialsForMerchant(merchantId);
     const diagnostics = await runDiagnostics({
       accessToken: creds.accessToken,
@@ -188,29 +215,33 @@ export async function executeSalesLaunch(
       const failedChecks = diagnostics.checks.filter(c => c.status === "fail");
       const msg = failedChecks.map(c => `${c.name}: ${c.message}`).join("; ");
       stages[stages.length - 1] = { stage: "diagnostics", status: "failed", message: msg, data: { checks: diagnostics.checks } };
-      await updateJobStage(jobId, "diagnostics", { status: "failed", errorMessage: msg, errorSummary: "Diagnostics failed" });
-      return { success: false, jobId, stages, error: msg, errorStage: "diagnostics" };
+      await persistStages(jobId, stages, { status: "failed", errorMessage: msg, errorSummary: "Diagnostics failed" });
+      return;
     }
     stages[stages.length - 1] = { stage: "diagnostics", status: "success", data: { checks: diagnostics.checks } };
+    await persistStages(jobId, stages);
 
     stages.push({ stage: "media_validation", status: "running" });
+    await persistStages(jobId, stages);
     const mediaIssues = await validateMediaReadiness(input, creds.accessToken, merchantId);
     if (mediaIssues.length > 0) {
       const mediaMsg = mediaIssues.map(i => i.message).join("; ");
       stages[stages.length - 1] = { stage: "media_validation", status: "failed", message: mediaMsg };
-      await updateJobStage(jobId, "media_validation", { status: "failed", errorMessage: mediaMsg, errorSummary: "Media validation failed" });
-      return { success: false, jobId, stages, validationIssues: mediaIssues, error: mediaMsg, errorStage: "media_validation" };
+      await persistStages(jobId, stages, { status: "failed", errorMessage: mediaMsg, errorSummary: "Media validation failed" });
+      return;
     }
     stages[stages.length - 1] = { stage: "media_validation", status: "success" };
+    await persistStages(jobId, stages);
 
     if (input.publishMode === "VALIDATE") {
-      await updateJobStage(jobId, "complete", { status: "validated" });
       stages.push({ stage: "complete", status: "success", message: "Validation and diagnostics passed. No objects created." });
-      return { success: true, jobId, stages };
+      await persistStages(jobId, stages, { status: "validated" });
+      return;
     }
 
     if (input.mode === "UPLOAD_IMAGE" && input.imageUrl && !input.imageHash) {
       stages.push({ stage: "media_upload", status: "running" });
+      await persistStages(jobId, stages);
       try {
         const uploadResult = await uploadImageToMeta(merchantId, input.imageUrl);
         input.imageHash = uploadResult.hash;
@@ -232,6 +263,7 @@ export async function executeSalesLaunch(
         }
 
         stages[stages.length - 1] = { stage: "media_upload", status: "success", message: `Image hash: ${uploadResult.hash}` };
+        await persistStages(jobId, stages);
       } catch (uploadErr: unknown) {
         const uploadError = uploadErr instanceof Error ? uploadErr : new Error(String(uploadErr));
         try {
@@ -251,13 +283,14 @@ export async function executeSalesLaunch(
         }
 
         stages[stages.length - 1] = { stage: "media_upload", status: "failed", message: uploadError.message };
-        await updateJobStage(jobId, "media_upload", { status: "failed", errorMessage: uploadError.message, errorSummary: "Media upload failed" });
-        return { success: false, jobId, stages, error: `Image upload failed: ${uploadError.message}`, errorStage: "media_upload" };
+        await persistStages(jobId, stages, { status: "failed", errorMessage: uploadError.message, errorSummary: "Media upload failed" });
+        return;
       }
     }
 
     if (input.mode === "UPLOAD_VIDEO" && input.videoUrl && !input.videoId) {
       stages.push({ stage: "media_upload", status: "running" });
+      await persistStages(jobId, stages);
       try {
         const videoEndpoint = `${creds.adAccountId}/advideos`;
         const formData = new URLSearchParams();
@@ -268,7 +301,7 @@ export async function executeSalesLaunch(
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
           body: formData.toString(),
         });
-        const data = await response.json();
+        const data = await response.json() as Record<string, unknown>;
 
         try {
           await db.insert(metaApiLogs).values({
@@ -286,19 +319,24 @@ export async function executeSalesLaunch(
           console.warn("[SalesLaunch] Failed to write video upload log:", logErr instanceof Error ? logErr.message : logErr);
         }
 
-        if (!response.ok) throw new Error(data?.error?.message || "Video upload failed");
-        input.videoId = data.id;
+        if (!response.ok) {
+          const errResponse = data as { error?: { message?: string } };
+          throw new Error(errResponse?.error?.message || "Video upload failed");
+        }
+        input.videoId = data.id as string;
         stages[stages.length - 1] = { stage: "media_upload", status: "success", message: `Video ID: ${data.id}` };
+        await persistStages(jobId, stages);
       } catch (uploadErr: unknown) {
         const uploadError = uploadErr instanceof Error ? uploadErr : new Error(String(uploadErr));
         stages[stages.length - 1] = { stage: "media_upload", status: "failed", message: uploadError.message };
-        await updateJobStage(jobId, "media_upload", { status: "failed", errorMessage: uploadError.message, errorSummary: "Media upload failed" });
-        return { success: false, jobId, stages, error: `Video upload failed: ${uploadError.message}`, errorStage: "media_upload" };
+        await persistStages(jobId, stages, { status: "failed", errorMessage: uploadError.message, errorSummary: "Media upload failed" });
+        return;
       }
     }
 
     if (input.mode === "UPLOAD_VIDEO" && input.videoId) {
       stages.push({ stage: "media_readiness", status: "running" });
+      await persistStages(jobId, stages);
       try {
         const maxPolls = 30;
         const pollInterval = 5000;
@@ -308,8 +346,9 @@ export async function executeSalesLaunch(
           statusUrl.searchParams.set("access_token", creds.accessToken);
           statusUrl.searchParams.set("fields", "id,status");
           const statusRes = await fetch(statusUrl.toString());
-          const statusData = await statusRes.json();
-          const videoStatus = statusData?.status?.video_status;
+          const statusData = await statusRes.json() as Record<string, unknown>;
+          const videoStatusObj = statusData?.status as { video_status?: string } | undefined;
+          const videoStatus = videoStatusObj?.video_status;
 
           try {
             await db.insert(metaApiLogs).values({
@@ -342,15 +381,14 @@ export async function executeSalesLaunch(
           throw new Error("Video processing timed out (2.5 minutes). The video may still be processing — try again in a few minutes.");
         }
         stages[stages.length - 1] = { stage: "media_readiness", status: "success", message: "Video is ready" };
+        await persistStages(jobId, stages);
       } catch (pollErr: unknown) {
         const pollError = pollErr instanceof Error ? pollErr : new Error(String(pollErr));
         stages[stages.length - 1] = { stage: "media_readiness", status: "failed", message: pollError.message };
-        await updateJobStage(jobId, "media_readiness", { status: "failed", errorMessage: pollError.message, errorSummary: "Video not ready" });
-        return { success: false, jobId, stages, error: pollError.message, errorStage: "media_readiness" };
+        await persistStages(jobId, stages, { status: "failed", errorMessage: pollError.message, errorSummary: "Video not ready" });
+        return;
       }
     }
-
-    await updateJobStage(jobId, "campaign", { status: "launching" });
 
     const campaignPayload = sanitizePayload(buildCampaignPayload(input));
     const adsetPayloadPreview = sanitizePayload(buildAdSetPayload(input, "__PENDING__"));
@@ -362,43 +400,49 @@ export async function executeSalesLaunch(
       const errMsg = `Payload validation failed: ${fullValidation.errors.join("; ")}`;
       console.error("[SalesLaunch] PRE-FLIGHT BLOCKED:", errMsg);
       stages.push({ stage: "campaign", status: "failed", message: errMsg });
-      await updateJobStage(jobId, "campaign", { status: "failed", errorMessage: errMsg, errorSummary: "Payload validation failed" });
-      return { success: false, jobId, stages, error: errMsg, errorStage: "campaign" };
+      await persistStages(jobId, stages, { status: "failed", errorMessage: errMsg, errorSummary: "Payload validation failed" });
+      return;
     }
 
     stages.push({ stage: "campaign", status: "running" });
+    await persistStages(jobId, stages);
     console.log("[SalesLaunch] OUTGOING CAMPAIGN PAYLOAD:", JSON.stringify(campaignPayload, null, 2));
     const campaignResult = await loggedMetaPost(merchantId, jobId, "campaign", creds.accessToken, `${creds.adAccountId}/campaigns`, campaignPayload);
     const campaignId = campaignResult.id as string;
     stages[stages.length - 1] = { stage: "campaign", status: "success", data: { campaignId } };
-    await updateJobStage(jobId, "campaign", { metaCampaignId: campaignId });
+    await persistStages(jobId, stages, { metaCampaignId: campaignId });
 
     stages.push({ stage: "adset", status: "running" });
+    await persistStages(jobId, stages);
     const adsetPayload = sanitizePayload(buildAdSetPayload(input, campaignId));
     console.log("[SalesLaunch] OUTGOING ADSET PAYLOAD:", JSON.stringify(adsetPayload, null, 2));
     const adsetResult = await loggedMetaPost(merchantId, jobId, "adset", creds.accessToken, `${creds.adAccountId}/adsets`, adsetPayload);
     const adsetId = adsetResult.id as string;
     stages[stages.length - 1] = { stage: "adset", status: "success", data: { adsetId } };
-    await updateJobStage(jobId, "adset", { metaAdsetId: adsetId });
+    await persistStages(jobId, stages, { metaAdsetId: adsetId });
 
     stages.push({ stage: "creative", status: "running" });
+    await persistStages(jobId, stages);
     console.log("[SalesLaunch] OUTGOING CREATIVE PAYLOAD:", JSON.stringify(creativePayload, null, 2));
     const creativeResult = await loggedMetaPost(merchantId, jobId, "creative", creds.accessToken, `${creds.adAccountId}/adcreatives`, creativePayload);
     const creativeId = creativeResult.id as string;
     stages[stages.length - 1] = { stage: "creative", status: "success", data: { creativeId } };
-    await updateJobStage(jobId, "creative", { metaCreativeId: creativeId });
+    await persistStages(jobId, stages, { metaCreativeId: creativeId });
 
     stages.push({ stage: "ad", status: "running" });
+    await persistStages(jobId, stages);
     const adPayload = sanitizePayload(buildAdPayload(input, adsetId, creativeId));
     console.log("[SalesLaunch] OUTGOING AD PAYLOAD:", JSON.stringify(adPayload, null, 2));
     const adResult = await loggedMetaPost(merchantId, jobId, "ad", creds.accessToken, `${creds.adAccountId}/ads`, adPayload);
     const adId = adResult.id as string;
     stages[stages.length - 1] = { stage: "ad", status: "success", data: { adId } };
+    await persistStages(jobId, stages, { metaAdId: adId });
 
     const finalStatus = input.publishMode === "PUBLISH" ? "launched" : "draft";
 
     if (input.publishMode === "PUBLISH") {
       stages.push({ stage: "publish", status: "running" });
+      await persistStages(jobId, stages);
       try {
         await loggedMetaPost(merchantId, jobId, "publish_campaign", creds.accessToken, campaignId, { status: "ACTIVE" });
         await loggedMetaPost(merchantId, jobId, "publish_adset", creds.accessToken, adsetId, { status: "ACTIVE" });
@@ -407,33 +451,24 @@ export async function executeSalesLaunch(
       } catch (pubErr: unknown) {
         const pubError = pubErr instanceof MetaApiError ? pubErr : pubErr instanceof Error ? pubErr : new Error(String(pubErr));
         stages[stages.length - 1] = { stage: "publish", status: "failed", message: `Created but failed to go live: ${pubError.message}` };
-        await updateJobStage(jobId, "publish", {
+        await persistStages(jobId, stages, {
           status: "partial",
           metaAdId: adId,
           metaCreativeId: creativeId,
           errorMessage: `Publish failed: ${pubError.message}`,
-          resultJson: { campaignId, adsetId, creativeId, adId },
           launchedAt: new Date(),
         });
-        return {
-          success: false, jobId, stages, campaignId, adsetId, creativeId, adId,
-          error: `Objects created but publish failed: ${pubError.message}`, errorStage: "publish",
-          rawError: pubError instanceof MetaApiError ? pubError.metaError : null,
-        };
+        return;
       }
     }
 
-    await updateJobStage(jobId, "complete", {
+    stages.push({ stage: "complete", status: "success", message: finalStatus === "launched" ? "Ad is live!" : "Ad created as draft (paused)." });
+    await persistStages(jobId, stages, {
       status: finalStatus,
       metaAdId: adId,
       metaCreativeId: creativeId,
-      resultJson: { campaignId, adsetId, creativeId, adId },
       launchedAt: new Date(),
     });
-
-    stages.push({ stage: "complete", status: "success", message: finalStatus === "launched" ? "Ad is live!" : "Ad created as draft (paused)." });
-
-    return { success: true, jobId, stages, campaignId, adsetId, creativeId, adId };
 
   } catch (caughtErr: unknown) {
     const error = caughtErr instanceof MetaApiError ? caughtErr : caughtErr instanceof Error ? caughtErr : new Error(String(caughtErr));
@@ -441,18 +476,10 @@ export async function executeSalesLaunch(
     const parsedData = error instanceof MetaApiError ? { parsed: error.parsed } : null;
     stages[stages.length - 1] = { stage: currentStage, status: "failed", message: error.message, data: parsedData ?? undefined };
 
-    if (jobId) {
-      await updateJobStage(jobId, currentStage, {
-        status: "failed",
-        errorMessage: error.message,
-        errorSummary: `Failed at ${currentStage}: ${error.message}`,
-      }).catch(() => {});
-    }
-
-    return {
-      success: false, jobId, stages,
-      error: error.message, errorStage: currentStage,
-      rawError: error instanceof MetaApiError ? error.metaError : null,
-    };
+    await persistStages(jobId, stages, {
+      status: "failed",
+      errorMessage: error.message,
+      errorSummary: `Failed at ${currentStage}: ${error.message}`,
+    }).catch(() => {});
   }
 }

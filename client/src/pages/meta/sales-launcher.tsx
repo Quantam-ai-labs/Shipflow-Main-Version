@@ -135,6 +135,8 @@ export default function SalesLauncher() {
   const [diagnosticsResult, setDiagnosticsResult] = useState<{ passed: boolean; checks: DiagnosticCheck[]; adAccountCurrency?: string } | null>(null);
   const [accountCurrency, setAccountCurrency] = useState("USD");
   const [launchResult, setLaunchResult] = useState<LaunchResult | null>(null);
+  const [launchStages, setLaunchStages] = useState<LaunchStage[]>([]);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [showRawError, setShowRawError] = useState(false);
 
   const metaStatusQuery = useQuery<any>({ queryKey: ["/api/meta/oauth/status"] });
@@ -274,6 +276,66 @@ export default function SalesLauncher() {
     toast({ title: "Video processing timed out", variant: "destructive" });
   }
 
+  const TERMINAL_STATUSES = ["launched", "draft", "validated", "failed", "partial"];
+
+  const pollJobStatus = async (jobId: string) => {
+    const pollInterval = 1500;
+    const maxPolls = 120;
+
+    for (let i = 0; i < maxPolls; i++) {
+      try {
+        const res = await fetch(`/api/meta/sales/launch-jobs/${jobId}`, { credentials: "include" });
+        if (!res.ok) break;
+        const data = await res.json();
+        const job = data.job;
+        if (!job) break;
+
+        const resultJson = job.resultJson as { stages?: LaunchStage[] } | null;
+        const stages = resultJson?.stages || [];
+        setLaunchStages(stages);
+
+        if (TERMINAL_STATUSES.includes(job.status)) {
+          const finalStages = stages;
+          const lastStage = finalStages[finalStages.length - 1];
+          const success = job.status === "launched" || job.status === "draft" || job.status === "validated";
+
+          const result: LaunchResult = {
+            success,
+            jobId: job.id,
+            stages: finalStages,
+            campaignId: job.metaCampaignId || undefined,
+            adsetId: job.metaAdsetId || undefined,
+            creativeId: job.metaCreativeId || undefined,
+            adId: job.metaAdId || undefined,
+            error: job.errorMessage || undefined,
+            errorStage: !success ? lastStage?.stage : undefined,
+          };
+
+          setLaunchResult(result);
+          setActiveJobId(null);
+          queryClient.invalidateQueries({ queryKey: ["/api/meta/sales/launch-jobs"] });
+
+          if (success) {
+            toast({ title: job.status === "validated" ? "Validation passed!" : "Ad launched successfully!" });
+          } else {
+            toast({
+              title: `Failed at: ${STAGE_LABELS[lastStage?.stage || ""] || lastStage?.stage || "unknown"}`,
+              description: job.errorMessage,
+              variant: "destructive",
+            });
+          }
+          return;
+        }
+      } catch {
+        break;
+      }
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+    }
+
+    setActiveJobId(null);
+    toast({ title: "Launch timed out", description: "The launch is still running in the background. Check recent launches for status.", variant: "destructive" });
+  };
+
   const launchMutation = useMutation({
     mutationFn: async () => {
       const body: Record<string, unknown> = {
@@ -318,18 +380,11 @@ export default function SalesLauncher() {
       const res = await apiRequest("POST", "/api/meta/sales/launch", body);
       return res.json();
     },
-    onSuccess: (data: LaunchResult) => {
-      setLaunchResult(data);
-      queryClient.invalidateQueries({ queryKey: ["/api/meta/sales/launch-jobs"] });
-      if (data.success) {
-        toast({ title: publishMode === "VALIDATE" ? "Validation passed!" : "Ad launched successfully!" });
-      } else {
-        toast({
-          title: `Failed at: ${STAGE_LABELS[data.errorStage || ""] || data.errorStage}`,
-          description: data.error,
-          variant: "destructive",
-        });
-      }
+    onSuccess: (data: { jobId: string }) => {
+      setLaunchResult(null);
+      setLaunchStages([{ stage: "normalize", status: "running" }]);
+      setActiveJobId(data.jobId);
+      pollJobStatus(data.jobId);
     },
     onError: (err: Error) => {
       toast({ title: "Launch error", description: err.message, variant: "destructive" });
@@ -887,12 +942,12 @@ export default function SalesLauncher() {
           <div className="mt-4">
             <Button
               onClick={() => launchMutation.mutate()}
-              disabled={!allValid || launchMutation.isPending}
+              disabled={!allValid || launchMutation.isPending || !!activeJobId}
               className="w-full"
               data-testid="button-launch"
             >
-              {launchMutation.isPending ? (
-                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Launching...</>
+              {launchMutation.isPending || activeJobId ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> {activeJobId ? "Launching..." : "Submitting..."}</>
               ) : (
                 <><Rocket className="h-4 w-4 mr-2" /> {publishMode === "VALIDATE" ? "Validate" : publishMode === "DRAFT" ? "Create Draft" : "Launch Live"}</>
               )}
@@ -901,7 +956,30 @@ export default function SalesLauncher() {
         </CardContent>
       </Card>
 
-      {/* SECTION D: Launch Result */}
+      {/* SECTION D: Real-time Launch Progress */}
+      {activeJobId && !launchResult && launchStages.length > 0 && (
+        <Card data-testid="section-progress">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Loader2 className="h-5 w-5 text-blue-600 animate-spin" /> Launch in Progress
+            </CardTitle>
+            <CardDescription>Stages update in real-time as each step completes</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {launchStages.map((stage, i) => (
+                <div key={i} className="flex items-center gap-2 text-sm" data-testid={`progress-stage-${stage.stage}`}>
+                  <StatusIcon status={stage.status} />
+                  <span className="font-medium w-40">{STAGE_LABELS[stage.stage] || stage.stage}</span>
+                  {stage.message && <span className="text-muted-foreground truncate">{stage.message}</span>}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Launch Result (Final) */}
       {launchResult && (
         <Card data-testid="section-result">
           <CardHeader className="pb-3">
