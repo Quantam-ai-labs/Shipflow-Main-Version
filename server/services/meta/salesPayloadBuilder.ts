@@ -33,6 +33,7 @@ export function buildSalesCampaignPayload(input: SalesLaunchInput): Record<strin
     special_ad_categories: [],
     buying_type: "AUCTION",
     bid_strategy: "LOWEST_COST_WITHOUT_CAP",
+    is_adset_budget_sharing_enabled: false,
   };
 }
 
