@@ -308,6 +308,9 @@ export default function SalesLauncher() {
       } else {
         body.existingPostId = selectedPostId;
         body.existingPostSource = selectedPostSource;
+        if (destinationUrl.trim()) {
+          body.destinationUrl = destinationUrl;
+        }
       }
 
       const res = await apiRequest("POST", "/api/meta/sales/launch", body);
@@ -343,7 +346,10 @@ export default function SalesLauncher() {
     { label: "Campaign name", ok: !!adName.trim() },
     { label: "Daily budget valid", ok: parseFloat(dailyBudget) >= 1 },
     ...(isExistingPost
-      ? [{ label: "Post selected", ok: !!selectedPostId }]
+      ? [
+          { label: "Post selected", ok: !!selectedPostId },
+          { label: "Destination URL", ok: !!destinationUrl.trim() },
+        ]
       : [
           { label: "Destination URL", ok: !!destinationUrl.trim() },
           { label: "Primary text", ok: !!primaryText.trim() },
@@ -722,14 +728,13 @@ export default function SalesLauncher() {
             <div>
               <Label htmlFor="destinationUrl">
                 Destination URL
-                {isExistingPost && <span className="text-xs text-muted-foreground ml-2">(not applicable for existing posts)</span>}
+                {isExistingPost && <span className="text-xs text-muted-foreground ml-2">(required for conversion tracking)</span>}
               </Label>
               <Input
                 id="destinationUrl"
-                value={isExistingPost ? "" : destinationUrl}
+                value={destinationUrl}
                 onChange={e => setDestinationUrl(e.target.value)}
                 placeholder="https://yourstore.com/product"
-                disabled={isExistingPost}
                 data-testid="input-destination-url"
               />
             </div>

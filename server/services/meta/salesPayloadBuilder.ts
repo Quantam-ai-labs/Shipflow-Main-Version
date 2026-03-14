@@ -183,6 +183,9 @@ export function buildExistingPostSalesCreativePayload(
   } else {
     payload.object_story_id = input.existingPostId;
   }
+  if (input.instagramAccountId) {
+    payload.instagram_actor_id = input.instagramAccountId;
+  }
   return payload;
 }
 
@@ -191,10 +194,67 @@ export function buildSalesAdPayload(
   adsetId: string,
   creativeId: string
 ): Record<string, any> {
-  return {
+  const payload: Record<string, any> = {
     name: `${input.adName} - Ad`,
     adset_id: adsetId,
     creative: { creative_id: creativeId },
     status: "PAUSED",
   };
+
+  if (input.pixelId) {
+    payload.tracking_specs = [
+      { "action.type": ["offsite_conversion"], fb_pixel: [input.pixelId] },
+    ];
+  }
+
+  if (input.destinationUrl) {
+    payload.tracking_specs = payload.tracking_specs || [];
+    payload.tracking_specs.push({
+      "action.type": ["link_click"],
+      "fb_pixel": input.pixelId ? [input.pixelId] : undefined,
+    });
+  }
+
+  return payload;
+}
+
+export function validateAllPayloads(
+  campaignPayload: Record<string, any>,
+  adsetPayload: Record<string, any>,
+  creativePayload: Record<string, any>,
+  adPayload: Record<string, any>,
+  input: SalesLaunchInput
+): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+
+  if (!campaignPayload.name) errors.push("Campaign missing name");
+  if (!campaignPayload.objective) errors.push("Campaign missing objective");
+  if (typeof campaignPayload.is_adset_budget_sharing_enabled !== "boolean") {
+    errors.push("Campaign missing is_adset_budget_sharing_enabled boolean");
+  }
+
+  if (!adsetPayload.daily_budget || adsetPayload.daily_budget <= 0) {
+    errors.push("Ad set missing daily_budget > 0");
+  }
+  if (!adsetPayload.optimization_goal) errors.push("Ad set missing optimization_goal");
+  if (!adsetPayload.targeting) errors.push("Ad set missing targeting");
+
+  if (!adPayload.adset_id) errors.push("Ad missing adset_id");
+  if (!adPayload.creative?.creative_id) errors.push("Ad missing creative.creative_id");
+
+  if (input.mode === "UPLOAD_IMAGE" && !creativePayload.object_story_spec?.link_data?.image_hash) {
+    errors.push("Image creative missing image_hash");
+  }
+  if (input.mode === "UPLOAD_VIDEO" && !creativePayload.object_story_spec?.video_data?.video_id) {
+    errors.push("Video creative missing video_id");
+  }
+  if (input.mode === "EXISTING_POST" && !creativePayload.object_story_id && !creativePayload.source_instagram_media_id) {
+    errors.push("Existing post creative missing post ID");
+  }
+
+  if (input.pixelId && input.mode === "EXISTING_POST" && !input.destinationUrl) {
+    errors.push("Existing post with pixel tracking requires a destination URL");
+  }
+
+  return { valid: errors.length === 0, errors };
 }

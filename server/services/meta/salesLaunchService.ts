@@ -14,6 +14,7 @@ import {
   buildSalesAdPayload,
   sanitizePayload,
   validateBudgetArchitecture,
+  validateAllPayloads,
   type SalesLaunchInput,
 } from "./salesPayloadBuilder";
 import { parseMetaError, formatMetaErrorForUser, type ParsedMetaError } from "./metaErrorParser";
@@ -392,6 +393,20 @@ export async function executeSalesLaunch(
       rawCreativePayload = buildExistingPostSalesCreativePayload(input);
     }
     const creativePayload = sanitizePayload(rawCreativePayload as Record<string, any>);
+    console.log("[SalesLaunch] OUTGOING CREATIVE PAYLOAD:", JSON.stringify(creativePayload, null, 2));
+
+    const adPayloadPreview = sanitizePayload(buildSalesAdPayload(input, adsetId, "__PREVIEW__"));
+    console.log("[SalesLaunch] OUTGOING AD PAYLOAD (preview):", JSON.stringify(adPayloadPreview, null, 2));
+
+    const fullValidation = validateAllPayloads(campaignPayload, adsetPayload, creativePayload, adPayloadPreview, input);
+    if (!fullValidation.valid) {
+      const errMsg = `Payload validation failed: ${fullValidation.errors.join("; ")}`;
+      console.error("[SalesLaunch] PRE-FLIGHT BLOCKED:", errMsg);
+      stages[stages.length - 1] = { stage: "creative", status: "failed", message: errMsg };
+      await updateJobStage(jobId, "creative", { status: "failed", errorMessage: errMsg, errorSummary: "Validation failed" });
+      return { success: false, jobId, stages, error: errMsg, errorStage: "creative" };
+    }
+
     const creativeResult = await loggedMetaPost(merchantId, jobId, "creative", creds.accessToken, `${creds.adAccountId}/adcreatives`, creativePayload);
     const creativeId = creativeResult.id;
     stages[stages.length - 1] = { stage: "creative", status: "success", data: { creativeId } };
@@ -399,6 +414,7 @@ export async function executeSalesLaunch(
 
     stages.push({ stage: "ad", status: "running" });
     const adPayload = sanitizePayload(buildSalesAdPayload(input, adsetId, creativeId));
+    console.log("[SalesLaunch] OUTGOING AD PAYLOAD:", JSON.stringify(adPayload, null, 2));
     const adResult = await loggedMetaPost(merchantId, jobId, "ad", creds.accessToken, `${creds.adAccountId}/ads`, adPayload);
     const adId = adResult.id;
     stages[stages.length - 1] = { stage: "ad", status: "success", data: { adId } };
