@@ -4,16 +4,13 @@ import { eq } from "drizzle-orm";
 import { getCredentialsForMerchant, META_BASE_URL } from "../metaAds";
 import { uploadImageToMeta } from "../metaAdLauncher";
 import { runDiagnostics } from "./salesDiagnostics";
-import { normalizeInput, validateLaunchInput, validateConnection, validateMediaReadiness, type ValidationIssue } from "./salesValidation";
+import { normalizeInput, validateLaunchInput, validateMediaReadiness, type ValidationIssue } from "./salesValidation";
 import {
-  buildSalesCampaignPayload,
-  buildSalesAdSetPayload,
-  buildImageSalesCreativePayload,
-  buildVideoSalesCreativePayload,
-  buildExistingPostSalesCreativePayload,
-  buildSalesAdPayload,
+  buildCampaignPayload,
+  buildAdSetPayload,
+  buildCreativePayload,
+  buildAdPayload,
   sanitizePayload,
-  validateBudgetArchitecture,
   validateAllPayloads,
   type SalesLaunchInput,
 } from "./salesPayloadBuilder";
@@ -354,69 +351,48 @@ export async function executeSalesLaunch(
     }
 
     await updateJobStage(jobId, "campaign", { status: "launching" });
-    stages.push({ stage: "campaign", status: "running" });
-    const rawCampaignPayload = buildSalesCampaignPayload(input);
-    const rawAdsetPayload = buildSalesAdSetPayload(input, "__PENDING__");
-    const campaignPayload = sanitizePayload(rawCampaignPayload);
-    const adsetPayloadForValidation = sanitizePayload(rawAdsetPayload);
 
-    const budgetCheck = validateBudgetArchitecture(campaignPayload, adsetPayloadForValidation, input.budgetLevel);
-    if (!budgetCheck.valid) {
-      const errMsg = `Budget architecture validation failed: ${budgetCheck.errors.join("; ")}`;
+    const campaignPayload = sanitizePayload(buildCampaignPayload(input));
+    const adsetPayloadPreview = sanitizePayload(buildAdSetPayload(input, "__PENDING__"));
+    const creativePayload = sanitizePayload(buildCreativePayload(input));
+    const adPayloadPreview = sanitizePayload(buildAdPayload(input, "__PENDING__", "__PREVIEW__"));
+
+    const fullValidation = validateAllPayloads(campaignPayload, adsetPayloadPreview, creativePayload, adPayloadPreview, input);
+    if (!fullValidation.valid) {
+      const errMsg = `Payload validation failed: ${fullValidation.errors.join("; ")}`;
       console.error("[SalesLaunch] PRE-FLIGHT BLOCKED:", errMsg);
-      stages[stages.length - 1] = { stage: "campaign", status: "failed", message: errMsg };
-      await updateJobStage(jobId, "campaign", { status: "failed", errorMessage: errMsg, errorSummary: "Budget validation failed" });
+      stages.push({ stage: "campaign", status: "failed", message: errMsg });
+      await updateJobStage(jobId, "campaign", { status: "failed", errorMessage: errMsg, errorSummary: "Payload validation failed" });
       return { success: false, jobId, stages, error: errMsg, errorStage: "campaign" };
     }
 
+    stages.push({ stage: "campaign", status: "running" });
     console.log("[SalesLaunch] OUTGOING CAMPAIGN PAYLOAD:", JSON.stringify(campaignPayload, null, 2));
     const campaignResult = await loggedMetaPost(merchantId, jobId, "campaign", creds.accessToken, `${creds.adAccountId}/campaigns`, campaignPayload);
-    const campaignId = campaignResult.id;
+    const campaignId = campaignResult.id as string;
     stages[stages.length - 1] = { stage: "campaign", status: "success", data: { campaignId } };
     await updateJobStage(jobId, "campaign", { metaCampaignId: campaignId });
 
     stages.push({ stage: "adset", status: "running" });
-    const adsetPayload = sanitizePayload(buildSalesAdSetPayload(input, campaignId));
+    const adsetPayload = sanitizePayload(buildAdSetPayload(input, campaignId));
     console.log("[SalesLaunch] OUTGOING ADSET PAYLOAD:", JSON.stringify(adsetPayload, null, 2));
     const adsetResult = await loggedMetaPost(merchantId, jobId, "adset", creds.accessToken, `${creds.adAccountId}/adsets`, adsetPayload);
-    const adsetId = adsetResult.id;
+    const adsetId = adsetResult.id as string;
     stages[stages.length - 1] = { stage: "adset", status: "success", data: { adsetId } };
     await updateJobStage(jobId, "adset", { metaAdsetId: adsetId });
 
     stages.push({ stage: "creative", status: "running" });
-    let rawCreativePayload: Record<string, unknown>;
-    if (input.mode === "UPLOAD_IMAGE") {
-      rawCreativePayload = buildImageSalesCreativePayload(input);
-    } else if (input.mode === "UPLOAD_VIDEO") {
-      rawCreativePayload = buildVideoSalesCreativePayload(input);
-    } else {
-      rawCreativePayload = buildExistingPostSalesCreativePayload(input);
-    }
-    const creativePayload = sanitizePayload(rawCreativePayload as Record<string, any>);
     console.log("[SalesLaunch] OUTGOING CREATIVE PAYLOAD:", JSON.stringify(creativePayload, null, 2));
-
-    const adPayloadPreview = sanitizePayload(buildSalesAdPayload(input, adsetId, "__PREVIEW__"));
-    console.log("[SalesLaunch] OUTGOING AD PAYLOAD (preview):", JSON.stringify(adPayloadPreview, null, 2));
-
-    const fullValidation = validateAllPayloads(campaignPayload, adsetPayload, creativePayload, adPayloadPreview, input);
-    if (!fullValidation.valid) {
-      const errMsg = `Payload validation failed: ${fullValidation.errors.join("; ")}`;
-      console.error("[SalesLaunch] PRE-FLIGHT BLOCKED:", errMsg);
-      stages[stages.length - 1] = { stage: "creative", status: "failed", message: errMsg };
-      await updateJobStage(jobId, "creative", { status: "failed", errorMessage: errMsg, errorSummary: "Validation failed" });
-      return { success: false, jobId, stages, error: errMsg, errorStage: "creative" };
-    }
-
     const creativeResult = await loggedMetaPost(merchantId, jobId, "creative", creds.accessToken, `${creds.adAccountId}/adcreatives`, creativePayload);
-    const creativeId = creativeResult.id;
+    const creativeId = creativeResult.id as string;
     stages[stages.length - 1] = { stage: "creative", status: "success", data: { creativeId } };
     await updateJobStage(jobId, "creative", { metaCreativeId: creativeId });
 
     stages.push({ stage: "ad", status: "running" });
-    const adPayload = sanitizePayload(buildSalesAdPayload(input, adsetId, creativeId));
+    const adPayload = sanitizePayload(buildAdPayload(input, adsetId, creativeId));
     console.log("[SalesLaunch] OUTGOING AD PAYLOAD:", JSON.stringify(adPayload, null, 2));
     const adResult = await loggedMetaPost(merchantId, jobId, "ad", creds.accessToken, `${creds.adAccountId}/ads`, adPayload);
-    const adId = adResult.id;
+    const adId = adResult.id as string;
     stages[stages.length - 1] = { stage: "ad", status: "success", data: { adId } };
 
     const finalStatus = input.publishMode === "PUBLISH" ? "launched" : "draft";

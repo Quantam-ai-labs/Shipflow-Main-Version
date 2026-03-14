@@ -28,32 +28,18 @@ export interface SalesLaunchInput {
   publishMode: "VALIDATE" | "DRAFT" | "PUBLISH";
 }
 
-export function buildSalesCampaignPayload(input: SalesLaunchInput): Record<string, any> {
-  const isCBO = input.budgetLevel === "CBO";
-  const payload: Record<string, any> = {
-    name: input.adName,
-    objective: "OUTCOME_SALES",
-    status: "PAUSED",
-    special_ad_categories: [],
-    buying_type: "AUCTION",
-    is_adset_budget_sharing_enabled: isCBO,
-  };
-
-  if (isCBO) {
-    payload.daily_budget = Math.round(input.dailyBudget * 100);
-    payload.bid_strategy = "LOWEST_COST_WITHOUT_CAP";
-  }
-
-  return payload;
-}
-
 export function sanitizePayload(obj: Record<string, any>): Record<string, any> {
   const result: Record<string, any> = {};
   for (const [key, value] of Object.entries(obj)) {
     if (value === undefined || value === null || value === "") continue;
     if (typeof value === "number" && isNaN(value)) continue;
-    if (typeof value === "object" && !Array.isArray(value)) {
-      result[key] = sanitizePayload(value);
+    if (Array.isArray(value)) {
+      result[key] = value;
+    } else if (typeof value === "object") {
+      const cleaned = sanitizePayload(value);
+      if (Object.keys(cleaned).length > 0) {
+        result[key] = cleaned;
+      }
     } else {
       result[key] = value;
     }
@@ -61,75 +47,50 @@ export function sanitizePayload(obj: Record<string, any>): Record<string, any> {
   return result;
 }
 
-export function validateBudgetArchitecture(
-  campaignPayload: Record<string, any>,
-  adsetPayload: Record<string, any>,
-  budgetLevel: BudgetLevel
-): { valid: boolean; errors: string[] } {
-  const errors: string[] = [];
+export function buildCampaignPayload(input: SalesLaunchInput): Record<string, any> {
+  const isCBO = input.budgetLevel === "CBO";
+  const budgetCents = Math.round(input.dailyBudget * 100);
 
-  if (typeof campaignPayload.is_adset_budget_sharing_enabled !== "boolean") {
-    errors.push("Campaign payload must include is_adset_budget_sharing_enabled as a boolean");
+  const payload: Record<string, any> = {
+    name: input.adName,
+    objective: "OUTCOME_SALES",
+    status: "PAUSED",
+    special_ad_categories: [],
+    buying_type: "AUCTION",
+  };
+
+  if (isCBO) {
+    payload.daily_budget = budgetCents;
+    payload.bid_strategy = "LOWEST_COST_WITHOUT_CAP";
   }
 
-  if (budgetLevel === "CBO") {
-    if (!campaignPayload.daily_budget || campaignPayload.daily_budget <= 0) {
-      errors.push("CBO mode: campaign must have daily_budget > 0");
-    }
-    if (!campaignPayload.bid_strategy) {
-      errors.push("CBO mode: campaign must have bid_strategy");
-    }
-    if (adsetPayload.daily_budget) {
-      errors.push("CBO mode: ad set must NOT have daily_budget (budget is on campaign)");
-    }
-    if (adsetPayload.bid_strategy) {
-      errors.push("CBO mode: ad set must NOT have bid_strategy (bid strategy is on campaign)");
-    }
-  } else {
-    const forbiddenCampaignFields = ["bid_strategy", "daily_budget", "lifetime_budget"];
-    for (const field of forbiddenCampaignFields) {
-      if (field in campaignPayload) {
-        errors.push(`ABO mode: campaign must NOT include ${field}`);
-      }
-    }
-    if (!adsetPayload.daily_budget || adsetPayload.daily_budget <= 0) {
-      errors.push("ABO mode: ad set must have daily_budget > 0");
-    }
-  }
-
-  return { valid: errors.length === 0, errors };
+  return payload;
 }
 
-export function buildSalesAdSetPayload(
+export function buildAdSetPayload(
   input: SalesLaunchInput,
   campaignId: string
 ): Record<string, any> {
+  const isABO = input.budgetLevel === "ABO";
   const budgetCents = Math.round(input.dailyBudget * 100);
-
   const hasPixel = !!input.pixelId;
-  const optimizationGoal = hasPixel ? "OFFSITE_CONVERSIONS" : "LINK_CLICKS";
-
-  const targeting: Record<string, any> = {
-    geo_locations: {
-      countries: ["PK"],
-    },
-  };
-
-  const isCBO = input.budgetLevel === "CBO";
 
   const payload: Record<string, any> = {
     name: `${input.adName} - Ad Set`,
     campaign_id: campaignId,
-    optimization_goal: optimizationGoal,
+    optimization_goal: hasPixel ? "OFFSITE_CONVERSIONS" : "LINK_CLICKS",
     billing_event: "IMPRESSIONS",
-    targeting,
+    targeting: {
+      geo_locations: {
+        countries: ["PK"],
+      },
+    },
     status: "PAUSED",
-    use_advantage_audience: true,
   };
 
-  if (!isCBO) {
-    payload.bid_strategy = "LOWEST_COST_WITHOUT_CAP";
+  if (isABO) {
     payload.daily_budget = budgetCents;
+    payload.bid_strategy = "LOWEST_COST_WITHOUT_CAP";
   }
 
   if (hasPixel) {
@@ -146,9 +107,17 @@ export function buildSalesAdSetPayload(
   return payload;
 }
 
-export function buildImageSalesCreativePayload(
-  input: SalesLaunchInput
-): Record<string, any> {
+export function buildCreativePayload(input: SalesLaunchInput): Record<string, any> {
+  if (input.mode === "UPLOAD_IMAGE") {
+    return buildImageCreativePayload(input);
+  } else if (input.mode === "UPLOAD_VIDEO") {
+    return buildVideoCreativePayload(input);
+  } else {
+    return buildExistingPostCreativePayload(input);
+  }
+}
+
+function buildImageCreativePayload(input: SalesLaunchInput): Record<string, any> {
   const linkData: Record<string, any> = {
     image_hash: input.imageHash,
     link: input.destinationUrl,
@@ -175,9 +144,7 @@ export function buildImageSalesCreativePayload(
   };
 }
 
-export function buildVideoSalesCreativePayload(
-  input: SalesLaunchInput
-): Record<string, any> {
+function buildVideoCreativePayload(input: SalesLaunchInput): Record<string, any> {
   const videoData: Record<string, any> = {
     video_id: input.videoId,
     message: input.primaryText || "",
@@ -203,24 +170,25 @@ export function buildVideoSalesCreativePayload(
   };
 }
 
-export function buildExistingPostSalesCreativePayload(
-  input: SalesLaunchInput
-): Record<string, any> {
+function buildExistingPostCreativePayload(input: SalesLaunchInput): Record<string, any> {
   const payload: Record<string, unknown> = {
     name: `${input.adName} - Creative`,
   };
+
   if (input.existingPostSource === "instagram") {
     payload.source_instagram_media_id = input.existingPostId;
   } else {
     payload.object_story_id = input.existingPostId;
   }
+
   if (input.instagramAccountId) {
     payload.instagram_actor_id = input.instagramAccountId;
   }
+
   return payload;
 }
 
-export function buildSalesAdPayload(
+export function buildAdPayload(
   input: SalesLaunchInput,
   adsetId: string,
   creativeId: string
@@ -238,14 +206,6 @@ export function buildSalesAdPayload(
     ];
   }
 
-  if (input.destinationUrl) {
-    payload.tracking_specs = payload.tracking_specs || [];
-    payload.tracking_specs.push({
-      "action.type": ["link_click"],
-      "fb_pixel": input.pixelId ? [input.pixelId] : undefined,
-    });
-  }
-
   return payload;
 }
 
@@ -260,18 +220,42 @@ export function validateAllPayloads(
 
   if (!campaignPayload.name) errors.push("Campaign missing name");
   if (!campaignPayload.objective) errors.push("Campaign missing objective");
-  if (typeof campaignPayload.is_adset_budget_sharing_enabled !== "boolean") {
-    errors.push("Campaign missing is_adset_budget_sharing_enabled boolean");
+
+  if (input.budgetLevel === "CBO") {
+    if (!campaignPayload.daily_budget || campaignPayload.daily_budget <= 0) {
+      errors.push("CBO mode: campaign must have daily_budget > 0");
+    }
+    if (!campaignPayload.bid_strategy) {
+      errors.push("CBO mode: campaign must have bid_strategy");
+    }
+    if (adsetPayload.daily_budget) {
+      errors.push("CBO mode: ad set must NOT have daily_budget (budget is on campaign)");
+    }
+    if (adsetPayload.bid_strategy) {
+      errors.push("CBO mode: ad set must NOT have bid_strategy");
+    }
+  } else {
+    if (!adsetPayload.daily_budget || adsetPayload.daily_budget <= 0) {
+      errors.push("ABO mode: ad set must have daily_budget > 0");
+    }
+    if (campaignPayload.daily_budget) {
+      errors.push("ABO mode: campaign must NOT have daily_budget");
+    }
   }
 
-  if (!adsetPayload.daily_budget || adsetPayload.daily_budget <= 0) {
-    errors.push("Ad set missing daily_budget > 0");
+  if (campaignPayload.is_adset_budget_sharing_enabled !== undefined) {
+    errors.push("Campaign must NOT include is_adset_budget_sharing_enabled (Meta infers from budget placement)");
   }
+
   if (!adsetPayload.optimization_goal) errors.push("Ad set missing optimization_goal");
   if (!adsetPayload.targeting) errors.push("Ad set missing targeting");
 
-  if (!adPayload.adset_id) errors.push("Ad missing adset_id");
-  if (!adPayload.creative?.creative_id) errors.push("Ad missing creative.creative_id");
+  if (!adPayload.adset_id) {
+    errors.push("Ad missing adset_id");
+  }
+  if (adPayload.adset_id && adPayload.adset_id !== "__PENDING__" && !adPayload.creative?.creative_id) {
+    errors.push("Ad missing creative_id");
+  }
 
   if (input.mode === "UPLOAD_IMAGE" && !creativePayload.object_story_spec?.link_data?.image_hash) {
     errors.push("Image creative missing image_hash");
@@ -281,10 +265,6 @@ export function validateAllPayloads(
   }
   if (input.mode === "EXISTING_POST" && !creativePayload.object_story_id && !creativePayload.source_instagram_media_id) {
     errors.push("Existing post creative missing post ID");
-  }
-
-  if (input.pixelId && input.mode === "EXISTING_POST" && !input.destinationUrl) {
-    errors.push("Existing post with pixel tracking requires a destination URL");
   }
 
   return { valid: errors.length === 0, errors };
