@@ -236,20 +236,11 @@ async function executeSalesLaunchAsync(
           input.instagramActorId = igAccounts[0].id;
           console.log(`[SalesLaunch] Using instagram_actor_id from ad account: ${input.instagramActorId}`);
         } else {
-          const pageIgUrl = new URL(`${META_BASE_URL}/${input.pageId}`);
-          pageIgUrl.searchParams.set("access_token", creds.accessToken);
-          pageIgUrl.searchParams.set("fields", "instagram_business_account{id,username}");
-          const pageIgRes = await fetch(pageIgUrl.toString());
-          const pageIgData = await pageIgRes.json() as { instagram_business_account?: { id: string; username?: string } };
-          if (pageIgData?.instagram_business_account?.id) {
-            input.instagramActorId = pageIgData.instagram_business_account.id;
-            console.log(`[SalesLaunch] Using instagram_actor_id from page fallback: ${input.instagramActorId}`);
-          } else {
-            const errMsg = "No Instagram account linked to ad account or page. Instagram post ads require an Instagram Business account linked to your Ad Account in Meta Business Settings.";
-            stages.push({ stage: "ig_resolution", status: "failed", message: errMsg });
-            await persistStages(jobId, stages, { status: "failed", errorMessage: errMsg, errorSummary: "Instagram account not linked" });
-            return;
-          }
+          const errMsg = "No Instagram account linked to your Ad Account. To run ads from Instagram posts, link your Instagram Business account to the Ad Account in Meta Business Settings > Ad Accounts > Instagram Accounts.";
+          console.error(`[SalesLaunch] IG resolution failed: no IG accounts on ad account ${actId}`);
+          stages.push({ stage: "ig_resolution", status: "failed", message: errMsg });
+          await persistStages(jobId, stages, { status: "failed", errorMessage: errMsg, errorSummary: "Instagram account not linked to ad account" });
+          return;
         }
       } catch (igErr: unknown) {
         const igError = igErr instanceof Error ? igErr : new Error(String(igErr));
