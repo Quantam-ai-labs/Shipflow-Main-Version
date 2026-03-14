@@ -520,9 +520,6 @@ async function executeSalesLaunchAsync(
     stages.push({ stage: "ad", status: "running" });
     await persistStages(jobId, stages);
     const adPayload = sanitizePayload(buildAdPayload(input, adsetId, creativeId));
-    if (input.existingPostSource === "instagram" && input.instagramActorId) {
-      (adPayload.creative as Record<string, unknown>).instagram_actor_id = input.instagramActorId;
-    }
     console.log("[SalesLaunch] OUTGOING AD PAYLOAD:", JSON.stringify(adPayload, null, 2));
     const adResult = await loggedMetaPost(merchantId, jobId, "ad", creds.accessToken, `${creds.adAccountId}/ads`, adPayload);
     const adId = adResult.id as string;

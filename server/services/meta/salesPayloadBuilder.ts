@@ -198,8 +198,11 @@ function buildExistingPostCreativePayload(input: SalesLaunchInput): MetaPayload 
 
   if (input.existingPostSource === "instagram") {
     payload.source_instagram_media_id = input.existingPostId;
-    payload.instagram_actor_id = input.instagramActorId || undefined;
-    payload.object_story_spec = { page_id: input.pageId };
+    const igStorySpec: Record<string, unknown> = { page_id: input.pageId };
+    if (input.instagramActorId) {
+      igStorySpec.instagram_actor_id = input.instagramActorId;
+    }
+    payload.object_story_spec = igStorySpec;
   } else {
     payload.object_story_id = input.existingPostId;
   }
