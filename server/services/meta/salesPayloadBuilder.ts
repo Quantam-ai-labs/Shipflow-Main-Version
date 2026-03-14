@@ -32,9 +32,46 @@ export function buildSalesCampaignPayload(input: SalesLaunchInput): Record<strin
     status: "PAUSED",
     special_ad_categories: [],
     buying_type: "AUCTION",
-    bid_strategy: "LOWEST_COST_WITHOUT_CAP",
     is_adset_budget_sharing_enabled: false,
   };
+}
+
+export function sanitizePayload(obj: Record<string, any>): Record<string, any> {
+  const result: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value === undefined || value === null || value === "") continue;
+    if (typeof value === "number" && isNaN(value)) continue;
+    if (typeof value === "object" && !Array.isArray(value)) {
+      result[key] = sanitizePayload(value);
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+export function validateBudgetArchitecture(
+  campaignPayload: Record<string, any>,
+  adsetPayload: Record<string, any>
+): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+
+  if (typeof campaignPayload.is_adset_budget_sharing_enabled !== "boolean") {
+    errors.push("Campaign payload must include is_adset_budget_sharing_enabled as a boolean");
+  }
+
+  const forbiddenCampaignFields = ["bid_strategy", "daily_budget", "lifetime_budget", "budget_optimization"];
+  for (const field of forbiddenCampaignFields) {
+    if (field in campaignPayload) {
+      errors.push(`Campaign payload must NOT include ${field} when using ad-set-level budget`);
+    }
+  }
+
+  if (!adsetPayload.daily_budget || adsetPayload.daily_budget <= 0) {
+    errors.push("Ad set payload must include daily_budget > 0");
+  }
+
+  return { valid: errors.length === 0, errors };
 }
 
 export function buildSalesAdSetPayload(

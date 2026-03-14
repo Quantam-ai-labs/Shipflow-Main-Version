@@ -12,6 +12,8 @@ import {
   buildVideoSalesCreativePayload,
   buildExistingPostSalesCreativePayload,
   buildSalesAdPayload,
+  sanitizePayload,
+  validateBudgetArchitecture,
   type SalesLaunchInput,
 } from "./salesPayloadBuilder";
 import { parseMetaError, formatMetaErrorForUser, type ParsedMetaError } from "./metaErrorParser";
@@ -352,35 +354,51 @@ export async function executeSalesLaunch(
 
     await updateJobStage(jobId, "campaign", { status: "launching" });
     stages.push({ stage: "campaign", status: "running" });
-    const campaignPayload = buildSalesCampaignPayload(input);
+    const rawCampaignPayload = buildSalesCampaignPayload(input);
+    const rawAdsetPayload = buildSalesAdSetPayload(input, "__PENDING__");
+    const campaignPayload = sanitizePayload(rawCampaignPayload);
+    const adsetPayloadForValidation = sanitizePayload(rawAdsetPayload);
+
+    const budgetCheck = validateBudgetArchitecture(campaignPayload, adsetPayloadForValidation);
+    if (!budgetCheck.valid) {
+      const errMsg = `Budget architecture validation failed: ${budgetCheck.errors.join("; ")}`;
+      console.error("[SalesLaunch] PRE-FLIGHT BLOCKED:", errMsg);
+      stages[stages.length - 1] = { stage: "campaign", status: "failed", message: errMsg };
+      await updateJobStage(jobId, "campaign", { status: "failed", errorMessage: errMsg, errorSummary: "Budget validation failed" });
+      return { success: false, jobId, stages, error: errMsg, errorStage: "campaign" };
+    }
+
+    console.log("[SalesLaunch] OUTGOING CAMPAIGN PAYLOAD:", JSON.stringify(campaignPayload, null, 2));
     const campaignResult = await loggedMetaPost(merchantId, jobId, "campaign", creds.accessToken, `${creds.adAccountId}/campaigns`, campaignPayload);
     const campaignId = campaignResult.id;
     stages[stages.length - 1] = { stage: "campaign", status: "success", data: { campaignId } };
     await updateJobStage(jobId, "campaign", { metaCampaignId: campaignId });
 
     stages.push({ stage: "adset", status: "running" });
-    const adsetPayload = buildSalesAdSetPayload(input, campaignId);
+    const adsetPayload = sanitizePayload(buildSalesAdSetPayload(input, campaignId));
+    console.log("[SalesLaunch] OUTGOING ADSET PAYLOAD:", JSON.stringify(adsetPayload, null, 2));
     const adsetResult = await loggedMetaPost(merchantId, jobId, "adset", creds.accessToken, `${creds.adAccountId}/adsets`, adsetPayload);
     const adsetId = adsetResult.id;
     stages[stages.length - 1] = { stage: "adset", status: "success", data: { adsetId } };
     await updateJobStage(jobId, "adset", { metaAdsetId: adsetId });
 
     stages.push({ stage: "creative", status: "running" });
-    let creativePayload: Record<string, unknown>;
+    let rawCreativePayload: Record<string, unknown>;
     if (input.mode === "UPLOAD_IMAGE") {
-      creativePayload = buildImageSalesCreativePayload(input);
+      rawCreativePayload = buildImageSalesCreativePayload(input);
     } else if (input.mode === "UPLOAD_VIDEO") {
-      creativePayload = buildVideoSalesCreativePayload(input);
+      rawCreativePayload = buildVideoSalesCreativePayload(input);
     } else {
-      creativePayload = buildExistingPostSalesCreativePayload(input);
+      rawCreativePayload = buildExistingPostSalesCreativePayload(input);
     }
+    const creativePayload = sanitizePayload(rawCreativePayload as Record<string, any>);
     const creativeResult = await loggedMetaPost(merchantId, jobId, "creative", creds.accessToken, `${creds.adAccountId}/adcreatives`, creativePayload);
     const creativeId = creativeResult.id;
     stages[stages.length - 1] = { stage: "creative", status: "success", data: { creativeId } };
     await updateJobStage(jobId, "creative", { metaCreativeId: creativeId });
 
     stages.push({ stage: "ad", status: "running" });
-    const adPayload = buildSalesAdPayload(input, adsetId, creativeId);
+    const adPayload = sanitizePayload(buildSalesAdPayload(input, adsetId, creativeId));
     const adResult = await loggedMetaPost(merchantId, jobId, "ad", creds.accessToken, `${creds.adAccountId}/ads`, adPayload);
     const adId = adResult.id;
     stages[stages.length - 1] = { stage: "ad", status: "success", data: { adId } };

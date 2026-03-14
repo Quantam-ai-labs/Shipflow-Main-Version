@@ -1,0 +1,117 @@
+Fix the Meta Sales Launcher campaign builder for the current Marketing API version.
+
+CURRENT SITUATION
+We are using ad-set-level budget architecture for this simplified SALES launcher.
+Meta is now returning:
+- "Must specify True or False in is_adset_budget_sharing_enabled field"
+- and earlier it also returned "No Budget for Campaign"
+
+ROOT CAUSE
+The campaign payload is not aligned with current Meta API requirements for ad-set budget architecture.
+The launcher must explicitly handle:
+1. is_adset_budget_sharing_enabled at campaign level
+2. daily_budget at ad set level
+3. no accidental campaign-level bid strategy or campaign budget logic
+
+MANDATORY IMPLEMENTATION RULES
+
+1. CAMPAIGN PAYLOAD
+For this launcher, create a minimal SALES campaign payload.
+Include:
+- objective / outcome fields required for SALES
+- name
+- status as needed
+- special ad category handling if required
+- is_adset_budget_sharing_enabled: false
+
+IMPORTANT:
+Set is_adset_budget_sharing_enabled explicitly as a real boolean false for this launcher unless we intentionally want ad set budget sharing enabled.
+
+Do NOT send:
+- campaign daily_budget
+- campaign lifetime_budget
+- campaign budget optimization flags
+- campaign-level bid_strategy
+- any campaign-level budget fields
+unless we intentionally switch architecture
+
+2. AD SET PAYLOAD
+Put budget only at ad set level:
+- daily_budget
+- schedule
+- targeting
+- placements
+- promoted object / conversion linkage
+- optimization settings required for SALES
+
+3. REMOVE CONFLICTS
+Audit all helpers and shared builders for accidental injection of:
+- bid_strategy at campaign level
+- campaign budget fields
+- budget optimization flags
+- hidden defaults
+- strings instead of booleans
+- null / undefined / empty strings
+
+4. TYPE SAFETY
+Ensure:
+- is_adset_budget_sharing_enabled is actual boolean false
+- not "false"
+- not 0 unless API version explicitly expects that
+- not undefined
+- not null
+- not omitted
+
+5. SANITIZATION
+Before sending payloads to Meta, sanitize all payloads recursively:
+- remove undefined
+- remove null
+- remove empty strings
+- remove NaN
+But DO NOT remove explicit boolean false
+
+6. INTERNAL VALIDATION
+Add validation rules:
+- if ad-set budget architecture is used, campaign payload MUST include is_adset_budget_sharing_enabled as boolean
+- if campaign payload includes campaign-level bid_strategy, assert campaign-level budget exists
+- otherwise block internally before calling Meta
+- if ad-set budget is used, assert daily_budget exists on ad set payload
+
+7. EXISTING POST MODE
+Existing post mode must use the same budget architecture:
+- campaign payload still needs is_adset_budget_sharing_enabled boolean
+- ad set still needs daily_budget
+- existing post only changes creative path, not campaign budget architecture
+
+8. DEBUG LOGGING
+Show me the exact sanitized final outgoing:
+- campaign payload
+- ad set payload
+before Meta API call
+
+I want to confirm:
+campaign payload includes:
+  is_adset_budget_sharing_enabled: false
+and does NOT include:
+  campaign bid_strategy
+  campaign daily_budget
+  campaign lifetime_budget
+  campaign budget optimization flags
+
+9. TESTS
+Add tests that verify:
+- campaign payload includes is_adset_budget_sharing_enabled: false
+- campaign payload does not include campaign-level budget fields
+- campaign payload does not include campaign-level bid_strategy
+- ad set payload includes daily_budget
+- image mode, video mode, and existing-post mode all use the same campaign budget architecture
+
+EXPECTED RESULT
+After this fix:
+- the "Must specify True or False in is_adset_budget_sharing_enabled field" error should stop
+- the "No Budget for Campaign" error should also stop if campaign-level bid strategy / campaign budget logic is removed
+- the launcher should consistently use:
+  campaign = minimal shell + explicit is_adset_budget_sharing_enabled boolean
+  ad set = daily budget
+  creative = image/video/existing post
+  ad = final publish object
