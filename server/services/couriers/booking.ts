@@ -115,9 +115,15 @@ export function orderToPacket(order: Order, merchantBookingRemarks?: string | nu
       }).join(" | ")
     : (order.itemSummary || "Order items");
 
-  const notesParts: string[] = [];
-  if (order.notes) notesParts.push(order.notes);
-  notesParts.push(merchantBookingRemarks || COURIER_SPECIAL_INSTRUCTIONS);
+  let specialInstructions: string;
+  if (merchantBookingRemarks) {
+    specialInstructions = merchantBookingRemarks;
+  } else {
+    const notesParts: string[] = [];
+    if (order.notes) notesParts.push(order.notes);
+    notesParts.push(COURIER_SPECIAL_INSTRUCTIONS);
+    specialInstructions = notesParts.join(" - ");
+  }
 
   return {
     orderId: order.id,
@@ -129,7 +135,7 @@ export function orderToPacket(order: Order, merchantBookingRemarks?: string | nu
     codAmount: parseFloat(order.codRemaining ?? order.totalAmount) || 0,
     weight: 200,
     pieces,
-    specialInstructions: notesParts.join(" - "),
+    specialInstructions,
     itemSummary,
   };
 }
