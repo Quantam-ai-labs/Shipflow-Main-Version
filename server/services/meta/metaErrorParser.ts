@@ -38,7 +38,8 @@ const CODE_FIXES: Record<number, string> = {
 
 const PATTERN_FIXES: Array<{ pattern: string; fix: string }> = [
   { pattern: "Cannot Use Ad Set Budget Sharing", fix: "CBO/ABO conflict — budget placement is incorrect. Do not send is_adset_budget_sharing_enabled." },
-  { pattern: "instagram_actor_id", fix: "Instagram actor ID is invalid or should not be sent for this creative type." },
+  { pattern: "instagram_actor_id", fix: "Instagram user ID (instagram_user_id) is invalid or should not be sent for this creative type." },
+  { pattern: "instagram_user_id", fix: "Instagram user ID is invalid or should not be sent for this creative type." },
   { pattern: "object_story_spec.*object_story_id", fix: "Both object_story_spec and object_story_id were sent. Only one should be used." },
   { pattern: "Invalid parameter", fix: "A parameter in the request is invalid. Check the raw Meta error for the specific field name." },
   { pattern: "daily_budget.*too low", fix: "The daily budget is below Meta's minimum. Increase the budget amount." },

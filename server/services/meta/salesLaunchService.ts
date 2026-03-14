@@ -259,7 +259,7 @@ async function executeSalesLaunchAsync(
 
         if (igAccounts.length > 0) {
           input.instagramActorId = igAccounts[0].id;
-          console.log(`[SalesLaunch] Using instagram_actor_id from ad account: ${input.instagramActorId}`);
+          console.log(`[SalesLaunch] Using instagram_user_id from ad account: ${input.instagramActorId}`);
         } else {
           const errMsg = "No Instagram account linked to your Ad Account. To run ads from Instagram posts, link your Instagram Business account to the Ad Account in Meta Business Settings > Ad Accounts > Instagram Accounts.";
           console.error(`[SalesLaunch] IG resolution failed: no IG accounts on ad account ${actId}`);
