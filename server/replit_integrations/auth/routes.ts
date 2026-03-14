@@ -94,7 +94,7 @@ export function registerAuthRoutes(app: Express): void {
       });
 
       const { merchant, user } = result;
-      req.session.cookie.maxAge = 12 * 60 * 60 * 1000;
+      req.session.cookie.maxAge = 365 * 24 * 60 * 60 * 1000;
       const deviceName = parseUserAgent(req.headers["user-agent"]);
       await db.update(users).set({ lastLoginAt: new Date(), lastLoginDevice: deviceName }).where(eq(users.id, user.id));
       (req.session as any).userId = user.id;
@@ -160,7 +160,7 @@ export function registerAuthRoutes(app: Express): void {
 
       if (!otpNeeded) {
         const deviceName = parseUserAgent(req.headers["user-agent"]);
-        req.session.cookie.maxAge = 12 * 60 * 60 * 1000;
+        req.session.cookie.maxAge = 365 * 24 * 60 * 60 * 1000;
         await db.update(users).set({
           lastLoginAt: new Date(),
           lastLoginDevice: deviceName,
@@ -257,7 +257,7 @@ export function registerAuthRoutes(app: Express): void {
         }
       }
 
-      const sessionMaxAge = rememberDevice ? 7 * 24 * 60 * 60 * 1000 : 12 * 60 * 60 * 1000;
+      const sessionMaxAge = 365 * 24 * 60 * 60 * 1000;
       req.session.cookie.maxAge = sessionMaxAge;
 
       const deviceName = parseUserAgent(req.headers["user-agent"]);
@@ -383,7 +383,7 @@ export function registerAuthRoutes(app: Express): void {
         return res.status(403).json({ message: "Your account has been deactivated." });
       }
 
-      req.session.cookie.maxAge = 24 * 60 * 60 * 1000;
+      req.session.cookie.maxAge = 365 * 24 * 60 * 60 * 1000;
 
       const deviceName = parseUserAgent(req.headers["user-agent"]);
       const trimmedAdminName = displayName.trim();

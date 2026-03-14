@@ -3,8 +3,8 @@ import type { Express, RequestHandler } from "express";
 import connectPg from "connect-pg-simple";
 
 export function getSession() {
-  const sessionTtlMs = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds (max possible; actual per-session maxAge set at login)
-  const sessionTtlSec = 7 * 24 * 60 * 60; // 7 days in seconds (for pg store ttl)
+  const sessionTtlMs = 365 * 24 * 60 * 60 * 1000; // 365 days in milliseconds
+  const sessionTtlSec = 365 * 24 * 60 * 60; // 365 days in seconds (for pg store ttl)
   const pgStore = connectPg(session);
   const sessionStore = new pgStore({
     conString: process.env.DATABASE_URL,

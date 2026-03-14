@@ -1,4 +1,4 @@
-import { useState, Component, ErrorInfo, ReactNode } from "react";
+import { useState, Component, ErrorInfo, ReactNode, Suspense, lazy } from "react";
 import { Switch, Route, Redirect, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -49,81 +49,91 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
   }
 }
 
+function PageLoader() {
+  return (
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <p className="text-sm text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+  
 import AuthPage from "@/pages/auth";
-import Dashboard from "@/pages/dashboard";
-import Pipeline from "@/pages/pipeline";
-import OrderDetails from "@/pages/order-details";
-import Shipments from "@/pages/shipments";
-import Analytics from "@/pages/analytics";
-import CodReconciliationHub from "@/pages/cod-reconciliation-hub";
-import PaymentLedger from "@/pages/payment-ledger";
-import ManageCheques from "@/pages/manage-cheques";
-import Team from "@/pages/team";
-import Settings from "@/pages/settings";
+import Landing from "@/pages/landing";
+import NotFound from "@/pages/not-found";
+import PrivacyPolicy from "@/pages/legal/privacy-policy";
+import TermsOfService from "@/pages/legal/terms-of-service";
+import DataDeletion from "@/pages/legal/data-deletion";
 import Onboarding from "@/pages/onboarding";
 import AdminPanel from "@/pages/admin";
 import AdminLoginPage from "@/pages/admin-login";
 import MerchantSetup from "@/pages/merchant-setup";
-import InviteAccept from "@/pages/invite-accept";
-
-import PrintLabels from "@/pages/print-labels";
-import Products from "@/pages/products";
-import ShopifyProducts from "@/pages/shopify-products";
-import ShopifyProductDetail from "@/pages/shopify-product-detail";
-import ProductAnalytics from "@/pages/product-analytics";
-import ExpenseTracker from "@/pages/expense-tracker";
-import CourierDues from "@/pages/courier-dues";
-import FinancialDashboard from "@/pages/financial-dashboard";
-import AccountingOverview from "@/pages/accounting/overview";
-import AccountingParties from "@/pages/accounting/parties";
-import AccountingProducts from "@/pages/accounting/products";
-import AccountingStock from "@/pages/accounting/stock";
-import AccountingSales from "@/pages/accounting/sales";
-import SaleOrdersPage from "@/pages/accounting/sale-orders";
-import AccountingExpenses from "@/pages/accounting/expenses";
-import AccountingCodReceivable from "@/pages/accounting/cod-receivable";
-import AccountingCourierPayable from "@/pages/accounting/courier-payable";
-import AccountingPnl from "@/pages/accounting/reports/pnl";
-import AccountingBalanceSheet from "@/pages/accounting/reports/balance-sheet";
-import AccountingCashFlow from "@/pages/accounting/reports/cash-flow";
-import AccountingStockReport from "@/pages/accounting/reports/stock";
-import AccountingPartyBalances from "@/pages/accounting/reports/party-balances";
-import AccountingLedger from "@/pages/accounting/ledger";
-import AccountingTrialBalance from "@/pages/accounting/trial-balance";
-import AccountingCashAccounts from "@/pages/accounting/cash-accounts";
-import AccountingSettings from "@/pages/accounting/settings";
-import AccountingTransactions from "@/pages/accounting/transactions";
-import OpeningBalancesPage from "@/pages/accounting/opening-balances";
-import MarketingDashboard from "@/pages/marketing/dashboard";
-import AdsManager from "@/pages/marketing/ads-manager";
-import AdsProfitability from "@/pages/marketing/ads-profitability";
-import AdAttribution from "@/pages/marketing/ad-attribution";
-import RevenueTruth from "@/pages/marketing/revenue-truth";
-import ReportsHub from "@/pages/reports";
-import AIAssistant from "@/pages/ai-assistant";
-import SupportDashboardPage from "@/pages/support/dashboard";
-import SupportTemplatesPage from "@/pages/support/templates";
-import SupportChatPage from "@/pages/support/chat";
-import SupportConnectionPage from "@/pages/support/connection";
-import SupportRoboCallPage from "@/pages/support/robocall";
-import SupportCallQueuePage from "@/pages/support/call-queue";
-import SalesLauncher from "@/pages/meta/sales-launcher";
-import MetaMediaLibrary from "@/pages/meta/media-library";
-import MetaBulkLaunch from "@/pages/meta/bulk-launch";
-import MetaCampaigns from "@/pages/meta/campaigns";
-import MetaAudiences from "@/pages/meta/audiences";
-import MetaAutomationRules from "@/pages/meta/automation-rules";
-import PrivacyPolicy from "@/pages/legal/privacy-policy";
-import TermsOfService from "@/pages/legal/terms-of-service";
-import DataDeletion from "@/pages/legal/data-deletion";
-import Landing from "@/pages/landing";
-import PricingPage from "@/pages/pricing";
-import ContactPage from "@/pages/contact";
-import NotFound from "@/pages/not-found";
-import LoadsheetPage from "@/pages/loadsheet";
 import WarehousePage from "@/pages/warehouse";
 import AgentChatPage from "@/pages/agent-chat";
 
+const Dashboard = lazy(() => import("@/pages/dashboard"));
+const Pipeline = lazy(() => import("@/pages/pipeline"));
+const OrderDetails = lazy(() => import("@/pages/order-details"));
+const Shipments = lazy(() => import("@/pages/shipments"));
+const Analytics = lazy(() => import("@/pages/analytics"));
+const CodReconciliationHub = lazy(() => import("@/pages/cod-reconciliation-hub"));
+const PaymentLedger = lazy(() => import("@/pages/payment-ledger"));
+const ManageCheques = lazy(() => import("@/pages/manage-cheques"));
+const Team = lazy(() => import("@/pages/team"));
+const Settings = lazy(() => import("@/pages/settings"));
+const InviteAccept = lazy(() => import("@/pages/invite-accept"));
+const PrintLabels = lazy(() => import("@/pages/print-labels"));
+const Products = lazy(() => import("@/pages/products"));
+const ShopifyProducts = lazy(() => import("@/pages/shopify-products"));
+const ShopifyProductDetail = lazy(() => import("@/pages/shopify-product-detail"));
+const ProductAnalytics = lazy(() => import("@/pages/product-analytics"));
+const ExpenseTracker = lazy(() => import("@/pages/expense-tracker"));
+const CourierDues = lazy(() => import("@/pages/courier-dues"));
+const FinancialDashboard = lazy(() => import("@/pages/financial-dashboard"));
+const AccountingOverview = lazy(() => import("@/pages/accounting/overview"));
+const AccountingParties = lazy(() => import("@/pages/accounting/parties"));
+const AccountingProducts = lazy(() => import("@/pages/accounting/products"));
+const AccountingStock = lazy(() => import("@/pages/accounting/stock"));
+const AccountingSales = lazy(() => import("@/pages/accounting/sales"));
+const SaleOrdersPage = lazy(() => import("@/pages/accounting/sale-orders"));
+const AccountingExpenses = lazy(() => import("@/pages/accounting/expenses"));
+const AccountingCodReceivable = lazy(() => import("@/pages/accounting/cod-receivable"));
+const AccountingCourierPayable = lazy(() => import("@/pages/accounting/courier-payable"));
+const AccountingPnl = lazy(() => import("@/pages/accounting/reports/pnl"));
+const AccountingBalanceSheet = lazy(() => import("@/pages/accounting/reports/balance-sheet"));
+const AccountingCashFlow = lazy(() => import("@/pages/accounting/reports/cash-flow"));
+const AccountingStockReport = lazy(() => import("@/pages/accounting/reports/stock"));
+const AccountingPartyBalances = lazy(() => import("@/pages/accounting/reports/party-balances"));
+const AccountingLedger = lazy(() => import("@/pages/accounting/ledger"));
+const AccountingTrialBalance = lazy(() => import("@/pages/accounting/trial-balance"));
+const AccountingCashAccounts = lazy(() => import("@/pages/accounting/cash-accounts"));
+const AccountingSettings = lazy(() => import("@/pages/accounting/settings"));
+const AccountingTransactions = lazy(() => import("@/pages/accounting/transactions"));
+const OpeningBalancesPage = lazy(() => import("@/pages/accounting/opening-balances"));
+const MarketingDashboard = lazy(() => import("@/pages/marketing/dashboard"));
+const AdsManager = lazy(() => import("@/pages/marketing/ads-manager"));
+const AdsProfitability = lazy(() => import("@/pages/marketing/ads-profitability"));
+const AdAttribution = lazy(() => import("@/pages/marketing/ad-attribution"));
+const RevenueTruth = lazy(() => import("@/pages/marketing/revenue-truth"));
+const ReportsHub = lazy(() => import("@/pages/reports"));
+const AIAssistant = lazy(() => import("@/pages/ai-assistant"));
+const SupportDashboardPage = lazy(() => import("@/pages/support/dashboard"));
+const SupportTemplatesPage = lazy(() => import("@/pages/support/templates"));
+const SupportChatPage = lazy(() => import("@/pages/support/chat"));
+const SupportConnectionPage = lazy(() => import("@/pages/support/connection"));
+const SupportRoboCallPage = lazy(() => import("@/pages/support/robocall"));
+const SupportCallQueuePage = lazy(() => import("@/pages/support/call-queue"));
+const SalesLauncher = lazy(() => import("@/pages/meta/sales-launcher"));
+const MetaMediaLibrary = lazy(() => import("@/pages/meta/media-library"));
+const MetaBulkLaunch = lazy(() => import("@/pages/meta/bulk-launch"));
+const MetaCampaigns = lazy(() => import("@/pages/meta/campaigns"));
+const MetaAudiences = lazy(() => import("@/pages/meta/audiences"));
+const MetaAutomationRules = lazy(() => import("@/pages/meta/automation-rules"));
+const PricingPage = lazy(() => import("@/pages/pricing"));
+const ContactPage = lazy(() => import("@/pages/contact"));
+const LoadsheetPage = lazy(() => import("@/pages/loadsheet"));
 function OnboardingBanner() {
   return (
     <div className="bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-800 px-4 py-2 flex items-center justify-between gap-2" data-testid="banner-onboarding">
@@ -236,6 +246,7 @@ function ProtectedRoute({ component: Component, path }: { component: React.Compo
 function AppRoutes() {
   const { canAccess } = usePageAccess();
   return (
+    <Suspense fallback={<PageLoader />}>
     <Switch>
       <Route path="/">
         <Redirect to="/dashboard" />
@@ -319,6 +330,7 @@ function AppRoutes() {
       <Route path="/admin" component={AdminPanel} />
       <Route component={NotFound} />
     </Switch>
+    </Suspense>
   );
 }
 
@@ -522,12 +534,16 @@ function MainApp() {
   if (location.startsWith("/privacy-policy")) return <PrivacyPolicy />;
   if (location.startsWith("/terms-of-service")) return <TermsOfService />;
   if (location.startsWith("/data-deletion")) return <DataDeletion />;
-  if (location === "/pricing") return <PricingPage />;
-  if (location === "/contact") return <ContactPage />;
+  if (location === "/pricing") return <Suspense fallback={<PageLoader />}><PricingPage /></Suspense>;
+  if (location === "/contact") return <Suspense fallback={<PageLoader />}><ContactPage /></Suspense>;
 
   if (!isAuthenticated) {
     if (location === "/" || location === "") return <Landing />;
     return <AuthPage />;
+  }
+
+  if (location === "/" || location === "") {
+    return <Redirect to="/dashboard" />;
   }
 
   // Super Admin users go straight to admin panel (no merchant needed)
@@ -543,7 +559,7 @@ function MainApp() {
   }
 
   if (location.startsWith("/print-labels")) {
-    return <PrintLabels />;
+    return <Suspense fallback={<PageLoader />}><PrintLabels /></Suspense>;
   }
 
   if (user?.merchant?.onboardingStep !== "COMPLETED" && location !== "/onboarding" && location !== "/admin") {
