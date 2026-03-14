@@ -10,7 +10,6 @@ import {
   buildAdSetPayload,
   buildCreativePayload,
   buildAdPayload,
-  buildExistingPostCreativeFallback,
   sanitizePayload,
   validateAllPayloads,
   type SalesLaunchInput,
@@ -499,22 +498,9 @@ async function executeSalesLaunchAsync(
     stages.push({ stage: "creative", status: "running" });
     await persistStages(jobId, stages);
     console.log("[SalesLaunch] OUTGOING CREATIVE PAYLOAD:", JSON.stringify(creativePayload, null, 2));
-    let creativeId: string;
-    let usedFallbackCreative = false;
-    try {
-      const creativeResult = await loggedMetaPost(merchantId, jobId, "creative", creds.accessToken, `${creds.adAccountId}/adcreatives`, creativePayload);
-      creativeId = creativeResult.id as string;
-    } catch (creativeErr) {
-      const fallbackPayload = buildExistingPostCreativeFallback(input);
-      if (!fallbackPayload) throw creativeErr;
-      console.warn("[SalesLaunch] Primary creative failed, trying fallback without instagram_actor_id:", (creativeErr as Error).message);
-      const fallbackSanitized = sanitizePayload(fallbackPayload);
-      console.log("[SalesLaunch] FALLBACK CREATIVE PAYLOAD:", JSON.stringify(fallbackSanitized, null, 2));
-      const fallbackResult = await loggedMetaPost(merchantId, jobId, "creative_fallback", creds.accessToken, `${creds.adAccountId}/adcreatives`, fallbackSanitized);
-      creativeId = fallbackResult.id as string;
-      usedFallbackCreative = true;
-    }
-    stages[stages.length - 1] = { stage: "creative", status: "success", data: { creativeId, usedFallback: usedFallbackCreative } };
+    const creativeResult = await loggedMetaPost(merchantId, jobId, "creative", creds.accessToken, `${creds.adAccountId}/adcreatives`, creativePayload);
+    const creativeId = creativeResult.id as string;
+    stages[stages.length - 1] = { stage: "creative", status: "success", data: { creativeId } };
     await persistStages(jobId, stages, { metaCreativeId: creativeId });
 
     stages.push({ stage: "ad", status: "running" });
