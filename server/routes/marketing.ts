@@ -46,7 +46,7 @@ import {
 } from "../services/metaAdLauncher";
 import { startSalesLaunch } from "../services/meta/salesLaunchService";
 import { runDiagnostics } from "../services/meta/salesDiagnostics";
-import { normalizeInput, validateLaunchInput, validateMediaReadiness, type ValidationIssue } from "../services/meta/salesValidation";
+import { normalizeInput, validateLaunchInput, validateMediaReadiness, validateConnection, type ValidationIssue } from "../services/meta/salesValidation";
 import { generateChatResponse, generateDashboardInsights, generateQuickStrategy } from "../services/aiInsights";
 import crypto from "crypto";
 
@@ -3044,7 +3044,6 @@ export function registerMarketingRoutes(app: Express) {
       let mediaIssues: ValidationIssue[] = [];
       try {
         const creds = await getCredentialsForMerchant(merchantId);
-        const { validateConnection } = await import("../services/meta/salesValidation");
         connectionIssues = await validateConnection(creds.accessToken, creds.adAccountId, normalized.pageId, merchantId);
 
         if (connectionIssues.length === 0) {
