@@ -406,7 +406,6 @@ export default function SalesLauncher() {
     ...(isExistingPost
       ? [
           { label: "Post selected", ok: !!selectedPostId },
-          { label: "Destination URL", ok: !!destinationUrl.trim() },
         ]
       : [
           { label: "Destination URL", ok: !!destinationUrl.trim() },
