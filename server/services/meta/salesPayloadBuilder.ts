@@ -205,12 +205,11 @@ function buildExistingPostCreativePayload(input: SalesLaunchInput): MetaPayload 
 
   if (input.existingPostSource === "instagram") {
     payload.source_instagram_media_id = input.existingPostId;
+    if (input.instagramAccountId) {
+      payload.instagram_actor_id = input.instagramAccountId;
+    }
   } else {
     payload.object_story_id = input.existingPostId;
-  }
-
-  if (input.instagramAccountId) {
-    payload.instagram_actor_id = input.instagramAccountId;
   }
 
   return payload;

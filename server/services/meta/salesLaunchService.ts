@@ -491,8 +491,12 @@ async function executeSalesLaunchAsync(
   } catch (caughtErr: unknown) {
     const error = caughtErr instanceof MetaApiError ? caughtErr : caughtErr instanceof Error ? caughtErr : new Error(String(caughtErr));
     const currentStage = stages[stages.length - 1]?.stage || "unknown";
-    const parsedData = error instanceof MetaApiError ? { parsed: error.parsed } : null;
-    stages[stages.length - 1] = { stage: currentStage, status: "failed", message: error.message, data: parsedData ?? undefined };
+    const errorData: Record<string, unknown> = {};
+    if (error instanceof MetaApiError) {
+      errorData.parsed = error.parsed;
+      errorData.rawError = error.metaError;
+    }
+    stages[stages.length - 1] = { stage: currentStage, status: "failed", message: error.message, data: Object.keys(errorData).length > 0 ? errorData : undefined };
 
     await persistStages(jobId, stages, {
       status: "failed",

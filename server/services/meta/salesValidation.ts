@@ -73,9 +73,6 @@ export function validateLaunchInput(input: SalesLaunchInput): ValidationIssue[] 
     if (!input.existingPostId) {
       issues.push({ code: "MISSING_POST_ID", field: "existingPostId", stage: "media", message: "An existing post must be selected.", fixSuggestion: "Select a post from your Facebook or Instagram Page." });
     }
-    if (!input.destinationUrl) {
-      issues.push({ code: "MISSING_URL", field: "destinationUrl", stage: "input", message: "Destination URL is required for conversion tracking.", fixSuggestion: "Enter a website URL." });
-    }
   }
 
   if (input.destinationUrl) {
