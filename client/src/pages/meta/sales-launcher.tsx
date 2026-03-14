@@ -3,7 +3,6 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,7 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   CheckCircle2, XCircle, AlertTriangle, Loader2, Rocket, Activity, Image, Video,
-  FileText, Search, ChevronDown, RefreshCw, ExternalLink, Info, Upload,
+  FileText, Search, ChevronDown, RefreshCw, ExternalLink, Info, Upload, History,
+  Zap, Globe, Target, DollarSign,
 } from "lucide-react";
 
 type CreativeMode = "UPLOAD_IMAGE" | "UPLOAD_VIDEO" | "EXISTING_POST";
@@ -73,20 +73,24 @@ const CTA_OPTIONS = [
   { value: "WHATSAPP_MESSAGE", label: "WhatsApp Message" },
 ];
 
+const glassCard = "relative rounded-2xl border border-white/20 dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.04] backdrop-blur-xl";
+const glassCardHover = `${glassCard} transition-all duration-300`;
+const glassInner = "rounded-xl border border-black/[0.04] dark:border-white/[0.06] bg-white/40 dark:bg-white/[0.03] backdrop-blur-sm";
+
 function StatusIcon({ status }: { status: string }) {
   switch (status) {
     case "pass":
     case "success":
-      return <CheckCircle2 className="h-4 w-4 text-green-600" />;
+      return <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
     case "fail":
     case "failed":
-      return <XCircle className="h-4 w-4 text-red-600" />;
+      return <XCircle className="h-4 w-4 text-red-500" />;
     case "warn":
-      return <AlertTriangle className="h-4 w-4 text-yellow-600" />;
+      return <AlertTriangle className="h-4 w-4 text-amber-500" />;
     case "running":
-      return <Loader2 className="h-4 w-4 text-blue-600 animate-spin" />;
+      return <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />;
     default:
-      return <div className="h-4 w-4 rounded-full border-2 border-muted" />;
+      return <div className="h-4 w-4 rounded-full border-2 border-black/10 dark:border-white/10" />;
   }
 }
 
@@ -109,6 +113,10 @@ const STAGE_LABELS: Record<string, string> = {
   complete: "Complete",
 };
 
+function getDefaultBudget(currency: string): string {
+  return currency === "PKR" ? "2800" : "10";
+}
+
 export default function SalesLauncher() {
   const { toast } = useToast();
   const [adName, setAdName] = useState("");
@@ -118,8 +126,8 @@ export default function SalesLauncher() {
   const [headline, setHeadline] = useState("");
   const [description, setDescription] = useState("");
   const [cta, setCta] = useState("SHOP_NOW");
-  const [dailyBudget, setDailyBudget] = useState("500");
-  const [budgetLevel, setBudgetLevel] = useState<"CBO" | "ABO">("ABO");
+  const [dailyBudget, setDailyBudget] = useState("10");
+  const [budgetLevel, setBudgetLevel] = useState<"CBO" | "ABO">("CBO");
   const [publishMode, setPublishMode] = useState<PublishMode>("VALIDATE");
   const [startMode, setStartMode] = useState<"NOW" | "SCHEDULED">("NOW");
   const [startTime, setStartTime] = useState("");
@@ -139,6 +147,7 @@ export default function SalesLauncher() {
   const [launchStages, setLaunchStages] = useState<LaunchStage[]>([]);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [showRawError, setShowRawError] = useState(false);
+  const [budgetInitialized, setBudgetInitialized] = useState(false);
 
   const metaStatusQuery = useQuery<any>({ queryKey: ["/api/meta/oauth/status"] });
   const metaStatus = metaStatusQuery.data;
@@ -164,6 +173,18 @@ export default function SalesLauncher() {
   });
   const igAccounts: MetaIgAccount[] = igAccountsQuery.data?.instagramAccounts || [];
   const [selectedIgAccountId, setSelectedIgAccountId] = useState("");
+
+  useEffect(() => {
+    if (pages.length > 0 && !selectedPageId) {
+      setSelectedPageId(pages[0].id);
+    }
+  }, [pages, selectedPageId]);
+
+  useEffect(() => {
+    if (pixels.length > 0 && !selectedPixelId) {
+      setSelectedPixelId(pixels[0].id);
+    }
+  }, [pixels, selectedPixelId]);
 
   useEffect(() => {
     if (igAccounts.length > 0 && !selectedIgAccountId) {
@@ -205,6 +226,10 @@ export default function SalesLauncher() {
       setDiagnosticsResult(data);
       if (data.adAccountCurrency) {
         setAccountCurrency(data.adAccountCurrency);
+        if (!budgetInitialized) {
+          setDailyBudget(getDefaultBudget(data.adAccountCurrency));
+          setBudgetInitialized(true);
+        }
       }
       toast({
         title: data.passed ? "Diagnostics passed" : "Diagnostics found issues",
@@ -414,51 +439,60 @@ export default function SalesLauncher() {
         ]),
   ];
   const allValid = validationChecklist.every(c => c.ok);
+  const validCount = validationChecklist.filter(c => c.ok).length;
 
   if (!isConnected) {
     return (
-      <div className="p-4 md:p-6 max-w-[900px] mx-auto space-y-6" data-testid="sales-launcher-page">
-        <h1 className="text-2xl font-bold" data-testid="text-page-title">Sales Launcher</h1>
-        <Card>
-          <CardContent className="p-6 text-center space-y-4">
-            <AlertTriangle className="h-12 w-12 text-yellow-500 mx-auto" />
-            <p className="text-lg font-medium">Meta Not Connected</p>
-            <p className="text-muted-foreground">Connect your Meta account in Settings &gt; Marketing to use the Sales Launcher.</p>
-          </CardContent>
-        </Card>
+      <div className="p-4 md:p-6 max-w-[880px] mx-auto space-y-6" data-testid="sales-launcher-page">
+        <h1 className="text-2xl font-semibold tracking-tight" data-testid="text-page-title">Sales Launcher</h1>
+        <div className={`${glassCard} p-8 text-center space-y-4`}>
+          <div className="w-16 h-16 rounded-2xl bg-amber-50 dark:bg-amber-500/10 flex items-center justify-center mx-auto">
+            <AlertTriangle className="h-8 w-8 text-amber-500" />
+          </div>
+          <p className="text-lg font-medium">Meta Not Connected</p>
+          <p className="text-muted-foreground text-sm max-w-md mx-auto">Connect your Meta account in Settings &gt; Marketing to use the Sales Launcher.</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="p-4 md:p-6 max-w-[900px] mx-auto space-y-6" data-testid="sales-launcher-page">
+    <div className="p-4 md:p-6 max-w-[880px] mx-auto space-y-5" data-testid="sales-launcher-page">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold" data-testid="text-page-title">Sales Launcher</h1>
-          <p className="text-sm text-muted-foreground">Launch SALES campaigns with broad Pakistan targeting</p>
+          <h1 className="text-2xl font-semibold tracking-tight" data-testid="text-page-title">Sales Launcher</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">Launch SALES campaigns with broad Pakistan targeting</p>
         </div>
-        <Badge variant="outline" className="gap-1">
-          <Activity className="h-3 w-3" />
-          {metaStatus?.businessName || "Connected"}
-        </Badge>
+        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200/60 dark:border-emerald-500/20">
+          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">{metaStatus?.businessName || "Connected"}</span>
+        </div>
       </div>
 
-      {/* SECTION A: Diagnostics */}
-      <Card data-testid="section-diagnostics">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Connection & Diagnostics</CardTitle>
-          <CardDescription>Verify your Meta account is ready to launch ads</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
-            <div>
-              <span className="text-muted-foreground">Ad Account</span>
-              <p className="font-medium truncate">{metaStatus?.adAccountId || "—"}</p>
+      {/* SECTION A: Connection & Diagnostics */}
+      <div className={glassCard} data-testid="section-diagnostics">
+        <div className="px-5 pt-4 pb-3">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center">
+              <Globe className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
             </div>
             <div>
-              <span className="text-muted-foreground">Page</span>
+              <h2 className="text-sm font-semibold">Connection & Diagnostics</h2>
+              <p className="text-xs text-muted-foreground">Verify your Meta account is ready to launch ads</p>
+            </div>
+          </div>
+        </div>
+        <div className="px-5 pb-5 space-y-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+            <div>
+              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Ad Account</span>
+              <p className="font-medium text-xs truncate mt-1">{metaStatus?.adAccountId || "—"}</p>
+            </div>
+            <div>
+              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Page</span>
               <Select value={selectedPageId} onValueChange={setSelectedPageId}>
-                <SelectTrigger className="h-8 text-xs mt-0.5" data-testid="select-page">
+                <SelectTrigger className="h-8 text-xs mt-1 bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]" data-testid="select-page">
                   <SelectValue placeholder="Select page" />
                 </SelectTrigger>
                 <SelectContent>
@@ -469,9 +503,9 @@ export default function SalesLauncher() {
               </Select>
             </div>
             <div>
-              <span className="text-muted-foreground">Instagram</span>
+              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Instagram</span>
               <Select value={selectedIgAccountId} onValueChange={setSelectedIgAccountId}>
-                <SelectTrigger className="h-8 text-xs mt-0.5" data-testid="select-ig-account">
+                <SelectTrigger className="h-8 text-xs mt-1 bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]" data-testid="select-ig-account">
                   <SelectValue placeholder="None (optional)" />
                 </SelectTrigger>
                 <SelectContent>
@@ -485,9 +519,9 @@ export default function SalesLauncher() {
               </Select>
             </div>
             <div>
-              <span className="text-muted-foreground">Pixel</span>
+              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Pixel</span>
               <Select value={selectedPixelId} onValueChange={setSelectedPixelId}>
-                <SelectTrigger className="h-8 text-xs mt-0.5" data-testid="select-pixel">
+                <SelectTrigger className="h-8 text-xs mt-1 bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]" data-testid="select-pixel">
                   <SelectValue placeholder="None (optional)" />
                 </SelectTrigger>
                 <SelectContent>
@@ -504,74 +538,84 @@ export default function SalesLauncher() {
                 variant="outline"
                 onClick={() => diagnosticsMutation.mutate()}
                 disabled={diagnosticsMutation.isPending}
+                className="w-full h-8 text-xs bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08] hover:bg-white/80 dark:hover:bg-white/[0.1] transition-all"
                 data-testid="button-run-diagnostics"
               >
-                {diagnosticsMutation.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <RefreshCw className="h-3 w-3 mr-1" />}
-                Run Diagnostics
+                {diagnosticsMutation.isPending ? <Loader2 className="h-3 w-3 mr-1.5 animate-spin" /> : <RefreshCw className="h-3 w-3 mr-1.5" />}
+                Diagnostics
               </Button>
             </div>
           </div>
 
           {diagnosticsResult && (
-            <div className="border rounded-md p-3 space-y-2" data-testid="diagnostics-results">
+            <div className={`${glassInner} p-3 space-y-1.5`} data-testid="diagnostics-results">
               {diagnosticsResult.checks.map((check, i) => (
                 <div key={i} className="flex items-center gap-2 text-sm">
                   <StatusIcon status={check.status} />
-                  <span className="font-medium w-28">{check.name}</span>
-                  <span className="text-muted-foreground">{check.message}</span>
+                  <span className="font-medium w-28 text-xs">{check.name}</span>
+                  <span className="text-muted-foreground text-xs">{check.message}</span>
                 </div>
               ))}
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      {/* SECTION B: Launch Form */}
-      <Card data-testid="section-form">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Sales Ad Configuration</CardTitle>
-          <CardDescription>Only SALES objective • Pakistan broad targeting • Automatic placements</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
+      {/* SECTION B: Sales Ad Configuration */}
+      <div className={glassCard} data-testid="section-form">
+        <div className="px-5 pt-4 pb-3">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-violet-50 dark:bg-violet-500/10 flex items-center justify-center">
+              <Target className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold">Sales Ad Configuration</h2>
+              <p className="text-xs text-muted-foreground">SALES objective · Pakistan broad · Automatic placements</p>
+            </div>
+          </div>
+        </div>
+        <div className="px-5 pb-5 space-y-4">
           <div>
-            <Label htmlFor="adName">Campaign / Ad Name</Label>
+            <Label htmlFor="adName" className="text-xs font-medium">Campaign / Ad Name</Label>
             <Input
               id="adName"
               value={adName}
               onChange={e => setAdName(e.target.value)}
               placeholder="e.g. Summer Sale Campaign"
+              className="mt-1 bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08] focus:ring-2 focus:ring-blue-500/20 transition-all"
               data-testid="input-ad-name"
             />
           </div>
 
           {/* Creative Mode Tabs */}
           <div>
-            <Label>Creative Source</Label>
-            <Tabs value={mode} onValueChange={v => setMode(v as CreativeMode)} className="mt-1">
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="UPLOAD_IMAGE" data-testid="tab-upload-image" className="gap-1 text-xs">
-                  <Image className="h-3 w-3" /> Upload Image
+            <Label className="text-xs font-medium">Creative Source</Label>
+            <Tabs value={mode} onValueChange={v => setMode(v as CreativeMode)} className="mt-1.5">
+              <TabsList className="grid w-full grid-cols-3 bg-black/[0.04] dark:bg-white/[0.06] p-0.5 rounded-xl">
+                <TabsTrigger value="UPLOAD_IMAGE" data-testid="tab-upload-image" className="gap-1.5 text-xs rounded-[10px] data-[state=active]:bg-white dark:data-[state=active]:bg-white/[0.12] data-[state=active]:shadow-sm transition-all">
+                  <Image className="h-3 w-3" /> Image
                 </TabsTrigger>
-                <TabsTrigger value="UPLOAD_VIDEO" data-testid="tab-upload-video" className="gap-1 text-xs">
-                  <Video className="h-3 w-3" /> Upload Video
+                <TabsTrigger value="UPLOAD_VIDEO" data-testid="tab-upload-video" className="gap-1.5 text-xs rounded-[10px] data-[state=active]:bg-white dark:data-[state=active]:bg-white/[0.12] data-[state=active]:shadow-sm transition-all">
+                  <Video className="h-3 w-3" /> Video
                 </TabsTrigger>
-                <TabsTrigger value="EXISTING_POST" data-testid="tab-existing-post" className="gap-1 text-xs">
-                  <FileText className="h-3 w-3" /> Existing Post
+                <TabsTrigger value="EXISTING_POST" data-testid="tab-existing-post" className="gap-1.5 text-xs rounded-[10px] data-[state=active]:bg-white dark:data-[state=active]:bg-white/[0.12] data-[state=active]:shadow-sm transition-all">
+                  <FileText className="h-3 w-3" /> Post
                 </TabsTrigger>
               </TabsList>
 
               <TabsContent value="UPLOAD_IMAGE" className="space-y-3 mt-3">
                 <div>
-                  <Label>Upload Image</Label>
                   <div className="flex flex-col gap-2">
                     <div
-                      className="border-2 border-dashed rounded-md p-4 text-center cursor-pointer hover:bg-muted/50 transition-colors"
+                      className={`${glassInner} p-5 text-center cursor-pointer hover:bg-white/60 dark:hover:bg-white/[0.06] transition-all`}
                       onClick={() => document.getElementById("imageFileInput")?.click()}
                       data-testid="dropzone-image"
                     >
-                      <Upload className="h-6 w-6 mx-auto text-muted-foreground mb-1" />
-                      <p className="text-sm text-muted-foreground">Click to select an image file</p>
-                      <p className="text-xs text-muted-foreground mt-1">JPG, PNG, or WebP (max 30MB)</p>
+                      <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center mx-auto mb-2">
+                        <Upload className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <p className="text-xs font-medium">Click to upload an image</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">JPG, PNG, or WebP (max 30MB)</p>
                     </div>
                     <input
                       id="imageFileInput"
@@ -609,6 +653,7 @@ export default function SalesLauncher() {
                             value={imageUrl}
                             onChange={e => setImageUrl(e.target.value)}
                             placeholder="https://example.com/image.jpg"
+                            className="bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]"
                             data-testid="input-image-url"
                           />
                           <Button
@@ -624,35 +669,36 @@ export default function SalesLauncher() {
                     </Collapsible>
                   </div>
                   {uploadImageMutation.isPending && (
-                    <div className="mt-2 flex items-center gap-2 text-sm text-blue-600">
+                    <div className="mt-2 flex items-center gap-2 text-xs text-blue-600">
                       <Loader2 className="h-3 w-3 animate-spin" /> Uploading image to Meta...
                     </div>
                   )}
                   {imageHash && (
-                    <div className="mt-2 flex items-center gap-2 text-sm text-green-600">
+                    <div className="mt-2 flex items-center gap-2 text-xs text-emerald-600">
                       <CheckCircle2 className="h-3 w-3" />
                       Image uploaded (hash: {imageHash.substring(0, 12)}...)
-                      <Button variant="ghost" size="sm" className="h-6 text-xs ml-auto" onClick={() => { setImageHash(""); setImagePreview(""); setImageUrl(""); }} data-testid="button-remove-image">Remove</Button>
+                      <Button variant="ghost" size="sm" className="h-6 text-[10px] ml-auto" onClick={() => { setImageHash(""); setImagePreview(""); setImageUrl(""); }} data-testid="button-remove-image">Remove</Button>
                     </div>
                   )}
                   {imagePreview && (
-                    <img src={imagePreview} alt="Preview" className="mt-2 rounded-md max-h-48 object-contain" data-testid="img-preview" />
+                    <img src={imagePreview} alt="Preview" className="mt-2 rounded-xl max-h-48 object-contain" data-testid="img-preview" />
                   )}
                 </div>
               </TabsContent>
 
               <TabsContent value="UPLOAD_VIDEO" className="space-y-3 mt-3">
                 <div>
-                  <Label>Upload Video</Label>
                   <div className="flex flex-col gap-2">
                     <div
-                      className="border-2 border-dashed rounded-md p-4 text-center cursor-pointer hover:bg-muted/50 transition-colors"
+                      className={`${glassInner} p-5 text-center cursor-pointer hover:bg-white/60 dark:hover:bg-white/[0.06] transition-all`}
                       onClick={() => document.getElementById("videoFileInput")?.click()}
                       data-testid="dropzone-video"
                     >
-                      <Upload className="h-6 w-6 mx-auto text-muted-foreground mb-1" />
-                      <p className="text-sm text-muted-foreground">Click to select a video file</p>
-                      <p className="text-xs text-muted-foreground mt-1">MP4, MOV, or AVI (max 100MB)</p>
+                      <div className="w-10 h-10 rounded-xl bg-violet-50 dark:bg-violet-500/10 flex items-center justify-center mx-auto mb-2">
+                        <Upload className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+                      </div>
+                      <p className="text-xs font-medium">Click to upload a video</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">MP4, MOV, or AVI (max 100MB)</p>
                     </div>
                     <input
                       id="videoFileInput"
@@ -688,6 +734,7 @@ export default function SalesLauncher() {
                             value={videoUrl}
                             onChange={e => setVideoUrl(e.target.value)}
                             placeholder="https://example.com/video.mp4"
+                            className="bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]"
                             data-testid="input-video-url"
                           />
                           <Button
@@ -703,52 +750,56 @@ export default function SalesLauncher() {
                     </Collapsible>
                   </div>
                   {uploadVideoMutation.isPending && (
-                    <div className="mt-2 flex items-center gap-2 text-sm text-blue-600">
+                    <div className="mt-2 flex items-center gap-2 text-xs text-blue-600">
                       <Loader2 className="h-3 w-3 animate-spin" /> Uploading video to Meta...
                     </div>
                   )}
                   {videoId && (
-                    <div className="mt-2 flex items-center gap-2 text-sm">
+                    <div className="mt-2 flex items-center gap-2 text-xs">
                       <StatusIcon status={videoStatus === "ready" ? "pass" : videoStatus === "timeout" ? "fail" : "running"} />
                       Video ID: {videoId} — Status: {videoStatus || "pending"}
-                      <Button variant="ghost" size="sm" className="h-6 text-xs ml-auto" onClick={() => { setVideoId(""); setVideoStatus(""); setVideoUrl(""); }} data-testid="button-remove-video">Remove</Button>
+                      <Button variant="ghost" size="sm" className="h-6 text-[10px] ml-auto" onClick={() => { setVideoId(""); setVideoStatus(""); setVideoUrl(""); }} data-testid="button-remove-video">Remove</Button>
                     </div>
                   )}
                 </div>
               </TabsContent>
 
               <TabsContent value="EXISTING_POST" className="space-y-3 mt-3">
-                <div className="flex items-start gap-2 p-3 bg-muted/50 border rounded-md text-sm">
-                  <Info className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                <div className={`${glassInner} flex items-start gap-2 p-3 text-xs`}>
+                  <Info className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
                   <span className="text-muted-foreground">
                     Existing post ads run <strong>as-is</strong>. Copy, URL, and CTA cannot be edited for this mode.
-                    The post content will be used exactly as it appears on your page.
                   </span>
                 </div>
                 <div>
-                  <Label>Search Posts</Label>
-                  <div className="flex gap-2">
+                  <Label className="text-xs font-medium">Search Posts</Label>
+                  <div className="flex gap-2 mt-1">
                     <Input
                       value={postSearch}
                       onChange={e => setPostSearch(e.target.value)}
                       placeholder="Search by text..."
+                      className="bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]"
                       data-testid="input-post-search"
                     />
-                    <Button size="sm" variant="outline" disabled={postsLoading}>
+                    <Button size="sm" variant="outline" disabled={postsLoading} className="bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]">
                       <Search className="h-3 w-3" />
                     </Button>
                   </div>
                 </div>
                 {postsLoading && (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <Loader2 className="h-3 w-3 animate-spin" /> Loading posts...
                   </div>
                 )}
-                <div className="max-h-64 overflow-y-auto space-y-2" data-testid="post-list">
+                <div className="max-h-64 overflow-y-auto space-y-1.5" data-testid="post-list">
                   {posts.map((post: MetaPost) => (
                     <div
                       key={post.id}
-                      className={`flex gap-3 p-2 border rounded-md cursor-pointer hover:bg-muted/50 transition-colors ${selectedPostId === post.id ? "ring-2 ring-primary bg-muted/30" : ""}`}
+                      className={`flex gap-3 p-2.5 rounded-xl cursor-pointer transition-all ${
+                        selectedPostId === post.id
+                          ? "bg-blue-50/80 dark:bg-blue-500/10 border border-blue-200/60 dark:border-blue-500/20 ring-1 ring-blue-500/20"
+                          : `${glassInner} hover:bg-white/60 dark:hover:bg-white/[0.06]`
+                      }`}
                       onClick={() => {
                         setSelectedPostId(post.id);
                         setSelectedPostSource(post.source === "instagram" ? "instagram" : "facebook");
@@ -757,21 +808,21 @@ export default function SalesLauncher() {
                       data-testid={`post-item-${post.id}`}
                     >
                       {post.fullPicture && (
-                        <img src={post.fullPicture} alt="" className="w-16 h-16 rounded object-cover shrink-0" />
+                        <img src={post.fullPicture} alt="" className="w-14 h-14 rounded-lg object-cover shrink-0" />
                       )}
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
-                          <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${post.source === "instagram" ? "border-pink-400 text-pink-600" : "border-blue-400 text-blue-600"}`}>
+                          <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md ${post.source === "instagram" ? "bg-pink-100 dark:bg-pink-500/10 text-pink-600 dark:text-pink-400" : "bg-blue-100 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400"}`}>
                             {post.source === "instagram" ? "IG" : "FB"}
-                          </Badge>
-                          <p className="text-sm truncate">{post.message || "(No text)"}</p>
+                          </span>
+                          <p className="text-xs truncate">{post.message || "(No text)"}</p>
                         </div>
-                        <p className="text-xs text-muted-foreground mt-0.5">
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
                           {post.createdTime ? new Date(post.createdTime).toLocaleDateString("en-PK") : ""} · {post.type || "post"}
                           {(post.likes || 0) > 0 && ` · ${post.likes} likes`}
                         </p>
                       </div>
-                      {selectedPostId === post.id && <CheckCircle2 className="h-4 w-4 text-primary shrink-0 self-center" />}
+                      {selectedPostId === post.id && <CheckCircle2 className="h-4 w-4 text-blue-500 shrink-0 self-center" />}
                     </div>
                   ))}
                 </div>
@@ -779,25 +830,26 @@ export default function SalesLauncher() {
             </Tabs>
           </div>
 
-          {/* Ad Copy Fields — disabled for existing post */}
+          {/* Ad Copy Fields */}
           <div className="space-y-3">
             <div>
-              <Label htmlFor="destinationUrl">
+              <Label htmlFor="destinationUrl" className="text-xs font-medium">
                 Destination URL
-                {isExistingPost && <span className="text-xs text-muted-foreground ml-2">(required for conversion tracking)</span>}
+                {isExistingPost && <span className="text-[10px] text-muted-foreground ml-2">(required for conversion tracking)</span>}
               </Label>
               <Input
                 id="destinationUrl"
                 value={destinationUrl}
                 onChange={e => setDestinationUrl(e.target.value)}
                 placeholder="https://yourstore.com/product"
+                className="mt-1 bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08] focus:ring-2 focus:ring-blue-500/20 transition-all"
                 data-testid="input-destination-url"
               />
             </div>
             <div>
-              <Label htmlFor="primaryText">
+              <Label htmlFor="primaryText" className="text-xs font-medium">
                 Primary Text
-                {isExistingPost && <span className="text-xs text-muted-foreground ml-2">(not applicable)</span>}
+                {isExistingPost && <span className="text-[10px] text-muted-foreground ml-2">(not applicable)</span>}
               </Label>
               <Textarea
                 id="primaryText"
@@ -806,13 +858,14 @@ export default function SalesLauncher() {
                 placeholder="Your main ad copy..."
                 disabled={isExistingPost}
                 rows={3}
+                className="mt-1 bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08] focus:ring-2 focus:ring-blue-500/20 transition-all resize-none"
                 data-testid="input-primary-text"
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label htmlFor="headline">
-                  Headline {isExistingPost && <span className="text-xs text-muted-foreground">(n/a)</span>}
+                <Label htmlFor="headline" className="text-xs font-medium">
+                  Headline {isExistingPost && <span className="text-[10px] text-muted-foreground">(n/a)</span>}
                 </Label>
                 <Input
                   id="headline"
@@ -820,12 +873,13 @@ export default function SalesLauncher() {
                   onChange={e => setHeadline(e.target.value)}
                   placeholder="Short headline"
                   disabled={isExistingPost}
+                  className="mt-1 bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]"
                   data-testid="input-headline"
                 />
               </div>
               <div>
-                <Label htmlFor="description">
-                  Description {isExistingPost && <span className="text-xs text-muted-foreground">(n/a)</span>}
+                <Label htmlFor="description" className="text-xs font-medium">
+                  Description {isExistingPost && <span className="text-[10px] text-muted-foreground">(n/a)</span>}
                 </Label>
                 <Input
                   id="description"
@@ -833,17 +887,18 @@ export default function SalesLauncher() {
                   onChange={e => setDescription(e.target.value)}
                   placeholder="Optional description"
                   disabled={isExistingPost}
+                  className="mt-1 bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]"
                   data-testid="input-description"
                 />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>
-                  Call to Action {isExistingPost && <span className="text-xs text-muted-foreground">(n/a)</span>}
+                <Label className="text-xs font-medium">
+                  Call to Action {isExistingPost && <span className="text-[10px] text-muted-foreground">(n/a)</span>}
                 </Label>
                 <Select value={isExistingPost ? "" : cta} onValueChange={setCta} disabled={isExistingPost}>
-                  <SelectTrigger data-testid="select-cta">
+                  <SelectTrigger className="mt-1 bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]" data-testid="select-cta">
                     <SelectValue placeholder="Select CTA" />
                   </SelectTrigger>
                   <SelectContent>
@@ -854,29 +909,33 @@ export default function SalesLauncher() {
                 </Select>
               </div>
               <div>
-                <Label htmlFor="dailyBudget">Daily Budget ({accountCurrency})</Label>
+                <Label htmlFor="dailyBudget" className="text-xs font-medium flex items-center gap-1">
+                  <DollarSign className="h-3 w-3" />
+                  Daily Budget ({accountCurrency})
+                </Label>
                 <Input
                   id="dailyBudget"
                   type="number"
                   value={dailyBudget}
                   onChange={e => setDailyBudget(e.target.value)}
                   min="1"
+                  className="mt-1 bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]"
                   data-testid="input-daily-budget"
                 />
               </div>
             </div>
             <div>
-              <Label>Budget Optimization</Label>
+              <Label className="text-xs font-medium">Budget Optimization</Label>
               <Select value={budgetLevel} onValueChange={v => setBudgetLevel(v as "CBO" | "ABO")}>
-                <SelectTrigger data-testid="select-budget-level">
+                <SelectTrigger className="mt-1 bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]" data-testid="select-budget-level">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="ABO">Ad Set Budget (ABO)</SelectItem>
                   <SelectItem value="CBO">Campaign Budget Optimization (CBO)</SelectItem>
+                  <SelectItem value="ABO">Ad Set Budget (ABO)</SelectItem>
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="text-[10px] text-muted-foreground mt-1.5">
                 {budgetLevel === "CBO"
                   ? "Meta distributes your budget across ad sets automatically"
                   : "You control the budget for each ad set individually"}
@@ -887,9 +946,9 @@ export default function SalesLauncher() {
           {/* Publish Mode */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label>Publish Mode</Label>
+              <Label className="text-xs font-medium">Publish Mode</Label>
               <Select value={publishMode} onValueChange={v => setPublishMode(v as PublishMode)}>
-                <SelectTrigger data-testid="select-publish-mode">
+                <SelectTrigger className="mt-1 bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]" data-testid="select-publish-mode">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -900,9 +959,9 @@ export default function SalesLauncher() {
               </Select>
             </div>
             <div>
-              <Label>Start</Label>
+              <Label className="text-xs font-medium">Start</Label>
               <Select value={startMode} onValueChange={v => setStartMode(v as "NOW" | "SCHEDULED")}>
-                <SelectTrigger data-testid="select-start-mode">
+                <SelectTrigger className="mt-1 bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]" data-testid="select-start-mode">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -915,86 +974,94 @@ export default function SalesLauncher() {
                   type="datetime-local"
                   value={startTime}
                   onChange={e => setStartTime(e.target.value)}
-                  className="mt-2"
+                  className="mt-2 bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]"
                   data-testid="input-start-time"
                 />
               )}
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      {/* SECTION C: Validation Checklist */}
-      <Card data-testid="section-validation">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Pre-Launch Checklist</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 gap-2">
+      {/* SECTION C: Pre-Launch Checklist + Button */}
+      <div className={glassCard} data-testid="section-validation">
+        <div className="px-5 pt-4 pb-3">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center">
+              <Zap className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <div className="flex-1">
+              <h2 className="text-sm font-semibold">Pre-Launch Checklist</h2>
+            </div>
+            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${allValid ? "bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400"}`}>
+              {validCount}/{validationChecklist.length}
+            </span>
+          </div>
+        </div>
+        <div className="px-5 pb-5">
+          <div className="grid grid-cols-2 gap-1.5 mb-4">
             {validationChecklist.map((item, i) => (
-              <div key={i} className="flex items-center gap-2 text-sm">
+              <div key={i} className="flex items-center gap-2 text-xs py-1">
                 <StatusIcon status={item.ok ? "pass" : "fail"} />
-                <span className={item.ok ? "" : "text-muted-foreground"}>{item.label}</span>
+                <span className={item.ok ? "text-foreground" : "text-muted-foreground"}>{item.label}</span>
               </div>
             ))}
           </div>
-          <div className="mt-4">
-            <Button
-              onClick={() => launchMutation.mutate()}
-              disabled={!allValid || launchMutation.isPending || !!activeJobId}
-              className="w-full"
-              data-testid="button-launch"
-            >
-              {launchMutation.isPending || activeJobId ? (
-                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> {activeJobId ? "Launching..." : "Submitting..."}</>
-              ) : (
-                <><Rocket className="h-4 w-4 mr-2" /> {publishMode === "VALIDATE" ? "Validate" : publishMode === "DRAFT" ? "Create Draft" : "Launch Live"}</>
-              )}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+          <Button
+            onClick={() => launchMutation.mutate()}
+            disabled={!allValid || launchMutation.isPending || !!activeJobId}
+            className="w-full h-11 text-sm font-medium bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white border-0 rounded-xl shadow-[0_0_20px_rgba(59,130,246,0.3)] hover:shadow-[0_0_30px_rgba(59,130,246,0.4)] transition-all duration-300 disabled:opacity-50 disabled:shadow-none"
+            data-testid="button-launch"
+          >
+            {launchMutation.isPending || activeJobId ? (
+              <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> {activeJobId ? "Launching..." : "Submitting..."}</>
+            ) : (
+              <><Rocket className="h-4 w-4 mr-2" /> {publishMode === "VALIDATE" ? "Validate" : publishMode === "DRAFT" ? "Create Draft" : "Launch Live"}</>
+            )}
+          </Button>
+        </div>
+      </div>
 
       {/* SECTION D: Real-time Launch Progress */}
       {activeJobId && !launchResult && launchStages.length > 0 && (
-        <Card data-testid="section-progress">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Loader2 className="h-5 w-5 text-blue-600 animate-spin" /> Launch in Progress
-            </CardTitle>
-            <CardDescription>Stages update in real-time as each step completes</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
+        <div className={`${glassCard} border-blue-200/60 dark:border-blue-500/20`} data-testid="section-progress">
+          <div className="px-5 pt-4 pb-3">
+            <div className="flex items-center gap-2">
+              <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />
+              <h2 className="text-sm font-semibold">Launch in Progress</h2>
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-0.5 ml-6">Stages update in real-time</p>
+          </div>
+          <div className="px-5 pb-5">
+            <div className="space-y-1.5">
               {launchStages.map((stage, i) => (
-                <div key={i} className="flex items-center gap-2 text-sm" data-testid={`progress-stage-${stage.stage}`}>
+                <div key={i} className="flex items-center gap-2 text-xs py-1" data-testid={`progress-stage-${stage.stage}`}>
                   <StatusIcon status={stage.status} />
                   <span className="font-medium w-40">{STAGE_LABELS[stage.stage] || stage.stage}</span>
                   {stage.message && <span className="text-muted-foreground truncate">{stage.message}</span>}
                 </div>
               ))}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
       {/* Launch Result (Final) */}
       {launchResult && (
-        <Card data-testid="section-result">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
+        <div className={`${glassCard} ${launchResult.success ? "border-emerald-200/60 dark:border-emerald-500/20" : "border-red-200/60 dark:border-red-500/20"}`} data-testid="section-result">
+          <div className="px-5 pt-4 pb-3">
+            <div className="flex items-center gap-2">
               {launchResult.success ? (
-                <><CheckCircle2 className="h-5 w-5 text-green-600" /> Launch {publishMode === "VALIDATE" ? "Validation" : ""} Successful</>
+                <><CheckCircle2 className="h-4 w-4 text-emerald-500" /> <h2 className="text-sm font-semibold">Launch {publishMode === "VALIDATE" ? "Validation" : ""} Successful</h2></>
               ) : (
-                <><XCircle className="h-5 w-5 text-red-600" /> Launch Failed</>
+                <><XCircle className="h-4 w-4 text-red-500" /> <h2 className="text-sm font-semibold">Launch Failed</h2></>
               )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Stage Progress */}
-            <div className="space-y-2">
+            </div>
+          </div>
+          <div className="px-5 pb-5 space-y-3">
+            <div className="space-y-1.5">
               {launchResult.stages.map((stage, i) => (
-                <div key={i} className="flex items-center gap-2 text-sm">
+                <div key={i} className="flex items-center gap-2 text-xs">
                   <StatusIcon status={stage.status} />
                   <span className="font-medium w-40">{STAGE_LABELS[stage.stage] || stage.stage}</span>
                   {stage.message && <span className="text-muted-foreground truncate">{stage.message}</span>}
@@ -1002,46 +1069,43 @@ export default function SalesLauncher() {
               ))}
             </div>
 
-            {/* Validation Issues */}
             {launchResult.validationIssues && launchResult.validationIssues.length > 0 && (
-              <div className="border rounded-md p-3 space-y-2">
-                <p className="text-sm font-medium text-red-600">Validation Issues:</p>
+              <div className={`${glassInner} p-3 space-y-2`}>
+                <p className="text-xs font-semibold text-red-600">Validation Issues:</p>
                 {launchResult.validationIssues.map((issue, i) => (
-                  <div key={i} className="text-sm pl-2 border-l-2 border-red-200 space-y-0.5">
+                  <div key={i} className="text-xs pl-2 border-l-2 border-red-200 dark:border-red-500/30 space-y-0.5">
                     <p className="font-medium">{issue.message}</p>
-                    <p className="text-muted-foreground text-xs">Fix: {issue.fixSuggestion}</p>
+                    <p className="text-muted-foreground text-[10px]">Fix: {issue.fixSuggestion}</p>
                   </div>
                 ))}
               </div>
             )}
 
-            {/* Success IDs */}
             {launchResult.success && launchResult.campaignId && (
-              <div className="grid grid-cols-2 gap-2 text-sm border rounded-md p-3">
-                <div><span className="text-muted-foreground">Campaign ID:</span> <span className="font-mono">{launchResult.campaignId}</span></div>
-                <div><span className="text-muted-foreground">Ad Set ID:</span> <span className="font-mono">{launchResult.adsetId}</span></div>
-                <div><span className="text-muted-foreground">Creative ID:</span> <span className="font-mono">{launchResult.creativeId}</span></div>
-                <div><span className="text-muted-foreground">Ad ID:</span> <span className="font-mono">{launchResult.adId}</span></div>
+              <div className={`${glassInner} grid grid-cols-2 gap-2 text-xs p-3`}>
+                <div><span className="text-muted-foreground">Campaign:</span> <span className="font-mono text-[10px]">{launchResult.campaignId}</span></div>
+                <div><span className="text-muted-foreground">Ad Set:</span> <span className="font-mono text-[10px]">{launchResult.adsetId}</span></div>
+                <div><span className="text-muted-foreground">Creative:</span> <span className="font-mono text-[10px]">{launchResult.creativeId}</span></div>
+                <div><span className="text-muted-foreground">Ad:</span> <span className="font-mono text-[10px]">{launchResult.adId}</span></div>
               </div>
             )}
 
-            {/* Error Details */}
             {!launchResult.success && launchResult.error && (
-              <div className="border border-red-200 rounded-md p-3 space-y-2">
-                <p className="text-sm font-medium text-red-600">
+              <div className={`${glassInner} border-red-200/60 dark:border-red-500/20 p-3 space-y-2`}>
+                <p className="text-xs font-semibold text-red-600">
                   Failed at: {STAGE_LABELS[launchResult.errorStage || ""] || launchResult.errorStage}
                 </p>
-                <p className="text-sm">{launchResult.error}</p>
+                <p className="text-xs">{launchResult.error}</p>
                 {launchResult.rawError && (
                   <Collapsible open={showRawError} onOpenChange={setShowRawError}>
                     <CollapsibleTrigger asChild>
-                      <Button variant="ghost" size="sm" className="gap-1 text-xs h-7" data-testid="button-show-raw-error">
-                        <ChevronDown className={`h-3 w-3 transition-transform ${showRawError ? "rotate-180" : ""}`} />
+                      <Button variant="ghost" size="sm" className="gap-1 text-[10px] h-6" data-testid="button-show-raw-error">
+                        <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${showRawError ? "rotate-180" : ""}`} />
                         Raw Meta Error
                       </Button>
                     </CollapsibleTrigger>
                     <CollapsibleContent>
-                      <pre className="mt-2 p-2 bg-muted text-xs rounded overflow-x-auto max-h-48">
+                      <pre className="mt-2 p-2 bg-black/[0.03] dark:bg-white/[0.03] text-[10px] rounded-lg overflow-x-auto max-h-48 font-mono">
                         {JSON.stringify(launchResult.rawError, null, 2)}
                       </pre>
                     </CollapsibleContent>
@@ -1049,8 +1113,8 @@ export default function SalesLauncher() {
                 )}
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
       {/* Launch History */}
@@ -1063,44 +1127,64 @@ function LaunchJobHistory() {
   const jobsQuery = useQuery<any[]>({ queryKey: ["/api/meta/sales/launch-jobs"] });
   const jobs = jobsQuery.data || [];
   const [expandedJob, setExpandedJob] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   if (jobs.length === 0) return null;
 
   return (
-    <Card data-testid="section-launch-history">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base">Launch History</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-2">
-          {jobs.slice(0, 20).map((job: LaunchJob) => (
-            <Collapsible key={job.id} open={expandedJob === job.id} onOpenChange={open => setExpandedJob(open ? job.id : null)}>
-              <CollapsibleTrigger asChild>
-                <div className="flex items-center gap-2 text-sm p-2 border rounded-md cursor-pointer hover:bg-muted/50" data-testid={`job-row-${job.id}`}>
-                  <StatusIcon status={job.status === "launched" || job.status === "validated" || job.status === "draft" ? "success" : job.status === "failed" ? "fail" : "running"} />
-                  <span className="font-medium flex-1 truncate">{job.campaignName}</span>
-                  <Badge variant="outline" className="text-xs">{job.mode || job.launchType}</Badge>
-                  <Badge variant={job.status === "launched" ? "default" : job.status === "failed" ? "destructive" : "secondary"} className="text-xs">
-                    {job.status}
-                  </Badge>
-                  <span className="text-xs text-muted-foreground">
-                    {job.createdAt ? new Date(job.createdAt).toLocaleDateString("en-PK") : ""}
-                  </span>
-                  <ChevronDown className={`h-3 w-3 transition-transform ${expandedJob === job.id ? "rotate-180" : ""}`} />
-                </div>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="p-3 border rounded-md mt-1 bg-muted/20 text-sm space-y-2">
-                {job.metaCampaignId && <p><span className="text-muted-foreground">Campaign:</span> {job.metaCampaignId}</p>}
-                {job.metaAdsetId && <p><span className="text-muted-foreground">Ad Set:</span> {job.metaAdsetId}</p>}
-                {job.metaCreativeId && <p><span className="text-muted-foreground">Creative:</span> {job.metaCreativeId}</p>}
-                {job.metaAdId && <p><span className="text-muted-foreground">Ad:</span> {job.metaAdId}</p>}
-                {job.errorMessage && <p className="text-red-600"><span className="text-muted-foreground">Error:</span> {job.errorMessage}</p>}
-                {job.currentStage && <p><span className="text-muted-foreground">Last Stage:</span> {job.currentStage}</p>}
-              </CollapsibleContent>
-            </Collapsible>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+    <Collapsible open={historyOpen} onOpenChange={setHistoryOpen}>
+      <div className={glassCard} data-testid="section-launch-history">
+        <CollapsibleTrigger asChild>
+          <div className="px-5 py-3.5 cursor-pointer hover:bg-white/40 dark:hover:bg-white/[0.03] transition-all rounded-2xl">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-white/[0.06] flex items-center justify-center">
+                <History className="h-3.5 w-3.5 text-gray-600 dark:text-gray-400" />
+              </div>
+              <h2 className="text-sm font-semibold flex-1">Launch History</h2>
+              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-gray-100 dark:bg-white/[0.06] text-muted-foreground">
+                {jobs.length}
+              </span>
+              <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${historyOpen ? "rotate-180" : ""}`} />
+            </div>
+          </div>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="px-5 pb-4 space-y-1.5">
+            {jobs.slice(0, 20).map((job: LaunchJob) => (
+              <Collapsible key={job.id} open={expandedJob === job.id} onOpenChange={open => setExpandedJob(open ? job.id : null)}>
+                <CollapsibleTrigger asChild>
+                  <div className={`flex items-center gap-2 text-xs p-2.5 rounded-xl cursor-pointer transition-all ${glassInner} hover:bg-white/60 dark:hover:bg-white/[0.06]`} data-testid={`job-row-${job.id}`}>
+                    <StatusIcon status={job.status === "launched" || job.status === "validated" || job.status === "draft" ? "success" : job.status === "failed" ? "fail" : "running"} />
+                    <span className="font-medium flex-1 truncate">{job.campaignName}</span>
+                    <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-black/[0.04] dark:bg-white/[0.06]`}>
+                      {job.mode || job.launchType}
+                    </span>
+                    <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md ${
+                      job.status === "launched" ? "bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" :
+                      job.status === "failed" ? "bg-red-100 dark:bg-red-500/10 text-red-700 dark:text-red-400" :
+                      "bg-gray-100 dark:bg-white/[0.06] text-muted-foreground"
+                    }`}>
+                      {job.status}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {job.createdAt ? new Date(job.createdAt).toLocaleDateString("en-PK") : ""}
+                    </span>
+                    <ChevronDown className={`h-3 w-3 text-muted-foreground transition-transform duration-200 ${expandedJob === job.id ? "rotate-180" : ""}`} />
+                  </div>
+                </CollapsibleTrigger>
+                <CollapsibleContent className={`${glassInner} p-3 mt-1 text-xs space-y-1.5`}>
+                  {job.metaCampaignId && <p><span className="text-muted-foreground">Campaign:</span> <span className="font-mono text-[10px]">{job.metaCampaignId}</span></p>}
+                  {job.metaAdsetId && <p><span className="text-muted-foreground">Ad Set:</span> <span className="font-mono text-[10px]">{job.metaAdsetId}</span></p>}
+                  {job.metaCreativeId && <p><span className="text-muted-foreground">Creative:</span> <span className="font-mono text-[10px]">{job.metaCreativeId}</span></p>}
+                  {job.metaAdId && <p><span className="text-muted-foreground">Ad:</span> <span className="font-mono text-[10px]">{job.metaAdId}</span></p>}
+                  {job.errorMessage && <p className="text-red-500"><span className="text-muted-foreground">Error:</span> {job.errorMessage}</p>}
+                  {job.currentStage && <p><span className="text-muted-foreground">Last Stage:</span> {job.currentStage}</p>}
+                </CollapsibleContent>
+              </Collapsible>
+            ))}
+          </div>
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
   );
 }
