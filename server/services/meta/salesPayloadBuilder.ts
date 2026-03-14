@@ -202,6 +202,13 @@ function buildExistingPostCreativePayload(input: SalesLaunchInput): MetaPayload 
     payload.object_story_id = input.existingPostId;
   }
 
+  if (input.destinationUrl) {
+    payload.call_to_action = {
+      type: input.cta || "SHOP_NOW",
+      value: { link: input.destinationUrl },
+    };
+  }
+
   return payload;
 }
 
