@@ -25,6 +25,7 @@ export interface SalesLaunchInput {
   startMode: "NOW" | "SCHEDULED";
   startTime?: string | null;
   publishMode: "VALIDATE" | "DRAFT" | "PUBLISH";
+  instagramActorId?: string | null;
 }
 
 export type MetaPayload = Record<string, unknown>;
@@ -197,6 +198,9 @@ function buildExistingPostCreativePayload(input: SalesLaunchInput): MetaPayload 
 
   if (input.existingPostSource === "instagram") {
     payload.source_instagram_media_id = input.existingPostId;
+    if (input.instagramActorId) {
+      payload.instagram_actor_id = input.instagramActorId;
+    }
   } else {
     payload.object_story_id = input.existingPostId;
   }
@@ -297,6 +301,9 @@ export function validateAllPayloads(
   }
   if (input.mode === "EXISTING_POST" && !creativePayload.object_story_id && !creativePayload.source_instagram_media_id) {
     errors.push("Existing post creative missing post ID");
+  }
+  if (input.mode === "EXISTING_POST" && input.existingPostSource === "instagram" && !creativePayload.instagram_actor_id) {
+    errors.push("Instagram post creative missing instagram_actor_id — link your Instagram account to the Ad Account in Meta Business Settings");
   }
 
   return { valid: errors.length === 0, errors };

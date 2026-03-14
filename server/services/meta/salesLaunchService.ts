@@ -221,6 +221,46 @@ async function executeSalesLaunchAsync(
     stages[stages.length - 1] = { stage: "diagnostics", status: "success", data: { checks: diagnostics.checks } };
     await persistStages(jobId, stages);
 
+    if (input.mode === "EXISTING_POST" && input.existingPostSource === "instagram") {
+      try {
+        const actId = creds.adAccountId.startsWith("act_") ? creds.adAccountId : `act_${creds.adAccountId}`;
+        const igUrl = new URL(`${META_BASE_URL}/${actId}/instagram_accounts`);
+        igUrl.searchParams.set("access_token", creds.accessToken);
+        igUrl.searchParams.set("fields", "id,username");
+        const igRes = await fetch(igUrl.toString());
+        const igData = await igRes.json() as { data?: Array<{ id: string; username?: string }> };
+        const igAccounts = igData?.data || [];
+        console.log(`[SalesLaunch] Ad account IG accounts: ${JSON.stringify(igAccounts)}`);
+
+        if (igAccounts.length > 0) {
+          input.instagramActorId = igAccounts[0].id;
+          console.log(`[SalesLaunch] Using instagram_actor_id from ad account: ${input.instagramActorId}`);
+        } else {
+          const pageIgUrl = new URL(`${META_BASE_URL}/${input.pageId}`);
+          pageIgUrl.searchParams.set("access_token", creds.accessToken);
+          pageIgUrl.searchParams.set("fields", "instagram_business_account{id,username}");
+          const pageIgRes = await fetch(pageIgUrl.toString());
+          const pageIgData = await pageIgRes.json() as { instagram_business_account?: { id: string; username?: string } };
+          if (pageIgData?.instagram_business_account?.id) {
+            input.instagramActorId = pageIgData.instagram_business_account.id;
+            console.log(`[SalesLaunch] Using instagram_actor_id from page fallback: ${input.instagramActorId}`);
+          } else {
+            const errMsg = "No Instagram account linked to ad account or page. Instagram post ads require an Instagram Business account linked to your Ad Account in Meta Business Settings.";
+            stages.push({ stage: "ig_resolution", status: "failed", message: errMsg });
+            await persistStages(jobId, stages, { status: "failed", errorMessage: errMsg, errorSummary: "Instagram account not linked" });
+            return;
+          }
+        }
+      } catch (igErr: unknown) {
+        const igError = igErr instanceof Error ? igErr : new Error(String(igErr));
+        const errMsg = `Failed to resolve Instagram actor ID: ${igError.message}. Ensure your Instagram Business account is linked to your Ad Account in Meta Business Settings.`;
+        console.error(`[SalesLaunch] IG resolution failed: ${igError.message}`);
+        stages.push({ stage: "ig_resolution", status: "failed", message: errMsg });
+        await persistStages(jobId, stages, { status: "failed", errorMessage: errMsg, errorSummary: "Instagram account resolution failed" });
+        return;
+      }
+    }
+
     stages.push({ stage: "media_validation", status: "running" });
     await persistStages(jobId, stages);
     const mediaIssues = await validateMediaReadiness(input, creds.accessToken, merchantId);

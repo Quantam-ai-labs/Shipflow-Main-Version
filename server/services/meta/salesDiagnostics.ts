@@ -133,20 +133,33 @@ export async function runDiagnostics(config: {
     checks.push({ name: "Facebook Page", status: "fail", message: "No Facebook Page selected" });
   }
 
+  const adActIgResult = await metaGet(accessToken, `${actId}/instagram_accounts`, { fields: "id,username" }, merchantId);
+  if (adActIgResult.ok) {
+    const adActIgList = adActIgResult.data.data as Array<{ id: string; username?: string }> | undefined;
+    if (adActIgList && adActIgList.length > 0) {
+      const firstIg = adActIgList[0];
+      checks.push({ name: "Instagram Account (Ad Account)", status: "pass", message: `@${firstIg.username || firstIg.id} linked to ad account` });
+    } else {
+      checks.push({ name: "Instagram Account (Ad Account)", status: "warn", message: "No Instagram account linked to ad account. Instagram post ads may fail — link your IG account in Meta Business Settings > Ad Accounts." });
+    }
+  } else {
+    checks.push({ name: "Instagram Account (Ad Account)", status: "warn", message: "Could not check ad account Instagram accounts." });
+  }
+
   if (pageId) {
     const igResult = await metaGet(accessToken, pageId, { fields: "instagram_business_account{id,name,username}" }, merchantId);
     if (igResult.ok) {
       const igData = igResult.data.instagram_business_account as MetaIgAccount | undefined;
       if (igData) {
-        checks.push({ name: "Instagram Account", status: "pass", message: `@${igData.username || igData.name} linked` });
+        checks.push({ name: "Instagram Account (Page)", status: "pass", message: `@${igData.username || igData.name} linked to page` });
       } else {
-        checks.push({ name: "Instagram Account", status: "warn", message: "No Instagram Business account linked. Ads will run on Facebook only." });
+        checks.push({ name: "Instagram Account (Page)", status: "warn", message: "No Instagram Business account linked to page. Ads will run on Facebook only." });
       }
     } else {
-      checks.push({ name: "Instagram Account", status: "warn", message: "No Instagram Business account linked." });
+      checks.push({ name: "Instagram Account (Page)", status: "warn", message: "No Instagram Business account linked to page." });
     }
   } else {
-    checks.push({ name: "Instagram Account", status: "skip", message: "No page selected" });
+    checks.push({ name: "Instagram Account (Page)", status: "skip", message: "No page selected" });
   }
 
   if (pixelId) {
