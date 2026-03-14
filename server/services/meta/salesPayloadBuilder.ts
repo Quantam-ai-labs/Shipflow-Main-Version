@@ -222,6 +222,16 @@ export function buildAdPayload(
     ];
   }
 
+  if (input.destinationUrl) {
+    try {
+      const hostname = new URL(input.destinationUrl).hostname;
+      if (hostname) {
+        payload.conversion_domain = hostname;
+      }
+    } catch {
+    }
+  }
+
   return payload;
 }
 
