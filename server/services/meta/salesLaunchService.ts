@@ -10,6 +10,7 @@ import {
   buildAdSetPayload,
   buildCreativePayload,
   buildAdPayload,
+  buildExistingPostCreativeFallback,
   sanitizePayload,
   validateAllPayloads,
   type SalesLaunchInput,
@@ -120,10 +121,25 @@ async function loggedMetaPost(
       continue;
     }
 
+    console.error(`[SalesLaunch] Meta API error at ${stage}:`, JSON.stringify({
+      endpoint,
+      httpStatus: response.status,
+      error: errorObj,
+      error_subcode: errorObj?.error_subcode,
+      error_data: errorObj?.error_data,
+      blame_field_specs: (errorObj as Record<string, unknown>)?.blame_field_specs,
+      fbtrace_id: errorObj?.fbtrace_id,
+      requestBody: sanitizeForLog(body),
+    }));
     const parsed = parseMetaError(data);
     throw new MetaApiError(formatMetaErrorForUser(parsed), data, parsed);
   }
 
+  console.error(`[SalesLaunch] Meta API exhausted retries at ${stage}:`, JSON.stringify({
+    endpoint,
+    lastError,
+    requestBody: sanitizeForLog(body),
+  }));
   const parsed = parseMetaError(lastError);
   throw new MetaApiError(formatMetaErrorForUser(parsed), lastError, parsed);
 }
@@ -483,14 +499,30 @@ async function executeSalesLaunchAsync(
     stages.push({ stage: "creative", status: "running" });
     await persistStages(jobId, stages);
     console.log("[SalesLaunch] OUTGOING CREATIVE PAYLOAD:", JSON.stringify(creativePayload, null, 2));
-    const creativeResult = await loggedMetaPost(merchantId, jobId, "creative", creds.accessToken, `${creds.adAccountId}/adcreatives`, creativePayload);
-    const creativeId = creativeResult.id as string;
-    stages[stages.length - 1] = { stage: "creative", status: "success", data: { creativeId } };
+    let creativeId: string;
+    let usedFallbackCreative = false;
+    try {
+      const creativeResult = await loggedMetaPost(merchantId, jobId, "creative", creds.accessToken, `${creds.adAccountId}/adcreatives`, creativePayload);
+      creativeId = creativeResult.id as string;
+    } catch (creativeErr) {
+      const fallbackPayload = buildExistingPostCreativeFallback(input);
+      if (!fallbackPayload) throw creativeErr;
+      console.warn("[SalesLaunch] Primary creative failed, trying fallback without instagram_actor_id:", (creativeErr as Error).message);
+      const fallbackSanitized = sanitizePayload(fallbackPayload);
+      console.log("[SalesLaunch] FALLBACK CREATIVE PAYLOAD:", JSON.stringify(fallbackSanitized, null, 2));
+      const fallbackResult = await loggedMetaPost(merchantId, jobId, "creative_fallback", creds.accessToken, `${creds.adAccountId}/adcreatives`, fallbackSanitized);
+      creativeId = fallbackResult.id as string;
+      usedFallbackCreative = true;
+    }
+    stages[stages.length - 1] = { stage: "creative", status: "success", data: { creativeId, usedFallback: usedFallbackCreative } };
     await persistStages(jobId, stages, { metaCreativeId: creativeId });
 
     stages.push({ stage: "ad", status: "running" });
     await persistStages(jobId, stages);
     const adPayload = sanitizePayload(buildAdPayload(input, adsetId, creativeId));
+    if (input.existingPostSource === "instagram" && input.instagramActorId) {
+      (adPayload.creative as Record<string, unknown>).instagram_actor_id = input.instagramActorId;
+    }
     console.log("[SalesLaunch] OUTGOING AD PAYLOAD:", JSON.stringify(adPayload, null, 2));
     const adResult = await loggedMetaPost(merchantId, jobId, "ad", creds.accessToken, `${creds.adAccountId}/ads`, adPayload);
     const adId = adResult.id as string;

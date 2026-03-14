@@ -198,14 +198,21 @@ function buildExistingPostCreativePayload(input: SalesLaunchInput): MetaPayload 
 
   if (input.existingPostSource === "instagram") {
     payload.source_instagram_media_id = input.existingPostId;
-    if (input.instagramActorId) {
-      payload.instagram_actor_id = input.instagramActorId;
-    }
+    payload.instagram_actor_id = input.instagramActorId || undefined;
+    payload.object_story_spec = { page_id: input.pageId };
   } else {
     payload.object_story_id = input.existingPostId;
   }
 
   return payload;
+}
+
+export function buildExistingPostCreativeFallback(input: SalesLaunchInput): MetaPayload | null {
+  if (input.existingPostSource !== "instagram") return null;
+  return {
+    name: `${input.adName} - Creative`,
+    source_instagram_media_id: input.existingPostId,
+  };
 }
 
 export function buildAdPayload(
@@ -302,8 +309,11 @@ export function validateAllPayloads(
   if (input.mode === "EXISTING_POST" && !creativePayload.object_story_id && !creativePayload.source_instagram_media_id) {
     errors.push("Existing post creative missing post ID");
   }
-  if (input.mode === "EXISTING_POST" && input.existingPostSource === "instagram" && !creativePayload.instagram_actor_id) {
-    errors.push("Instagram post creative missing instagram_actor_id — link your Instagram account to the Ad Account in Meta Business Settings");
+  if (input.mode === "EXISTING_POST" && input.existingPostSource === "instagram") {
+    const storySpecForIg = creativePayload.object_story_spec as Record<string, unknown> | undefined;
+    if (!storySpecForIg?.page_id) {
+      errors.push("Instagram post creative missing page_id in object_story_spec");
+    }
   }
 
   return { valid: errors.length === 0, errors };
