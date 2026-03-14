@@ -1,0 +1,166 @@
+We are very close to a stable Meta Ads launcher now.
+
+Campaign creation, ad set creation, and creative creation are working.
+Ads launch successfully when Instagram is disabled.
+
+The remaining issues are:
+
+1. Invalid instagram_actor_id
+2. Existing Post mode destination URL logic
+3. Instagram must be optional
+4. Payload validation must be stricter to prevent Meta API errors
+
+Fix these issues without breaking the working campaign/adset/creative flow.
+
+-------------------------------------
+
+PROBLEM 1: INVALID INSTAGRAM ACTOR ID
+
+Error:
+"Param instagram_actor_id must be a valid Instagram account id"
+
+Root cause:
+The system is currently using the wrong ID for instagram_actor_id.
+
+Correct behavior:
+
+The instagram_actor_id must come from:
+
+GET /{page-id}?fields=instagram_business_account
+
+Then use:
+instagram_business_account.id
+
+Implementation steps:
+
+1. Update the Instagram account fetch logic.
+2. When syncing Meta assets, fetch the Instagram Business Account attached to each Facebook Page.
+3. Store the correct instagram_business_account.id.
+4. Use this ID as instagram_actor_id in creative payloads.
+
+Validation rules:
+
+If the page has no Instagram Business Account attached:
+- Do NOT allow Instagram selection
+- Show message:
+  "No Instagram Business Account connected to this Facebook Page"
+
+If a selected Instagram ID does not match the page's connected IG account:
+- Block launch
+- Show validation error.
+
+-------------------------------------
+
+PROBLEM 2: INSTAGRAM MUST BE OPTIONAL
+
+Instagram should NOT be required to launch ads.
+
+Implementation rules:
+
+If Instagram is selected:
+  include instagram_actor_id
+
+If Instagram is not selected:
+  completely remove instagram_actor_id from payload
+
+Never send:
+- null
+- empty string
+- invalid ID
+
+Only include the field when a verified IG business account exists.
+
+-------------------------------------
+
+PROBLEM 3: EXISTING POST MODE + DESTINATION URL
+
+Existing post ads still require a website URL for conversion tracking when using OFFSITE_CONVERSIONS optimization.
+
+Fix product behavior:
+
+1. Do NOT mark destination URL as "not applicable" in existing post mode.
+2. Destination URL should be required if the selected post does not already contain a website link.
+3. If the selected post already contains a link:
+   - auto-detect and display it
+   - allow user to override if needed.
+4. Backend validation must confirm that either:
+   - the selected post has a link, OR
+   - the user provided a destination URL.
+
+Block launch if neither exists.
+
+-------------------------------------
+
+PROBLEM 4: PAYLOAD SANITIZATION
+
+Before any Meta API call:
+
+Sanitize payloads to remove:
+
+- undefined
+- null
+- empty strings
+- invalid IDs
+
+Do NOT remove valid boolean values like false.
+
+-------------------------------------
+
+PROBLEM 5: STRICT PAYLOAD VALIDATION
+
+Add internal validation before API call.
+
+Campaign payload must contain:
+- name
+- objective
+- status
+- is_adset_budget_sharing_enabled
+
+Ad set payload must contain:
+- daily_budget
+- optimization_goal
+- promoted_object
+- targeting
+
+Creative payload must contain:
+- correct page_id
+- correct creative structure for image/video/existing post
+
+Ad payload must contain:
+- adset_id
+- creative.id
+- status
+
+Only include instagram_actor_id when a valid Instagram business account exists.
+
+-------------------------------------
+
+PROBLEM 6: DEBUGGING LOGS
+
+Log the final sanitized payload before each Meta API call:
+
+Log separately:
+
+- campaign payload
+- adset payload
+- creative payload
+- ad payload
+
+Include these in admin logs so we can inspect issues quickly.
+
+-------------------------------------
+
+EXPECTED RESULT
+
+After these fixes:
+
+Image ads launch successfully.
+Video ads launch successfully.
+Existing post ads launch successfully.
+Instagram works when selected.
+Instagram is ignored when not selected.
+No invalid instagram_actor_id errors.
+No missing website URL errors.
+
+Do not rewrite the launcher architecture.
+Fix only these issues while preserving the current working flow.
