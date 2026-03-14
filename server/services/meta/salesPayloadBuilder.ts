@@ -13,7 +13,6 @@ export interface SalesLaunchInput {
   existingPostSource?: "facebook" | "instagram" | null;
   adAccountId: string;
   pageId: string;
-  instagramAccountId?: string | null;
   pixelId?: string | null;
   destinationUrl?: string | null;
   primaryText?: string | null;
@@ -142,7 +141,6 @@ interface ObjectStorySpec {
   page_id: string;
   link_data?: LinkData;
   video_data?: VideoData;
-  instagram_actor_id?: string;
 }
 
 function buildImageCreativePayload(input: SalesLaunchInput): MetaPayload {
@@ -162,9 +160,6 @@ function buildImageCreativePayload(input: SalesLaunchInput): MetaPayload {
     page_id: input.pageId,
     link_data: linkData,
   };
-  if (input.instagramAccountId) {
-    objectStorySpec.instagram_actor_id = input.instagramAccountId;
-  }
 
   return {
     name: `${input.adName} - Creative`,
@@ -188,9 +183,6 @@ function buildVideoCreativePayload(input: SalesLaunchInput): MetaPayload {
     page_id: input.pageId,
     video_data: videoData,
   };
-  if (input.instagramAccountId) {
-    objectStorySpec.instagram_actor_id = input.instagramAccountId;
-  }
 
   return {
     name: `${input.adName} - Creative`,
@@ -205,9 +197,6 @@ function buildExistingPostCreativePayload(input: SalesLaunchInput): MetaPayload 
 
   if (input.existingPostSource === "instagram") {
     payload.source_instagram_media_id = input.existingPostId;
-    if (input.instagramAccountId) {
-      payload.instagram_actor_id = input.instagramAccountId;
-    }
   } else {
     payload.object_story_id = input.existingPostId;
   }

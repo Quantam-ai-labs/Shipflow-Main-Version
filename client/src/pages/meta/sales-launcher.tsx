@@ -344,7 +344,6 @@ export default function SalesLauncher() {
         mode,
         adAccountId: metaStatus?.adAccountId || "",
         pageId: selectedPageId,
-        instagramAccountId: selectedIgAccountId && selectedIgAccountId !== "none" ? selectedIgAccountId : null,
         pixelId: selectedPixelId && selectedPixelId !== "none" ? selectedPixelId : null,
         dailyBudget: parseFloat(dailyBudget) || 500,
         currency: accountCurrency,

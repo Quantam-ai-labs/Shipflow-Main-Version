@@ -250,7 +250,6 @@ export function normalizeInput(raw: Record<string, unknown>): SalesLaunchInput {
     mode,
     adAccountId: trimOrNull(raw.adAccountId) || "",
     pageId: trimOrNull(raw.pageId) || "",
-    instagramAccountId: trimOrNull(raw.instagramAccountId),
     pixelId: trimOrNull(raw.pixelId),
     dailyBudget: parseFloat(String(raw.dailyBudget || 0)) || 0,
     currency: trimOrNull(raw.currency) || "PKR",
