@@ -97,6 +97,7 @@ const STAGE_LABELS: Record<string, string> = {
   media_validation: "Validating Media",
   media_upload: "Uploading Media",
   media_readiness: "Checking Video Readiness",
+  payload_preflight: "Payload Preflight Check",
   campaign: "Creating Campaign",
   adset: "Creating Ad Set",
   creative: "Creating Creative",

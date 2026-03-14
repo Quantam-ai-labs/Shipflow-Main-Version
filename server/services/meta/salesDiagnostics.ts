@@ -170,6 +170,18 @@ export async function runDiagnostics(config: {
     checks.push({ name: "Pixel", status: "warn", message: "No pixel selected. Ads will optimize for LINK_CLICKS." });
   }
 
+  const fundingResult = await metaGet(accessToken, `${actId}/adspaymentcycle`, { fields: "data" }, merchantId);
+  if (fundingResult.ok) {
+    checks.push({ name: "Payment Method", status: "pass", message: "Payment method is configured" });
+  } else {
+    const fundingSourceResult = await metaGet(accessToken, `${actId}`, { fields: "funding_source_details" }, merchantId);
+    if (fundingSourceResult.ok && fundingSourceResult.data.funding_source_details) {
+      checks.push({ name: "Payment Method", status: "pass", message: "Payment method is configured" });
+    } else {
+      checks.push({ name: "Payment Method", status: "warn", message: "No payment method detected. Add a payment method in Meta Business Settings to run ads." });
+    }
+  }
+
   const permResult = await metaGet(accessToken, "me/permissions", {}, merchantId);
   if (permResult.ok) {
     const permList = permResult.data.data as Array<{ permission: string; status: string }> | undefined;

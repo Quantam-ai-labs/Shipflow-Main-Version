@@ -233,8 +233,26 @@ async function executeSalesLaunchAsync(
     stages[stages.length - 1] = { stage: "media_validation", status: "success" };
     await persistStages(jobId, stages);
 
+    stages.push({ stage: "payload_preflight", status: "running" });
+    await persistStages(jobId, stages);
+    {
+      const preflightCampaign = sanitizePayload(buildCampaignPayload(input));
+      const preflightAdset = sanitizePayload(buildAdSetPayload(input, "__PENDING__"));
+      const preflightCreative = sanitizePayload(buildCreativePayload(input));
+      const preflightAd = sanitizePayload(buildAdPayload(input, "__PENDING__", "__PREVIEW__"));
+      const preflightResult = validateAllPayloads(preflightCampaign, preflightAdset, preflightCreative, preflightAd, input);
+      if (!preflightResult.valid) {
+        const errMsg = `Payload preflight failed: ${preflightResult.errors.join("; ")}`;
+        stages[stages.length - 1] = { stage: "payload_preflight", status: "failed", message: errMsg };
+        await persistStages(jobId, stages, { status: "failed", errorMessage: errMsg, errorSummary: "Payload preflight failed" });
+        return;
+      }
+    }
+    stages[stages.length - 1] = { stage: "payload_preflight", status: "success" };
+    await persistStages(jobId, stages);
+
     if (input.publishMode === "VALIDATE") {
-      stages.push({ stage: "complete", status: "success", message: "Validation and diagnostics passed. No objects created." });
+      stages.push({ stage: "complete", status: "success", message: "Validation, diagnostics, and payload preflight passed. No objects created." });
       await persistStages(jobId, stages, { status: "validated" });
       return;
     }
