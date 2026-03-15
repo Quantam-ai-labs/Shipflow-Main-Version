@@ -211,7 +211,7 @@ export default function LoadsheetPage() {
     couriers: Array<{ id: string; name: string; isActive: boolean }>;
   }>({ queryKey: ["/api/integrations"] });
   const configuredCouriers = (integrationsData?.couriers ?? []).filter((c) => c.isActive);
-  const COURIER_DISPLAY: Record<string, string> = { leopards: "Leopards", postex: "PostEx" };
+  const COURIER_DISPLAY: Record<string, string> = { leopards: "Leopards", postex: "PostEx", tcs: "TCS" };
   const courierDisplayName = (name: string) => COURIER_DISPLAY[name.toLowerCase()] ?? (name.charAt(0).toUpperCase() + name.slice(1));
 
   // ---- Booked shipments query ----
@@ -587,20 +587,32 @@ export default function LoadsheetPage() {
                     <label className="text-xs font-medium text-muted-foreground w-16 shrink-0">Courier</label>
                     <div className="flex flex-wrap gap-1.5">
                       {configuredCouriers.length === 0 ? (
-                        <span className="text-xs text-muted-foreground">No couriers configured</span>
+                        <span className="text-xs text-muted-foreground">
+                          No couriers configured —{" "}
+                          <Link href="/settings?tab=couriers" className="text-primary hover:underline" data-testid="link-add-courier">
+                            Add a courier in Settings
+                          </Link>
+                        </span>
                       ) : (
-                        configuredCouriers.map((c) => (
-                          <Button
-                            key={c.id}
-                            type="button"
-                            size="sm"
-                            variant={selectedCourier === c.name ? "default" : "outline"}
-                            onClick={() => handleCourierSelect(selectedCourier === c.name ? null : c.name)}
-                            data-testid={`button-select-courier-${c.name}`}
-                          >
-                            {courierDisplayName(c.name)}
-                          </Button>
-                        ))
+                        <>
+                          {configuredCouriers.map((c) => (
+                            <Button
+                              key={c.id}
+                              type="button"
+                              size="sm"
+                              variant={selectedCourier === c.name ? "default" : "outline"}
+                              onClick={() => handleCourierSelect(selectedCourier === c.name ? null : c.name)}
+                              data-testid={`button-select-courier-${c.name}`}
+                            >
+                              {courierDisplayName(c.name)}
+                            </Button>
+                          ))}
+                          <Link href="/settings?tab=couriers" data-testid="link-manage-couriers">
+                            <Button type="button" size="sm" variant="ghost" className="text-xs text-muted-foreground h-7 px-2">
+                              + Add Courier
+                            </Button>
+                          </Link>
+                        </>
                       )}
                     </div>
                   </div>
