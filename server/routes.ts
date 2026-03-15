@@ -48,6 +48,7 @@ import {
   robocallLogs,
   shipmentBatches,
   shipmentBatchItems,
+  platformSettings,
 } from "@shared/schema";
 import {
   and,
@@ -5405,8 +5406,10 @@ export async function registerRoutes(
 
   // ─── WhatsApp Meta Webhook (public — no auth) ─────────────────────────────
   // GET: Meta webhook verification challenge
-  app.get("/webhooks/whatsapp", (req: any, res) => {
-    const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN;
+  app.get("/webhooks/whatsapp", async (req: any, res) => {
+    const { getMetaConfig: getMetaCfg } = await import("./utils/metaConfig");
+    const metaCfg = await getMetaCfg();
+    const verifyToken = metaCfg.whatsappVerifyToken || process.env.WHATSAPP_VERIFY_TOKEN;
     if(!verifyToken)
       return res.status(403).json({ error: "Forbidden" });
     const mode = req.query["hub.mode"];
@@ -12929,6 +12932,82 @@ export async function registerRoutes(
       }
       console.error("Error updating platform settings:", error);
       res.status(500).json({ message: "Failed to update platform settings" });
+    }
+  });
+
+  app.get("/api/admin/meta-settings", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+      const settings = await storage.getPlatformSettings();
+      const mask = (val: string | null | undefined) => val ? "••••" + val.slice(-4) : "";
+      res.json({
+        facebookAppId: settings.metaFacebookAppId || process.env.FACEBOOK_APP_ID || "",
+        facebookAppSecret: mask(settings.metaFacebookAppSecret || process.env.FACEBOOK_APP_SECRET),
+        whatsappEmbeddedSignupConfigId: settings.metaWhatsappEmbeddedSignupConfigId || process.env.WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID || "",
+        whatsappVerifyToken: mask(settings.metaWhatsappVerifyToken || process.env.WHATSAPP_VERIFY_TOKEN),
+        whatsappAccessToken: mask(settings.metaWhatsappAccessToken || process.env.WHATSAPP_ACCESS_TOKEN),
+        whatsappPhoneNoId: settings.metaWhatsappPhoneNoId || process.env.WHATSAPP_PHONE_NO_ID || "",
+        hasDbOverride: {
+          facebookAppId: !!settings.metaFacebookAppId,
+          facebookAppSecret: !!settings.metaFacebookAppSecret,
+          whatsappEmbeddedSignupConfigId: !!settings.metaWhatsappEmbeddedSignupConfigId,
+          whatsappVerifyToken: !!settings.metaWhatsappVerifyToken,
+          whatsappAccessToken: !!settings.metaWhatsappAccessToken,
+          whatsappPhoneNoId: !!settings.metaWhatsappPhoneNoId,
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching meta settings:", error);
+      res.status(500).json({ message: "Failed to fetch meta settings" });
+    }
+  });
+
+  app.put("/api/admin/meta-settings", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+
+      const schema = z.object({
+        facebookAppId: z.string().optional(),
+        facebookAppSecret: z.string().optional(),
+        whatsappEmbeddedSignupConfigId: z.string().optional(),
+        whatsappVerifyToken: z.string().optional(),
+        whatsappAccessToken: z.string().optional(),
+        whatsappPhoneNoId: z.string().optional(),
+      });
+      const body = schema.parse(req.body);
+
+      const updateData: any = { updatedAt: new Date() };
+      if (body.facebookAppId !== undefined) updateData.metaFacebookAppId = body.facebookAppId || null;
+      if (body.facebookAppSecret !== undefined && !body.facebookAppSecret.startsWith("••••")) updateData.metaFacebookAppSecret = body.facebookAppSecret || null;
+      if (body.whatsappEmbeddedSignupConfigId !== undefined) updateData.metaWhatsappEmbeddedSignupConfigId = body.whatsappEmbeddedSignupConfigId || null;
+      if (body.whatsappVerifyToken !== undefined && !body.whatsappVerifyToken.startsWith("••••")) updateData.metaWhatsappVerifyToken = body.whatsappVerifyToken || null;
+      if (body.whatsappAccessToken !== undefined && !body.whatsappAccessToken.startsWith("••••")) updateData.metaWhatsappAccessToken = body.whatsappAccessToken || null;
+      if (body.whatsappPhoneNoId !== undefined) updateData.metaWhatsappPhoneNoId = body.whatsappPhoneNoId || null;
+
+      const existing = await storage.getPlatformSettings();
+      await db.update(platformSettings)
+        .set(updateData)
+        .where(eq(platformSettings.id, existing.id));
+
+      const changedFields = Object.keys(updateData).filter(k => k !== "updatedAt").map(k => k.replace("meta", ""));
+      await db.insert(adminActionLogs).values({
+        adminUserId: adminId,
+        actionType: "UPDATE_META_SETTINGS",
+        details: `Updated Meta settings: ${changedFields.join(", ")}`,
+      });
+
+      const { clearMetaConfigCache } = await import("./utils/metaConfig");
+      clearMetaConfigCache();
+
+      res.json({ message: "Meta settings updated successfully" });
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors[0].message });
+      }
+      console.error("Error updating meta settings:", error);
+      res.status(500).json({ message: "Failed to update meta settings" });
     }
   });
 

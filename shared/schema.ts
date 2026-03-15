@@ -919,6 +919,12 @@ export type AdminActionLog = typeof adminActionLogs.$inferSelect;
 export const platformSettings = pgTable("platform_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   globalOtpRequired: boolean("global_otp_required").notNull().default(true),
+  metaFacebookAppId: varchar("meta_facebook_app_id"),
+  metaFacebookAppSecret: varchar("meta_facebook_app_secret"),
+  metaWhatsappEmbeddedSignupConfigId: varchar("meta_whatsapp_embedded_signup_config_id"),
+  metaWhatsappVerifyToken: varchar("meta_whatsapp_verify_token"),
+  metaWhatsappAccessToken: varchar("meta_whatsapp_access_token"),
+  metaWhatsappPhoneNoId: varchar("meta_whatsapp_phone_no_id"),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 

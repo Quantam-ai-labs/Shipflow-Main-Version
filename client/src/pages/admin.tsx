@@ -1468,6 +1468,177 @@ function SuperAdminsTab() {
 }
 
 // ─── SETTINGS TAB ───
+function MetaAppTab() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [editMode, setEditMode] = useState<Record<string, boolean>>({});
+  const [formValues, setFormValues] = useState<Record<string, string>>({});
+
+  const { data: metaSettings, isLoading } = useQuery<any>({
+    queryKey: ["/api/admin/meta-settings"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/meta-settings", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch meta settings");
+      return res.json();
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async (data: Record<string, string>) => {
+      const res = await apiRequest("PUT", "/api/admin/meta-settings", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Saved", description: "Meta settings updated. Changes take effect immediately for new requests." });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/meta-settings"] });
+      setEditMode({});
+      setFormValues({});
+    },
+    onError: (err: any) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
+  });
+
+  const fields = [
+    { key: "facebookAppId", label: "Facebook App ID", secret: false, instruction: "Meta Developers → Your App → Settings → Basic → App ID" },
+    { key: "facebookAppSecret", label: "Facebook App Secret", secret: true, instruction: "Meta Developers → Your App → Settings → Basic → App Secret (click Show)" },
+    { key: "whatsappEmbeddedSignupConfigId", label: "WhatsApp Embedded Signup Config ID", secret: false, instruction: "Meta Developers → Your App → WhatsApp → Embedded Signup → Configuration ID" },
+    { key: "whatsappVerifyToken", label: "WhatsApp Webhook Verify Token", secret: true, instruction: "A custom string you set. Must match the token entered in Meta Developers → WhatsApp → Configuration → Webhook → Verify Token" },
+    { key: "whatsappAccessToken", label: "WhatsApp Access Token (System Fallback)", secret: true, instruction: "Meta Developers → Your App → WhatsApp → API Setup → Permanent Access Token. Used when merchant has no own token." },
+    { key: "whatsappPhoneNoId", label: "WhatsApp Phone Number ID (System Fallback)", secret: false, instruction: "Meta Developers → Your App → WhatsApp → API Setup → Phone Number ID. Used when merchant has no own phone." },
+  ];
+
+  const handleEdit = (key: string) => {
+    setEditMode(prev => ({ ...prev, [key]: true }));
+    const currentVal = metaSettings?.[key] || "";
+    setFormValues(prev => ({ ...prev, [key]: currentVal.startsWith("••••") ? "" : currentVal }));
+  };
+
+  const handleSave = (key: string) => {
+    const val = formValues[key];
+    if (val === undefined) return;
+    updateMutation.mutate({ [key]: val });
+  };
+
+  const handleCancel = (key: string) => {
+    setEditMode(prev => ({ ...prev, [key]: false }));
+    setFormValues(prev => { const n = { ...prev }; delete n[key]; return n; });
+  };
+
+  const webhookUrl = typeof window !== "undefined"
+    ? `${window.location.origin}/api/whatsapp/webhook`
+    : "";
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2" data-testid="text-meta-settings-title">
+            <Globe className="w-5 h-5" />
+            Meta App Configuration
+          </CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Configure your Meta (Facebook/WhatsApp) app credentials. Values saved here override environment variables.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {isLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3, 4, 5, 6].map(i => <Skeleton key={i} className="h-16 w-full" />)}
+            </div>
+          ) : (
+            <>
+              {fields.map(({ key, label, secret, instruction }) => {
+                const isEditing = editMode[key];
+                const currentVal = metaSettings?.[key] || "";
+                const hasOverride = metaSettings?.hasDbOverride?.[key];
+                return (
+                  <div key={key} className="p-4 border rounded-lg space-y-2" data-testid={`meta-field-${key}`}>
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <Label className="font-medium text-sm">{label}</Label>
+                          {hasOverride && (
+                            <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">DB Override</Badge>
+                          )}
+                          {!hasOverride && currentVal && (
+                            <Badge variant="outline" className="text-xs bg-gray-50 text-gray-600 border-gray-200">Env Var</Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">{instruction}</p>
+                      </div>
+                      {!isEditing && (
+                        <Button variant="ghost" size="sm" onClick={() => handleEdit(key)} data-testid={`button-edit-${key}`}>
+                          <PenLine className="w-3.5 h-3.5 mr-1" />Edit
+                        </Button>
+                      )}
+                    </div>
+                    {isEditing ? (
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type={secret ? "password" : "text"}
+                          value={formValues[key] || ""}
+                          onChange={(e) => setFormValues(prev => ({ ...prev, [key]: e.target.value }))}
+                          placeholder={`Enter ${label}`}
+                          className="font-mono text-sm"
+                          data-testid={`input-${key}`}
+                        />
+                        <Button size="sm" onClick={() => handleSave(key)} disabled={updateMutation.isPending} data-testid={`button-save-${key}`}>
+                          {updateMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5 mr-1" />}
+                          Save
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => handleCancel(key)} data-testid={`button-cancel-${key}`}>
+                          Cancel
+                        </Button>
+                      </div>
+                    ) : (
+                      <p className="font-mono text-sm text-muted-foreground" data-testid={`value-${key}`}>
+                        {currentVal || <span className="italic text-orange-500">Not configured</span>}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+
+              <Separator className="my-4" />
+
+              <div className="p-4 border rounded-lg bg-muted/30 space-y-2">
+                <Label className="font-medium text-sm">WhatsApp Webhook URL</Label>
+                <p className="text-xs text-muted-foreground">Copy this URL into Meta Developers → WhatsApp → Configuration → Webhook → Callback URL</p>
+                <div className="flex items-center gap-2">
+                  <Input value={webhookUrl} readOnly className="font-mono text-sm bg-white" data-testid="input-webhook-url" />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { navigator.clipboard.writeText(webhookUrl); toast({ title: "Copied", description: "Webhook URL copied to clipboard" }); }}
+                    data-testid="button-copy-webhook-url"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5 mr-1" />Copy
+                  </Button>
+                </div>
+              </div>
+
+              <div className="p-4 border rounded-lg bg-amber-50 dark:bg-amber-950/20 space-y-2">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-600" />
+                  <Label className="font-medium text-sm text-amber-800 dark:text-amber-400">How to Switch Meta Apps</Label>
+                </div>
+                <ol className="text-xs text-amber-700 dark:text-amber-400 space-y-1 list-decimal list-inside">
+                  <li>Create your new Meta App at developers.facebook.com</li>
+                  <li>In the new app, add "WhatsApp" and "Facebook Login" products</li>
+                  <li>Update the Facebook App ID and App Secret above with the new app's credentials</li>
+                  <li>Set up WhatsApp Embedded Signup and enter the new Config ID</li>
+                  <li>Configure the Webhook with the callback URL above and a new Verify Token</li>
+                  <li>Generate a permanent System User access token and update WhatsApp Access Token</li>
+                  <li>Merchants will need to reconnect their WhatsApp Business Accounts via the new embedded signup</li>
+                </ol>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 function SettingsTab() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -1604,7 +1775,7 @@ export default function AdminPanel() {
       </div>
 
       <Tabs defaultValue="dashboard" className="w-full">
-        <TabsList className="grid w-full grid-cols-8" data-testid="admin-tabs">
+        <TabsList className="grid w-full grid-cols-9" data-testid="admin-tabs">
           <TabsTrigger value="dashboard" data-testid="tab-dashboard" className="text-xs sm:text-sm">
             <Activity className="w-4 h-4 mr-1 hidden sm:inline" />Dashboard
           </TabsTrigger>
@@ -1626,6 +1797,9 @@ export default function AdminPanel() {
           <TabsTrigger value="admins" data-testid="tab-admins" className="text-xs sm:text-sm">
             <Shield className="w-4 h-4 mr-1 hidden sm:inline" />Admins
           </TabsTrigger>
+          <TabsTrigger value="meta-app" data-testid="tab-meta-app" className="text-xs sm:text-sm">
+            <Globe className="w-4 h-4 mr-1 hidden sm:inline" />Meta App
+          </TabsTrigger>
           <TabsTrigger value="settings" data-testid="tab-settings" className="text-xs sm:text-sm">
             <KeyRound className="w-4 h-4 mr-1 hidden sm:inline" />Settings
           </TabsTrigger>
@@ -1638,6 +1812,7 @@ export default function AdminPanel() {
         <TabsContent value="health" className="mt-6"><HealthTab /></TabsContent>
         <TabsContent value="audit" className="mt-6"><AuditLogTab /></TabsContent>
         <TabsContent value="admins" className="mt-6"><SuperAdminsTab /></TabsContent>
+        <TabsContent value="meta-app" className="mt-6"><MetaAppTab /></TabsContent>
         <TabsContent value="settings" className="mt-6"><SettingsTab /></TabsContent>
       </Tabs>
     </div>

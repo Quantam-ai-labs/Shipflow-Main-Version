@@ -82,6 +82,16 @@ Preferred communication style: Simple, everyday language.
 
 ## Meta Ads Integration
 
+### Admin Meta App Configuration
+- Super Admin can configure all Meta/WhatsApp credentials from the "Meta App" tab in the Control Room (`/admin`)
+- 6 configurable settings: Facebook App ID, App Secret, WhatsApp Embedded Signup Config ID, WA Verify Token, WA Access Token (system fallback), WA Phone Number ID (system fallback)
+- Values saved in `platform_settings` DB table override environment variables
+- Centralized config via `server/utils/metaConfig.ts` — `getMetaConfig()` returns DB-first, env var fallback values with 60s TTL cache
+- Secrets are masked in the UI (last 4 chars visible)
+- "DB Override" / "Env Var" badges indicate value source
+- Webhook URL shown for copy-paste into Meta Developer Console
+- Step-by-step Meta app switching instructions included
+
 ### OAuth Connect
 - Facebook OAuth 2.0 flow via `/api/meta/oauth/url` (generates auth URL) and `/api/meta/oauth/callback` (exchanges code for long-lived token)
 - Permissions: `ads_management`, `ads_read`, `business_management`, `pages_show_list`, `pages_read_engagement`

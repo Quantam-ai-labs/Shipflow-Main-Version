@@ -48,26 +48,27 @@ import { startSalesLaunch } from "../services/meta/salesLaunchService";
 import { runDiagnostics } from "../services/meta/salesDiagnostics";
 import { normalizeInput, validateLaunchInput, validateMediaReadiness, validateConnection, type ValidationIssue } from "../services/meta/salesValidation";
 import { generateChatResponse, generateDashboardInsights, generateQuickStrategy } from "../services/aiInsights";
+import { getMetaConfig } from "../utils/metaConfig";
 import crypto from "crypto";
 
-function getOauthStateSecret(): string {
-  const secret = process.env.FACEBOOK_APP_SECRET;
-  if (!secret) throw new Error("FACEBOOK_APP_SECRET is required for OAuth state signing");
-  return secret;
+async function getOauthStateSecret(): Promise<string> {
+  const config = await getMetaConfig();
+  if (!config.facebookAppSecret) throw new Error("FACEBOOK_APP_SECRET is required for OAuth state signing");
+  return config.facebookAppSecret;
 }
 
-function createOauthState(merchantId: string): string {
+async function createOauthState(merchantId: string): Promise<string> {
   const timestamp = Date.now().toString();
-  const secret = getOauthStateSecret();
+  const secret = await getOauthStateSecret();
   const payload = `${merchantId}:${timestamp}`;
   const hmac = crypto.createHmac("sha256", secret).update(payload).digest("hex");
   return Buffer.from(JSON.stringify({ merchantId, timestamp, hmac })).toString("base64url");
 }
 
-function verifyOauthState(state: string): { merchantId: string } | null {
+async function verifyOauthState(state: string): Promise<{ merchantId: string } | null> {
   try {
     const { merchantId, timestamp, hmac } = JSON.parse(Buffer.from(state, "base64url").toString());
-    const secret = getOauthStateSecret();
+    const secret = await getOauthStateSecret();
     const payload = `${merchantId}:${timestamp}`;
     const expected = crypto.createHmac("sha256", secret).update(payload).digest("hex");
     if (!crypto.timingSafeEqual(Buffer.from(hmac), Buffer.from(expected))) return null;
@@ -1496,9 +1497,8 @@ export function registerMarketingRoutes(app: Express) {
     try {
       const merchantId = await getMerchantId(req);
 
-      const appId = process.env.FACEBOOK_APP_ID;
-      const appSecret = process.env.FACEBOOK_APP_SECRET;
-      if (!appId || !appSecret) {
+      const metaConf = await getMetaConfig();
+      if (!metaConf.facebookAppId || !metaConf.facebookAppSecret) {
         return res.status(400).json({ error: "Facebook App credentials not configured. Contact your platform administrator." });
       }
 
@@ -1513,10 +1513,10 @@ export function registerMarketingRoutes(app: Express) {
         "instagram_manage_insights",
       ].join(",");
 
-      const stateToken = createOauthState(merchantId);
+      const stateToken = await createOauthState(merchantId);
 
       const oauthUrl = new URL(`https://www.facebook.com/${META_API_VERSION}/dialog/oauth`);
-      oauthUrl.searchParams.set("client_id", appId);
+      oauthUrl.searchParams.set("client_id", metaConf.facebookAppId);
       oauthUrl.searchParams.set("redirect_uri", redirectUri);
       oauthUrl.searchParams.set("scope", scopes);
       oauthUrl.searchParams.set("state", stateToken);
@@ -1541,26 +1541,25 @@ export function registerMarketingRoutes(app: Express) {
         return res.redirect("/settings?tab=marketing&oauth=error&message=Missing+authorization+code");
       }
 
-      const stateEntry = verifyOauthState(state as string);
+      const stateEntry = await verifyOauthState(state as string);
       if (!stateEntry) {
         return res.redirect("/settings?tab=marketing&oauth=error&message=Invalid+or+expired+state+parameter");
       }
 
       const merchantId = stateEntry.merchantId;
 
-      const appId = process.env.FACEBOOK_APP_ID;
-      const appSecretRaw = process.env.FACEBOOK_APP_SECRET;
+      const metaConf = await getMetaConfig();
 
-      if (!appId || !appSecretRaw) {
+      if (!metaConf.facebookAppId || !metaConf.facebookAppSecret) {
         return res.redirect("/settings?tab=marketing&oauth=error&message=Facebook+App+credentials+not+configured");
       }
 
       const redirectUri = `${req.protocol}://${req.get("host")}/api/meta/oauth/callback`;
 
       const tokenUrl = new URL(`${META_BASE_URL}/oauth/access_token`);
-      tokenUrl.searchParams.set("client_id", appId);
+      tokenUrl.searchParams.set("client_id", metaConf.facebookAppId);
       tokenUrl.searchParams.set("redirect_uri", redirectUri);
-      tokenUrl.searchParams.set("client_secret", appSecretRaw);
+      tokenUrl.searchParams.set("client_secret", metaConf.facebookAppSecret);
       tokenUrl.searchParams.set("code", code as string);
 
       const tokenRes = await fetch(tokenUrl.toString());
@@ -1747,10 +1746,9 @@ export function registerMarketingRoutes(app: Express) {
         return res.status(400).json({ error: "No access token to refresh" });
       }
 
-      const appId = process.env.FACEBOOK_APP_ID;
-      const appSecretRaw = process.env.FACEBOOK_APP_SECRET;
+      const metaConf = await getMetaConfig();
 
-      if (!appId || !appSecretRaw) {
+      if (!metaConf.facebookAppId || !metaConf.facebookAppSecret) {
         return res.status(400).json({ error: "Facebook App credentials not configured" });
       }
 
@@ -1758,8 +1756,8 @@ export function registerMarketingRoutes(app: Express) {
 
       const refreshUrl = new URL(`${META_BASE_URL}/oauth/access_token`);
       refreshUrl.searchParams.set("grant_type", "fb_exchange_token");
-      refreshUrl.searchParams.set("client_id", appId);
-      refreshUrl.searchParams.set("client_secret", appSecretRaw);
+      refreshUrl.searchParams.set("client_id", metaConf.facebookAppId);
+      refreshUrl.searchParams.set("client_secret", metaConf.facebookAppSecret);
       refreshUrl.searchParams.set("fb_exchange_token", currentToken);
 
       const refreshRes = await fetch(refreshUrl.toString());
@@ -2843,15 +2841,14 @@ export function registerMarketingRoutes(app: Express) {
         return res.status(400).json({ error: "Authorization code is required" });
       }
 
-      const appId = process.env.FACEBOOK_APP_ID;
-      const appSecret = process.env.FACEBOOK_APP_SECRET;
-      if (!appId || !appSecret) {
+      const metaConf = await getMetaConfig();
+      if (!metaConf.facebookAppId || !metaConf.facebookAppSecret) {
         return res.status(400).json({ error: "Facebook App credentials not configured" });
       }
 
       const tokenUrl = new URL(`${META_BASE_URL}/oauth/access_token`);
-      tokenUrl.searchParams.set("client_id", appId);
-      tokenUrl.searchParams.set("client_secret", appSecret);
+      tokenUrl.searchParams.set("client_id", metaConf.facebookAppId);
+      tokenUrl.searchParams.set("client_secret", metaConf.facebookAppSecret);
       tokenUrl.searchParams.set("code", code);
 
       const tokenRes = await fetch(tokenUrl.toString());
@@ -2991,12 +2988,11 @@ export function registerMarketingRoutes(app: Express) {
 
   app.get("/api/whatsapp/embedded-signup/config", isAuthenticated, async (req: any, res) => {
     try {
-      const appId = process.env.FACEBOOK_APP_ID;
-      if (!appId) {
+      const metaConf = await getMetaConfig();
+      if (!metaConf.facebookAppId) {
         return res.status(400).json({ error: "Facebook App not configured" });
       }
-      const configId = process.env.WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID || "";
-      res.json({ appId, configId });
+      res.json({ appId: metaConf.facebookAppId, configId: metaConf.whatsappEmbeddedSignupConfigId });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
