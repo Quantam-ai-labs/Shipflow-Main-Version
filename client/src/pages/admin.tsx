@@ -1592,7 +1592,7 @@ function MetaAppTab() {
       content: (
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">In your Meta app dashboard, go to <strong>Add Products</strong> and add:</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div className="p-3 border rounded-lg bg-muted/30">
               <p className="text-sm font-medium">Facebook Login for Business</p>
               <p className="text-xs text-muted-foreground mt-1">Required for merchant WhatsApp onboarding via Embedded Signup</p>
@@ -1600,6 +1600,10 @@ function MetaAppTab() {
             <div className="p-3 border rounded-lg bg-muted/30">
               <p className="text-sm font-medium">WhatsApp</p>
               <p className="text-xs text-muted-foreground mt-1">Required for WhatsApp Business API messaging</p>
+            </div>
+            <div className="p-3 border rounded-lg bg-muted/30">
+              <p className="text-sm font-medium">Marketing API</p>
+              <p className="text-xs text-muted-foreground mt-1">Required for Meta Ads Manager and Ads Launcher</p>
             </div>
           </div>
         </div>
@@ -1627,6 +1631,9 @@ function MetaAppTab() {
               { perm: "whatsapp_business_management", note: "Standard Access", critical: false },
               { perm: "whatsapp_business_messaging", note: "Standard Access", critical: false },
               { perm: "business_management", note: "Standard Access", critical: false },
+              { perm: "ads_management", note: "Advanced Access", critical: true },
+              { perm: "ads_read", note: "Advanced Access", critical: true },
+              { perm: "read_insights", note: "Advanced Access", critical: true },
             ].map(({ perm, note, critical }) => (
               <div key={perm} className={`flex items-center justify-between p-2 rounded-lg border text-sm ${critical ? "bg-amber-50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-800" : "bg-muted/30"}`}>
                 <span className="font-mono text-xs">{perm}</span>
@@ -1637,7 +1644,7 @@ function MetaAppTab() {
           <div className="p-3 border border-amber-200 rounded-lg bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">
             <p className="text-xs text-amber-800 dark:text-amber-400 flex items-center gap-1.5">
               <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-              <strong>public_profile MUST have Advanced Access</strong> — without this, Embedded Signup will silently fail. Submit for Advanced Access via App Review.
+              <strong>public_profile, ads_management, ads_read, and read_insights MUST have Advanced Access</strong> — without public_profile, Embedded Signup will silently fail. Without ads permissions, Ad Manager and Ads Launcher won't work. Submit for Advanced Access via App Review.
             </p>
           </div>
         </div>
