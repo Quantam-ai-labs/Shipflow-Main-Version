@@ -3021,6 +3021,11 @@ export function registerMarketingRoutes(app: Express) {
         console.error(`[WA-Signup] Phone registration error:`, regErr.message);
       }
 
+      await db.update(merchants).set({
+        waPhoneRegistered: registrationStatus === "success",
+        updatedAt: new Date(),
+      }).where(eq(merchants.id, merchantId));
+
       res.json({
         success: true,
         wabaId,
@@ -3070,6 +3075,10 @@ export function registerMarketingRoutes(app: Express) {
 
       if (registerRes.ok) {
         console.log(`[WA-Register] Phone ${merchant.waPhoneNumberId} registered successfully for merchant ${merchantId}`);
+        await db.update(merchants).set({
+          waPhoneRegistered: true,
+          updatedAt: new Date(),
+        }).where(eq(merchants.id, merchantId));
         return res.json({ success: true, registrationStatus: "success" });
       }
 

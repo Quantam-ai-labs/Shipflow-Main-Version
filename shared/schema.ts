@@ -60,6 +60,7 @@ export const merchants = pgTable("merchants", {
   waVerifyToken: varchar("wa_verify_token", { length: 255 }),
   waNotificationsEnabled: boolean("wa_notifications_enabled").notNull().default(true),
   waDisconnected: boolean("wa_disconnected").notNull().default(false),
+  waPhoneRegistered: boolean("wa_phone_registered").notNull().default(false),
   supportChatPin: varchar("support_chat_pin", { length: 6 }),
   supportChatPinHash: varchar("support_chat_pin_hash", { length: 128 }),
   robocallDisconnected: boolean("robocall_disconnected").notNull().default(false),

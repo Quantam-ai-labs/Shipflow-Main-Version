@@ -28,6 +28,7 @@ interface ConnectionData {
   waWabaId: string;
   connected: boolean;
   waDisconnected: boolean;
+  waPhoneRegistered: boolean;
   waVerifyToken: string;
   webhookUrl: string;
 }
@@ -132,6 +133,11 @@ export default function SettingsWhatsApp() {
       waAccessToken: data.waAccessToken || "",
       waWabaId: data.waWabaId || "",
     });
+    if (data.connected && !data.waPhoneRegistered && regStatus === null) {
+      setRegStatus("failed");
+    } else if (data.connected && data.waPhoneRegistered && regStatus === null) {
+      setRegStatus("success");
+    }
     setLoaded(true);
   }
 
@@ -274,6 +280,7 @@ export default function SettingsWhatsApp() {
       setRegStatus("success");
       setRegError(null);
       setTwoFaPin("");
+      queryClient.invalidateQueries({ queryKey: ["/api/support/connection"] });
       toast({
         title: "Phone Registered!",
         description: "Your WhatsApp phone number is now fully registered and ready to send messages.",
@@ -381,16 +388,18 @@ export default function SettingsWhatsApp() {
             <Badge
               variant={isConnected ? "default" : "secondary"}
               className={
-                isConnected
+                isConnected && data?.waPhoneRegistered
                   ? "bg-green-500 text-white gap-1.5 no-default-hover-elevate no-default-active-elevate"
-                  : isDisconnected
+                  : isConnected && !data?.waPhoneRegistered
                     ? "bg-amber-500 text-white gap-1.5 no-default-hover-elevate no-default-active-elevate"
-                    : "gap-1.5"
+                    : isDisconnected
+                      ? "bg-amber-500 text-white gap-1.5 no-default-hover-elevate no-default-active-elevate"
+                      : "gap-1.5"
               }
               data-testid="status-wa-connection"
             >
               {isConnected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-              {isDisconnected ? "Paused" : isConnected ? "Connected" : "Not Connected"}
+              {isDisconnected ? "Paused" : isConnected && data?.waPhoneRegistered ? "Connected" : isConnected ? "Phone Not Registered" : "Not Connected"}
             </Badge>
             {isConnected && (
               <AlertDialog>

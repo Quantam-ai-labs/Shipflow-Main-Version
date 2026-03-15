@@ -7903,6 +7903,8 @@ export async function registerRoutes(
         waAccessToken: merchants.waAccessToken,
         waWabaId: merchants.waWabaId,
         waVerifyToken: merchants.waVerifyToken,
+        waDisconnected: merchants.waDisconnected,
+        waPhoneRegistered: merchants.waPhoneRegistered,
       }).from(merchants).where(eq(merchants.id, merchantId)).limit(1);
 
       let verifyToken = merchantRow?.waVerifyToken ?? null;
@@ -7915,13 +7917,13 @@ export async function registerRoutes(
       const proto = req.headers["x-forwarded-proto"] || req.protocol || "https";
       const canonicalHost = `${proto}://${req.get("host")}`;
 
-      const [disconnectRow] = await db.select({ waDisconnected: merchants.waDisconnected }).from(merchants).where(eq(merchants.id, merchantId)).limit(1);
       res.json({
         waPhoneNumberId: merchantRow?.waPhoneNumberId ?? "",
         waAccessToken: merchantRow?.waAccessToken ? "••••••••" : "",
         waWabaId: merchantRow?.waWabaId ?? "",
         connected: !!(merchantRow?.waPhoneNumberId && merchantRow?.waAccessToken),
-        waDisconnected: disconnectRow?.waDisconnected ?? false,
+        waDisconnected: merchantRow?.waDisconnected ?? false,
+        waPhoneRegistered: merchantRow?.waPhoneRegistered ?? false,
         waVerifyToken: verifyToken,
         webhookUrl: `${canonicalHost}/webhooks/whatsapp/${merchantId}`,
       });
