@@ -542,7 +542,7 @@ function MainApp() {
     return <AuthPage />;
   }
 
-  if (location === "/" || location === "") {
+  if (location === "/" || location === "" || location === "/api/login" || location === "/auth") {
     return <Redirect to="/dashboard" />;
   }
 

@@ -782,7 +782,7 @@ export default function Landing() {
             </div>
             <div className="flex items-center gap-3">
               <ThemeToggle />
-              <a href="/api/login">
+              <a href="/auth">
                 <Button data-testid="button-login" size="sm">
                   Get Started
                   <ArrowRight className="w-4 h-4 ml-1" />
@@ -866,7 +866,7 @@ export default function Landing() {
                 transition={{ delay: 0.75 }}
                 className="flex flex-col sm:flex-row gap-4"
               >
-                <a href="/api/login">
+                <a href="/auth">
                   <Button size="lg" className="w-full sm:w-auto" data-testid="button-hero-cta">
                     Start Free Trial
                     <ArrowRight className="w-4 h-4 ml-2" />
@@ -983,7 +983,7 @@ export default function Landing() {
                       <Badge variant="secondary">{section.badge}</Badge>
                       <h3 className="text-2xl sm:text-3xl font-bold">{section.title}</h3>
                       <p className="text-muted-foreground leading-relaxed">{section.description}</p>
-                      <a href="/api/login">
+                      <a href="/auth">
                         <Button variant="outline" className="group" data-testid={`button-feature-${section.id}`}>
                           Learn More
                           <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-0.5 transition-transform" />
@@ -1075,7 +1075,7 @@ export default function Landing() {
             transition={{ delay: 0.4 }}
             className="flex flex-col sm:flex-row gap-4 justify-center"
           >
-            <a href="/api/login">
+            <a href="/auth">
               <Button size="lg" variant="secondary" data-testid="button-cta-bottom">
                 Get Started Free
                 <ArrowRight className="w-4 h-4 ml-2" />
@@ -1116,7 +1116,7 @@ export default function Landing() {
               <h4 className="font-semibold text-sm mb-3">Company</h4>
               <div className="space-y-2">
                 <Link href="/contact"><span className="block text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer" data-testid="link-footer-contact">Contact</span></Link>
-                <a href="/api/login" className="block text-sm text-muted-foreground hover:text-foreground transition-colors" data-testid="link-footer-login">Sign In</a>
+                <a href="/auth" className="block text-sm text-muted-foreground hover:text-foreground transition-colors" data-testid="link-footer-login">Sign In</a>
               </div>
             </div>
             <div>

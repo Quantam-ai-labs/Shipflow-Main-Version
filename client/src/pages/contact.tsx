@@ -75,7 +75,7 @@ export default function ContactPage() {
             </div>
             <div className="flex items-center gap-3">
               <ThemeToggle />
-              <a href="/api/login">
+              <a href="/auth">
                 <Button data-testid="button-login" size="sm">
                   Get Started
                   <ArrowRight className="w-4 h-4 ml-1" />
@@ -283,7 +283,7 @@ export default function ContactPage() {
                   <p className="text-sm text-muted-foreground mb-4">
                     Check our documentation or sign in to access live chat support.
                   </p>
-                  <a href="/api/login">
+                  <a href="/auth">
                     <Button variant="outline" size="sm" className="w-full" data-testid="button-support">
                       Access Support
                       <ArrowRight className="w-4 h-4 ml-1" />

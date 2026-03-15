@@ -135,7 +135,7 @@ export default function PricingPage() {
             </div>
             <div className="flex items-center gap-3">
               <ThemeToggle />
-              <a href="/api/login">
+              <a href="/auth">
                 <Button data-testid="button-login" size="sm">
                   Get Started
                   <ArrowRight className="w-4 h-4 ml-1" />
@@ -236,7 +236,7 @@ export default function PricingPage() {
                           </div>
                         ))}
                       </div>
-                      <a href="/api/login">
+                      <a href="/auth">
                         <Button
                           className="w-full"
                           variant={plan.popular ? "default" : "outline"}
