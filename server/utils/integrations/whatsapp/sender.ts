@@ -98,19 +98,19 @@ export async function sendWhatsAppApiRequest(params: {
 }): Promise<SendResult> {
   const { formattedPhone, templateName, messageText, orderNumber, templateParams } = params;
 
-  const phoneNumberId = params.phoneNumberId || process.env.WHATSAPP_PHONE_NO_ID;
-  const token = params.accessToken || process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneNumberId = params.phoneNumberId;
+  const token = params.accessToken;
 
   if (!token) {
     console.warn(
-      `${LOG_PREFIX} WHATSAPP_ACCESS_TOKEN not set — skipping order ${orderNumber}`
+      `${LOG_PREFIX} WhatsApp access token not provided — skipping order ${orderNumber}`
     );
-    return { success: false, error: "WHATSAPP_ACCESS_TOKEN not configured" };
+    return { success: false, error: "WhatsApp not configured. Please connect your WhatsApp Business Account in Settings." };
   }
 
   if (!phoneNumberId) {
     console.warn(
-      `${LOG_PREFIX} WHATSAPP_PHONE_NO_ID not set — skipping order ${orderNumber}`
+      `${LOG_PREFIX} WhatsApp phone number ID not provided — skipping order ${orderNumber}`
     );
     return { success: false, error: "WhatsApp Phone Number ID not configured" };
   }

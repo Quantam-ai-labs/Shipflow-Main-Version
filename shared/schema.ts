@@ -923,8 +923,6 @@ export const platformSettings = pgTable("platform_settings", {
   metaFacebookAppSecret: varchar("meta_facebook_app_secret"),
   metaWhatsappEmbeddedSignupConfigId: varchar("meta_whatsapp_embedded_signup_config_id"),
   metaWhatsappVerifyToken: varchar("meta_whatsapp_verify_token"),
-  metaWhatsappAccessToken: varchar("meta_whatsapp_access_token"),
-  metaWhatsappPhoneNoId: varchar("meta_whatsapp_phone_no_id"),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 

@@ -25,7 +25,5 @@ export async function getMetaConfig() {
     facebookAppSecret: s.metaFacebookAppSecret || process.env.FACEBOOK_APP_SECRET || "",
     whatsappEmbeddedSignupConfigId: s.metaWhatsappEmbeddedSignupConfigId || process.env.WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID || "",
     whatsappVerifyToken: s.metaWhatsappVerifyToken || process.env.WHATSAPP_VERIFY_TOKEN || "",
-    whatsappAccessToken: s.metaWhatsappAccessToken || process.env.WHATSAPP_ACCESS_TOKEN || "",
-    whatsappPhoneNoId: s.metaWhatsappPhoneNoId || process.env.WHATSAPP_PHONE_NO_ID || "",
   };
 }

@@ -27,7 +27,7 @@ import {
   TrendingUp, Package, ShoppingCart, Truck, Server,
   BarChart3, ClipboardList, Crown, ArrowLeft, HardDrive, Cpu,
   Clock, Zap, Globe, ChevronRight, LogOut, Plus, Trash2, ExternalLink,
-  PenLine, KeyRound,
+  PenLine, KeyRound, Copy, Info, CircleCheck, CircleDot,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, queryClient as globalQueryClient } from "@/lib/queryClient";
@@ -1468,11 +1468,68 @@ function SuperAdminsTab() {
 }
 
 // ─── SETTINGS TAB ───
+function CopyField({ label, value, description }: { label: string; value: string; description?: string }) {
+  const { toast } = useToast();
+  const handleCopy = () => {
+    navigator.clipboard.writeText(value);
+    toast({ title: "Copied", description: `${label} copied to clipboard` });
+  };
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs font-medium text-muted-foreground">{label}</Label>
+      {description && <p className="text-xs text-muted-foreground/70">{description}</p>}
+      <div className="flex items-center gap-2">
+        <Input value={value} readOnly className="font-mono text-xs bg-muted/50 h-8" data-testid={`input-copy-${label.toLowerCase().replace(/\s/g, "-")}`} />
+        <Button variant="outline" size="sm" className="h-8 px-2 shrink-0" onClick={handleCopy} data-testid={`button-copy-${label.toLowerCase().replace(/\s/g, "-")}`}>
+          <Copy className="w-3.5 h-3.5" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function InlineEditField({ label, fieldKey, value, secret, onSave, isPending }: {
+  label: string; fieldKey: string; value: string; secret: boolean;
+  onSave: (key: string, val: string) => void; isPending: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [inputVal, setInputVal] = useState("");
+  const handleEdit = () => { setEditing(true); setInputVal(value.startsWith("••••") ? "" : value); };
+  const handleSave = () => { onSave(fieldKey, inputVal); setEditing(false); };
+  const configured = !!value && value !== "";
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-2">
+        <Label className="text-sm font-medium">{label}</Label>
+        {configured && !editing && <Badge variant="outline" className="text-xs bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800">Configured</Badge>}
+        {!configured && !editing && <Badge variant="outline" className="text-xs bg-orange-50 text-orange-600 border-orange-200 dark:bg-orange-950/30 dark:text-orange-400 dark:border-orange-800">Required</Badge>}
+      </div>
+      {editing ? (
+        <div className="flex items-center gap-2">
+          <Input type={secret ? "password" : "text"} value={inputVal} onChange={(e) => setInputVal(e.target.value)}
+            placeholder={`Enter ${label}`} className="font-mono text-sm h-9" autoFocus data-testid={`input-${fieldKey}`} />
+          <Button size="sm" className="h-9" onClick={handleSave} disabled={isPending} data-testid={`button-save-${fieldKey}`}>
+            {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+          </Button>
+          <Button size="sm" variant="ghost" className="h-9" onClick={() => setEditing(false)} data-testid={`button-cancel-${fieldKey}`}>Cancel</Button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-sm text-muted-foreground" data-testid={`value-${fieldKey}`}>
+            {value || <span className="italic text-orange-500">Not set</span>}
+          </span>
+          <Button variant="ghost" size="sm" className="h-7 px-2" onClick={handleEdit} data-testid={`button-edit-${fieldKey}`}>
+            <PenLine className="w-3 h-3" />
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MetaAppTab() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [editMode, setEditMode] = useState<Record<string, boolean>>({});
-  const [formValues, setFormValues] = useState<Record<string, string>>({});
 
   const { data: metaSettings, isLoading } = useQuery<any>({
     queryKey: ["/api/admin/meta-settings"],
@@ -1489,152 +1546,216 @@ function MetaAppTab() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Saved", description: "Meta settings updated. Changes take effect immediately for new requests." });
+      toast({ title: "Saved", description: "Setting updated successfully." });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/meta-settings"] });
-      setEditMode({});
-      setFormValues({});
     },
     onError: (err: any) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
   });
 
-  const fields = [
-    { key: "facebookAppId", label: "Facebook App ID", secret: false, instruction: "Meta Developers → Your App → Settings → Basic → App ID" },
-    { key: "facebookAppSecret", label: "Facebook App Secret", secret: true, instruction: "Meta Developers → Your App → Settings → Basic → App Secret (click Show)" },
-    { key: "whatsappEmbeddedSignupConfigId", label: "WhatsApp Embedded Signup Config ID", secret: false, instruction: "Meta Developers → Your App → WhatsApp → Embedded Signup → Configuration ID" },
-    { key: "whatsappVerifyToken", label: "WhatsApp Webhook Verify Token", secret: true, instruction: "A custom string you set. Must match the token entered in Meta Developers → WhatsApp → Configuration → Webhook → Verify Token" },
-    { key: "whatsappAccessToken", label: "WhatsApp Access Token (System Fallback)", secret: true, instruction: "Meta Developers → Your App → WhatsApp → API Setup → Permanent Access Token. Used when merchant has no own token." },
-    { key: "whatsappPhoneNoId", label: "WhatsApp Phone Number ID (System Fallback)", secret: false, instruction: "Meta Developers → Your App → WhatsApp → API Setup → Phone Number ID. Used when merchant has no own phone." },
-  ];
-
-  const handleEdit = (key: string) => {
-    setEditMode(prev => ({ ...prev, [key]: true }));
-    const currentVal = metaSettings?.[key] || "";
-    setFormValues(prev => ({ ...prev, [key]: currentVal.startsWith("••••") ? "" : currentVal }));
-  };
-
-  const handleSave = (key: string) => {
-    const val = formValues[key];
-    if (val === undefined) return;
+  const handleFieldSave = (key: string, val: string) => {
     updateMutation.mutate({ [key]: val });
   };
 
-  const handleCancel = (key: string) => {
-    setEditMode(prev => ({ ...prev, [key]: false }));
-    setFormValues(prev => { const n = { ...prev }; delete n[key]; return n; });
-  };
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        {[1, 2, 3, 4, 5, 6, 7, 8].map(i => <Skeleton key={i} className="h-24 w-full" />)}
+      </div>
+    );
+  }
 
-  const webhookUrl = typeof window !== "undefined"
-    ? `${window.location.origin}/api/whatsapp/webhook`
-    : "";
+  const urls = metaSettings?.urls || {};
+  const appId = metaSettings?.facebookAppId || "";
+
+  const steps = [
+    {
+      num: 1,
+      title: "Create a Meta App",
+      content: (
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">Go to <a href="https://developers.facebook.com/apps/" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline" data-testid="link-meta-developers">developers.facebook.com/apps</a> and create a new app.</p>
+          <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside ml-1">
+            <li>Select <strong>"Other"</strong> as the use case</li>
+            <li>Choose <strong>"Business"</strong> as the app type</li>
+            <li>Name it something like <strong>"1SOL Logistics"</strong></li>
+          </ul>
+          <Separator className="my-3" />
+          <InlineEditField label="Facebook App ID" fieldKey="facebookAppId" value={appId} secret={false} onSave={handleFieldSave} isPending={updateMutation.isPending} />
+          <InlineEditField label="Facebook App Secret" fieldKey="facebookAppSecret" value={metaSettings?.facebookAppSecret || ""} secret={true} onSave={handleFieldSave} isPending={updateMutation.isPending} />
+          <p className="text-xs text-muted-foreground/70 flex items-center gap-1"><Info className="w-3 h-3" /> Find these under Settings → Basic in your Meta app dashboard</p>
+        </div>
+      ),
+    },
+    {
+      num: 2,
+      title: "Add Products to Your App",
+      content: (
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">In your Meta app dashboard, go to <strong>Add Products</strong> and add:</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="p-3 border rounded-lg bg-muted/30">
+              <p className="text-sm font-medium">Facebook Login for Business</p>
+              <p className="text-xs text-muted-foreground mt-1">Required for merchant WhatsApp onboarding via Embedded Signup</p>
+            </div>
+            <div className="p-3 border rounded-lg bg-muted/30">
+              <p className="text-sm font-medium">WhatsApp</p>
+              <p className="text-xs text-muted-foreground mt-1">Required for WhatsApp Business API messaging</p>
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      num: 3,
+      title: "Configure Facebook Login → OAuth Redirect",
+      content: (
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">Go to <strong>Facebook Login for Business → Settings</strong> and paste this as the <strong>Valid OAuth Redirect URI</strong>:</p>
+          <CopyField label="OAuth Redirect URI" value={urls.oauthCallback || ""} />
+        </div>
+      ),
+    },
+    {
+      num: 4,
+      title: "Configure Permissions",
+      content: (
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">Go to <strong>App Review → Permissions and Features</strong> and request the following:</p>
+          <div className="space-y-2">
+            {[
+              { perm: "public_profile", note: "Must have Advanced Access", critical: true },
+              { perm: "whatsapp_business_management", note: "Standard Access", critical: false },
+              { perm: "whatsapp_business_messaging", note: "Standard Access", critical: false },
+              { perm: "business_management", note: "Standard Access", critical: false },
+            ].map(({ perm, note, critical }) => (
+              <div key={perm} className={`flex items-center justify-between p-2 rounded-lg border text-sm ${critical ? "bg-amber-50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-800" : "bg-muted/30"}`}>
+                <span className="font-mono text-xs">{perm}</span>
+                <Badge variant={critical ? "default" : "outline"} className={`text-xs ${critical ? "bg-amber-600" : ""}`}>{note}</Badge>
+              </div>
+            ))}
+          </div>
+          <div className="p-3 border border-amber-200 rounded-lg bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">
+            <p className="text-xs text-amber-800 dark:text-amber-400 flex items-center gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+              <strong>public_profile MUST have Advanced Access</strong> — without this, Embedded Signup will silently fail. Submit for Advanced Access via App Review.
+            </p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      num: 5,
+      title: "WhatsApp Embedded Signup Configuration",
+      content: (
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">Go to <strong>WhatsApp → Embedded Signup</strong> in your Meta app and create a configuration. Copy the <strong>Configuration ID</strong>.</p>
+          <InlineEditField label="Embedded Signup Config ID" fieldKey="whatsappEmbeddedSignupConfigId" value={metaSettings?.whatsappEmbeddedSignupConfigId || ""} secret={false} onSave={handleFieldSave} isPending={updateMutation.isPending} />
+        </div>
+      ),
+    },
+    {
+      num: 6,
+      title: "Configure Webhook",
+      content: (
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">Go to <strong>WhatsApp → Configuration → Webhook</strong> and set up the webhook:</p>
+          <CopyField label="Callback URL" value={urls.webhookCallback || ""} description="Paste this as the Webhook Callback URL" />
+          <Separator className="my-2" />
+          <InlineEditField label="Verify Token" fieldKey="whatsappVerifyToken" value={metaSettings?.whatsappVerifyToken || ""} secret={false} onSave={handleFieldSave} isPending={updateMutation.isPending} />
+          <p className="text-xs text-muted-foreground/70 flex items-center gap-1"><Info className="w-3 h-3" /> Enter the same verify token both here and in Meta Developer Console. It can be any string you choose.</p>
+          <Separator className="my-2" />
+          <p className="text-sm text-muted-foreground">After saving, subscribe to these webhook fields:</p>
+          <div className="flex flex-wrap gap-2">
+            {["messages", "message_template_status_update"].map(f => (
+              <Badge key={f} variant="outline" className="font-mono text-xs">{f}</Badge>
+            ))}
+          </div>
+        </div>
+      ),
+    },
+    {
+      num: 7,
+      title: "App Settings & Required URLs",
+      content: (
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">Go to <strong>Settings → Basic</strong> and fill in the required URLs:</p>
+          <div className="space-y-3">
+            <CopyField label="Privacy Policy URL" value={urls.privacyPolicy || ""} />
+            <CopyField label="Terms of Service URL" value={urls.termsOfService || ""} />
+            <CopyField label="Data Deletion Request URL" value={urls.dataDeletion || ""} />
+            <CopyField label="App Domain" value={urls.appDomain || ""} />
+          </div>
+        </div>
+      ),
+    },
+    {
+      num: 8,
+      title: "App Review & Go Live",
+      content: (
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">Before going live:</p>
+          <ul className="text-sm text-muted-foreground space-y-1.5 list-disc list-inside ml-1">
+            <li>Toggle your app from <strong>Development</strong> to <strong>Live</strong> mode in the top bar</li>
+            <li>Submit for <strong>App Review</strong> if you need Advanced Access for any permissions</li>
+            <li>Add a <strong>business verification</strong> in Settings → Basic if required</li>
+          </ul>
+          <div className="p-3 border border-blue-200 rounded-lg bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800">
+            <p className="text-xs text-blue-800 dark:text-blue-400 flex items-center gap-1.5">
+              <Info className="w-3.5 h-3.5 shrink-0" />
+              Once live, merchants can connect their WhatsApp Business Accounts through the Embedded Signup flow in their Settings page. Each merchant manages their own WhatsApp number and access token.
+            </p>
+          </div>
+        </div>
+      ),
+    },
+  ];
+
+  const configuredCount = [
+    !!appId,
+    !!(metaSettings?.facebookAppSecret && !metaSettings.facebookAppSecret.startsWith("••••") ? true : metaSettings?.facebookAppSecret),
+    !!(metaSettings?.whatsappEmbeddedSignupConfigId),
+    !!(metaSettings?.whatsappVerifyToken),
+  ].filter(Boolean).length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-testid="meta-app-tab">
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2" data-testid="text-meta-settings-title">
-            <Globe className="w-5 h-5" />
-            Meta App Configuration
-          </CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Configure your Meta (Facebook/WhatsApp) app credentials. Values saved here override environment variables.
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {isLoading ? (
-            <div className="space-y-3">
-              {[1, 2, 3, 4, 5, 6].map(i => <Skeleton key={i} className="h-16 w-full" />)}
+        <CardHeader className="pb-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2" data-testid="text-meta-settings-title">
+                <Globe className="w-5 h-5" />
+                Meta App Setup Guide
+              </CardTitle>
+              <p className="text-sm text-muted-foreground mt-1">
+                Follow these steps to connect your Meta Developer App for WhatsApp Embedded Signup and Webhooks.
+              </p>
             </div>
-          ) : (
-            <>
-              {fields.map(({ key, label, secret, instruction }) => {
-                const isEditing = editMode[key];
-                const currentVal = metaSettings?.[key] || "";
-                const hasOverride = metaSettings?.hasDbOverride?.[key];
-                return (
-                  <div key={key} className="p-4 border rounded-lg space-y-2" data-testid={`meta-field-${key}`}>
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <div className="flex items-center gap-2">
-                          <Label className="font-medium text-sm">{label}</Label>
-                          {hasOverride && (
-                            <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">DB Override</Badge>
-                          )}
-                          {!hasOverride && currentVal && (
-                            <Badge variant="outline" className="text-xs bg-gray-50 text-gray-600 border-gray-200">Env Var</Badge>
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground">{instruction}</p>
-                      </div>
-                      {!isEditing && (
-                        <Button variant="ghost" size="sm" onClick={() => handleEdit(key)} data-testid={`button-edit-${key}`}>
-                          <PenLine className="w-3.5 h-3.5 mr-1" />Edit
-                        </Button>
-                      )}
-                    </div>
-                    {isEditing ? (
-                      <div className="flex items-center gap-2">
-                        <Input
-                          type={secret ? "password" : "text"}
-                          value={formValues[key] || ""}
-                          onChange={(e) => setFormValues(prev => ({ ...prev, [key]: e.target.value }))}
-                          placeholder={`Enter ${label}`}
-                          className="font-mono text-sm"
-                          data-testid={`input-${key}`}
-                        />
-                        <Button size="sm" onClick={() => handleSave(key)} disabled={updateMutation.isPending} data-testid={`button-save-${key}`}>
-                          {updateMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5 mr-1" />}
-                          Save
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => handleCancel(key)} data-testid={`button-cancel-${key}`}>
-                          Cancel
-                        </Button>
-                      </div>
-                    ) : (
-                      <p className="font-mono text-sm text-muted-foreground" data-testid={`value-${key}`}>
-                        {currentVal || <span className="italic text-orange-500">Not configured</span>}
-                      </p>
-                    )}
-                  </div>
-                );
-              })}
-
-              <Separator className="my-4" />
-
-              <div className="p-4 border rounded-lg bg-muted/30 space-y-2">
-                <Label className="font-medium text-sm">WhatsApp Webhook URL</Label>
-                <p className="text-xs text-muted-foreground">Copy this URL into Meta Developers → WhatsApp → Configuration → Webhook → Callback URL</p>
-                <div className="flex items-center gap-2">
-                  <Input value={webhookUrl} readOnly className="font-mono text-sm bg-white" data-testid="input-webhook-url" />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => { navigator.clipboard.writeText(webhookUrl); toast({ title: "Copied", description: "Webhook URL copied to clipboard" }); }}
-                    data-testid="button-copy-webhook-url"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5 mr-1" />Copy
-                  </Button>
-                </div>
-              </div>
-
-              <div className="p-4 border rounded-lg bg-amber-50 dark:bg-amber-950/20 space-y-2">
-                <div className="flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-600" />
-                  <Label className="font-medium text-sm text-amber-800 dark:text-amber-400">How to Switch Meta Apps</Label>
-                </div>
-                <ol className="text-xs text-amber-700 dark:text-amber-400 space-y-1 list-decimal list-inside">
-                  <li>Create your new Meta App at developers.facebook.com</li>
-                  <li>In the new app, add "WhatsApp" and "Facebook Login" products</li>
-                  <li>Update the Facebook App ID and App Secret above with the new app's credentials</li>
-                  <li>Set up WhatsApp Embedded Signup and enter the new Config ID</li>
-                  <li>Configure the Webhook with the callback URL above and a new Verify Token</li>
-                  <li>Generate a permanent System User access token and update WhatsApp Access Token</li>
-                  <li>Merchants will need to reconnect their WhatsApp Business Accounts via the new embedded signup</li>
-                </ol>
-              </div>
-            </>
-          )}
-        </CardContent>
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground">Configuration</p>
+              <p className="text-lg font-semibold" data-testid="text-config-progress">{configuredCount}/4 fields set</p>
+            </div>
+          </div>
+        </CardHeader>
       </Card>
+
+      <div className="space-y-4">
+        {steps.map((step) => (
+          <Card key={step.num} data-testid={`meta-step-${step.num}`}>
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold shrink-0">
+                  {step.num}
+                </div>
+                <CardTitle className="text-base">{step.title}</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0 pl-14">
+              {step.content}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 }

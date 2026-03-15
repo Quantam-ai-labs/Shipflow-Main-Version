@@ -5473,16 +5473,23 @@ export async function registerRoutes(
 
           const value = change.value;
           const phoneNumberId = value?.metadata?.phone_number_id ?? "";
-          const configuredPhoneId = process.env.WHATSAPP_PHONE_NO_ID ?? "";
 
           console.log(`  │  │  ├─ Phone ID: ${phoneNumberId}`);
-          console.log(`  │  │  ├─ Configured: ${configuredPhoneId}`);
 
-          if (phoneNumberId && configuredPhoneId && phoneNumberId !== configuredPhoneId) {
-            console.warn(`  │  │  └─ ❌ Phone ID mismatch! Skipping.`);
-            continue;
+          // ✅ Step 4b: Resolve merchant from phone_number_id for tenant isolation
+          let webhookMerchantId: string | null = null;
+          if (phoneNumberId) {
+            const [resolvedMerchant] = await db
+              .select({ id: merchants.id })
+              .from(merchants)
+              .where(eq(merchants.waPhoneNumberId, phoneNumberId))
+              .limit(1);
+            webhookMerchantId = resolvedMerchant?.id ?? null;
+            console.log(`  │  │  ├─ Resolved merchant: ${webhookMerchantId || "NONE"}`);
           }
-          console.log(`  │  │  ├─ ✅ Phone ID valid`);
+          if (!webhookMerchantId) {
+            console.warn(`  │  │  └─ ⚠️ No merchant found for phone ID ${phoneNumberId}, processing without merchant scope`);
+          }
 
           // ✅ Step 5: Process messages
           const messages = value?.messages ?? [];
@@ -5510,8 +5517,18 @@ export async function registerRoutes(
             const normalizedPhone = fromPhone.replace(/^\+/, "");
             console.log(`      └─ Normalized: ${normalizedPhone}`);
 
-            // ✅ Step 7: Find matching order
+            // ✅ Step 7: Find matching order (scoped to resolved merchant if available)
             console.log(`      └─ Querying database for matching order...`);
+            const orderWhereConditions = [
+              or(
+                eq(orders.customerPhone, normalizedPhone),
+                eq(orders.customerPhone, `+${normalizedPhone}`),
+                eq(orders.customerPhone, `0${normalizedPhone.slice(2)}`),
+              ),
+            ];
+            if (webhookMerchantId) {
+              orderWhereConditions.push(eq(orders.merchantId, webhookMerchantId));
+            }
             const [matchedOrder] = await db
               .select({
                 id: orders.id,
@@ -5522,15 +5539,7 @@ export async function registerRoutes(
                 tags: orders.tags,
               })
               .from(orders)
-              .where(
-                and(
-                  or(
-                    eq(orders.customerPhone, normalizedPhone),
-                    eq(orders.customerPhone, `+${normalizedPhone}`),
-                    eq(orders.customerPhone, `0${normalizedPhone.slice(2)}`),
-                  )
-                )
-              )
+              .where(and(...orderWhereConditions))
               .orderBy(desc(orders.createdAt))
               .limit(1);
 
@@ -5584,6 +5593,7 @@ export async function registerRoutes(
 
               // ✅ Step 9: Process the response (CONFIRM/CANCEL logic)
               console.log(`      └─ Processing user response...`);
+              const replyMerchant = await storage.getMerchant(matchedOrder.merchantId);
               await processWhatsAppOrderResponse(
                 matchedOrder.merchantId,
                 matchedOrder.id,
@@ -5592,6 +5602,8 @@ export async function registerRoutes(
                 fromPhone,
                 normalizedPhone,
                 matchedOrder.shopifyOrderId,
+                replyMerchant?.waPhoneNumberId || undefined,
+                replyMerchant?.waAccessToken || undefined,
               );
             } catch (dbError: any) {
               console.error(`      ❌ DATABASE ERROR: ${dbError.message}`);
@@ -5797,10 +5809,13 @@ export async function registerRoutes(
               });
 
               if (msgType === "text" || msgType === "button_reply") {
+                const replyMerchant2 = await storage.getMerchant(matchedOrder.merchantId);
                 await processWhatsAppOrderResponse(
                   matchedOrder.merchantId, matchedOrder.id,
                   matchedOrder.orderNumber, messageBody, fromPhone, fromPhone,
                   matchedOrder.shopifyOrderId,
+                  replyMerchant2?.waPhoneNumberId || undefined,
+                  replyMerchant2?.waAccessToken || undefined,
                 );
               }
 
@@ -5829,6 +5844,8 @@ export async function registerRoutes(
     phoneNumber: string,
     normalizedPhone: string,
     shopifyOrderId?: string,
+    replyPhoneId?: string,
+    replyAccessToken?: string,
   ) {
     try {
       const lowerMessage = messageBody.toLowerCase().trim();
@@ -5857,30 +5874,30 @@ export async function registerRoutes(
         if (action === "confirm") {
           if (result.conflict) {
             await sendWhatsAppReply(normalizedPhone,
-              `Your response for order #${orderNumber} has been noted. Our team will review and confirm shortly.`);
+              `Your response for order #${orderNumber} has been noted. Our team will review and confirm shortly.`, replyPhoneId, replyAccessToken);
           } else {
             await sendWhatsAppReply(normalizedPhone,
-              `Thank you! Order #${orderNumber} has been confirmed. We'll process and ship it shortly.`);
+              `Thank you! Order #${orderNumber} has been confirmed. We'll process and ship it shortly.`, replyPhoneId, replyAccessToken);
           }
         } else if (action === "cancel") {
           if (result.conflict) {
             await sendWhatsAppReply(normalizedPhone,
-              `Your cancellation request for order #${orderNumber} has been noted. Our team will review shortly.`);
+              `Your cancellation request for order #${orderNumber} has been noted. Our team will review shortly.`, replyPhoneId, replyAccessToken);
           } else {
             await sendWhatsAppReply(normalizedPhone,
-              `Order #${orderNumber} has been cancelled. No charges will be applied. If you have any questions, please contact support.`);
+              `Order #${orderNumber} has been cancelled. No charges will be applied. If you have any questions, please contact support.`, replyPhoneId, replyAccessToken);
           }
         } else {
           await sendWhatsAppReply(normalizedPhone,
-            `Thank you for your message regarding order #${orderNumber}. Our team will get back to you shortly.\n\nTo confirm or cancel, please reply with:\n*confirm* - to confirm the order\n*cancel* - to cancel the order`);
+            `Thank you for your message regarding order #${orderNumber}. Our team will get back to you shortly.\n\nTo confirm or cancel, please reply with:\n*confirm* - to confirm the order\n*cancel* - to cancel the order`, replyPhoneId, replyAccessToken);
         }
       } else if (result.locked) {
         await sendWhatsAppReply(normalizedPhone,
-          `Order #${orderNumber} has already been processed and shipped. For any changes, please contact our support team.`);
+          `Order #${orderNumber} has already been processed and shipped. For any changes, please contact our support team.`, replyPhoneId, replyAccessToken);
       } else {
         console.log(`        Failed: ${result.error}`);
         await sendWhatsAppReply(normalizedPhone,
-          `Sorry, there was an issue processing your response for order #${orderNumber}. Please try again or contact support.`);
+          `Sorry, there was an issue processing your response for order #${orderNumber}. Please try again or contact support.`, replyPhoneId, replyAccessToken);
       }
 
       await storage.createOrderChangeLog({
@@ -5905,14 +5922,16 @@ export async function registerRoutes(
    */
   async function sendWhatsAppReply(
     phoneNumber: string,
-    messageText: string
+    messageText: string,
+    merchantPhoneId?: string,
+    merchantAccessToken?: string,
   ): Promise<boolean> {
     try {
-      const phoneId = process.env.WHATSAPP_PHONE_NO_ID;
-      const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+      const phoneId = merchantPhoneId;
+      const accessToken = merchantAccessToken;
 
       if (!phoneId || !accessToken) {
-        console.warn(`        ⚠️  Cannot send reply: Missing WHATSAPP_PHONE_NO_ID or WHATSAPP_ACCESS_TOKEN`);
+        console.warn(`        ⚠️  Cannot send reply: Merchant WhatsApp not configured`);
         return false;
       }
 
@@ -7048,7 +7067,7 @@ export async function registerRoutes(
       if (!merchant) return res.status(404).json({ error: "Merchant not found" });
 
       const wabaId = merchant.waWabaId;
-      const accessToken = merchant.waAccessToken || process.env.WHATSAPP_ACCESS_TOKEN;
+      const accessToken = merchant.waAccessToken;
 
       if (!wabaId || !accessToken) {
         return res.status(400).json({ error: "WhatsApp Business Account not configured. Go to Support > Connection to set up WABA ID and Access Token." });
@@ -7151,7 +7170,7 @@ export async function registerRoutes(
       if (!merchant) return res.status(404).json({ error: "Merchant not found" });
 
       const wabaId = merchant.waWabaId;
-      const accessToken = merchant.waAccessToken || process.env.WHATSAPP_ACCESS_TOKEN;
+      const accessToken = merchant.waAccessToken;
 
       if (!wabaId || !accessToken) {
         return res.status(400).json({ error: "WhatsApp Business Account ID or Access Token not configured. Go to Support > Connection to set them up." });
@@ -7232,7 +7251,7 @@ export async function registerRoutes(
 
       const merchant = await storage.getMerchant(merchantId);
       const wabaId = merchant?.waWabaId;
-      const accessToken = merchant?.waAccessToken || process.env.WHATSAPP_ACCESS_TOKEN;
+      const accessToken = merchant?.waAccessToken;
 
       if (wabaId && accessToken) {
         try {
@@ -7516,7 +7535,7 @@ export async function registerRoutes(
 
       const [merchantRow] = await db.select({ waAccessToken: merchants.waAccessToken })
         .from(merchants).where(eq(merchants.id, merchantId)).limit(1);
-      const accessToken = merchantRow?.waAccessToken || process.env.WHATSAPP_ACCESS_TOKEN;
+      const accessToken = merchantRow?.waAccessToken;
       if (!accessToken) return res.status(500).json({ error: "WhatsApp not configured" });
 
       const metaRes = await fetch(`https://graph.facebook.com/v21.0/${mediaId}`, {
@@ -7726,8 +7745,8 @@ export async function registerRoutes(
         waAccessToken: merchants.waAccessToken,
       }).from(merchants).where(eq(merchants.id, merchantId)).limit(1);
 
-      const phoneNumberId = merchantRow?.waPhoneNumberId || process.env.WHATSAPP_PHONE_NO_ID;
-      const accessToken = merchantRow?.waAccessToken || process.env.WHATSAPP_ACCESS_TOKEN;
+      const phoneNumberId = merchantRow?.waPhoneNumberId;
+      const accessToken = merchantRow?.waAccessToken;
 
       if (!phoneNumberId || !accessToken) {
         return res.status(400).json({ error: "WhatsApp credentials not configured" });
@@ -7833,8 +7852,8 @@ export async function registerRoutes(
         waAccessToken: merchants.waAccessToken,
       }).from(merchants).where(eq(merchants.id, merchantId)).limit(1);
 
-      const phoneNumberId = merchantRow?.waPhoneNumberId || process.env.WHATSAPP_PHONE_NO_ID;
-      const accessToken = merchantRow?.waAccessToken || process.env.WHATSAPP_ACCESS_TOKEN;
+      const phoneNumberId = merchantRow?.waPhoneNumberId;
+      const accessToken = merchantRow?.waAccessToken;
 
       if (!phoneNumberId || !accessToken) {
         return res.status(400).json({ error: "WhatsApp credentials not configured" });
@@ -10704,7 +10723,7 @@ export async function registerRoutes(
 
       const [merchantRow] = await db.select({ waAccessToken: merchants.waAccessToken })
         .from(merchants).where(eq(merchants.id, merchantId)).limit(1);
-      const accessToken = merchantRow?.waAccessToken || process.env.WHATSAPP_ACCESS_TOKEN;
+      const accessToken = merchantRow?.waAccessToken;
       if (!accessToken) return res.status(500).json({ error: "WhatsApp not configured" });
 
       const metaRes = await fetch(`https://graph.facebook.com/v21.0/${mediaId}`, {
@@ -10775,8 +10794,8 @@ export async function registerRoutes(
         waAccessToken: merchants.waAccessToken,
       }).from(merchants).where(eq(merchants.id, merchantId)).limit(1);
 
-      const phoneNumberId = merchantRow?.waPhoneNumberId || process.env.WHATSAPP_PHONE_NO_ID;
-      const accessToken = merchantRow?.waAccessToken || process.env.WHATSAPP_ACCESS_TOKEN;
+      const phoneNumberId = merchantRow?.waPhoneNumberId;
+      const accessToken = merchantRow?.waAccessToken;
 
       if (!phoneNumberId || !accessToken) {
         return res.status(400).json({ error: "WhatsApp credentials not configured" });
@@ -10878,8 +10897,8 @@ export async function registerRoutes(
         waAccessToken: merchants.waAccessToken,
       }).from(merchants).where(eq(merchants.id, merchantId)).limit(1);
 
-      const phoneNumberId = merchantRow?.waPhoneNumberId || process.env.WHATSAPP_PHONE_NO_ID;
-      const accessToken = merchantRow?.waAccessToken || process.env.WHATSAPP_ACCESS_TOKEN;
+      const phoneNumberId = merchantRow?.waPhoneNumberId;
+      const accessToken = merchantRow?.waAccessToken;
 
       if (!phoneNumberId || !accessToken) {
         return res.status(400).json({ error: "WhatsApp credentials not configured" });
@@ -12941,20 +12960,20 @@ export async function registerRoutes(
       if (!adminId) return;
       const settings = await storage.getPlatformSettings();
       const mask = (val: string | null | undefined) => val ? "••••" + val.slice(-4) : "";
+      const appUrl = `${req.protocol}://${req.get("host")}`;
+      const appDomain = (req.get("host") || "").split(":")[0];
       res.json({
         facebookAppId: settings.metaFacebookAppId || process.env.FACEBOOK_APP_ID || "",
         facebookAppSecret: mask(settings.metaFacebookAppSecret || process.env.FACEBOOK_APP_SECRET),
         whatsappEmbeddedSignupConfigId: settings.metaWhatsappEmbeddedSignupConfigId || process.env.WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID || "",
-        whatsappVerifyToken: mask(settings.metaWhatsappVerifyToken || process.env.WHATSAPP_VERIFY_TOKEN),
-        whatsappAccessToken: mask(settings.metaWhatsappAccessToken || process.env.WHATSAPP_ACCESS_TOKEN),
-        whatsappPhoneNoId: settings.metaWhatsappPhoneNoId || process.env.WHATSAPP_PHONE_NO_ID || "",
-        hasDbOverride: {
-          facebookAppId: !!settings.metaFacebookAppId,
-          facebookAppSecret: !!settings.metaFacebookAppSecret,
-          whatsappEmbeddedSignupConfigId: !!settings.metaWhatsappEmbeddedSignupConfigId,
-          whatsappVerifyToken: !!settings.metaWhatsappVerifyToken,
-          whatsappAccessToken: !!settings.metaWhatsappAccessToken,
-          whatsappPhoneNoId: !!settings.metaWhatsappPhoneNoId,
+        whatsappVerifyToken: settings.metaWhatsappVerifyToken || process.env.WHATSAPP_VERIFY_TOKEN || "",
+        urls: {
+          oauthCallback: `${appUrl}/api/meta/oauth/callback`,
+          webhookCallback: `${appUrl}/webhooks/whatsapp`,
+          privacyPolicy: `${appUrl}/privacy-policy`,
+          termsOfService: `${appUrl}/terms-of-service`,
+          dataDeletion: `${appUrl}/data-deletion`,
+          appDomain: appDomain,
         },
       });
     } catch (error) {
@@ -12973,8 +12992,6 @@ export async function registerRoutes(
         facebookAppSecret: z.string().optional(),
         whatsappEmbeddedSignupConfigId: z.string().optional(),
         whatsappVerifyToken: z.string().optional(),
-        whatsappAccessToken: z.string().optional(),
-        whatsappPhoneNoId: z.string().optional(),
       });
       const body = schema.parse(req.body);
 
@@ -12982,9 +12999,7 @@ export async function registerRoutes(
       if (body.facebookAppId !== undefined) updateData.metaFacebookAppId = body.facebookAppId || null;
       if (body.facebookAppSecret !== undefined && !body.facebookAppSecret.startsWith("••••")) updateData.metaFacebookAppSecret = body.facebookAppSecret || null;
       if (body.whatsappEmbeddedSignupConfigId !== undefined) updateData.metaWhatsappEmbeddedSignupConfigId = body.whatsappEmbeddedSignupConfigId || null;
-      if (body.whatsappVerifyToken !== undefined && !body.whatsappVerifyToken.startsWith("••••")) updateData.metaWhatsappVerifyToken = body.whatsappVerifyToken || null;
-      if (body.whatsappAccessToken !== undefined && !body.whatsappAccessToken.startsWith("••••")) updateData.metaWhatsappAccessToken = body.whatsappAccessToken || null;
-      if (body.whatsappPhoneNoId !== undefined) updateData.metaWhatsappPhoneNoId = body.whatsappPhoneNoId || null;
+      if (body.whatsappVerifyToken !== undefined) updateData.metaWhatsappVerifyToken = body.whatsappVerifyToken || null;
 
       const existing = await storage.getPlatformSettings();
       await db.update(platformSettings)
