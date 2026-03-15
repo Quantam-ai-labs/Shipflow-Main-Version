@@ -289,6 +289,14 @@ export default function SettingsWhatsApp() {
       });
     },
     onError: (err: any) => {
+      const serverStatus = err?.registrationStatus;
+      if (serverStatus === "2fa_required") {
+        setRegStatus("2fa_required");
+        setRegError(err.message || "Two-factor authentication PIN required.");
+      } else if (serverStatus === "failed") {
+        setRegStatus("failed");
+        setRegError(err.message || "Registration failed.");
+      }
       toast({
         title: "Registration Failed",
         description: err.message || "Could not register phone number. Check your PIN and try again.",
@@ -565,13 +573,13 @@ export default function SettingsWhatsApp() {
                 <SiFacebook className="w-3.5 h-3.5" />
                 {signupInProgress || embeddedSignupMutation.isPending ? "Connecting..." : "Reconnect via Facebook"}
               </Button>
-              {regStatus !== "2fa_required" && regStatus !== "failed" && (
+              {regStatus !== "2fa_required" && regStatus !== "failed" && !data?.waPhoneRegistered && (
                 <Button
                   variant="ghost"
                   size="sm"
                   className="gap-1.5 text-muted-foreground"
                   onClick={() => {
-                    setRegStatus("2fa_required");
+                    setRegStatus("failed");
                     setRegError(null);
                   }}
                   data-testid="button-show-reregister"
