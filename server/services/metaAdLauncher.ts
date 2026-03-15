@@ -100,7 +100,7 @@ async function getPageAccessToken(merchantId: string, pageId: string): Promise<s
 export async function fetchPagePosts(merchantId: string, pageId: string, search?: string): Promise<any[]> {
   const creds = await getCredentialsForMerchant(merchantId);
   const pageToken = await getPageAccessToken(merchantId, pageId);
-  const fields = "id,message,full_picture,created_time,type,permalink_url,status_type,likes.summary(true),comments.summary(true),shares";
+  const fields = "id,message,full_picture,created_time,type,permalink_url,status_type,reactions.summary(total_count),comments.summary(total_count),shares";
 
   let data: any;
   const promotableUrl = new URL(`${META_BASE_URL}/${pageId}/promotable_posts`);
@@ -146,7 +146,7 @@ export async function fetchPagePosts(merchantId: string, pageId: string, search?
     type: p.type || "status",
     statusType: p.status_type || "",
     permalinkUrl: p.permalink_url || "",
-    likes: p.likes?.summary?.total_count || 0,
+    likes: p.reactions?.summary?.total_count || 0,
     comments: p.comments?.summary?.total_count || 0,
     shares: p.shares?.count || 0,
     source: "facebook",
@@ -193,7 +193,7 @@ export async function fetchBrandedContentPosts(merchantId: string, pageId: strin
     const pageToken = await getPageAccessToken(merchantId, pageId);
     const url = new URL(`${META_BASE_URL}/${pageId}/published_posts`);
     url.searchParams.set("access_token", pageToken);
-    url.searchParams.set("fields", "id,message,full_picture,created_time,type,permalink_url,is_hidden,likes.summary(true),comments.summary(true),shares");
+    url.searchParams.set("fields", "id,message,full_picture,created_time,type,permalink_url,is_hidden,reactions.summary(total_count),comments.summary(total_count),shares");
     url.searchParams.set("limit", "50");
     const response = await fetch(url.toString());
     const data = await response.json();
@@ -213,7 +213,7 @@ export async function fetchBrandedContentPosts(merchantId: string, pageId: strin
       createdTime: p.created_time,
       type: p.type || "status",
       permalinkUrl: p.permalink_url || "",
-      likes: p.likes?.summary?.total_count || 0,
+      likes: p.reactions?.summary?.total_count || 0,
       comments: p.comments?.summary?.total_count || 0,
       shares: p.shares?.count || 0,
       source: "partner",
@@ -227,7 +227,7 @@ export async function fetchPageVideos(merchantId: string, pageId: string, search
   const pageToken = await getPageAccessToken(merchantId, pageId);
   const url = new URL(`${META_BASE_URL}/${pageId}/videos`);
   url.searchParams.set("access_token", pageToken);
-  url.searchParams.set("fields", "id,title,description,source,picture,created_time,length,likes.summary(true),comments.summary(true)");
+  url.searchParams.set("fields", "id,title,description,source,picture,created_time,length,reactions.summary(total_count),comments.summary(total_count)");
   url.searchParams.set("limit", "50");
   const response = await fetch(url.toString());
   const data = await response.json();
@@ -251,7 +251,7 @@ export async function fetchPageVideos(merchantId: string, pageId: string, search
     type: "video",
     statusType: "added_video",
     permalinkUrl: v.source || "",
-    likes: v.likes?.summary?.total_count || 0,
+    likes: v.reactions?.summary?.total_count || 0,
     comments: v.comments?.summary?.total_count || 0,
     shares: 0,
     source: "facebook",
