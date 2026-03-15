@@ -273,7 +273,9 @@ export default function SettingsWhatsApp() {
 
   const registerPhoneMutation = useMutation({
     mutationFn: async (pin: string) => {
-      const res = await apiRequest("POST", "/api/whatsapp/register-phone", { pin });
+      const body: Record<string, string> = {};
+      if (pin) body.pin = pin;
+      const res = await apiRequest("POST", "/api/whatsapp/register-phone", body);
       return (await res.json()) as { success: boolean; registrationStatus: string };
     },
     onSuccess: () => {
@@ -525,20 +527,20 @@ export default function SettingsWhatsApp() {
                     type="password"
                     inputMode="numeric"
                     maxLength={6}
-                    placeholder="6-digit PIN"
+                    placeholder={regStatus === "2fa_required" ? "6-digit WhatsApp PIN" : "PIN (optional)"}
                     value={twoFaPin}
                     onChange={(e) => setTwoFaPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                    className="max-w-[140px]"
+                    className="max-w-[160px]"
                     data-testid="input-2fa-pin"
                   />
                   <Button
                     size="sm"
-                    onClick={() => registerPhoneMutation.mutate(twoFaPin)}
-                    disabled={twoFaPin.length !== 6 || registerPhoneMutation.isPending}
+                    onClick={() => registerPhoneMutation.mutate(twoFaPin || "")}
+                    disabled={(regStatus === "2fa_required" && twoFaPin.length !== 6) || (twoFaPin.length > 0 && twoFaPin.length !== 6) || registerPhoneMutation.isPending}
                     data-testid="button-register-phone"
                   >
                     <KeyRound className="w-3.5 h-3.5 mr-1.5" />
-                    {registerPhoneMutation.isPending ? "Registering..." : "Complete Registration"}
+                    {registerPhoneMutation.isPending ? "Registering..." : regStatus === "2fa_required" ? "Complete Registration" : "Retry Registration"}
                   </Button>
                 </div>
               </div>

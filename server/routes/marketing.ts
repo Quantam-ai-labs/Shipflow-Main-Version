@@ -2835,7 +2835,7 @@ export function registerMarketingRoutes(app: Express) {
   app.post("/api/whatsapp/embedded-signup", isAuthenticated, async (req: any, res) => {
     try {
       const merchantId = await getMerchantId(req);
-      const { code, sessionWabaId, sessionPhoneId } = req.body;
+      const { code, sessionWabaId, sessionPhoneId, wabaId: reqWabaId, phoneNumberId: reqPhoneId } = req.body;
 
       if (!code) {
         return res.status(400).json({ error: "Authorization code is required" });
@@ -2865,8 +2865,8 @@ export function registerMarketingRoutes(app: Express) {
 
       const userToken = tokenData.access_token;
 
-      let wabaId: string | null = sessionWabaId || null;
-      let phoneNumberId: string | null = sessionPhoneId || null;
+      let wabaId: string | null = sessionWabaId || reqWabaId || null;
+      let phoneNumberId: string | null = sessionPhoneId || reqPhoneId || null;
       let displayPhone = "";
       let verifiedName = "";
 
@@ -3048,8 +3048,8 @@ export function registerMarketingRoutes(app: Express) {
       const merchantId = await getMerchantId(req);
       const { pin } = req.body;
 
-      if (!pin || typeof pin !== "string" || pin.length !== 6 || !/^\d{6}$/.test(pin)) {
-        return res.status(400).json({ error: "A valid 6-digit PIN is required" });
+      if (pin && (typeof pin !== "string" || pin.length !== 6 || !/^\d{6}$/.test(pin))) {
+        return res.status(400).json({ error: "PIN must be exactly 6 digits" });
       }
 
       const [merchant] = await db.select({
@@ -3062,14 +3062,16 @@ export function registerMarketingRoutes(app: Express) {
       }
 
       const registerUrl = new URL(`${META_BASE_URL}/${merchant.waPhoneNumberId}/register`);
+      const registerBody: Record<string, string> = {
+        access_token: merchant.waAccessToken,
+        messaging_product: "whatsapp",
+      };
+      if (pin) registerBody.pin = pin;
+
       const registerRes = await fetch(registerUrl.toString(), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          access_token: merchant.waAccessToken,
-          messaging_product: "whatsapp",
-          pin,
-        }),
+        body: JSON.stringify(registerBody),
       });
       const registerData = await registerRes.json().catch(() => null) as any;
 
