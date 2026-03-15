@@ -1578,8 +1578,8 @@ export function registerMarketingRoutes(app: Express) {
 
       const longTokenUrl = new URL(`${META_BASE_URL}/oauth/access_token`);
       longTokenUrl.searchParams.set("grant_type", "fb_exchange_token");
-      longTokenUrl.searchParams.set("client_id", appId);
-      longTokenUrl.searchParams.set("client_secret", appSecretRaw);
+      longTokenUrl.searchParams.set("client_id", metaConf.facebookAppId);
+      longTokenUrl.searchParams.set("client_secret", metaConf.facebookAppSecret);
       longTokenUrl.searchParams.set("fb_exchange_token", shortToken);
 
       const longTokenRes = await fetch(longTokenUrl.toString());
@@ -2867,7 +2867,7 @@ export function registerMarketingRoutes(app: Express) {
 
       const debugUrl = new URL(`${META_BASE_URL}/debug_token`);
       debugUrl.searchParams.set("input_token", userToken);
-      debugUrl.searchParams.set("access_token", `${appId}|${appSecret}`);
+      debugUrl.searchParams.set("access_token", `${metaConf.facebookAppId}|${metaConf.facebookAppSecret}`);
       const debugRes = await fetch(debugUrl.toString());
       const debugData = debugRes.ok ? await debugRes.json().catch(() => null) : null;
       const granularScopes = debugData?.data?.granular_scopes || [];
@@ -2964,11 +2964,14 @@ export function registerMarketingRoutes(app: Express) {
             pin: "000000",
           }),
         });
+        const registerData = await registerRes.json().catch(() => null);
         if (registerRes.ok) {
-          console.log(`[WA-Signup] Phone number registered for Cloud API`);
+          console.log(`[WA-Signup] Phone number ${phoneNumberId} registered for Cloud API successfully`);
+        } else {
+          console.error(`[WA-Signup] Phone registration failed (${registerRes.status}):`, JSON.stringify(registerData));
         }
       } catch (regErr: any) {
-        console.warn(`[WA-Signup] Phone registration skipped:`, regErr.message);
+        console.error(`[WA-Signup] Phone registration error:`, regErr.message);
       }
 
       res.json({
