@@ -620,6 +620,9 @@ export default function LoadsheetPage() {
                   {!selectedCourier && (
                     <p className="text-xs text-muted-foreground italic">Select a courier above to begin scanning</p>
                   )}
+                  {selectedCourier && selectedCourier.toLowerCase().includes("tcs") && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400">TCS loadsheet generation via API is not yet supported. You can scan and track TCS shipments, but the loadsheet PDF must be generated from the TCS portal.</p>
+                  )}
                 </div>
 
                 {scanMode === "usb" ? (
