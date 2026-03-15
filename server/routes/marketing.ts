@@ -2835,7 +2835,7 @@ export function registerMarketingRoutes(app: Express) {
   app.post("/api/whatsapp/embedded-signup", isAuthenticated, async (req: any, res) => {
     try {
       const merchantId = await getMerchantId(req);
-      const { code } = req.body;
+      const { code, sessionWabaId, sessionPhoneId } = req.body;
 
       if (!code) {
         return res.status(400).json({ error: "Authorization code is required" });
@@ -2865,60 +2865,95 @@ export function registerMarketingRoutes(app: Express) {
 
       const userToken = tokenData.access_token;
 
-      const debugUrl = new URL(`${META_BASE_URL}/debug_token`);
-      debugUrl.searchParams.set("input_token", userToken);
-      debugUrl.searchParams.set("access_token", `${metaConf.facebookAppId}|${metaConf.facebookAppSecret}`);
-      const debugRes = await fetch(debugUrl.toString());
-      const debugData = debugRes.ok ? await debugRes.json().catch(() => null) : null;
-      const granularScopes = debugData?.data?.granular_scopes || [];
-      const waScope = granularScopes.find((s: any) => s.scope === "whatsapp_business_management");
-      let wabaId: string | null = null;
+      let wabaId: string | null = sessionWabaId || null;
+      let phoneNumberId: string | null = sessionPhoneId || null;
+      let displayPhone = "";
+      let verifiedName = "";
 
-      if (waScope?.target_ids?.length > 0) {
-        wabaId = waScope.target_ids[0];
-        console.log(`[WA-Signup] Found WABA ID from token debug: ${wabaId}`);
-      }
-
-      if (!wabaId) {
-        const sharedWabaUrl = new URL(`${META_BASE_URL}/me/businesses`);
-        sharedWabaUrl.searchParams.set("access_token", userToken);
-        sharedWabaUrl.searchParams.set("fields", "id,name");
-        const bizRes = await fetch(sharedWabaUrl.toString());
-        const bizData = bizRes.ok ? await bizRes.json().catch(() => ({ data: [] })) : { data: [] };
-
-        for (const biz of (bizData.data || [])) {
-          const wabaListUrl = new URL(`${META_BASE_URL}/${biz.id}/owned_whatsapp_business_accounts`);
-          wabaListUrl.searchParams.set("access_token", userToken);
-          wabaListUrl.searchParams.set("fields", "id,name");
-          const wabaRes = await fetch(wabaListUrl.toString());
-          const wabaData = wabaRes.ok ? await wabaRes.json().catch(() => ({ data: [] })) : { data: [] };
-          if (wabaData.data?.length > 0) {
-            wabaId = wabaData.data[0].id;
-            console.log(`[WA-Signup] Found WABA ID from business lookup: ${wabaId}`);
-            break;
+      if (wabaId && phoneNumberId) {
+        console.log(`[WA-Signup] Validating pre-captured IDs from sessionInfoListener — WABA: ${wabaId}, Phone: ${phoneNumberId}`);
+        let validated = false;
+        try {
+          const phonesUrl = new URL(`${META_BASE_URL}/${wabaId}/phone_numbers`);
+          phonesUrl.searchParams.set("access_token", userToken);
+          phonesUrl.searchParams.set("fields", "id,display_phone_number,verified_name");
+          const phonesRes = await fetch(phonesUrl.toString());
+          if (phonesRes.ok) {
+            const phonesData = await phonesRes.json() as any;
+            const matchedPhone = (phonesData.data || []).find((p: any) => String(p.id) === String(phoneNumberId));
+            if (matchedPhone) {
+              displayPhone = matchedPhone.display_phone_number || "";
+              verifiedName = matchedPhone.verified_name || "";
+              validated = true;
+              console.log(`[WA-Signup] Pre-captured IDs validated — Phone ${phoneNumberId} belongs to WABA ${wabaId}`);
+            } else {
+              console.warn(`[WA-Signup] Pre-captured phone ${phoneNumberId} not found under WABA ${wabaId}, falling back to server discovery`);
+            }
           }
+        } catch (e: any) {
+          console.warn(`[WA-Signup] Could not validate pre-captured IDs:`, e.message);
+        }
+        if (!validated) {
+          wabaId = null;
+          phoneNumberId = null;
         }
       }
 
-      if (!wabaId) {
-        return res.status(400).json({ error: "Could not find a WhatsApp Business Account. Please make sure you completed the signup." });
+      if (!wabaId || !phoneNumberId) {
+        const debugUrl = new URL(`${META_BASE_URL}/debug_token`);
+        debugUrl.searchParams.set("input_token", userToken);
+        debugUrl.searchParams.set("access_token", `${metaConf.facebookAppId}|${metaConf.facebookAppSecret}`);
+        const debugRes = await fetch(debugUrl.toString());
+        const debugData = debugRes.ok ? await debugRes.json().catch(() => null) : null;
+        const granularScopes = debugData?.data?.granular_scopes || [];
+        const waScope = granularScopes.find((s: any) => s.scope === "whatsapp_business_management");
+
+        if (waScope?.target_ids?.length > 0) {
+          wabaId = waScope.target_ids[0];
+          console.log(`[WA-Signup] Found WABA ID from token debug: ${wabaId}`);
+        }
+
+        if (!wabaId) {
+          const sharedWabaUrl = new URL(`${META_BASE_URL}/me/businesses`);
+          sharedWabaUrl.searchParams.set("access_token", userToken);
+          sharedWabaUrl.searchParams.set("fields", "id,name");
+          const bizRes = await fetch(sharedWabaUrl.toString());
+          const bizData = bizRes.ok ? await bizRes.json().catch(() => ({ data: [] })) : { data: [] };
+
+          for (const biz of (bizData.data || [])) {
+            const wabaListUrl = new URL(`${META_BASE_URL}/${biz.id}/owned_whatsapp_business_accounts`);
+            wabaListUrl.searchParams.set("access_token", userToken);
+            wabaListUrl.searchParams.set("fields", "id,name");
+            const wabaRes = await fetch(wabaListUrl.toString());
+            const wabaData = wabaRes.ok ? await wabaRes.json().catch(() => ({ data: [] })) : { data: [] };
+            if (wabaData.data?.length > 0) {
+              wabaId = wabaData.data[0].id;
+              console.log(`[WA-Signup] Found WABA ID from business lookup: ${wabaId}`);
+              break;
+            }
+          }
+        }
+
+        if (!wabaId) {
+          return res.status(400).json({ error: "Could not find a WhatsApp Business Account. Please make sure you completed the signup." });
+        }
+
+        const phonesUrl = new URL(`${META_BASE_URL}/${wabaId}/phone_numbers`);
+        phonesUrl.searchParams.set("access_token", userToken);
+        phonesUrl.searchParams.set("fields", "id,display_phone_number,verified_name,quality_rating");
+        const phonesRes = await fetch(phonesUrl.toString());
+        const phonesData = phonesRes.ok ? await phonesRes.json().catch(() => ({ data: [] })) : { data: [] };
+        const phoneNumbers = phonesData.data || [];
+
+        if (phoneNumbers.length === 0) {
+          return res.status(400).json({ error: "No phone numbers found on this WhatsApp Business Account." });
+        }
+
+        const phone = phoneNumbers[0];
+        phoneNumberId = phone.id;
+        displayPhone = phone.display_phone_number || "";
+        verifiedName = phone.verified_name || "";
       }
-
-      const phonesUrl = new URL(`${META_BASE_URL}/${wabaId}/phone_numbers`);
-      phonesUrl.searchParams.set("access_token", userToken);
-      phonesUrl.searchParams.set("fields", "id,display_phone_number,verified_name,quality_rating");
-      const phonesRes = await fetch(phonesUrl.toString());
-      const phonesData = phonesRes.ok ? await phonesRes.json().catch(() => ({ data: [] })) : { data: [] };
-      const phoneNumbers = phonesData.data || [];
-
-      if (phoneNumbers.length === 0) {
-        return res.status(400).json({ error: "No phone numbers found on this WhatsApp Business Account." });
-      }
-
-      const phone = phoneNumbers[0];
-      const phoneNumberId = phone.id;
-      const displayPhone = phone.display_phone_number || "";
-      const verifiedName = phone.verified_name || "";
 
       const { randomUUID } = await import("crypto");
       let existingVerifyToken: string | null = null;
@@ -2953,6 +2988,9 @@ export function registerMarketingRoutes(app: Express) {
         console.warn(`[WA-Signup] App subscription failed (non-blocking):`, subErr.message);
       }
 
+      let registrationStatus: "success" | "failed" | "2fa_required" = "failed";
+      let registrationError: string | null = null;
+
       try {
         const registerUrl = new URL(`${META_BASE_URL}/${phoneNumberId}/register`);
         const registerRes = await fetch(registerUrl.toString(), {
@@ -2964,13 +3002,22 @@ export function registerMarketingRoutes(app: Express) {
             pin: "000000",
           }),
         });
-        const registerData = await registerRes.json().catch(() => null);
+        const registerData = await registerRes.json().catch(() => null) as any;
         if (registerRes.ok) {
+          registrationStatus = "success";
           console.log(`[WA-Signup] Phone number ${phoneNumberId} registered for Cloud API successfully`);
         } else {
+          const errorSubcode = registerData?.error?.error_subcode;
+          if (errorSubcode === 2388001) {
+            registrationStatus = "2fa_required";
+            registrationError = "Two-factor authentication is enabled on this number. Please enter your 6-digit WhatsApp PIN to complete registration.";
+          } else {
+            registrationError = registerData?.error?.error_user_msg || registerData?.error?.message || "Phone registration failed";
+          }
           console.error(`[WA-Signup] Phone registration failed (${registerRes.status}):`, JSON.stringify(registerData));
         }
       } catch (regErr: any) {
+        registrationError = regErr.message;
         console.error(`[WA-Signup] Phone registration error:`, regErr.message);
       }
 
@@ -2982,9 +3029,60 @@ export function registerMarketingRoutes(app: Express) {
         verifiedName,
         webhookUrl: `${canonicalHost}/webhooks/whatsapp/${merchantId}`,
         verifyToken: existingVerifyToken,
+        registrationStatus,
+        registrationError,
       });
     } catch (error: any) {
       console.error("[WA-Signup] Error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/whatsapp/register-phone", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await getMerchantId(req);
+      const { pin } = req.body;
+
+      if (!pin || typeof pin !== "string" || pin.length !== 6 || !/^\d{6}$/.test(pin)) {
+        return res.status(400).json({ error: "A valid 6-digit PIN is required" });
+      }
+
+      const [merchant] = await db.select({
+        waPhoneNumberId: merchants.waPhoneNumberId,
+        waAccessToken: merchants.waAccessToken,
+      }).from(merchants).where(eq(merchants.id, merchantId)).limit(1);
+
+      if (!merchant?.waPhoneNumberId || !merchant?.waAccessToken) {
+        return res.status(400).json({ error: "WhatsApp is not connected. Complete the Embedded Signup first." });
+      }
+
+      const registerUrl = new URL(`${META_BASE_URL}/${merchant.waPhoneNumberId}/register`);
+      const registerRes = await fetch(registerUrl.toString(), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          access_token: merchant.waAccessToken,
+          messaging_product: "whatsapp",
+          pin,
+        }),
+      });
+      const registerData = await registerRes.json().catch(() => null) as any;
+
+      if (registerRes.ok) {
+        console.log(`[WA-Register] Phone ${merchant.waPhoneNumberId} registered successfully for merchant ${merchantId}`);
+        return res.json({ success: true, registrationStatus: "success" });
+      }
+
+      const errorSubcode = registerData?.error?.error_subcode;
+      const is2fa = errorSubcode === 2388001;
+      const errorMsg = registerData?.error?.error_user_msg || registerData?.error?.message || "Registration failed";
+      console.error(`[WA-Register] Phone registration failed (${registerRes.status}):`, JSON.stringify(registerData));
+      return res.status(400).json({
+        error: errorMsg,
+        registrationStatus: is2fa ? "2fa_required" : "failed",
+      });
+    } catch (error: any) {
+      console.error("[WA-Register] Error:", error);
       res.status(500).json({ error: error.message });
     }
   });
