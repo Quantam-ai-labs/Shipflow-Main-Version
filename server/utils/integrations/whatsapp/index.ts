@@ -83,18 +83,6 @@ export async function sendOrderStatusWhatsApp(
     return SKIP;
   }
 
-  const allowedDomain = process.env.LALA_IMPORT;
-  if (allowedDomain) {
-    const order = await storage.getOrderById(params.merchantId, params.orderId);
-    const orderShopDomain = order?.shopDomain ?? null;
-    if (orderShopDomain !== allowedDomain) {
-      console.log(
-        `${LOG_PREFIX} [ENV FILTER] Skipping order ${params.orderNumber} — shop_domain "${orderShopDomain}" does not match allowed "${allowedDomain}"`,
-      );
-      return SKIP;
-    }
-  }
-
   const formattedPhone = formatPhoneForWhatsApp(params.customerPhone);
   if (!formattedPhone) {
     console.warn(
