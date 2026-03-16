@@ -4,15 +4,21 @@ async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
     let message = text;
+    let extra: Record<string, any> = {};
     try {
       const parsed = JSON.parse(text);
-      if (parsed.message) message = parsed.message;
+      if (parsed.error) message = parsed.error;
+      else if (parsed.message) message = parsed.message;
+      extra = parsed;
     } catch {
       if (text.includes("<!DOCTYPE") || text.includes("<html")) {
         message = "Something went wrong. Please try again.";
       }
     }
-    throw new Error(message);
+    const err: any = new Error(message);
+    Object.assign(err, extra);
+    err.status = res.status;
+    throw err;
   }
   const contentType = res.headers.get("content-type") || "";
   if (contentType.includes("text/html")) {
