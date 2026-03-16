@@ -255,15 +255,15 @@ export default function SettingsWhatsApp() {
         setRegStatus("pin_required");
         setRegError(result.registrationError || null);
         toast({
-          title: "WhatsApp Connected — PIN Required",
-          description: "Your account is connected. Enter your WhatsApp two-step verification PIN to complete setup.",
+          title: "WhatsApp Connected — Choose a PIN",
+          description: "Your account is connected. Choose a 6-digit PIN to complete phone registration.",
         });
       } else if (result.registrationStatus === "2fa_required") {
         setRegStatus("2fa_required");
         setRegError(result.registrationError || null);
         toast({
-          title: "WhatsApp Connected — PIN Required",
-          description: "Your account is connected but needs your 2FA PIN to complete phone registration.",
+          title: "WhatsApp Connected — Enter Your PIN",
+          description: "Your account is connected. Enter your existing two-step verification PIN to complete registration.",
         });
       } else if (result.registrationStatus === "failed") {
         setRegStatus("failed");
@@ -423,7 +423,7 @@ export default function SettingsWhatsApp() {
               data-testid="status-wa-connection"
             >
               {isConnected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-              {isDisconnected ? "Paused" : isConnected && data?.waPhoneRegistered ? "Connected" : isConnected ? "PIN Required" : "Not Connected"}
+              {isDisconnected ? "Paused" : isConnected && data?.waPhoneRegistered ? "Connected" : isConnected ? "Setup Needed" : "Not Connected"}
             </Badge>
             {isConnected && (
               <AlertDialog>
@@ -535,19 +535,14 @@ export default function SettingsWhatsApp() {
                   <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
                   <div>
                     <p className="text-sm font-medium">
-                      {regStatus === "failed" ? "Phone Registration Failed" : "Two-Step Verification PIN Required"}
+                      {regStatus === "failed" ? "Phone Registration Failed" : regStatus === "2fa_required" ? "Enter Your Existing PIN" : "Choose a PIN to Complete Setup"}
                     </p>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {regStatus === "failed"
                         ? regError || "Phone registration did not complete. Enter your PIN and try again."
-                        : "Enter your 6-digit WhatsApp two-step verification PIN to complete phone registration."}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-                      <span className="font-medium">Where to find your PIN:</span> Open{" "}
-                      <a href="https://business.facebook.com/wa/manage" target="_blank" rel="noopener noreferrer" className="text-primary underline" data-testid="link-wa-manager">
-                        WhatsApp Manager
-                      </a>{" "}
-                      → Account Tools → Phone Numbers → click the Settings icon on your number → Two-Step Verification. If you haven't set one, enable it and create a 6-digit PIN, then enter it here.
+                        : regStatus === "2fa_required"
+                          ? "This number already has two-step verification. Enter your existing 6-digit PIN."
+                          : "Choose any 6-digit number — this will become your WhatsApp two-step verification PIN."}
                     </p>
                   </div>
                 </div>
@@ -556,7 +551,7 @@ export default function SettingsWhatsApp() {
                     type="password"
                     inputMode="numeric"
                     maxLength={6}
-                    placeholder="6-digit PIN"
+                    placeholder={regStatus === "2fa_required" ? "Enter existing PIN" : "Choose a 6-digit PIN"}
                     value={twoFaPin}
                     onChange={(e) => setTwoFaPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
                     className="max-w-[140px]"
