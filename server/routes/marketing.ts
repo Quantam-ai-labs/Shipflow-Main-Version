@@ -3020,7 +3020,7 @@ export function registerMarketingRoutes(app: Express) {
           }).where(eq(merchants.id, merchantId));
           console.log(`[WA-Signup] Auto-registration succeeded for phone ${phoneNumberId} (merchant ${merchantId})`);
         } else {
-          const errorSubcode = autoRegData?.error?.error_subcode;
+          const errorSubcode = Number(autoRegData?.error?.error_subcode);
           const errorMsg = autoRegData?.error?.error_user_msg || autoRegData?.error?.message || "";
           console.log(`[WA-Signup] Auto-registration failed (${autoRegRes.status}, subcode ${errorSubcode}): ${errorMsg}`);
 
