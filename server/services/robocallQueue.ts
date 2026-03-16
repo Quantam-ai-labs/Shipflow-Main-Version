@@ -535,6 +535,7 @@ export async function sendRobocallDirect(params: {
       callId: String(callId),
       status: "completed",
       reason: "Direct send (manual)",
+      scheduledAt: new Date(),
       attemptCount: 1,
       maxAttempts: 1,
       waResponseArrived: false,
