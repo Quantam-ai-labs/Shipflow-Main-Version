@@ -2996,8 +2996,47 @@ export function registerMarketingRoutes(app: Express) {
         console.warn(`[WA-Signup] App subscription failed (non-blocking):`, subErr.message);
       }
 
-      const registrationStatus: "pin_required" = "pin_required";
-      const registrationError: string | null = "Enter your WhatsApp two-step verification PIN to complete phone registration. If you haven't set one yet, go to WhatsApp Manager → Account Tools → Phone Numbers → Settings → enable Two-Step Verification.";
+      let registrationStatus: string = "pin_required";
+      let registrationError: string | null = null;
+
+      try {
+        const autoRegUrl = new URL(`${META_BASE_URL}/${phoneNumberId}/register`);
+        const autoRegRes = await fetch(autoRegUrl.toString(), {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${userToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ messaging_product: "whatsapp" }),
+        });
+        const autoRegData = await autoRegRes.json().catch(() => null) as any;
+
+        if (autoRegRes.ok) {
+          registrationStatus = "success";
+          registrationError = null;
+          await db.update(merchants).set({
+            waPhoneRegistered: true,
+            updatedAt: new Date(),
+          }).where(eq(merchants.id, merchantId));
+          console.log(`[WA-Signup] Auto-registration succeeded for phone ${phoneNumberId} (merchant ${merchantId})`);
+        } else {
+          const errorSubcode = autoRegData?.error?.error_subcode;
+          const errorMsg = autoRegData?.error?.error_user_msg || autoRegData?.error?.message || "";
+          console.log(`[WA-Signup] Auto-registration failed (${autoRegRes.status}, subcode ${errorSubcode}): ${errorMsg}`);
+
+          if (errorSubcode === 2388001) {
+            registrationStatus = "pin_required";
+            registrationError = "This number has two-step verification enabled. Enter your 6-digit PIN to complete registration.";
+          } else {
+            registrationStatus = "failed";
+            registrationError = errorMsg || "Phone registration failed. You can retry below.";
+          }
+        }
+      } catch (regErr: any) {
+        console.warn(`[WA-Signup] Auto-registration error (non-blocking):`, regErr.message);
+        registrationStatus = "failed";
+        registrationError = "Could not auto-register phone. You can retry with your PIN below.";
+      }
 
       res.json({
         success: true,
