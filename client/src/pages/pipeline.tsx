@@ -83,6 +83,8 @@ import {
   AlertTriangle,
   Lock,
   CalendarDays,
+  MessageSquare,
+  PhoneCall,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -520,6 +522,9 @@ export default function Pipeline() {
   const [addTagChips, setAddTagChips] = useState<string[]>([]);
   const [removeTagChips, setRemoveTagChips] = useState<string[]>([]);
   const [confirmActionModal, setConfirmActionModal] = useState<{ open: boolean; action: string; orderIds: string[]; description: string }>({ open: false, action: "", orderIds: [], description: "" });
+  const [bulkWaModalOpen, setBulkWaModalOpen] = useState(false);
+  const [bulkWaTemplate, setBulkWaTemplate] = useState("");
+  const [bulkRoboConfirmOpen, setBulkRoboConfirmOpen] = useState(false);
 
   const [remarkDialogOpen, setRemarkDialogOpen] = useState(false);
   const [selectedRemarkOrder, setSelectedRemarkOrder] = useState<Order | null>(null);
@@ -837,6 +842,61 @@ export default function Pipeline() {
     },
     onError: (err: any) => {
       toast({ title: "Failed", description: err.message || "Failed to update tags", variant: "destructive" });
+    },
+  });
+
+  const { data: waTemplatesData, isLoading: waTemplatesLoading, isError: waTemplatesError } = useQuery<any[]>({
+    queryKey: ["/api/wa-meta-templates"],
+    staleTime: 60000,
+  });
+  const approvedTemplates = useMemo(() => (waTemplatesData || []).filter((t: any) => t.status === "APPROVED"), [waTemplatesData]);
+
+  const bulkSendWaMutation = useMutation({
+    mutationFn: async ({ orderIds, templateName }: { orderIds: string[]; templateName: string }) => {
+      const res = await apiRequest("POST", "/api/orders/bulk-send-whatsapp", { orderIds, templateName });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      const parts: string[] = [];
+      if (data.sent > 0) parts.push(`${data.sent} sent`);
+      if (data.failed > 0) parts.push(`${data.failed} failed`);
+      if (data.skipped > 0) parts.push(`${data.skipped} skipped`);
+      toast({
+        title: data.sent > 0 ? "WhatsApp messages sent" : "WhatsApp send failed",
+        description: parts.join(", ") + (data.errors?.length ? ` — ${data.errors[0]}` : ""),
+        variant: data.sent > 0 ? "default" : "destructive",
+      });
+      setBulkWaModalOpen(false);
+      setBulkWaTemplate("");
+      setSelectedIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message || "Failed to send WhatsApp messages", variant: "destructive" });
+    },
+  });
+
+  const bulkQueueRoboMutation = useMutation({
+    mutationFn: async (orderIds: string[]) => {
+      const res = await apiRequest("POST", "/api/orders/bulk-queue-robocall", { orderIds });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      const parts: string[] = [];
+      if (data.queued > 0) parts.push(`${data.queued} queued`);
+      if (data.alreadyQueued > 0) parts.push(`${data.alreadyQueued} already queued`);
+      if (data.skipped > 0) parts.push(`${data.skipped} skipped`);
+      toast({
+        title: data.queued > 0 ? "RoboCall orders queued" : "No orders queued",
+        description: parts.join(", "),
+        variant: data.queued > 0 ? "default" : "destructive",
+      });
+      setBulkRoboConfirmOpen(false);
+      setSelectedIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message || "Failed to queue RoboCall", variant: "destructive" });
     },
   });
 
@@ -1675,6 +1735,32 @@ export default function Pipeline() {
               <Button size="sm" onClick={handleBookSelected} disabled={isBookingLoading || isPending} data-testid="button-book-selected">
                 {isBookingLoading ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Send className="w-3.5 h-3.5 mr-1.5" />}
                 Book Selected
+              </Button>
+            </>
+          )}
+
+          {(activeTab === "ALL" || activeTab === "NEW" || activeTab === "PENDING" || activeTab === "HOLD") && (
+            <>
+              <div className="h-4 w-px bg-border" />
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => { setBulkWaTemplate(""); setBulkWaModalOpen(true); }}
+                disabled={bulkSendWaMutation.isPending}
+                data-testid="bulk-whatsapp"
+              >
+                {bulkSendWaMutation.isPending ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <MessageSquare className="w-3.5 h-3.5 mr-1.5" />}
+                WhatsApp
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setBulkRoboConfirmOpen(true)}
+                disabled={bulkQueueRoboMutation.isPending}
+                data-testid="bulk-robocall"
+              >
+                {bulkQueueRoboMutation.isPending ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <PhoneCall className="w-3.5 h-3.5 mr-1.5" />}
+                RoboCall
               </Button>
             </>
           )}
@@ -3204,6 +3290,87 @@ export default function Pipeline() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Bulk WhatsApp Template Modal */}
+      <Dialog open={bulkWaModalOpen} onOpenChange={v => { if (!v) { setBulkWaModalOpen(false); setBulkWaTemplate(""); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageSquare className="w-4 h-4" />Send WhatsApp Message
+            </DialogTitle>
+            <DialogDescription>
+              Send a WhatsApp template to {selectedIds.size} selected order{selectedIds.size !== 1 ? "s" : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Select Template</label>
+              {waTemplatesLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />Loading templates...
+                </div>
+              ) : waTemplatesError ? (
+                <div className="text-sm text-destructive py-2">Failed to load templates. Please try again.</div>
+              ) : (
+                <Select value={bulkWaTemplate} onValueChange={setBulkWaTemplate}>
+                  <SelectTrigger data-testid="select-wa-template">
+                    <SelectValue placeholder="Choose a template..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {approvedTemplates.length === 0 ? (
+                      <SelectItem value="_none" disabled>No approved templates</SelectItem>
+                    ) : (
+                      approvedTemplates.map((t: any) => (
+                        <SelectItem key={t.id} value={t.name} data-testid={`wa-template-${t.name}`}>
+                          {t.name} ({t.language})
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setBulkWaModalOpen(false); setBulkWaTemplate(""); }}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!bulkWaTemplate || bulkSendWaMutation.isPending}
+              onClick={() => bulkSendWaMutation.mutate({ orderIds: Array.from(selectedIds), templateName: bulkWaTemplate })}
+              data-testid="btn-send-bulk-wa"
+            >
+              {bulkSendWaMutation.isPending ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Send className="w-3.5 h-3.5 mr-1.5" />}
+              Send to {selectedIds.size} order{selectedIds.size !== 1 ? "s" : ""}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk RoboCall Confirm Dialog */}
+      <AlertDialog open={bulkRoboConfirmOpen} onOpenChange={setBulkRoboConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <PhoneCall className="w-4 h-4" />Queue RoboCall
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This will queue {selectedIds.size} order{selectedIds.size !== 1 ? "s" : ""} for automated phone calls. Orders without phone numbers or already in the queue will be skipped.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={bulkQueueRoboMutation.isPending}
+              onClick={(e) => { e.preventDefault(); bulkQueueRoboMutation.mutate(Array.from(selectedIds)); }}
+              data-testid="btn-confirm-bulk-robocall"
+            >
+              {bulkQueueRoboMutation.isPending ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <PhoneCall className="w-3.5 h-3.5 mr-1.5" />}
+              Queue {selectedIds.size} order{selectedIds.size !== 1 ? "s" : ""}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Customer Order History Dialog */}
       <Dialog open={!!historyPopup} onOpenChange={open => { if (!open) setHistoryPopup(null); }}>

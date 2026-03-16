@@ -7571,6 +7571,217 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/orders/bulk-send-whatsapp", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const { orderIds, templateName } = req.body;
+      if (!Array.isArray(orderIds) || orderIds.length === 0) return res.status(400).json({ error: "No orders selected" });
+      if (!templateName) return res.status(400).json({ error: "Template name is required" });
+
+      const { formatPhoneForWhatsApp, sendWhatsAppApiRequest } = await import("./utils/integrations/whatsapp/sender");
+      const { buildVarsFromParams, buildTemplateParamsFromBody, interpolateMessageBody } = await import("./utils/integrations/whatsapp/variables");
+
+      const [merchantRow] = await db.select({
+        waPhoneNumberId: merchants.waPhoneNumberId,
+        waAccessToken: merchants.waAccessToken,
+      }).from(merchants).where(eq(merchants.id, merchantId)).limit(1);
+
+      if (!merchantRow?.waAccessToken) return res.status(400).json({ error: "WhatsApp not configured" });
+
+      const [metaTemplate] = await db.select({ body: waMetaTemplates.body })
+        .from(waMetaTemplates)
+        .where(and(eq(waMetaTemplates.merchantId, merchantId), eq(waMetaTemplates.name, templateName)))
+        .limit(1);
+
+      let sent = 0, failed = 0, skipped = 0;
+      const errors: string[] = [];
+
+      for (const orderId of orderIds) {
+        const order = await storage.getOrderById(merchantId, orderId);
+        if (!order || !order.customerPhone) { skipped++; continue; }
+
+        const formattedPhone = formatPhoneForWhatsApp(order.customerPhone);
+        if (!formattedPhone) { skipped++; continue; }
+
+        const lineItems = Array.isArray(order.lineItems) ? (order.lineItems as any[]).map((li: any) => ({
+          name: li.name || li.title || "",
+          quantity: li.quantity || 1,
+          price: parseFloat(li.price || "0"),
+          variantTitle: li.variant_title || li.variantTitle || null,
+        })) : [];
+
+        const vars = buildVarsFromParams({
+          customerName: order.customerName || "Customer",
+          orderNumber: order.orderNumber || "",
+          fromStatus: "",
+          toStatus: order.workflowStatus || "NEW",
+          totalAmount: order.totalAmount ? String(order.totalAmount) : null,
+          city: order.customerCity || null,
+          shippingAddress: order.shippingAddress || null,
+          courierName: order.courierName || null,
+          courierTracking: order.trackingNumber || null,
+          itemSummary: order.itemSummary || null,
+          lineItems,
+        });
+
+        let templateParams: string[] | undefined;
+        if (metaTemplate?.body) {
+          templateParams = buildTemplateParamsFromBody(metaTemplate.body, vars) ?? undefined;
+        }
+
+        const msgText = interpolateMessageBody(null, vars, order.workflowStatus || "NEW");
+
+        try {
+          const result = await sendWhatsAppApiRequest({
+            formattedPhone,
+            templateName,
+            messageText: msgText,
+            orderNumber: order.orderNumber || "",
+            templateParams,
+            phoneNumberId: merchantRow.waPhoneNumberId ?? undefined,
+            accessToken: merchantRow.waAccessToken ?? undefined,
+          });
+
+          await db.insert(orderChangeLog).values({
+            orderId: order.id,
+            merchantId,
+            changeType: "WHATSAPP_SENT",
+            newValue: result.success ? "sent" : "failed",
+            actorType: "user",
+            actorName: req.user?.name || req.user?.email || "User",
+            metadata: {
+              success: result.success,
+              phone: formattedPhone,
+              templateName,
+              messageText: msgText,
+              messageId: result.messageId,
+              error: result.error,
+              bulkAction: true,
+            },
+          });
+
+          if (result.success) {
+            sent++;
+            try {
+              const conv = await storage.upsertConversation({
+                merchantId,
+                contactPhone: formattedPhone,
+                contactName: order.customerName || undefined,
+                orderId: order.id,
+                orderNumber: order.orderNumber || undefined,
+                lastMessage: msgText.slice(0, 200),
+              });
+              await storage.createWaMessage({
+                conversationId: conv.id,
+                direction: "outbound",
+                senderName: "User (Bulk)",
+                text: msgText,
+                waMessageId: result.messageId,
+                status: "sent",
+              });
+            } catch {}
+          } else {
+            failed++;
+            if (result.error) errors.push(`#${order.orderNumber}: ${result.error}`);
+          }
+        } catch (err: any) {
+          failed++;
+          errors.push(`#${order.orderNumber}: ${err.message}`);
+        }
+      }
+
+      res.json({ sent, failed, skipped, errors: errors.slice(0, 5) });
+    } catch (error: any) {
+      console.error("[Bulk WhatsApp] Error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/orders/bulk-queue-robocall", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const { orderIds } = req.body;
+      if (!Array.isArray(orderIds) || orderIds.length === 0) return res.status(400).json({ error: "No orders selected" });
+
+      const { formatPhoneForWhatsApp } = await import("./utils/integrations/whatsapp/sender");
+
+      const [merchant] = await db.select().from(merchants).where(eq(merchants.id, merchantId)).limit(1);
+      if (!merchant) return res.status(404).json({ error: "Merchant not found" });
+
+      if (merchant.robocallDisconnected) return res.status(400).json({ error: "RoboCall is disconnected" });
+      if (!merchant.robocallEmail || !merchant.robocallApiKey) return res.status(400).json({ error: "RoboCall not configured" });
+
+      const startTime = merchant.robocallStartTime || "10:00";
+      const endTime = merchant.robocallEndTime || "20:00";
+
+      function isWithinWindow() {
+        const now = new Date();
+        const currentMinutes = now.getHours() * 60 + now.getMinutes();
+        const [sH, sM] = startTime.split(":").map(Number);
+        const [eH, eM] = endTime.split(":").map(Number);
+        return currentMinutes >= sH * 60 + sM && currentMinutes < eH * 60 + eM;
+      }
+
+      const withinWindow = isWithinWindow();
+      const scheduledAt = withinWindow ? new Date() : (() => {
+        const [sH, sM] = startTime.split(":").map(Number);
+        const d = new Date();
+        d.setHours(sH, sM, 0, 0);
+        if (d <= new Date()) d.setDate(d.getDate() + 1);
+        return d;
+      })();
+
+      let queued = 0, skipped = 0, alreadyQueued = 0;
+
+      for (const orderId of orderIds) {
+        const order = await storage.getOrderById(merchantId, orderId);
+        if (!order || !order.customerPhone) { skipped++; continue; }
+
+        const formattedPhone = formatPhoneForWhatsApp(order.customerPhone);
+        if (!formattedPhone) { skipped++; continue; }
+
+        const existing = await db.select({ id: robocallQueue.id }).from(robocallQueue)
+          .where(and(eq(robocallQueue.orderId, orderId), eq(robocallQueue.status, "waiting")))
+          .limit(1);
+        if (existing.length > 0) { alreadyQueued++; continue; }
+
+        await db.insert(robocallQueue).values({
+          merchantId,
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          customerName: order.customerName,
+          phone: formattedPhone,
+          amount: order.totalAmount || "0",
+          brandName: merchant.name,
+          status: "waiting",
+          reason: "Manual bulk queue",
+          scheduledAt,
+          attemptCount: 0,
+          maxAttempts: merchant.robocallMaxAttempts ?? 3,
+          waResponseArrived: false,
+        });
+
+        await logConfirmationEvent({
+          merchantId,
+          orderId: order.id,
+          eventType: "CALL_QUEUED",
+          note: `RoboCall queued manually (bulk action)`,
+        }).catch(() => {});
+
+        queued++;
+      }
+
+      res.json({ queued, skipped, alreadyQueued });
+    } catch (error: any) {
+      console.error("[Bulk RoboCall] Error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // ─────────────────────────────────────────────────────────────────────────
   // SUPPORT SECTION ROUTES
   // ─────────────────────────────────────────────────────────────────────────
