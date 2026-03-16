@@ -849,7 +849,7 @@ export default function Pipeline() {
     queryKey: ["/api/wa-meta-templates"],
     staleTime: 60000,
   });
-  const approvedTemplates = useMemo(() => (waTemplatesData || []).filter((t: any) => t.status === "APPROVED"), [waTemplatesData]);
+  const approvedTemplates = useMemo(() => (waTemplatesData || []).filter((t: any) => t.status?.toLowerCase() === "approved"), [waTemplatesData]);
 
   const bulkSendWaMutation = useMutation({
     mutationFn: async ({ orderIds, templateName }: { orderIds: string[]; templateName: string }) => {
