@@ -954,323 +954,191 @@ export async function generateMultiAirwayBillPdf(
 }
 
 export interface BatchLoadsheetData {
-  batchId: string;
   courierName: string;
-  createdBy: string;
-  createdAt: string;
+  courierLoadsheetId?: string;
   merchantName: string;
-  totalCount: number;
-  successCount: number;
-  failedCount: number;
+  accountNumber?: string;
+  accountCode?: string;
+  riderName?: string;
+  createdAt: string;
   items: Array<{
-    orderNumber: string;
     trackingNumber: string;
+    orderNumber: string;
+    city: string;
+    weight: number;
     consigneeName: string;
-    consigneeCity: string;
-    consigneePhone: string;
+    productDetails: string;
+    quantity: number;
     codAmount: number;
-    status: string;
-    error?: string;
   }>;
-}
-
-function drawLine(page: PDFPage, y: number, width: number) {
-  page.drawLine({
-    start: { x: 40, y },
-    end: { x: width - 40, y },
-    thickness: 0.5,
-    color: rgb(0.8, 0.8, 0.8),
-  });
-}
-
-function drawLabel(
-  page: PDFPage,
-  font: PDFFont,
-  boldFont: PDFFont,
-  label: string,
-  value: string,
-  x: number,
-  y: number,
-  labelSize: number = 8,
-  valueSize: number = 10,
-) {
-  drawTextSafe(page, font, label, x, y + 12, labelSize, rgb(0.5, 0.5, 0.5));
-  drawTextSafe(page, boldFont, value || "-", x, y, valueSize);
 }
 
 export async function generateBatchLoadsheetPdf(
   data: BatchLoadsheetData,
-): Promise<string> {
-  ensurePdfDir();
-
+): Promise<Buffer> {
   const pdfDoc = await PDFDocument.create();
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-  const pageWidth = 595.28;
-  const pageHeight = 841.89;
+  const pageWidth = 841.89;
+  const pageHeight = 595.28;
 
-  let page = pdfDoc.addPage([pageWidth, pageHeight]);
-  let y = pageHeight - 60;
-  const left = 40;
-
-  // =========================
-  // CENTERED TITLE
-  // =========================
-  const title = "Loadsheet";
-  const titleSize = 18;
-  const titleWidth = boldFont.widthOfTextAtSize(title, titleSize);
-  const centerTitleX = (pageWidth - titleWidth) / 2;
-
-  // =========================
-  // CENTERED DATE
-  // =========================
-  function formatDate(dateString: string) {
-    const date = new Date(dateString);
-
-    const day = String(date.getDate()).padStart(2, "0");
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const year = date.getFullYear();
-
-    let hours = date.getHours();
-    const minutes = String(date.getMinutes()).padStart(2, "0");
-
-    const ampm = hours >= 12 ? "PM" : "AM";
-    hours = hours % 12 || 12;
-
-    const formattedHours = String(hours).padStart(2, "0");
-
-    return `${day}-${month}-${year} ${formattedHours}:${minutes} ${ampm}`;
-  }
-  function formatDate2(dateString: string) {
-    const date = new Date(dateString);
-
-    const day = String(date.getDate()).padStart(2, "0");
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const year = date.getFullYear();
-
-    return `${day}-${month}-${year}`;
-  }
-
-  drawTextSafe(page, boldFont, title, centerTitleX, y, titleSize - 2);
-
-  const fontSize = 10;
-  const label = "Date: ";
-  const value = formatDate(data.createdAt);
-
-  const labelWidth = boldFont.widthOfTextAtSize(label, fontSize);
-  const valueWidth = font.widthOfTextAtSize(value, fontSize);
-  const totalWidth = labelWidth + valueWidth;
-  const centerX = (pageWidth - totalWidth) / 2;
-
-  drawTextSafe(page, font, value, centerX + labelWidth, y - 20, fontSize);
-  drawTextSafe(page, boldFont, label, centerX, y - 20, fontSize);
-
-  y -= 25;
-
-  y -= 35;
-
-  // =========================
-  // SUMMARY
-  // =========================
-
-  // =========================
-  // 3 COLUMN SUMMARY SECTION
-  // =========================
+  const left = 30;
+  const right = pageWidth - 30;
+  const tableWidth = right - left;
+  const rowHeight = 22;
+  const headerRowHeight = 20;
+  const borderWidth = 0.5;
+  const borderColor = rgb(0, 0, 0);
+  const headerBg = rgb(0.93, 0.93, 0.93);
+  const fontSize = 7.5;
+  const headerFontSize = 7.5;
 
   const items = Array.isArray(data.items) ? data.items : [];
+  const totalCod = items.reduce((s, i) => s + (Number(i.codAmount) || 0), 0);
+  const totalPieces = items.reduce((s, i) => s + (Number(i.quantity) || 0), 0);
 
-  const totalAmount = items.reduce(
-    (sum, i) => sum + (Number(i.codAmount) || 0),
-    0,
-  );
-
-  // Define evenly spaced columns
-  const usableWidth = pageWidth - left * 2;
-  const colWidth = usableWidth / 3;
-
-  const col1X = left;
-  const col2X = left + colWidth;
-  const col3X = left + colWidth * 2;
-
-  const lineGap = 18;
-  const underline1 = "___________________";
-
-  // Row 1
-  drawTextSafe(
-    page,
-    boldFont,
-    `Courier Name: ${data.courierName ?? "-"}`,
-    col1X,
-    y,
-    9,
-  );
-  drawTextSafe(page, boldFont, `Brand Name: ${underline1}`, col2X, y, 8);
-  drawTextSafe(page, boldFont, `Rider Name: ${underline1}`, col3X, y, 8);
-  y -= lineGap;
-
-  // Row 2
-  drawTextSafe(page, boldFont, `Total Shipments: ${items.length}`, col1X, y, 8);
-  drawTextSafe(page, boldFont, `Brand Phone: ${underline1}`, col2X, y, 8);
-  drawTextSafe(page, boldFont, `Rider Phone: ${underline1}`, col3X, y, 8);
-  y -= lineGap;
-
-  // Row 3
-  drawTextSafe(
-    page,
-    boldFont,
-    `Orders Total: Rs ${totalAmount.toLocaleString()}`,
-    col1X,
-    y,
-    8,
-  );
-  y -= lineGap;
-  drawTextSafe(page, boldFont, `Brand Signature: ${underline1}`, col2X, y, 8);
-  drawTextSafe(page, boldFont, `Rider Signature: ${underline1}`, col3X, y, 8);
-
-  // Row 4 (only first column has content)
-  drawTextSafe(
-    page,
-    boldFont,
-    `Orders COD: Rs ${totalAmount.toLocaleString()}`,
-    col1X,
-    y,
-    8,
-  );
-  y += lineGap;
-
-  y -= 40;
-
-  // =========================
-  // TABLE SETUP
-  // =========================
-  const headers = [
-    "",
-    "Booked",
-    "Name",
-    "Order #",
-    "Amount",
-    "COD",
-    "Weight",
-    "City",
-    "Tracking",
-  ];
-
-  const rowHeight = 20;
-  const borderWidth = 0.7;
-  const borderColor = rgb(0, 0, 0);
-
-  const colXs = [
-    left,
-    55, // Booked
-    130, // Name
-    190, // Order #
-    270, // Amount
-    330, // COD
-    380, // Weight
-    430, // City
-    490, // Tracking
-    pageWidth - 40,
-  ];
-
-  const tableWidth = pageWidth - left - 40;
-
-  // =========================
-  // HEADER ROW
-  // =========================
-  page.drawRectangle({
-    x: left,
-    y: y - rowHeight,
-    width: tableWidth,
-    height: rowHeight,
-    borderColor,
-    borderWidth,
-  });
-
-  colXs.forEach((xPos) => {
-    page.drawLine({
-      start: { x: xPos, y: y - rowHeight },
-      end: { x: xPos, y: y },
-      thickness: borderWidth,
-      color: borderColor,
-    });
-  });
-
-  headers.forEach((h, i) => {
-    drawTextSafe(page, boldFont, h, colXs[i] + 4, y - 14, 9);
-  });
-
-  y -= rowHeight;
-
-  // =========================
-  // DATA ROWS
-  // =========================
-  for (let i = 0; i < data.items.length; i++) {
-    const item = data.items[i];
-
-    page.drawRectangle({
-      x: left,
-      y: y - rowHeight,
-      width: tableWidth,
-      height: rowHeight,
-      borderColor,
-      borderWidth,
-    });
-
-    colXs.forEach((xPos) => {
-      page.drawLine({
-        start: { x: xPos, y: y - rowHeight },
-        end: { x: xPos, y: y },
-        thickness: borderWidth,
-        color: borderColor,
-      });
-    });
-
-    drawTextSafe(page, font, String(i + 1), colXs[0] + 4, y - 14, 8);
-    drawTextSafe(
-      page,
-      font,
-      formatDate2(data.createdAt),
-      colXs[1] + 4,
-      y - 14,
-      8,
-    );
-    drawTextSafe(
-      page,
-      font,
-      truncate(item.consigneeName, 18),
-      colXs[2] + 4,
-      y - 14,
-      8,
-    );
-    drawTextSafe(page, font, item.orderNumber || "", colXs[3] + 4, y - 14, 8);
-    drawTextSafe(page, font, `Rs ${item.codAmount}`, colXs[4] + 4, y - 14, 8);
-    drawTextSafe(page, font, `Rs ${item.codAmount}`, colXs[5] + 4, y - 14, 8);
-    drawTextSafe(page, font, "100", colXs[6] + 4, y - 14, 8);
-    drawTextSafe(page, font, item.consigneeCity, colXs[7] + 4, y - 14, 8);
-    drawTextSafe(
-      page,
-      font,
-      item.trackingNumber || "-",
-      colXs[8] + 4,
-      y - 14,
-      8,
-    );
-
-    y -= rowHeight;
-
-    if (y < 60) {
-      page = pdfDoc.addPage([pageWidth, pageHeight]);
-      y = pageHeight - 60;
-    }
+  function formatDateTime(dateString: string) {
+    const d = new Date(dateString);
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const year = d.getFullYear();
+    let hours = d.getHours();
+    const mins = String(d.getMinutes()).padStart(2, "0");
+    const ampm = hours >= 12 ? "PM" : "AM";
+    hours = hours % 12 || 12;
+    return `${month}/${day}/${year} ${String(hours).padStart(2, "0")}:${mins} ${ampm}`;
   }
 
-  const pdfBytes = await pdfDoc.save();
-  const filename = `loadsheet_${Date.now()}.pdf`;
-  const filepath = path.join(PDF_DIR, filename);
-  fs.writeFileSync(filepath, pdfBytes);
+  function formatDate(dateString: string) {
+    const d = new Date(dateString);
+    return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+  }
 
-  return filepath;
+  const headers = ["Sr.", "CN #", "Order ID", "Destination", "Weight", "Consignee Name", "Product Details", "Qty", "COD Amount"];
+  const colWidths = [30, 90, 65, 70, 42, 90, 220, 35, 65];
+  const colXs: number[] = [left];
+  for (let i = 0; i < colWidths.length; i++) {
+    colXs.push(colXs[i] + colWidths[i]);
+  }
+
+  function drawTableHeader(pg: PDFPage, yPos: number): number {
+    pg.drawRectangle({
+      x: left, y: yPos - headerRowHeight, width: tableWidth, height: headerRowHeight,
+      color: headerBg, borderColor, borderWidth,
+    });
+    for (const xPos of colXs) {
+      pg.drawLine({ start: { x: xPos, y: yPos }, end: { x: xPos, y: yPos - headerRowHeight }, thickness: borderWidth, color: borderColor });
+    }
+    headers.forEach((h, i) => {
+      drawTextSafe(pg, boldFont, h, colXs[i] + 3, yPos - 14, headerFontSize);
+    });
+    return yPos - headerRowHeight;
+  }
+
+  function drawPageHeader(pg: PDFPage): number {
+    let cy = pageHeight - 35;
+
+    const title = "Dispatch Report";
+    const tw = boldFont.widthOfTextAtSize(title, 14);
+    drawTextSafe(pg, boldFont, title, (pageWidth - tw) / 2, cy, 14);
+    cy -= 22;
+
+    drawTextSafe(pg, boldFont, data.courierName || "", left, cy, 10);
+
+    const rightCol = right - 200;
+    drawTextSafe(pg, boldFont, "Booked Packets Summary Report", rightCol, cy + 6, 8);
+    cy -= 13;
+
+    const infoLabels = [
+      ["Pickup Date", formatDateTime(data.createdAt)],
+      ["Printed On", formatDate(data.createdAt)],
+    ];
+    if (data.courierLoadsheetId) {
+      infoLabels.push(["Challan #", data.courierLoadsheetId]);
+    }
+
+    let infoY = cy;
+    for (const [lbl, val] of infoLabels) {
+      drawTextSafe(pg, font, `${lbl}`, rightCol, infoY, 8);
+      drawTextSafe(pg, font, val, rightCol + 80, infoY, 8);
+      infoY -= 12;
+    }
+
+    cy -= 16;
+    if (data.accountNumber) {
+      drawTextSafe(pg, boldFont, "Client", left, cy, 8);
+      drawTextSafe(pg, font, `Acc # ${data.accountNumber}`, left + 80, cy, 8);
+      drawTextSafe(pg, font, `Company Name: ${data.merchantName || "-"}`, left + 180, cy, 8);
+      cy -= 12;
+    }
+    if (data.accountCode || data.riderName) {
+      drawTextSafe(pg, boldFont, "Handed Over To:", left, cy, 8);
+      if (data.accountCode) drawTextSafe(pg, font, `Code: ${data.accountCode}`, left + 80, cy, 8);
+      if (data.riderName) drawTextSafe(pg, font, `Name: ${data.riderName}`, left + 180, cy, 8);
+      cy -= 12;
+    }
+    cy -= 8;
+    return cy;
+  }
+
+  let page = pdfDoc.addPage([pageWidth, pageHeight]);
+  let y = drawPageHeader(page);
+  y = drawTableHeader(page, y);
+
+  for (let i = 0; i < items.length; i++) {
+    if (y - rowHeight < 60) {
+      page = pdfDoc.addPage([pageWidth, pageHeight]);
+      y = pageHeight - 35;
+      y = drawTableHeader(page, y);
+    }
+
+    const item = items[i];
+
+    page.drawRectangle({
+      x: left, y: y - rowHeight, width: tableWidth, height: rowHeight,
+      borderColor, borderWidth,
+    });
+    for (const xPos of colXs) {
+      page.drawLine({ start: { x: xPos, y }, end: { x: xPos, y: y - rowHeight }, thickness: borderWidth, color: borderColor });
+    }
+
+    const textY = y - 14;
+    drawTextSafe(page, font, String(i + 1), colXs[0] + 3, textY, fontSize);
+    drawTextSafe(page, font, item.trackingNumber || "-", colXs[1] + 3, textY, fontSize);
+    drawTextSafe(page, font, item.orderNumber || "-", colXs[2] + 3, textY, fontSize);
+    drawTextSafe(page, font, truncate(item.city || "-", 16), colXs[3] + 3, textY, fontSize);
+    drawTextSafe(page, font, String(item.weight || 0), colXs[4] + 3, textY, fontSize);
+    drawTextSafe(page, font, truncate(item.consigneeName || "-", 20), colXs[5] + 3, textY, fontSize);
+    drawTextSafe(page, font, truncate(item.productDetails || "-", 52), colXs[6] + 3, textY, fontSize);
+    drawTextSafe(page, font, String(item.quantity || 0), colXs[7] + 3, textY, fontSize);
+    drawTextSafe(page, font, `${item.codAmount || 0}`, colXs[8] + 3, textY, fontSize);
+
+    y -= rowHeight;
+  }
+
+  y -= 8;
+  if (y < 100) {
+    page = pdfDoc.addPage([pageWidth, pageHeight]);
+    y = pageHeight - 50;
+  }
+
+  drawTextSafe(page, boldFont, `Total No. Of Pieces:`, left, y, 8);
+  drawTextSafe(page, font, String(totalPieces), left + 110, y, 8);
+  y -= 13;
+  drawTextSafe(page, boldFont, `Total No. Of Packets:`, left, y, 8);
+  drawTextSafe(page, font, String(items.length), left + 110, y, 8);
+  y -= 13;
+  drawTextSafe(page, boldFont, `Total COD Amount:`, left, y, 8);
+  drawTextSafe(page, font, String(totalCod), left + 110, y, 8);
+  y -= 30;
+
+  const sigLine = "______________________________";
+  drawTextSafe(page, font, `Client Signature: ${sigLine}`, left, y, 8);
+  drawTextSafe(page, font, `Booking Staff Signature: ${sigLine}`, right - 250, y, 8);
+
+  const pdfBytes = await pdfDoc.save();
+  return Buffer.from(pdfBytes);
 }
 
 export interface PicklistItem {
@@ -1524,6 +1392,8 @@ export async function generatePicklistPdfBuffer(items: PicklistItem[]): Promise<
 export function getPdfPath(filepath: string): string | null {
   if (!filepath) return null;
   if (fs.existsSync(filepath)) return filepath;
+  const inDir = path.join(PDF_DIR, filepath);
+  if (fs.existsSync(inDir)) return inDir;
   return null;
 }
 

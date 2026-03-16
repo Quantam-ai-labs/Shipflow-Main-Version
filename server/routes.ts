@@ -8893,7 +8893,7 @@ export async function registerRoutes(
         loadLeopardsCities,
         findLeopardsCity,
       } = await import("./services/couriers/booking");
-      const { generateBatchLoadsheetPdf } = await import(
+      const { generateBatchLoadsheetPdf, savePdf } = await import(
         "./services/pdfGenerator"
       );
 
@@ -9282,29 +9282,37 @@ export async function registerRoutes(
             });
           }));
 
-          const batchLoadsheetPath = await generateBatchLoadsheetPdf({
-            batchId: batch.id,
+          const batchPdfBuffer = await generateBatchLoadsheetPdf({
             courierName: courier === "leopards" ? "Leopards" : "PostEx",
-            createdBy: userId,
-            createdAt: new Date().toLocaleDateString(),
             merchantName: merchant.name,
-            totalCount: bgResults.length,
-            successCount,
-            failedCount,
-            items: bgResults.map((r) => {
+            createdAt: new Date().toISOString(),
+            items: bgResults.filter((r) => r.success).map((r) => {
               const order = bgFetchedOrders.find((o) => o.id === r.orderId);
+              const lineItems = Array.isArray(order?.lineItems) ? (order.lineItems as any[]) : [];
+              const productDetails = lineItems.length > 0
+                ? lineItems.map((li: any) => {
+                    const name = (li.name || li.title || "Item").trim();
+                    const variant = (li.variantTitle || li.variant_title) ? ` (${li.variantTitle || li.variant_title})` : "";
+                    const qty = li.quantity && li.quantity > 1 ? ` x${li.quantity}` : "";
+                    return `${name}${variant}${qty}`;
+                  }).join(", ")
+                : (order?.itemSummary || "-");
+              const totalQty = lineItems.length > 0
+                ? lineItems.reduce((s: number, li: any) => s + (Number(li.quantity) || 1), 0)
+                : (order?.totalQuantity || 1);
               return {
-                orderNumber: r.orderNumber,
-                trackingNumber: r.trackingNumber || "",
-                consigneeName: order?.customerName || "",
-                consigneeCity: order?.city || "",
-                consigneePhone: order?.customerPhone || "",
+                trackingNumber: r.trackingNumber || "-",
+                orderNumber: r.orderNumber || "-",
+                city: order?.city || "-",
+                weight: Number(order?.courierWeight) || 0,
+                consigneeName: order?.customerName || "-",
+                productDetails,
+                quantity: totalQty,
                 codAmount: Number(order?.totalAmount) || 0,
-                status: r.success ? "BOOKED" : "FAILED",
-                error: r.error,
               };
             }),
           });
+          const batchLoadsheetPath = await savePdf(batchPdfBuffer, `booking_batch_${courier}`);
 
           await storage.updateShipmentBatch(batch.id, {
             pdfBatchPath: batchLoadsheetPath,
@@ -10496,29 +10504,29 @@ export async function registerRoutes(
 
         const settings = creds.settings;
 
-        let pdfBuffer: Buffer;
         let courierLoadsheetId: string | undefined;
+        let riderName = "";
 
         if (courierNorm === "leopards") {
           if (!creds.apiSecret) {
             return res.status(400).json({ message: "Leopards API password not configured" });
           }
-          const riderName = settings.riderName?.trim() || "";
+          riderName = settings.riderName?.trim() || "";
           const riderCode = settings.riderCode?.trim() || "";
           if (!riderName || !riderCode) {
             return res.status(400).json({ message: "Rider name and rider code must be configured in Leopards courier settings before generating a loadsheet" });
           }
-          const { generateLeopardsLoadSheet } = await import("./services/couriers/leopards");
+          const { registerLeopardsLoadSheet } = await import("./services/couriers/leopards");
           console.log(`[Loadsheet] Calling Leopards generateLoadSheet for ${trackingNumbers.length} shipments — rider: ${riderName} (${riderCode})`);
-          pdfBuffer = await generateLeopardsLoadSheet(
+          courierLoadsheetId = await registerLeopardsLoadSheet(
             trackingNumbers,
             { apiKey: creds.apiKey, apiPassword: creds.apiSecret },
             { riderName, riderCode },
           );
         } else if (courierNorm === "postex") {
-          const { generatePostExLoadSheet } = await import("./services/courierSlips");
+          const { registerPostExLoadSheet } = await import("./services/courierSlips");
           console.log(`[Loadsheet] Calling PostEx generate-load-sheet for ${trackingNumbers.length} shipments`);
-          pdfBuffer = await generatePostExLoadSheet(
+          await registerPostExLoadSheet(
             trackingNumbers,
             creds.apiKey,
             "",
@@ -10529,8 +10537,43 @@ export async function registerRoutes(
           return res.status(400).json({ message: `Loadsheet generation via courier API is not supported for: ${courierLabel}` });
         }
 
-        // Save PDF and create batch record
-        const { savePdf } = await import("./services/pdfGenerator");
+        const { generateBatchLoadsheetPdf, savePdf } = await import("./services/pdfGenerator");
+
+        const loadsheetItems = bookedOrders.map((o) => {
+          const lineItems = Array.isArray(o.lineItems) ? (o.lineItems as any[]) : [];
+          const productDetails = lineItems.length > 0
+            ? lineItems.map((li: any) => {
+                const name = (li.name || li.title || "Item").trim();
+                const variant = (li.variantTitle || li.variant_title) ? ` (${li.variantTitle || li.variant_title})` : "";
+                const qty = li.quantity && li.quantity > 1 ? ` x${li.quantity}` : "";
+                return `${name}${variant}${qty}`;
+              }).join(", ")
+            : (o.itemSummary || "-");
+          const totalQty = lineItems.length > 0
+            ? lineItems.reduce((s: number, li: any) => s + (Number(li.quantity) || 1), 0)
+            : (o.totalQuantity || 1);
+          return {
+            trackingNumber: o.courierTracking || "-",
+            orderNumber: o.orderNumber || "-",
+            city: o.city || "-",
+            weight: Number(o.courierWeight) || 0,
+            consigneeName: o.customerName || "-",
+            productDetails,
+            quantity: totalQty,
+            codAmount: Number(o.totalAmount) || 0,
+          };
+        });
+
+        const pdfBuffer = await generateBatchLoadsheetPdf({
+          courierName: courierLabel,
+          courierLoadsheetId,
+          merchantName: merchant.businessName || merchant.shopName || "-",
+          accountNumber: settings.accountNumber?.trim() || "",
+          accountCode: settings.riderCode?.trim() || "",
+          riderName,
+          createdAt: new Date().toISOString(),
+          items: loadsheetItems,
+        });
         const pdfPath = await savePdf(pdfBuffer, `loadsheet_${courierNorm}`);
 
         const batch = await storage.createShipmentBatch({
@@ -11402,25 +11445,26 @@ export async function registerRoutes(
       // Read dispatch metadata from courier integration settings (DB)
       const whSettings = whCreds.settings;
 
-      let whPdfBuffer: Buffer;
+      let whCourierLoadsheetId: string | undefined;
+      let whRiderName = "";
       if (courierNormWh === "leopards") {
         if (!whCreds.apiSecret) return res.status(400).json({ message: "Leopards API password not configured" });
-        const whRiderName = whSettings.riderName?.trim() || "";
+        whRiderName = whSettings.riderName?.trim() || "";
         const whRiderCode = whSettings.riderCode?.trim() || "";
         if (!whRiderName || !whRiderCode) {
           return res.status(400).json({ message: "Rider name and rider code must be configured in Leopards courier settings before generating a loadsheet" });
         }
-        const { generateLeopardsLoadSheet } = await import("./services/couriers/leopards");
+        const { registerLeopardsLoadSheet } = await import("./services/couriers/leopards");
         console.log(`[Warehouse Loadsheet] Calling Leopards for ${trackingNums.length} shipments — rider: ${whRiderName} (${whRiderCode})`);
-        whPdfBuffer = await generateLeopardsLoadSheet(
+        whCourierLoadsheetId = await registerLeopardsLoadSheet(
           trackingNums,
           { apiKey: whCreds.apiKey, apiPassword: whCreds.apiSecret },
           { riderName: whRiderName, riderCode: whRiderCode },
         );
       } else if (courierNormWh === "postex") {
-        const { generatePostExLoadSheet } = await import("./services/courierSlips");
+        const { registerPostExLoadSheet } = await import("./services/courierSlips");
         console.log(`[Warehouse Loadsheet] Calling PostEx for ${trackingNums.length} shipments`);
-        whPdfBuffer = await generatePostExLoadSheet(
+        await registerPostExLoadSheet(
           trackingNums,
           whCreds.apiKey,
           "",
@@ -11431,7 +11475,43 @@ export async function registerRoutes(
         return res.status(400).json({ message: `Loadsheet generation via courier API is not supported for: ${courierLabelWh}` });
       }
 
-      const { savePdf } = await import("./services/pdfGenerator");
+      const { generateBatchLoadsheetPdf, savePdf } = await import("./services/pdfGenerator");
+
+      const whLoadsheetItems = fetchedOrders.map((o) => {
+        const lineItems = Array.isArray(o.lineItems) ? (o.lineItems as any[]) : [];
+        const productDetails = lineItems.length > 0
+          ? lineItems.map((li: any) => {
+              const name = (li.name || li.title || "Item").trim();
+              const variant = (li.variantTitle || li.variant_title) ? ` (${li.variantTitle || li.variant_title})` : "";
+              const qty = li.quantity && li.quantity > 1 ? ` x${li.quantity}` : "";
+              return `${name}${variant}${qty}`;
+            }).join(", ")
+          : (o.itemSummary || "-");
+        const totalQty = lineItems.length > 0
+          ? lineItems.reduce((s: number, li: any) => s + (Number(li.quantity) || 1), 0)
+          : (o.totalQuantity || 1);
+        return {
+          trackingNumber: o.courierTracking || "-",
+          orderNumber: o.orderNumber || "-",
+          city: o.city || "-",
+          weight: Number(o.courierWeight) || 0,
+          consigneeName: o.customerName || "-",
+          productDetails,
+          quantity: totalQty,
+          codAmount: Number(o.totalAmount) || 0,
+        };
+      });
+
+      const whPdfBuffer = await generateBatchLoadsheetPdf({
+        courierName: courierLabelWh,
+        courierLoadsheetId: whCourierLoadsheetId,
+        merchantName: merchant.businessName || merchant.shopName || "-",
+        accountNumber: whSettings.accountNumber?.trim() || "",
+        accountCode: whSettings.riderCode?.trim() || "",
+        riderName: whRiderName,
+        createdAt: new Date().toISOString(),
+        items: whLoadsheetItems,
+      });
       const whPdfPath = await savePdf(whPdfBuffer, `wh_loadsheet_${courierNormWh}`);
 
       const batch = await storage.createShipmentBatch({

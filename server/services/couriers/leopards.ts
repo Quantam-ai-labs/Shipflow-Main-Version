@@ -399,11 +399,11 @@ async function withRetry<T>(fn: () => Promise<T>, retries = 3, delayMs = 1000): 
   throw lastError;
 }
 
-export async function generateLeopardsLoadSheet(
+export async function registerLeopardsLoadSheet(
   cnNumbers: string[],
   creds: { apiKey: string; apiPassword: string },
   riderInfo: { riderName: string; riderCode: string },
-): Promise<Buffer> {
+): Promise<string> {
   const baseUrl = "https://merchantapi.leopardscourier.com/api";
 
   const loadSheetId: string = await withRetry(async () => {
@@ -426,7 +426,18 @@ export async function generateLeopardsLoadSheet(
     return String(data.load_sheet_id);
   });
 
-  console.log(`[Leopards] Generated load sheet ID: ${loadSheetId}`);
+  console.log(`[Leopards] Registered load sheet ID: ${loadSheetId}`);
+  return loadSheetId;
+}
+
+export async function generateLeopardsLoadSheet(
+  cnNumbers: string[],
+  creds: { apiKey: string; apiPassword: string },
+  riderInfo: { riderName: string; riderCode: string },
+): Promise<Buffer> {
+  const baseUrl = "https://merchantapi.leopardscourier.com/api";
+
+  const loadSheetId = await registerLeopardsLoadSheet(cnNumbers, creds, riderInfo);
 
   const pdfBuffer: Buffer = await withRetry(async () => {
     const res = await fetch(`${baseUrl}/downloadLoadSheet/`, {

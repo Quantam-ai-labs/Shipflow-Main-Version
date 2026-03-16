@@ -454,6 +454,45 @@ async function withRetry<T>(fn: () => Promise<T>, retries = 3, delayMs = 1000): 
   throw lastError;
 }
 
+export async function registerPostExLoadSheet(
+  trackingNumbers: string[],
+  apiToken: string,
+  pickupAddress = "",
+  returnCity = "",
+  returnAddress = "",
+): Promise<void> {
+  await withRetry(async () => {
+    const body: Record<string, any> = { trackingNumbers, pickupAddress };
+    if (returnCity) body.returnCity = returnCity;
+    if (returnAddress) body.returnAddress = returnAddress;
+    const res = await fetch(
+      "https://api.postex.pk/services/integration/api/order/v2/generate-load-sheet",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", token: apiToken },
+        body: JSON.stringify(body),
+      },
+    );
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`PostEx generate-load-sheet HTTP ${res.status}: ${text}`);
+    }
+    const contentType = res.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      const data = await res.json();
+      if (data.statusCode && String(data.statusCode) !== "200") {
+        throw new Error(`PostEx generate-load-sheet error: ${JSON.stringify(data)}`);
+      }
+    } else {
+      const buf = await res.arrayBuffer();
+      if (buf.byteLength < 50) {
+        throw new Error("PostEx generate-load-sheet returned empty response");
+      }
+    }
+  });
+  console.log(`[PostEx] Registered load sheet for ${trackingNumbers.length} shipments`);
+}
+
 export async function generatePostExLoadSheet(
   trackingNumbers: string[],
   apiToken: string,
