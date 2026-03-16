@@ -476,6 +476,89 @@ async function checkRobocallResponses() {
   }
 }
 
+export async function sendRobocallDirect(params: {
+  merchantId: string;
+  merchant: { robocallEmail: string; robocallApiKey: string; robocallVoiceId?: string | null; name?: string | null };
+  orderId: string;
+  orderNumber: string;
+  phone: string;
+  amount: string;
+  brandName?: string;
+}): Promise<{ success: boolean; callId?: string; error?: string }> {
+  const { merchantId, merchant, orderId, orderNumber, phone, amount, brandName } = params;
+  const voiceId = merchant.robocallVoiceId || "735";
+  const urlParams = new URLSearchParams({
+    email: merchant.robocallEmail,
+    key: merchant.robocallApiKey,
+    to: phone,
+    type: "dtmf",
+    voice_id: voiceId,
+    amount: amount || "0",
+    brand_name: (brandName || merchant.name || "").replace(/\s+/g, " ").trim(),
+    order_number: (orderNumber || "").replace(/^#/, ""),
+  });
+  const sendUrl = `${ROBOCALL_API_BASE}/send-voice?${urlParams.toString()}`;
+
+  const data = await safeFetchJson(sendUrl);
+  const smsData = data?.sms || data;
+  const callId = smsData?.id || smsData?.call_id || data?.data?.call_id || null;
+
+  if (callId) {
+    await db.insert(robocallLogs).values({
+      merchantId,
+      callId: String(callId),
+      phone,
+      amount,
+      voiceId,
+      brandName: brandName || merchant.name || null,
+      orderNumber,
+      status: "Initiated",
+    });
+
+    await logConfirmationEvent({
+      merchantId,
+      orderId,
+      eventType: "CALL_ATTEMPTED",
+      channel: "robocall",
+      apiResponse: data,
+      note: `RoboCall sent directly — call ID: ${callId}`,
+    });
+
+    await db.insert(robocallQueue).values({
+      merchantId,
+      orderId,
+      orderNumber,
+      customerName: brandName || null,
+      phone,
+      amount,
+      brandName: brandName || null,
+      callId: String(callId),
+      status: "completed",
+      reason: "Direct send (manual)",
+      attemptCount: 1,
+      maxAttempts: 1,
+      waResponseArrived: false,
+      completedAt: new Date(),
+    });
+
+    console.log(`${LOG_PREFIX} Direct call sent for ${orderNumber} — callId: ${callId}`);
+    return { success: true, callId: String(callId) };
+  } else {
+    const errorMsg = data?.error || "No call ID returned";
+    await logConfirmationEvent({
+      merchantId,
+      orderId,
+      eventType: "CALL_ATTEMPTED",
+      channel: "robocall",
+      apiResponse: data,
+      errorDetails: errorMsg,
+      note: `RoboCall direct send failed: ${errorMsg}`,
+    });
+    console.log(`${LOG_PREFIX} Direct call failed for ${orderNumber}: ${errorMsg}`);
+    return { success: false, error: errorMsg };
+  }
+}
+
 let queueInterval: ReturnType<typeof setInterval> | null = null;
 let responseInterval: ReturnType<typeof setInterval> | null = null;
 

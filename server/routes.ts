@@ -7708,6 +7708,7 @@ export async function registerRoutes(
       if (!Array.isArray(orderIds) || orderIds.length === 0) return res.status(400).json({ error: "No orders selected" });
 
       const { formatPhoneForWhatsApp } = await import("./utils/integrations/whatsapp/sender");
+      const { sendRobocallDirect } = await import("./services/robocallQueue");
 
       const [merchant] = await db.select().from(merchants).where(eq(merchants.id, merchantId)).limit(1);
       if (!merchant) return res.status(404).json({ error: "Merchant not found" });
@@ -7715,27 +7716,8 @@ export async function registerRoutes(
       if (merchant.robocallDisconnected) return res.status(400).json({ error: "RoboCall is disconnected" });
       if (!merchant.robocallEmail || !merchant.robocallApiKey) return res.status(400).json({ error: "RoboCall not configured" });
 
-      const startTime = merchant.robocallStartTime || "10:00";
-      const endTime = merchant.robocallEndTime || "20:00";
-
-      function isWithinWindow() {
-        const now = new Date();
-        const currentMinutes = now.getHours() * 60 + now.getMinutes();
-        const [sH, sM] = startTime.split(":").map(Number);
-        const [eH, eM] = endTime.split(":").map(Number);
-        return currentMinutes >= sH * 60 + sM && currentMinutes < eH * 60 + eM;
-      }
-
-      const withinWindow = isWithinWindow();
-      const scheduledAt = withinWindow ? new Date() : (() => {
-        const [sH, sM] = startTime.split(":").map(Number);
-        const d = new Date();
-        d.setHours(sH, sM, 0, 0);
-        if (d <= new Date()) d.setDate(d.getDate() + 1);
-        return d;
-      })();
-
-      let queued = 0, skipped = 0, alreadyQueued = 0;
+      let sent = 0, failed = 0, skipped = 0;
+      const errors: string[] = [];
 
       for (const orderId of orderIds) {
         const order = await storage.getOrderById(merchantId, orderId);
@@ -7744,38 +7726,29 @@ export async function registerRoutes(
         const formattedPhone = formatPhoneForWhatsApp(order.customerPhone);
         if (!formattedPhone) { skipped++; continue; }
 
-        const existing = await db.select({ id: robocallQueue.id }).from(robocallQueue)
-          .where(and(eq(robocallQueue.orderId, orderId), eq(robocallQueue.status, "waiting")))
-          .limit(1);
-        if (existing.length > 0) { alreadyQueued++; continue; }
-
-        await db.insert(robocallQueue).values({
+        const result = await sendRobocallDirect({
           merchantId,
+          merchant: { robocallEmail: merchant.robocallEmail!, robocallApiKey: merchant.robocallApiKey!, robocallVoiceId: merchant.robocallVoiceId, name: merchant.name },
           orderId: order.id,
-          orderNumber: order.orderNumber,
-          customerName: order.customerName,
+          orderNumber: order.orderNumber || "",
           phone: formattedPhone,
           amount: order.totalAmount || "0",
-          brandName: merchant.name,
-          status: "waiting",
-          reason: "Manual bulk queue",
-          scheduledAt,
-          attemptCount: 0,
-          maxAttempts: merchant.robocallMaxAttempts ?? 3,
-          waResponseArrived: false,
+          brandName: merchant.name || undefined,
         });
 
-        await logConfirmationEvent({
-          merchantId,
-          orderId: order.id,
-          eventType: "CALL_QUEUED",
-          note: `RoboCall queued manually (bulk action)`,
-        }).catch(() => {});
+        if (result.success) {
+          sent++;
+        } else {
+          failed++;
+          if (errors.length < 3) errors.push(`${order.orderNumber}: ${result.error}`);
+        }
 
-        queued++;
+        if (orderIds.indexOf(orderId) < orderIds.length - 1) {
+          await new Promise(r => setTimeout(r, 500));
+        }
       }
 
-      res.json({ queued, skipped, alreadyQueued });
+      res.json({ sent, failed, skipped, errors });
     } catch (error: any) {
       console.error("[Bulk RoboCall] Error:", error);
       res.status(500).json({ error: error.message });

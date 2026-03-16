@@ -883,13 +883,13 @@ export default function Pipeline() {
     },
     onSuccess: (data: any) => {
       const parts: string[] = [];
-      if (data.queued > 0) parts.push(`${data.queued} queued`);
-      if (data.alreadyQueued > 0) parts.push(`${data.alreadyQueued} already queued`);
+      if (data.sent > 0) parts.push(`${data.sent} called`);
+      if (data.failed > 0) parts.push(`${data.failed} failed`);
       if (data.skipped > 0) parts.push(`${data.skipped} skipped`);
       toast({
-        title: data.queued > 0 ? "RoboCall orders queued" : "No orders queued",
-        description: parts.join(", "),
-        variant: data.queued > 0 ? "default" : "destructive",
+        title: data.sent > 0 ? "RoboCall sent" : "RoboCall failed",
+        description: parts.join(", ") + (data.errors?.length ? ` — ${data.errors[0]}` : ""),
+        variant: data.sent > 0 ? "default" : "destructive",
       });
       setBulkRoboConfirmOpen(false);
       setSelectedIds(new Set());
@@ -3352,10 +3352,10 @@ export default function Pipeline() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
-              <PhoneCall className="w-4 h-4" />Queue RoboCall
+              <PhoneCall className="w-4 h-4" />Send RoboCall
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This will queue {selectedIds.size} order{selectedIds.size !== 1 ? "s" : ""} for automated phone calls. Orders without phone numbers or already in the queue will be skipped.
+              This will instantly call {selectedIds.size} order{selectedIds.size !== 1 ? "s" : ""} for automated phone confirmation. Orders without phone numbers will be skipped.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -3366,7 +3366,7 @@ export default function Pipeline() {
               data-testid="btn-confirm-bulk-robocall"
             >
               {bulkQueueRoboMutation.isPending ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <PhoneCall className="w-3.5 h-3.5 mr-1.5" />}
-              Queue {selectedIds.size} order{selectedIds.size !== 1 ? "s" : ""}
+              Call {selectedIds.size} order{selectedIds.size !== 1 ? "s" : ""}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
