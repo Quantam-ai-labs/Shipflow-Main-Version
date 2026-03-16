@@ -305,12 +305,22 @@ async function checkRobocallResponses() {
           !["NEW", "PENDING"].includes(currentOrder.workflowStatus || "");
 
         if (orderAlreadyResolved) {
+          const dtmfNote = dtmfValue ? ` — DTMF ${dtmfValue} (${dtmfValue === 1 ? "confirm" : dtmfValue === 2 ? "cancel" : "other"})` : "";
+          await logConfirmationEvent({
+            merchantId: entry.merchantId,
+            orderId: entry.orderId,
+            eventType: "CALL_RESPONSE",
+            channel: "robocall",
+            responseClassification: statusLabel,
+            note: `Call ${statusLabel}${dtmfNote} (order already ${currentOrder?.confirmationStatus || "resolved"}, duration: ${smsData.voice_sec || 0}s)`,
+            apiResponse: { voiceStatus: smsData.voice_status, voiceSec: smsData.voice_sec, dtmf: dtmfValue },
+          });
           await db.update(robocallQueue).set({
             status: "skipped",
             lastCallResult: `${statusLabel} (order already resolved)`,
             completedAt: new Date(),
           }).where(eq(robocallQueue.id, entry.id));
-          console.log(`${LOG_PREFIX} Skipping response for #${entry.orderNumber} — order already resolved (${currentOrder?.confirmationStatus}/${currentOrder?.workflowStatus})`);
+          console.log(`${LOG_PREFIX} Skipping response for #${entry.orderNumber} — order already resolved (${currentOrder?.confirmationStatus}/${currentOrder?.workflowStatus}), logged ${statusLabel}${dtmfNote}`);
           continue;
         }
 
