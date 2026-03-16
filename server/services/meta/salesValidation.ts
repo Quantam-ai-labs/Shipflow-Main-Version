@@ -73,6 +73,9 @@ export function validateLaunchInput(input: SalesLaunchInput): ValidationIssue[] 
     if (!input.existingPostId) {
       issues.push({ code: "MISSING_POST_ID", field: "existingPostId", stage: "media", message: "An existing post must be selected.", fixSuggestion: "Select a post from your Facebook or Instagram Page." });
     }
+    if (!input.destinationUrl) {
+      issues.push({ code: "MISSING_URL", field: "destinationUrl", stage: "input", message: "Destination URL is required for sales ads using existing posts.", fixSuggestion: "Enter a website URL where users will be directed when they click the ad." });
+    }
   }
 
   if (input.destinationUrl) {
@@ -287,6 +290,7 @@ export function normalizeInput(raw: Record<string, unknown>): SalesLaunchInput {
   } else if (mode === "EXISTING_POST") {
     base.existingPostId = trimOrNull(raw.existingPostId);
     base.existingPostSource = raw.existingPostSource === "instagram" ? "instagram" : "facebook";
+    base.cta = trimOrNull(raw.cta) || "SHOP_NOW";
   }
 
   if (Array.isArray(raw.targetCountries) && raw.targetCountries.length > 0) {

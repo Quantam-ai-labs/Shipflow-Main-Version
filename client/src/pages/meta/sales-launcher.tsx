@@ -550,9 +550,7 @@ export default function SalesLauncher() {
       } else {
         body.existingPostId = selectedPostId;
         body.existingPostSource = selectedPostSource;
-        if (destinationUrl.trim()) {
-          body.destinationUrl = destinationUrl;
-        }
+        body.destinationUrl = destinationUrl;
       }
 
       const res = await apiRequest("POST", "/api/meta/sales/launch", body);
@@ -580,12 +578,12 @@ export default function SalesLauncher() {
     { label: "Diagnostics passed", ok: diagnosticsPassed },
     { label: "Campaign name", ok: !!adName.trim() },
     { label: "Daily budget valid", ok: parseFloat(dailyBudget) >= 1 },
+    { label: "Destination URL", ok: !!destinationUrl.trim() },
     ...(isExistingPost
       ? [
           { label: "Post selected", ok: !!selectedPostId },
         ]
       : [
-          { label: "Destination URL", ok: !!destinationUrl.trim() },
           { label: "Primary text", ok: !!primaryText.trim() },
           ...(mode === "UPLOAD_IMAGE" ? [{ label: "Image uploaded", ok: !!imageHash }] : []),
           ...(mode === "UPLOAD_VIDEO" ? [{ label: "Video ready", ok: videoStatus === "ready" }] : []),
