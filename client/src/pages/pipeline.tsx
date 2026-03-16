@@ -271,23 +271,22 @@ const PENDING_REASON_TYPES = [
   { value: "OTHER", label: "Other" },
 ];
 
-const UNIVERSAL_STATUS_COLORS: Record<string, string> = {
-  'BOOKED': "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
-  'PICKED_UP': "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300",
-  'ARRIVED_AT_ORIGIN': "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
-  'IN_TRANSIT': "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300",
-  'ARRIVED_AT_DESTINATION': "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
-  'OUT_FOR_DELIVERY': "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300",
-  'DELIVERY_ATTEMPTED': "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300",
-  'DELIVERED': "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
-  'DELIVERY_FAILED': "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
-  'RETURNED_TO_SHIPPER': "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
-  'READY_FOR_RETURN': "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300",
-  'RETURN_IN_TRANSIT': "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
-  'RETURNED_TO_ORIGIN': "bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300",
-  'CANCELLED': "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
-  'Unfulfilled': "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
-};
+function truncateStatus(status: string, wordCount: number = 3): string {
+  const words = status.split(/\s+/);
+  if (words.length <= wordCount) return status;
+  return words.slice(0, wordCount).join(' ') + '...';
+}
+
+function getStatusBadgeColor(workflowStatus: string | null | undefined): string {
+  switch (workflowStatus) {
+    case 'BOOKED': return "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300";
+    case 'FULFILLED': return "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300";
+    case 'DELIVERED': return "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300";
+    case 'RETURN': return "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300";
+    case 'CANCELLED': return "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300";
+    default: return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
+  }
+}
 
 const WORKFLOW_STATUS_COLORS: Record<string, string> = {
   'NEW': "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
@@ -329,14 +328,6 @@ function getRoboTags(tags: string[] | null | undefined, tagConfig?: { confirm: s
   return tags.filter(t => roboSet.has(t.toLowerCase()));
 }
 
-const UNIVERSAL_STATUS_LABELS: Record<string, string> = {
-  'BOOKED': 'Booked', 'PICKED_UP': 'Picked Up', 'ARRIVED_AT_ORIGIN': 'At Origin',
-  'IN_TRANSIT': 'In Transit', 'ARRIVED_AT_DESTINATION': 'At Destination',
-  'OUT_FOR_DELIVERY': 'Out for Delivery', 'DELIVERY_ATTEMPTED': 'Attempted',
-  'DELIVERED': 'Delivered', 'DELIVERY_FAILED': 'Failed',
-  'RETURNED_TO_SHIPPER': 'Returned', 'READY_FOR_RETURN': 'Ready for Return', 'RETURN_IN_TRANSIT': 'Return in Transit',
-  'RETURNED_TO_ORIGIN': 'Returned to Origin', 'CANCELLED': 'Cancelled', 'Unfulfilled': 'Unfulfilled',
-};
 
 function useDebounce(value: string, delay: number) {
   const [debounced, setDebounced] = useState(value);
@@ -1424,9 +1415,16 @@ export default function Pipeline() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Statuses</SelectItem>
-                  {Object.entries(UNIVERSAL_STATUS_LABELS).map(([k, v]) => (
-                    <SelectItem key={k} value={k}>{v}</SelectItem>
-                  ))}
+                  {(() => {
+                    const uniqueStatuses = [...new Set(
+                      orders
+                        .map((o: any) => o.shipmentStatus)
+                        .filter(Boolean)
+                    )].sort();
+                    return uniqueStatuses.map((s: string) => (
+                      <SelectItem key={s} value={s}>{truncateStatus(s)}</SelectItem>
+                    ));
+                  })()}
                 </SelectContent>
               </Select>
             </div>
@@ -1520,7 +1518,7 @@ export default function Pipeline() {
         if (allFilterTag.trim()) chips.push({ label: `Tag: ${allFilterTag}`, clear: () => setAllFilterTag("") });
         if (allFilterStatuses.length > 0) chips.push({ label: `Status: ${allFilterStatuses.map(s => WORKFLOW_STATUS_LABELS[s] || s).join(", ")}`, clear: () => setAllFilterStatuses([]) });
         if (allFilterCourier !== "all") chips.push({ label: `Courier: ${allFilterCourier}`, clear: () => setAllFilterCourier("all") });
-        if (allFilterCourierStatus !== "all") chips.push({ label: `Courier Status: ${UNIVERSAL_STATUS_LABELS[allFilterCourierStatus] || allFilterCourierStatus}`, clear: () => setAllFilterCourierStatus("all") });
+        if (allFilterCourierStatus !== "all") chips.push({ label: `Courier Status: ${truncateStatus(allFilterCourierStatus)}`, clear: () => setAllFilterCourierStatus("all") });
         if (allMinItems) chips.push({ label: `Min Items: ${allMinItems}`, clear: () => setAllMinItems("") });
         if (allMaxItems) chips.push({ label: `Max Items: ${allMaxItems}`, clear: () => setAllMaxItems("") });
         if (paymentFilter !== "all") chips.push({ label: `Payment: ${paymentFilter === "PAID" ? "Prepaid" : paymentFilter === "PARTIAL" ? "Partially Paid" : "Unpaid"}`, clear: () => setPaymentFilter("all") });
@@ -2198,10 +2196,10 @@ export default function Pipeline() {
                       </td>
                       <td className="px-3 py-1.5">
                         {order.shipmentStatus ? (
-                          <Badge className={`text-xs ${UNIVERSAL_STATUS_COLORS[order.shipmentStatus || ""] || "bg-slate-100 text-slate-700"}`}
+                          <Badge className={`text-xs ${getStatusBadgeColor(order.workflowStatus)}`}
                             data-testid={`badge-status-${order.id}`}
-                            title={order.courierRawStatus ? `Courier: ${order.courierRawStatus}` : undefined}>
-                            {UNIVERSAL_STATUS_LABELS[order.shipmentStatus || ""] || order.shipmentStatus || "Unknown"}
+                            title={order.shipmentStatus || undefined}>
+                            {truncateStatus(order.shipmentStatus || "Unknown")}
                           </Badge>
                         ) : (
                           <span className="text-xs text-muted-foreground">-</span>

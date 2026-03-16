@@ -157,46 +157,29 @@ function StatCard({
   );
 }
 
-const UNIVERSAL_STATUS_COLORS: Record<string, string> = {
-  'BOOKED': "bg-blue-500/10 text-blue-600 border-blue-500/20",
-  'PICKED_UP': "bg-indigo-500/10 text-indigo-600 border-indigo-500/20",
-  'ARRIVED_AT_ORIGIN': "bg-purple-500/10 text-purple-600 border-purple-500/20",
-  'IN_TRANSIT': "bg-indigo-500/10 text-indigo-600 border-indigo-500/20",
-  'ARRIVED_AT_DESTINATION': "bg-purple-500/10 text-purple-600 border-purple-500/20",
-  'OUT_FOR_DELIVERY': "bg-amber-500/10 text-amber-600 border-amber-500/20",
-  'DELIVERY_ATTEMPTED': "bg-orange-500/10 text-orange-600 border-orange-500/20",
-  'DELIVERED': "bg-green-500/10 text-green-600 border-green-500/20",
-  'DELIVERY_FAILED': "bg-red-500/10 text-red-600 border-red-500/20",
-  'RETURNED_TO_SHIPPER': "bg-red-500/10 text-red-600 border-red-500/20",
-  'READY_FOR_RETURN': "bg-orange-500/10 text-orange-600 border-orange-500/20",
-  'RETURN_IN_TRANSIT': "bg-red-500/10 text-red-600 border-red-500/20",
-  'CANCELLED': "bg-red-500/10 text-red-600 border-red-500/20",
-  'Unfulfilled': "bg-gray-500/10 text-gray-600 border-gray-500/20",
-};
+function truncateStatus(status: string, wordCount: number = 3): string {
+  const words = status.split(/\s+/);
+  if (words.length <= wordCount) return status;
+  return words.slice(0, wordCount).join(' ') + '...';
+}
 
-const UNIVERSAL_STATUS_LABELS: Record<string, string> = {
-  'BOOKED': 'Booked',
-  'PICKED_UP': 'Picked Up',
-  'ARRIVED_AT_ORIGIN': 'At Origin',
-  'IN_TRANSIT': 'In Transit',
-  'ARRIVED_AT_DESTINATION': 'At Destination',
-  'OUT_FOR_DELIVERY': 'Out for Delivery',
-  'DELIVERY_ATTEMPTED': 'Attempted',
-  'DELIVERED': 'Delivered',
-  'DELIVERY_FAILED': 'Failed',
-  'RETURNED_TO_SHIPPER': 'Returned',
-  'READY_FOR_RETURN': 'Ready for Return',
-  'RETURN_IN_TRANSIT': 'Return in Transit',
-  'CANCELLED': 'Cancelled',
-  'Unfulfilled': 'Unfulfilled',
-};
+function getStatusBadgeColor(workflowStatus: string | null | undefined): string {
+  switch (workflowStatus) {
+    case 'BOOKED': return "bg-blue-500/10 text-blue-600 border-blue-500/20";
+    case 'FULFILLED': return "bg-indigo-500/10 text-indigo-600 border-indigo-500/20";
+    case 'DELIVERED': return "bg-green-500/10 text-green-600 border-green-500/20";
+    case 'RETURN': return "bg-red-500/10 text-red-600 border-red-500/20";
+    case 'CANCELLED': return "bg-red-500/10 text-red-600 border-red-500/20";
+    default: return "bg-gray-500/10 text-gray-600 border-gray-500/20";
+  }
+}
 
-function getStatusBadge(status: string) {
-  const color = UNIVERSAL_STATUS_COLORS[status] || "bg-gray-500/10 text-gray-600 border-gray-500/20";
-  const label = UNIVERSAL_STATUS_LABELS[status] || status;
+function getStatusBadge(status: string, workflowStatus?: string | null) {
+  const color = getStatusBadgeColor(workflowStatus);
+  const label = truncateStatus(status);
 
   return (
-    <Badge className={color}>
+    <Badge className={color} title={status}>
       {label}
     </Badge>
   );
@@ -231,11 +214,11 @@ function getStageFeatures(order: Order): string {
   switch (stage) {
     case "BOOKED":
     case "FULFILLED":
-      return [order.courierName, order.courierTracking, order.shipmentStatus ? UNIVERSAL_STATUS_LABELS[order.shipmentStatus] || order.shipmentStatus : null].filter(Boolean).join(" | ");
+      return [order.courierName, order.courierTracking, order.shipmentStatus ? truncateStatus(order.shipmentStatus) : null].filter(Boolean).join(" | ");
     case "DELIVERED":
       return [order.courierName, order.courierTracking, "Delivered"].filter(Boolean).join(" | ");
     case "RETURN":
-      return [order.courierName, order.courierTracking, order.shipmentStatus ? UNIVERSAL_STATUS_LABELS[order.shipmentStatus] || order.shipmentStatus : "Return"].filter(Boolean).join(" | ");
+      return [order.courierName, order.courierTracking, order.shipmentStatus ? truncateStatus(order.shipmentStatus) : "Return"].filter(Boolean).join(" | ");
     case "CANCELLED":
       return "Cancelled";
     case "PENDING":
@@ -774,10 +757,10 @@ function OrderSearchSection() {
                                     <div className="text-xs text-muted-foreground">{order.courierTracking || "-"}</div>
                                   </td>
                                   <td className="px-3 py-1.5">
-                                    <Badge className={`text-xs ${UNIVERSAL_STATUS_COLORS[order.shipmentStatus || ""] || "bg-slate-100 text-slate-700"}`}
-                                      title={order.courierRawStatus ? `Courier: ${order.courierRawStatus}` : undefined}
+                                    <Badge className={`text-xs ${getStatusBadgeColor(order.workflowStatus)}`}
+                                      title={order.shipmentStatus || undefined}
                                       data-testid={`badge-search-status-${order.id}`}>
-                                      {UNIVERSAL_STATUS_LABELS[order.shipmentStatus || ""] || order.shipmentStatus || "Unknown"}
+                                      {truncateStatus(order.shipmentStatus || "Unknown")}
                                     </Badge>
                                   </td>
                                 </>
@@ -1178,7 +1161,7 @@ export default function Dashboard() {
                         <p className="text-sm font-medium">PKR {order.totalAmount}</p>
                         <p className="text-xs text-muted-foreground capitalize">{order.paymentMethod}</p>
                       </div>
-                      {getStatusBadge(order.shipmentStatus || "Unfulfilled")}
+                      {getStatusBadge(order.shipmentStatus || "Unfulfilled", order.workflowStatus)}
                     </div>
                   </div>
                 </Link>

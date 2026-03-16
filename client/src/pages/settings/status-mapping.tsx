@@ -28,10 +28,7 @@ import {
   Truck,
   ChevronDown,
   ChevronRight,
-  Tag,
   Plus,
-  Pencil,
-  Trash2,
   RotateCcw,
   Download,
   Upload,
@@ -56,56 +53,6 @@ const WORKFLOW_STAGE_LABELS: Record<string, string> = {
   CANCELLED: "Cancelled",
 };
 
-const NORMALIZED_STATUSES = [
-  "BOOKED",
-  "PICKED_UP",
-  "ARRIVED_AT_ORIGIN",
-  "IN_TRANSIT",
-  "ARRIVED_AT_DESTINATION",
-  "OUT_FOR_DELIVERY",
-  "DELIVERY_ATTEMPTED",
-  "DELIVERED",
-  "DELIVERY_FAILED",
-  "READY_FOR_RETURN",
-  "RETURN_IN_TRANSIT",
-  "RETURNED_TO_ORIGIN",
-  "RETURNED_TO_SHIPPER",
-  "CANCELLED",
-] as const;
-
-const STATUS_LABELS: Record<string, string> = {
-  BOOKED: "Booked",
-  PICKED_UP: "Picked Up",
-  ARRIVED_AT_ORIGIN: "At Origin",
-  IN_TRANSIT: "In Transit",
-  ARRIVED_AT_DESTINATION: "At Destination",
-  OUT_FOR_DELIVERY: "Out for Delivery",
-  DELIVERY_ATTEMPTED: "Delivery Attempted",
-  DELIVERED: "Delivered",
-  DELIVERY_FAILED: "Delivery Failed",
-  READY_FOR_RETURN: "Ready for Return",
-  RETURN_IN_TRANSIT: "Return in Transit",
-  RETURNED_TO_ORIGIN: "Returned to Origin",
-  RETURNED_TO_SHIPPER: "Returned to Shipper",
-  CANCELLED: "Cancelled",
-};
-
-const WORKFLOW_STAGE_MAP: Record<string, string> = {
-  BOOKED: "BOOKED",
-  PICKED_UP: "FULFILLED",
-  ARRIVED_AT_ORIGIN: "FULFILLED",
-  IN_TRANSIT: "FULFILLED",
-  ARRIVED_AT_DESTINATION: "FULFILLED",
-  OUT_FOR_DELIVERY: "FULFILLED",
-  DELIVERY_ATTEMPTED: "FULFILLED",
-  DELIVERED: "DELIVERED",
-  DELIVERY_FAILED: "FULFILLED",
-  READY_FOR_RETURN: "RETURN",
-  RETURN_IN_TRANSIT: "RETURN",
-  RETURNED_TO_ORIGIN: "RETURN",
-  RETURNED_TO_SHIPPER: "RETURN",
-  CANCELLED: "CANCELLED",
-};
 
 const WORKFLOW_STAGE_COLORS: Record<string, string> = {
   BOOKED: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
@@ -115,22 +62,6 @@ const WORKFLOW_STAGE_COLORS: Record<string, string> = {
   CANCELLED: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
 };
 
-const STATUS_CATEGORY_COLORS: Record<string, string> = {
-  BOOKED: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
-  PICKED_UP: "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300",
-  ARRIVED_AT_ORIGIN: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300",
-  IN_TRANSIT: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300",
-  ARRIVED_AT_DESTINATION: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300",
-  OUT_FOR_DELIVERY: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300",
-  DELIVERY_ATTEMPTED: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300",
-  DELIVERED: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300",
-  DELIVERY_FAILED: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300",
-  READY_FOR_RETURN: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300",
-  RETURN_IN_TRANSIT: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300",
-  RETURNED_TO_ORIGIN: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300",
-  RETURNED_TO_SHIPPER: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300",
-  CANCELLED: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300",
-};
 
 const COURIER_LABELS: Record<string, string> = {
   leopards: "Leopards Courier",
@@ -151,21 +82,9 @@ interface RawCourierStatus {
   rawStatus: string;
   orderCount: number;
   customMappingId: string | null;
-  normalizedStatus: string | null;
   workflowStage: string | null;
   isCustom: boolean;
-  systemNormalizedStatus: string | null;
-}
-
-interface KeywordMapping {
-  id: string;
-  merchantId: string;
-  courierName: string | null;
-  keyword: string;
-  normalizedStatus: string;
-  workflowStage: string | null;
-  priority: number | null;
-  createdAt: string;
+  systemWorkflowStage: string | null;
 }
 
 interface UnmappedStatus {
@@ -199,7 +118,7 @@ function RawStatusMappingSection() {
     leopards: true,
     postex: true,
   });
-  const [drafts, setDrafts] = useState<Record<string, { normalizedStatus: string; workflowStage: string }>>({});
+  const [drafts, setDrafts] = useState<Record<string, { workflowStage: string }>>({});
   const [savingRows, setSavingRows] = useState<Set<string>>(new Set());
 
   const { data, isLoading, refetch } = useQuery<{ rawStatuses: RawCourierStatus[] }>({
@@ -231,7 +150,7 @@ function RawStatusMappingSection() {
       await apiRequest("POST", "/api/courier-status-mappings", {
         courierName: normalizeCourierName(row.courierName),
         courierStatus: row.rawStatus.toLowerCase().trim(),
-        normalizedStatus: draft.normalizedStatus,
+        normalizedStatus: draft.workflowStage,
         workflowStage: draft.workflowStage,
       });
       setDrafts((prev) => {
@@ -240,7 +159,7 @@ function RawStatusMappingSection() {
         return next;
       });
       await refetch();
-      toast({ title: "Mapping saved", description: `"${row.rawStatus}" → ${STATUS_LABELS[draft.normalizedStatus] || draft.normalizedStatus}` });
+      toast({ title: "Mapping saved", description: `"${row.rawStatus}" → ${WORKFLOW_STAGE_LABELS[draft.workflowStage] || draft.workflowStage}` });
     } catch {
       toast({ title: "Error", description: "Failed to save mapping.", variant: "destructive" });
     } finally {
@@ -285,11 +204,8 @@ function RawStatusMappingSection() {
     const matchesSearch =
       !search ||
       r.rawStatus.toLowerCase().includes(search.toLowerCase()) ||
-      (r.normalizedStatus || r.systemNormalizedStatus || "")
+      (WORKFLOW_STAGE_LABELS[r.workflowStage || r.systemWorkflowStage || ""] || "")
         .toLowerCase()
-        .includes(search.toLowerCase()) ||
-      STATUS_LABELS[r.normalizedStatus || r.systemNormalizedStatus || ""]
-        ?.toLowerCase()
         .includes(search.toLowerCase());
     return matchesCourier && matchesSearch;
   });
@@ -305,17 +221,11 @@ function RawStatusMappingSection() {
     setExpandedCouriers((prev) => ({ ...prev, [name]: !prev[name] }));
   };
 
-  const getEffectiveNormalized = (row: RawCourierStatus) => {
-    const key = rowKey(row.courierName, row.rawStatus);
-    return drafts[key]?.normalizedStatus ?? (row.isCustom ? row.normalizedStatus : null) ?? row.systemNormalizedStatus ?? "BOOKED";
-  };
-
   const getEffectiveStage = (row: RawCourierStatus) => {
     const key = rowKey(row.courierName, row.rawStatus);
     if (drafts[key]?.workflowStage) return drafts[key].workflowStage;
     if (row.isCustom && row.workflowStage) return row.workflowStage;
-    const norm = getEffectiveNormalized(row);
-    return WORKFLOW_STAGE_MAP[norm] || "FULFILLED";
+    return row.systemWorkflowStage || "FULFILLED";
   };
 
   const isDirty = (row: RawCourierStatus) => {
@@ -355,7 +265,7 @@ function RawStatusMappingSection() {
               Raw Status Mappings
             </CardTitle>
             <CardDescription className="mt-1">
-              Every courier status seen in your orders — with its current normalization. Override any row to change how it's categorized. System defaults are shown in muted text; custom overrides are marked.
+              Every courier status seen in your orders — mapped to a workflow stage. Override any row to change how it's categorized. System defaults are shown in muted text; custom overrides are marked.
             </CardDescription>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -430,17 +340,15 @@ function RawStatusMappingSection() {
 
               {expandedCouriers[courier] && (
                 <div className="border-t">
-                  <div className="hidden lg:grid grid-cols-[2fr_3rem_2fr_1.6fr_auto] gap-2 px-3 py-2 text-xs font-medium text-muted-foreground border-b bg-muted/30">
+                  <div className="hidden lg:grid grid-cols-[2fr_3rem_1.6fr_auto] gap-2 px-3 py-2 text-xs font-medium text-muted-foreground border-b bg-muted/30">
                     <span>Courier Status</span>
                     <span className="text-center">Orders</span>
-                    <span>Normalized Status</span>
                     <span>Workflow Stage</span>
                     <span className="w-20" />
                   </div>
                   <div className="divide-y max-h-[600px] overflow-y-auto">
                     {rows.map((row) => {
                       const key = rowKey(row.courierName, row.rawStatus);
-                      const effectiveNorm = getEffectiveNormalized(row);
                       const effectiveStage = getEffectiveStage(row);
                       const dirty = isDirty(row);
                       const saving = savingRows.has(key);
@@ -448,7 +356,7 @@ function RawStatusMappingSection() {
                       return (
                         <div
                           key={key}
-                          className={`grid grid-cols-1 lg:grid-cols-[2fr_3rem_2fr_1.6fr_auto] gap-2 px-3 py-2 items-center text-sm ${dirty ? "bg-amber-50/50 dark:bg-amber-900/10" : ""}`}
+                          className={`grid grid-cols-1 lg:grid-cols-[2fr_3rem_1.6fr_auto] gap-2 px-3 py-2 items-center text-sm ${dirty ? "bg-amber-50/50 dark:bg-amber-900/10" : ""}`}
                           data-testid={`raw-status-row-${key}`}
                         >
                           <div className="flex items-center gap-2 flex-wrap">
@@ -476,49 +384,11 @@ function RawStatusMappingSection() {
 
                           <div>
                             <Select
-                              value={effectiveNorm}
-                              onValueChange={(value) => {
-                                setDrafts((prev) => ({
-                                  ...prev,
-                                  [key]: {
-                                    normalizedStatus: value,
-                                    workflowStage: prev[key]?.workflowStage || WORKFLOW_STAGE_MAP[value] || "FULFILLED",
-                                  },
-                                }));
-                              }}
-                            >
-                              <SelectTrigger
-                                className="h-8 text-xs"
-                                data-testid={`select-norm-${key}`}
-                              >
-                                <SelectValue>
-                                  <span className="flex items-center gap-1.5">
-                                    <span className={`inline-block w-2 h-2 rounded-full ${STATUS_CATEGORY_COLORS[effectiveNorm]?.split(" ")[0] || "bg-gray-200"}`} />
-                                    {STATUS_LABELS[effectiveNorm] || effectiveNorm}
-                                  </span>
-                                </SelectValue>
-                              </SelectTrigger>
-                              <SelectContent>
-                                {NORMALIZED_STATUSES.map((s) => (
-                                  <SelectItem key={s} value={s}>
-                                    <span className="flex items-center gap-2">
-                                      <span className={`inline-block w-2 h-2 rounded-full ${STATUS_CATEGORY_COLORS[s]?.split(" ")[0] || "bg-gray-200"}`} />
-                                      {STATUS_LABELS[s]}
-                                    </span>
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-
-                          <div>
-                            <Select
                               value={effectiveStage}
                               onValueChange={(value) => {
                                 setDrafts((prev) => ({
                                   ...prev,
                                   [key]: {
-                                    normalizedStatus: prev[key]?.normalizedStatus || effectiveNorm,
                                     workflowStage: value,
                                   },
                                 }));
@@ -614,319 +484,6 @@ function RawStatusMappingSection() {
 }
 
 // ============================================================
-// Section 2: Keyword Rules
-// ============================================================
-
-const BLANK_KEYWORD_FORM = {
-  keyword: "",
-  courierName: "all" as "all" | "leopards" | "postex",
-  normalizedStatus: "DELIVERY_FAILED" as string,
-  workflowStage: "FULFILLED" as string,
-  priority: 0,
-};
-
-function KeywordRulesSection() {
-  const { toast } = useToast();
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState({ ...BLANK_KEYWORD_FORM });
-
-  const { data, isLoading } = useQuery<{ mappings: KeywordMapping[] }>({
-    queryKey: ["/api/courier-keyword-mappings"],
-  });
-
-  const createMutation = useMutation({
-    mutationFn: async (body: object) => {
-      const res = await apiRequest("POST", "/api/courier-keyword-mappings", body);
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/courier-keyword-mappings"] });
-      setDialogOpen(false);
-      setForm({ ...BLANK_KEYWORD_FORM });
-      toast({ title: "Keyword rule created" });
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to create keyword rule.", variant: "destructive" });
-    },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: async ({ id, body }: { id: string; body: object }) => {
-      const res = await apiRequest("PUT", `/api/courier-keyword-mappings/${id}`, body);
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/courier-keyword-mappings"] });
-      setDialogOpen(false);
-      setEditingId(null);
-      setForm({ ...BLANK_KEYWORD_FORM });
-      toast({ title: "Keyword rule updated" });
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to update keyword rule.", variant: "destructive" });
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      return apiRequest("DELETE", `/api/courier-keyword-mappings/${id}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/courier-keyword-mappings"] });
-      toast({ title: "Keyword rule deleted" });
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to delete keyword rule.", variant: "destructive" });
-    },
-  });
-
-  const openAdd = () => {
-    setEditingId(null);
-    setForm({ ...BLANK_KEYWORD_FORM });
-    setDialogOpen(true);
-  };
-
-  const openEdit = (rule: KeywordMapping) => {
-    setEditingId(rule.id);
-    setForm({
-      keyword: rule.keyword,
-      courierName: (rule.courierName as "leopards" | "postex") || "all",
-      normalizedStatus: rule.normalizedStatus,
-      workflowStage: rule.workflowStage || WORKFLOW_STAGE_MAP[rule.normalizedStatus] || "FULFILLED",
-      priority: rule.priority ?? 0,
-    });
-    setDialogOpen(true);
-  };
-
-  const handleSubmit = () => {
-    if (!form.keyword.trim()) return;
-    const body = {
-      keyword: form.keyword.trim(),
-      courierName: form.courierName === "all" ? null : form.courierName,
-      normalizedStatus: form.normalizedStatus,
-      workflowStage: form.workflowStage || null,
-      priority: form.priority,
-    };
-    if (editingId) {
-      updateMutation.mutate({ id: editingId, body });
-    } else {
-      createMutation.mutate(body);
-    }
-  };
-
-  const mappings = data?.mappings || [];
-  const isPending = createMutation.isPending || updateMutation.isPending;
-
-  return (
-    <>
-      <Card>
-        <CardHeader>
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Tag className="w-5 h-5" />
-                Keyword Rules
-              </CardTitle>
-              <CardDescription className="mt-1">
-                If a raw status <strong>contains</strong> a keyword, it maps to the selected normalization — unless an exact custom match exists above. Rules are applied in priority order (highest first).
-              </CardDescription>
-            </div>
-            <Button size="sm" onClick={openAdd} data-testid="button-add-keyword-rule">
-              <Plus className="w-4 h-4 mr-1" />
-              Add Rule
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="space-y-2">
-              {[1, 2, 3].map((i) => <Skeleton key={i} className="h-10 w-full" />)}
-            </div>
-          ) : mappings.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <Tag className="w-8 h-8 mx-auto mb-2 opacity-50" />
-              <p>No keyword rules yet.</p>
-              <p className="text-sm mt-1">Add a rule to automatically map statuses containing a keyword.</p>
-            </div>
-          ) : (
-            <div className="border rounded-md overflow-hidden">
-              <div className="hidden md:grid grid-cols-[1.5fr_1fr_1.5fr_1fr_4rem_auto] gap-2 px-3 py-2 text-xs font-medium text-muted-foreground border-b bg-muted/30">
-                <span>Keyword</span>
-                <span>Applies To</span>
-                <span>Maps To</span>
-                <span>Stage</span>
-                <span className="text-center">Priority</span>
-                <span className="w-16" />
-              </div>
-              <div className="divide-y">
-                {mappings.map((rule) => (
-                  <div
-                    key={rule.id}
-                    className="grid grid-cols-1 md:grid-cols-[1.5fr_1fr_1.5fr_1fr_4rem_auto] gap-2 px-3 py-2 items-center text-sm"
-                    data-testid={`keyword-rule-row-${rule.id}`}
-                  >
-                    <code className="text-xs bg-muted px-2 py-1 rounded font-mono break-all">
-                      {rule.keyword}
-                    </code>
-                    <span className="text-xs text-muted-foreground">
-                      {rule.courierName ? courierLabel(rule.courierName) : "All Couriers"}
-                    </span>
-                    <div className="flex items-center gap-1.5">
-                      <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${STATUS_CATEGORY_COLORS[rule.normalizedStatus]?.split(" ")[0] || "bg-gray-200"}`} />
-                      <span className="text-xs">{STATUS_LABELS[rule.normalizedStatus] || rule.normalizedStatus}</span>
-                    </div>
-                    <div>
-                      {rule.workflowStage && (
-                        <Badge className={`text-[10px] ${WORKFLOW_STAGE_COLORS[rule.workflowStage] || ""}`} variant="secondary">
-                          {WORKFLOW_STAGE_LABELS[rule.workflowStage] || rule.workflowStage}
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="text-center text-xs text-muted-foreground tabular-nums">
-                      {rule.priority ?? 0}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-7 w-7"
-                        onClick={() => openEdit(rule)}
-                        data-testid={`button-edit-keyword-${rule.id}`}
-                      >
-                        <Pencil className="w-3 h-3" />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                        onClick={() => deleteMutation.mutate(rule.id)}
-                        disabled={deleteMutation.isPending}
-                        data-testid={`button-delete-keyword-${rule.id}`}
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editingId ? "Edit Keyword Rule" : "Add Keyword Rule"}</DialogTitle>
-            <DialogDescription>
-              If a raw courier status <strong>contains</strong> this keyword (case-insensitive), it will be mapped to the selected normalization — unless an exact custom rule overrides it.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label>Keyword</Label>
-              <Input
-                placeholder="e.g. refused, returned, cancelled"
-                value={form.keyword}
-                onChange={(e) => setForm((f) => ({ ...f, keyword: e.target.value }))}
-                data-testid="input-keyword"
-              />
-              <p className="text-xs text-muted-foreground">
-                Case-insensitive. Matches if the raw status contains this substring.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label>Applies To Courier</Label>
-              <Select
-                value={form.courierName}
-                onValueChange={(v) => setForm((f) => ({ ...f, courierName: v as "all" | "leopards" | "postex" }))}
-              >
-                <SelectTrigger data-testid="select-keyword-courier">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Couriers</SelectItem>
-                  <SelectItem value="leopards">Leopards Courier</SelectItem>
-                  <SelectItem value="postex">PostEx</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Maps To (Normalized Status)</Label>
-              <Select
-                value={form.normalizedStatus}
-                onValueChange={(v) => {
-                  setForm((f) => ({
-                    ...f,
-                    normalizedStatus: v,
-                    workflowStage: WORKFLOW_STAGE_MAP[v] || f.workflowStage,
-                  }));
-                }}
-              >
-                <SelectTrigger data-testid="select-keyword-normalized">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {NORMALIZED_STATUSES.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      <span className="flex items-center gap-2">
-                        <span className={`inline-block w-2 h-2 rounded-full ${STATUS_CATEGORY_COLORS[s]?.split(" ")[0] || "bg-gray-200"}`} />
-                        {STATUS_LABELS[s]}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Workflow Stage</Label>
-              <Select
-                value={form.workflowStage}
-                onValueChange={(v) => setForm((f) => ({ ...f, workflowStage: v }))}
-              >
-                <SelectTrigger data-testid="select-keyword-stage">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {WORKFLOW_STAGES.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {WORKFLOW_STAGE_LABELS[s]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Priority</Label>
-              <Input
-                type="number"
-                value={form.priority}
-                onChange={(e) => setForm((f) => ({ ...f, priority: parseInt(e.target.value) || 0 }))}
-                data-testid="input-keyword-priority"
-              />
-              <p className="text-xs text-muted-foreground">
-                Higher priority rules are checked first. Default is 0.
-              </p>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={!form.keyword.trim() || isPending}
-              data-testid="button-confirm-keyword-rule"
-            >
-              {isPending ? "Saving..." : editingId ? "Update Rule" : "Add Rule"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-}
-
-// ============================================================
 // Helper — normalize courier name for API submission
 // ============================================================
 
@@ -952,7 +509,6 @@ export default function StatusMappingPage() {
   const [addMappingForm, setAddMappingForm] = useState({
     courierName: "leopards" as string,
     courierStatus: "",
-    normalizedStatus: "BOOKED" as string,
     workflowStage: "BOOKED" as string,
   });
 
@@ -981,7 +537,7 @@ export default function StatusMappingPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/unmapped-courier-statuses?resolved=false"] });
       queryClient.invalidateQueries({ queryKey: ["/api/unmapped-courier-statuses/count"] });
       setShowAddMappingDialog(false);
-      setAddMappingForm({ courierName: "leopards", courierStatus: "", normalizedStatus: "BOOKED", workflowStage: "BOOKED" });
+      setAddMappingForm({ courierName: "leopards", courierStatus: "", workflowStage: "BOOKED" });
       toast({ title: "Mapping added", description: "Custom status mapping has been created." });
     },
     onError: () => {
@@ -1245,31 +801,6 @@ export default function StatusMappingPage() {
               <p className="text-xs text-muted-foreground">The exact status string as it appears from the courier.</p>
             </div>
             <div className="space-y-2">
-              <Label>Normalized Status</Label>
-              <Select
-                value={addMappingForm.normalizedStatus}
-                onValueChange={(v) => setAddMappingForm((f) => ({
-                  ...f,
-                  normalizedStatus: v,
-                  workflowStage: WORKFLOW_STAGE_MAP[v] || f.workflowStage,
-                }))}
-              >
-                <SelectTrigger data-testid="select-add-mapping-normalized">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {NORMALIZED_STATUSES.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      <span className="flex items-center gap-2">
-                        <span className={`inline-block w-2 h-2 rounded-full ${STATUS_CATEGORY_COLORS[s]?.split(" ")[0] || "bg-gray-200"}`} />
-                        {STATUS_LABELS[s]}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
               <Label>Workflow Stage</Label>
               <Select
                 value={addMappingForm.workflowStage}
@@ -1297,7 +828,7 @@ export default function StatusMappingPage() {
               onClick={() => addMappingMutation.mutate({
                 courierName: addMappingForm.courierName,
                 courierStatus: addMappingForm.courierStatus.toLowerCase().trim(),
-                normalizedStatus: addMappingForm.normalizedStatus,
+                normalizedStatus: addMappingForm.workflowStage,
                 workflowStage: addMappingForm.workflowStage,
               })}
               disabled={!addMappingForm.courierStatus.trim() || addMappingMutation.isPending}
@@ -1310,8 +841,6 @@ export default function StatusMappingPage() {
       </Dialog>
 
       <RawStatusMappingSection />
-
-      <KeywordRulesSection />
 
       {unmappedStatuses && unmappedStatuses.length > 0 && (
         <Card>

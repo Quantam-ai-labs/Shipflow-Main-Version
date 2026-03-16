@@ -1188,28 +1188,28 @@ export class DatabaseStorage implements IStorage {
     today.setHours(0, 0, 0, 0);
 
     const deliveredToday = allOrders.filter(o => 
-      o.shipmentStatus === "DELIVERED" && o.lastTrackingUpdate && new Date(o.lastTrackingUpdate) >= today
+      o.workflowStatus === "DELIVERED" && o.lastTrackingUpdate && new Date(o.lastTrackingUpdate) >= today
     ).length;
 
     const pendingShipments = allOrders.filter(o => 
-      o.shipmentStatus === "Unfulfilled" || o.shipmentStatus === "pending" || !o.shipmentStatus
+      !o.workflowStatus || o.workflowStatus === "NEW" || o.workflowStatus === "PENDING" || o.workflowStatus === "HOLD" || o.workflowStatus === "READY_TO_SHIP"
     ).length;
 
     const inTransit = allOrders.filter(o => 
-      o.shipmentStatus === "IN_TRANSIT" || o.shipmentStatus === "ARRIVED_AT_DESTINATION" || o.shipmentStatus === "OUT_FOR_DELIVERY"
+      o.workflowStatus === "FULFILLED"
     ).length;
 
     const booked = allOrders.filter(o => 
-      o.shipmentStatus === "BOOKED" || o.shipmentStatus === "PICKED_UP" || o.shipmentStatus === "ARRIVED_AT_ORIGIN"
+      o.workflowStatus === "BOOKED"
     ).length;
 
     const codPending = allOrders
-      .filter(o => o.paymentMethod === "cod" && o.shipmentStatus !== "DELIVERED")
+      .filter(o => o.paymentMethod === "cod" && o.workflowStatus !== "DELIVERED")
       .reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
 
-    const totalDelivered = allOrders.filter(o => o.shipmentStatus === "DELIVERED").length;
-    const totalReturned = allOrders.filter(o => o.shipmentStatus === "RETURNED_TO_SHIPPER" || o.shipmentStatus === "RETURN_IN_TRANSIT").length;
-    const totalFailed = allOrders.filter(o => o.shipmentStatus === "DELIVERY_FAILED" || o.shipmentStatus === "DELIVERY_ATTEMPTED").length;
+    const totalDelivered = allOrders.filter(o => o.workflowStatus === "DELIVERED").length;
+    const totalReturned = allOrders.filter(o => o.workflowStatus === "RETURN").length;
+    const totalFailed = allOrders.filter(o => o.workflowStatus === "CANCELLED").length;
     
     // Delivery rate = delivered / (delivered + returned + failed)
     const completedOrders = totalDelivered + totalReturned + totalFailed;
@@ -1258,9 +1258,9 @@ export class DatabaseStorage implements IStorage {
     
     const allOrders = await db.select().from(orders).where(and(...conditions));
 
-    const totalDelivered = allOrders.filter(o => o.shipmentStatus === "DELIVERED").length;
-    const totalReturned = allOrders.filter(o => o.shipmentStatus === "RETURNED_TO_SHIPPER" || o.shipmentStatus === "RETURN_IN_TRANSIT").length;
-    const totalFailed = allOrders.filter(o => o.shipmentStatus === "DELIVERY_FAILED" || o.shipmentStatus === "DELIVERY_ATTEMPTED").length;
+    const totalDelivered = allOrders.filter(o => o.workflowStatus === "DELIVERED").length;
+    const totalReturned = allOrders.filter(o => o.workflowStatus === "RETURN").length;
+    const totalFailed = allOrders.filter(o => o.workflowStatus === "CANCELLED").length;
     
     // Delivery rate = delivered / (delivered + returned + failed)
     const completedOrders = totalDelivered + totalReturned + totalFailed;
@@ -1270,7 +1270,7 @@ export class DatabaseStorage implements IStorage {
 
     const totalRevenue = allOrders.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
     const deliveredRevenue = allOrders
-      .filter(o => o.shipmentStatus === "DELIVERED")
+      .filter(o => o.workflowStatus === "DELIVERED")
       .reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
 
     // Courier performance from orders table
@@ -1279,9 +1279,9 @@ export class DatabaseStorage implements IStorage {
       const courier = o.courierName || "No Courier";
       const current = courierMap.get(courier) || { orders: 0, delivered: 0, returned: 0, failed: 0 };
       current.orders++;
-      if (o.shipmentStatus === "DELIVERED") current.delivered++;
-      if (o.shipmentStatus === "RETURNED_TO_SHIPPER" || o.shipmentStatus === "RETURN_IN_TRANSIT") current.returned++;
-      if (o.shipmentStatus === "DELIVERY_FAILED" || o.shipmentStatus === "DELIVERY_ATTEMPTED") current.failed++;
+      if (o.workflowStatus === "DELIVERED") current.delivered++;
+      if (o.workflowStatus === "RETURN") current.returned++;
+      if (o.workflowStatus === "CANCELLED") current.failed++;
       courierMap.set(courier, current);
     });
 
@@ -1303,8 +1303,8 @@ export class DatabaseStorage implements IStorage {
       const current = cityMap.get(city) || { orders: 0, delivered: 0, returned: 0, revenue: 0 };
       current.orders++;
       current.revenue += Number(o.totalAmount || 0);
-      if (o.shipmentStatus === "DELIVERED") current.delivered++;
-      if (o.shipmentStatus === "RETURNED_TO_SHIPPER" || o.shipmentStatus === "RETURN_IN_TRANSIT") current.returned++;
+      if (o.workflowStatus === "DELIVERED") current.delivered++;
+      if (o.workflowStatus === "RETURN") current.returned++;
       cityMap.set(city, current);
     });
 
@@ -1341,7 +1341,7 @@ export class DatabaseStorage implements IStorage {
       last7Days.push({
         date: dayName,
         orders: dayOrders.length,
-        delivered: dayOrders.filter(o => o.shipmentStatus === "DELIVERED").length,
+        delivered: dayOrders.filter(o => o.workflowStatus === "DELIVERED").length,
         revenue: dayOrders.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0),
       });
     }
@@ -1841,15 +1841,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async seedDefaultMappings(merchantId: string): Promise<{ created: number; existing: number }> {
-    const { LEOPARDS_STATUS_MAP, POSTEX_STATUS_MAP, DEFAULT_WORKFLOW_STAGE_MAP } = await import('./services/statusNormalization');
+    const { DEFAULT_RAW_TO_STAGE } = await import('./services/statusNormalization');
 
     const allDefaults: { courierName: string; courierStatus: string; normalizedStatus: string; workflowStage: string }[] = [];
 
-    for (const [status, normalized] of Object.entries(LEOPARDS_STATUS_MAP)) {
-      allDefaults.push({ courierName: 'leopards', courierStatus: status, normalizedStatus: normalized, workflowStage: DEFAULT_WORKFLOW_STAGE_MAP[normalized] || 'FULFILLED' });
-    }
-    for (const [status, normalized] of Object.entries(POSTEX_STATUS_MAP)) {
-      allDefaults.push({ courierName: 'postex', courierStatus: status, normalizedStatus: normalized, workflowStage: DEFAULT_WORKFLOW_STAGE_MAP[normalized] || 'FULFILLED' });
+    for (const [status, stage] of Object.entries(DEFAULT_RAW_TO_STAGE)) {
+      allDefaults.push({ courierName: 'all', courierStatus: status, normalizedStatus: stage, workflowStage: stage });
     }
 
     let created = 0;

@@ -28,7 +28,7 @@ Preferred communication style: Simple, everyday language.
 ### Key Features
 - **Merchant & Team Management**: Tenant management, team invites, role-based access, and Super Admin impersonation capabilities.
 - **Shopify Integration**: OAuth-based access, encrypted tokens, webhook processing for orders and fulfillments, historical data import, bi-directional write-back, and configurable "Robo-Tags" for automation.
-- **Courier Management**: API credential management per courier, universal status normalization, optimized sync, and display of logged weight.
+- **Courier Management**: API credential management per courier, direct raw-to-stage status mapping (raw courier status → workflow stage: BOOKED/FULFILLED/DELIVERED/RETURN/CANCELLED), optimized sync, and display of logged weight.
 - **Order & Shipment Management**: Shopify order sync, status tracking, remarks, 9-stage workflow, and batch booking.
 - **COD Reconciliation**: Tracks payment settlements, `prepaidAmount`, `codRemaining`, `codPaymentStatus`, payment detail fetching, and automatic settlement marking via a Payment Ledger.
 - **Onboarding Wizard**: Guides initial Shopify and courier setup.
@@ -40,7 +40,7 @@ Preferred communication style: Simple, everyday language.
 - **Ads Profitability Calculator**: Tracks Facebook/Meta campaign profitability with auto-sync and financial metrics.
 - **AI Marketing Intelligence**: AI-powered analytics with auto-generated insights and a conversational chat interface.
 - **Universal AI Assistant**: Dedicated AI page with alerts, chat, voice I/O, and multi-language support.
-- **Status Mapping Import/Export**: Custom status mappings and keyword rules for couriers via JSON.
+- **Status Mapping Import/Export**: Custom status mappings for couriers via JSON. Settings page shows raw status → workflow stage mapping without intermediate normalization layer.
 - **Product & Inventory Management**: Syncs Shopify product data (title, variants, SKU, price, cost, inventory).
 - **Accounting & Finance Module**: Double-entry accounting system with P&L, Balance Snapshot, and Cash Flow reports.
 - **WhatsApp Order Notifications**: Automated WhatsApp messages via Meta Graph API on order status changes, driven by `wa_automations` rules. Features robust duplicate prevention and retry mechanisms. WhatsApp Embedded Signup allows one-click connection via Facebook Login SDK popup (with optional `WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID` env var for full embedded signup experience, or falls back to standard FB Login with WhatsApp scopes). Manual credential entry available as collapsible fallback.

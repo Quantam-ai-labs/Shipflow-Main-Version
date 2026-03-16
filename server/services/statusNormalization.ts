@@ -1,351 +1,135 @@
-export const UNIVERSAL_STATUSES = [
-  'BOOKED',
-  'PICKED_UP',
-  'ARRIVED_AT_ORIGIN',
-  'IN_TRANSIT',
-  'ARRIVED_AT_DESTINATION',
-  'OUT_FOR_DELIVERY',
-  'DELIVERY_ATTEMPTED',
-  'DELIVERED',
-  'DELIVERY_FAILED',
-  'READY_FOR_RETURN',
-  'RETURN_IN_TRANSIT',
-  'RETURNED_TO_ORIGIN',
-  'RETURNED_TO_SHIPPER',
-  'CANCELLED',
-] as const;
+export type CourierType = 'leopards' | 'postex';
 
-export type UniversalStatus = typeof UNIVERSAL_STATUSES[number];
+export const WORKFLOW_STAGES = ['BOOKED', 'FULFILLED', 'DELIVERED', 'RETURN', 'CANCELLED'] as const;
+export type WorkflowStage = typeof WORKFLOW_STAGES[number];
 
-const FINAL_STATUSES: UniversalStatus[] = ['DELIVERED', 'RETURNED_TO_SHIPPER', 'CANCELLED'];
-
-export const POSTEX_STATUS_MAP: Record<string, UniversalStatus> = {
+export const DEFAULT_RAW_TO_STAGE: Record<string, WorkflowStage> = {
   'unbooked': 'BOOKED',
   'booked': 'BOOKED',
   'consignment booked': 'BOOKED',
-  'pending': 'BOOKED',
-  'at merchant\'s warehouse': 'PICKED_UP',
-  'picked up': 'PICKED_UP',
-  'at postex warehouse': 'ARRIVED_AT_ORIGIN',
-  'arrived at postex warehouse': 'ARRIVED_AT_ORIGIN',
-  'package on route': 'IN_TRANSIT',
-  'in transit': 'IN_TRANSIT',
-  'dispatched': 'IN_TRANSIT',
-  'in transit to destination': 'IN_TRANSIT',
-  'shipment in transit': 'IN_TRANSIT',
-  'arrived at destination hub': 'ARRIVED_AT_DESTINATION',
-  'arrived at destination': 'ARRIVED_AT_DESTINATION',
-  'at destination hub': 'ARRIVED_AT_DESTINATION',
-  'out for delivery': 'OUT_FOR_DELIVERY',
-  'attempt made': 'DELIVERY_ATTEMPTED',
-  'delivery attempt': 'DELIVERY_ATTEMPTED',
-  'delivery attempted': 'DELIVERY_ATTEMPTED',
-  'delivered': 'DELIVERED',
-  'delivered to customer': 'DELIVERED',
-  'delivery under review': 'DELIVERY_FAILED',
-  'delivery failed': 'DELIVERY_FAILED',
-  'refused': 'DELIVERY_FAILED',
-  'not accepted': 'DELIVERY_FAILED',
-  'ready for return': 'READY_FOR_RETURN',
-  'waiting for return': 'READY_FOR_RETURN',
-  'return process initiated': 'READY_FOR_RETURN',
-  'return in transit': 'RETURN_IN_TRANSIT',
-  'being return': 'RETURN_IN_TRANSIT',
-  'being returned': 'RETURN_IN_TRANSIT',
-  'return dispatched': 'RETURN_IN_TRANSIT',
-  'returned to origin': 'RETURNED_TO_ORIGIN',
-  'arrived at origin city': 'RETURNED_TO_ORIGIN',
-  'return arrived at origin': 'RETURNED_TO_ORIGIN',
-  'returned': 'RETURNED_TO_SHIPPER',
-  'returned to shipper': 'RETURNED_TO_SHIPPER',
-  'returned at merchant warehouse': 'RETURNED_TO_SHIPPER',
-  'returned to merchant': 'RETURNED_TO_SHIPPER',
-  'en route to merchant warehouse': 'RETURN_IN_TRANSIT',
-  'cancelled': 'CANCELLED',
-  'booking cancelled by merchant': 'CANCELLED',
-  'booking cancelled by merchant ': 'CANCELLED',
-  'order cancelled': 'CANCELLED',
-};
-
-export const LEOPARDS_STATUS_MAP: Record<string, UniversalStatus> = {
   'booking created': 'BOOKED',
-  'booked': 'BOOKED',
   'shipment created': 'BOOKED',
   'pickup request not send': 'BOOKED',
   'pickup request not sent': 'BOOKED',
   'pickup request sent': 'BOOKED',
   'packet not found in system': 'BOOKED',
   'posted for consignment booking': 'BOOKED',
-  'consignment booked': 'BOOKED',
-  'picked up': 'PICKED_UP',
-  'shipment picked': 'PICKED_UP',
-  'assign to courier': 'PICKED_UP',
-  'assigned to courier': 'PICKED_UP',
-  'pickup done': 'PICKED_UP',
-  'at origin facility': 'ARRIVED_AT_ORIGIN',
-  'arrived at station': 'ARRIVED_AT_ORIGIN',
-  'arrived at origin': 'ARRIVED_AT_ORIGIN',
-  'at station': 'ARRIVED_AT_ORIGIN',
-  'in transit': 'IN_TRANSIT',
-  'dispatched': 'IN_TRANSIT',
-  'dispatched to destination': 'IN_TRANSIT',
-  'in transit to destination': 'IN_TRANSIT',
-  'shipment in transit': 'IN_TRANSIT',
-  'arrived at destination': 'ARRIVED_AT_DESTINATION',
-  'at destination': 'ARRIVED_AT_DESTINATION',
-  'arrived at destination station': 'ARRIVED_AT_DESTINATION',
-  'out for delivery': 'OUT_FOR_DELIVERY',
-  'enroute for delivery': 'OUT_FOR_DELIVERY',
-  'delivery attempted': 'DELIVERY_ATTEMPTED',
-  'attempt failed': 'DELIVERY_ATTEMPTED',
-  'delivery attempt': 'DELIVERY_ATTEMPTED',
-  'delivered': 'DELIVERED',
-  'undelivered': 'DELIVERY_FAILED',
-  'failed': 'DELIVERY_FAILED',
-  'delivery failed': 'DELIVERY_FAILED',
-  'refused': 'DELIVERY_FAILED',
-  'not delivered': 'DELIVERY_FAILED',
-  'pending': 'DELIVERY_ATTEMPTED',
-  'ready for return': 'READY_FOR_RETURN',
-  'waiting for return': 'READY_FOR_RETURN',
-  'return process initiated': 'READY_FOR_RETURN',
-  'being return': 'RETURN_IN_TRANSIT',
-  'return in transit': 'RETURN_IN_TRANSIT',
-  'return dispatched': 'RETURN_IN_TRANSIT',
-  'being returned': 'RETURN_IN_TRANSIT',
-  'return to sender': 'RETURN_IN_TRANSIT',
-  'return to origin': 'RETURNED_TO_ORIGIN',
-  'returned to origin': 'RETURNED_TO_ORIGIN',
-  'return arrived at origin': 'RETURNED_TO_ORIGIN',
-  'arrived at origin city': 'RETURNED_TO_ORIGIN',
-  'returned to shipper': 'RETURNED_TO_SHIPPER',
-  'returned': 'RETURNED_TO_SHIPPER',
-  'return completed': 'RETURNED_TO_SHIPPER',
-  'cancelled': 'CANCELLED',
-  'shipment cancelled': 'CANCELLED',
   'rc': 'BOOKED',
-  'ac': 'OUT_FOR_DELIVERY',
+
+  'pending': 'FULFILLED',
+  'at merchant\'s warehouse': 'FULFILLED',
+  'picked up': 'FULFILLED',
+  'shipment picked': 'FULFILLED',
+  'assign to courier': 'FULFILLED',
+  'assigned to courier': 'FULFILLED',
+  'pickup done': 'FULFILLED',
+  'at postex warehouse': 'FULFILLED',
+  'arrived at postex warehouse': 'FULFILLED',
+  'at origin facility': 'FULFILLED',
+  'arrived at station': 'FULFILLED',
+  'arrived at origin': 'FULFILLED',
+  'at station': 'FULFILLED',
+  'package on route': 'FULFILLED',
+  'in transit': 'FULFILLED',
+  'dispatched': 'FULFILLED',
+  'in transit to destination': 'FULFILLED',
+  'shipment in transit': 'FULFILLED',
+  'dispatched to destination': 'FULFILLED',
+  'arrived at destination hub': 'FULFILLED',
+  'arrived at destination': 'FULFILLED',
+  'at destination hub': 'FULFILLED',
+  'at destination': 'FULFILLED',
+  'arrived at destination station': 'FULFILLED',
+  'out for delivery': 'FULFILLED',
+  'enroute for delivery': 'FULFILLED',
+  'attempt made': 'FULFILLED',
+  'delivery attempt': 'FULFILLED',
+  'delivery attempted': 'FULFILLED',
+  'attempt failed': 'FULFILLED',
+  'delivery under review': 'FULFILLED',
+  'delivery failed': 'FULFILLED',
+  'refused': 'FULFILLED',
+  'not accepted': 'FULFILLED',
+  'undelivered': 'FULFILLED',
+  'failed': 'FULFILLED',
+  'not delivered': 'FULFILLED',
+  'sp': 'FULFILLED',
+  'ac': 'FULFILLED',
+  'dp': 'FULFILLED',
+  'ar': 'FULFILLED',
+  'pn1': 'FULFILLED',
+  'pn2': 'FULFILLED',
+
+  'delivered': 'DELIVERED',
+  'delivered to customer': 'DELIVERED',
   'dv': 'DELIVERED',
-  'pn1': 'DELIVERY_ATTEMPTED',
-  'pn2': 'DELIVERY_ATTEMPTED',
-  'ro': 'RETURN_IN_TRANSIT',
-  'rn1': 'RETURN_IN_TRANSIT',
-  'rn2': 'RETURN_IN_TRANSIT',
-  'rw': 'RETURNED_TO_ORIGIN',
-  'dw': 'RETURNED_TO_ORIGIN',
-  'rs': 'RETURNED_TO_SHIPPER',
   'dr': 'DELIVERED',
-  'ar': 'ARRIVED_AT_DESTINATION',
-  'dp': 'IN_TRANSIT',
-  'nr': 'READY_FOR_RETURN',
-  'sp': 'PICKED_UP',
+
+  'ready for return': 'RETURN',
+  'waiting for return': 'RETURN',
+  'return process initiated': 'RETURN',
+  'return in transit': 'RETURN',
+  'being return': 'RETURN',
+  'being returned': 'RETURN',
+  'return dispatched': 'RETURN',
+  'return to sender': 'RETURN',
+  'return to origin': 'RETURN',
+  'returned to origin': 'RETURN',
+  'arrived at origin city': 'RETURN',
+  'return arrived at origin': 'RETURN',
+  'returned': 'RETURN',
+  'returned to shipper': 'RETURN',
+  'returned at merchant warehouse': 'RETURN',
+  'returned to merchant': 'RETURN',
+  'en route to merchant warehouse': 'RETURN',
+  'return completed': 'RETURN',
+  'nr': 'RETURN',
+  'ro': 'RETURN',
+  'rn1': 'RETURN',
+  'rn2': 'RETURN',
+  'rw': 'RETURN',
+  'dw': 'RETURN',
+  'rs': 'RETURN',
+
+  'cancelled': 'CANCELLED',
+  'booking cancelled by merchant': 'CANCELLED',
+  'booking cancelled by merchant ': 'CANCELLED',
+  'order cancelled': 'CANCELLED',
+  'shipment cancelled': 'CANCELLED',
 };
 
-function keywordFallback(rawStatus: string): UniversalStatus | null {
-  const s = rawStatus.toLowerCase();
+export function resolveWorkflowStage(
+  rawStatus: string,
+  customStageMappings?: Record<string, string>,
+): WorkflowStage | null {
+  const key = rawStatus.toLowerCase().trim();
 
+  if (customStageMappings && customStageMappings[key]) {
+    const stage = customStageMappings[key] as WorkflowStage;
+    if (WORKFLOW_STAGES.includes(stage)) {
+      return stage;
+    }
+  }
+
+  const defaultStage = DEFAULT_RAW_TO_STAGE[key];
+  if (defaultStage) return defaultStage;
+
+  const s = key;
   if (s.includes('delivered') && !s.includes('un') && !s.includes('not') && !s.includes('fail') && !s.includes('attempt')) return 'DELIVERED';
   if (s.includes('deliver') && (s.includes('success') || s.includes('completed'))) return 'DELIVERED';
-  if (s.includes('out') && s.includes('delivery')) return 'OUT_FOR_DELIVERY';
-  if (s.includes('attempt')) return 'DELIVERY_ATTEMPTED';
-  if (s.includes('undeliver') || (s.includes('delivery') && s.includes('fail'))) return 'DELIVERY_FAILED';
-  if (s.includes('refused') || s.includes('not accepted')) return 'DELIVERY_FAILED';
-  if (s.includes('return') && (s.includes('shipper') || s.includes('merchant') || s.includes('completed'))) return 'RETURNED_TO_SHIPPER';
-  if (s.includes('return') && s.includes('origin')) return 'RETURNED_TO_ORIGIN';
-  if (s.includes('return') && s.includes('transit')) return 'RETURN_IN_TRANSIT';
-  if (s.includes('return') && (s.includes('ready') || s.includes('waiting') || s.includes('initiated') || s.includes('process'))) return 'READY_FOR_RETURN';
-  if (s.includes('return') && (s.includes('being') || s.includes('dispatched'))) return 'RETURN_IN_TRANSIT';
-  if (s.includes('return to ')) return 'RETURN_IN_TRANSIT';
+  if (s.includes('return') && (s.includes('shipper') || s.includes('merchant') || s.includes('completed'))) return 'RETURN';
+  if (s.includes('return')) return 'RETURN';
   if (s.includes('cancel')) return 'CANCELLED';
-  if (s.includes('arrived') && s.includes('destination')) return 'ARRIVED_AT_DESTINATION';
-  if (s.includes('destination')) return 'ARRIVED_AT_DESTINATION';
-  if (s.includes('arrived') || s.includes('at station') || s.includes('at hub')) return 'ARRIVED_AT_ORIGIN';
-  if (s.includes('in transit') || s.includes('dispatched') || s.includes('on route') || s.includes('in-transit')) return 'IN_TRANSIT';
-  if (s.includes('picked up') || s.includes('pickup done') || s.includes('assign') || s.includes('shipment picked')) return 'PICKED_UP';
-  if (s.startsWith('pending')) return 'DELIVERY_ATTEMPTED';
+  if (s.includes('out') && s.includes('delivery')) return 'FULFILLED';
+  if (s.includes('attempt')) return 'FULFILLED';
+  if (s.includes('refused') || s.includes('not accepted')) return 'FULFILLED';
+  if (s.includes('in transit') || s.includes('dispatched') || s.includes('on route') || s.includes('in-transit')) return 'FULFILLED';
+  if (s.includes('arrived') || s.includes('at station') || s.includes('at hub') || s.includes('destination')) return 'FULFILLED';
+  if (s.includes('picked up') || s.includes('pickup done') || s.includes('assign') || s.includes('shipment picked')) return 'FULFILLED';
   if (s.includes('booked') || s.includes('booking') || s.includes('created')) return 'BOOKED';
 
   return null;
 }
-
-export type CourierType = 'leopards' | 'postex';
-
-function getCourierMap(courier: CourierType): Record<string, UniversalStatus> {
-  return courier === 'leopards' ? LEOPARDS_STATUS_MAP : POSTEX_STATUS_MAP;
-}
-
-const AMBIGUOUS_ORIGIN_STATUSES = ['arrived at station', 'at station', 'arrived at origin', 'at origin facility'];
-const POST_ORIGIN_STATUSES: UniversalStatus[] = ['PICKED_UP', 'IN_TRANSIT', 'ARRIVED_AT_DESTINATION', 'OUT_FOR_DELIVERY', 'DELIVERY_ATTEMPTED', 'DELIVERY_FAILED', 'READY_FOR_RETURN', 'RETURN_IN_TRANSIT', 'RETURNED_TO_ORIGIN'];
-const POST_BOOKING_WORKFLOWS = ['FULFILLED', 'DELIVERED', 'RETURN'];
-const TRANSIT_INDICATORS = ['in transit', 'dispatched', 'dispatched to destination', 'in transit to destination', 'shipment in transit', 'package on route', 'out for delivery', 'delivery attempted', 'attempt failed', 'delivery attempt', 'enroute for delivery', 'arrived at destination', 'at destination'];
-
-function hasPassedThroughTransit(currentStatus?: string | null, workflowStatus?: string | null, events?: Array<{ status: string; date?: string; description?: string }>): boolean {
-  if (currentStatus && POST_ORIGIN_STATUSES.includes(currentStatus as UniversalStatus)) {
-    return true;
-  }
-  if (workflowStatus && POST_BOOKING_WORKFLOWS.includes(workflowStatus)) {
-    return true;
-  }
-  if (!events || events.length === 0) return false;
-  return events.some(e => {
-    const s = (e.status || '').toLowerCase().trim();
-    return TRANSIT_INDICATORS.some(t => s.includes(t));
-  });
-}
-
-export interface KeywordMappingRule {
-  keyword: string;
-  normalizedStatus: string;
-  courierName?: string | null;
-  priority?: number | null;
-}
-
-export function normalizeStatus(
-  rawStatus: string,
-  courier: CourierType,
-  currentStatus?: string | null,
-  events?: Array<{ status: string; date?: string; description?: string }>,
-  workflowStatus?: string | null,
-  customMappings?: Record<string, string>,
-  keywordMappings?: KeywordMappingRule[],
-): { normalizedStatus: UniversalStatus; mapped: boolean } {
-  const key = rawStatus.toLowerCase().trim();
-
-  if (customMappings && customMappings[key]) {
-    const customResult = customMappings[key] as UniversalStatus;
-    if (UNIVERSAL_STATUSES.includes(customResult)) {
-      return { normalizedStatus: customResult, mapped: true };
-    }
-  }
-
-  if (keywordMappings && keywordMappings.length > 0) {
-    const sorted = [...keywordMappings].sort((a, b) => (b.priority || 0) - (a.priority || 0));
-    for (const rule of sorted) {
-      const matchesCourier = !rule.courierName || rule.courierName.toLowerCase() === courier.toLowerCase();
-      if (matchesCourier && key.includes(rule.keyword.toLowerCase())) {
-        const mapped = rule.normalizedStatus as UniversalStatus;
-        if (UNIVERSAL_STATUSES.includes(mapped)) {
-          return { normalizedStatus: mapped, mapped: true };
-        }
-      }
-    }
-  }
-
-  const map = getCourierMap(courier);
-
-  const STATUS_RANK: Record<string, number> = {
-    'BOOKED': 0, 'PICKED_UP': 1, 'ARRIVED_AT_ORIGIN': 2, 'IN_TRANSIT': 3,
-    'ARRIVED_AT_DESTINATION': 4, 'OUT_FOR_DELIVERY': 5, 'DELIVERY_ATTEMPTED': 6,
-    'DELIVERED': 7, 'DELIVERY_FAILED': 6,
-    'READY_FOR_RETURN': 8, 'RETURN_IN_TRANSIT': 9, 'RETURNED_TO_ORIGIN': 10, 'RETURNED_TO_SHIPPER': 11,
-    'CANCELLED': 12,
-  };
-
-  const applyRegressionGuard = (newStatus: UniversalStatus): UniversalStatus => {
-    if (!currentStatus || currentStatus === newStatus) return newStatus;
-    const currentRank = STATUS_RANK[currentStatus] ?? -1;
-    const newRank = STATUS_RANK[newStatus] ?? -1;
-
-    if (newRank < currentRank && currentRank >= 7) {
-      const workflowRankMap: Record<string, number> = {
-        'BOOKED': 0, 'FULFILLED': 5, 'DELIVERED': 7, 'RETURN': 9, 'CANCELLED': 12,
-      };
-      const wfRank = workflowStatus ? (workflowRankMap[workflowStatus] ?? -1) : -1;
-      if (wfRank >= 0 && wfRank < currentRank) {
-        console.log(`[StatusNorm] Regression allowed: workflowStatus=${workflowStatus} (rank ${wfRank}) is behind shipmentStatus=${currentStatus} (rank ${currentRank}) — data mismatch, trusting courier: ${newStatus} (raw: "${rawStatus}")`);
-        return newStatus;
-      }
-
-      if (events && events.length > 0) {
-        const latestEventStatus = events[events.length - 1]?.status?.toLowerCase().trim();
-        const latestMapped = getCourierMap(courier)[latestEventStatus || ''];
-        if (latestMapped && (STATUS_RANK[latestMapped] ?? -1) < currentRank) {
-          console.log(`[StatusNorm] Regression allowed: courier events confirm status moved back from ${currentStatus} to ${newStatus} (raw: "${rawStatus}")`);
-          return newStatus;
-        }
-      }
-      console.log(`[StatusNorm] Regression blocked: ${currentStatus} (rank ${currentRank}) → ${newStatus} (rank ${newRank}), keeping ${currentStatus}`);
-      return currentStatus as UniversalStatus;
-    }
-
-    if (newStatus === 'BOOKED' && workflowStatus && POST_BOOKING_WORKFLOWS.includes(workflowStatus)) {
-      return (currentStatus as UniversalStatus) || 'PICKED_UP';
-    }
-    return newStatus;
-  };
-
-  if (key === 'pending' && courier === 'leopards') {
-    if (!events || events.length === 0) {
-      return { normalizedStatus: 'BOOKED', mapped: true };
-    }
-    if (hasPassedThroughTransit(currentStatus, workflowStatus, events)) {
-      return { normalizedStatus: 'DELIVERY_ATTEMPTED', mapped: true };
-    }
-    return { normalizedStatus: 'BOOKED', mapped: true };
-  }
-
-  const directMatch = map[key];
-  if (directMatch) {
-    if (directMatch === 'ARRIVED_AT_ORIGIN' && AMBIGUOUS_ORIGIN_STATUSES.includes(key)) {
-      if (hasPassedThroughTransit(currentStatus, workflowStatus, events)) {
-        return { normalizedStatus: 'ARRIVED_AT_DESTINATION', mapped: true };
-      }
-    }
-    const guarded = applyRegressionGuard(directMatch);
-    return { normalizedStatus: guarded, mapped: true };
-  }
-
-  for (const [mapKey, mapValue] of Object.entries(map)) {
-    if (key.includes(mapKey) && mapKey.length >= 4) {
-      if (mapValue === 'ARRIVED_AT_ORIGIN' && AMBIGUOUS_ORIGIN_STATUSES.some(a => key.includes(a))) {
-        if (hasPassedThroughTransit(currentStatus, workflowStatus, events)) {
-          return { normalizedStatus: 'ARRIVED_AT_DESTINATION', mapped: true };
-        }
-      }
-      const guarded = applyRegressionGuard(mapValue);
-      return { normalizedStatus: guarded, mapped: true };
-    }
-  }
-
-  const fallback = keywordFallback(rawStatus);
-  if (fallback) {
-    if (fallback === 'ARRIVED_AT_ORIGIN' && hasPassedThroughTransit(currentStatus, workflowStatus, events)) {
-      console.log(`[StatusNorm] Keyword fallback for "${rawStatus}" (${courier}) -> ARRIVED_AT_DESTINATION (post-transit)`);
-      return { normalizedStatus: 'ARRIVED_AT_DESTINATION', mapped: false };
-    }
-    const guarded = applyRegressionGuard(fallback);
-    console.log(`[StatusNorm] Keyword fallback for "${rawStatus}" (${courier}) -> ${guarded}`);
-    return { normalizedStatus: guarded, mapped: false };
-  }
-
-  console.warn(`[StatusNorm] UNMAPPED STATUS: "${rawStatus}" from ${courier} - keeping previous status`);
-  if (currentStatus && UNIVERSAL_STATUSES.includes(currentStatus as UniversalStatus)) {
-    return { normalizedStatus: currentStatus as UniversalStatus, mapped: false };
-  }
-
-  if (!currentStatus) {
-    return { normalizedStatus: 'BOOKED', mapped: false };
-  }
-
-  return { normalizedStatus: (currentStatus as UniversalStatus) || 'BOOKED', mapped: false };
-}
-
-export const DEFAULT_WORKFLOW_STAGE_MAP: Record<string, string> = {
-  'BOOKED': 'BOOKED',
-  'PICKED_UP': 'FULFILLED',
-  'ARRIVED_AT_ORIGIN': 'FULFILLED',
-  'IN_TRANSIT': 'FULFILLED',
-  'ARRIVED_AT_DESTINATION': 'FULFILLED',
-  'OUT_FOR_DELIVERY': 'FULFILLED',
-  'DELIVERY_ATTEMPTED': 'FULFILLED',
-  'DELIVERED': 'DELIVERED',
-  'DELIVERY_FAILED': 'FULFILLED',
-  'READY_FOR_RETURN': 'FULFILLED',
-  'RETURN_IN_TRANSIT': 'RETURN',
-  'RETURNED_TO_ORIGIN': 'RETURN',
-  'RETURNED_TO_SHIPPER': 'RETURN',
-  'CANCELLED': 'CANCELLED',
-};
 
 export function detectCourierType(courierName: string): CourierType | null {
   const name = courierName.toLowerCase();
@@ -354,30 +138,13 @@ export function detectCourierType(courierName: string): CourierType | null {
   return null;
 }
 
-export function isFinalStatus(status: string): boolean {
-  return FINAL_STATUSES.includes(status as UniversalStatus);
+export function isFinalStatus(rawStatus: string): boolean {
+  const stage = resolveWorkflowStage(rawStatus);
+  return stage === 'DELIVERED' || stage === 'RETURN' || stage === 'CANCELLED';
 }
 
-export function isValidUniversalStatus(status: string): boolean {
-  return UNIVERSAL_STATUSES.includes(status as UniversalStatus);
-}
-
-export function getStatusDisplayLabel(status: string): string {
-  const labels: Record<string, string> = {
-    'BOOKED': 'Booked',
-    'PICKED_UP': 'Picked Up',
-    'ARRIVED_AT_ORIGIN': 'At Origin',
-    'IN_TRANSIT': 'In Transit',
-    'ARRIVED_AT_DESTINATION': 'At Destination',
-    'OUT_FOR_DELIVERY': 'Out for Delivery',
-    'DELIVERY_ATTEMPTED': 'Delivery Attempted',
-    'DELIVERED': 'Delivered',
-    'DELIVERY_FAILED': 'Delivery Failed',
-    'READY_FOR_RETURN': 'Ready for Return',
-    'RETURN_IN_TRANSIT': 'Return in Transit',
-    'RETURNED_TO_ORIGIN': 'Returned to Origin',
-    'RETURNED_TO_SHIPPER': 'Returned',
-    'CANCELLED': 'Cancelled',
-  };
-  return labels[status] || status;
+export function truncateStatus(status: string, wordCount: number = 3): string {
+  const words = status.split(/\s+/);
+  if (words.length <= wordCount) return status;
+  return words.slice(0, wordCount).join(' ') + '...';
 }

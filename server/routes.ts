@@ -782,16 +782,13 @@ export async function registerRoutes(
 
   app.get("/api/orders/statuses", isAuthenticated, async (req, res) => {
     try {
-      const { UNIVERSAL_STATUSES } = await import(
-        "./services/statusNormalization"
-      );
-      const { getStatusDisplayLabel } = await import(
+      const { WORKFLOW_STAGES } = await import(
         "./services/statusNormalization"
       );
       res.json({
-        statuses: UNIVERSAL_STATUSES.map((s) => ({
+        statuses: WORKFLOW_STAGES.map((s) => ({
           value: s,
-          label: getStatusDisplayLabel(s),
+          label: s.charAt(0) + s.slice(1).toLowerCase(),
         })),
       });
     } catch (error) {
@@ -1245,17 +1242,7 @@ export async function registerRoutes(
     }
   });
 
-  const PICKED_UP_OR_BEYOND_STATUSES = [
-    "PICKED_UP",
-    "IN_TRANSIT",
-    "ARRIVED_AT_DESTINATION",
-    "OUT_FOR_DELIVERY",
-    "DELIVERY_ATTEMPTED",
-    "DELIVERED",
-    "DELIVERY_FAILED",
-    "RETURNED_TO_SHIPPER",
-    "RETURN_IN_TRANSIT",
-  ];
+  const CANCEL_BLOCKED_STAGES = ["FULFILLED", "DELIVERED", "RETURN"];
 
   const EDITABLE_ORDER_FIELDS = [
     "customerName",
@@ -1484,8 +1471,8 @@ export async function registerRoutes(
         }
 
         if (
-          order.shipmentStatus &&
-          PICKED_UP_OR_BEYOND_STATUSES.includes(order.shipmentStatus)
+          order.workflowStatus &&
+          CANCEL_BLOCKED_STAGES.includes(order.workflowStatus)
         ) {
           return res
             .status(403)
@@ -1524,9 +1511,9 @@ export async function registerRoutes(
                   merchantId,
                 );
                 if (liveTracking) {
-                  const liveStatus = (liveTracking.normalizedStatus || '').toUpperCase();
+                  const liveStage = liveTracking.resolvedStage || '';
                   const liveRaw = (liveTracking.rawCourierStatus || '').toLowerCase();
-                  if (liveStatus === 'CANCELLED' || liveRaw.includes('cancel')) {
+                  if (liveStage === 'CANCELLED' || liveRaw.includes('cancel')) {
                     alreadyCancelled = true;
                     console.log(`[Cancel] Shipment ${oldCourierTracking} already cancelled on courier — proceeding with local cleanup`);
                   }
@@ -1771,9 +1758,9 @@ export async function registerRoutes(
                 merchantId,
               );
               if (liveTracking) {
-                const liveStatus = (liveTracking.normalizedStatus || '').toUpperCase();
+                const liveStage = liveTracking.resolvedStage || '';
                 const liveRaw = (liveTracking.rawCourierStatus || '').toLowerCase();
-                if (liveStatus === 'CANCELLED' || liveRaw.includes('cancel')) {
+                if (liveStage === 'CANCELLED' || liveRaw.includes('cancel')) {
                   console.log(`[BulkCleanup] Live check: ${o.orderNumber} (${o.courierTracking}) is cancelled on courier`);
                   cancelledOrders.push(o);
                 }
@@ -6028,55 +6015,23 @@ export async function registerRoutes(
           const order = matchingOrders[0];
           const merchantId = order.merchantId;
 
-          let customMappings: Record<string, string> | undefined;
-          try {
-            const mappingRows = await storage.getCourierStatusMappings(merchantId, 'postex');
-            if (mappingRows && mappingRows.length > 0) {
-              customMappings = {};
-              for (const m of mappingRows) {
-                customMappings[m.courierStatus] = m.normalizedStatus;
-              }
-            }
-          } catch {}
-
-          const { normalizeStatus, isValidUniversalStatus } = await import("./services/statusNormalization");
-          const { normalizedStatus, mapped } = normalizeStatus(
-            rawStatus,
-            'postex',
-            order.shipmentStatus,
-            undefined,
-            order.workflowStatus,
-            customMappings,
-          );
-
-          if (!mapped) {
-            try {
-              await storage.recordUnmappedStatus(merchantId, 'postex', rawStatus, trackingNumber);
-            } catch {}
-          }
-
-          if (!isValidUniversalStatus(normalizedStatus)) {
-            console.warn(`[PostEx Webhook] Invalid normalized status "${normalizedStatus}" for tracking ${trackingNumber}`);
-            return;
-          }
-
-          if (normalizedStatus === order.shipmentStatus) {
-            console.log(`[PostEx Webhook] Status unchanged for ${trackingNumber}: ${normalizedStatus}`);
+          if (rawStatus === order.shipmentStatus) {
+            console.log(`[PostEx Webhook] Status unchanged for ${trackingNumber}: ${rawStatus}`);
             return;
           }
 
           await storage.updateOrder(merchantId, order.id, {
-            shipmentStatus: normalizedStatus,
+            shipmentStatus: rawStatus,
             courierRawStatus: rawStatus,
             lastTrackingUpdate: new Date(),
           });
 
           const freshOrder = await storage.getOrderById(merchantId, order.id);
           if (freshOrder) {
-            await autoTransitionOrder(merchantId, freshOrder, normalizedStatus, rawStatus);
+            await autoTransitionOrder(merchantId, freshOrder, rawStatus);
           }
 
-          console.log(`[PostEx Webhook] Updated order ${order.orderNumber}: ${order.shipmentStatus} -> ${normalizedStatus} (raw: ${rawStatus})`);
+          console.log(`[PostEx Webhook] Updated order ${order.orderNumber}: ${order.shipmentStatus} -> ${rawStatus}`);
 
           try {
             const accounts = await storage.getCourierAccounts(merchantId);
@@ -6089,7 +6044,6 @@ export async function registerRoutes(
                   lastWebhookActivity: {
                     trackingNumber,
                     rawStatus,
-                    normalizedStatus,
                     orderNumber: order.orderNumber,
                     receivedAt: new Date().toISOString(),
                   },
@@ -6165,55 +6119,23 @@ export async function registerRoutes(
             const order = matchingOrders[0];
             const merchantId = order.merchantId;
 
-            let customMappings: Record<string, string> | undefined;
-            try {
-              const mappingRows = await storage.getCourierStatusMappings(merchantId, 'leopards');
-              if (mappingRows && mappingRows.length > 0) {
-                customMappings = {};
-                for (const m of mappingRows) {
-                  customMappings[m.courierStatus] = m.normalizedStatus;
-                }
-              }
-            } catch {}
-
-            const { normalizeStatus, isValidUniversalStatus } = await import("./services/statusNormalization");
-            const { normalizedStatus, mapped } = normalizeStatus(
-              rawStatus,
-              'leopards',
-              order.shipmentStatus,
-              undefined,
-              order.workflowStatus,
-              customMappings,
-            );
-
-            if (!mapped) {
-              try {
-                await storage.recordUnmappedStatus(merchantId, 'leopards', rawStatus, cnNumber);
-              } catch {}
-            }
-
-            if (!isValidUniversalStatus(normalizedStatus)) {
-              console.warn(`[Leopards Webhook] Invalid normalized status "${normalizedStatus}" for CN ${cnNumber}`);
-              continue;
-            }
-
-            if (normalizedStatus === order.shipmentStatus) {
-              console.log(`[Leopards Webhook] Status unchanged for ${cnNumber}: ${normalizedStatus}`);
+            if (rawStatus === order.shipmentStatus) {
+              console.log(`[Leopards Webhook] Status unchanged for ${cnNumber}: ${rawStatus}`);
               continue;
             }
 
             await storage.updateOrder(merchantId, order.id, {
-              shipmentStatus: normalizedStatus,
+              shipmentStatus: rawStatus,
               courierRawStatus: rawStatus,
               lastTrackingUpdate: new Date(),
             });
 
             const freshOrder = await storage.getOrderById(merchantId, order.id);
             if (freshOrder) {
-              await autoTransitionOrder(merchantId, freshOrder, normalizedStatus, rawStatus);
+              await autoTransitionOrder(merchantId, freshOrder, rawStatus);
             }
 
-            console.log(`[Leopards Webhook] Updated order ${order.orderNumber}: ${order.shipmentStatus} -> ${normalizedStatus} (raw: ${rawStatus})`);
+            console.log(`[Leopards Webhook] Updated order ${order.orderNumber}: ${order.shipmentStatus} -> ${rawStatus}`);
 
             try {
               const accounts = await storage.getCourierAccounts(merchantId);
@@ -6226,7 +6148,6 @@ export async function registerRoutes(
                     lastWebhookActivity: {
                       trackingNumber: cnNumber,
                       rawStatus,
-                      normalizedStatus,
                       orderNumber: order.orderNumber,
                       receivedAt: new Date().toISOString(),
                     },
@@ -8533,7 +8454,7 @@ export async function registerRoutes(
           success: true,
           courierName: order.courierName,
           trackingNumber: order.courierTracking,
-          currentStatus: result.normalizedStatus,
+          currentStatus: result.rawCourierStatus,
           rawStatus: result.rawCourierStatus,
           statusDescription: result.statusDescription,
           lastUpdate: result.lastUpdate,
@@ -11913,7 +11834,7 @@ export async function registerRoutes(
         const merchantId = await requireMerchant(req, res);
         if (!merchantId) return;
 
-        const { normalizeStatus, detectCourierType, LEOPARDS_STATUS_MAP, POSTEX_STATUS_MAP, DEFAULT_WORKFLOW_STAGE_MAP } = await import(
+        const { detectCourierType, resolveWorkflowStage, DEFAULT_RAW_TO_STAGE } = await import(
           "./services/statusNormalization"
         );
 
@@ -11960,41 +11881,21 @@ export async function registerRoutes(
           }
         }
 
-        const systemMaps: Record<string, Record<string, string>> = {
-          leopards: LEOPARDS_STATUS_MAP,
-          postex: POSTEX_STATUS_MAP,
-        };
-
-        for (const [courier, statusMap] of Object.entries(systemMaps)) {
-          for (const rawStatus of Object.keys(statusMap)) {
-            const key = `${courier}::${rawStatus.toLowerCase().trim()}`;
-            if (!merged.has(key)) {
-              merged.set(key, { courierName: courier, rawStatus, orderCount: 0 });
-            }
-          }
-        }
-
         const result = Array.from(merged.values()).map((r) => {
           const rawKey = r.rawStatus.toLowerCase().trim();
           const mapKey = `${r.courierName}::${rawKey}`;
           const customMapping = customMap.get(mapKey);
 
-          const courierType = detectCourierType(r.courierName);
-          let systemNormalizedStatus: string | null = null;
-          if (courierType) {
-            const { normalizedStatus: sysNorm } = normalizeStatus(r.rawStatus, courierType);
-            systemNormalizedStatus = sysNorm;
-          }
+          const systemStage = resolveWorkflowStage(r.rawStatus) || null;
 
           return {
             courierName: r.courierName,
             rawStatus: r.rawStatus,
             orderCount: r.orderCount,
             customMappingId: customMapping?.id || null,
-            normalizedStatus: customMapping?.normalizedStatus || null,
             workflowStage: customMapping?.workflowStage || null,
             isCustom: !!customMapping,
-            systemNormalizedStatus,
+            systemWorkflowStage: systemStage,
           };
         });
 

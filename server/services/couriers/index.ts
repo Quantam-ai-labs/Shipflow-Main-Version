@@ -1,15 +1,13 @@
 import { leopardsService, type TrackingResult as LeopardsTrackingResult } from './leopards';
 import { postexService, type TrackingResult as PostExTrackingResult } from './postex';
-import { normalizeStatus, detectCourierType, isFinalStatus, type UniversalStatus, type KeywordMappingRule } from '../statusNormalization';
+import { detectCourierType, resolveWorkflowStage, isFinalStatus, type WorkflowStage } from '../statusNormalization';
 import { db } from '../../db';
 import { courierStatusMappings } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
 import { storage } from '../../storage';
 
 interface CachedMappings {
-  customNormalization: Record<string, string>;
-  workflowStages: Record<string, string>;
-  keywordMappings: KeywordMappingRule[];
+  stageMappings: Record<string, string>;
   expiry: number;
 }
 
@@ -30,44 +28,22 @@ async function loadMerchantMappings(merchantId: string, courierType: string): Pr
         eq(courierStatusMappings.courierName, courierType),
       ));
 
-    const customNormalization: Record<string, string> = {};
-    const workflowStages: Record<string, string> = {};
+    const stageMappings: Record<string, string> = {};
 
     for (const row of rows) {
       const key = row.courierStatus.toLowerCase().trim();
-      customNormalization[key] = row.normalizedStatus;
       if (row.workflowStage) {
-        workflowStages[key] = row.workflowStage;
-        const normalizedKey = `__normalized__${row.normalizedStatus.toLowerCase().trim()}`;
-        if (!workflowStages[normalizedKey]) {
-          workflowStages[normalizedKey] = row.workflowStage;
-        }
+        stageMappings[key] = row.workflowStage;
       }
     }
 
-    const keywordRows = await storage.getCourierKeywordMappings(merchantId);
-    const keywordMappings: KeywordMappingRule[] = keywordRows.map(r => ({
-      keyword: r.keyword,
-      normalizedStatus: r.normalizedStatus,
-      courierName: r.courierName,
-      priority: r.priority,
-    }));
-
-    const result: CachedMappings = { customNormalization, workflowStages, keywordMappings, expiry: Date.now() + CACHE_TTL };
+    const result: CachedMappings = { stageMappings, expiry: Date.now() + CACHE_TTL };
     customMappingsCache.set(cacheKey, result);
     return result;
   } catch (error) {
     console.error('[Courier] Error fetching custom mappings:', error);
-    return { customNormalization: {}, workflowStages: {}, keywordMappings: [], expiry: Date.now() + CACHE_TTL };
+    return { stageMappings: {}, expiry: Date.now() + CACHE_TTL };
   }
-}
-
-async function getCustomMappings(merchantId: string, courierType: string): Promise<{ customMappings?: Record<string, string>; keywordMappings?: KeywordMappingRule[] }> {
-  const { customNormalization, keywordMappings } = await loadMerchantMappings(merchantId, courierType);
-  return {
-    customMappings: Object.keys(customNormalization).length > 0 ? customNormalization : undefined,
-    keywordMappings: keywordMappings.length > 0 ? keywordMappings : undefined,
-  };
 }
 
 export function clearMappingsCache(merchantId?: string) {
@@ -82,27 +58,16 @@ export function clearMappingsCache(merchantId?: string) {
   }
 }
 
-export async function getWorkflowStageMapping(merchantId: string, courierType: string, normalizedStatus: string, rawCourierStatus?: string): Promise<string | null> {
-  const { workflowStages } = await loadMerchantMappings(merchantId, courierType);
-  if (rawCourierStatus) {
-    const rawKey = rawCourierStatus.toLowerCase().trim();
-    if (workflowStages[rawKey]) {
-      return workflowStages[rawKey];
-    }
-  }
-  const normalizedKey = `__normalized__${normalizedStatus.toLowerCase().trim()}`;
-  if (workflowStages[normalizedKey]) {
-    return workflowStages[normalizedKey];
-  }
-  return null;
+export async function getStageMappings(merchantId: string, courierType: string): Promise<Record<string, string>> {
+  const { stageMappings } = await loadMerchantMappings(merchantId, courierType);
+  return stageMappings;
 }
 
 export type TrackingResult = LeopardsTrackingResult | PostExTrackingResult;
 
-export type NormalizedTrackingResult = TrackingResult & {
-  normalizedStatus: UniversalStatus;
+export type RawTrackingResult = TrackingResult & {
   rawCourierStatus: string;
-  wasMapped: boolean;
+  resolvedStage: WorkflowStage | null;
 };
 
 export interface CourierCredentials {
@@ -131,7 +96,7 @@ export async function trackShipment(
   currentStatus?: string | null,
   workflowStatus?: string | null,
   merchantId?: string,
-): Promise<NormalizedTrackingResult | null> {
+): Promise<RawTrackingResult | null> {
   const name = courierName.toLowerCase();
   let result: TrackingResult | null = null;
   
@@ -152,20 +117,24 @@ export async function trackShipment(
   if (!result) return null;
 
   const courierType = detectCourierType(courierName);
+  const rawCourierStatus = result.courierStatus || result.status || '';
+
   if (!courierType || !result.success) {
     return {
       ...result,
-      normalizedStatus: (currentStatus as UniversalStatus) || 'BOOKED',
-      rawCourierStatus: result.courierStatus || '',
-      wasMapped: false,
+      rawCourierStatus,
+      resolvedStage: null,
     };
   }
 
-  const rawCourierStatus = result.courierStatus || result.status;
-  const { customMappings, keywordMappings } = merchantId ? await getCustomMappings(merchantId, courierType) : {};
-  const { normalizedStatus, mapped } = normalizeStatus(rawCourierStatus, courierType, currentStatus, result.events, workflowStatus, customMappings, keywordMappings);
+  let customStageMappings: Record<string, string> | undefined;
+  if (merchantId) {
+    customStageMappings = await getStageMappings(merchantId, courierType);
+  }
 
-  if (!mapped && merchantId && rawCourierStatus) {
+  const resolvedStage = resolveWorkflowStage(rawCourierStatus, customStageMappings);
+
+  if (!resolvedStage && merchantId && rawCourierStatus) {
     try {
       await storage.recordUnmappedStatus(merchantId, courierType, rawCourierStatus, trackingNumber);
     } catch (err) {
@@ -175,9 +144,8 @@ export async function trackShipment(
 
   return {
     ...result,
-    normalizedStatus,
     rawCourierStatus,
-    wasMapped: mapped,
+    resolvedStage,
   };
 }
 
@@ -212,5 +180,5 @@ export async function cancelCourierBooking(
 }
 
 export { leopardsService, postexService };
-export { normalizeStatus, detectCourierType, isFinalStatus, UNIVERSAL_STATUSES } from '../statusNormalization';
-export type { UniversalStatus } from '../statusNormalization';
+export { detectCourierType, isFinalStatus, resolveWorkflowStage } from '../statusNormalization';
+export type { WorkflowStage } from '../statusNormalization';

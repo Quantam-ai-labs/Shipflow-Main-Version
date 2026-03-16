@@ -1,9 +1,9 @@
 import { db, withRetry } from '../db';
 import { orders, merchants, courierAccounts } from '../../shared/schema';
 import { eq, and, or, isNull, sql, desc, notInArray } from 'drizzle-orm';
-import { trackShipment, getWorkflowStageMapping, detectCourierType, type CourierCredentials } from './couriers';
+import { trackShipment, getStageMappings, detectCourierType, type CourierCredentials } from './couriers';
 import { leopardsService } from './couriers/leopards';
-import { normalizeStatus, type UniversalStatus, DEFAULT_WORKFLOW_STAGE_MAP, isValidUniversalStatus } from './statusNormalization';
+import { resolveWorkflowStage } from './statusNormalization';
 import { storage } from '../storage';
 import { transitionOrder } from './workflowTransition';
 
@@ -132,18 +132,17 @@ async function createShopifyFulfillmentForOrder(merchantId: string, order: any, 
   }
 }
 
-async function resolveTargetWorkflowStage(merchantId: string, courierName: string, normalizedStatus: string, rawCourierStatus?: string): Promise<string | null> {
+async function resolveTargetStage(merchantId: string, courierName: string, rawCourierStatus: string): Promise<string | null> {
   const courierType = detectCourierType(courierName || '');
+  let customStageMappings: Record<string, string> | undefined;
   if (courierType) {
-    const custom = await getWorkflowStageMapping(merchantId, courierType, normalizedStatus, rawCourierStatus);
-    if (custom) {
-      console.log(`[CourierSync] Custom stage mapping: ${rawCourierStatus || normalizedStatus} → ${normalizedStatus} → ${custom} (courier: ${courierType})`);
-      return custom;
-    }
+    customStageMappings = await getStageMappings(merchantId, courierType);
   }
-  const defaultStage = DEFAULT_WORKFLOW_STAGE_MAP[normalizedStatus];
-  if (defaultStage) return defaultStage;
-  console.log(`[CourierSync] No stage mapping found for status "${normalizedStatus}" — order stays in current stage`);
+  const stage = resolveWorkflowStage(rawCourierStatus, customStageMappings);
+  if (stage) {
+    return stage;
+  }
+  console.log(`[CourierSync] No stage mapping found for raw status "${rawCourierStatus}" — order stays in current stage`);
   return null;
 }
 
@@ -174,11 +173,12 @@ async function cancelShopifyFulfillmentForOrder(merchantId: string, order: any):
   }
 }
 
-export async function autoTransitionOrder(merchantId: string, order: any, newShipmentStatus: string, rawCourierStatus?: string): Promise<string | null> {
+export async function autoTransitionOrder(merchantId: string, order: any, rawCourierStatus: string): Promise<string | null> {
   const currentWorkflow = order.workflowStatus;
-  const targetWorkflow = await resolveTargetWorkflowStage(merchantId, order.courierName || '', newShipmentStatus, rawCourierStatus);
+  const targetWorkflow = await resolveTargetStage(merchantId, order.courierName || '', rawCourierStatus);
 
-  if (currentWorkflow === 'BOOKED' && newShipmentStatus === 'CANCELLED') {
+  const stageForCancellation = resolveWorkflowStage(rawCourierStatus);
+  if (currentWorkflow === 'BOOKED' && stageForCancellation === 'CANCELLED') {
     const result = await transitionOrder({
       merchantId,
       orderId: order.id,
@@ -232,7 +232,7 @@ export async function autoTransitionOrder(merchantId: string, order: any, newShi
     toStatus: targetWorkflow,
     action: 'courier_status_sync',
     actorType: 'system',
-    reason: `Courier mapping: ${newShipmentStatus} → ${targetWorkflow} (was ${currentWorkflow})`,
+    reason: `Courier mapping: ${rawCourierStatus} → ${targetWorkflow} (was ${currentWorkflow})`,
     extraData,
   });
 
@@ -241,7 +241,7 @@ export async function autoTransitionOrder(merchantId: string, order: any, newShi
       const courierDisplayName = normalizeCourierName(order.courierName || '') === 'leopards' ? 'Leopards' : 'PostEx';
       await createShopifyFulfillmentForOrder(merchantId, order, order.courierTracking, courierDisplayName);
     }
-    console.log(`[CourierSync] Order ${order.orderNumber} transitioned ${currentWorkflow} -> ${targetWorkflow} (courier: ${newShipmentStatus})`);
+    console.log(`[CourierSync] Order ${order.orderNumber} transitioned ${currentWorkflow} -> ${targetWorkflow} (courier: ${rawCourierStatus})`);
     return targetWorkflow;
   }
 
@@ -323,16 +323,10 @@ async function syncMerchantCourierStatuses(merchantId: string, options?: { force
     });
 
     const courierType = detectCourierType(leopardsOrders[0].courierName || 'leopards');
-    let customMappings: Record<string, string> | undefined;
+    let customStageMappings: Record<string, string> | undefined;
     if (courierType) {
       try {
-        const mappingRows = await storage.getCourierStatusMappings(merchantId, courierType);
-        if (mappingRows && mappingRows.length > 0) {
-          customMappings = {};
-          for (const m of mappingRows) {
-            customMappings[m.courierStatus] = m.normalizedStatus;
-          }
-        }
+        customStageMappings = await getStageMappings(merchantId, courierType);
       } catch {}
     }
 
@@ -347,35 +341,20 @@ async function syncMerchantCourierStatuses(merchantId: string, options?: { force
 
       try {
         const rawCourierStatus = trackResult.courierStatus || trackResult.status;
-        const { normalizedStatus, mapped } = normalizeStatus(
-          rawCourierStatus,
-          courierType || 'leopards',
-          order.shipmentStatus,
-          trackResult.events,
-          order.workflowStatus,
-          customMappings,
-        );
+        const stage = resolveWorkflowStage(rawCourierStatus, customStageMappings);
 
-        if (!mapped && rawCourierStatus) {
+        if (!stage && rawCourierStatus) {
           try {
             await storage.recordUnmappedStatus(merchantId, courierType || 'leopards', rawCourierStatus, order.courierTracking!);
           } catch {}
         }
 
-        if (!isValidUniversalStatus(normalizedStatus)) {
-          console.warn(`[CourierSync] Rejected invalid status "${normalizedStatus}" for order ${order.orderNumber} (raw: "${rawCourierStatus}") — keeping current status`);
-          lSkipped++;
-          leopardsProcessed++;
-          updateCombinedProgress();
-          continue;
-        }
-
-        const newWorkflow = await autoTransitionOrder(merchantId, order, normalizedStatus, rawCourierStatus);
+        const newWorkflow = await autoTransitionOrder(merchantId, order, rawCourierStatus);
         if (newWorkflow) lTransitioned++;
 
         if (newWorkflow !== 'READY_TO_SHIP') {
           const weightUpdate: Record<string, any> = {
-            shipmentStatus: normalizedStatus,
+            shipmentStatus: rawCourierStatus,
             courierRawStatus: rawCourierStatus,
             lastTrackingUpdate: new Date(),
           };
@@ -416,17 +395,12 @@ async function syncMerchantCourierStatuses(merchantId: string, options?: { force
             const credObj: CourierCredentials = { apiKey: postexCreds.apiKey || undefined, apiSecret: postexCreds.apiSecret || undefined };
             const result = await trackShipment(order.courierName!, order.courierTracking!, credObj, order.shipmentStatus, order.workflowStatus, merchantId);
             if (result && result.success) {
-              if (!isValidUniversalStatus(result.normalizedStatus)) {
-                console.warn(`[CourierSync] Rejected invalid PostEx status "${result.normalizedStatus}" for order ${order.orderNumber} (raw: "${result.rawCourierStatus}") — keeping current status`);
-                return 'skipped';
-              }
-
-              const newWorkflow = await autoTransitionOrder(merchantId, order, result.normalizedStatus, result.rawCourierStatus);
+              const newWorkflow = await autoTransitionOrder(merchantId, order, result.rawCourierStatus);
               if (newWorkflow) pTransitioned++;
 
               if (newWorkflow !== 'READY_TO_SHIP') {
                 await storage.updateOrder(merchantId, order.id, {
-                  shipmentStatus: result.normalizedStatus,
+                  shipmentStatus: result.rawCourierStatus,
                   courierRawStatus: result.rawCourierStatus,
                   lastTrackingUpdate: new Date(),
                 });
@@ -714,16 +688,10 @@ async function sweepTerminalOrders(merchantId: string): Promise<{ rechecked: num
       });
 
       const courierType = detectCourierType(leopardsOrders[0].courierName || 'leopards');
-      let customMappings: Record<string, string> | undefined;
+      let customStageMappings: Record<string, string> | undefined;
       if (courierType) {
         try {
-          const mappingRows = await storage.getCourierStatusMappings(merchantId, courierType);
-          if (mappingRows && mappingRows.length > 0) {
-            customMappings = {};
-            for (const m of mappingRows) {
-              customMappings[m.courierStatus] = m.normalizedStatus;
-            }
-          }
+          customStageMappings = await getStageMappings(merchantId, courierType);
         } catch {}
       }
 
@@ -738,27 +706,14 @@ async function sweepTerminalOrders(merchantId: string): Promise<{ rechecked: num
 
         try {
           const rawCourierStatus = trackResult.courierStatus || trackResult.status;
-          const { normalizedStatus } = normalizeStatus(
-            rawCourierStatus,
-            courierType || 'leopards',
-            order.shipmentStatus,
-            trackResult.events,
-            order.workflowStatus,
-            customMappings,
-          );
 
-          if (!isValidUniversalStatus(normalizedStatus)) {
-            await storage.updateOrder(merchantId, order.id, { lastTrackingUpdate: new Date() });
-            continue;
-          }
-
-          if (normalizedStatus !== order.shipmentStatus) {
-            const newWorkflow = await autoTransitionOrder(merchantId, order, normalizedStatus, rawCourierStatus);
+          if (rawCourierStatus !== order.shipmentStatus) {
+            const newWorkflow = await autoTransitionOrder(merchantId, order, rawCourierStatus);
             if (newWorkflow) reverted++;
 
             if (newWorkflow !== 'READY_TO_SHIP') {
               const recheckUpdate: Record<string, any> = {
-                shipmentStatus: normalizedStatus,
+                shipmentStatus: rawCourierStatus,
                 courierRawStatus: rawCourierStatus,
                 lastTrackingUpdate: new Date(),
               };
@@ -795,14 +750,14 @@ async function sweepTerminalOrders(merchantId: string): Promise<{ rechecked: num
       const credObj: CourierCredentials = { apiKey: postexCreds.apiKey || undefined, apiSecret: postexCreds.apiSecret || undefined };
       const result = await trackShipment(order.courierName!, order.courierTracking!, credObj, order.shipmentStatus, order.workflowStatus, merchantId);
 
-      if (result && result.success && isValidUniversalStatus(result.normalizedStatus)) {
-        if (result.normalizedStatus !== order.shipmentStatus) {
-          const newWorkflow = await autoTransitionOrder(merchantId, order, result.normalizedStatus, result.rawCourierStatus);
+      if (result && result.success) {
+        if (result.rawCourierStatus !== order.shipmentStatus) {
+          const newWorkflow = await autoTransitionOrder(merchantId, order, result.rawCourierStatus);
           if (newWorkflow) reverted++;
 
           if (newWorkflow !== 'READY_TO_SHIP') {
             await storage.updateOrder(merchantId, order.id, {
-              shipmentStatus: result.normalizedStatus,
+              shipmentStatus: result.rawCourierStatus,
               courierRawStatus: result.rawCourierStatus,
               lastTrackingUpdate: new Date(),
             });
