@@ -11834,7 +11834,7 @@ export async function registerRoutes(
         const merchantId = await requireMerchant(req, res);
         if (!merchantId) return;
 
-        const { detectCourierType, resolveWorkflowStage, DEFAULT_RAW_TO_STAGE } = await import(
+        const { detectCourierType, detectCourierFromStatus, resolveWorkflowStage, COURIER_STATUS_SEED, SHARED_STATUSES } = await import(
           "./services/statusNormalization"
         );
 
@@ -11863,15 +11863,45 @@ export async function registerRoutes(
           ]),
         );
 
+        const sharedSet = new Set(SHARED_STATUSES.map(s => s.toLowerCase().trim()));
+
         const merged = new Map<string, { courierName: string; rawStatus: string; orderCount: number }>();
+
+        for (const [statusKey, seed] of Object.entries(COURIER_STATUS_SEED)) {
+          const key = `${seed.courier}::${statusKey}`;
+          merged.set(key, {
+            courierName: seed.courier,
+            rawStatus: statusKey,
+            orderCount: 0,
+          });
+
+          if (sharedSet.has(statusKey)) {
+            const otherCourier = seed.courier === 'leopards' ? 'postex' : 'leopards';
+            const otherKey = `${otherCourier}::${statusKey}`;
+            if (!merged.has(otherKey)) {
+              merged.set(otherKey, {
+                courierName: otherCourier,
+                rawStatus: statusKey,
+                orderCount: 0,
+              });
+            }
+          }
+        }
 
         for (const r of rawStatusRows) {
           if (!r.rawStatus || !r.courierName) continue;
-          const normalizedCourier = detectCourierType(r.courierName) || r.courierName.toLowerCase();
-          const key = `${normalizedCourier}::${r.rawStatus.toLowerCase().trim()}`;
+          let normalizedCourier = detectCourierType(r.courierName);
+          if (!normalizedCourier) {
+            normalizedCourier = detectCourierFromStatus(r.rawStatus);
+          }
+          const statusKey = r.rawStatus.toLowerCase().trim();
+          const key = `${normalizedCourier}::${statusKey}`;
           const existing = merged.get(key);
           if (existing) {
             existing.orderCount += Number(r.orderCount);
+            if (existing.rawStatus !== r.rawStatus && r.rawStatus !== statusKey) {
+              existing.rawStatus = r.rawStatus;
+            }
           } else {
             merged.set(key, {
               courierName: normalizedCourier,

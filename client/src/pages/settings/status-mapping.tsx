@@ -115,8 +115,8 @@ function RawStatusMappingSection() {
   const [search, setSearch] = useState("");
   const [courierFilter, setCourierFilter] = useState("all");
   const [expandedCouriers, setExpandedCouriers] = useState<Record<string, boolean>>({
-    leopards: true,
-    postex: true,
+    leopards: false,
+    postex: false,
   });
   const [drafts, setDrafts] = useState<Record<string, { workflowStage: string }>>({});
   const [savingRows, setSavingRows] = useState<Set<string>>(new Set());
@@ -265,7 +265,7 @@ function RawStatusMappingSection() {
               Raw Status Mappings
             </CardTitle>
             <CardDescription className="mt-1">
-              Every courier status seen in your orders — mapped to a workflow stage. Override any row to change how it's categorized. System defaults are shown in muted text; custom overrides are marked.
+              All known courier statuses mapped to workflow stages. Statuses with active orders show full opacity; unused statuses appear muted. Override any row to change how it's categorized.
             </CardDescription>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -353,10 +353,12 @@ function RawStatusMappingSection() {
                       const dirty = isDirty(row);
                       const saving = savingRows.has(key);
 
+                      const isSeededOnly = row.orderCount === 0;
+
                       return (
                         <div
                           key={key}
-                          className={`grid grid-cols-1 lg:grid-cols-[2fr_3rem_1.6fr_auto] gap-2 px-3 py-2 items-center text-sm ${dirty ? "bg-amber-50/50 dark:bg-amber-900/10" : ""}`}
+                          className={`grid grid-cols-1 lg:grid-cols-[2fr_3rem_1.6fr_auto] gap-2 px-3 py-2 items-center text-sm ${dirty ? "bg-amber-50/50 dark:bg-amber-900/10" : ""} ${isSeededOnly && !dirty ? "opacity-50" : ""}`}
                           data-testid={`raw-status-row-${key}`}
                         >
                           <div className="flex items-center gap-2 flex-wrap">
