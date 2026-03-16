@@ -41,7 +41,7 @@ interface EmbeddedSignupResult {
   verifiedName: string;
   webhookUrl: string;
   verifyToken: string;
-  registrationStatus?: "success" | "failed" | "2fa_required";
+  registrationStatus?: "success" | "failed" | "2fa_required" | "pin_required";
   registrationError?: string;
 }
 
@@ -109,7 +109,7 @@ export default function SettingsWhatsApp() {
   const [chatPin, setChatPin] = useState("");
   const [manualOpen, setManualOpen] = useState(false);
   const [signupInProgress, setSignupInProgress] = useState(false);
-  const [regStatus, setRegStatus] = useState<"success" | "failed" | "2fa_required" | null>(null);
+  const [regStatus, setRegStatus] = useState<"success" | "failed" | "2fa_required" | "pin_required" | null>(null);
   const [regError, setRegError] = useState<string | null>(null);
   const [twoFaPin, setTwoFaPin] = useState("");
   const sessionInfoRef = useRef<{ wabaId?: string; phoneId?: string }>({});
@@ -134,7 +134,7 @@ export default function SettingsWhatsApp() {
       waWabaId: data.waWabaId || "",
     });
     if (data.connected && !data.waPhoneRegistered && regStatus === null) {
-      setRegStatus("failed");
+      setRegStatus("pin_required");
     } else if (data.connected && data.waPhoneRegistered && regStatus === null) {
       setRegStatus("success");
     }
@@ -165,6 +165,15 @@ export default function SettingsWhatsApp() {
             if (waba_id) sessionInfoRef.current.wabaId = waba_id;
             if (phone_number_id) sessionInfoRef.current.phoneId = phone_number_id;
             console.log("[WA-Signup] sessionInfoListener FINISH:", { waba_id, phone_number_id });
+          } else if (data.event === "FINISH_ONLY_WABA") {
+            const { waba_id } = data.data || {};
+            if (waba_id) sessionInfoRef.current.wabaId = waba_id;
+            console.log("[WA-Signup] sessionInfoListener FINISH_ONLY_WABA — WABA created but no phone number added:", { waba_id });
+            toast({
+              title: "WABA Created — Phone Number Needed",
+              description: "Your WhatsApp Business Account was created but no phone number was added. Please add a phone number in the Meta Business Manager and try connecting again.",
+              variant: "destructive",
+            });
           } else if (data.event === "CANCEL") {
             console.log("[WA-Signup] sessionInfoListener CANCEL");
           } else if (data.event === "ERROR") {
@@ -175,7 +184,7 @@ export default function SettingsWhatsApp() {
     };
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
-  }, []);
+  }, [toast]);
 
   const saveChatPinMutation = useMutation({
     mutationFn: async (pin: string) => apiRequest("POST", "/api/support/chat-pin", { pin }),
@@ -242,12 +251,19 @@ export default function SettingsWhatsApp() {
       setLoaded(false);
       sessionInfoRef.current = {};
 
-      if (result.registrationStatus === "2fa_required") {
+      if (result.registrationStatus === "pin_required") {
+        setRegStatus("pin_required");
+        setRegError(result.registrationError || null);
+        toast({
+          title: "WhatsApp Connected — PIN Required",
+          description: "Your account is connected. Enter your WhatsApp two-step verification PIN to complete setup.",
+        });
+      } else if (result.registrationStatus === "2fa_required") {
         setRegStatus("2fa_required");
         setRegError(result.registrationError || null);
         toast({
           title: "WhatsApp Connected — PIN Required",
-          description: "Your account is connected but needs a 2FA PIN to complete phone registration.",
+          description: "Your account is connected but needs your 2FA PIN to complete phone registration.",
         });
       } else if (result.registrationStatus === "failed") {
         setRegStatus("failed");
@@ -273,9 +289,7 @@ export default function SettingsWhatsApp() {
 
   const registerPhoneMutation = useMutation({
     mutationFn: async (pin: string) => {
-      const body: Record<string, string> = {};
-      if (pin) body.pin = pin;
-      const res = await apiRequest("POST", "/api/whatsapp/register-phone", body);
+      const res = await apiRequest("POST", "/api/whatsapp/register-phone", { pin });
       return (await res.json()) as { success: boolean; registrationStatus: string };
     },
     onSuccess: () => {
@@ -292,10 +306,10 @@ export default function SettingsWhatsApp() {
       const serverStatus = err?.registrationStatus;
       if (serverStatus === "2fa_required") {
         setRegStatus("2fa_required");
-        setRegError(err.message || "Two-factor authentication PIN required.");
-      } else if (serverStatus === "failed") {
+        setRegError(err.message || "Wrong PIN. Check your WhatsApp two-step verification PIN and try again.");
+      } else {
         setRegStatus("failed");
-        setRegError(err.message || "Registration failed.");
+        setRegError(err.message || "Registration failed. Check your PIN and try again.");
       }
       toast({
         title: "Registration Failed",
@@ -409,7 +423,7 @@ export default function SettingsWhatsApp() {
               data-testid="status-wa-connection"
             >
               {isConnected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-              {isDisconnected ? "Paused" : isConnected && data?.waPhoneRegistered ? "Connected" : isConnected ? "Phone Not Registered" : "Not Connected"}
+              {isDisconnected ? "Paused" : isConnected && data?.waPhoneRegistered ? "Connected" : isConnected ? "PIN Required" : "Not Connected"}
             </Badge>
             {isConnected && (
               <AlertDialog>
@@ -515,18 +529,25 @@ export default function SettingsWhatsApp() {
               </div>
             </div>
 
-            {(regStatus === "2fa_required" || regStatus === "failed") && (
+            {(regStatus === "pin_required" || regStatus === "2fa_required" || regStatus === "failed") && (
               <div className="rounded-lg border border-amber-500/30 bg-amber-50/50 dark:bg-amber-950/10 p-4 space-y-3" data-testid="section-registration-status">
                 <div className="flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
                   <div>
                     <p className="text-sm font-medium">
-                      {regStatus === "2fa_required" ? "2FA PIN Required" : "Phone Registration Failed"}
+                      {regStatus === "failed" ? "Phone Registration Failed" : "Two-Step Verification PIN Required"}
                     </p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {regStatus === "2fa_required"
-                        ? "Your WhatsApp number has two-factor authentication enabled. Enter your 6-digit WhatsApp PIN to complete registration."
-                        : regError || "Phone registration did not complete. You can retry below."}
+                      {regStatus === "failed"
+                        ? regError || "Phone registration did not complete. Enter your PIN and try again."
+                        : "Enter your 6-digit WhatsApp two-step verification PIN to complete phone registration."}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+                      <span className="font-medium">Where to find your PIN:</span> Open{" "}
+                      <a href="https://business.facebook.com/wa/manage" target="_blank" rel="noopener noreferrer" className="text-primary underline" data-testid="link-wa-manager">
+                        WhatsApp Manager
+                      </a>{" "}
+                      → Account Tools → Phone Numbers → click the Settings icon on your number → Two-Step Verification. If you haven't set one, enable it and create a 6-digit PIN, then enter it here.
                     </p>
                   </div>
                 </div>
@@ -535,20 +556,20 @@ export default function SettingsWhatsApp() {
                     type="password"
                     inputMode="numeric"
                     maxLength={6}
-                    placeholder={regStatus === "2fa_required" ? "6-digit WhatsApp PIN" : "PIN (optional)"}
+                    placeholder="6-digit PIN"
                     value={twoFaPin}
                     onChange={(e) => setTwoFaPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                    className="max-w-[160px]"
+                    className="max-w-[140px]"
                     data-testid="input-2fa-pin"
                   />
                   <Button
                     size="sm"
-                    onClick={() => registerPhoneMutation.mutate(twoFaPin || "")}
-                    disabled={(regStatus === "2fa_required" && twoFaPin.length !== 6) || (twoFaPin.length > 0 && twoFaPin.length !== 6) || registerPhoneMutation.isPending}
+                    onClick={() => registerPhoneMutation.mutate(twoFaPin)}
+                    disabled={twoFaPin.length !== 6 || registerPhoneMutation.isPending}
                     data-testid="button-register-phone"
                   >
                     <KeyRound className="w-3.5 h-3.5 mr-1.5" />
-                    {registerPhoneMutation.isPending ? "Registering..." : regStatus === "2fa_required" ? "Complete Registration" : "Retry Registration"}
+                    {registerPhoneMutation.isPending ? "Registering..." : "Register Phone"}
                   </Button>
                 </div>
               </div>
@@ -573,19 +594,19 @@ export default function SettingsWhatsApp() {
                 <SiFacebook className="w-3.5 h-3.5" />
                 {signupInProgress || embeddedSignupMutation.isPending ? "Connecting..." : "Reconnect via Facebook"}
               </Button>
-              {regStatus !== "2fa_required" && regStatus !== "failed" && !data?.waPhoneRegistered && (
+              {regStatus !== "pin_required" && regStatus !== "2fa_required" && regStatus !== "failed" && !data?.waPhoneRegistered && (
                 <Button
                   variant="ghost"
                   size="sm"
                   className="gap-1.5 text-muted-foreground"
                   onClick={() => {
-                    setRegStatus("failed");
+                    setRegStatus("pin_required");
                     setRegError(null);
                   }}
                   data-testid="button-show-reregister"
                 >
                   <KeyRound className="w-3.5 h-3.5" />
-                  Re-register Phone
+                  Register Phone
                 </Button>
               )}
             </div>

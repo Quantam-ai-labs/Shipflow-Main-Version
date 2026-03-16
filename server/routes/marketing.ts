@@ -2865,6 +2865,8 @@ export function registerMarketingRoutes(app: Express) {
 
       const userToken = tokenData.access_token;
 
+      const authHeaders = { "Authorization": `Bearer ${userToken}`, "Content-Type": "application/json" };
+
       let wabaId: string | null = sessionWabaId || reqWabaId || null;
       let phoneNumberId: string | null = sessionPhoneId || reqPhoneId || null;
       let displayPhone = "";
@@ -2875,9 +2877,8 @@ export function registerMarketingRoutes(app: Express) {
         let validated = false;
         try {
           const phonesUrl = new URL(`${META_BASE_URL}/${wabaId}/phone_numbers`);
-          phonesUrl.searchParams.set("access_token", userToken);
           phonesUrl.searchParams.set("fields", "id,display_phone_number,verified_name");
-          const phonesRes = await fetch(phonesUrl.toString());
+          const phonesRes = await fetch(phonesUrl.toString(), { headers: { "Authorization": `Bearer ${userToken}` } });
           if (phonesRes.ok) {
             const phonesData = await phonesRes.json() as any;
             const matchedPhone = (phonesData.data || []).find((p: any) => String(p.id) === String(phoneNumberId));
@@ -2900,10 +2901,10 @@ export function registerMarketingRoutes(app: Express) {
       }
 
       if (!wabaId || !phoneNumberId) {
+        const appToken = `${metaConf.facebookAppId}|${metaConf.facebookAppSecret}`;
         const debugUrl = new URL(`${META_BASE_URL}/debug_token`);
         debugUrl.searchParams.set("input_token", userToken);
-        debugUrl.searchParams.set("access_token", `${metaConf.facebookAppId}|${metaConf.facebookAppSecret}`);
-        const debugRes = await fetch(debugUrl.toString());
+        const debugRes = await fetch(debugUrl.toString(), { headers: { "Authorization": `Bearer ${appToken}` } });
         const debugData = debugRes.ok ? await debugRes.json().catch(() => null) : null;
         const granularScopes = debugData?.data?.granular_scopes || [];
         const waScope = granularScopes.find((s: any) => s.scope === "whatsapp_business_management");
@@ -2915,16 +2916,14 @@ export function registerMarketingRoutes(app: Express) {
 
         if (!wabaId) {
           const sharedWabaUrl = new URL(`${META_BASE_URL}/me/businesses`);
-          sharedWabaUrl.searchParams.set("access_token", userToken);
           sharedWabaUrl.searchParams.set("fields", "id,name");
-          const bizRes = await fetch(sharedWabaUrl.toString());
+          const bizRes = await fetch(sharedWabaUrl.toString(), { headers: { "Authorization": `Bearer ${userToken}` } });
           const bizData = bizRes.ok ? await bizRes.json().catch(() => ({ data: [] })) : { data: [] };
 
           for (const biz of (bizData.data || [])) {
             const wabaListUrl = new URL(`${META_BASE_URL}/${biz.id}/owned_whatsapp_business_accounts`);
-            wabaListUrl.searchParams.set("access_token", userToken);
             wabaListUrl.searchParams.set("fields", "id,name");
-            const wabaRes = await fetch(wabaListUrl.toString());
+            const wabaRes = await fetch(wabaListUrl.toString(), { headers: { "Authorization": `Bearer ${userToken}` } });
             const wabaData = wabaRes.ok ? await wabaRes.json().catch(() => ({ data: [] })) : { data: [] };
             if (wabaData.data?.length > 0) {
               wabaId = wabaData.data[0].id;
@@ -2939,14 +2938,13 @@ export function registerMarketingRoutes(app: Express) {
         }
 
         const phonesUrl = new URL(`${META_BASE_URL}/${wabaId}/phone_numbers`);
-        phonesUrl.searchParams.set("access_token", userToken);
         phonesUrl.searchParams.set("fields", "id,display_phone_number,verified_name,quality_rating");
-        const phonesRes = await fetch(phonesUrl.toString());
+        const phonesRes = await fetch(phonesUrl.toString(), { headers: { "Authorization": `Bearer ${userToken}` } });
         const phonesData = phonesRes.ok ? await phonesRes.json().catch(() => ({ data: [] })) : { data: [] };
         const phoneNumbers = phonesData.data || [];
 
         if (phoneNumbers.length === 0) {
-          return res.status(400).json({ error: "No phone numbers found on this WhatsApp Business Account." });
+          return res.status(400).json({ error: "No phone numbers found on this WhatsApp Business Account. Please add a phone number in the Meta Business Manager and try again." });
         }
 
         const phone = phoneNumbers[0];
@@ -2967,11 +2965,13 @@ export function registerMarketingRoutes(app: Express) {
         waWabaId: wabaId,
         waVerifyToken: existingVerifyToken,
         waDisconnected: false,
+        waPhoneRegistered: false,
         updatedAt: new Date(),
       }).where(eq(merchants.id, merchantId));
 
       const proto = req.headers["x-forwarded-proto"] || req.protocol || "https";
       const canonicalHost = `${proto}://${req.get("host")}`;
+      const webhookUrl = `${canonicalHost}/webhooks/whatsapp/${merchantId}`;
 
       console.log(`[WA-Signup] WhatsApp Embedded Signup completed for merchant ${merchantId}. WABA: ${wabaId}, Phone: ${phoneNumberId} (${displayPhone})`);
 
@@ -2979,52 +2979,25 @@ export function registerMarketingRoutes(app: Express) {
         const subscribeUrl = new URL(`${META_BASE_URL}/${wabaId}/subscribed_apps`);
         const subscribeRes = await fetch(subscribeUrl.toString(), {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ access_token: userToken }),
+          headers: authHeaders,
+          body: JSON.stringify({
+            override_callback_uri: webhookUrl,
+            verify_token: existingVerifyToken,
+          }),
         });
         const subscribeData = subscribeRes.ok ? await subscribeRes.json().catch(() => null) : null;
-        console.log(`[WA-Signup] App subscription result:`, subscribeData);
+        if (!subscribeRes.ok) {
+          const subErrData = await subscribeRes.json().catch(() => null);
+          console.warn(`[WA-Signup] App subscription failed (${subscribeRes.status}):`, JSON.stringify(subErrData));
+        } else {
+          console.log(`[WA-Signup] App subscription with webhook override result:`, subscribeData);
+        }
       } catch (subErr: any) {
         console.warn(`[WA-Signup] App subscription failed (non-blocking):`, subErr.message);
       }
 
-      let registrationStatus: "success" | "failed" | "2fa_required" = "failed";
-      let registrationError: string | null = null;
-
-      try {
-        const registerUrl = new URL(`${META_BASE_URL}/${phoneNumberId}/register`);
-        const registerRes = await fetch(registerUrl.toString(), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            access_token: userToken,
-            messaging_product: "whatsapp",
-            pin: "000000",
-          }),
-        });
-        const registerData = await registerRes.json().catch(() => null) as any;
-        if (registerRes.ok) {
-          registrationStatus = "success";
-          console.log(`[WA-Signup] Phone number ${phoneNumberId} registered for Cloud API successfully`);
-        } else {
-          const errorSubcode = registerData?.error?.error_subcode;
-          if (errorSubcode === 2388001) {
-            registrationStatus = "2fa_required";
-            registrationError = "Two-factor authentication is enabled on this number. Please enter your 6-digit WhatsApp PIN to complete registration.";
-          } else {
-            registrationError = registerData?.error?.error_user_msg || registerData?.error?.message || "Phone registration failed";
-          }
-          console.error(`[WA-Signup] Phone registration failed (${registerRes.status}):`, JSON.stringify(registerData));
-        }
-      } catch (regErr: any) {
-        registrationError = regErr.message;
-        console.error(`[WA-Signup] Phone registration error:`, regErr.message);
-      }
-
-      await db.update(merchants).set({
-        waPhoneRegistered: registrationStatus === "success",
-        updatedAt: new Date(),
-      }).where(eq(merchants.id, merchantId));
+      const registrationStatus: "pin_required" = "pin_required";
+      const registrationError: string | null = "Enter your WhatsApp two-step verification PIN to complete phone registration. If you haven't set one yet, go to WhatsApp Manager → Account Tools → Phone Numbers → Settings → enable Two-Step Verification.";
 
       res.json({
         success: true,
@@ -3032,7 +3005,7 @@ export function registerMarketingRoutes(app: Express) {
         phoneNumberId,
         displayPhone,
         verifiedName,
-        webhookUrl: `${canonicalHost}/webhooks/whatsapp/${merchantId}`,
+        webhookUrl,
         verifyToken: existingVerifyToken,
         registrationStatus,
         registrationError,
@@ -3048,8 +3021,8 @@ export function registerMarketingRoutes(app: Express) {
       const merchantId = await getMerchantId(req);
       const { pin } = req.body;
 
-      if (pin && (typeof pin !== "string" || pin.length !== 6 || !/^\d{6}$/.test(pin))) {
-        return res.status(400).json({ error: "PIN must be exactly 6 digits" });
+      if (!pin || typeof pin !== "string" || pin.length !== 6 || !/^\d{6}$/.test(pin)) {
+        return res.status(400).json({ error: "A valid 6-digit PIN is required. This is your WhatsApp two-step verification PIN." });
       }
 
       const [merchant] = await db.select({
@@ -3062,16 +3035,16 @@ export function registerMarketingRoutes(app: Express) {
       }
 
       const registerUrl = new URL(`${META_BASE_URL}/${merchant.waPhoneNumberId}/register`);
-      const registerBody: Record<string, string> = {
-        access_token: merchant.waAccessToken,
-        messaging_product: "whatsapp",
-      };
-      if (pin) registerBody.pin = pin;
-
       const registerRes = await fetch(registerUrl.toString(), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(registerBody),
+        headers: {
+          "Authorization": `Bearer ${merchant.waAccessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          pin,
+        }),
       });
       const registerData = await registerRes.json().catch(() => null) as any;
 
