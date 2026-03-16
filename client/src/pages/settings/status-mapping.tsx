@@ -32,6 +32,8 @@ import {
   RotateCcw,
   Download,
   Upload,
+  Wand2,
+  MapPin,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -529,6 +531,25 @@ export default function StatusMappingPage() {
     },
   });
 
+  const bulkAutoMapMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/courier-status-mappings/bulk-auto-map");
+      return res.json();
+    },
+    onSuccess: (data: { mapped: number; skipped: number }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/courier-status-mappings/raw-statuses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/unmapped-courier-statuses?resolved=false"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/unmapped-courier-statuses/count"] });
+      toast({
+        title: "Auto-mapped",
+        description: `${data.mapped} status(es) mapped using system defaults.${data.skipped > 0 ? ` ${data.skipped} could not be matched.` : ""}`,
+      });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to auto-map statuses.", variant: "destructive" });
+    },
+  });
+
   const addMappingMutation = useMutation({
     mutationFn: async (body: object) => {
       const res = await apiRequest("POST", "/api/courier-status-mappings", body);
@@ -672,14 +693,6 @@ export default function StatusMappingPage() {
             className="hidden"
             onChange={handleFileSelect}
           />
-          <Button
-            size="sm"
-            onClick={() => setShowAddMappingDialog(true)}
-            data-testid="button-add-mapping"
-          >
-            <Plus className="w-4 h-4 mr-1.5" />
-            Add Mapping
-          </Button>
         </div>
       </div>
 
@@ -847,16 +860,32 @@ export default function StatusMappingPage() {
       {unmappedStatuses && unmappedStatuses.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-amber-500" />
-              Unmapped Courier Statuses
-              <Badge variant="destructive" className="text-xs" data-testid="badge-unmapped-count">
-                {unmappedStatuses.length}
-              </Badge>
-            </CardTitle>
-            <CardDescription>
-              These statuses were seen during tracking sync but weren't matched by any rule. Map them above or dismiss them here.
-            </CardDescription>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-amber-500" />
+                  Unmapped Courier Statuses
+                  <Badge variant="destructive" className="text-xs" data-testid="badge-unmapped-count">
+                    {unmappedStatuses.length}
+                  </Badge>
+                </CardTitle>
+                <CardDescription className="mt-1">
+                  These statuses were seen during tracking sync but weren't matched by any rule.
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => bulkAutoMapMutation.mutate()}
+                  disabled={bulkAutoMapMutation.isPending}
+                  data-testid="button-map-all-unmapped"
+                >
+                  {bulkAutoMapMutation.isPending ? <RefreshCw className="w-4 h-4 mr-1.5 animate-spin" /> : <Wand2 className="w-4 h-4 mr-1.5" />}
+                  Map All
+                </Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
@@ -880,15 +909,42 @@ export default function StatusMappingPage() {
                       )}
                     </div>
                   </div>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => dismissUnmappedMutation.mutate(status.id)}
-                    disabled={dismissUnmappedMutation.isPending}
-                    data-testid={`button-dismiss-unmapped-${status.id}`}
-                  >
-                    <X className="w-4 h-4" />
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        const courierNorm = status.courierName?.toLowerCase().includes("postex") ? "postex" : "leopards";
+                        setAddMappingForm({
+                          courierName: courierNorm,
+                          courierStatus: status.rawStatus,
+                          workflowStage: "BOOKED",
+                        });
+                        fetch(`/api/courier-status-mappings/seed-lookup?status=${encodeURIComponent(status.rawStatus)}`, { credentials: "include" })
+                          .then(r => r.json())
+                          .then(data => {
+                            if (data.stage) {
+                              setAddMappingForm(f => ({ ...f, workflowStage: data.stage }));
+                            }
+                          })
+                          .catch(() => {});
+                        setShowAddMappingDialog(true);
+                      }}
+                      data-testid={`button-map-unmapped-${status.id}`}
+                    >
+                      <MapPin className="w-3.5 h-3.5 mr-1" />
+                      Map
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => dismissUnmappedMutation.mutate(status.id)}
+                      disabled={dismissUnmappedMutation.isPending}
+                      data-testid={`button-dismiss-unmapped-${status.id}`}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>

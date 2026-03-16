@@ -12098,6 +12098,64 @@ export async function registerRoutes(
     },
   );
 
+  app.post(
+    "/api/courier-status-mappings/bulk-auto-map",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+
+        const { COURIER_STATUS_SEED } = await import("./services/statusNormalization");
+        const unmapped = await storage.getUnmappedStatuses(merchantId, false);
+        if (unmapped.length === 0) {
+          return res.json({ mapped: 0, skipped: 0 });
+        }
+
+        let mapped = 0;
+        let skipped = 0;
+        for (const u of unmapped) {
+          const key = u.rawStatus.toLowerCase().trim();
+          const seed = COURIER_STATUS_SEED[key];
+          if (seed) {
+            await storage.upsertCourierStatusMapping({
+              merchantId,
+              courierName: u.courierName,
+              courierStatus: key,
+              normalizedStatus: seed.stage,
+              workflowStage: seed.stage,
+              isCustom: true,
+            });
+            await storage.resolveUnmappedStatus(merchantId, u.id);
+            mapped++;
+          } else {
+            skipped++;
+          }
+        }
+
+        res.json({ mapped, skipped });
+      } catch (error) {
+        console.error("Error bulk auto-mapping:", error);
+        res.status(500).json({ message: "Failed to auto-map statuses" });
+      }
+    },
+  );
+
+  app.get(
+    "/api/courier-status-mappings/seed-lookup",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const { COURIER_STATUS_SEED } = await import("./services/statusNormalization");
+        const rawStatus = (req.query.status as string || "").toLowerCase().trim();
+        const seed = COURIER_STATUS_SEED[rawStatus];
+        res.json({ stage: seed?.stage || null, courier: seed?.courier || null });
+      } catch (error) {
+        res.status(500).json({ message: "Lookup failed" });
+      }
+    },
+  );
+
   // ============================================
   // COURIER MAPPING IMPORT / EXPORT
   // ============================================
