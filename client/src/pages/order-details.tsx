@@ -306,10 +306,49 @@ function getActivityLabel(entry: any): string {
 function OrderTimeline({ orderId, auditLog, changeLog }: { orderId: string; auditLog: any[] | undefined; changeLog: any[] | undefined }) {
   const [expanded, setExpanded] = useState(false);
   const COLLAPSED_COUNT = 5;
+  const { toast } = useToast();
 
   const { data: confirmationData } = useQuery<{ timeline: any[] }>({
     queryKey: ["/api/orders", orderId, "confirmation-timeline"],
     staleTime: 30000,
+  });
+
+  const retryLogMutation = useMutation({
+    mutationFn: async (logId: string) => {
+      const res = await apiRequest("POST", `/api/whatsapp-logs/${logId}/retry`);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      if (data.success) {
+        toast({ title: "WhatsApp message resent successfully" });
+      } else {
+        toast({ title: "Retry failed", description: data.error || "Unknown error", variant: "destructive" });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/orders", orderId, "confirmation-timeline"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders", orderId] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Retry failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const retryOrderMutation = useMutation({
+    mutationFn: async (toStatus?: string) => {
+      const res = await apiRequest("POST", `/api/orders/${orderId}/retry-whatsapp`, { toStatus: toStatus || "NEW" });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      if (data.success) {
+        toast({ title: "WhatsApp message resent successfully" });
+      } else {
+        toast({ title: "Retry failed", description: data.error || "Unknown error", variant: "destructive" });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/orders", orderId, "confirmation-timeline"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders", orderId] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Retry failed", description: err.message, variant: "destructive" });
+    },
   });
 
   const timeline: any[] = [];
@@ -368,6 +407,19 @@ function OrderTimeline({ orderId, auditLog, changeLog }: { orderId: string; audi
                       )}
                       {entry.note && (
                         <p className="text-xs text-muted-foreground mt-0.5 break-words">{entry.note}</p>
+                      )}
+                      {entry.errorDetails && (entry.eventType === "WA_SENT" || entry.eventType === "WA_PERMANENT_FAILURE") && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="mt-1.5 h-6 text-xs gap-1.5 px-2"
+                          disabled={retryOrderMutation.isPending}
+                          onClick={() => retryOrderMutation.mutate()}
+                          data-testid={`retry-wa-confirmation-${entry.id}`}
+                        >
+                          {retryOrderMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                          Retry WhatsApp
+                        </Button>
                       )}
                       <p className="text-xs text-muted-foreground/60 mt-0.5">{timeStr}</p>
                     </div>
@@ -481,6 +533,19 @@ function OrderTimeline({ orderId, auditLog, changeLog }: { orderId: string; audi
                               return err.length > 80 ? err.slice(0, 80) + "..." : err;
                             })()}
                           </span>
+                        )}
+                        {entry.newValue === "failed" && entry.id && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-6 text-xs gap-1.5 px-2"
+                            disabled={retryLogMutation.isPending}
+                            onClick={() => retryLogMutation.mutate(entry.id)}
+                            data-testid={`retry-wa-log-${entry.id}`}
+                          >
+                            {retryLogMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                            Retry
+                          </Button>
                         )}
                       </div>
                     )}

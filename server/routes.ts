@@ -7522,6 +7522,55 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/orders/:orderId/retry-whatsapp", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const order = await storage.getOrderById(merchantId, req.params.orderId);
+      if (!order) return res.status(404).json({ error: "Order not found" });
+
+      if (!order.customerPhone) return res.status(400).json({ error: "Order has no phone number" });
+
+      const { sendOrderStatusWhatsApp } = await import("./utils/integrations/whatsapp/index");
+
+      const lineItems = Array.isArray(order.lineItems) ? (order.lineItems as any[]).map((li: any) => ({
+        name: li.name || li.title || "",
+        quantity: li.quantity || 1,
+        price: parseFloat(li.price || "0"),
+        variantTitle: li.variant_title || li.variantTitle || null,
+      })) : [];
+
+      const toStatus = req.body?.toStatus || order.workflowStatus || "NEW";
+
+      const result = await sendOrderStatusWhatsApp({
+        merchantId,
+        orderId: order.id,
+        orderNumber: order.orderNumber || "",
+        customerName: order.customerName || "Customer",
+        customerPhone: order.customerPhone,
+        fromStatus: "",
+        toStatus,
+        totalAmount: order.totalAmount ? String(order.totalAmount) : null,
+        city: order.customerCity || null,
+        shippingAddress: order.shippingAddress || null,
+        courierName: order.courierName || null,
+        courierTracking: order.trackingNumber || null,
+        itemSummary: order.itemSummary || null,
+        lineItems,
+      });
+
+      if (result.sent) {
+        res.json({ success: true });
+      } else {
+        res.json({ success: false, error: result.error || "No active automation found for current order status" });
+      }
+    } catch (error: any) {
+      console.error("[WhatsApp Retry Order] Error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // ─────────────────────────────────────────────────────────────────────────
   // SUPPORT SECTION ROUTES
   // ─────────────────────────────────────────────────────────────────────────
