@@ -151,12 +151,17 @@ async function updateJobStage(jobId: string, stage: string, updates: Record<stri
     .where(eq(adLaunchJobs.id, jobId));
 }
 
-async function persistStages(jobId: string, stages: LaunchStage[], extraFields: Record<string, unknown> = {}) {
+async function persistStages(
+  jobId: string,
+  stages: LaunchStage[],
+  extraFields: Record<string, unknown> = {},
+  resultOnly: Record<string, unknown> = {},
+) {
   const currentStage = stages[stages.length - 1]?.stage || "unknown";
   await db.update(adLaunchJobs)
     .set({
       currentStage,
-      resultJson: { stages, ...extraFields },
+      resultJson: { stages, ...extraFields, ...resultOnly },
       ...extraFields,
     })
     .where(eq(adLaunchJobs.id, jobId));
@@ -491,13 +496,13 @@ async function executeSalesLaunchAsync(
         } catch (pubErr: unknown) {
           const pubError = pubErr instanceof MetaApiError ? pubErr : pubErr instanceof Error ? pubErr : new Error(String(pubErr));
           stages[stages.length - 1] = { stage: "publish", status: "failed", message: `Created but failed to go live: ${pubError.message}` };
-          await persistStages(jobId, stages, { status: "partial", createdEntities, errorMessage: `Publish failed: ${pubError.message}`, launchedAt: new Date() });
+          await persistStages(jobId, stages, { status: "partial", errorMessage: `Publish failed: ${pubError.message}`, launchedAt: new Date() }, { createdEntities });
           return;
         }
       }
 
       stages.push({ stage: "complete", status: "success", message: finalStatus === "launched" ? "All ads are live!" : "All ads created as draft." });
-      await persistStages(jobId, stages, { status: finalStatus, metaCampaignId: campaignId, createdEntities, launchedAt: new Date() });
+      await persistStages(jobId, stages, { status: finalStatus, metaCampaignId: campaignId, launchedAt: new Date() }, { createdEntities });
       return;
     }
 
