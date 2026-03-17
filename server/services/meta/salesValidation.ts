@@ -1,7 +1,7 @@
 import { META_BASE_URL } from "../metaAds";
 import { db } from "../../db";
 import { metaApiLogs } from "@shared/schema";
-import type { SalesLaunchInput, BudgetLevel } from "./salesPayloadBuilder";
+import type { SalesLaunchInput, BudgetLevel, SalesLaunchAdSetInput, SalesLaunchAdInput } from "./salesPayloadBuilder";
 
 export interface ValidationIssue {
   code: string;
@@ -41,40 +41,74 @@ export function validateLaunchInput(input: SalesLaunchInput): ValidationIssue[] 
   if (!input.adName || !input.adName.trim()) {
     issues.push({ code: "MISSING_AD_NAME", field: "adName", stage: "input", message: "Campaign / Ad name is required.", fixSuggestion: "Enter a name for your campaign." });
   }
-  if (!["UPLOAD_IMAGE", "UPLOAD_VIDEO", "EXISTING_POST"].includes(input.mode)) {
-    issues.push({ code: "INVALID_MODE", field: "mode", stage: "input", message: "Creative mode must be UPLOAD_IMAGE, UPLOAD_VIDEO, or EXISTING_POST.", fixSuggestion: "Select a valid creative mode." });
-  }
+  if (input.adSets && input.adSets.length > 0) {
+    for (let si = 0; si < input.adSets.length; si++) {
+      const adSet = input.adSets[si];
+      if (!adSet.targetCountries || adSet.targetCountries.length === 0) {
+        issues.push({ code: "MISSING_TARGETING", field: `adSets[${si}].targetCountries`, stage: "input", message: `Ad Set ${si + 1}: At least one target country required.`, fixSuggestion: "Add a target country." });
+      }
+      if (input.budgetLevel === "ABO" && (!adSet.dailyBudget || adSet.dailyBudget < 1)) {
+        issues.push({ code: "INVALID_BUDGET", field: `adSets[${si}].dailyBudget`, stage: "input", message: `Ad Set ${si + 1}: Budget must be at least 1.`, fixSuggestion: "Enter a valid daily budget." });
+      }
+      for (let ai = 0; ai < adSet.ads.length; ai++) {
+        const ad = adSet.ads[ai];
+        const prefix = `Set ${si + 1} Ad ${ai + 1}`;
+        if (!["UPLOAD_IMAGE", "UPLOAD_VIDEO", "EXISTING_POST"].includes(ad.mode)) {
+          issues.push({ code: "INVALID_MODE", field: `adSets[${si}].ads[${ai}].mode`, stage: "input", message: `${prefix}: Invalid creative mode.`, fixSuggestion: "Select a valid creative mode." });
+        }
+        if (!ad.destinationUrl) {
+          issues.push({ code: "MISSING_URL", field: `adSets[${si}].ads[${ai}].destinationUrl`, stage: "input", message: `${prefix}: Destination URL required.`, fixSuggestion: "Enter a website URL." });
+        }
+        if (ad.mode === "UPLOAD_IMAGE" && !ad.imageHash && !ad.imageUrl) {
+          issues.push({ code: "MISSING_IMAGE", field: `adSets[${si}].ads[${ai}].imageHash`, stage: "media", message: `${prefix}: Image required.`, fixSuggestion: "Upload an image." });
+        }
+        if (ad.mode === "UPLOAD_VIDEO" && !ad.videoId && !ad.videoUrl) {
+          issues.push({ code: "MISSING_VIDEO", field: `adSets[${si}].ads[${ai}].videoId`, stage: "media", message: `${prefix}: Video required.`, fixSuggestion: "Upload a video." });
+        }
+        if (ad.mode === "EXISTING_POST" && !ad.existingPostId) {
+          issues.push({ code: "MISSING_POST_ID", field: `adSets[${si}].ads[${ai}].existingPostId`, stage: "media", message: `${prefix}: Post required.`, fixSuggestion: "Select a post." });
+        }
+        if (ad.mode !== "EXISTING_POST" && !ad.primaryText) {
+          issues.push({ code: "MISSING_PRIMARY_TEXT", field: `adSets[${si}].ads[${ai}].primaryText`, stage: "input", message: `${prefix}: Primary text required.`, fixSuggestion: "Add ad copy text." });
+        }
+      }
+    }
+  } else {
+    if (!["UPLOAD_IMAGE", "UPLOAD_VIDEO", "EXISTING_POST"].includes(input.mode)) {
+      issues.push({ code: "INVALID_MODE", field: "mode", stage: "input", message: "Creative mode must be UPLOAD_IMAGE, UPLOAD_VIDEO, or EXISTING_POST.", fixSuggestion: "Select a valid creative mode." });
+    }
 
-  if (input.mode === "UPLOAD_IMAGE") {
-    if (!input.imageHash && !input.imageUrl) {
-      issues.push({ code: "MISSING_IMAGE", field: "imageHash", stage: "media", message: "Image must be uploaded before launch.", fixSuggestion: "Upload an image first." });
+    if (input.mode === "UPLOAD_IMAGE") {
+      if (!input.imageHash && !input.imageUrl) {
+        issues.push({ code: "MISSING_IMAGE", field: "imageHash", stage: "media", message: "Image must be uploaded before launch.", fixSuggestion: "Upload an image first." });
+      }
+      if (!input.destinationUrl) {
+        issues.push({ code: "MISSING_URL", field: "destinationUrl", stage: "input", message: "Destination URL is required for image ads.", fixSuggestion: "Enter a website URL." });
+      }
+      if (!input.primaryText) {
+        issues.push({ code: "MISSING_PRIMARY_TEXT", field: "primaryText", stage: "input", message: "Primary text is required for image ads.", fixSuggestion: "Add the main ad copy text." });
+      }
     }
-    if (!input.destinationUrl) {
-      issues.push({ code: "MISSING_URL", field: "destinationUrl", stage: "input", message: "Destination URL is required for image ads.", fixSuggestion: "Enter a website URL." });
-    }
-    if (!input.primaryText) {
-      issues.push({ code: "MISSING_PRIMARY_TEXT", field: "primaryText", stage: "input", message: "Primary text is required for image ads.", fixSuggestion: "Add the main ad copy text." });
-    }
-  }
 
-  if (input.mode === "UPLOAD_VIDEO") {
-    if (!input.videoId && !input.videoUrl) {
-      issues.push({ code: "MISSING_VIDEO", field: "videoId", stage: "media", message: "Video must be uploaded before launch.", fixSuggestion: "Upload a video first." });
+    if (input.mode === "UPLOAD_VIDEO") {
+      if (!input.videoId && !input.videoUrl) {
+        issues.push({ code: "MISSING_VIDEO", field: "videoId", stage: "media", message: "Video must be uploaded before launch.", fixSuggestion: "Upload a video first." });
+      }
+      if (!input.destinationUrl) {
+        issues.push({ code: "MISSING_URL", field: "destinationUrl", stage: "input", message: "Destination URL is required for video ads.", fixSuggestion: "Enter a website URL." });
+      }
+      if (!input.primaryText) {
+        issues.push({ code: "MISSING_PRIMARY_TEXT", field: "primaryText", stage: "input", message: "Primary text is required for video ads.", fixSuggestion: "Add the main ad copy text." });
+      }
     }
-    if (!input.destinationUrl) {
-      issues.push({ code: "MISSING_URL", field: "destinationUrl", stage: "input", message: "Destination URL is required for video ads.", fixSuggestion: "Enter a website URL." });
-    }
-    if (!input.primaryText) {
-      issues.push({ code: "MISSING_PRIMARY_TEXT", field: "primaryText", stage: "input", message: "Primary text is required for video ads.", fixSuggestion: "Add the main ad copy text." });
-    }
-  }
 
-  if (input.mode === "EXISTING_POST") {
-    if (!input.existingPostId) {
-      issues.push({ code: "MISSING_POST_ID", field: "existingPostId", stage: "media", message: "An existing post must be selected.", fixSuggestion: "Select a post from your Facebook or Instagram Page." });
-    }
-    if (!input.destinationUrl) {
-      issues.push({ code: "MISSING_URL", field: "destinationUrl", stage: "input", message: "Destination URL is required for sales ads using existing posts.", fixSuggestion: "Enter a website URL where users will be directed when they click the ad." });
+    if (input.mode === "EXISTING_POST") {
+      if (!input.existingPostId) {
+        issues.push({ code: "MISSING_POST_ID", field: "existingPostId", stage: "media", message: "An existing post must be selected.", fixSuggestion: "Select a post from your Facebook or Instagram Page." });
+      }
+      if (!input.destinationUrl) {
+        issues.push({ code: "MISSING_URL", field: "destinationUrl", stage: "input", message: "Destination URL is required for sales ads using existing posts.", fixSuggestion: "Enter a website URL where users will be directed when they click the ad." });
+      }
     }
   }
 
@@ -172,6 +206,31 @@ export async function validateMediaReadiness(
   merchantId?: string,
 ): Promise<ValidationIssue[]> {
   const issues: ValidationIssue[] = [];
+
+  if (input.adSets && input.adSets.length > 0) {
+    for (let si = 0; si < input.adSets.length; si++) {
+      for (let ai = 0; ai < input.adSets[si].ads.length; ai++) {
+        const ad = input.adSets[si].ads[ai];
+        const syntheticInput: SalesLaunchInput = {
+          ...input,
+          mode: ad.mode,
+          imageHash: ad.imageHash,
+          imageUrl: ad.imageUrl,
+          videoId: ad.videoId,
+          videoUrl: ad.videoUrl,
+          existingPostId: ad.existingPostId,
+          existingPostSource: ad.existingPostSource,
+          destinationUrl: ad.destinationUrl,
+          adSets: undefined,
+        };
+        const adIssues = await validateMediaReadiness(syntheticInput, accessToken, merchantId);
+        for (const issue of adIssues) {
+          issues.push({ ...issue, field: `adSets[${si}].ads[${ai}].${issue.field}`, message: `Set ${si + 1} Ad ${ai + 1}: ${issue.message}` });
+        }
+      }
+    }
+    return issues;
+  }
 
   if (input.mode === "UPLOAD_IMAGE" && input.imageHash) {
     try {
@@ -300,6 +359,49 @@ export function normalizeInput(raw: Record<string, unknown>): SalesLaunchInput {
     base.targetCities = (raw.targetCities as Array<{ key: string; name?: string }>)
       .filter((c: any) => c && typeof c.key === "string" && c.key.length > 0)
       .map((c: any) => ({ key: c.key, name: c.name || undefined }));
+  }
+
+  if (Array.isArray(raw.adSets) && raw.adSets.length > 0) {
+    base.adSets = (raw.adSets as any[]).map((rawAdSet: any) => ({
+      targetCountries: Array.isArray(rawAdSet.targetCountries) ? rawAdSet.targetCountries.filter((c: unknown) => typeof c === "string") : [],
+      targetCities: Array.isArray(rawAdSet.targetCities) ? rawAdSet.targetCities.filter((c: any) => c && typeof c.key === "string").map((c: any) => ({ key: c.key, name: c.name })) : [],
+      dailyBudget: parseFloat(String(rawAdSet.dailyBudget || 0)) || 0,
+      ads: Array.isArray(rawAdSet.ads) ? rawAdSet.ads.map((rawAd: any) => ({
+        mode: (["UPLOAD_IMAGE", "UPLOAD_VIDEO", "EXISTING_POST"].includes(String(rawAd.mode)) ? String(rawAd.mode) : "UPLOAD_IMAGE") as SalesLaunchAdInput["mode"],
+        imageHash: trimOrNull(rawAd.imageHash),
+        imageUrl: trimOrNull(rawAd.imageUrl),
+        videoId: trimOrNull(rawAd.videoId),
+        videoUrl: trimOrNull(rawAd.videoUrl),
+        existingPostId: trimOrNull(rawAd.existingPostId),
+        existingPostSource: rawAd.existingPostSource === "instagram" ? "instagram" as const : "facebook" as const,
+        destinationUrl: trimOrNull(rawAd.destinationUrl),
+        primaryText: trimOrNull(rawAd.primaryText),
+        headline: trimOrNull(rawAd.headline),
+        description: trimOrNull(rawAd.description),
+        cta: trimOrNull(rawAd.cta) || "SHOP_NOW",
+      })) : [],
+    }));
+
+    const firstAdSet = base.adSets[0];
+    const firstAd = firstAdSet?.ads[0];
+    if (firstAdSet) {
+      if (firstAdSet.targetCountries?.length) base.targetCountries = firstAdSet.targetCountries;
+      if (firstAdSet.targetCities?.length) base.targetCities = firstAdSet.targetCities;
+    }
+    if (firstAd) {
+      base.mode = firstAd.mode;
+      base.destinationUrl = firstAd.destinationUrl;
+      base.primaryText = firstAd.primaryText;
+      base.headline = firstAd.headline;
+      base.description = firstAd.description;
+      base.cta = firstAd.cta;
+      base.imageHash = firstAd.imageHash;
+      base.imageUrl = firstAd.imageUrl;
+      base.videoId = firstAd.videoId;
+      base.videoUrl = firstAd.videoUrl;
+      base.existingPostId = firstAd.existingPostId;
+      base.existingPostSource = firstAd.existingPostSource;
+    }
   }
 
   return base;

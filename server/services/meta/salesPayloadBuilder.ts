@@ -33,6 +33,29 @@ export interface SalesLaunchInput {
   instagramActorId?: string | null;
   targetCountries?: string[];
   targetCities?: GeoCity[];
+  adSets?: SalesLaunchAdSetInput[];
+}
+
+export interface SalesLaunchAdInput {
+  mode: SalesCreativeMode;
+  imageHash?: string | null;
+  imageUrl?: string | null;
+  videoId?: string | null;
+  videoUrl?: string | null;
+  existingPostId?: string | null;
+  existingPostSource?: "facebook" | "instagram" | null;
+  destinationUrl?: string | null;
+  primaryText?: string | null;
+  headline?: string | null;
+  description?: string | null;
+  cta?: string | null;
+}
+
+export interface SalesLaunchAdSetInput {
+  targetCountries?: string[];
+  targetCities?: GeoCity[];
+  dailyBudget?: number;
+  ads: SalesLaunchAdInput[];
 }
 
 export type MetaPayload = Record<string, unknown>;

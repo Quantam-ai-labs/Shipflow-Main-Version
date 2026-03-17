@@ -13,17 +13,17 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import {
   CheckCircle2, XCircle, AlertTriangle, Loader2, Rocket, Activity, Image, Video,
   FileText, Search, ChevronDown, RefreshCw, ExternalLink, Info, Upload, History,
-  Zap, Globe, Target, DollarSign, MapPin, X,
+  Zap, Globe, Target, DollarSign, MapPin, X, Plus, Trash2, Copy, Layers, ChevronRight,
 } from "lucide-react";
 
 type CreativeMode = "UPLOAD_IMAGE" | "UPLOAD_VIDEO" | "EXISTING_POST";
 type PublishMode = "VALIDATE" | "DRAFT" | "PUBLISH";
+type PostSourceFilter = "all" | "facebook" | "instagram" | "library";
 
 interface MetaPage { id: string; name: string; }
 interface MetaPixel { id: string; name: string; }
 interface MetaIgAccount { id: string; name?: string; username?: string; profile_picture_url?: string; pageName?: string; }
 interface MetaPost { id: string; message?: string; fullPicture?: string; createdTime?: string; type?: string; likes?: number; comments?: number; shares?: number; source?: string; permalinkUrl?: string; }
-interface LaunchJob { id: string; adName: string; mode: string; publishMode: string; status: string; createdAt: string; metaCampaignId?: string; metaAdsetId?: string; metaAdId?: string; errorMessage?: string; }
 
 interface DiagnosticCheck {
   name: string;
@@ -60,6 +60,36 @@ interface LaunchResult {
   rawError?: Record<string, unknown>;
 }
 
+interface AdConfig {
+  id: string;
+  mode: CreativeMode;
+  imageUrl: string;
+  imageHash: string;
+  imagePreview: string;
+  imageUploading: boolean;
+  videoUrl: string;
+  videoId: string;
+  videoStatus: string;
+  videoUploading: boolean;
+  selectedPostId: string;
+  selectedPostSource: "facebook" | "instagram";
+  selectedPostPreview: any;
+  primaryText: string;
+  headline: string;
+  description: string;
+  cta: string;
+  destinationUrl: string;
+}
+
+interface AdSetConfig {
+  id: string;
+  targetCountries: string[];
+  targetCities: { key: string; name: string }[];
+  dailyBudget: string;
+  ads: AdConfig[];
+  isExpanded: boolean;
+}
+
 const CTA_OPTIONS = [
   { value: "SHOP_NOW", label: "Shop Now" },
   { value: "LEARN_MORE", label: "Learn More" },
@@ -72,8 +102,6 @@ const CTA_OPTIONS = [
   { value: "SEND_MESSAGE", label: "Send Message" },
   { value: "WHATSAPP_MESSAGE", label: "WhatsApp Message" },
 ];
-
-type PostSourceFilter = "all" | "facebook" | "instagram" | "library";
 
 const ASIAN_COUNTRIES: { code: string; name: string }[] = [
   { code: "AF", name: "Afghanistan" },
@@ -222,43 +250,76 @@ const STAGE_LABELS: Record<string, string> = {
   complete: "Complete",
 };
 
+function getStageName(stage: string): string {
+  if (STAGE_LABELS[stage]) return STAGE_LABELS[stage];
+  if (stage.startsWith("adset_")) return `Creating Ad Set ${parseInt(stage.split("_")[1]) + 1}`;
+  if (stage.startsWith("creative_")) {
+    const parts = stage.split("_");
+    return `Creative (Set ${parseInt(parts[1]) + 1}, Ad ${parseInt(parts[2]) + 1})`;
+  }
+  if (stage.startsWith("ad_")) {
+    const parts = stage.split("_");
+    if (parts.length === 3) return `Ad (Set ${parseInt(parts[1]) + 1}, Ad ${parseInt(parts[2]) + 1})`;
+  }
+  if (stage.startsWith("publish_adset_")) return `Publishing Ad Set ${parseInt(stage.split("_")[2]) + 1}`;
+  if (stage.startsWith("publish_ad_")) {
+    const parts = stage.split("_");
+    if (parts.length === 4) return `Publishing Ad (Set ${parseInt(parts[2]) + 1}, Ad ${parseInt(parts[3]) + 1})`;
+  }
+  return stage;
+}
+
 function getDefaultBudget(currency: string): string {
   return currency === "PKR" ? "2800" : "10";
 }
 
+function uid() {
+  return Math.random().toString(36).slice(2, 10);
+}
+
+function createDefaultAd(): AdConfig {
+  return {
+    id: uid(),
+    mode: "UPLOAD_IMAGE",
+    imageUrl: "", imageHash: "", imagePreview: "", imageUploading: false,
+    videoUrl: "", videoId: "", videoStatus: "", videoUploading: false,
+    selectedPostId: "", selectedPostSource: "facebook", selectedPostPreview: null,
+    primaryText: "", headline: "", description: "", cta: "SHOP_NOW", destinationUrl: "",
+  };
+}
+
+function createDefaultAdSet(currency: string): AdSetConfig {
+  return {
+    id: uid(),
+    targetCountries: ["PK"],
+    targetCities: [],
+    dailyBudget: getDefaultBudget(currency),
+    ads: [createDefaultAd()],
+    isExpanded: true,
+  };
+}
+
 export default function SalesLauncher() {
   const { toast } = useToast();
+
   const [adName, setAdName] = useState("");
-  const [mode, setMode] = useState<CreativeMode>("UPLOAD_IMAGE");
-  const [destinationUrl, setDestinationUrl] = useState("");
-  const [primaryText, setPrimaryText] = useState("");
-  const [headline, setHeadline] = useState("");
-  const [description, setDescription] = useState("");
-  const [cta, setCta] = useState("SHOP_NOW");
   const [dailyBudget, setDailyBudget] = useState("10");
   const [budgetLevel, setBudgetLevel] = useState<"CBO" | "ABO">("CBO");
   const [publishMode, setPublishMode] = useState<PublishMode>("VALIDATE");
   const [startMode, setStartMode] = useState<"NOW" | "SCHEDULED">("NOW");
   const [startTime, setStartTime] = useState("");
-  const [imageUrl, setImageUrl] = useState("");
-  const [imageHash, setImageHash] = useState("");
-  const [imagePreview, setImagePreview] = useState("");
-  const [videoUrl, setVideoUrl] = useState("");
-  const [videoId, setVideoId] = useState("");
-  const [videoStatus, setVideoStatus] = useState<string>("");
-  const [selectedPostId, setSelectedPostId] = useState("");
-  const [selectedPostSource, setSelectedPostSource] = useState<"facebook" | "instagram">("facebook");
-  const [selectedPostPreview, setSelectedPostPreview] = useState<any>(null);
-  const [postSearch, setPostSearch] = useState("");
-  const [diagnosticsResult, setDiagnosticsResult] = useState<{ passed: boolean; checks: DiagnosticCheck[]; adAccountCurrency?: string } | null>(null);
   const [accountCurrency, setAccountCurrency] = useState("USD");
+  const [budgetInitialized, setBudgetInitialized] = useState(false);
+
+  const [adSets, setAdSets] = useState<AdSetConfig[]>([createDefaultAdSet("USD")]);
+
+  const [diagnosticsResult, setDiagnosticsResult] = useState<{ passed: boolean; checks: DiagnosticCheck[]; adAccountCurrency?: string } | null>(null);
   const [launchResult, setLaunchResult] = useState<LaunchResult | null>(null);
   const [launchStages, setLaunchStages] = useState<LaunchStage[]>([]);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [showRawError, setShowRawError] = useState(false);
-  const [budgetInitialized, setBudgetInitialized] = useState(false);
-  const [targetCountries, setTargetCountries] = useState<string[]>(["PK"]);
-  const [targetCities, setTargetCities] = useState<{ key: string; name: string }[]>([]);
+
+  const [postSearch, setPostSearch] = useState("");
   const [postSourceFilter, setPostSourceFilter] = useState<PostSourceFilter>("all");
   const [countrySearch, setCountrySearch] = useState("");
   const [citySearch, setCitySearch] = useState("");
@@ -267,51 +328,30 @@ export default function SalesLauncher() {
   const metaStatus = metaStatusQuery.data;
   const isConnected = metaStatus?.connected === true;
 
-  const pagesQuery = useQuery<any>({
-    queryKey: ["/api/meta/pages"],
-    enabled: isConnected,
-  });
+  const pagesQuery = useQuery<any>({ queryKey: ["/api/meta/pages"], enabled: isConnected });
   const pages = pagesQuery.data?.pages || [];
   const [selectedPageId, setSelectedPageId] = useState("");
 
-  const pixelsQuery = useQuery<any>({
-    queryKey: ["/api/meta/pixels"],
-    enabled: isConnected,
-  });
+  const pixelsQuery = useQuery<any>({ queryKey: ["/api/meta/pixels"], enabled: isConnected });
   const pixels = pixelsQuery.data?.pixels || [];
   const [selectedPixelId, setSelectedPixelId] = useState("");
 
-  const igAccountsQuery = useQuery<any>({
-    queryKey: ["/api/meta/instagram-accounts"],
-    enabled: isConnected,
-  });
+  const igAccountsQuery = useQuery<any>({ queryKey: ["/api/meta/instagram-accounts"], enabled: isConnected });
   const igAccounts: MetaIgAccount[] = igAccountsQuery.data?.instagramAccounts || [];
   const [selectedIgAccountId, setSelectedIgAccountId] = useState("");
 
-  useEffect(() => {
-    if (pages.length > 0 && !selectedPageId) {
-      setSelectedPageId(pages[0].id);
-    }
-  }, [pages, selectedPageId]);
+  useEffect(() => { if (pages.length > 0 && !selectedPageId) setSelectedPageId(pages[0].id); }, [pages, selectedPageId]);
+  useEffect(() => { if (pixels.length > 0 && !selectedPixelId) setSelectedPixelId(pixels[0].id); }, [pixels, selectedPixelId]);
+  useEffect(() => { if (igAccounts.length > 0 && !selectedIgAccountId) setSelectedIgAccountId(igAccounts[0].id); }, [igAccounts, selectedIgAccountId]);
 
-  useEffect(() => {
-    if (pixels.length > 0 && !selectedPixelId) {
-      setSelectedPixelId(pixels[0].id);
-    }
-  }, [pixels, selectedPixelId]);
-
-  useEffect(() => {
-    if (igAccounts.length > 0 && !selectedIgAccountId) {
-      setSelectedIgAccountId(igAccounts[0].id);
-    }
-  }, [igAccounts, selectedIgAccountId]);
+  const anyAdUsesExistingPost = adSets.some(s => s.ads.some(a => a.mode === "EXISTING_POST"));
 
   const fbPostSearchParams = new URLSearchParams();
   if (postSearch) fbPostSearchParams.set("search", postSearch);
   fbPostSearchParams.set("includeVideos", "true");
   const fbPostsQuery = useQuery<any>({
     queryKey: [`/api/meta/page-posts?${fbPostSearchParams.toString()}`],
-    enabled: isConnected && mode === "EXISTING_POST",
+    enabled: isConnected && anyAdUsesExistingPost,
   });
   const igQueryParams = new URLSearchParams();
   if (postSearch) igQueryParams.set("search", postSearch);
@@ -319,50 +359,91 @@ export default function SalesLauncher() {
   const igQueryString = igQueryParams.toString() ? `?${igQueryParams.toString()}` : "";
   const igPostsQuery = useQuery<any>({
     queryKey: [`/api/meta/ig-media${igQueryString}`],
-    enabled: isConnected && mode === "EXISTING_POST" && !!selectedIgAccountId && selectedIgAccountId !== "none",
+    enabled: isConnected && anyAdUsesExistingPost && !!selectedIgAccountId && selectedIgAccountId !== "none",
   });
   const adImagesQuery = useQuery<any>({
     queryKey: ["/api/meta/ad-account-images"],
-    enabled: isConnected && mode === "EXISTING_POST",
+    enabled: isConnected && anyAdUsesExistingPost,
   });
   const adVideosQuery = useQuery<any>({
     queryKey: ["/api/meta/ad-account-videos"],
-    enabled: isConnected && mode === "EXISTING_POST",
+    enabled: isConnected && anyAdUsesExistingPost,
   });
   const fbPosts: MetaPost[] = fbPostsQuery.data?.posts || [];
-  const fbPostsError = fbPostsQuery.data?._error === true;
-  const fbPostsErrorMsg = fbPostsQuery.data?.errorMessage || "Could not load Facebook posts";
   const igPosts: MetaPost[] = igPostsQuery.data?.posts || [];
   const libraryImages: MetaPost[] = (adImagesQuery.data?.images || []).map((img: any) => ({
-    id: `lib_img_${img.hash}`,
-    message: img.name || "Ad Image",
-    fullPicture: img.url || "",
-    createdTime: img.createdTime,
-    type: "image",
-    source: "library",
+    id: `lib_img_${img.hash}`, message: img.name || "Ad Image", fullPicture: img.url || "",
+    createdTime: img.createdTime, type: "image", source: "library",
   }));
   const libraryVideos: MetaPost[] = (adVideosQuery.data?.videos || []).map((v: any) => ({
-    id: `lib_vid_${v.id}`,
-    message: v.title || "Ad Video",
-    fullPicture: v.picture || "",
-    createdTime: v.createdTime,
-    type: "video",
-    source: "library",
+    id: `lib_vid_${v.id}`, message: v.title || "Ad Video", fullPicture: v.picture || "",
+    createdTime: v.createdTime, type: "video", source: "library",
   }));
   const allPosts: MetaPost[] = [...fbPosts, ...igPosts, ...libraryImages, ...libraryVideos].sort((a, b) => {
     const ta = a.createdTime ? new Date(a.createdTime).getTime() : 0;
     const tb = b.createdTime ? new Date(b.createdTime).getTime() : 0;
     return tb - ta;
   });
-  const posts: MetaPost[] = postSourceFilter === "all"
-    ? allPosts
-    : allPosts.filter(p => p.source === postSourceFilter);
+  const posts: MetaPost[] = postSourceFilter === "all" ? allPosts : allPosts.filter(p => p.source === postSourceFilter);
   const postsLoading = fbPostsQuery.isLoading || igPostsQuery.isLoading || adImagesQuery.isLoading || adVideosQuery.isLoading;
   const sourceCount = {
     all: allPosts.length,
     facebook: allPosts.filter(p => p.source === "facebook").length,
     instagram: allPosts.filter(p => p.source === "instagram").length,
     library: allPosts.filter(p => p.source === "library").length,
+  };
+
+  const updateAdSet = (idx: number, updates: Partial<AdSetConfig>) => {
+    setAdSets(prev => prev.map((s, i) => i === idx ? { ...s, ...updates } : s));
+  };
+
+  const updateAd = (adSetIdx: number, adIdx: number, updates: Partial<AdConfig>) => {
+    setAdSets(prev => prev.map((s, si) =>
+      si === adSetIdx
+        ? { ...s, ads: s.ads.map((a, ai) => ai === adIdx ? { ...a, ...updates } : a) }
+        : s
+    ));
+  };
+
+  const addAdSet = () => {
+    if (adSets.length >= 10) return;
+    setAdSets(prev => {
+      const newSets = prev.map(s => ({ ...s, isExpanded: false }));
+      return [...newSets, createDefaultAdSet(accountCurrency)];
+    });
+  };
+
+  const removeAdSet = (idx: number) => {
+    if (adSets.length <= 1) return;
+    setAdSets(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const duplicateAdSet = (idx: number) => {
+    if (adSets.length >= 10) return;
+    setAdSets(prev => {
+      const source = prev[idx];
+      const dup: AdSetConfig = {
+        ...JSON.parse(JSON.stringify(source)),
+        id: uid(),
+        isExpanded: true,
+        ads: source.ads.map(a => ({ ...JSON.parse(JSON.stringify(a)), id: uid(), imageUploading: false, videoUploading: false })),
+      };
+      const next = prev.map(s => ({ ...s, isExpanded: false }));
+      next.splice(idx + 1, 0, dup);
+      return next;
+    });
+  };
+
+  const addAd = (adSetIdx: number) => {
+    const adSet = adSets[adSetIdx];
+    if (adSet.ads.length >= 10) return;
+    updateAdSet(adSetIdx, { ads: [...adSet.ads, createDefaultAd()] });
+  };
+
+  const removeAd = (adSetIdx: number, adIdx: number) => {
+    const adSet = adSets[adSetIdx];
+    if (adSet.ads.length <= 1) return;
+    updateAdSet(adSetIdx, { ads: adSet.ads.filter((_, i) => i !== adIdx) });
   };
 
   const diagnosticsMutation = useMutation({
@@ -378,7 +459,9 @@ export default function SalesLauncher() {
       if (data.adAccountCurrency) {
         setAccountCurrency(data.adAccountCurrency);
         if (!budgetInitialized) {
-          setDailyBudget(getDefaultBudget(data.adAccountCurrency));
+          const defaultBudget = getDefaultBudget(data.adAccountCurrency);
+          setDailyBudget(defaultBudget);
+          setAdSets(prev => prev.map(s => ({ ...s, dailyBudget: defaultBudget })));
           setBudgetInitialized(true);
         }
       }
@@ -392,64 +475,51 @@ export default function SalesLauncher() {
     },
   });
 
-  const uploadImageMutation = useMutation({
-    mutationFn: async (payload: { type: "url"; url: string } | { type: "file"; base64: string; filename: string }) => {
-      if (payload.type === "url") {
-        const res = await apiRequest("POST", "/api/meta/sales/upload-image", { imageUrl: payload.url });
-        return res.json();
-      } else {
-        const res = await apiRequest("POST", "/api/meta/sales/upload-image", { imageBase64: payload.base64, filename: payload.filename });
-        return res.json();
-      }
-    },
-    onSuccess: (data) => {
-      setImageHash(data.imageHash);
-      if (!imagePreview && data.imageUrl) setImagePreview(data.imageUrl);
+  const handleUploadImage = async (adSetIdx: number, adIdx: number, payload: { type: "url"; url: string } | { type: "file"; base64: string; filename: string }) => {
+    updateAd(adSetIdx, adIdx, { imageUploading: true });
+    try {
+      const body = payload.type === "url" ? { imageUrl: payload.url } : { imageBase64: payload.base64, filename: payload.filename };
+      const res = await apiRequest("POST", "/api/meta/sales/upload-image", body);
+      const data = await res.json();
+      updateAd(adSetIdx, adIdx, { imageHash: data.imageHash, imageUploading: false });
+      if (data.imageUrl) updateAd(adSetIdx, adIdx, { imagePreview: data.imageUrl });
       toast({ title: "Image uploaded to Meta" });
-    },
-    onError: (err: Error) => {
+    } catch (err: any) {
+      updateAd(adSetIdx, adIdx, { imageUploading: false });
       toast({ title: "Image upload failed", description: err.message, variant: "destructive" });
-    },
-  });
+    }
+  };
 
-  const uploadVideoMutation = useMutation({
-    mutationFn: async (payload: { type: "url"; url: string } | { type: "file"; base64: string; filename: string }) => {
-      if (payload.type === "url") {
-        const res = await apiRequest("POST", "/api/meta/sales/upload-video", { videoUrl: payload.url });
-        return res.json();
-      } else {
-        const res = await apiRequest("POST", "/api/meta/sales/upload-video", { videoBase64: payload.base64, filename: payload.filename });
-        return res.json();
-      }
-    },
-    onSuccess: (data) => {
-      setVideoId(data.videoId);
-      setVideoStatus("processing");
+  const handleUploadVideo = async (adSetIdx: number, adIdx: number, payload: { type: "url"; url: string } | { type: "file"; base64: string; filename: string }) => {
+    updateAd(adSetIdx, adIdx, { videoUploading: true });
+    try {
+      const body = payload.type === "url" ? { videoUrl: payload.url } : { videoBase64: payload.base64, filename: payload.filename };
+      const res = await apiRequest("POST", "/api/meta/sales/upload-video", body);
+      const data = await res.json();
+      updateAd(adSetIdx, adIdx, { videoId: data.videoId, videoStatus: "processing", videoUploading: false });
       toast({ title: "Video uploaded, processing..." });
-      pollVideoStatus(data.videoId);
-    },
-    onError: (err: Error) => {
+      pollVideoStatus(adSetIdx, adIdx, data.videoId);
+    } catch (err: any) {
+      updateAd(adSetIdx, adIdx, { videoUploading: false });
       toast({ title: "Video upload failed", description: err.message, variant: "destructive" });
-    },
-  });
+    }
+  };
 
-  async function pollVideoStatus(vid: string) {
+  async function pollVideoStatus(adSetIdx: number, adIdx: number, vid: string) {
     for (let i = 0; i < 30; i++) {
       await new Promise(r => setTimeout(r, 5000));
       try {
         const res = await fetch(`/api/meta/sales/video-status/${vid}`, { credentials: "include" });
         const data = await res.json();
         if (data.ready) {
-          setVideoStatus("ready");
+          updateAd(adSetIdx, adIdx, { videoStatus: "ready" });
           toast({ title: "Video is ready for launch" });
           return;
         }
-        setVideoStatus(data.status || "processing");
-      } catch {
-        break;
-      }
+        updateAd(adSetIdx, adIdx, { videoStatus: data.status || "processing" });
+      } catch { break; }
     }
-    setVideoStatus("timeout");
+    updateAd(adSetIdx, adIdx, { videoStatus: "timeout" });
     toast({ title: "Video processing timed out", variant: "destructive" });
   }
 
@@ -458,7 +528,6 @@ export default function SalesLauncher() {
   const pollJobStatus = async (jobId: string) => {
     const pollInterval = 1500;
     const maxPolls = 120;
-
     for (let i = 0; i < maxPolls; i++) {
       try {
         const res = await fetch(`/api/meta/sales/launch-jobs/${jobId}`, { credentials: "include" });
@@ -466,58 +535,43 @@ export default function SalesLauncher() {
         const data = await res.json();
         const job = data.job;
         if (!job) break;
-
         const resultJson = job.resultJson as { stages?: LaunchStage[] } | null;
         const stages = resultJson?.stages || [];
         setLaunchStages(stages);
-
         if (TERMINAL_STATUSES.includes(job.status)) {
-          const finalStages = stages;
-          const lastStage = finalStages[finalStages.length - 1];
+          const lastStage = stages[stages.length - 1];
           const success = job.status === "launched" || job.status === "draft" || job.status === "validated";
-
-          const result: LaunchResult = {
+          setLaunchResult({
             success,
             jobId: job.id,
-            stages: finalStages,
+            stages,
             campaignId: job.metaCampaignId || undefined,
             adsetId: job.metaAdsetId || undefined,
             creativeId: job.metaCreativeId || undefined,
             adId: job.metaAdId || undefined,
             error: job.errorMessage || undefined,
             errorStage: !success ? lastStage?.stage : undefined,
-          };
-
-          setLaunchResult(result);
+          });
           setActiveJobId(null);
           queryClient.invalidateQueries({ queryKey: ["/api/meta/sales/launch-jobs"] });
-
           if (success) {
             toast({ title: job.status === "validated" ? "Validation passed!" : "Ad launched successfully!" });
           } else {
-            toast({
-              title: `Failed at: ${STAGE_LABELS[lastStage?.stage || ""] || lastStage?.stage || "unknown"}`,
-              description: job.errorMessage,
-              variant: "destructive",
-            });
+            toast({ title: `Failed at: ${getStageName(lastStage?.stage || "")}`, description: job.errorMessage, variant: "destructive" });
           }
           return;
         }
-      } catch {
-        break;
-      }
+      } catch { break; }
       await new Promise(resolve => setTimeout(resolve, pollInterval));
     }
-
     setActiveJobId(null);
-    toast({ title: "Launch timed out", description: "The launch is still running in the background. Check recent launches for status.", variant: "destructive" });
+    toast({ title: "Launch timed out", description: "The launch is still running in the background.", variant: "destructive" });
   };
 
   const launchMutation = useMutation({
     mutationFn: async () => {
       const body: Record<string, unknown> = {
         adName,
-        mode,
         adAccountId: metaStatus?.adAccountId || "",
         pageId: selectedPageId,
         pixelId: selectedPixelId && selectedPixelId !== "none" ? selectedPixelId : null,
@@ -527,32 +581,27 @@ export default function SalesLauncher() {
         startMode,
         startTime: startMode === "SCHEDULED" ? startTime : null,
         publishMode,
-        targetCountries: targetCountries.length > 0 ? targetCountries : ["PK"],
-        targetCities: targetCities.length > 0 ? targetCities : undefined,
+        instagramActorId: selectedIgAccountId && selectedIgAccountId !== "none" ? selectedIgAccountId : undefined,
+        adSets: adSets.map(adSet => ({
+          targetCountries: adSet.targetCountries.length > 0 ? adSet.targetCountries : ["PK"],
+          targetCities: adSet.targetCities.length > 0 ? adSet.targetCities : undefined,
+          dailyBudget: budgetLevel === "ABO" ? parseFloat(adSet.dailyBudget) || 500 : undefined,
+          ads: adSet.ads.map(ad => ({
+            mode: ad.mode,
+            imageHash: ad.mode === "UPLOAD_IMAGE" ? ad.imageHash : undefined,
+            imageUrl: ad.mode === "UPLOAD_IMAGE" ? ad.imageUrl : undefined,
+            videoId: ad.mode === "UPLOAD_VIDEO" ? ad.videoId : undefined,
+            videoUrl: ad.mode === "UPLOAD_VIDEO" ? ad.videoUrl : undefined,
+            existingPostId: ad.mode === "EXISTING_POST" ? ad.selectedPostId : undefined,
+            existingPostSource: ad.mode === "EXISTING_POST" ? ad.selectedPostSource : undefined,
+            destinationUrl: ad.destinationUrl,
+            primaryText: ad.mode !== "EXISTING_POST" ? ad.primaryText : undefined,
+            headline: ad.mode !== "EXISTING_POST" ? ad.headline : undefined,
+            description: ad.mode !== "EXISTING_POST" ? ad.description : undefined,
+            cta: ad.mode !== "EXISTING_POST" ? ad.cta : undefined,
+          })),
+        })),
       };
-
-      if (mode === "UPLOAD_IMAGE") {
-        body.imageHash = imageHash;
-        body.imageUrl = imageUrl;
-        body.destinationUrl = destinationUrl;
-        body.primaryText = primaryText;
-        body.headline = headline;
-        body.description = description;
-        body.cta = cta;
-      } else if (mode === "UPLOAD_VIDEO") {
-        body.videoId = videoId;
-        body.videoUrl = videoUrl;
-        body.destinationUrl = destinationUrl;
-        body.primaryText = primaryText;
-        body.headline = headline;
-        body.description = description;
-        body.cta = cta;
-      } else {
-        body.existingPostId = selectedPostId;
-        body.existingPostSource = selectedPostSource;
-        body.destinationUrl = destinationUrl;
-      }
-
       const res = await apiRequest("POST", "/api/meta/sales/launch", body);
       return res.json();
     },
@@ -567,28 +616,38 @@ export default function SalesLauncher() {
     },
   });
 
-  const isExistingPost = mode === "EXISTING_POST";
-
   const diagnosticsPassed = diagnosticsResult?.passed === true;
+  const totalAds = adSets.reduce((sum, s) => sum + s.ads.length, 0);
 
-  const validationChecklist = [
+  const campaignChecks = [
     { label: "Meta connected", ok: isConnected },
     { label: "Ad account selected", ok: !!metaStatus?.adAccountId },
     { label: "Page selected", ok: !!selectedPageId },
     { label: "Diagnostics passed", ok: diagnosticsPassed },
     { label: "Campaign name", ok: !!adName.trim() },
-    { label: "Daily budget valid", ok: parseFloat(dailyBudget) >= 1 },
-    { label: "Destination URL", ok: !!destinationUrl.trim() },
-    ...(isExistingPost
-      ? [
-          { label: "Post selected", ok: !!selectedPostId },
-        ]
-      : [
-          { label: "Primary text", ok: !!primaryText.trim() },
-          ...(mode === "UPLOAD_IMAGE" ? [{ label: "Image uploaded", ok: !!imageHash }] : []),
-          ...(mode === "UPLOAD_VIDEO" ? [{ label: "Video ready", ok: videoStatus === "ready" }] : []),
-        ]),
+    ...(budgetLevel === "CBO" ? [{ label: "CBO budget valid", ok: parseFloat(dailyBudget) >= 1 }] : []),
   ];
+
+  const adSetAdChecks = adSets.flatMap((adSet, si) => {
+    const setChecks = [
+      { label: `Set ${si + 1}: has targeting`, ok: adSet.targetCountries.length > 0 },
+      ...(budgetLevel === "ABO" ? [{ label: `Set ${si + 1}: budget valid`, ok: parseFloat(adSet.dailyBudget) >= 1 }] : []),
+    ];
+    const adChecks = adSet.ads.flatMap((ad, ai) => {
+      const isPost = ad.mode === "EXISTING_POST";
+      const prefix = adSets.length > 1 || adSet.ads.length > 1 ? `S${si + 1}A${ai + 1}` : "";
+      return [
+        { label: `${prefix} Destination URL`.trim(), ok: !!ad.destinationUrl.trim() },
+        ...(isPost ? [{ label: `${prefix} Post selected`.trim(), ok: !!ad.selectedPostId }] : []),
+        ...(!isPost ? [{ label: `${prefix} Primary text`.trim(), ok: !!ad.primaryText.trim() }] : []),
+        ...(ad.mode === "UPLOAD_IMAGE" && !isPost ? [{ label: `${prefix} Image uploaded`.trim(), ok: !!ad.imageHash }] : []),
+        ...(ad.mode === "UPLOAD_VIDEO" && !isPost ? [{ label: `${prefix} Video ready`.trim(), ok: ad.videoStatus === "ready" }] : []),
+      ];
+    });
+    return [...setChecks, ...adChecks];
+  });
+
+  const validationChecklist = [...campaignChecks, ...adSetAdChecks];
   const allValid = validationChecklist.every(c => c.ok);
   const validCount = validationChecklist.filter(c => c.ok).length;
 
@@ -609,15 +668,19 @@ export default function SalesLauncher() {
 
   return (
     <div className="p-4 md:p-6 max-w-[880px] mx-auto space-y-5" data-testid="sales-launcher-page">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight" data-testid="text-page-title">Sales Launcher</h1>
           <p className="text-sm text-muted-foreground mt-0.5">Launch SALES campaigns with geo-targeted audiences</p>
         </div>
-        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200/60 dark:border-emerald-500/20">
-          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">{metaStatus?.businessName || "Connected"}</span>
+        <div className="flex items-center gap-2">
+          {totalAds > 1 && (
+            <span className="text-xs text-muted-foreground">{adSets.length} ad set{adSets.length > 1 ? "s" : ""} · {totalAds} ad{totalAds > 1 ? "s" : ""}</span>
+          )}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200/60 dark:border-emerald-500/20">
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">{metaStatus?.businessName || "Connected"}</span>
+          </div>
         </div>
       </div>
 
@@ -697,7 +760,6 @@ export default function SalesLauncher() {
               </Button>
             </div>
           </div>
-
           {diagnosticsResult && (
             <div className={`${glassInner} p-3 space-y-1.5`} data-testid="diagnostics-results">
               {diagnosticsResult.checks.map((check, i) => (
@@ -712,22 +774,22 @@ export default function SalesLauncher() {
         </div>
       </div>
 
-      {/* SECTION B: Sales Ad Configuration */}
-      <div className={glassCard} data-testid="section-form">
+      {/* Campaign Settings */}
+      <div className={glassCard} data-testid="section-campaign">
         <div className="px-5 pt-4 pb-3">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-violet-50 dark:bg-violet-500/10 flex items-center justify-center">
               <Target className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
             </div>
             <div>
-              <h2 className="text-sm font-semibold">Sales Ad Configuration</h2>
-              <p className="text-xs text-muted-foreground">SALES objective · Pakistan broad · Automatic placements</p>
+              <h2 className="text-sm font-semibold">Campaign Settings</h2>
+              <p className="text-xs text-muted-foreground">SALES objective · Automatic placements</p>
             </div>
           </div>
         </div>
         <div className="px-5 pb-5 space-y-4">
           <div>
-            <Label htmlFor="adName" className="text-xs font-medium">Campaign / Ad Name</Label>
+            <Label htmlFor="adName" className="text-xs font-medium">Campaign Name</Label>
             <Input
               id="adName"
               value={adName}
@@ -737,371 +799,23 @@ export default function SalesLauncher() {
               data-testid="input-ad-name"
             />
           </div>
-
-          {/* Creative Mode Tabs */}
-          <div>
-            <Label className="text-xs font-medium">Creative Source</Label>
-            <Tabs value={mode} onValueChange={v => setMode(v as CreativeMode)} className="mt-1.5">
-              <TabsList className="grid w-full grid-cols-3 bg-black/[0.04] dark:bg-white/[0.06] p-0.5 rounded-xl">
-                <TabsTrigger value="UPLOAD_IMAGE" data-testid="tab-upload-image" className="gap-1.5 text-xs rounded-[10px] data-[state=active]:bg-white dark:data-[state=active]:bg-white/[0.12] data-[state=active]:shadow-sm transition-all">
-                  <Image className="h-3 w-3" /> Image
-                </TabsTrigger>
-                <TabsTrigger value="UPLOAD_VIDEO" data-testid="tab-upload-video" className="gap-1.5 text-xs rounded-[10px] data-[state=active]:bg-white dark:data-[state=active]:bg-white/[0.12] data-[state=active]:shadow-sm transition-all">
-                  <Video className="h-3 w-3" /> Video
-                </TabsTrigger>
-                <TabsTrigger value="EXISTING_POST" data-testid="tab-existing-post" className="gap-1.5 text-xs rounded-[10px] data-[state=active]:bg-white dark:data-[state=active]:bg-white/[0.12] data-[state=active]:shadow-sm transition-all">
-                  <FileText className="h-3 w-3" /> Post
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="UPLOAD_IMAGE" className="space-y-3 mt-3">
-                <div>
-                  <div className="flex flex-col gap-2">
-                    <div
-                      className={`${glassInner} p-5 text-center cursor-pointer hover:bg-white/60 dark:hover:bg-white/[0.06] transition-all`}
-                      onClick={() => document.getElementById("imageFileInput")?.click()}
-                      data-testid="dropzone-image"
-                    >
-                      <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center mx-auto mb-2">
-                        <Upload className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                      </div>
-                      <p className="text-xs font-medium">Click to upload an image</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">JPG, PNG, or WebP (max 30MB)</p>
-                    </div>
-                    <input
-                      id="imageFileInput"
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      className="hidden"
-                      data-testid="input-image-file"
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        if (file.size > 30 * 1024 * 1024) {
-                          toast({ title: "File too large", description: "Image must be under 30MB.", variant: "destructive" });
-                          return;
-                        }
-                        const preview = URL.createObjectURL(file);
-                        setImagePreview(preview);
-                        const reader = new FileReader();
-                        reader.onload = () => {
-                          const base64 = (reader.result as string).split(",")[1];
-                          uploadImageMutation.mutate({ type: "file", base64, filename: file.name });
-                        };
-                        reader.readAsDataURL(file);
-                      }}
-                    />
-                    <Collapsible>
-                      <CollapsibleTrigger asChild>
-                        <Button variant="ghost" size="sm" className="text-xs gap-1 h-7" data-testid="toggle-image-url">
-                          <ExternalLink className="h-3 w-3" /> Or use image URL
-                        </Button>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent className="mt-1">
-                        <div className="flex gap-2">
-                          <Input
-                            id="imageUrl"
-                            value={imageUrl}
-                            onChange={e => setImageUrl(e.target.value)}
-                            placeholder="https://example.com/image.jpg"
-                            className="bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]"
-                            data-testid="input-image-url"
-                          />
-                          <Button
-                            size="sm"
-                            onClick={() => uploadImageMutation.mutate({ type: "url", url: imageUrl })}
-                            disabled={!imageUrl || uploadImageMutation.isPending}
-                            data-testid="button-upload-image-url"
-                          >
-                            {uploadImageMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Upload"}
-                          </Button>
-                        </div>
-                      </CollapsibleContent>
-                    </Collapsible>
-                  </div>
-                  {uploadImageMutation.isPending && (
-                    <div className="mt-2 flex items-center gap-2 text-xs text-blue-600">
-                      <Loader2 className="h-3 w-3 animate-spin" /> Uploading image to Meta...
-                    </div>
-                  )}
-                  {imageHash && (
-                    <div className="mt-2 flex items-center gap-2 text-xs text-emerald-600">
-                      <CheckCircle2 className="h-3 w-3" />
-                      Image uploaded (hash: {imageHash.substring(0, 12)}...)
-                      <Button variant="ghost" size="sm" className="h-6 text-[10px] ml-auto" onClick={() => { setImageHash(""); setImagePreview(""); setImageUrl(""); }} data-testid="button-remove-image">Remove</Button>
-                    </div>
-                  )}
-                  {imagePreview && (
-                    <img src={imagePreview} alt="Preview" className="mt-2 rounded-xl max-h-48 object-contain" data-testid="img-preview" />
-                  )}
-                </div>
-              </TabsContent>
-
-              <TabsContent value="UPLOAD_VIDEO" className="space-y-3 mt-3">
-                <div>
-                  <div className="flex flex-col gap-2">
-                    <div
-                      className={`${glassInner} p-5 text-center cursor-pointer hover:bg-white/60 dark:hover:bg-white/[0.06] transition-all`}
-                      onClick={() => document.getElementById("videoFileInput")?.click()}
-                      data-testid="dropzone-video"
-                    >
-                      <div className="w-10 h-10 rounded-xl bg-violet-50 dark:bg-violet-500/10 flex items-center justify-center mx-auto mb-2">
-                        <Upload className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-                      </div>
-                      <p className="text-xs font-medium">Click to upload a video</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">MP4, MOV, or AVI (max 100MB)</p>
-                    </div>
-                    <input
-                      id="videoFileInput"
-                      type="file"
-                      accept="video/mp4,video/quicktime,video/x-msvideo"
-                      className="hidden"
-                      data-testid="input-video-file"
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        if (file.size > 100 * 1024 * 1024) {
-                          toast({ title: "File too large", description: "Video must be under 100MB for file upload. Use the URL option for larger files.", variant: "destructive" });
-                          return;
-                        }
-                        const reader = new FileReader();
-                        reader.onload = () => {
-                          const base64 = (reader.result as string).split(",")[1];
-                          uploadVideoMutation.mutate({ type: "file", base64, filename: file.name });
-                        };
-                        reader.readAsDataURL(file);
-                      }}
-                    />
-                    <Collapsible>
-                      <CollapsibleTrigger asChild>
-                        <Button variant="ghost" size="sm" className="text-xs gap-1 h-7" data-testid="toggle-video-url">
-                          <ExternalLink className="h-3 w-3" /> Or use video URL
-                        </Button>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent className="mt-1">
-                        <div className="flex gap-2">
-                          <Input
-                            id="videoUrl"
-                            value={videoUrl}
-                            onChange={e => setVideoUrl(e.target.value)}
-                            placeholder="https://example.com/video.mp4"
-                            className="bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]"
-                            data-testid="input-video-url"
-                          />
-                          <Button
-                            size="sm"
-                            onClick={() => uploadVideoMutation.mutate({ type: "url", url: videoUrl })}
-                            disabled={!videoUrl || uploadVideoMutation.isPending}
-                            data-testid="button-upload-video-url"
-                          >
-                            {uploadVideoMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Upload"}
-                          </Button>
-                        </div>
-                      </CollapsibleContent>
-                    </Collapsible>
-                  </div>
-                  {uploadVideoMutation.isPending && (
-                    <div className="mt-2 flex items-center gap-2 text-xs text-blue-600">
-                      <Loader2 className="h-3 w-3 animate-spin" /> Uploading video to Meta...
-                    </div>
-                  )}
-                  {videoId && (
-                    <div className="mt-2 flex items-center gap-2 text-xs">
-                      <StatusIcon status={videoStatus === "ready" ? "pass" : videoStatus === "timeout" ? "fail" : "running"} />
-                      Video ID: {videoId} — Status: {videoStatus || "pending"}
-                      <Button variant="ghost" size="sm" className="h-6 text-[10px] ml-auto" onClick={() => { setVideoId(""); setVideoStatus(""); setVideoUrl(""); }} data-testid="button-remove-video">Remove</Button>
-                    </div>
-                  )}
-                </div>
-              </TabsContent>
-
-              <TabsContent value="EXISTING_POST" className="space-y-3 mt-3">
-                <div className={`${glassInner} flex items-start gap-2 p-3 text-xs`}>
-                  <Info className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
-                  <span className="text-muted-foreground">
-                    Existing post ads run <strong>as-is</strong>. Copy, URL, and CTA cannot be edited for this mode.
-                  </span>
-                </div>
-                <div>
-                  <Label className="text-xs font-medium">Search Posts</Label>
-                  <div className="flex gap-2 mt-1">
-                    <Input
-                      value={postSearch}
-                      onChange={e => setPostSearch(e.target.value)}
-                      placeholder="Search by text..."
-                      className="bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]"
-                      data-testid="input-post-search"
-                    />
-                    <Button size="sm" variant="outline" disabled={postsLoading} className="bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]">
-                      <Search className="h-3 w-3" />
-                    </Button>
-                  </div>
-                </div>
-                <div className="flex gap-1.5 flex-wrap" data-testid="post-source-filters">
-                  {(["all", "facebook", "instagram", "library"] as PostSourceFilter[]).map(src => (
-                    <button
-                      key={src}
-                      onClick={() => setPostSourceFilter(src)}
-                      className={`px-2.5 py-1 rounded-lg text-[10px] font-medium transition-all ${
-                        postSourceFilter === src
-                          ? "bg-blue-100 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300 ring-1 ring-blue-300/50"
-                          : "bg-black/[0.03] dark:bg-white/[0.06] text-muted-foreground hover:bg-black/[0.06] dark:hover:bg-white/[0.1]"
-                      }`}
-                      data-testid={`filter-${src}`}
-                    >
-                      {src === "all" ? "All" : src === "facebook" ? "Facebook" : src === "instagram" ? "Instagram" : "Media Library"}
-                      <span className="ml-1 opacity-60">{sourceCount[src]}</span>
-                    </button>
-                  ))}
-                </div>
-                {fbPostsError && (
-                  <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 rounded-lg px-3 py-2">
-                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                    <span>Facebook posts could not be loaded: {fbPostsErrorMsg}</span>
-                  </div>
-                )}
-                {postsLoading && (
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Loader2 className="h-3 w-3 animate-spin" /> Loading posts...
-                  </div>
-                )}
-                <div className="max-h-64 overflow-y-auto space-y-1.5" data-testid="post-list">
-                  {posts.map((post: MetaPost) => (
-                    <div
-                      key={post.id}
-                      className={`flex gap-3 p-2.5 rounded-xl transition-all ${
-                        post.source === "library"
-                          ? `${glassInner} opacity-60 cursor-default`
-                          : selectedPostId === post.id
-                            ? "bg-blue-50/80 dark:bg-blue-500/10 border border-blue-200/60 dark:border-blue-500/20 ring-1 ring-blue-500/20 cursor-pointer"
-                            : `${glassInner} hover:bg-white/60 dark:hover:bg-white/[0.06] cursor-pointer`
-                      }`}
-                      title={post.source === "library" ? "Library assets cannot be used as existing posts — use Upload mode instead" : undefined}
-                      onClick={() => {
-                        if (post.source === "library") return;
-                        setSelectedPostId(post.id);
-                        setSelectedPostSource(post.source === "instagram" ? "instagram" : "facebook");
-                        setSelectedPostPreview(post);
-                      }}
-                      data-testid={`post-item-${post.id}`}
-                    >
-                      {post.fullPicture && (
-                        <img src={post.fullPicture} alt="" className="w-14 h-14 rounded-lg object-cover shrink-0" />
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md ${
-                            post.source === "instagram" ? "bg-pink-100 dark:bg-pink-500/10 text-pink-600 dark:text-pink-400"
-                            : post.source === "library" ? "bg-purple-100 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400"
-                            : "bg-blue-100 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400"
-                          }`}>
-                            {post.source === "instagram" ? "IG" : post.source === "library" ? "LIB" : "FB"}
-                          </span>
-                          {post.type && (
-                            <span className="text-[8px] uppercase tracking-wider text-muted-foreground bg-black/[0.04] dark:bg-white/[0.06] px-1 py-0.5 rounded">
-                              {post.type}
-                            </span>
-                          )}
-                          <p className="text-xs truncate">{post.message || "(No text)"}</p>
-                        </div>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">
-                          {post.createdTime ? new Date(post.createdTime).toLocaleDateString("en-PK") : ""} · {post.type || "post"}
-                          {(post.likes || 0) > 0 && ` · ${post.likes} likes`}
-                        </p>
-                      </div>
-                      {post.source === "library" && (
-                        <span className="text-[8px] text-muted-foreground self-center shrink-0">View only</span>
-                      )}
-                      {selectedPostId === post.id && post.source !== "library" && <CheckCircle2 className="h-4 w-4 text-blue-500 shrink-0 self-center" />}
-                    </div>
-                  ))}
-                </div>
-              </TabsContent>
-            </Tabs>
-          </div>
-
-          {/* Ad Copy Fields */}
-          <div className="space-y-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div>
-              <Label htmlFor="destinationUrl" className="text-xs font-medium">
-                Destination URL
-                {isExistingPost && <span className="text-[10px] text-muted-foreground ml-2">(required for conversion tracking)</span>}
-              </Label>
-              <Input
-                id="destinationUrl"
-                value={destinationUrl}
-                onChange={e => setDestinationUrl(e.target.value)}
-                placeholder="https://yourstore.com/product"
-                className="mt-1 bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08] focus:ring-2 focus:ring-blue-500/20 transition-all"
-                data-testid="input-destination-url"
-              />
+              <Label className="text-xs font-medium">Budget Optimization</Label>
+              <Select value={budgetLevel} onValueChange={v => setBudgetLevel(v as "CBO" | "ABO")}>
+                <SelectTrigger className="mt-1 bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]" data-testid="select-budget-level">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="CBO">CBO (Campaign)</SelectItem>
+                  <SelectItem value="ABO">ABO (Ad Set)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            <div>
-              <Label htmlFor="primaryText" className="text-xs font-medium">
-                Primary Text
-                {isExistingPost && <span className="text-[10px] text-muted-foreground ml-2">(not applicable)</span>}
-              </Label>
-              <Textarea
-                id="primaryText"
-                value={isExistingPost ? "" : primaryText}
-                onChange={e => setPrimaryText(e.target.value)}
-                placeholder="Your main ad copy..."
-                disabled={isExistingPost}
-                rows={3}
-                className="mt-1 bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08] focus:ring-2 focus:ring-blue-500/20 transition-all resize-none"
-                data-testid="input-primary-text"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label htmlFor="headline" className="text-xs font-medium">
-                  Headline {isExistingPost && <span className="text-[10px] text-muted-foreground">(n/a)</span>}
-                </Label>
-                <Input
-                  id="headline"
-                  value={isExistingPost ? "" : headline}
-                  onChange={e => setHeadline(e.target.value)}
-                  placeholder="Short headline"
-                  disabled={isExistingPost}
-                  className="mt-1 bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]"
-                  data-testid="input-headline"
-                />
-              </div>
-              <div>
-                <Label htmlFor="description" className="text-xs font-medium">
-                  Description {isExistingPost && <span className="text-[10px] text-muted-foreground">(n/a)</span>}
-                </Label>
-                <Input
-                  id="description"
-                  value={isExistingPost ? "" : description}
-                  onChange={e => setDescription(e.target.value)}
-                  placeholder="Optional description"
-                  disabled={isExistingPost}
-                  className="mt-1 bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]"
-                  data-testid="input-description"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="text-xs font-medium">
-                  Call to Action {isExistingPost && <span className="text-[10px] text-muted-foreground">(n/a)</span>}
-                </Label>
-                <Select value={isExistingPost ? "" : cta} onValueChange={setCta} disabled={isExistingPost}>
-                  <SelectTrigger className="mt-1 bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]" data-testid="select-cta">
-                    <SelectValue placeholder="Select CTA" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CTA_OPTIONS.map(opt => (
-                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            {budgetLevel === "CBO" && (
               <div>
                 <Label htmlFor="dailyBudget" className="text-xs font-medium flex items-center gap-1">
-                  <DollarSign className="h-3 w-3" />
-                  Daily Budget ({accountCurrency})
+                  <DollarSign className="h-3 w-3" /> Daily Budget ({accountCurrency})
                 </Label>
                 <Input
                   id="dailyBudget"
@@ -1113,28 +827,7 @@ export default function SalesLauncher() {
                   data-testid="input-daily-budget"
                 />
               </div>
-            </div>
-            <div>
-              <Label className="text-xs font-medium">Budget Optimization</Label>
-              <Select value={budgetLevel} onValueChange={v => setBudgetLevel(v as "CBO" | "ABO")}>
-                <SelectTrigger className="mt-1 bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]" data-testid="select-budget-level">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="CBO">Campaign Budget Optimization (CBO)</SelectItem>
-                  <SelectItem value="ABO">Ad Set Budget (ABO)</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-[10px] text-muted-foreground mt-1.5">
-                {budgetLevel === "CBO"
-                  ? "Meta distributes your budget across ad sets automatically"
-                  : "You control the budget for each ad set individually"}
-              </p>
-            </div>
-          </div>
-
-          {/* Publish Mode */}
-          <div className="grid grid-cols-2 gap-3">
+            )}
             <div>
               <Label className="text-xs font-medium">Publish Mode</Label>
               <Select value={publishMode} onValueChange={v => setPublishMode(v as PublishMode)}>
@@ -1143,7 +836,7 @@ export default function SalesLauncher() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="VALIDATE">Validate Only</SelectItem>
-                  <SelectItem value="DRAFT">Create as Draft (Paused)</SelectItem>
+                  <SelectItem value="DRAFT">Create as Draft</SelectItem>
                   <SelectItem value="PUBLISH">Publish Live</SelectItem>
                 </SelectContent>
               </Select>
@@ -1160,129 +853,400 @@ export default function SalesLauncher() {
                 </SelectContent>
               </Select>
               {startMode === "SCHEDULED" && (
-                <Input
-                  type="datetime-local"
-                  value={startTime}
-                  onChange={e => setStartTime(e.target.value)}
-                  className="mt-2 bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]"
-                  data-testid="input-start-time"
-                />
+                <Input type="datetime-local" value={startTime} onChange={e => setStartTime(e.target.value)} className="mt-2 bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]" data-testid="input-start-time" />
               )}
             </div>
           </div>
+          <p className="text-[10px] text-muted-foreground">
+            {budgetLevel === "CBO"
+              ? "Meta distributes your budget across ad sets automatically"
+              : "You control the budget for each ad set individually"}
+          </p>
         </div>
       </div>
 
-      {/* SECTION: Geo Targeting */}
-      <div className={glassCard} data-testid="section-targeting">
-        <div className="px-5 pt-4 pb-3">
+      {/* Ad Sets Section */}
+      <div className="space-y-3" data-testid="section-adsets">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-orange-50 dark:bg-orange-500/10 flex items-center justify-center">
-              <MapPin className="h-3.5 w-3.5 text-orange-600 dark:text-orange-400" />
+            <div className="w-7 h-7 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 flex items-center justify-center">
+              <Layers className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
             </div>
-            <div>
-              <h2 className="text-sm font-semibold">Geo Targeting</h2>
-              <p className="text-xs text-muted-foreground">Select countries and cities to target</p>
-            </div>
+            <h2 className="text-sm font-semibold">Ad Sets & Ads</h2>
+            <Badge variant="secondary" className="text-[10px]">{adSets.length} set{adSets.length > 1 ? "s" : ""} · {totalAds} ad{totalAds > 1 ? "s" : ""}</Badge>
           </div>
+          <Button size="sm" variant="outline" onClick={addAdSet} disabled={adSets.length >= 10}
+            className="h-7 text-xs gap-1 bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]"
+            data-testid="button-add-adset"
+          >
+            <Plus className="h-3 w-3" /> Add Ad Set
+          </Button>
         </div>
-        <div className="px-5 pb-5 space-y-4">
-          <div>
-            <Label className="text-xs font-medium">Countries</Label>
-            <div className="flex flex-wrap gap-1.5 mt-1.5 mb-2">
-              {targetCountries.map(code => {
-                const c = ASIAN_COUNTRIES.find(a => a.code === code);
-                return (
-                  <span key={code} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300 text-[10px] font-medium" data-testid={`country-tag-${code}`}>
-                    {c?.name || code}
-                    <button onClick={() => setTargetCountries(prev => prev.filter(cc => cc !== code))} className="hover:text-red-500 transition-colors" data-testid={`remove-country-${code}`}>
-                      <X className="h-2.5 w-2.5" />
-                    </button>
-                  </span>
-                );
-              })}
-            </div>
-            <div className="relative">
-              <Input
-                placeholder="Search countries..."
-                value={countrySearch}
-                onChange={e => setCountrySearch(e.target.value)}
-                className="h-8 text-xs bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]"
-                data-testid="input-country-search"
-              />
-              {countrySearch.trim() && (
-                <div className={`absolute top-full left-0 right-0 mt-1 z-20 ${glassCard} max-h-40 overflow-y-auto py-1 shadow-lg`}>
-                  {ASIAN_COUNTRIES
-                    .filter(c => !targetCountries.includes(c.code) && c.name.toLowerCase().includes(countrySearch.toLowerCase()))
-                    .map(c => (
-                      <button
-                        key={c.code}
-                        className="w-full text-left px-3 py-1.5 text-xs hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors"
-                        onClick={() => { setTargetCountries(prev => [...prev, c.code]); setCountrySearch(""); }}
-                        data-testid={`add-country-${c.code}`}
-                      >
-                        {c.name} ({c.code})
-                      </button>
-                    ))}
-                </div>
-              )}
-            </div>
-          </div>
 
-          {targetCountries.includes("PK") && (
-            <div>
-              <Label className="text-xs font-medium">Pakistan Cities <span className="text-muted-foreground font-normal">(optional — leave empty for all of Pakistan)</span></Label>
-              <div className="flex flex-wrap gap-1.5 mt-1.5 mb-2">
-                {targetCities.map(city => (
-                  <span key={city.key} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-orange-50 dark:bg-orange-500/10 text-orange-700 dark:text-orange-300 text-[10px] font-medium" data-testid={`city-tag-${city.key}`}>
-                    {city.name}
-                    <button onClick={() => setTargetCities(prev => prev.filter(c => c.key !== city.key))} className="hover:text-red-500 transition-colors" data-testid={`remove-city-${city.key}`}>
-                      <X className="h-2.5 w-2.5" />
-                    </button>
-                  </span>
-                ))}
-              </div>
-              <div className="relative">
-                <Input
-                  placeholder="Search Pakistan cities..."
-                  value={citySearch}
-                  onChange={e => setCitySearch(e.target.value)}
-                  className="h-8 text-xs bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]"
-                  data-testid="input-city-search"
-                />
-                {citySearch.trim() && (
-                  <div className={`absolute top-full left-0 right-0 mt-1 z-20 ${glassCard} max-h-40 overflow-y-auto py-1 shadow-lg`}>
-                    {PAKISTAN_CITIES
-                      .filter(c => !targetCities.some(tc => tc.key === c.key) && c.name.toLowerCase().includes(citySearch.toLowerCase()))
-                      .map(c => (
-                        <button
-                          key={c.key}
-                          className="w-full text-left px-3 py-1.5 text-xs hover:bg-orange-50 dark:hover:bg-orange-500/10 transition-colors"
-                          onClick={() => { setTargetCities(prev => [...prev, c]); setCitySearch(""); }}
-                          data-testid={`add-city-${c.key}`}
-                        >
-                          {c.name}
-                        </button>
-                      ))}
-                  </div>
+        {adSets.map((adSet, si) => (
+          <div key={adSet.id} className={glassCard} data-testid={`adset-panel-${si}`}>
+            <div
+              className="px-5 py-3 flex items-center gap-2 cursor-pointer hover:bg-white/40 dark:hover:bg-white/[0.03] transition-all rounded-t-2xl"
+              onClick={() => updateAdSet(si, { isExpanded: !adSet.isExpanded })}
+            >
+              <ChevronRight className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 ${adSet.isExpanded ? "rotate-90" : ""}`} />
+              <span className="text-sm font-semibold flex-1">Ad Set {si + 1}</span>
+              <span className="text-[10px] text-muted-foreground">
+                {adSet.ads.length} ad{adSet.ads.length > 1 ? "s" : ""} · {adSet.targetCountries.map(c => ASIAN_COUNTRIES.find(a => a.code === c)?.name || c).join(", ")}
+              </span>
+              <div className="flex items-center gap-1 ml-2" onClick={e => e.stopPropagation()}>
+                <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => duplicateAdSet(si)} disabled={adSets.length >= 10} data-testid={`button-duplicate-adset-${si}`}>
+                  <Copy className="h-3 w-3" />
+                </Button>
+                {adSets.length > 1 && (
+                  <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-500 hover:text-red-600" onClick={() => removeAdSet(si)} data-testid={`button-remove-adset-${si}`}>
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
                 )}
               </div>
-              {targetCities.length > 0 && (
-                <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1.5 flex items-center gap-1">
-                  <AlertTriangle className="h-3 w-3" />
-                  When cities are selected, targeting narrows to those cities only (not all of Pakistan)
-                </p>
-              )}
             </div>
-          )}
 
-          <div className={`${glassInner} p-3 text-xs text-muted-foreground`}>
-            <span className="font-medium text-foreground">Targeting: </span>
-            {targetCities.length > 0
-              ? `${targetCities.map(c => c.name).join(", ")}${targetCountries.filter(c => c !== "PK").length > 0 ? ` + ${targetCountries.filter(c => c !== "PK").map(code => ASIAN_COUNTRIES.find(a => a.code === code)?.name || code).join(", ")}` : ""}`
-              : targetCountries.map(code => ASIAN_COUNTRIES.find(a => a.code === code)?.name || code).join(", ")}
+            {adSet.isExpanded && (
+              <div className="px-5 pb-5 space-y-4 border-t border-black/[0.04] dark:border-white/[0.06] pt-4">
+                {/* Geo Targeting */}
+                <div className={`${glassInner} p-4 space-y-3`}>
+                  <div className="flex items-center gap-1.5">
+                    <MapPin className="h-3.5 w-3.5 text-orange-500" />
+                    <span className="text-xs font-semibold">Geo Targeting</span>
+                  </div>
+                  <div>
+                    <Label className="text-[10px] font-medium text-muted-foreground">Countries</Label>
+                    <div className="flex flex-wrap gap-1 mt-1 mb-1.5">
+                      {adSet.targetCountries.map(code => {
+                        const c = ASIAN_COUNTRIES.find(a => a.code === code);
+                        return (
+                          <span key={code} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300 text-[10px] font-medium" data-testid={`country-tag-${si}-${code}`}>
+                            {c?.name || code}
+                            <button onClick={() => updateAdSet(si, { targetCountries: adSet.targetCountries.filter(cc => cc !== code) })} className="hover:text-red-500"><X className="h-2.5 w-2.5" /></button>
+                          </span>
+                        );
+                      })}
+                    </div>
+                    <div className="relative">
+                      <Input placeholder="Search countries..." value={countrySearch} onChange={e => setCountrySearch(e.target.value)}
+                        className="h-7 text-[10px] bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]" data-testid={`input-country-search-${si}`} />
+                      {countrySearch.trim() && (
+                        <div className={`absolute top-full left-0 right-0 mt-1 z-20 ${glassCard} max-h-32 overflow-y-auto py-1 shadow-lg`}>
+                          {ASIAN_COUNTRIES
+                            .filter(c => !adSet.targetCountries.includes(c.code) && c.name.toLowerCase().includes(countrySearch.toLowerCase()))
+                            .map(c => (
+                              <button key={c.code} className="w-full text-left px-3 py-1 text-[10px] hover:bg-blue-50 dark:hover:bg-blue-500/10"
+                                onClick={() => { updateAdSet(si, { targetCountries: [...adSet.targetCountries, c.code] }); setCountrySearch(""); }}
+                                data-testid={`add-country-${si}-${c.code}`}
+                              >{c.name} ({c.code})</button>
+                            ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {adSet.targetCountries.includes("PK") && (
+                    <div>
+                      <Label className="text-[10px] font-medium text-muted-foreground">Pakistan Cities <span className="font-normal">(optional)</span></Label>
+                      <div className="flex flex-wrap gap-1 mt-1 mb-1.5">
+                        {adSet.targetCities.map(city => (
+                          <span key={city.key} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-orange-50 dark:bg-orange-500/10 text-orange-700 dark:text-orange-300 text-[10px] font-medium" data-testid={`city-tag-${si}-${city.key}`}>
+                            {city.name}
+                            <button onClick={() => updateAdSet(si, { targetCities: adSet.targetCities.filter(c => c.key !== city.key) })} className="hover:text-red-500"><X className="h-2.5 w-2.5" /></button>
+                          </span>
+                        ))}
+                      </div>
+                      <div className="relative">
+                        <Input placeholder="Search cities..." value={citySearch} onChange={e => setCitySearch(e.target.value)}
+                          className="h-7 text-[10px] bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]" data-testid={`input-city-search-${si}`} />
+                        {citySearch.trim() && (
+                          <div className={`absolute top-full left-0 right-0 mt-1 z-20 ${glassCard} max-h-32 overflow-y-auto py-1 shadow-lg`}>
+                            {PAKISTAN_CITIES
+                              .filter(c => !adSet.targetCities.some(tc => tc.key === c.key) && c.name.toLowerCase().includes(citySearch.toLowerCase()))
+                              .map(c => (
+                                <button key={c.key} className="w-full text-left px-3 py-1 text-[10px] hover:bg-orange-50 dark:hover:bg-orange-500/10"
+                                  onClick={() => { updateAdSet(si, { targetCities: [...adSet.targetCities, c] }); setCitySearch(""); }}
+                                  data-testid={`add-city-${si}-${c.key}`}
+                                >{c.name}</button>
+                              ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* ABO Budget */}
+                {budgetLevel === "ABO" && (
+                  <div className="flex items-center gap-3">
+                    <Label className="text-xs font-medium flex items-center gap-1 shrink-0">
+                      <DollarSign className="h-3 w-3" /> Ad Set Budget ({accountCurrency})
+                    </Label>
+                    <Input type="number" value={adSet.dailyBudget} onChange={e => updateAdSet(si, { dailyBudget: e.target.value })}
+                      min="1" className="w-32 h-8 text-xs bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]"
+                      data-testid={`input-adset-budget-${si}`} />
+                  </div>
+                )}
+
+                {/* Ads within this ad set */}
+                <div className="space-y-3">
+                  {adSet.ads.map((ad, ai) => (
+                    <div key={ad.id} className={`${glassInner} p-4 space-y-3`} data-testid={`ad-panel-${si}-${ai}`}>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">Ad {ai + 1}</Badge>
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                          {ad.mode === "UPLOAD_IMAGE" ? "Image" : ad.mode === "UPLOAD_VIDEO" ? "Video" : "Post"}
+                        </Badge>
+                        <div className="flex-1" />
+                        {adSet.ads.length > 1 && (
+                          <Button size="sm" variant="ghost" className="h-5 w-5 p-0 text-red-500 hover:text-red-600" onClick={() => removeAd(si, ai)} data-testid={`button-remove-ad-${si}-${ai}`}>
+                            <X className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+
+                      {/* Creative Source Tabs */}
+                      <Tabs value={ad.mode} onValueChange={v => updateAd(si, ai, { mode: v as CreativeMode })}>
+                        <TabsList className="grid w-full grid-cols-3 bg-black/[0.04] dark:bg-white/[0.06] p-0.5 rounded-xl">
+                          <TabsTrigger value="UPLOAD_IMAGE" data-testid={`tab-upload-image-${si}-${ai}`} className="gap-1 text-[10px] rounded-[10px] data-[state=active]:bg-white dark:data-[state=active]:bg-white/[0.12] data-[state=active]:shadow-sm">
+                            <Image className="h-3 w-3" /> Image
+                          </TabsTrigger>
+                          <TabsTrigger value="UPLOAD_VIDEO" data-testid={`tab-upload-video-${si}-${ai}`} className="gap-1 text-[10px] rounded-[10px] data-[state=active]:bg-white dark:data-[state=active]:bg-white/[0.12] data-[state=active]:shadow-sm">
+                            <Video className="h-3 w-3" /> Video
+                          </TabsTrigger>
+                          <TabsTrigger value="EXISTING_POST" data-testid={`tab-existing-post-${si}-${ai}`} className="gap-1 text-[10px] rounded-[10px] data-[state=active]:bg-white dark:data-[state=active]:bg-white/[0.12] data-[state=active]:shadow-sm">
+                            <FileText className="h-3 w-3" /> Post
+                          </TabsTrigger>
+                        </TabsList>
+
+                        <TabsContent value="UPLOAD_IMAGE" className="space-y-2 mt-2">
+                          <div
+                            className="p-4 text-center cursor-pointer rounded-lg border border-dashed border-black/10 dark:border-white/10 hover:bg-white/60 dark:hover:bg-white/[0.06] transition-all"
+                            onClick={() => document.getElementById(`imageFileInput_${ad.id}`)?.click()}
+                            data-testid={`dropzone-image-${si}-${ai}`}
+                          >
+                            <Upload className="h-4 w-4 text-blue-500 mx-auto mb-1" />
+                            <p className="text-[10px] font-medium">Click to upload image</p>
+                            <p className="text-[9px] text-muted-foreground">JPG, PNG, WebP (max 30MB)</p>
+                          </div>
+                          <input id={`imageFileInput_${ad.id}`} type="file" accept="image/jpeg,image/png,image/webp" className="hidden"
+                            data-testid={`input-image-file-${si}-${ai}`}
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              if (file.size > 30 * 1024 * 1024) { toast({ title: "File too large", description: "Max 30MB.", variant: "destructive" }); return; }
+                              const preview = URL.createObjectURL(file);
+                              updateAd(si, ai, { imagePreview: preview });
+                              const reader = new FileReader();
+                              reader.onload = () => {
+                                const base64 = (reader.result as string).split(",")[1];
+                                handleUploadImage(si, ai, { type: "file", base64, filename: file.name });
+                              };
+                              reader.readAsDataURL(file);
+                            }}
+                          />
+                          <Collapsible>
+                            <CollapsibleTrigger asChild>
+                              <Button variant="ghost" size="sm" className="text-[10px] gap-1 h-6"><ExternalLink className="h-2.5 w-2.5" /> Or use URL</Button>
+                            </CollapsibleTrigger>
+                            <CollapsibleContent className="mt-1">
+                              <div className="flex gap-1.5">
+                                <Input value={ad.imageUrl} onChange={e => updateAd(si, ai, { imageUrl: e.target.value })}
+                                  placeholder="https://..." className="h-7 text-[10px] bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]" data-testid={`input-image-url-${si}-${ai}`} />
+                                <Button size="sm" className="h-7 text-[10px]" onClick={() => handleUploadImage(si, ai, { type: "url", url: ad.imageUrl })}
+                                  disabled={!ad.imageUrl || ad.imageUploading} data-testid={`button-upload-image-url-${si}-${ai}`}>Upload</Button>
+                              </div>
+                            </CollapsibleContent>
+                          </Collapsible>
+                          {ad.imageUploading && <div className="flex items-center gap-1.5 text-[10px] text-blue-600"><Loader2 className="h-3 w-3 animate-spin" /> Uploading...</div>}
+                          {ad.imageHash && (
+                            <div className="flex items-center gap-1.5 text-[10px] text-emerald-600">
+                              <CheckCircle2 className="h-3 w-3" /> Uploaded (hash: {ad.imageHash.substring(0, 12)}...)
+                              <Button variant="ghost" size="sm" className="h-5 text-[9px] ml-auto" onClick={() => updateAd(si, ai, { imageHash: "", imagePreview: "", imageUrl: "" })} data-testid={`button-remove-image-${si}-${ai}`}>Remove</Button>
+                            </div>
+                          )}
+                          {ad.imagePreview && <img src={ad.imagePreview} alt="Preview" className="rounded-lg max-h-32 object-contain" data-testid={`img-preview-${si}-${ai}`} />}
+                        </TabsContent>
+
+                        <TabsContent value="UPLOAD_VIDEO" className="space-y-2 mt-2">
+                          <div
+                            className="p-4 text-center cursor-pointer rounded-lg border border-dashed border-black/10 dark:border-white/10 hover:bg-white/60 dark:hover:bg-white/[0.06] transition-all"
+                            onClick={() => document.getElementById(`videoFileInput_${ad.id}`)?.click()}
+                            data-testid={`dropzone-video-${si}-${ai}`}
+                          >
+                            <Upload className="h-4 w-4 text-violet-500 mx-auto mb-1" />
+                            <p className="text-[10px] font-medium">Click to upload video</p>
+                            <p className="text-[9px] text-muted-foreground">MP4, MOV (max 100MB)</p>
+                          </div>
+                          <input id={`videoFileInput_${ad.id}`} type="file" accept="video/mp4,video/quicktime" className="hidden"
+                            data-testid={`input-video-file-${si}-${ai}`}
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              if (file.size > 100 * 1024 * 1024) { toast({ title: "File too large", description: "Max 100MB.", variant: "destructive" }); return; }
+                              const reader = new FileReader();
+                              reader.onload = () => {
+                                const base64 = (reader.result as string).split(",")[1];
+                                handleUploadVideo(si, ai, { type: "file", base64, filename: file.name });
+                              };
+                              reader.readAsDataURL(file);
+                            }}
+                          />
+                          <Collapsible>
+                            <CollapsibleTrigger asChild>
+                              <Button variant="ghost" size="sm" className="text-[10px] gap-1 h-6"><ExternalLink className="h-2.5 w-2.5" /> Or use URL</Button>
+                            </CollapsibleTrigger>
+                            <CollapsibleContent className="mt-1">
+                              <div className="flex gap-1.5">
+                                <Input value={ad.videoUrl} onChange={e => updateAd(si, ai, { videoUrl: e.target.value })}
+                                  placeholder="https://..." className="h-7 text-[10px] bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]" data-testid={`input-video-url-${si}-${ai}`} />
+                                <Button size="sm" className="h-7 text-[10px]" onClick={() => handleUploadVideo(si, ai, { type: "url", url: ad.videoUrl })}
+                                  disabled={!ad.videoUrl || ad.videoUploading} data-testid={`button-upload-video-url-${si}-${ai}`}>Upload</Button>
+                              </div>
+                            </CollapsibleContent>
+                          </Collapsible>
+                          {ad.videoUploading && <div className="flex items-center gap-1.5 text-[10px] text-blue-600"><Loader2 className="h-3 w-3 animate-spin" /> Uploading...</div>}
+                          {ad.videoId && (
+                            <div className="flex items-center gap-1.5 text-[10px]">
+                              <StatusIcon status={ad.videoStatus === "ready" ? "pass" : ad.videoStatus === "timeout" ? "fail" : "running"} />
+                              Video: {ad.videoId} — {ad.videoStatus || "pending"}
+                              <Button variant="ghost" size="sm" className="h-5 text-[9px] ml-auto" onClick={() => updateAd(si, ai, { videoId: "", videoStatus: "", videoUrl: "" })} data-testid={`button-remove-video-${si}-${ai}`}>Remove</Button>
+                            </div>
+                          )}
+                        </TabsContent>
+
+                        <TabsContent value="EXISTING_POST" className="space-y-2 mt-2">
+                          <div className="flex items-start gap-1.5 text-[10px] text-muted-foreground p-2 rounded-lg bg-black/[0.02] dark:bg-white/[0.02]">
+                            <Info className="h-3 w-3 mt-0.5 shrink-0" />
+                            Existing post ads run as-is. Copy and CTA cannot be edited.
+                          </div>
+                          <div className="flex gap-1.5">
+                            <Input value={postSearch} onChange={e => setPostSearch(e.target.value)} placeholder="Search posts..."
+                              className="h-7 text-[10px] bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]" data-testid={`input-post-search-${si}-${ai}`} />
+                          </div>
+                          <div className="flex gap-1 flex-wrap" data-testid={`post-source-filters-${si}-${ai}`}>
+                            {(["all", "facebook", "instagram", "library"] as PostSourceFilter[]).map(src => (
+                              <button key={src} onClick={() => setPostSourceFilter(src)}
+                                className={`px-2 py-0.5 rounded-md text-[9px] font-medium transition-all ${
+                                  postSourceFilter === src
+                                    ? "bg-blue-100 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300 ring-1 ring-blue-300/50"
+                                    : "bg-black/[0.03] dark:bg-white/[0.06] text-muted-foreground hover:bg-black/[0.06]"
+                                }`} data-testid={`filter-${src}-${si}-${ai}`}
+                              >{src} ({sourceCount[src]})</button>
+                            ))}
+                          </div>
+                          <div className="max-h-48 overflow-y-auto space-y-1">
+                            {postsLoading ? (
+                              <div className="flex justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
+                            ) : posts.length === 0 ? (
+                              <p className="text-[10px] text-muted-foreground text-center py-4">No posts found</p>
+                            ) : posts.slice(0, 30).map(post => (
+                              <div
+                                key={post.id}
+                                onClick={() => {
+                                  if (post.source === "library") return;
+                                  updateAd(si, ai, {
+                                    selectedPostId: post.id,
+                                    selectedPostSource: (post.source === "instagram" ? "instagram" : "facebook") as "facebook" | "instagram",
+                                    selectedPostPreview: post,
+                                  });
+                                }}
+                                className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer text-[10px] transition-all ${
+                                  ad.selectedPostId === post.id ? "bg-blue-50 dark:bg-blue-500/10 ring-1 ring-blue-300/50" : "hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
+                                } ${post.source === "library" ? "opacity-60" : ""}`}
+                                data-testid={`post-item-${si}-${ai}-${post.id}`}
+                              >
+                                {post.fullPicture ? (
+                                  <img src={post.fullPicture} alt="" className="w-10 h-10 rounded object-cover shrink-0" />
+                                ) : (
+                                  <div className="w-10 h-10 rounded bg-muted flex items-center justify-center shrink-0"><FileText className="w-4 h-4 text-muted-foreground/40" /></div>
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-1">
+                                    {post.source && <span className="text-[8px] uppercase tracking-wider text-muted-foreground bg-black/[0.04] dark:bg-white/[0.06] px-1 py-0.5 rounded">{post.source}</span>}
+                                    <p className="truncate">{post.message || "(No text)"}</p>
+                                  </div>
+                                  <p className="text-muted-foreground mt-0.5">
+                                    {post.createdTime ? new Date(post.createdTime).toLocaleDateString("en-PK") : ""}
+                                    {(post.likes || 0) > 0 && ` · ${post.likes} likes`}
+                                  </p>
+                                </div>
+                                {ad.selectedPostId === post.id && post.source !== "library" && <CheckCircle2 className="h-3.5 w-3.5 text-blue-500 shrink-0" />}
+                              </div>
+                            ))}
+                          </div>
+                          {ad.selectedPostId && (
+                            <div className="flex items-center gap-1.5 text-[10px] text-emerald-600">
+                              <CheckCircle2 className="h-3 w-3" /> Post selected: {ad.selectedPostId}
+                              <Button variant="ghost" size="sm" className="h-5 text-[9px] ml-auto"
+                                onClick={() => updateAd(si, ai, { selectedPostId: "", selectedPostPreview: null })}
+                                data-testid={`button-clear-post-${si}-${ai}`}>Clear</Button>
+                            </div>
+                          )}
+                        </TabsContent>
+                      </Tabs>
+
+                      {/* Ad Copy Fields */}
+                      <div className="space-y-2">
+                        <div>
+                          <Label className="text-[10px] font-medium">Destination URL</Label>
+                          <Input value={ad.destinationUrl} onChange={e => updateAd(si, ai, { destinationUrl: e.target.value })}
+                            placeholder="https://yourstore.com/product"
+                            className="mt-0.5 h-8 text-xs bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]"
+                            data-testid={`input-destination-url-${si}-${ai}`} />
+                        </div>
+                        {ad.mode !== "EXISTING_POST" && (
+                          <>
+                            <div>
+                              <Label className="text-[10px] font-medium">Primary Text</Label>
+                              <Textarea value={ad.primaryText} onChange={e => updateAd(si, ai, { primaryText: e.target.value })}
+                                placeholder="Your main ad copy..." rows={2}
+                                className="mt-0.5 text-xs bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08] resize-none"
+                                data-testid={`input-primary-text-${si}-${ai}`} />
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <Label className="text-[10px] font-medium">Headline</Label>
+                                <Input value={ad.headline} onChange={e => updateAd(si, ai, { headline: e.target.value })}
+                                  placeholder="Short headline"
+                                  className="mt-0.5 h-7 text-[10px] bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]"
+                                  data-testid={`input-headline-${si}-${ai}`} />
+                              </div>
+                              <div>
+                                <Label className="text-[10px] font-medium">Description</Label>
+                                <Input value={ad.description} onChange={e => updateAd(si, ai, { description: e.target.value })}
+                                  placeholder="Optional"
+                                  className="mt-0.5 h-7 text-[10px] bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]"
+                                  data-testid={`input-description-${si}-${ai}`} />
+                              </div>
+                            </div>
+                            <div>
+                              <Label className="text-[10px] font-medium">Call to Action</Label>
+                              <Select value={ad.cta} onValueChange={v => updateAd(si, ai, { cta: v })}>
+                                <SelectTrigger className="mt-0.5 h-7 text-[10px] bg-white/50 dark:bg-white/[0.06] border-black/[0.08] dark:border-white/[0.08]" data-testid={`select-cta-${si}-${ai}`}>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {CTA_OPTIONS.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+
+                  <Button size="sm" variant="outline" onClick={() => addAd(si)} disabled={adSet.ads.length >= 10}
+                    className="w-full h-7 text-[10px] gap-1 border-dashed border-black/10 dark:border-white/10"
+                    data-testid={`button-add-ad-${si}`}
+                  >
+                    <Plus className="h-3 w-3" /> Add Ad to Set {si + 1}
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
-        </div>
+        ))}
       </div>
 
       {/* SECTION C: Pre-Launch Checklist + Button */}
@@ -1318,7 +1282,7 @@ export default function SalesLauncher() {
             {launchMutation.isPending || activeJobId ? (
               <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> {activeJobId ? "Launching..." : "Submitting..."}</>
             ) : (
-              <><Rocket className="h-4 w-4 mr-2" /> {publishMode === "VALIDATE" ? "Validate" : publishMode === "DRAFT" ? "Create Draft" : "Launch Live"}</>
+              <><Rocket className="h-4 w-4 mr-2" /> {publishMode === "VALIDATE" ? "Validate" : publishMode === "DRAFT" ? "Create Draft" : "Launch Live"} ({totalAds} ad{totalAds > 1 ? "s" : ""})</>
             )}
           </Button>
         </div>
@@ -1339,7 +1303,7 @@ export default function SalesLauncher() {
               {launchStages.map((stage, i) => (
                 <div key={i} className="flex items-center gap-2 text-xs py-1" data-testid={`progress-stage-${stage.stage}`}>
                   <StatusIcon status={stage.status} />
-                  <span className="font-medium w-40">{STAGE_LABELS[stage.stage] || stage.stage}</span>
+                  <span className="font-medium w-48">{getStageName(stage.stage)}</span>
                   {stage.message && <span className="text-muted-foreground truncate">{stage.message}</span>}
                 </div>
               ))}
@@ -1348,7 +1312,7 @@ export default function SalesLauncher() {
         </div>
       )}
 
-      {/* Launch Result (Final) */}
+      {/* Launch Result */}
       {launchResult && (
         <div className={`${glassCard} ${launchResult.success ? "border-emerald-200/60 dark:border-emerald-500/20" : "border-red-200/60 dark:border-red-500/20"}`} data-testid="section-result">
           <div className="px-5 pt-4 pb-3">
@@ -1365,7 +1329,7 @@ export default function SalesLauncher() {
               {launchResult.stages.map((stage, i) => (
                 <div key={i} className="flex items-center gap-2 text-xs">
                   <StatusIcon status={stage.status} />
-                  <span className="font-medium w-40">{STAGE_LABELS[stage.stage] || stage.stage}</span>
+                  <span className="font-medium w-48">{getStageName(stage.stage)}</span>
                   {stage.message && <span className="text-muted-foreground truncate">{stage.message}</span>}
                 </div>
               ))}
@@ -1386,16 +1350,16 @@ export default function SalesLauncher() {
             {launchResult.success && launchResult.campaignId && (
               <div className={`${glassInner} grid grid-cols-2 gap-2 text-xs p-3`}>
                 <div><span className="text-muted-foreground">Campaign:</span> <span className="font-mono text-[10px]">{launchResult.campaignId}</span></div>
-                <div><span className="text-muted-foreground">Ad Set:</span> <span className="font-mono text-[10px]">{launchResult.adsetId}</span></div>
-                <div><span className="text-muted-foreground">Creative:</span> <span className="font-mono text-[10px]">{launchResult.creativeId}</span></div>
-                <div><span className="text-muted-foreground">Ad:</span> <span className="font-mono text-[10px]">{launchResult.adId}</span></div>
+                {launchResult.adsetId && <div><span className="text-muted-foreground">Ad Set:</span> <span className="font-mono text-[10px]">{launchResult.adsetId}</span></div>}
+                {launchResult.creativeId && <div><span className="text-muted-foreground">Creative:</span> <span className="font-mono text-[10px]">{launchResult.creativeId}</span></div>}
+                {launchResult.adId && <div><span className="text-muted-foreground">Ad:</span> <span className="font-mono text-[10px]">{launchResult.adId}</span></div>}
               </div>
             )}
 
             {!launchResult.success && launchResult.error && (
               <div className={`${glassInner} border-red-200/60 dark:border-red-500/20 p-3 space-y-2`}>
                 <p className="text-xs font-semibold text-red-600">
-                  Failed at: {STAGE_LABELS[launchResult.errorStage || ""] || launchResult.errorStage}
+                  Failed at: {getStageName(launchResult.errorStage || "")}
                 </p>
                 <p className="text-xs">{launchResult.error}</p>
                 {launchResult.rawError && (
@@ -1419,7 +1383,6 @@ export default function SalesLauncher() {
         </div>
       )}
 
-      {/* Launch History */}
       <LaunchJobHistory />
     </div>
   );
@@ -1443,46 +1406,31 @@ function LaunchJobHistory() {
                 <History className="h-3.5 w-3.5 text-gray-600 dark:text-gray-400" />
               </div>
               <h2 className="text-sm font-semibold flex-1">Launch History</h2>
-              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-gray-100 dark:bg-white/[0.06] text-muted-foreground">
-                {jobs.length}
-              </span>
+              <Badge variant="secondary" className="text-[10px]">{jobs.length}</Badge>
               <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${historyOpen ? "rotate-180" : ""}`} />
             </div>
           </div>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="px-5 pb-4 space-y-1.5">
-            {jobs.slice(0, 20).map((job: LaunchJob) => (
-              <Collapsible key={job.id} open={expandedJob === job.id} onOpenChange={open => setExpandedJob(open ? job.id : null)}>
-                <CollapsibleTrigger asChild>
-                  <div className={`flex items-center gap-2 text-xs p-2.5 rounded-xl cursor-pointer transition-all ${glassInner} hover:bg-white/60 dark:hover:bg-white/[0.06]`} data-testid={`job-row-${job.id}`}>
-                    <StatusIcon status={job.status === "launched" || job.status === "validated" || job.status === "draft" ? "success" : job.status === "failed" ? "fail" : "running"} />
-                    <span className="font-medium flex-1 truncate">{job.campaignName}</span>
-                    <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-black/[0.04] dark:bg-white/[0.06]`}>
-                      {job.mode || job.launchType}
-                    </span>
-                    <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md ${
-                      job.status === "launched" ? "bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" :
-                      job.status === "failed" ? "bg-red-100 dark:bg-red-500/10 text-red-700 dark:text-red-400" :
-                      "bg-gray-100 dark:bg-white/[0.06] text-muted-foreground"
-                    }`}>
-                      {job.status}
-                    </span>
-                    <span className="text-[10px] text-muted-foreground">
-                      {job.createdAt ? new Date(job.createdAt).toLocaleDateString("en-PK") : ""}
-                    </span>
-                    <ChevronDown className={`h-3 w-3 text-muted-foreground transition-transform duration-200 ${expandedJob === job.id ? "rotate-180" : ""}`} />
+          <div className="px-5 pb-5 space-y-2">
+            {jobs.slice(0, 10).map((job: any) => (
+              <div key={job.id} className={`${glassInner} p-3 cursor-pointer hover:bg-white/50 dark:hover:bg-white/[0.05] transition-all`}
+                onClick={() => setExpandedJob(expandedJob === job.id ? null : job.id)} data-testid={`history-job-${job.id}`}>
+                <div className="flex items-center gap-2 text-xs">
+                  <StatusIcon status={job.status === "launched" || job.status === "draft" || job.status === "validated" ? "success" : job.status === "running" ? "running" : "failed"} />
+                  <span className="font-medium flex-1 truncate">{job.campaignName || job.adName || "Unnamed"}</span>
+                  <Badge variant="outline" className="text-[9px] uppercase">{job.status}</Badge>
+                  <span className="text-[10px] text-muted-foreground">{job.createdAt ? new Date(job.createdAt).toLocaleDateString("en-PK") : ""}</span>
+                </div>
+                {expandedJob === job.id && (
+                  <div className="mt-2 space-y-1 text-[10px]">
+                    {job.metaCampaignId && <div className="text-muted-foreground">Campaign: <span className="font-mono">{job.metaCampaignId}</span></div>}
+                    {job.metaAdsetId && <div className="text-muted-foreground">Ad Set: <span className="font-mono">{job.metaAdsetId}</span></div>}
+                    {job.metaAdId && <div className="text-muted-foreground">Ad: <span className="font-mono">{job.metaAdId}</span></div>}
+                    {job.errorMessage && <div className="text-red-600">{job.errorMessage}</div>}
                   </div>
-                </CollapsibleTrigger>
-                <CollapsibleContent className={`${glassInner} p-3 mt-1 text-xs space-y-1.5`}>
-                  {job.metaCampaignId && <p><span className="text-muted-foreground">Campaign:</span> <span className="font-mono text-[10px]">{job.metaCampaignId}</span></p>}
-                  {job.metaAdsetId && <p><span className="text-muted-foreground">Ad Set:</span> <span className="font-mono text-[10px]">{job.metaAdsetId}</span></p>}
-                  {job.metaCreativeId && <p><span className="text-muted-foreground">Creative:</span> <span className="font-mono text-[10px]">{job.metaCreativeId}</span></p>}
-                  {job.metaAdId && <p><span className="text-muted-foreground">Ad:</span> <span className="font-mono text-[10px]">{job.metaAdId}</span></p>}
-                  {job.errorMessage && <p className="text-red-500"><span className="text-muted-foreground">Error:</span> {job.errorMessage}</p>}
-                  {job.currentStage && <p><span className="text-muted-foreground">Last Stage:</span> {job.currentStage}</p>}
-                </CollapsibleContent>
-              </Collapsible>
+                )}
+              </div>
             ))}
           </div>
         </CollapsibleContent>

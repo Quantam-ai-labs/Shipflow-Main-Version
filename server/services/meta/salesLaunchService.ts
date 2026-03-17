@@ -13,6 +13,8 @@ import {
   sanitizePayload,
   validateAllPayloads,
   type SalesLaunchInput,
+  type SalesLaunchAdSetInput,
+  type SalesLaunchAdInput,
   type MetaPayload,
 } from "./salesPayloadBuilder";
 import { parseMetaError, formatMetaErrorForUser, type ParsedMetaError } from "./metaErrorParser";
@@ -240,7 +242,10 @@ async function executeSalesLaunchAsync(
     stages[stages.length - 1] = { stage: "diagnostics", status: "success", data: { checks: diagnostics.checks } };
     await persistStages(jobId, stages);
 
-    if (input.mode === "EXISTING_POST" && input.existingPostSource === "instagram") {
+    const needsIgResolution = input.adSets
+      ? input.adSets.some(s => s.ads.some(a => a.mode === "EXISTING_POST" && a.existingPostSource === "instagram"))
+      : (input.mode === "EXISTING_POST" && input.existingPostSource === "instagram");
+    if (needsIgResolution) {
       try {
         const actId = creds.adAccountId.startsWith("act_") ? creds.adAccountId : `act_${creds.adAccountId}`;
         const igUrl = new URL(`${META_BASE_URL}/${actId}/instagram_accounts`);
@@ -314,6 +319,185 @@ async function executeSalesLaunchAsync(
     if (input.publishMode === "VALIDATE") {
       stages.push({ stage: "complete", status: "success", message: "Validation, diagnostics, and payload preflight passed. No objects created." });
       await persistStages(jobId, stages, { status: "validated" });
+      return;
+    }
+
+    if (input.adSets && input.adSets.length > 0) {
+      for (let si = 0; si < input.adSets.length; si++) {
+        for (let ai = 0; ai < input.adSets[si].ads.length; ai++) {
+          const ad = input.adSets[si].ads[ai];
+
+          if (ad.mode === "UPLOAD_IMAGE" && ad.imageUrl && !ad.imageHash) {
+            const uploadStageName = `media_upload_${si}_${ai}`;
+            stages.push({ stage: uploadStageName, status: "running" });
+            await persistStages(jobId, stages);
+            try {
+              const uploadResult = await uploadImageToMeta(merchantId, ad.imageUrl);
+              ad.imageHash = uploadResult.hash;
+              stages[stages.length - 1] = { stage: uploadStageName, status: "success", message: `Image hash: ${uploadResult.hash}` };
+              await persistStages(jobId, stages);
+            } catch (uploadErr: unknown) {
+              const uploadError = uploadErr instanceof Error ? uploadErr : new Error(String(uploadErr));
+              stages[stages.length - 1] = { stage: uploadStageName, status: "failed", message: uploadError.message };
+              await persistStages(jobId, stages, { status: "failed", errorMessage: uploadError.message, errorSummary: "Media upload failed" });
+              return;
+            }
+          }
+
+          if (ad.mode === "UPLOAD_VIDEO" && ad.videoUrl && !ad.videoId) {
+            const uploadStageName = `media_upload_${si}_${ai}`;
+            stages.push({ stage: uploadStageName, status: "running" });
+            await persistStages(jobId, stages);
+            try {
+              const videoEndpoint = `${creds.adAccountId}/advideos`;
+              const formData = new URLSearchParams();
+              formData.set("access_token", creds.accessToken);
+              formData.set("file_url", ad.videoUrl);
+              const response = await fetch(`${META_BASE_URL}/${videoEndpoint}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: formData.toString(),
+              });
+              const data = await response.json() as Record<string, unknown>;
+              if (!response.ok) {
+                const errResponse = data as { error?: { message?: string } };
+                throw new Error(errResponse?.error?.message || "Video upload failed");
+              }
+              ad.videoId = data.id as string;
+              stages[stages.length - 1] = { stage: uploadStageName, status: "success", message: `Video ID: ${data.id}` };
+              await persistStages(jobId, stages);
+
+              const readinessStageName = `media_readiness_${si}_${ai}`;
+              stages.push({ stage: readinessStageName, status: "running" });
+              await persistStages(jobId, stages);
+              let videoReady = false;
+              for (let poll = 0; poll < 30; poll++) {
+                await new Promise(resolve => setTimeout(resolve, 5000));
+                const statusUrl = new URL(`${META_BASE_URL}/${ad.videoId}`);
+                statusUrl.searchParams.set("access_token", creds.accessToken);
+                statusUrl.searchParams.set("fields", "id,status");
+                const statusRes = await fetch(statusUrl.toString());
+                const statusData = await statusRes.json() as Record<string, unknown>;
+                const videoStatusObj = statusData?.status as { video_status?: string } | undefined;
+                if (videoStatusObj?.video_status === "ready") { videoReady = true; break; }
+                if (videoStatusObj?.video_status === "error") throw new Error("Video processing failed on Meta's side.");
+              }
+              if (!videoReady) throw new Error("Video processing timed out.");
+              stages[stages.length - 1] = { stage: readinessStageName, status: "success" };
+              await persistStages(jobId, stages);
+            } catch (uploadErr: unknown) {
+              const uploadError = uploadErr instanceof Error ? uploadErr : new Error(String(uploadErr));
+              stages[stages.length - 1] = { ...stages[stages.length - 1], status: "failed", message: uploadError.message };
+              await persistStages(jobId, stages, { status: "failed", errorMessage: uploadError.message, errorSummary: "Media upload failed" });
+              return;
+            }
+          }
+        }
+      }
+
+      const campaignPayload = sanitizePayload(buildCampaignPayload(input));
+      stages.push({ stage: "campaign", status: "running" });
+      await persistStages(jobId, stages);
+      console.log("[SalesLaunch] OUTGOING CAMPAIGN PAYLOAD (multi):", JSON.stringify(campaignPayload, null, 2));
+      const campaignResult = await loggedMetaPost(merchantId, jobId, "campaign", creds.accessToken, `${creds.adAccountId}/campaigns`, campaignPayload);
+      const campaignId = campaignResult.id as string;
+      stages[stages.length - 1] = { stage: "campaign", status: "success", data: { campaignId } };
+      await persistStages(jobId, stages, { metaCampaignId: campaignId });
+
+      const createdEntities: { adsetId: string; ads: { creativeId: string; adId: string }[] }[] = [];
+
+      for (let si = 0; si < input.adSets.length; si++) {
+        const adSetDef = input.adSets[si];
+        const adSetInput: SalesLaunchInput = {
+          ...input,
+          targetCountries: adSetDef.targetCountries?.length ? adSetDef.targetCountries : input.targetCountries,
+          targetCities: adSetDef.targetCities?.length ? adSetDef.targetCities : input.targetCities,
+          dailyBudget: input.budgetLevel === "ABO" ? (adSetDef.dailyBudget || input.dailyBudget) : input.dailyBudget,
+        };
+
+        const adsetStageName = `adset_${si}`;
+        stages.push({ stage: adsetStageName, status: "running" });
+        await persistStages(jobId, stages);
+        const adsetPayload = sanitizePayload(buildAdSetPayload(adSetInput, campaignId));
+        adsetPayload.name = `${input.adName} - Ad Set ${si + 1}`;
+        console.log(`[SalesLaunch] OUTGOING ADSET PAYLOAD (set ${si}):`, JSON.stringify(adsetPayload, null, 2));
+        const adsetResult = await loggedMetaPost(merchantId, jobId, adsetStageName, creds.accessToken, `${creds.adAccountId}/adsets`, adsetPayload);
+        const adsetId = adsetResult.id as string;
+        stages[stages.length - 1] = { stage: adsetStageName, status: "success", data: { adsetId } };
+        await persistStages(jobId, stages);
+
+        const adEntries: { creativeId: string; adId: string }[] = [];
+
+        for (let ai = 0; ai < adSetDef.ads.length; ai++) {
+          const adDef = adSetDef.ads[ai];
+          const adInput: SalesLaunchInput = {
+            ...adSetInput,
+            mode: adDef.mode,
+            imageHash: adDef.imageHash,
+            imageUrl: adDef.imageUrl,
+            videoId: adDef.videoId,
+            videoUrl: adDef.videoUrl,
+            existingPostId: adDef.existingPostId,
+            existingPostSource: adDef.existingPostSource,
+            destinationUrl: adDef.destinationUrl,
+            primaryText: adDef.primaryText,
+            headline: adDef.headline,
+            description: adDef.description,
+            cta: adDef.cta,
+          };
+
+          const creativeStageName = `creative_${si}_${ai}`;
+          stages.push({ stage: creativeStageName, status: "running" });
+          await persistStages(jobId, stages);
+          const creativePayload = sanitizePayload(buildCreativePayload(adInput));
+          creativePayload.name = `${input.adName} - S${si + 1}A${ai + 1} Creative`;
+          console.log(`[SalesLaunch] OUTGOING CREATIVE PAYLOAD (set ${si} ad ${ai}):`, JSON.stringify(creativePayload, null, 2));
+          const creativeResult = await loggedMetaPost(merchantId, jobId, creativeStageName, creds.accessToken, `${creds.adAccountId}/adcreatives`, creativePayload);
+          const creativeId = creativeResult.id as string;
+          stages[stages.length - 1] = { stage: creativeStageName, status: "success", data: { creativeId } };
+          await persistStages(jobId, stages);
+
+          const adStageName = `ad_${si}_${ai}`;
+          stages.push({ stage: adStageName, status: "running" });
+          await persistStages(jobId, stages);
+          const adPayload = sanitizePayload(buildAdPayload(adInput, adsetId, creativeId));
+          adPayload.name = `${input.adName} - S${si + 1}A${ai + 1}`;
+          console.log(`[SalesLaunch] OUTGOING AD PAYLOAD (set ${si} ad ${ai}):`, JSON.stringify(adPayload, null, 2));
+          const adResult = await loggedMetaPost(merchantId, jobId, adStageName, creds.accessToken, `${creds.adAccountId}/ads`, adPayload);
+          const adId = adResult.id as string;
+          stages[stages.length - 1] = { stage: adStageName, status: "success", data: { adId } };
+          await persistStages(jobId, stages);
+
+          adEntries.push({ creativeId, adId });
+        }
+
+        createdEntities.push({ adsetId, ads: adEntries });
+      }
+
+      const finalStatus = input.publishMode === "PUBLISH" ? "launched" : "draft";
+
+      if (input.publishMode === "PUBLISH") {
+        stages.push({ stage: "publish", status: "running" });
+        await persistStages(jobId, stages);
+        try {
+          await loggedMetaPost(merchantId, jobId, "publish_campaign", creds.accessToken, campaignId, { status: "ACTIVE" });
+          for (let si = 0; si < createdEntities.length; si++) {
+            await loggedMetaPost(merchantId, jobId, `publish_adset_${si}`, creds.accessToken, createdEntities[si].adsetId, { status: "ACTIVE" });
+            for (let ai = 0; ai < createdEntities[si].ads.length; ai++) {
+              await loggedMetaPost(merchantId, jobId, `publish_ad_${si}_${ai}`, creds.accessToken, createdEntities[si].ads[ai].adId, { status: "ACTIVE" });
+            }
+          }
+          stages[stages.length - 1] = { stage: "publish", status: "success" };
+        } catch (pubErr: unknown) {
+          const pubError = pubErr instanceof MetaApiError ? pubErr : pubErr instanceof Error ? pubErr : new Error(String(pubErr));
+          stages[stages.length - 1] = { stage: "publish", status: "failed", message: `Created but failed to go live: ${pubError.message}` };
+          await persistStages(jobId, stages, { status: "partial", errorMessage: `Publish failed: ${pubError.message}`, launchedAt: new Date() });
+          return;
+        }
+      }
+
+      stages.push({ stage: "complete", status: "success", message: finalStatus === "launched" ? "All ads are live!" : "All ads created as draft." });
+      await persistStages(jobId, stages, { status: finalStatus, metaCampaignId: campaignId, launchedAt: new Date() });
       return;
     }
 
