@@ -644,6 +644,8 @@ export default function MetaAdLauncher() {
 
   const [adSets, setAdSets] = useState<AdSetState[]>(() => [createDefaultAdSet("", 1)]);
 
+  const [launchResult, setLaunchResult] = useState<any>(null);
+
   const [showPostPicker, setShowPostPicker] = useState(false);
   const [postSearchQuery, setPostSearchQuery] = useState("");
   const [activePostPickerTarget, setActivePostPickerTarget] = useState<{ adSetIdx: number; adIdx: number } | null>(null);
@@ -839,6 +841,7 @@ export default function MetaAdLauncher() {
       return data;
     },
     onSuccess: (data) => {
+      setLaunchResult(data);
       const msg = data.failedAds > 0
         ? `Campaign "${campaignName}" created. ${data.succeededAds}/${data.totalAds} ads succeeded, ${data.failedAds} failed.`
         : `Campaign "${campaignName}" created with ${data.totalAds} ad(s) in PAUSED state.`;
@@ -1208,13 +1211,76 @@ export default function MetaAdLauncher() {
               </p>
             </div>
 
-            <div className="flex justify-between pt-2">
-              <Button variant="outline" onClick={() => setStep("adsets")} data-testid="button-back-adsets"><ArrowLeft className="w-4 h-4 mr-1" /> Back</Button>
-              <Button onClick={() => launchMutation.mutate()} disabled={launchMutation.isPending} className="gap-2" data-testid="button-launch-ad">
-                {launchMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Rocket className="w-4 h-4" />}
-                Launch Campaign ({totalAds} ad{totalAds !== 1 ? "s" : ""})
-              </Button>
-            </div>
+            {!launchResult && (
+              <div className="flex justify-between pt-2">
+                <Button variant="outline" onClick={() => setStep("adsets")} data-testid="button-back-adsets"><ArrowLeft className="w-4 h-4 mr-1" /> Back</Button>
+                <Button onClick={() => launchMutation.mutate()} disabled={launchMutation.isPending} className="gap-2" data-testid="button-launch-ad">
+                  {launchMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Rocket className="w-4 h-4" />}
+                  Launch Campaign ({totalAds} ad{totalAds !== 1 ? "s" : ""})
+                </Button>
+              </div>
+            )}
+
+            {launchResult && (
+              <div className="space-y-3 pt-2" data-testid="launch-result-panel">
+                <div className={`rounded-lg p-3 flex items-start gap-2 ${launchResult.failedAds > 0 ? "bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800" : "bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800"}`}>
+                  {launchResult.failedAds > 0 ? <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" /> : <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0 mt-0.5" />}
+                  <div>
+                    <p className="text-sm font-medium" data-testid="text-launch-summary">
+                      {launchResult.failedAds > 0
+                        ? `Partial success: ${launchResult.succeededAds}/${launchResult.totalAds} ads created, ${launchResult.failedAds} failed`
+                        : `All ${launchResult.totalAds} ad(s) created successfully in PAUSED state`}
+                    </p>
+                    {launchResult.campaignId && <p className="text-xs text-muted-foreground mt-1">Campaign ID: <span className="font-mono">{launchResult.campaignId}</span></p>}
+                  </div>
+                </div>
+
+                {launchResult.adSets?.map((adSetResult: any, asIdx: number) => (
+                  <div key={asIdx} className="border rounded-lg p-3 space-y-2" data-testid={`result-adset-${asIdx}`}>
+                    <div className="flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-primary" />
+                      <span className="text-sm font-medium">{adSetResult.name || `Ad Set ${asIdx + 1}`}</span>
+                      {adSetResult.adSetId ? (
+                        <Badge variant="outline" className="text-xs text-green-600 ml-auto" data-testid={`badge-adset-status-${asIdx}`}>
+                          <CheckCircle2 className="w-3 h-3 mr-1" /> Created
+                        </Badge>
+                      ) : (
+                        <Badge variant="destructive" className="text-xs ml-auto" data-testid={`badge-adset-status-${asIdx}`}>
+                          <AlertCircle className="w-3 h-3 mr-1" /> Failed
+                        </Badge>
+                      )}
+                    </div>
+                    {adSetResult.error && (
+                      <p className="text-xs text-destructive bg-destructive/10 rounded p-2" data-testid={`text-adset-error-${asIdx}`}>
+                        {adSetResult.step && <span className="font-medium">[{adSetResult.step}] </span>}
+                        {adSetResult.error}
+                      </p>
+                    )}
+                    {adSetResult.ads?.map((adResult: any, adIdx: number) => (
+                      <div key={adIdx} className="ml-4 border rounded p-2 flex items-center justify-between gap-2" data-testid={`result-ad-${asIdx}-${adIdx}`}>
+                        <span className="text-xs">{adResult.name || `Ad ${adIdx + 1}`}</span>
+                        {adResult.adId ? (
+                          <Badge variant="outline" className="text-[10px] text-green-600">
+                            <CheckCircle2 className="w-3 h-3 mr-1" /> Created
+                          </Badge>
+                        ) : (
+                          <div className="flex flex-col items-end gap-1">
+                            <Badge variant="destructive" className="text-[10px]">
+                              <AlertCircle className="w-3 h-3 mr-1" /> Failed
+                            </Badge>
+                            {adResult.error && (
+                              <span className="text-[10px] text-destructive max-w-[300px] truncate" title={adResult.error}>
+                                {adResult.step && `[${adResult.step}] `}{adResult.error}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

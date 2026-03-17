@@ -410,7 +410,7 @@ export async function createAdSet(
   if (params.endTime) {
     body.end_time = params.endTime;
   }
-  body.use_advantage_audience = true;
+  body.use_advantage_audience = params.useAdvantageAudience !== false;
 
   const result = await metaApiPost(creds, `${creds.adAccountId}/adsets`, body);
   console.log(`[MetaAdLauncher] AdSet created: ${result.id}`);

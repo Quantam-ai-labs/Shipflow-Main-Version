@@ -2149,7 +2149,10 @@ export function registerMarketingRoutes(app: Express) {
         endTime: z.string().optional(),
         ads: z.array(z.object({
           name: z.string().min(1),
-          creative: creativeSchema,
+          creative: creativeSchema.refine(data => {
+            if (data.format === "existing_post") return !!data.existingPostId;
+            return !!data.primaryText && !!data.linkUrl;
+          }, { message: "Existing post requires postId; other formats require primaryText and linkUrl" }),
         })).min(1).max(10),
       });
 
