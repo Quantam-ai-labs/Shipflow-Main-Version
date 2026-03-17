@@ -15731,7 +15731,6 @@ export async function registerRoutes(
       const { apiKey, email, callId } = req.body;
       if (!apiKey || !email || !callId) return res.status(400).json({ error: "apiKey, email, and callId are required" });
       const data = await safeFetchJson(`${ROBOCALL_API_BASE}/get-call?email=${encodeURIComponent(email)}&key=${encodeURIComponent(apiKey)}&id=${encodeURIComponent(callId)}`);
-      console.log(`[RoboCall] get-call response for ${callId}:`, JSON.stringify(data));
       if (data.raw) return res.status(400).json({ error: data.error });
       const smsData = data.sms;
       if (smsData && smsData.voice_status !== undefined) {
