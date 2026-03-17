@@ -963,8 +963,8 @@ export async function launchMultiAdSetCampaign(
       .set({
         status: allSucceeded ? "launched" : allFailed ? "failed" : "partial",
         metaCampaignId: campaignId,
-        metaAdsetId: result.adSets.map(a => a.adSetId).filter(Boolean).join(","),
-        metaAdId: result.adSets.flatMap(a => a.ads.map(ad => ad.adId)).filter(Boolean).join(","),
+        metaAdsetId: (result.adSets.find(a => a.adSetId)?.adSetId || "").slice(0, 100),
+        metaAdId: (result.adSets.flatMap(a => a.ads).find(ad => ad.adId)?.adId || "").slice(0, 100),
         resultJson: result,
         launchedAt: new Date(),
         errorMessage: allSucceeded ? undefined : `${result.failedAdSets} ad set(s) and ${result.failedAds} ad(s) failed`,
