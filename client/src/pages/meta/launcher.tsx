@@ -1236,48 +1236,53 @@ export default function MetaAdLauncher() {
                 </div>
 
                 {launchResult.adSets?.map((adSetResult: any, asIdx: number) => (
-                  <div key={asIdx} className="border rounded-lg p-3 space-y-2" data-testid={`result-adset-${asIdx}`}>
-                    <div className="flex items-center gap-2">
-                      <Layers className="w-4 h-4 text-primary" />
-                      <span className="text-sm font-medium">{adSetResult.name || `Ad Set ${asIdx + 1}`}</span>
-                      {adSetResult.adSetId ? (
-                        <Badge variant="outline" className="text-xs text-green-600 ml-auto" data-testid={`badge-adset-status-${asIdx}`}>
-                          <CheckCircle2 className="w-3 h-3 mr-1" /> Created
-                        </Badge>
-                      ) : (
-                        <Badge variant="destructive" className="text-xs ml-auto" data-testid={`badge-adset-status-${asIdx}`}>
-                          <AlertCircle className="w-3 h-3 mr-1" /> Failed
-                        </Badge>
-                      )}
-                    </div>
-                    {adSetResult.error && (
-                      <p className="text-xs text-destructive bg-destructive/10 rounded p-2" data-testid={`text-adset-error-${asIdx}`}>
-                        {adSetResult.step && <span className="font-medium">[{adSetResult.step}] </span>}
-                        {adSetResult.error}
-                      </p>
-                    )}
-                    {adSetResult.ads?.map((adResult: any, adIdx: number) => (
-                      <div key={adIdx} className="ml-4 border rounded p-2 flex items-center justify-between gap-2" data-testid={`result-ad-${asIdx}-${adIdx}`}>
-                        <span className="text-xs">{adResult.name || `Ad ${adIdx + 1}`}</span>
-                        {adResult.adId ? (
-                          <Badge variant="outline" className="text-[10px] text-green-600">
+                  <Collapsible key={asIdx} defaultOpen={!!adSetResult.error || adSetResult.ads?.some((a: any) => a.error)}>
+                    <div className="border rounded-lg p-3 space-y-2" data-testid={`result-adset-${asIdx}`}>
+                      <CollapsibleTrigger className="flex items-center gap-2 w-full text-left">
+                        <Layers className="w-4 h-4 text-primary" />
+                        <span className="text-sm font-medium">{adSetResult.name || `Ad Set ${asIdx + 1}`}</span>
+                        {adSetResult.adSetId ? (
+                          <Badge variant="outline" className="text-xs text-green-600 ml-auto" data-testid={`badge-adset-status-${asIdx}`}>
                             <CheckCircle2 className="w-3 h-3 mr-1" /> Created
                           </Badge>
                         ) : (
-                          <div className="flex flex-col items-end gap-1">
-                            <Badge variant="destructive" className="text-[10px]">
-                              <AlertCircle className="w-3 h-3 mr-1" /> Failed
-                            </Badge>
-                            {adResult.error && (
-                              <span className="text-[10px] text-destructive max-w-[300px] truncate" title={adResult.error}>
-                                {adResult.step && `[${adResult.step}] `}{adResult.error}
-                              </span>
+                          <Badge variant="destructive" className="text-xs ml-auto" data-testid={`badge-adset-status-${asIdx}`}>
+                            <AlertCircle className="w-3 h-3 mr-1" /> Failed
+                          </Badge>
+                        )}
+                        <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="space-y-2">
+                        {adSetResult.error && (
+                          <p className="text-xs text-destructive bg-destructive/10 rounded p-2" data-testid={`text-adset-error-${asIdx}`}>
+                            {adSetResult.step && <span className="font-medium">[{adSetResult.step}] </span>}
+                            {adSetResult.error}
+                          </p>
+                        )}
+                        {adSetResult.ads?.map((adResult: any, adIdx: number) => (
+                          <div key={adIdx} className="ml-4 border rounded p-2 flex items-center justify-between gap-2" data-testid={`result-ad-${asIdx}-${adIdx}`}>
+                            <span className="text-xs">{adResult.name || `Ad ${adIdx + 1}`}</span>
+                            {adResult.adId ? (
+                              <Badge variant="outline" className="text-[10px] text-green-600">
+                                <CheckCircle2 className="w-3 h-3 mr-1" /> Created
+                              </Badge>
+                            ) : (
+                              <div className="flex flex-col items-end gap-1">
+                                <Badge variant="destructive" className="text-[10px]">
+                                  <AlertCircle className="w-3 h-3 mr-1" /> Failed
+                                </Badge>
+                                {adResult.error && (
+                                  <span className="text-[10px] text-destructive max-w-[300px] truncate" title={adResult.error}>
+                                    {adResult.step && `[${adResult.step}] `}{adResult.error}
+                                  </span>
+                                )}
+                              </div>
                             )}
                           </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                        ))}
+                      </CollapsibleContent>
+                    </div>
+                  </Collapsible>
                 ))}
               </div>
             )}
