@@ -33,6 +33,7 @@ import {
   fetchAdAccountVideos,
   launchAd,
   bulkLaunchAds,
+  launchMultiAdSetCampaign,
   uploadImageToMeta,
   createCustomAudience,
   createLookalikeAudience,
@@ -2111,7 +2112,65 @@ export function registerMarketingRoutes(app: Express) {
   app.post("/api/meta/launch", isAuthenticated, async (req: any, res) => {
     try {
       const merchantId = await getMerchantId(req);
-      const schema = z.object({
+
+      const creativeSchema = z.object({
+        format: z.enum(["single_image", "video", "carousel", "existing_post"]).optional(),
+        existingPostId: z.string().optional(),
+        existingPostSource: z.enum(["facebook", "instagram", "partner"]).optional(),
+        primaryText: z.string().optional(),
+        headline: z.string().optional(),
+        description: z.string().optional(),
+        linkUrl: z.string().url().optional(),
+        imageUrl: z.string().optional(),
+        imageHash: z.string().optional(),
+        videoId: z.string().optional(),
+        thumbnailUrl: z.string().optional(),
+        callToAction: z.string().optional(),
+        carouselCards: z.array(z.object({
+          imageUrl: z.string().optional(),
+          imageHash: z.string().optional(),
+          headline: z.string().optional(),
+          description: z.string().optional(),
+          linkUrl: z.string().url(),
+        })).optional(),
+      });
+
+      const adSetSchema = z.object({
+        name: z.string().min(1),
+        targeting: z.any(),
+        optimizationGoal: z.string().optional(),
+        dailyBudget: z.string().optional(),
+        lifetimeBudget: z.string().optional(),
+        budgetType: z.enum(["daily", "lifetime"]).optional(),
+        bidStrategy: z.string().optional(),
+        bidAmount: z.string().optional(),
+        useAdvantageAudience: z.boolean().optional(),
+        startTime: z.string().optional(),
+        endTime: z.string().optional(),
+        ads: z.array(z.object({
+          name: z.string().min(1),
+          creative: creativeSchema,
+        })).min(1).max(10),
+      });
+
+      const multiSchema = z.object({
+        campaignName: z.string().min(1),
+        objective: z.string().default("OUTCOME_SALES"),
+        budgetLevel: z.enum(["adset", "campaign"]).optional(),
+        budgetType: z.enum(["daily", "lifetime"]).optional(),
+        dailyBudget: z.string().optional(),
+        lifetimeBudget: z.string().optional(),
+        spendingLimit: z.string().optional(),
+        bidStrategy: z.string().optional(),
+        bidAmount: z.string().optional(),
+        pageId: z.string().min(1),
+        pixelId: z.string().optional(),
+        conversionEvent: z.enum(["PURCHASE", "ADD_TO_CART", "INITIATE_CHECKOUT", "LEAD", "COMPLETE_REGISTRATION", "SEARCH", "VIEW_CONTENT", "CONTACT", "SUBSCRIBE"]).optional(),
+        status: z.string().optional(),
+        adSets: z.array(adSetSchema).min(1).max(10),
+      });
+
+      const legacySchema = z.object({
         campaignName: z.string().min(1),
         objective: z.string().default("OUTCOME_SALES"),
         dailyBudget: z.string().optional(),
@@ -2123,27 +2182,7 @@ export function registerMarketingRoutes(app: Express) {
         bidAmount: z.string().optional(),
         targeting: z.any(),
         useAdvantageAudience: z.boolean().optional(),
-        creative: z.object({
-          format: z.enum(["single_image", "video", "carousel", "existing_post"]).optional(),
-          existingPostId: z.string().optional(),
-          existingPostSource: z.enum(["facebook", "instagram", "partner"]).optional(),
-          primaryText: z.string().optional(),
-          headline: z.string().optional(),
-          description: z.string().optional(),
-          linkUrl: z.string().url().optional(),
-          imageUrl: z.string().optional(),
-          imageHash: z.string().optional(),
-          videoId: z.string().optional(),
-          thumbnailUrl: z.string().optional(),
-          callToAction: z.string().optional(),
-          carouselCards: z.array(z.object({
-            imageUrl: z.string().optional(),
-            imageHash: z.string().optional(),
-            headline: z.string().optional(),
-            description: z.string().optional(),
-            linkUrl: z.string().url(),
-          })).optional(),
-        }).refine(data => {
+        creative: creativeSchema.refine(data => {
           if (data.format === "existing_post") return !!data.existingPostId;
           return !!data.primaryText && !!data.linkUrl;
         }, { message: "Existing post requires postId; other formats require primaryText and linkUrl" }),
@@ -2156,28 +2195,71 @@ export function registerMarketingRoutes(app: Express) {
         endTime: z.string().optional(),
       });
 
-      const parsed = schema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid launch config", details: parsed.error.flatten() });
+      const isMulti = Array.isArray(req.body.adSets);
+
+      if (isMulti) {
+        const parsed = multiSchema.safeParse(req.body);
+        if (!parsed.success) {
+          return res.status(400).json({ error: "Invalid multi-adset launch config", details: parsed.error.flatten() });
+        }
+        const config = parsed.data;
+        const totalAds = config.adSets.reduce((sum, as2) => sum + as2.ads.length, 0);
+
+        const [job] = await db.insert(adLaunchJobs).values({
+          merchantId,
+          launchType: "multi",
+          campaignName: config.campaignName,
+          objective: config.objective,
+          dailyBudget: config.dailyBudget || config.adSets[0]?.dailyBudget || "0",
+          targeting: config.adSets[0]?.targeting || {},
+          creativeConfig: { adSets: config.adSets.map(as2 => ({ name: as2.name, adsCount: as2.ads.length })) },
+          pageId: config.pageId,
+          pixelId: config.pixelId,
+          status: "pending",
+        }).returning();
+
+        const result = await launchMultiAdSetCampaign(merchantId, job.id, {
+          campaignName: config.campaignName,
+          objective: config.objective,
+          budgetLevel: config.budgetLevel || "adset",
+          budgetType: config.budgetType,
+          dailyBudget: config.dailyBudget,
+          lifetimeBudget: config.lifetimeBudget,
+          spendingLimit: config.spendingLimit,
+          bidStrategy: config.bidStrategy,
+          bidAmount: config.bidAmount,
+          pageId: config.pageId,
+          pixelId: config.pixelId,
+          conversionEvent: config.conversionEvent,
+          status: config.status,
+          adSets: config.adSets,
+        });
+
+        res.json({ success: true, jobId: job.id, ...result });
+      } else {
+        const parsed = legacySchema.safeParse(req.body);
+        if (!parsed.success) {
+          return res.status(400).json({ error: "Invalid launch config", details: parsed.error.flatten() });
+        }
+
+        const config = parsed.data;
+
+        const [job] = await db.insert(adLaunchJobs).values({
+          merchantId,
+          launchType: "single",
+          campaignName: config.campaignName,
+          objective: config.objective,
+          dailyBudget: config.dailyBudget,
+          targeting: config.targeting,
+          creativeConfig: config.creative,
+          pageId: config.pageId,
+          pixelId: config.pixelId,
+          status: "pending",
+        }).returning();
+
+        const result = await launchAd(merchantId, job.id, config);
+        res.json({ success: true, jobId: job.id, ...result });
       }
-
-      const config = parsed.data;
-
-      const [job] = await db.insert(adLaunchJobs).values({
-        merchantId,
-        launchType: "single",
-        campaignName: config.campaignName,
-        objective: config.objective,
-        dailyBudget: config.dailyBudget,
-        targeting: config.targeting,
-        creativeConfig: config.creative,
-        pageId: config.pageId,
-        pixelId: config.pixelId,
-        status: "pending",
-      }).returning();
-
-      const result = await launchAd(merchantId, job.id, config);
-      res.json({ success: true, jobId: job.id, ...result });
     } catch (error: any) {
       console.error("[MetaAdLauncher] Launch error:", error.message);
       res.status(500).json({

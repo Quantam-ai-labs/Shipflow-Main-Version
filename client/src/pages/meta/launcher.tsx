@@ -14,16 +14,17 @@ import { Calendar } from "@/components/ui/calendar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Loader2, Rocket, ArrowRight, ArrowLeft, CheckCircle2, AlertCircle, ImageIcon, Film, Plus, Trash2, Search, X, CalendarIcon, Eye, FileText, ThumbsUp, MessageCircle, Share2, ExternalLink, ChevronDown } from "lucide-react";
+import { Loader2, Rocket, ArrowRight, ArrowLeft, CheckCircle2, AlertCircle, ImageIcon, Film, Plus, Trash2, Search, X, CalendarIcon, Eye, FileText, ThumbsUp, MessageCircle, Share2, ExternalLink, ChevronDown, ChevronUp, Copy, Layers } from "lucide-react";
 import { SiFacebook, SiInstagram } from "react-icons/si";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 
-type Step = "campaign" | "targeting" | "creative" | "review";
+type Step = "campaign" | "adsets" | "review";
 type AdFormat = "single_image" | "video" | "carousel" | "existing_post";
 type BudgetType = "daily" | "lifetime";
+type BudgetLevel = "adset" | "campaign";
 
 interface ExistingPost {
   id: string;
@@ -37,6 +38,72 @@ interface ExistingPost {
   comments: number;
   shares: number;
   source: "facebook" | "instagram" | "partner";
+}
+
+interface GeoLocation {
+  key: string;
+  name: string;
+  type: string;
+  country_code: string;
+  region: string;
+}
+
+interface Interest {
+  id: string;
+  name: string;
+  audience_size?: number;
+}
+
+interface CarouselCard {
+  id: string;
+  imageUrl: string;
+  headline: string;
+  description: string;
+  linkUrl: string;
+}
+
+interface AdState {
+  id: string;
+  name: string;
+  format: AdFormat;
+  primaryText: string;
+  headline: string;
+  description: string;
+  linkUrl: string;
+  imageUrl: string;
+  videoId: string;
+  thumbnailUrl: string;
+  callToAction: string;
+  carouselCards: CarouselCard[];
+  selectedPost: ExistingPost | null;
+}
+
+interface AdSetState {
+  id: string;
+  name: string;
+  dailyBudget: string;
+  lifetimeBudget: string;
+  budgetType: BudgetType;
+  minAge: string;
+  maxAge: string;
+  gender: string;
+  allPakistan: boolean;
+  selectedGeoLocations: GeoLocation[];
+  interests: Interest[];
+  selectedPlacements: string[];
+  autoPlacement: boolean;
+  advantagePlusAudience: boolean;
+  selectedAudiences: { id: string; name: string }[];
+  excludedAudiences: { id: string; name: string }[];
+  optimizationGoal: string;
+  bidStrategy: string;
+  bidAmount: string;
+  startDate?: Date;
+  startTime: string;
+  endDate?: Date;
+  endTime: string;
+  ads: AdState[];
+  isExpanded: boolean;
 }
 
 const OBJECTIVES = [
@@ -63,8 +130,6 @@ const BID_STRATEGIES = [
   { value: "COST_CAP", label: "Cost Cap" },
   { value: "BID_CAP", label: "Bid Cap" },
 ];
-
-type BudgetLevel = "adset" | "campaign";
 
 const CONVERSION_EVENTS = [
   { value: "PURCHASE", label: "Purchase" },
@@ -169,70 +234,10 @@ const PLACEMENTS = [
   { id: "audience_network", label: "Audience Network", platform: "audience_network", position: "classic" },
 ];
 
-interface Interest {
-  id: string;
-  name: string;
-  audience_size?: number;
-}
-
-interface CarouselCard {
-  id: string;
-  imageUrl: string;
-  headline: string;
-  description: string;
-  linkUrl: string;
-}
-
 const MEDIA_LIMITS = {
   image: { maxSizeMB: 30, minWidth: 600, recommendedWidth: 1080, recommendedHeight: 1080, validRatios: ["1:1", "4:5", "9:16", "16:9", "1.91:1"], validFormats: ["jpg", "jpeg", "png", "webp", "gif"] },
   video: { maxSizeMB: 4096, maxLengthSec: 240, minWidth: 500, validFormats: ["mp4", "mov"] },
 };
-
-function validateMediaFile(file: File | null, type: "image" | "video"): string[] {
-  const warnings: string[] = [];
-  if (!file) return warnings;
-  const ext = file.name.split(".").pop()?.toLowerCase() || "";
-  const limits = type === "image" ? MEDIA_LIMITS.image : MEDIA_LIMITS.video;
-  if (!limits.validFormats.includes(ext)) {
-    warnings.push(`File should be ${limits.validFormats.join(", ").toUpperCase()} format (got .${ext})`);
-  }
-  const sizeMB = file.size / (1024 * 1024);
-  if (sizeMB > limits.maxSizeMB) {
-    warnings.push(`File size ${sizeMB.toFixed(1)}MB exceeds maximum ${limits.maxSizeMB}MB`);
-  }
-  return warnings;
-}
-
-function validateMediaUrl(url: string, type: "image" | "video"): string[] {
-  const warnings: string[] = [];
-  if (!url) return warnings;
-  const ext = url.split("?")[0].split(".").pop()?.toLowerCase() || "";
-  const limits = type === "image" ? MEDIA_LIMITS.image : MEDIA_LIMITS.video;
-  if (ext && !limits.validFormats.includes(ext) && !url.startsWith("data:")) {
-    warnings.push(`${type === "image" ? "Image" : "Video"} should be ${limits.validFormats.join(", ").toUpperCase()} format`);
-  }
-  return warnings;
-}
-
-function validateImageDimensions(width: number, height: number): string[] {
-  const warnings: string[] = [];
-  if (width < MEDIA_LIMITS.image.minWidth) {
-    warnings.push(`Image width ${width}px is below minimum ${MEDIA_LIMITS.image.minWidth}px`);
-  }
-  const ratio = width / height;
-  const validRanges = [
-    { label: "1:1", min: 0.95, max: 1.05 },
-    { label: "4:5", min: 0.75, max: 0.85 },
-    { label: "9:16", min: 0.52, max: 0.62 },
-    { label: "16:9", min: 1.7, max: 1.85 },
-    { label: "1.91:1", min: 1.85, max: 1.97 },
-  ];
-  const matchesAny = validRanges.some(r => ratio >= r.min && ratio <= r.max);
-  if (!matchesAny) {
-    warnings.push(`Aspect ratio ${ratio.toFixed(2)} may not be optimal. Recommended: ${MEDIA_LIMITS.image.validRatios.join(", ")}`);
-  }
-  return warnings;
-}
 
 const TIME_OPTIONS = Array.from({ length: 24 }, (_, h) => {
   const hh = h.toString().padStart(2, "0");
@@ -246,14 +251,78 @@ function uid() {
   return Math.random().toString(36).slice(2, 10);
 }
 
-function AdPreview({ primaryText, headline, imageUrl, thumbnailUrl, linkUrl, callToAction, pageName, format, carouselCards }: {
+function createDefaultAd(adSetName: string, adIdx: number): AdState {
+  return {
+    id: uid(),
+    name: `${adSetName} - Ad ${adIdx}`,
+    format: "single_image",
+    primaryText: "",
+    headline: "",
+    description: "",
+    linkUrl: "",
+    imageUrl: "",
+    videoId: "",
+    thumbnailUrl: "",
+    callToAction: "SHOP_NOW",
+    carouselCards: [
+      { id: uid(), imageUrl: "", headline: "", description: "", linkUrl: "" },
+      { id: uid(), imageUrl: "", headline: "", description: "", linkUrl: "" },
+    ],
+    selectedPost: null,
+  };
+}
+
+function createDefaultAdSet(campaignName: string, adSetIdx: number): AdSetState {
+  const name = `${campaignName || "Campaign"} - Ad Set ${adSetIdx}`;
+  return {
+    id: uid(),
+    name,
+    dailyBudget: "500",
+    lifetimeBudget: "5000",
+    budgetType: "daily",
+    minAge: "18",
+    maxAge: "65",
+    gender: "all",
+    allPakistan: false,
+    selectedGeoLocations: [
+      { key: "2211096", name: "Karachi", type: "city", country_code: "PK", region: "Sindh" },
+      { key: "2211177", name: "Lahore", type: "city", country_code: "PK", region: "Punjab" },
+    ],
+    interests: [],
+    selectedPlacements: [],
+    autoPlacement: true,
+    advantagePlusAudience: false,
+    selectedAudiences: [],
+    excludedAudiences: [],
+    optimizationGoal: "",
+    bidStrategy: "LOWEST_COST_WITHOUT_CAP",
+    bidAmount: "",
+    startTime: "00:00",
+    endTime: "23:59",
+    ads: [createDefaultAd(name, 1)],
+    isExpanded: true,
+  };
+}
+
+function validateMediaUrl(url: string, type: "image" | "video"): string[] {
+  const warnings: string[] = [];
+  if (!url) return warnings;
+  const ext = url.split("?")[0].split(".").pop()?.toLowerCase() || "";
+  const limits = type === "image" ? MEDIA_LIMITS.image : MEDIA_LIMITS.video;
+  if (ext && !limits.validFormats.includes(ext) && !url.startsWith("data:")) {
+    warnings.push(`${type === "image" ? "Image" : "Video"} should be ${limits.validFormats.join(", ").toUpperCase()} format`);
+  }
+  return warnings;
+}
+
+function AdPreview({ primaryText, headline, imageUrl, thumbnailUrl, linkUrl, callToAction, pageName, format: adFormat, carouselCards }: {
   primaryText: string; headline?: string; imageUrl?: string; thumbnailUrl?: string; linkUrl: string; callToAction: string; pageName?: string; format?: AdFormat; carouselCards?: CarouselCard[];
 }) {
   const ctaLabel = CTA_OPTIONS.find(c => c.value === callToAction)?.label || "Shop Now";
   let domain = "yourstore.com";
   try { if (linkUrl) domain = new URL(linkUrl).hostname.replace("www.", ""); } catch {};
-  const previewImage = format === "video" ? (thumbnailUrl || imageUrl) : imageUrl;
-  const isCarousel = format === "carousel" && carouselCards && carouselCards.length >= 2;
+  const previewImage = adFormat === "video" ? (thumbnailUrl || imageUrl) : imageUrl;
+  const isCarousel = adFormat === "carousel" && carouselCards && carouselCards.length >= 2;
   return (
     <div className="border rounded-lg overflow-hidden bg-white dark:bg-zinc-900 max-w-sm mx-auto shadow-sm" data-testid="ad-preview">
       <div className="p-3 flex items-center gap-2">
@@ -280,7 +349,7 @@ function AdPreview({ primaryText, headline, imageUrl, thumbnailUrl, linkUrl, cal
             </div>
           ))}
         </div>
-      ) : format === "video" ? (
+      ) : adFormat === "video" ? (
         <div className="relative">
           {previewImage ? (
             <img src={previewImage} alt="Video thumbnail" className="w-full aspect-video object-cover" />
@@ -457,6 +526,106 @@ function PostPickerDialog({
   );
 }
 
+function buildTargetingPayload(adSet: AdSetState) {
+  const targeting: any = {
+    geo_locations: adSet.allPakistan
+      ? { countries: ["PK"] }
+      : (() => {
+          const geo: any = {};
+          const valid = adSet.selectedGeoLocations.filter(loc => loc.key);
+          const cities = valid.filter(loc => loc.type === "city" || !loc.type);
+          const regions = valid.filter(loc => loc.type === "region" || loc.type === "subcity" || loc.type === "neighborhood");
+          const zips = valid.filter(loc => loc.type === "zip");
+          if (cities.length > 0) geo.cities = cities.map(loc => ({ key: loc.key, name: loc.name, country: loc.country_code || "PK" }));
+          if (regions.length > 0) geo.regions = regions.map(loc => ({ key: loc.key, name: loc.name }));
+          if (zips.length > 0) geo.zips = zips.map(loc => ({ key: loc.key }));
+          return geo;
+        })(),
+    age_min: parseInt(adSet.minAge),
+    age_max: parseInt(adSet.maxAge),
+  };
+  if (adSet.gender !== "all") targeting.genders = adSet.gender === "male" ? [1] : [2];
+  if (adSet.interests.length > 0) {
+    targeting.flexible_spec = [{ interests: adSet.interests.map(i => ({ id: i.id, name: i.name })) }];
+  }
+  if (adSet.selectedAudiences.length > 0) {
+    targeting.custom_audiences = adSet.selectedAudiences.map(a => ({ id: a.id, name: a.name }));
+  }
+  if (adSet.excludedAudiences.length > 0) {
+    targeting.excluded_custom_audiences = adSet.excludedAudiences.map(a => ({ id: a.id, name: a.name }));
+  }
+  if (!adSet.autoPlacement && adSet.selectedPlacements.length > 0) {
+    const platforms = Array.from(new Set(adSet.selectedPlacements.map(id => PLACEMENTS.find(p => p.id === id)?.platform).filter(Boolean)));
+    targeting.publisher_platforms = platforms;
+    const fbPositions = adSet.selectedPlacements.filter(id => PLACEMENTS.find(p => p.id === id)?.platform === "facebook").map(id => PLACEMENTS.find(p => p.id === id)?.position).filter(Boolean);
+    const igPositions = adSet.selectedPlacements.filter(id => PLACEMENTS.find(p => p.id === id)?.platform === "instagram").map(id => PLACEMENTS.find(p => p.id === id)?.position).filter(Boolean);
+    const anPositions = adSet.selectedPlacements.filter(id => PLACEMENTS.find(p => p.id === id)?.platform === "audience_network").map(id => PLACEMENTS.find(p => p.id === id)?.position).filter(Boolean);
+    if (fbPositions.length) targeting.facebook_positions = fbPositions;
+    if (igPositions.length) targeting.instagram_positions = igPositions;
+    if (anPositions.length) targeting.audience_network_positions = anPositions;
+  }
+  return targeting;
+}
+
+function buildAdCreativePayload(ad: AdState) {
+  const creative: any = { format: ad.format };
+  if (ad.format === "existing_post" && ad.selectedPost) {
+    creative.existingPostId = ad.selectedPost.id;
+    creative.existingPostSource = ad.selectedPost.source;
+    if (ad.linkUrl) {
+      creative.linkUrl = ad.linkUrl;
+      creative.callToAction = ad.callToAction;
+    }
+  } else {
+    creative.primaryText = ad.primaryText;
+    creative.headline = ad.headline || undefined;
+    creative.description = ad.description || undefined;
+    creative.linkUrl = ad.linkUrl;
+    creative.callToAction = ad.callToAction;
+    if (ad.format === "single_image") {
+      creative.imageUrl = ad.imageUrl || undefined;
+    } else if (ad.format === "video") {
+      creative.videoId = ad.videoId || undefined;
+      creative.thumbnailUrl = ad.thumbnailUrl || undefined;
+    } else if (ad.format === "carousel") {
+      creative.carouselCards = ad.carouselCards.filter(c => c.imageUrl).map(c => ({
+        imageUrl: c.imageUrl || undefined,
+        headline: c.headline || undefined,
+        description: c.description || undefined,
+        linkUrl: c.linkUrl && isValidUrl(c.linkUrl) ? c.linkUrl : ad.linkUrl,
+      }));
+    }
+  }
+  return creative;
+}
+
+function isValidUrl(url: string): boolean {
+  try { return !!url.trim() && !!new URL(url); } catch { return false; }
+}
+
+function isAdValid(ad: AdState): boolean {
+  if (ad.format === "existing_post") return !!ad.selectedPost;
+  if (!ad.primaryText.trim() || !isValidUrl(ad.linkUrl)) return false;
+  if (ad.format === "video") return !!ad.videoId.trim();
+  if (ad.format === "carousel") {
+    const cardsWithImages = ad.carouselCards.filter(c => c.imageUrl);
+    if (cardsWithImages.length < 2) return false;
+    return cardsWithImages.every(c => isValidUrl(c.linkUrl) || isValidUrl(ad.linkUrl));
+  }
+  return true;
+}
+
+function isAdSetValid(adSet: AdSetState, budgetLevel: BudgetLevel): boolean {
+  const hasLocation = adSet.allPakistan || adSet.selectedGeoLocations.length > 0;
+  if (!hasLocation || !adSet.name.trim()) return false;
+  if (budgetLevel === "adset") {
+    const budgetValue = adSet.budgetType === "daily" ? adSet.dailyBudget : adSet.lifetimeBudget;
+    const budgetMin = adSet.budgetType === "daily" ? 100 : 1000;
+    if (parseFloat(budgetValue) < budgetMin) return false;
+  }
+  return adSet.ads.length > 0 && adSet.ads.every(isAdValid);
+}
+
 export default function MetaAdLauncher() {
   const { toast } = useToast();
   const [step, setStep] = useState<Step>("campaign");
@@ -472,48 +641,12 @@ export default function MetaAdLauncher() {
   const [bidAmount, setBidAmount] = useState("");
   const [selectedPixelId, setSelectedPixelId] = useState("");
   const [conversionEvent, setConversionEvent] = useState("PURCHASE");
-  const [optimizationGoal, setOptimizationGoal] = useState("");
-  const [startDate, setStartDate] = useState<Date | undefined>(undefined);
-  const [startTime, setStartTime] = useState("00:00");
-  const [endDate, setEndDate] = useState<Date | undefined>(undefined);
-  const [endTime, setEndTime] = useState("23:59");
 
-  const [minAge, setMinAge] = useState("18");
-  const [maxAge, setMaxAge] = useState("65");
-  const [gender, setGender] = useState("all");
-  const [allPakistan, setAllPakistan] = useState(false);
-  const [selectedGeoLocations, setSelectedGeoLocations] = useState<{ key: string; name: string; type: string; country_code: string; region: string }[]>(
-    [{ key: "2211096", name: "Karachi", type: "city", country_code: "PK", region: "Sindh" }, { key: "2211177", name: "Lahore", type: "city", country_code: "PK", region: "Punjab" }]
-  );
-  const [cityFilter, setCityFilter] = useState("");
-  const [interests, setInterests] = useState<Interest[]>([]);
-  const [interestSearch, setInterestSearch] = useState("");
-  const [selectedPlacements, setSelectedPlacements] = useState<string[]>([]);
-  const [autoPlacement, setAutoPlacement] = useState(true);
-  const [advantagePlusAudience, setAdvantagePlusAudience] = useState(false);
-  const [selectedAudiences, setSelectedAudiences] = useState<{ id: string; name: string }[]>([]);
-  const [excludedAudiences, setExcludedAudiences] = useState<{ id: string; name: string }[]>([]);
-  const [geoSearchQuery, setGeoSearchQuery] = useState("");
-  const [geoSearchResults, setGeoSearchResults] = useState<{ key: string; name: string; type: string; country_code: string; region: string }[]>([]);
+  const [adSets, setAdSets] = useState<AdSetState[]>(() => [createDefaultAdSet("", 1)]);
 
-  const [adFormat, setAdFormat] = useState<AdFormat>("single_image");
-  const [primaryText, setPrimaryText] = useState("");
-  const [headline, setHeadline] = useState("");
-  const [description, setDescription] = useState("");
-  const [linkUrl, setLinkUrl] = useState("");
-  const [imageUrl, setImageUrl] = useState("");
-  const [videoId, setVideoId] = useState("");
-  const [thumbnailUrl, setThumbnailUrl] = useState("");
-  const [callToAction, setCallToAction] = useState("SHOP_NOW");
-  const [carouselCards, setCarouselCards] = useState<CarouselCard[]>([
-    { id: uid(), imageUrl: "", headline: "", description: "", linkUrl: "" },
-    { id: uid(), imageUrl: "", headline: "", description: "", linkUrl: "" },
-  ]);
-  const [showPreview, setShowPreview] = useState(false);
-  const [imageDimWarnings, setImageDimWarnings] = useState<string[]>([]);
-  const [selectedPost, setSelectedPost] = useState<ExistingPost | null>(null);
   const [showPostPicker, setShowPostPicker] = useState(false);
   const [postSearchQuery, setPostSearchQuery] = useState("");
+  const [activePostPickerTarget, setActivePostPickerTarget] = useState<{ adSetIdx: number; adIdx: number } | null>(null);
 
   const { data: oauthStatus } = useQuery<any>({ queryKey: ["/api/meta/oauth/status"] });
   const { data: pagesData } = useQuery<any>({ queryKey: ["/api/meta/pages"], enabled: !!oauthStatus?.connected });
@@ -560,22 +693,6 @@ export default function MetaAdLauncher() {
     enabled: showPostPicker && !!oauthStatus?.connected,
   });
 
-  const [interestDebounce, setInterestDebounce] = useState("");
-  useEffect(() => {
-    const t = setTimeout(() => setInterestDebounce(interestSearch), 300);
-    return () => clearTimeout(t);
-  }, [interestSearch]);
-
-  const { data: interestResults, isLoading: interestLoading } = useQuery<{ data: Interest[] }>({
-    queryKey: ["/api/meta/targeting-search", interestDebounce],
-    queryFn: async () => {
-      if (!interestDebounce || interestDebounce.length < 2) return { data: [] };
-      const res = await fetch(`/api/meta/targeting-search?q=${encodeURIComponent(interestDebounce)}&type=adinterest`, { credentials: "include" });
-      return res.json();
-    },
-    enabled: interestDebounce.length >= 2,
-  });
-
   const pageId = oauthStatus?.pageId || pagesData?.pages?.[0]?.id || "";
   const pageName = oauthStatus?.pageName || pagesData?.pages?.[0]?.name || "";
   const availablePixels: { id: string; name: string }[] = pixelsData?.pixels || [];
@@ -589,152 +706,123 @@ export default function MetaAdLauncher() {
 
   const conversionGoals = ["OFFSITE_CONVERSIONS", "LEAD_GENERATION"];
   const hasPixel = selectedPixelId && selectedPixelId !== "none";
-  useEffect(() => {
-    if (!hasPixel && conversionGoals.includes(optimizationGoal)) {
-      setOptimizationGoal("LINK_CLICKS");
-    }
-  }, [hasPixel, optimizationGoal]);
-
-  const mediaWarnings = adFormat === "single_image" ? [...validateMediaUrl(imageUrl, "image"), ...imageDimWarnings] : [];
-
-  useEffect(() => {
-    if (adFormat !== "single_image" || !imageUrl) { setImageDimWarnings([]); return; }
-    const img = new Image();
-    img.onload = () => setImageDimWarnings(validateImageDimensions(img.naturalWidth, img.naturalHeight));
-    img.onerror = () => setImageDimWarnings([]);
-    img.src = imageUrl;
-  }, [imageUrl, adFormat]);
-  useEffect(() => {
-    if (!geoSearchQuery || geoSearchQuery.length < 2) { setGeoSearchResults([]); return; }
-    const timer = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/meta/targeting-search?type=adgeolocation&q=${encodeURIComponent(geoSearchQuery)}`);
-        if (!res.ok) return;
-        const data = await res.json();
-        setGeoSearchResults((data.data || []).map((item: any) => ({
-          key: item.key || item.id || item.name,
-          name: item.name,
-          type: item.type || "city",
-          country_code: item.country_code || "PK",
-          region: item.region || "",
-        })));
-      } catch { setGeoSearchResults([]); }
-    }, 400);
-    return () => clearTimeout(timer);
-  }, [geoSearchQuery]);
 
   const budgetValue = budgetType === "daily" ? dailyBudget : lifetimeBudget;
   const budgetMin = budgetType === "daily" ? 100 : 1000;
   const budgetWarning = parseFloat(budgetValue) < budgetMin ? `Minimum ${budgetType} budget is PKR ${budgetMin}` : "";
 
+  const needsBidAmount = bidStrategy === "COST_CAP" || bidStrategy === "BID_CAP";
+  const canProceedFromCampaign = campaignName.trim() &&
+    (budgetLevel === "adset" || (parseFloat(budgetValue) >= budgetMin && (!needsBidAmount || (bidAmount && parseFloat(bidAmount) > 0))));
+
+  const totalAds = adSets.reduce((sum, as2) => sum + as2.ads.length, 0);
+  const canProceedFromAdSets = adSets.length > 0 && adSets.every(as2 => isAdSetValid(as2, budgetLevel));
+
+  const updateAdSet = useCallback((adSetId: string, updates: Partial<AdSetState>) => {
+    setAdSets(prev => prev.map(as2 => as2.id === adSetId ? { ...as2, ...updates } : as2));
+  }, []);
+
+  const updateAd = useCallback((adSetId: string, adId: string, updates: Partial<AdState>) => {
+    setAdSets(prev => prev.map(as2 =>
+      as2.id === adSetId ? { ...as2, ads: as2.ads.map(ad => ad.id === adId ? { ...ad, ...updates } : ad) } : as2
+    ));
+  }, []);
+
+  const addAdSet = useCallback(() => {
+    if (adSets.length >= 10) return;
+    setAdSets(prev => {
+      const newAS = createDefaultAdSet(campaignName, prev.length + 1);
+      return [...prev.map(as2 => ({ ...as2, isExpanded: false })), newAS];
+    });
+  }, [adSets.length, campaignName]);
+
+  const removeAdSet = useCallback((id: string) => {
+    if (adSets.length <= 1) return;
+    setAdSets(prev => prev.filter(as2 => as2.id !== id));
+  }, [adSets.length]);
+
+  const duplicateAdSet = useCallback((sourceId: string) => {
+    if (adSets.length >= 10) return;
+    setAdSets(prev => {
+      const source = prev.find(as2 => as2.id === sourceId);
+      if (!source) return prev;
+      const clone: AdSetState = {
+        ...source,
+        id: uid(),
+        name: `${source.name} (Copy)`,
+        isExpanded: true,
+        ads: source.ads.map(ad => ({ ...ad, id: uid(), name: `${ad.name} (Copy)`, carouselCards: ad.carouselCards.map(c => ({ ...c, id: uid() })) })),
+      };
+      return [...prev.map(as2 => ({ ...as2, isExpanded: false })), clone];
+    });
+  }, [adSets.length]);
+
+  const addAd = useCallback((adSetId: string) => {
+    setAdSets(prev => prev.map(as2 => {
+      if (as2.id !== adSetId || as2.ads.length >= 10) return as2;
+      return { ...as2, ads: [...as2.ads, createDefaultAd(as2.name, as2.ads.length + 1)] };
+    }));
+  }, []);
+
+  const removeAd = useCallback((adSetId: string, adId: string) => {
+    setAdSets(prev => prev.map(as2 => {
+      if (as2.id !== adSetId || as2.ads.length <= 1) return as2;
+      return { ...as2, ads: as2.ads.filter(ad => ad.id !== adId) };
+    }));
+  }, []);
+
   const launchMutation = useMutation({
     mutationFn: async () => {
-      const targeting: any = {
-        geo_locations: allPakistan
-          ? { countries: ["PK"] }
-          : (() => {
-              const geo: any = {};
-              const valid = selectedGeoLocations.filter(loc => loc.key);
-              const cities = valid.filter(loc => loc.type === "city" || !loc.type);
-              const regions = valid.filter(loc => loc.type === "region" || loc.type === "subcity" || loc.type === "neighborhood");
-              const zips = valid.filter(loc => loc.type === "zip");
-              if (cities.length > 0) geo.cities = cities.map(loc => ({ key: loc.key, name: loc.name, country: loc.country_code || "PK" }));
-              if (regions.length > 0) geo.regions = regions.map(loc => ({ key: loc.key, name: loc.name }));
-              if (zips.length > 0) geo.zips = zips.map(loc => ({ key: loc.key }));
-              return geo;
-            })(),
-        age_min: parseInt(minAge),
-        age_max: parseInt(maxAge),
-      };
-      if (gender !== "all") targeting.genders = gender === "male" ? [1] : [2];
-      if (interests.length > 0) {
-        targeting.flexible_spec = [{ interests: interests.map(i => ({ id: i.id, name: i.name })) }];
-      }
-      if (selectedAudiences.length > 0) {
-        targeting.custom_audiences = selectedAudiences.map(a => ({ id: a.id, name: a.name }));
-      }
-      if (excludedAudiences.length > 0) {
-        targeting.excluded_custom_audiences = excludedAudiences.map(a => ({ id: a.id, name: a.name }));
-      }
-      if (!autoPlacement && selectedPlacements.length > 0) {
-        const platforms = Array.from(new Set(selectedPlacements.map(id => PLACEMENTS.find(p => p.id === id)?.platform).filter(Boolean)));
-        targeting.publisher_platforms = platforms;
-        const fbPositions = selectedPlacements.filter(id => PLACEMENTS.find(p => p.id === id)?.platform === "facebook").map(id => PLACEMENTS.find(p => p.id === id)?.position).filter(Boolean);
-        const igPositions = selectedPlacements.filter(id => PLACEMENTS.find(p => p.id === id)?.platform === "instagram").map(id => PLACEMENTS.find(p => p.id === id)?.position).filter(Boolean);
-        const anPositions = selectedPlacements.filter(id => PLACEMENTS.find(p => p.id === id)?.platform === "audience_network").map(id => PLACEMENTS.find(p => p.id === id)?.position).filter(Boolean);
-        if (fbPositions.length) targeting.facebook_positions = fbPositions;
-        if (igPositions.length) targeting.instagram_positions = igPositions;
-        if (anPositions.length) targeting.audience_network_positions = anPositions;
-      }
-
-      const creative: any = {
-        format: adFormat,
-      };
-      if (adFormat === "existing_post" && selectedPost) {
-        creative.existingPostId = selectedPost.id;
-        creative.existingPostSource = selectedPost.source;
-        if (linkUrl) {
-          creative.linkUrl = linkUrl;
-          creative.callToAction = callToAction;
-        }
-      } else {
-        creative.primaryText = primaryText;
-        creative.headline = headline || undefined;
-        creative.description = description || undefined;
-        creative.linkUrl = linkUrl;
-        creative.callToAction = callToAction;
-        if (adFormat === "single_image") {
-          creative.imageUrl = imageUrl || undefined;
-        } else if (adFormat === "video") {
-          creative.videoId = videoId || undefined;
-          creative.thumbnailUrl = thumbnailUrl || undefined;
-        } else if (adFormat === "carousel") {
-          creative.carouselCards = carouselCards.filter(c => c.imageUrl || c.linkUrl).map(c => ({
-            imageUrl: c.imageUrl || undefined,
-            headline: c.headline || undefined,
-            description: c.description || undefined,
-            linkUrl: c.linkUrl || linkUrl,
-          }));
-        }
-      }
-
       const payload: any = {
-        campaignName, objective,
-        dailyBudget: budgetType === "daily" ? dailyBudget : undefined,
-        budgetType,
+        campaignName,
+        objective,
         budgetLevel,
-        targeting, creative, pageId,
-        pixelId: (selectedPixelId && selectedPixelId !== "none") ? selectedPixelId : undefined,
+        pageId,
+        pixelId: hasPixel ? selectedPixelId : undefined,
+        conversionEvent: hasPixel ? conversionEvent : undefined,
         status: "PAUSED",
+        adSets: adSets.map(as2 => {
+          const targeting = buildTargetingPayload(as2);
+          let startTimeISO: string | undefined;
+          let endTimeISO: string | undefined;
+          if (as2.startDate) {
+            const [sh, sm] = as2.startTime.split(":").map(Number);
+            const sd = new Date(as2.startDate);
+            sd.setHours(sh, sm, 0, 0);
+            startTimeISO = sd.toISOString();
+          }
+          if (as2.endDate) {
+            const [eh, em] = as2.endTime.split(":").map(Number);
+            const ed = new Date(as2.endDate);
+            ed.setHours(eh, em, 0, 0);
+            endTimeISO = ed.toISOString();
+          }
+          return {
+            name: as2.name,
+            targeting,
+            optimizationGoal: as2.optimizationGoal || undefined,
+            useAdvantageAudience: as2.advantagePlusAudience || undefined,
+            dailyBudget: budgetLevel === "adset" ? (as2.budgetType === "daily" ? as2.dailyBudget : undefined) : undefined,
+            lifetimeBudget: budgetLevel === "adset" ? (as2.budgetType === "lifetime" ? as2.lifetimeBudget : undefined) : undefined,
+            budgetType: budgetLevel === "adset" ? as2.budgetType : undefined,
+            bidStrategy: as2.bidStrategy !== "LOWEST_COST_WITHOUT_CAP" ? as2.bidStrategy : undefined,
+            bidAmount: as2.bidAmount || undefined,
+            startTime: startTimeISO,
+            endTime: endTimeISO,
+            ads: as2.ads.map(ad => ({
+              name: ad.name,
+              creative: buildAdCreativePayload(ad),
+            })),
+          };
+        }),
       };
-      if (selectedPixelId && selectedPixelId !== "none") {
-        payload.conversionEvent = conversionEvent;
-      }
-      if (advantagePlusAudience) {
-        payload.useAdvantageAudience = true;
-      }
-      if (optimizationGoal) {
-        payload.optimizationGoal = optimizationGoal;
-      }
-      if (budgetLevel === "campaign" && spendingLimit) {
-        payload.spendingLimit = spendingLimit;
-      }
-      if (budgetType === "lifetime") payload.lifetimeBudget = lifetimeBudget;
-      if (bidStrategy && bidStrategy !== "LOWEST_COST_WITHOUT_CAP" && bidAmount) {
-        payload.bidStrategy = bidStrategy;
-        payload.bidAmount = bidAmount;
-      }
-      if (startDate) {
-        const [sh, sm] = startTime.split(":").map(Number);
-        const sd = new Date(startDate);
-        sd.setHours(sh, sm, 0, 0);
-        payload.startTime = sd.toISOString();
-      }
-      if (endDate) {
-        const [eh, em] = endTime.split(":").map(Number);
-        const ed = new Date(endDate);
-        ed.setHours(eh, em, 0, 0);
-        payload.endTime = ed.toISOString();
+      if (budgetLevel === "campaign") {
+        payload.budgetType = budgetType;
+        payload.dailyBudget = budgetType === "daily" ? dailyBudget : undefined;
+        payload.lifetimeBudget = budgetType === "lifetime" ? lifetimeBudget : undefined;
+        payload.spendingLimit = spendingLimit || undefined;
+        payload.bidStrategy = bidStrategy !== "LOWEST_COST_WITHOUT_CAP" ? bidStrategy : undefined;
+        payload.bidAmount = bidAmount || undefined;
       }
 
       const res = await fetch("/api/meta/launch", {
@@ -745,13 +833,16 @@ export default function MetaAdLauncher() {
       });
       const data = await res.json();
       if (!res.ok) {
-        const step = data.step ? `[${data.step}] ` : "";
-        throw new Error(`${step}${data.error || "Unknown error"}`);
+        const s = data.step ? `[${data.step}] ` : "";
+        throw new Error(`${s}${data.error || "Unknown error"}`);
       }
       return data;
     },
-    onSuccess: () => {
-      toast({ title: "Ad Launched Successfully!", description: `Campaign "${campaignName}" created in PAUSED state.` });
+    onSuccess: (data) => {
+      const msg = data.failedAds > 0
+        ? `Campaign "${campaignName}" created. ${data.succeededAds}/${data.totalAds} ads succeeded, ${data.failedAds} failed.`
+        : `Campaign "${campaignName}" created with ${data.totalAds} ad(s) in PAUSED state.`;
+      toast({ title: "Campaign Launched!", description: msg });
       queryClient.invalidateQueries({ queryKey: ["/api/meta/launch-jobs"] });
     },
     onError: (error: any) => {
@@ -786,29 +877,10 @@ export default function MetaAdLauncher() {
 
   const steps: { key: Step; label: string }[] = [
     { key: "campaign", label: "Campaign" },
-    { key: "targeting", label: "Targeting" },
-    { key: "creative", label: "Creative" },
+    { key: "adsets", label: "Ad Sets & Ads" },
     { key: "review", label: "Review & Launch" },
   ];
   const currentIdx = steps.findIndex(s => s.key === step);
-  const needsBidAmount = bidStrategy === "COST_CAP" || bidStrategy === "BID_CAP";
-  const canProceedFromCampaign = campaignName.trim() && parseFloat(budgetValue) >= budgetMin && (!needsBidAmount || (bidAmount && parseFloat(bidAmount) > 0));
-  const canProceedFromTargeting = allPakistan || selectedGeoLocations.length > 0;
-  let isValidUrl = false;
-  try { isValidUrl = !!linkUrl.trim() && !!new URL(linkUrl); } catch {}
-  const canProceedFromCreative = adFormat === "existing_post"
-    ? !!selectedPost
-    : primaryText.trim() && isValidUrl && (
-      adFormat === "single_image" ||
-      adFormat === "video" && videoId.trim() ||
-      adFormat === "carousel" && carouselCards.filter(c => c.imageUrl).length >= 2
-    );
-
-  const addCarouselCard = () => setCarouselCards(prev => [...prev, { id: uid(), imageUrl: "", headline: "", description: "", linkUrl: "" }]);
-  const removeCarouselCard = (id: string) => { if (carouselCards.length > 2) setCarouselCards(prev => prev.filter(c => c.id !== id)); };
-  const updateCarouselCard = (id: string, field: keyof CarouselCard, value: string) => setCarouselCards(prev => prev.map(c => c.id === id ? { ...c, [field]: value } : c));
-  const addInterest = (interest: Interest) => { if (!interests.find(i => i.id === interest.id)) setInterests(prev => [...prev, interest]); setInterestSearch(""); };
-  const removeInterest = (id: string) => setInterests(prev => prev.filter(i => i.id !== id));
 
   return (
     <div className="p-4 md:p-6 max-w-[900px] mx-auto space-y-6" data-testid="meta-launcher-page">
@@ -858,15 +930,14 @@ export default function MetaAdLauncher() {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label>Optimization Goal</Label>
-                <Select value={optimizationGoal || (() => {
-                  const m: Record<string, string> = { OUTCOME_SALES: hasPixel ? "OFFSITE_CONVERSIONS" : "LINK_CLICKS", OUTCOME_LEADS: hasPixel ? "LEAD_GENERATION" : "LINK_CLICKS", OUTCOME_ENGAGEMENT: "POST_ENGAGEMENT", OUTCOME_AWARENESS: "REACH", OUTCOME_TRAFFIC: "LANDING_PAGE_VIEWS" };
-                  return m[objective] || (hasPixel ? "OFFSITE_CONVERSIONS" : "LINK_CLICKS");
-                })()} onValueChange={setOptimizationGoal}>
-                  <SelectTrigger data-testid="select-optimization-goal"><SelectValue /></SelectTrigger>
-                  <SelectContent>{OPTIMIZATION_GOALS.filter(o => hasPixel || !conversionGoals.includes(o.value)).map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+                <Label>Budget Level</Label>
+                <Select value={budgetLevel} onValueChange={(v) => setBudgetLevel(v as BudgetLevel)}>
+                  <SelectTrigger data-testid="select-budget-level"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="adset">Ad Set Budget (ABO)</SelectItem>
+                    <SelectItem value="campaign">Campaign Budget (CBO)</SelectItem>
+                  </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">{hasPixel ? "Auto-selected based on pixel. Override if needed." : "Select a pixel to unlock conversion optimization goals."}</p>
               </div>
             </div>
 
@@ -900,105 +971,55 @@ export default function MetaAdLauncher() {
               )}
             </div>
 
-            <Separator />
-            <h3 className="font-medium text-sm">Budget</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="space-y-1.5">
-                <Label>Budget Level</Label>
-                <Select value={budgetLevel} onValueChange={(v) => setBudgetLevel(v as BudgetLevel)}>
-                  <SelectTrigger data-testid="select-budget-level"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="adset">Ad Set Budget (ABO)</SelectItem>
-                    <SelectItem value="campaign">Campaign Budget (CBO)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Budget Type</Label>
-                <Select value={budgetType} onValueChange={(v) => setBudgetType(v as BudgetType)}>
-                  <SelectTrigger data-testid="select-budget-type"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="daily">Daily Budget</SelectItem>
-                    <SelectItem value="lifetime">Lifetime Budget</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="budget-amount">{budgetType === "daily" ? "Daily" : "Lifetime"} Budget (PKR)</Label>
-                <Input
-                  id="budget-amount" type="number" min={budgetMin}
-                  value={budgetType === "daily" ? dailyBudget : lifetimeBudget}
-                  onChange={e => budgetType === "daily" ? setDailyBudget(e.target.value) : setLifetimeBudget(e.target.value)}
-                  data-testid="input-budget-amount"
-                />
-                {budgetWarning && <p className="text-xs text-destructive">{budgetWarning}</p>}
-              </div>
-            </div>
             {budgetLevel === "campaign" && (
-              <div className="space-y-1.5">
-                <Label htmlFor="spending-limit">Campaign Spending Limit (PKR, optional)</Label>
-                <Input id="spending-limit" type="number" placeholder="Leave empty for no limit" value={spendingLimit} onChange={e => setSpendingLimit(e.target.value)} data-testid="input-spending-limit" />
+              <>
+                <Separator />
+                <h3 className="font-medium text-sm">Campaign Budget (CBO)</h3>
                 <p className="text-xs text-muted-foreground">CBO: Meta distributes budget across ad sets automatically for best results.</p>
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label>Bid Strategy</Label>
-                <Select value={bidStrategy} onValueChange={setBidStrategy}>
-                  <SelectTrigger data-testid="select-bid-strategy"><SelectValue /></SelectTrigger>
-                  <SelectContent>{BID_STRATEGIES.map(b => <SelectItem key={b.value} value={b.value}>{b.label}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              {(bidStrategy === "COST_CAP" || bidStrategy === "BID_CAP") && (
-                <div className="space-y-1.5">
-                  <Label htmlFor="bid-amount">{bidStrategy === "COST_CAP" ? "Cost Cap" : "Bid Cap"} (PKR) *</Label>
-                  <Input id="bid-amount" type="number" placeholder="e.g. 50" value={bidAmount} onChange={e => setBidAmount(e.target.value)} data-testid="input-bid-amount" />
-                  {(!bidAmount || parseFloat(bidAmount) <= 0) && <p className="text-xs text-destructive">Required when using {bidStrategy === "COST_CAP" ? "Cost Cap" : "Bid Cap"} strategy</p>}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="space-y-1.5">
+                    <Label>Budget Type</Label>
+                    <Select value={budgetType} onValueChange={(v) => setBudgetType(v as BudgetType)}>
+                      <SelectTrigger data-testid="select-budget-type"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="daily">Daily Budget</SelectItem>
+                        <SelectItem value="lifetime">Lifetime Budget</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="budget-amount">{budgetType === "daily" ? "Daily" : "Lifetime"} Budget (PKR)</Label>
+                    <Input
+                      id="budget-amount" type="number" min={budgetMin}
+                      value={budgetType === "daily" ? dailyBudget : lifetimeBudget}
+                      onChange={e => budgetType === "daily" ? setDailyBudget(e.target.value) : setLifetimeBudget(e.target.value)}
+                      data-testid="input-budget-amount"
+                    />
+                    {budgetWarning && <p className="text-xs text-destructive">{budgetWarning}</p>}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="spending-limit">Spending Limit (PKR)</Label>
+                    <Input id="spending-limit" type="number" placeholder="No limit" value={spendingLimit} onChange={e => setSpendingLimit(e.target.value)} data-testid="input-spending-limit" />
+                  </div>
                 </div>
-              )}
-            </div>
 
-            <Separator />
-            <h3 className="font-medium text-sm">Schedule (Optional)</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label>Start Date</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className="w-full justify-start text-left font-normal" data-testid="button-start-date">
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {startDate ? format(startDate, "PPP") : "Not set (start immediately)"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={startDate} onSelect={setStartDate} initialFocus /></PopoverContent>
-                </Popover>
-                {startDate && (
-                  <Select value={startTime} onValueChange={setStartTime}>
-                    <SelectTrigger data-testid="select-start-time"><SelectValue placeholder="Start Time" /></SelectTrigger>
-                    <SelectContent>{TIME_OPTIONS.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
-                  </Select>
-                )}
-              </div>
-              <div className="space-y-1.5">
-                <Label>End Date</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className="w-full justify-start text-left font-normal" data-testid="button-end-date">
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {endDate ? format(endDate, "PPP") : "No end date"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={endDate} onSelect={setEndDate} initialFocus /></PopoverContent>
-                </Popover>
-                {endDate && (
-                  <Select value={endTime} onValueChange={setEndTime}>
-                    <SelectTrigger data-testid="select-end-time"><SelectValue placeholder="End Time" /></SelectTrigger>
-                    <SelectContent>{TIME_OPTIONS.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
-                  </Select>
-                )}
-              </div>
-            </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label>Bid Strategy</Label>
+                    <Select value={bidStrategy} onValueChange={setBidStrategy}>
+                      <SelectTrigger data-testid="select-bid-strategy"><SelectValue /></SelectTrigger>
+                      <SelectContent>{BID_STRATEGIES.map(b => <SelectItem key={b.value} value={b.value}>{b.label}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  {needsBidAmount && (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="bid-amount">{bidStrategy === "COST_CAP" ? "Cost Cap" : "Bid Cap"} (PKR) *</Label>
+                      <Input id="bid-amount" type="number" placeholder="e.g. 50" value={bidAmount} onChange={e => setBidAmount(e.target.value)} data-testid="input-bid-amount" />
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
 
             {pageId && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -1008,663 +1029,848 @@ export default function MetaAdLauncher() {
             )}
 
             <div className="flex justify-end pt-2">
-              <Button onClick={() => setStep("targeting")} disabled={!canProceedFromCampaign} data-testid="button-next-targeting">
-                Next: Targeting <ArrowRight className="w-4 h-4 ml-1" />
+              <Button onClick={() => setStep("adsets")} disabled={!canProceedFromCampaign} data-testid="button-next-adsets">
+                Next: Ad Sets & Ads <ArrowRight className="w-4 h-4 ml-1" />
               </Button>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {step === "targeting" && (
-        <Card data-testid="card-targeting-step">
-          <CardHeader>
-            <CardTitle className="text-base">Audience Targeting</CardTitle>
-            <CardDescription>Define who should see your ads in Pakistan</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="space-y-1.5">
-                <Label>Min Age</Label>
-                <Input type="number" min="13" max="65" value={minAge} onChange={e => setMinAge(e.target.value)} data-testid="input-min-age" />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Max Age</Label>
-                <Input type="number" min="13" max="65" value={maxAge} onChange={e => setMaxAge(e.target.value)} data-testid="input-max-age" />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Gender</Label>
-                <Select value={gender} onValueChange={setGender}>
-                  <SelectTrigger data-testid="select-gender"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All</SelectItem>
-                    <SelectItem value="male">Male</SelectItem>
-                    <SelectItem value="female">Female</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+      {step === "adsets" && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-semibold">Ad Sets & Ads</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {adSets.length} ad set{adSets.length !== 1 ? "s" : ""}, {totalAds} ad{totalAds !== 1 ? "s" : ""} total
+              </p>
             </div>
+            <Button variant="outline" size="sm" onClick={addAdSet} disabled={adSets.length >= 10} data-testid="button-add-adset">
+              <Plus className="w-3.5 h-3.5 mr-1" /> Add Ad Set
+            </Button>
+          </div>
 
-            <Separator />
+          {adSets.map((adSet, asIdx) => (
+            <AdSetPanel
+              key={adSet.id}
+              adSet={adSet}
+              adSetIdx={asIdx}
+              budgetLevel={budgetLevel}
+              objective={objective}
+              hasPixel={!!hasPixel}
+              conversionGoals={conversionGoals}
+              audiencesData={audiencesData}
+              mediaData={mediaData}
+              pageName={pageName}
+              onUpdate={(updates) => updateAdSet(adSet.id, updates)}
+              onUpdateAd={(adId, updates) => updateAd(adSet.id, adId, updates)}
+              onRemove={() => removeAdSet(adSet.id)}
+              onDuplicate={() => duplicateAdSet(adSet.id)}
+              onAddAd={() => addAd(adSet.id)}
+              onRemoveAd={(adId) => removeAd(adSet.id, adId)}
+              canRemove={adSets.length > 1}
+              canAdd={adSets.length < 10}
+              onOpenPostPicker={(adIdx) => {
+                setActivePostPickerTarget({ adSetIdx: asIdx, adIdx });
+                setShowPostPicker(true);
+              }}
+            />
+          ))}
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Location Targeting</Label>
-                <div className="flex items-center gap-2">
-                  <Switch checked={allPakistan} onCheckedChange={(v) => { setAllPakistan(v); if (v) setSelectedGeoLocations([]); }} data-testid="switch-all-pakistan" />
-                  <span className="text-sm font-medium">{allPakistan ? "All Pakistan" : "Select Cities"}</span>
-                </div>
-              </div>
-              {allPakistan ? (
-                <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg p-3">
-                  <p className="text-sm text-green-700 dark:text-green-400">Targeting all of Pakistan (country-level). Your ads will reach audiences nationwide.</p>
-                </div>
-              ) : (
-                <>
-                  <div className="space-y-2">
-                    <div className="flex flex-wrap gap-1.5">
-                      {PK_PROVINCES.map(prov => {
-                        const provinceCityObjs = PK_CITIES.filter(c => c.province === prov.name).map(c => ({ key: c.key, name: c.name, type: "city" as const, country_code: "PK", region: c.province }));
-                        const provinceCityNames = provinceCityObjs.map(c => c.name);
-                        const selectedNames = selectedGeoLocations.map(g => g.name);
-                        const allSelected = provinceCityNames.every(n => selectedNames.includes(n));
-                        return (
-                          <Badge key={prov.name} variant={allSelected ? "default" : "outline"} className="cursor-pointer select-none text-xs"
-                            onClick={() => {
-                              if (allSelected) setSelectedGeoLocations(prev => prev.filter(g => !provinceCityNames.includes(g.name)));
-                              else setSelectedGeoLocations(prev => {
-                                const existing = prev.filter(g => !provinceCityNames.includes(g.name));
-                                return [...existing, ...provinceCityObjs];
-                              });
-                            }}
-                            data-testid={`badge-province-${prov.name.toLowerCase()}`}
-                          >{prov.label}</Badge>
-                        );
-                      })}
-                    </div>
-                    <p className="text-xs text-muted-foreground">Click a province to select/deselect all its cities</p>
-                  </div>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Search cities via Meta or filter presets..."
-                      value={geoSearchQuery || cityFilter}
-                      onChange={e => { const v = e.target.value; setGeoSearchQuery(v); setCityFilter(v); }}
-                      className="pl-9 h-8 text-sm" data-testid="input-city-search"
-                    />
-                  </div>
-                  {geoSearchResults.length > 0 && (
-                    <div className="border rounded-md p-2 space-y-1 bg-muted/30">
-                      <p className="text-xs font-medium text-muted-foreground">Meta Location Results</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {geoSearchResults.filter(r => !selectedGeoLocations.some(g => g.key === r.key)).map(r => (
-                          <Badge key={r.key} variant="outline" className="cursor-pointer select-none text-xs border-dashed"
-                            onClick={() => { setSelectedGeoLocations(prev => [...prev, r]); setGeoSearchQuery(""); setGeoSearchResults([]); }}
-                            data-testid={`badge-geo-${r.key}`}
-                          >{r.name}{r.region ? `, ${r.region}` : ""}{r.type && r.type !== "city" ? ` (${r.type})` : ""}</Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto">
-                    {PK_CITIES
-                      .filter(c => !cityFilter || c.name.toLowerCase().includes(cityFilter.toLowerCase()))
-                      .map(({ name: cityName, key: cityKey, province }) => {
-                        const isSelected = selectedGeoLocations.some(g => g.key === cityKey);
-                        return (
-                          <Badge key={cityKey} variant={isSelected ? "default" : "outline"} className="cursor-pointer select-none text-xs"
-                            onClick={() => setSelectedGeoLocations(prev => isSelected
-                              ? prev.filter(g => g.key !== cityKey)
-                              : [...prev, { key: cityKey, name: cityName, type: "city", country_code: "PK", region: province }]
-                            )}
-                            data-testid={`badge-city-${cityName.toLowerCase().replace(/\s+/g, "-")}`}
-                          >{cityName}</Badge>
-                        );
-                      })}
-                  </div>
-                  <p className="text-xs text-muted-foreground">{selectedGeoLocations.length} locations selected ({PK_CITIES.length} presets + Meta search)</p>
-                </>
-              )}
-            </div>
-
-            <Separator />
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Advantage+ Audience</Label>
-                <div className="flex items-center gap-2">
-                  <Switch checked={advantagePlusAudience} onCheckedChange={setAdvantagePlusAudience} data-testid="switch-advantage-plus" />
-                  <span className="text-sm text-muted-foreground">{advantagePlusAudience ? "On" : "Off"}</span>
-                </div>
-              </div>
-              {advantagePlusAudience && (
-                <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
-                  <p className="text-sm text-blue-700 dark:text-blue-400">Meta will use your targeting as a suggestion and automatically expand the audience beyond your selections for better results.</p>
-                </div>
-              )}
-            </div>
-
-            <Separator />
-
-            <div className="space-y-2">
-              <Label>Interest Targeting</Label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search interests (e.g. Online shopping, Fashion...)"
-                  value={interestSearch} onChange={e => setInterestSearch(e.target.value)}
-                  className="pl-9" data-testid="input-interest-search"
-                />
-              </div>
-              {interestSearch.length >= 2 && (
-                <div className="border rounded-md max-h-40 overflow-y-auto">
-                  {interestLoading ? (
-                    <div className="p-3 text-sm text-muted-foreground flex items-center gap-2"><Loader2 className="w-3 h-3 animate-spin" /> Searching...</div>
-                  ) : (interestResults?.data || []).length === 0 ? (
-                    <div className="p-3 text-sm text-muted-foreground">No interests found</div>
-                  ) : (
-                    (interestResults?.data || []).map((item) => (
-                      <button key={item.id} className="w-full px-3 py-2 text-left text-sm hover:bg-muted flex items-center justify-between"
-                        onClick={() => addInterest(item)} data-testid={`interest-option-${item.id}`}>
-                        <span>{item.name}</span>
-                        {item.audience_size && <span className="text-xs text-muted-foreground">{(item.audience_size / 1000000).toFixed(1)}M</span>}
-                      </button>
-                    ))
-                  )}
-                </div>
-              )}
-              {interests.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {interests.map(i => (
-                    <Badge key={i.id} variant="secondary" className="gap-1" data-testid={`interest-tag-${i.id}`}>
-                      {i.name}
-                      <X className="w-3 h-3 cursor-pointer" onClick={() => removeInterest(i.id)} />
-                    </Badge>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {(audiencesData?.audiences?.length ?? 0) > 0 && (
-              <>
-                <Separator />
-                <div className="space-y-2">
-                  <Label>Custom Audiences (Include)</Label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {audiencesData?.audiences?.filter(a => a.metaAudienceId).map(a => {
-                      const isSelected = selectedAudiences.some(s => s.id === a.metaAudienceId);
-                      return (
-                        <Badge
-                          key={a.id}
-                          variant={isSelected ? "default" : "outline"}
-                          className="cursor-pointer"
-                          onClick={() => {
-                            if (isSelected) setSelectedAudiences(prev => prev.filter(s => s.id !== a.metaAudienceId));
-                            else {
-                              setSelectedAudiences(prev => [...prev, { id: a.metaAudienceId!, name: a.name }]);
-                              setExcludedAudiences(prev => prev.filter(s => s.id !== a.metaAudienceId));
-                            }
-                          }}
-                          data-testid={`audience-include-${a.id}`}
-                        >
-                          {a.name}
-                        </Badge>
-                      );
-                    })}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Custom Audiences (Exclude)</Label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {audiencesData?.audiences?.filter(a => a.metaAudienceId).map(a => {
-                      const isExcluded = excludedAudiences.some(s => s.id === a.metaAudienceId);
-                      return (
-                        <Badge
-                          key={a.id}
-                          variant={isExcluded ? "destructive" : "outline"}
-                          className="cursor-pointer"
-                          onClick={() => {
-                            if (isExcluded) setExcludedAudiences(prev => prev.filter(s => s.id !== a.metaAudienceId));
-                            else {
-                              setExcludedAudiences(prev => [...prev, { id: a.metaAudienceId!, name: a.name }]);
-                              setSelectedAudiences(prev => prev.filter(s => s.id !== a.metaAudienceId));
-                            }
-                          }}
-                          data-testid={`audience-exclude-${a.id}`}
-                        >
-                          {a.name}
-                        </Badge>
-                      );
-                    })}
-                  </div>
-                </div>
-              </>
-            )}
-
-            <Separator />
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Placements</Label>
-                <div className="flex items-center gap-2">
-                  <Switch checked={autoPlacement} onCheckedChange={setAutoPlacement} data-testid="switch-auto-placement" />
-                  <span className="text-sm text-muted-foreground">{autoPlacement ? "Automatic" : "Manual"}</span>
-                </div>
-              </div>
-              {!autoPlacement && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {PLACEMENTS.map(p => (
-                    <label key={p.id} className="flex items-center gap-2 p-2 rounded border cursor-pointer hover:bg-muted/50">
-                      <Checkbox
-                        checked={selectedPlacements.includes(p.id)}
-                        onCheckedChange={(checked) => {
-                          setSelectedPlacements(prev => checked ? [...prev, p.id] : prev.filter(x => x !== p.id));
-                        }}
-                        data-testid={`checkbox-placement-${p.id}`}
-                      />
-                      {p.platform === "instagram" ? <SiInstagram className="w-3.5 h-3.5 text-pink-500" /> : <SiFacebook className="w-3.5 h-3.5 text-[#1877F2]" />}
-                      <span className="text-sm">{p.label}</span>
-                    </label>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="flex justify-between pt-2">
-              <Button variant="outline" onClick={() => setStep("campaign")} data-testid="button-back-campaign"><ArrowLeft className="w-4 h-4 mr-1" /> Back</Button>
-              <Button onClick={() => setStep("creative")} disabled={!canProceedFromTargeting} data-testid="button-next-creative">
-                Next: Creative <ArrowRight className="w-4 h-4 ml-1" />
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {step === "creative" && (
-        <Card data-testid="card-creative-step">
-          <CardHeader>
-            <CardTitle className="text-base">Ad Creative</CardTitle>
-            <CardDescription>Design your ad copy and select media</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-1.5">
-              <Label>Ad Format</Label>
-              <div className="flex gap-2 flex-wrap">
-                {([
-                  { value: "single_image" as AdFormat, label: "Single Image", icon: ImageIcon },
-                  { value: "video" as AdFormat, label: "Video", icon: Film },
-                  { value: "carousel" as AdFormat, label: "Carousel", icon: Plus },
-                  { value: "existing_post" as AdFormat, label: "Existing Post", icon: FileText },
-                ]).map(f => (
-                  <Button key={f.value} variant={adFormat === f.value ? "default" : "outline"} size="sm" className="gap-1.5"
-                    onClick={() => { setAdFormat(f.value); if (f.value === "existing_post" && !selectedPost) setShowPostPicker(true); }} data-testid={`button-format-${f.value}`}>
-                    <f.icon className="w-3.5 h-3.5" /> {f.label}
-                  </Button>
-                ))}
-              </div>
-            </div>
-
-            {adFormat === "existing_post" && (
-              <div className="space-y-3">
-                {selectedPost ? (
-                  <div className="border rounded-lg p-3 space-y-2" data-testid="selected-post-card">
-                    <div className="flex items-start gap-3">
-                      {selectedPost.fullPicture && (
-                        <img src={selectedPost.fullPicture} alt="Post" className="w-20 h-20 rounded object-cover shrink-0" />
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 mb-1">
-                          {selectedPost.source === "facebook" && <SiFacebook className="w-3.5 h-3.5 text-[#1877F2] shrink-0" />}
-                          {selectedPost.source === "instagram" && <SiInstagram className="w-3.5 h-3.5 text-[#E4405F] shrink-0" />}
-                          {selectedPost.source === "partner" && <Share2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
-                          <span className="text-xs text-muted-foreground capitalize">{selectedPost.source}</span>
-                          <span className="text-xs text-muted-foreground">·</span>
-                          <span className="text-xs text-muted-foreground">{selectedPost.createdTime ? format(new Date(selectedPost.createdTime), "dd MMM yyyy") : ""}</span>
-                        </div>
-                        <p className="text-sm line-clamp-2">{selectedPost.message || "(No text)"}</p>
-                        <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1"><ThumbsUp className="w-3 h-3" /> {selectedPost.likes}</span>
-                          <span className="flex items-center gap-1"><MessageCircle className="w-3 h-3" /> {selectedPost.comments}</span>
-                          {selectedPost.shares > 0 && <span className="flex items-center gap-1"><Share2 className="w-3 h-3" /> {selectedPost.shares}</span>}
-                        </div>
-                        <p className="text-[10px] text-muted-foreground mt-1 font-mono">ID: {selectedPost.id}</p>
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm" onClick={() => setShowPostPicker(true)} data-testid="button-change-post">Change Post</Button>
-                      <Button variant="ghost" size="sm" onClick={() => setSelectedPost(null)} data-testid="button-remove-post"><X className="w-3.5 h-3.5 mr-1" /> Remove</Button>
-                    </div>
-                  </div>
-                ) : (
-                  <Button variant="outline" className="w-full h-24 border-dashed gap-2" onClick={() => setShowPostPicker(true)} data-testid="button-select-post">
-                    <Search className="w-4 h-4" /> Select an Existing Post
-                  </Button>
-                )}
-
-                <PostPickerDialog
-                  open={showPostPicker}
-                  onOpenChange={setShowPostPicker}
-                  searchQuery={postSearchQuery}
-                  onSearchChange={setPostSearchQuery}
-                  fbPosts={fbPostsData?.posts || []}
-                  igPosts={igPostsData?.posts || []}
-                  partnerPosts={partnerPostsData?.posts || []}
-                  mediaLibrary={mediaData?.media || []}
-                  fbLoading={fbPostsLoading}
-                  igLoading={igPostsLoading}
-                  partnerLoading={partnerPostsLoading}
-                  onSelectPost={(post) => {
-                    setSelectedPost(post);
-                    setShowPostPicker(false);
-                  }}
-                  onSelectMedia={(media) => {
+          <PostPickerDialog
+            open={showPostPicker}
+            onOpenChange={setShowPostPicker}
+            searchQuery={postSearchQuery}
+            onSearchChange={setPostSearchQuery}
+            fbPosts={fbPostsData?.posts || []}
+            igPosts={igPostsData?.posts || []}
+            partnerPosts={partnerPostsData?.posts || []}
+            mediaLibrary={mediaData?.media || []}
+            fbLoading={fbPostsLoading}
+            igLoading={igPostsLoading}
+            partnerLoading={partnerPostsLoading}
+            onSelectPost={(post) => {
+              if (activePostPickerTarget) {
+                const as2 = adSets[activePostPickerTarget.adSetIdx];
+                if (as2) {
+                  const ad = as2.ads[activePostPickerTarget.adIdx];
+                  if (ad) updateAd(as2.id, ad.id, { selectedPost: post });
+                }
+              }
+              setShowPostPicker(false);
+            }}
+            onSelectMedia={(media) => {
+              if (activePostPickerTarget) {
+                const as2 = adSets[activePostPickerTarget.adSetIdx];
+                if (as2) {
+                  const ad = as2.ads[activePostPickerTarget.adIdx];
+                  if (ad) {
                     if (media.type === "video") {
-                      setAdFormat("video");
-                      setVideoId(media.metaMediaHash || "");
+                      updateAd(as2.id, ad.id, { format: "video", videoId: media.metaMediaHash || "", selectedPost: null });
                     } else {
-                      setAdFormat("single_image");
-                      setImageUrl(media.url);
+                      updateAd(as2.id, ad.id, { format: "single_image", imageUrl: media.url, selectedPost: null });
                     }
-                    setShowPostPicker(false);
-                    setSelectedPost(null);
-                  }}
-                />
-              </div>
-            )}
+                  }
+                }
+              }
+              setShowPostPicker(false);
+            }}
+          />
 
-            {adFormat === "existing_post" && selectedPost && (
-              <Collapsible>
-                <CollapsibleTrigger asChild>
-                  <Button variant="ghost" size="sm" className="w-full justify-between text-sm font-medium p-3 h-auto" data-testid="btn-toggle-conversion-link">
-                    Conversion Link (Optional)
-                    <ChevronDown className="w-4 h-4" />
-                  </Button>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <div className="space-y-3 border rounded-lg p-3 bg-muted/30 mt-1">
-                    <p className="text-xs text-muted-foreground">Add a website URL for conversion tracking. Meta will show this as a CTA button on your promoted post.</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <Label htmlFor="ep-link-url">Website URL</Label>
-                        <Input id="ep-link-url" type="url" placeholder="https://yourstore.com" value={linkUrl} onChange={e => setLinkUrl(e.target.value)} data-testid="input-existing-post-link-url" />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label>Call to Action</Label>
-                        <Select value={callToAction} onValueChange={setCallToAction}>
-                          <SelectTrigger data-testid="select-existing-post-cta"><SelectValue /></SelectTrigger>
-                          <SelectContent>{CTA_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  </div>
-                </CollapsibleContent>
-              </Collapsible>
-            )}
-
-            {adFormat !== "existing_post" && (
-            <div className="space-y-1.5">
-              <Label htmlFor="primary-text">Primary Text *</Label>
-              <Textarea id="primary-text" placeholder="Write your ad copy here..." rows={3} value={primaryText} onChange={e => setPrimaryText(e.target.value)} data-testid="textarea-primary-text" />
-            </div>
-            )}
-
-            {adFormat !== "existing_post" && (
-            <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="headline">Headline</Label>
-                <Input id="headline" placeholder="e.g. 50% Off Summer Collection" value={headline} onChange={e => setHeadline(e.target.value)} data-testid="input-headline" />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="ad-description">Description</Label>
-                <Input id="ad-description" placeholder="e.g. Free delivery nationwide" value={description} onChange={e => setDescription(e.target.value)} data-testid="input-description" />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="link-url">Landing Page URL *</Label>
-                <Input id="link-url" type="url" placeholder="https://yourstore.com/collection" value={linkUrl} onChange={e => setLinkUrl(e.target.value)} data-testid="input-link-url" />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Call to Action</Label>
-                <Select value={callToAction} onValueChange={setCallToAction}>
-                  <SelectTrigger data-testid="select-cta"><SelectValue /></SelectTrigger>
-                  <SelectContent>{CTA_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-            </div>
-            </>
-            )}
-
-            {adFormat === "single_image" && (
-              <div className="space-y-1.5">
-                <Label htmlFor="image-url">Image URL</Label>
-                <Input id="image-url" type="url" placeholder="https://example.com/ad-image.jpg" value={imageUrl} onChange={e => setImageUrl(e.target.value)} data-testid="input-image-url" />
-                {mediaWarnings.length > 0 && (
-                  <div className="space-y-1">{mediaWarnings.map((w, i) => <p key={i} className="text-xs text-amber-600 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{w}</p>)}</div>
-                )}
-                <p className="text-xs text-muted-foreground">Recommended: 1080×1080px (1:1), 1080×1350px (4:5), or 1080×1920px (9:16). Max {MEDIA_LIMITS.image.maxSizeMB}MB.</p>
-                {mediaData?.media?.length > 0 && (
-                  <div className="mt-2">
-                    <p className="text-xs text-muted-foreground mb-1.5">Or select from Media Library:</p>
-                    <div className="flex gap-2 overflow-x-auto pb-1">
-                      {mediaData.media.filter((m: any) => m.type === "image").slice(0, 8).map((m: any) => (
-                        <button key={m.id} onClick={() => setImageUrl(m.url)} className={`shrink-0 w-16 h-16 rounded border-2 overflow-hidden transition-colors ${imageUrl === m.url ? "border-primary" : "border-transparent hover:border-muted-foreground/30"}`} data-testid={`media-select-${m.id}`}>
-                          <img src={m.url} alt={m.name} className="w-full h-full object-cover" />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {adFormat === "video" && (
-              <div className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="video-id">Video ID (from Media Library upload)</Label>
-                  <Input id="video-id" placeholder="Meta Video ID" value={videoId} onChange={e => setVideoId(e.target.value)} data-testid="input-video-id" />
-                  <p className="text-xs text-muted-foreground">Upload a video via the <a href="/meta/media-library" className="text-primary underline">Media Library</a> first. The Meta Video ID will appear after upload. Max {MEDIA_LIMITS.video.maxLengthSec}s, {MEDIA_LIMITS.video.maxSizeMB / 1024}GB. Accepted formats: MP4, MOV.</p>
-                  {mediaData?.media?.length > 0 && (
-                    <div className="mt-2">
-                      <p className="text-xs text-muted-foreground mb-1.5">Videos from Media Library:</p>
-                      <div className="flex gap-2 overflow-x-auto pb-1">
-                        {mediaData.media.filter((m: any) => m.type === "video").slice(0, 8).map((m: any) => (
-                          <button key={m.id} onClick={() => setVideoId(m.metaMediaHash || "")} className={`shrink-0 px-3 py-2 rounded border-2 text-xs font-medium transition-colors ${videoId === m.metaMediaHash ? "border-primary bg-primary/10" : "border-muted hover:border-muted-foreground/30"}`} data-testid={`video-select-${m.id}`}>
-                            <Film className="w-4 h-4 mx-auto mb-1" />
-                            {m.name}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="thumbnail-url">Thumbnail URL (optional)</Label>
-                  <Input id="thumbnail-url" type="url" placeholder="https://example.com/thumbnail.jpg" value={thumbnailUrl} onChange={e => setThumbnailUrl(e.target.value)} data-testid="input-thumbnail-url" />
-                </div>
-              </div>
-            )}
-
-            {adFormat === "carousel" && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label>Carousel Cards ({carouselCards.length})</Label>
-                  <Button variant="outline" size="sm" onClick={addCarouselCard} disabled={carouselCards.length >= 10} data-testid="button-add-carousel-card">
-                    <Plus className="w-3.5 h-3.5 mr-1" /> Add Card
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">Minimum 2 cards, maximum 10. Each card needs an image and uses the main landing URL if no URL specified.</p>
-                {carouselCards.map((card, idx) => (
-                  <div key={card.id} className="border rounded-lg p-3 space-y-2" data-testid={`carousel-card-${card.id}`}>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium">Card {idx + 1}</span>
-                      <Button variant="ghost" size="sm" onClick={() => removeCarouselCard(card.id)} disabled={carouselCards.length <= 2} data-testid={`button-remove-card-${card.id}`}>
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </div>
-                    <Input placeholder="Image URL" value={card.imageUrl} onChange={e => updateCarouselCard(card.id, "imageUrl", e.target.value)} className="text-xs h-8" data-testid={`input-card-image-${card.id}`} />
-                    <div className="grid grid-cols-2 gap-2">
-                      <Input placeholder="Card Headline" value={card.headline} onChange={e => updateCarouselCard(card.id, "headline", e.target.value)} className="text-xs h-8" data-testid={`input-card-headline-${card.id}`} />
-                      <Input placeholder="Card Description" value={card.description} onChange={e => updateCarouselCard(card.id, "description", e.target.value)} className="text-xs h-8" data-testid={`input-card-description-${card.id}`} />
-                    </div>
-                    <Input placeholder="Card URL (optional)" value={card.linkUrl} onChange={e => updateCarouselCard(card.id, "linkUrl", e.target.value)} className="text-xs h-8" data-testid={`input-card-url-${card.id}`} />
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="flex justify-between pt-2">
-              <Button variant="outline" onClick={() => setStep("targeting")} data-testid="button-back-targeting"><ArrowLeft className="w-4 h-4 mr-1" /> Back</Button>
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setShowPreview(!showPreview)} data-testid="button-toggle-preview">
-                  <Eye className="w-4 h-4 mr-1" /> {showPreview ? "Hide" : "Show"} Preview
-                </Button>
-                <Button onClick={() => setStep("review")} disabled={!canProceedFromCreative} data-testid="button-next-review">
-                  Next: Review <ArrowRight className="w-4 h-4 ml-1" />
-                </Button>
-              </div>
-            </div>
-
-            {showPreview && (
-              <>
-                <Separator />
-                <h3 className="font-medium text-sm text-center">Ad Preview</h3>
-                <AdPreview primaryText={primaryText} headline={headline} imageUrl={imageUrl} thumbnailUrl={thumbnailUrl} linkUrl={linkUrl} callToAction={callToAction} pageName={pageName} format={adFormat} carouselCards={carouselCards} />
-              </>
-            )}
-          </CardContent>
-        </Card>
+          <div className="flex justify-between pt-2">
+            <Button variant="outline" onClick={() => setStep("campaign")} data-testid="button-back-campaign"><ArrowLeft className="w-4 h-4 mr-1" /> Back</Button>
+            <Button onClick={() => setStep("review")} disabled={!canProceedFromAdSets} data-testid="button-next-review">
+              Next: Review <ArrowRight className="w-4 h-4 ml-1" />
+            </Button>
+          </div>
+        </div>
       )}
 
       {step === "review" && (
         <Card data-testid="card-review-step">
           <CardHeader>
             <CardTitle className="text-base">Review & Launch</CardTitle>
-            <CardDescription>Review your ad configuration before launching. Ads are created in <strong>PAUSED</strong> state.</CardDescription>
+            <CardDescription>Review your campaign structure before launching. All ads are created in <strong>PAUSED</strong> state.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-3">
-                <h3 className="font-medium text-sm">Campaign</h3>
-                <div className="space-y-1 text-sm">
-                  <div className="flex justify-between"><span className="text-muted-foreground">Name</span><span className="font-medium" data-testid="review-campaign-name">{campaignName}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Objective</span><span>{OBJECTIVES.find(o => o.value === objective)?.label}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Budget Level</span><Badge variant="outline">{budgetLevel === "campaign" ? "CBO" : "ABO"}</Badge></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Budget</span><span>PKR {budgetValue}/{budgetType === "daily" ? "day" : "total"}</span></div>
-                  {budgetLevel === "campaign" && spendingLimit && <div className="flex justify-between"><span className="text-muted-foreground">Spending Limit</span><span>PKR {spendingLimit}</span></div>}
-                  <div className="flex justify-between"><span className="text-muted-foreground">Bid Strategy</span><span>{BID_STRATEGIES.find(b => b.value === bidStrategy)?.label}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Optimization</span><span>{OPTIMIZATION_GOALS.find(o => o.value === (optimizationGoal || (() => {
-                    const m: Record<string, string> = { OUTCOME_SALES: hasPixel ? "OFFSITE_CONVERSIONS" : "LINK_CLICKS", OUTCOME_LEADS: hasPixel ? "LEAD_GENERATION" : "LINK_CLICKS", OUTCOME_ENGAGEMENT: "POST_ENGAGEMENT", OUTCOME_AWARENESS: "REACH", OUTCOME_TRAFFIC: "LANDING_PAGE_VIEWS" };
-                    return m[objective] || (hasPixel ? "OFFSITE_CONVERSIONS" : "LINK_CLICKS");
-                  })()))?.label}</span></div>
-                  {selectedPixelId && selectedPixelId !== "none" && (
-                    <>
-                      <div className="flex justify-between"><span className="text-muted-foreground">Pixel</span><span className="font-mono text-xs">{availablePixels.find(p => p.id === selectedPixelId)?.name || selectedPixelId}</span></div>
-                      <div className="flex justify-between"><span className="text-muted-foreground">Conv. Event</span><span>{CONVERSION_EVENTS.find(e => e.value === conversionEvent)?.label}</span></div>
-                    </>
-                  )}
-                  {startDate && <div className="flex justify-between"><span className="text-muted-foreground">Start</span><span>{format(startDate, "PPP")} {startTime}</span></div>}
-                  {endDate && <div className="flex justify-between"><span className="text-muted-foreground">End</span><span>{format(endDate, "PPP")} {endTime}</span></div>}
-                </div>
-
-                <Separator />
-
-                <h3 className="font-medium text-sm">Targeting</h3>
-                <div className="space-y-1 text-sm">
-                  <div className="flex justify-between"><span className="text-muted-foreground">Age</span><span>{minAge} - {maxAge}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Gender</span><span className="capitalize">{gender}</span></div>
-                  <div><span className="text-muted-foreground">Location: </span><span>{allPakistan ? "All Pakistan" : `${selectedGeoLocations.length} locations`}</span></div>
-                  {!allPakistan && selectedGeoLocations.length > 0 && <div className="text-xs text-muted-foreground pl-2">{selectedGeoLocations.map(g => g.name).join(", ")}</div>}
-                  {interests.length > 0 && <div><span className="text-muted-foreground">Interests: </span><span>{interests.map(i => i.name).join(", ")}</span></div>}
-                  {advantagePlusAudience && <div className="flex justify-between"><span className="text-muted-foreground">Advantage+</span><Badge variant="secondary" className="text-xs">Enabled</Badge></div>}
-                  <div className="flex justify-between"><span className="text-muted-foreground">Placements</span><span>{autoPlacement ? "Automatic" : `${selectedPlacements.length} selected`}</span></div>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <h3 className="font-medium text-sm">Creative</h3>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between"><span className="text-muted-foreground">Format</span><Badge variant="outline">{adFormat === "existing_post" ? "Existing Post" : adFormat === "single_image" ? "Image" : adFormat === "video" ? "Video" : "Carousel"}</Badge></div>
-                  {adFormat === "existing_post" && selectedPost ? (
-                    <div className="border rounded p-2 space-y-1.5">
-                      <div className="flex items-start gap-2">
-                        {selectedPost.fullPicture && <img src={selectedPost.fullPicture} alt="Post" className="w-14 h-14 rounded object-cover shrink-0" />}
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1 mb-0.5">
-                            {selectedPost.source === "facebook" && <SiFacebook className="w-3 h-3 text-[#1877F2]" />}
-                            {selectedPost.source === "instagram" && <SiInstagram className="w-3 h-3 text-[#E4405F]" />}
-                            <span className="text-xs text-muted-foreground capitalize">{selectedPost.source}</span>
-                          </div>
-                          <p className="text-xs line-clamp-2">{selectedPost.message || "(No text)"}</p>
-                          <p className="text-[10px] text-muted-foreground font-mono mt-0.5">ID: {selectedPost.id}</p>
-                        </div>
-                      </div>
-                      {linkUrl && (
-                        <div className="text-xs mt-1">
-                          <span className="text-muted-foreground">CTA Link: </span>
-                          <a href={linkUrl} target="_blank" rel="noreferrer" className="text-primary break-all">{linkUrl}</a>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <>
-                      <div><span className="text-muted-foreground block">Primary Text</span><p className="mt-0.5">{primaryText}</p></div>
-                      {headline && <div><span className="text-muted-foreground block">Headline</span><p className="mt-0.5 font-medium">{headline}</p></div>}
-                      <div className="flex justify-between"><span className="text-muted-foreground">CTA</span><span>{CTA_OPTIONS.find(c => c.value === callToAction)?.label}</span></div>
-                      <div><span className="text-muted-foreground block">URL</span><a href={linkUrl} target="_blank" rel="noreferrer" className="text-primary text-xs break-all">{linkUrl}</a></div>
-                      {adFormat === "single_image" && imageUrl && <div className="mt-2"><img src={imageUrl} alt="Ad preview" className="rounded border max-h-32 object-cover" /></div>}
-                      {adFormat === "carousel" && <p className="text-xs text-muted-foreground">{carouselCards.filter(c => c.imageUrl).length} carousel cards</p>}
-                    </>
-                  )}
-                </div>
+            <div className="space-y-3">
+              <h3 className="font-medium text-sm">Campaign</h3>
+              <div className="space-y-1 text-sm">
+                <div className="flex justify-between"><span className="text-muted-foreground">Name</span><span className="font-medium" data-testid="review-campaign-name">{campaignName}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Objective</span><span>{OBJECTIVES.find(o => o.value === objective)?.label}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Budget Level</span><Badge variant="outline">{budgetLevel === "campaign" ? "CBO" : "ABO"}</Badge></div>
+                {budgetLevel === "campaign" && (
+                  <div className="flex justify-between"><span className="text-muted-foreground">Campaign Budget</span><span>PKR {budgetValue}/{budgetType === "daily" ? "day" : "total"}</span></div>
+                )}
+                {selectedPixelId && selectedPixelId !== "none" && (
+                  <>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Pixel</span><span className="font-mono text-xs">{availablePixels.find(p => p.id === selectedPixelId)?.name || selectedPixelId}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Conv. Event</span><span>{CONVERSION_EVENTS.find(e => e.value === conversionEvent)?.label}</span></div>
+                  </>
+                )}
+                <div className="flex justify-between"><span className="text-muted-foreground">Ad Sets</span><span>{adSets.length}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Total Ads</span><span>{totalAds}</span></div>
               </div>
             </div>
 
             <Separator />
 
-            {adFormat === "existing_post" && selectedPost ? (
-              <div className="border rounded-lg overflow-hidden bg-white dark:bg-zinc-900 max-w-sm mx-auto shadow-sm" data-testid="existing-post-review-preview">
-                <div className="p-3 flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold">
-                    {(pageName || "P")[0]}
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold">{pageName || "Your Page"}</p>
-                    <p className="text-[10px] text-muted-foreground">Sponsored</p>
-                  </div>
+            {adSets.map((adSet, asIdx) => (
+              <div key={adSet.id} className="border rounded-lg p-4 space-y-3" data-testid={`review-adset-${asIdx}`}>
+                <div className="flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-primary" />
+                  <h4 className="font-medium text-sm">{adSet.name}</h4>
+                  <Badge variant="outline" className="text-xs ml-auto">{adSet.ads.length} ad{adSet.ads.length !== 1 ? "s" : ""}</Badge>
                 </div>
-                <div className="px-3 pb-2"><p className="text-sm whitespace-pre-wrap">{selectedPost.message || "(No text)"}</p></div>
-                {selectedPost.fullPicture && <img src={selectedPost.fullPicture} alt="Post" className="w-full aspect-square object-cover" />}
-                <div className="p-3 border-t flex items-center justify-between">
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1"><ThumbsUp className="w-3 h-3" /> {selectedPost.likes}</span>
-                    <span className="flex items-center gap-1"><MessageCircle className="w-3 h-3" /> {selectedPost.comments}</span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  <div className="space-y-1">
+                    <div className="flex justify-between"><span className="text-muted-foreground">Age</span><span>{adSet.minAge} - {adSet.maxAge}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Gender</span><span className="capitalize">{adSet.gender}</span></div>
+                    <div><span className="text-muted-foreground">Location: </span><span>{adSet.allPakistan ? "All Pakistan" : `${adSet.selectedGeoLocations.length} locations`}</span></div>
+                    {!adSet.allPakistan && adSet.selectedGeoLocations.length > 0 && (
+                      <div className="text-xs text-muted-foreground pl-2">{adSet.selectedGeoLocations.map(g => g.name).join(", ")}</div>
+                    )}
+                    {adSet.interests.length > 0 && <div><span className="text-muted-foreground">Interests: </span><span className="text-xs">{adSet.interests.map(i => i.name).join(", ")}</span></div>}
+                    {adSet.advantagePlusAudience && <Badge variant="secondary" className="text-xs">Advantage+ On</Badge>}
+                    <div className="flex justify-between"><span className="text-muted-foreground">Placements</span><span>{adSet.autoPlacement ? "Automatic" : `${adSet.selectedPlacements.length} selected`}</span></div>
+                    {budgetLevel === "adset" && (
+                      <div className="flex justify-between"><span className="text-muted-foreground">Budget</span><span>PKR {adSet.budgetType === "daily" ? adSet.dailyBudget : adSet.lifetimeBudget}/{adSet.budgetType === "daily" ? "day" : "total"}</span></div>
+                    )}
                   </div>
-                  {selectedPost.permalinkUrl && <a href={selectedPost.permalinkUrl} target="_blank" rel="noreferrer" className="text-xs text-primary flex items-center gap-1"><ExternalLink className="w-3 h-3" /> View Post</a>}
+                  <div className="space-y-2">
+                    {adSet.ads.map((ad, adIdx) => (
+                      <div key={ad.id} className="border rounded p-2 space-y-1" data-testid={`review-ad-${asIdx}-${adIdx}`}>
+                        <p className="text-xs font-medium">{ad.name}</p>
+                        <div className="flex justify-between text-xs">
+                          <span className="text-muted-foreground">Format</span>
+                          <Badge variant="outline" className="text-[10px]">{ad.format === "existing_post" ? "Existing Post" : ad.format === "single_image" ? "Image" : ad.format === "video" ? "Video" : "Carousel"}</Badge>
+                        </div>
+                        {ad.format === "existing_post" && ad.selectedPost ? (
+                          <p className="text-[10px] text-muted-foreground truncate">Post: {ad.selectedPost.message || ad.selectedPost.id}</p>
+                        ) : (
+                          <>
+                            <p className="text-[10px] text-muted-foreground truncate">{ad.primaryText || "(No text)"}</p>
+                            {ad.headline && <p className="text-[10px] font-medium truncate">{ad.headline}</p>}
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
-            ) : (
-              <AdPreview primaryText={primaryText} headline={headline} imageUrl={imageUrl} thumbnailUrl={thumbnailUrl} linkUrl={linkUrl} callToAction={callToAction} pageName={pageName} format={adFormat} carouselCards={carouselCards} />
-            )}
+            ))}
 
             <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-3 flex items-start gap-2">
               <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
               <p className="text-xs text-amber-700 dark:text-amber-400">
-                Your ad will be created in <strong>PAUSED</strong> state. You can review and activate it directly from Facebook Ads Manager.
+                Your campaign ({adSets.length} ad set{adSets.length !== 1 ? "s" : ""}, {totalAds} ad{totalAds !== 1 ? "s" : ""}) will be created in <strong>PAUSED</strong> state. You can review and activate it from Facebook Ads Manager.
               </p>
             </div>
 
             <div className="flex justify-between pt-2">
-              <Button variant="outline" onClick={() => setStep("creative")} data-testid="button-back-creative"><ArrowLeft className="w-4 h-4 mr-1" /> Back</Button>
+              <Button variant="outline" onClick={() => setStep("adsets")} data-testid="button-back-adsets"><ArrowLeft className="w-4 h-4 mr-1" /> Back</Button>
               <Button onClick={() => launchMutation.mutate()} disabled={launchMutation.isPending} className="gap-2" data-testid="button-launch-ad">
                 {launchMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Rocket className="w-4 h-4" />}
-                Launch Ad (Paused)
+                Launch Campaign ({totalAds} ad{totalAds !== 1 ? "s" : ""})
               </Button>
             </div>
           </CardContent>
         </Card>
+      )}
+    </div>
+  );
+}
+
+function AdSetPanel({
+  adSet, adSetIdx, budgetLevel, objective, hasPixel, conversionGoals, audiencesData, mediaData, pageName,
+  onUpdate, onUpdateAd, onRemove, onDuplicate, onAddAd, onRemoveAd, canRemove, canAdd, onOpenPostPicker,
+}: {
+  adSet: AdSetState;
+  adSetIdx: number;
+  budgetLevel: BudgetLevel;
+  objective: string;
+  hasPixel: boolean;
+  conversionGoals: string[];
+  audiencesData: any;
+  mediaData: any;
+  pageName: string;
+  onUpdate: (updates: Partial<AdSetState>) => void;
+  onUpdateAd: (adId: string, updates: Partial<AdState>) => void;
+  onRemove: () => void;
+  onDuplicate: () => void;
+  onAddAd: () => void;
+  onRemoveAd: (adId: string) => void;
+  canRemove: boolean;
+  canAdd: boolean;
+  onOpenPostPicker: (adIdx: number) => void;
+}) {
+  const [cityFilter, setCityFilter] = useState("");
+  const [geoSearchQuery, setGeoSearchQuery] = useState("");
+  const [geoSearchResults, setGeoSearchResults] = useState<GeoLocation[]>([]);
+  const [interestSearch, setInterestSearch] = useState("");
+  const [interestDebounce, setInterestDebounce] = useState("");
+
+  useEffect(() => {
+    const t = setTimeout(() => setInterestDebounce(interestSearch), 300);
+    return () => clearTimeout(t);
+  }, [interestSearch]);
+
+  const { data: interestResults, isLoading: interestLoading } = useQuery<{ data: Interest[] }>({
+    queryKey: ["/api/meta/targeting-search", interestDebounce],
+    queryFn: async () => {
+      if (!interestDebounce || interestDebounce.length < 2) return { data: [] };
+      const res = await fetch(`/api/meta/targeting-search?q=${encodeURIComponent(interestDebounce)}&type=adinterest`, { credentials: "include" });
+      return res.json();
+    },
+    enabled: interestDebounce.length >= 2,
+  });
+
+  useEffect(() => {
+    if (!geoSearchQuery || geoSearchQuery.length < 2) { setGeoSearchResults([]); return; }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/meta/targeting-search?type=adgeolocation&q=${encodeURIComponent(geoSearchQuery)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        setGeoSearchResults((data.data || []).map((item: any) => ({
+          key: item.key || item.id || item.name,
+          name: item.name,
+          type: item.type || "city",
+          country_code: item.country_code || "PK",
+          region: item.region || "",
+        })));
+      } catch { setGeoSearchResults([]); }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [geoSearchQuery]);
+
+  const asBudgetValue = adSet.budgetType === "daily" ? adSet.dailyBudget : adSet.lifetimeBudget;
+  const asBudgetMin = adSet.budgetType === "daily" ? 100 : 1000;
+  const asBudgetWarning = budgetLevel === "adset" && parseFloat(asBudgetValue) < asBudgetMin ? `Minimum ${adSet.budgetType} budget is PKR ${asBudgetMin}` : "";
+
+  const validAdSets = isAdSetValid(adSet, budgetLevel);
+  const adCount = adSet.ads.length;
+
+  return (
+    <Card className={`transition-all ${!validAdSets && !adSet.isExpanded ? "border-amber-400" : ""}`} data-testid={`adset-panel-${adSetIdx}`}>
+      <button
+        className="w-full text-left p-4 flex items-center gap-3 hover:bg-muted/30 transition-colors"
+        onClick={() => onUpdate({ isExpanded: !adSet.isExpanded })}
+        data-testid={`adset-toggle-${adSetIdx}`}
+      >
+        <Layers className="w-4 h-4 text-primary shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold truncate">{adSet.name || `Ad Set ${adSetIdx + 1}`}</p>
+          <p className="text-xs text-muted-foreground">
+            {adCount} ad{adCount !== 1 ? "s" : ""} · {adSet.allPakistan ? "All Pakistan" : `${adSet.selectedGeoLocations.length} locations`}
+            {budgetLevel === "adset" && ` · PKR ${asBudgetValue}/${adSet.budgetType === "daily" ? "day" : "total"}`}
+          </p>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          {!validAdSets && <AlertCircle className="w-3.5 h-3.5 text-amber-500" />}
+          {adSet.isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </div>
+      </button>
+
+      {adSet.isExpanded && (
+        <CardContent className="border-t pt-4 space-y-4">
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex-1 min-w-[200px] space-y-1.5">
+              <Label>Ad Set Name</Label>
+              <Input value={adSet.name} onChange={e => onUpdate({ name: e.target.value })} placeholder="Ad Set Name" data-testid={`input-adset-name-${adSetIdx}`} />
+            </div>
+            <div className="flex gap-1 pt-5">
+              <Button variant="ghost" size="sm" onClick={onDuplicate} disabled={!canAdd} title="Duplicate" data-testid={`button-duplicate-adset-${adSetIdx}`}>
+                <Copy className="w-3.5 h-3.5" />
+              </Button>
+              <Button variant="ghost" size="sm" onClick={onRemove} disabled={!canRemove} title="Remove" data-testid={`button-remove-adset-${adSetIdx}`}>
+                <Trash2 className="w-3.5 h-3.5 text-destructive" />
+              </Button>
+            </div>
+          </div>
+
+          {budgetLevel === "adset" && (
+            <>
+              <Separator />
+              <h4 className="font-medium text-xs uppercase text-muted-foreground tracking-wider">Budget</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Budget Type</Label>
+                  <Select value={adSet.budgetType} onValueChange={(v) => onUpdate({ budgetType: v as BudgetType })}>
+                    <SelectTrigger className="h-8 text-xs" data-testid={`select-adset-budget-type-${adSetIdx}`}><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="daily">Daily</SelectItem>
+                      <SelectItem value="lifetime">Lifetime</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">{adSet.budgetType === "daily" ? "Daily" : "Lifetime"} Budget (PKR)</Label>
+                  <Input type="number" className="h-8 text-xs" min={asBudgetMin}
+                    value={adSet.budgetType === "daily" ? adSet.dailyBudget : adSet.lifetimeBudget}
+                    onChange={e => adSet.budgetType === "daily" ? onUpdate({ dailyBudget: e.target.value }) : onUpdate({ lifetimeBudget: e.target.value })}
+                    data-testid={`input-adset-budget-${adSetIdx}`}
+                  />
+                  {asBudgetWarning && <p className="text-xs text-destructive">{asBudgetWarning}</p>}
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Bid Strategy</Label>
+                  <Select value={adSet.bidStrategy} onValueChange={(v) => onUpdate({ bidStrategy: v })}>
+                    <SelectTrigger className="h-8 text-xs" data-testid={`select-adset-bid-${adSetIdx}`}><SelectValue /></SelectTrigger>
+                    <SelectContent>{BID_STRATEGIES.map(b => <SelectItem key={b.value} value={b.value}>{b.label}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+              </div>
+              {(adSet.bidStrategy === "COST_CAP" || adSet.bidStrategy === "BID_CAP") && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs">{adSet.bidStrategy === "COST_CAP" ? "Cost Cap" : "Bid Cap"} (PKR)</Label>
+                  <Input type="number" className="h-8 text-xs" placeholder="e.g. 50" value={adSet.bidAmount} onChange={e => onUpdate({ bidAmount: e.target.value })} data-testid={`input-adset-bidamt-${adSetIdx}`} />
+                </div>
+              )}
+            </>
+          )}
+
+          <Separator />
+          <h4 className="font-medium text-xs uppercase text-muted-foreground tracking-wider">Targeting</h4>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Min Age</Label>
+              <Input type="number" min="13" max="65" className="h-8 text-xs" value={adSet.minAge} onChange={e => onUpdate({ minAge: e.target.value })} data-testid={`input-adset-minage-${adSetIdx}`} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Max Age</Label>
+              <Input type="number" min="13" max="65" className="h-8 text-xs" value={adSet.maxAge} onChange={e => onUpdate({ maxAge: e.target.value })} data-testid={`input-adset-maxage-${adSetIdx}`} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Gender</Label>
+              <Select value={adSet.gender} onValueChange={(v) => onUpdate({ gender: v })}>
+                <SelectTrigger className="h-8 text-xs" data-testid={`select-adset-gender-${adSetIdx}`}><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="male">Male</SelectItem>
+                  <SelectItem value="female">Female</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs">Location</Label>
+              <div className="flex items-center gap-2">
+                <Switch checked={adSet.allPakistan} onCheckedChange={(v) => { onUpdate({ allPakistan: v, selectedGeoLocations: v ? [] : adSet.selectedGeoLocations }); }} data-testid={`switch-allpak-${adSetIdx}`} />
+                <span className="text-xs font-medium">{adSet.allPakistan ? "All Pakistan" : "Select Cities"}</span>
+              </div>
+            </div>
+            {adSet.allPakistan ? (
+              <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg p-2">
+                <p className="text-xs text-green-700 dark:text-green-400">Targeting all of Pakistan.</p>
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-wrap gap-1">
+                  {PK_PROVINCES.map(prov => {
+                    const provinceCityObjs = PK_CITIES.filter(c => c.province === prov.name).map(c => ({ key: c.key, name: c.name, type: "city" as const, country_code: "PK", region: c.province }));
+                    const allSelected = provinceCityObjs.every(c => adSet.selectedGeoLocations.some(g => g.name === c.name));
+                    return (
+                      <Badge key={prov.name} variant={allSelected ? "default" : "outline"} className="cursor-pointer select-none text-[10px]"
+                        onClick={() => {
+                          const provinceCityNames = provinceCityObjs.map(c => c.name);
+                          if (allSelected) onUpdate({ selectedGeoLocations: adSet.selectedGeoLocations.filter(g => !provinceCityNames.includes(g.name)) });
+                          else onUpdate({ selectedGeoLocations: [...adSet.selectedGeoLocations.filter(g => !provinceCityNames.includes(g.name)), ...provinceCityObjs] });
+                        }}
+                        data-testid={`badge-prov-${prov.name.toLowerCase()}-${adSetIdx}`}
+                      >{prov.label}</Badge>
+                    );
+                  })}
+                </div>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                  <Input placeholder="Search cities..." value={geoSearchQuery || cityFilter}
+                    onChange={e => { setGeoSearchQuery(e.target.value); setCityFilter(e.target.value); }}
+                    className="pl-8 h-7 text-xs" data-testid={`input-city-${adSetIdx}`}
+                  />
+                </div>
+                {geoSearchResults.length > 0 && (
+                  <div className="border rounded p-1.5 space-y-1 bg-muted/30">
+                    <p className="text-[10px] font-medium text-muted-foreground">Meta Location Results</p>
+                    <div className="flex flex-wrap gap-1">
+                      {geoSearchResults.filter(r => !adSet.selectedGeoLocations.some(g => g.key === r.key)).map(r => (
+                        <Badge key={r.key} variant="outline" className="cursor-pointer text-[10px] border-dashed"
+                          onClick={() => { onUpdate({ selectedGeoLocations: [...adSet.selectedGeoLocations, r] }); setGeoSearchQuery(""); setGeoSearchResults([]); }}
+                        >{r.name}{r.region ? `, ${r.region}` : ""}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto">
+                  {PK_CITIES
+                    .filter(c => !cityFilter || c.name.toLowerCase().includes(cityFilter.toLowerCase()))
+                    .map(({ name: cityName, key: cityKey, province }) => {
+                      const isSelected = adSet.selectedGeoLocations.some(g => g.key === cityKey);
+                      return (
+                        <Badge key={cityKey} variant={isSelected ? "default" : "outline"} className="cursor-pointer select-none text-[10px]"
+                          onClick={() => onUpdate({ selectedGeoLocations: isSelected
+                            ? adSet.selectedGeoLocations.filter(g => g.key !== cityKey)
+                            : [...adSet.selectedGeoLocations, { key: cityKey, name: cityName, type: "city", country_code: "PK", region: province }]
+                          })}
+                        >{cityName}</Badge>
+                      );
+                    })}
+                </div>
+                <p className="text-[10px] text-muted-foreground">{adSet.selectedGeoLocations.length} locations selected</p>
+              </>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs">Advantage+ Audience</Label>
+              <Switch checked={adSet.advantagePlusAudience} onCheckedChange={(v) => onUpdate({ advantagePlusAudience: v })} data-testid={`switch-adv-${adSetIdx}`} />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs">Interest Targeting</Label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Input placeholder="Search interests..." value={interestSearch} onChange={e => setInterestSearch(e.target.value)}
+                className="pl-8 h-7 text-xs" data-testid={`input-interest-${adSetIdx}`}
+              />
+            </div>
+            {interestSearch.length >= 2 && (
+              <div className="border rounded max-h-32 overflow-y-auto">
+                {interestLoading ? (
+                  <div className="p-2 text-xs text-muted-foreground flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Searching...</div>
+                ) : (interestResults?.data || []).length === 0 ? (
+                  <div className="p-2 text-xs text-muted-foreground">No interests found</div>
+                ) : (
+                  (interestResults?.data || []).map((item) => (
+                    <button key={item.id} className="w-full px-2 py-1.5 text-left text-xs hover:bg-muted flex items-center justify-between"
+                      onClick={() => { if (!adSet.interests.find(i => i.id === item.id)) onUpdate({ interests: [...adSet.interests, item] }); setInterestSearch(""); }}>
+                      <span>{item.name}</span>
+                      {item.audience_size && <span className="text-[10px] text-muted-foreground">{(item.audience_size / 1000000).toFixed(1)}M</span>}
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+            {adSet.interests.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {adSet.interests.map(i => (
+                  <Badge key={i.id} variant="secondary" className="gap-0.5 text-[10px]">
+                    {i.name}
+                    <X className="w-2.5 h-2.5 cursor-pointer" onClick={() => onUpdate({ interests: adSet.interests.filter(x => x.id !== i.id) })} />
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {(audiencesData?.audiences?.length ?? 0) > 0 && (
+            <>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Custom Audiences (Include)</Label>
+                <div className="flex flex-wrap gap-1">
+                  {audiencesData?.audiences?.filter((a: any) => a.metaAudienceId).map((a: any) => {
+                    const isSelected = adSet.selectedAudiences.some(s => s.id === a.metaAudienceId);
+                    return (
+                      <Badge key={a.id} variant={isSelected ? "default" : "outline"} className="cursor-pointer text-[10px]"
+                        onClick={() => {
+                          if (isSelected) onUpdate({ selectedAudiences: adSet.selectedAudiences.filter(s => s.id !== a.metaAudienceId) });
+                          else {
+                            onUpdate({ selectedAudiences: [...adSet.selectedAudiences, { id: a.metaAudienceId!, name: a.name }], excludedAudiences: adSet.excludedAudiences.filter(s => s.id !== a.metaAudienceId) });
+                          }
+                        }}
+                      >{a.name}</Badge>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Custom Audiences (Exclude)</Label>
+                <div className="flex flex-wrap gap-1">
+                  {audiencesData?.audiences?.filter((a: any) => a.metaAudienceId).map((a: any) => {
+                    const isExcluded = adSet.excludedAudiences.some(s => s.id === a.metaAudienceId);
+                    return (
+                      <Badge key={a.id} variant={isExcluded ? "destructive" : "outline"} className="cursor-pointer text-[10px]"
+                        onClick={() => {
+                          if (isExcluded) onUpdate({ excludedAudiences: adSet.excludedAudiences.filter(s => s.id !== a.metaAudienceId) });
+                          else onUpdate({ excludedAudiences: [...adSet.excludedAudiences, { id: a.metaAudienceId!, name: a.name }], selectedAudiences: adSet.selectedAudiences.filter(s => s.id !== a.metaAudienceId) });
+                        }}
+                      >{a.name}</Badge>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          )}
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs">Placements</Label>
+              <div className="flex items-center gap-2">
+                <Switch checked={adSet.autoPlacement} onCheckedChange={(v) => onUpdate({ autoPlacement: v })} data-testid={`switch-placement-${adSetIdx}`} />
+                <span className="text-xs text-muted-foreground">{adSet.autoPlacement ? "Auto" : "Manual"}</span>
+              </div>
+            </div>
+            {!adSet.autoPlacement && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                {PLACEMENTS.map(p => (
+                  <label key={p.id} className="flex items-center gap-1.5 p-1.5 rounded border cursor-pointer hover:bg-muted/50 text-xs">
+                    <Checkbox
+                      checked={adSet.selectedPlacements.includes(p.id)}
+                      onCheckedChange={(checked) => {
+                        onUpdate({ selectedPlacements: checked ? [...adSet.selectedPlacements, p.id] : adSet.selectedPlacements.filter(x => x !== p.id) });
+                      }}
+                    />
+                    {p.platform === "instagram" ? <SiInstagram className="w-3 h-3 text-pink-500" /> : <SiFacebook className="w-3 h-3 text-[#1877F2]" />}
+                    {p.label}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Optimization Goal</Label>
+            <Select value={adSet.optimizationGoal || (() => {
+              const m: Record<string, string> = { OUTCOME_SALES: hasPixel ? "OFFSITE_CONVERSIONS" : "LINK_CLICKS", OUTCOME_LEADS: hasPixel ? "LEAD_GENERATION" : "LINK_CLICKS", OUTCOME_ENGAGEMENT: "POST_ENGAGEMENT", OUTCOME_AWARENESS: "REACH", OUTCOME_TRAFFIC: "LANDING_PAGE_VIEWS" };
+              return m[objective] || (hasPixel ? "OFFSITE_CONVERSIONS" : "LINK_CLICKS");
+            })()} onValueChange={(v) => onUpdate({ optimizationGoal: v })}>
+              <SelectTrigger className="h-8 text-xs" data-testid={`select-optgoal-${adSetIdx}`}><SelectValue /></SelectTrigger>
+              <SelectContent>{OPTIMIZATION_GOALS.filter(o => hasPixel || !conversionGoals.includes(o.value)).map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+
+          <Separator />
+          <h4 className="font-medium text-xs uppercase text-muted-foreground tracking-wider">Schedule (Optional)</h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Start Date</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="w-full justify-start text-left text-xs h-8" data-testid={`btn-start-${adSetIdx}`}>
+                    <CalendarIcon className="mr-1.5 h-3.5 w-3.5" />
+                    {adSet.startDate ? format(adSet.startDate, "PPP") : "Not set"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={adSet.startDate} onSelect={(d) => onUpdate({ startDate: d })} initialFocus /></PopoverContent>
+              </Popover>
+              {adSet.startDate && (
+                <Select value={adSet.startTime} onValueChange={(v) => onUpdate({ startTime: v })}>
+                  <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>{TIME_OPTIONS.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
+                </Select>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">End Date</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="w-full justify-start text-left text-xs h-8" data-testid={`btn-end-${adSetIdx}`}>
+                    <CalendarIcon className="mr-1.5 h-3.5 w-3.5" />
+                    {adSet.endDate ? format(adSet.endDate, "PPP") : "No end date"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={adSet.endDate} onSelect={(d) => onUpdate({ endDate: d })} initialFocus /></PopoverContent>
+              </Popover>
+              {adSet.endDate && (
+                <Select value={adSet.endTime} onValueChange={(v) => onUpdate({ endTime: v })}>
+                  <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>{TIME_OPTIONS.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
+                </Select>
+              )}
+            </div>
+          </div>
+
+          <Separator />
+          <div className="flex items-center justify-between">
+            <h4 className="font-medium text-xs uppercase text-muted-foreground tracking-wider">Ads ({adSet.ads.length})</h4>
+            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onAddAd} disabled={adSet.ads.length >= 10} data-testid={`btn-add-ad-${adSetIdx}`}>
+              <Plus className="w-3 h-3 mr-1" /> Add Ad
+            </Button>
+          </div>
+
+          {adSet.ads.map((ad, adIdx) => (
+            <AdCard
+              key={ad.id}
+              ad={ad}
+              adIdx={adIdx}
+              adSetIdx={adSetIdx}
+              mediaData={mediaData}
+              pageName={pageName}
+              canRemove={adSet.ads.length > 1}
+              onUpdate={(updates) => onUpdateAd(ad.id, updates)}
+              onRemove={() => onRemoveAd(ad.id)}
+              onOpenPostPicker={() => onOpenPostPicker(adIdx)}
+            />
+          ))}
+        </CardContent>
+      )}
+    </Card>
+  );
+}
+
+function AdCard({
+  ad, adIdx, adSetIdx, mediaData, pageName, canRemove,
+  onUpdate, onRemove, onOpenPostPicker,
+}: {
+  ad: AdState;
+  adIdx: number;
+  adSetIdx: number;
+  mediaData: any;
+  pageName: string;
+  canRemove: boolean;
+  onUpdate: (updates: Partial<AdState>) => void;
+  onRemove: () => void;
+  onOpenPostPicker: () => void;
+}) {
+  const [showPreview, setShowPreview] = useState(false);
+  const valid = isAdValid(ad);
+
+  return (
+    <div className={`border rounded-lg p-3 space-y-3 ${!valid ? "border-amber-300" : ""}`} data-testid={`ad-card-${adSetIdx}-${adIdx}`}>
+      <div className="flex items-center gap-2">
+        <div className="flex-1 min-w-0">
+          <Input value={ad.name} onChange={e => onUpdate({ name: e.target.value })} className="h-7 text-xs font-medium" placeholder="Ad Name" data-testid={`input-ad-name-${adSetIdx}-${adIdx}`} />
+        </div>
+        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setShowPreview(!showPreview)} title="Preview" data-testid={`btn-preview-${adSetIdx}-${adIdx}`}>
+          <Eye className="w-3.5 h-3.5" />
+        </Button>
+        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onRemove} disabled={!canRemove} title="Remove" data-testid={`btn-remove-ad-${adSetIdx}-${adIdx}`}>
+          <Trash2 className="w-3.5 h-3.5 text-destructive" />
+        </Button>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label className="text-xs">Ad Format</Label>
+        <div className="flex gap-1.5 flex-wrap">
+          {([
+            { value: "single_image" as AdFormat, label: "Image", icon: ImageIcon },
+            { value: "video" as AdFormat, label: "Video", icon: Film },
+            { value: "carousel" as AdFormat, label: "Carousel", icon: Plus },
+            { value: "existing_post" as AdFormat, label: "Existing Post", icon: FileText },
+          ]).map(f => (
+            <Button key={f.value} variant={ad.format === f.value ? "default" : "outline"} size="sm" className="gap-1 text-xs h-7 px-2"
+              onClick={() => { onUpdate({ format: f.value }); if (f.value === "existing_post" && !ad.selectedPost) onOpenPostPicker(); }}
+              data-testid={`btn-format-${f.value}-${adSetIdx}-${adIdx}`}
+            >
+              <f.icon className="w-3 h-3" /> {f.label}
+            </Button>
+          ))}
+        </div>
+      </div>
+
+      {ad.format === "existing_post" && (
+        <div className="space-y-2">
+          {ad.selectedPost ? (
+            <div className="border rounded p-2 flex items-start gap-2">
+              {ad.selectedPost.fullPicture && <img src={ad.selectedPost.fullPicture} alt="" className="w-12 h-12 rounded object-cover shrink-0" />}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1 mb-0.5">
+                  {ad.selectedPost.source === "facebook" && <SiFacebook className="w-3 h-3 text-[#1877F2]" />}
+                  {ad.selectedPost.source === "instagram" && <SiInstagram className="w-3 h-3 text-[#E4405F]" />}
+                  <span className="text-[10px] text-muted-foreground capitalize">{ad.selectedPost.source}</span>
+                </div>
+                <p className="text-xs line-clamp-1">{ad.selectedPost.message || "(No text)"}</p>
+                <p className="text-[9px] text-muted-foreground font-mono">ID: {ad.selectedPost.id}</p>
+              </div>
+              <div className="flex gap-1 shrink-0">
+                <Button variant="outline" size="sm" className="h-6 text-[10px] px-1.5" onClick={onOpenPostPicker}>Change</Button>
+                <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onUpdate({ selectedPost: null })}><X className="w-3 h-3" /></Button>
+              </div>
+            </div>
+          ) : (
+            <Button variant="outline" className="w-full h-14 border-dashed gap-1.5 text-xs" onClick={onOpenPostPicker} data-testid={`btn-pick-post-${adSetIdx}-${adIdx}`}>
+              <Search className="w-3.5 h-3.5" /> Select an Existing Post
+            </Button>
+          )}
+          {ad.selectedPost && (
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="text-[10px]">CTA Link (optional)</Label>
+                <Input type="url" className="h-7 text-xs" placeholder="https://yourstore.com" value={ad.linkUrl} onChange={e => onUpdate({ linkUrl: e.target.value })} data-testid={`input-eplink-${adSetIdx}-${adIdx}`} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px]">CTA</Label>
+                <Select value={ad.callToAction} onValueChange={(v) => onUpdate({ callToAction: v })}>
+                  <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>{CTA_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {ad.format !== "existing_post" && (
+        <>
+          <div className="space-y-1">
+            <Label className="text-xs">Primary Text *</Label>
+            <Textarea rows={2} className="text-xs min-h-[50px]" placeholder="Write your ad copy..." value={ad.primaryText} onChange={e => onUpdate({ primaryText: e.target.value })} data-testid={`textarea-text-${adSetIdx}-${adIdx}`} />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <Label className="text-xs">Headline</Label>
+              <Input className="h-7 text-xs" placeholder="e.g. 50% Off" value={ad.headline} onChange={e => onUpdate({ headline: e.target.value })} data-testid={`input-headline-${adSetIdx}-${adIdx}`} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Description</Label>
+              <Input className="h-7 text-xs" placeholder="e.g. Free delivery" value={ad.description} onChange={e => onUpdate({ description: e.target.value })} data-testid={`input-desc-${adSetIdx}-${adIdx}`} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <Label className="text-xs">Landing Page URL *</Label>
+              <Input type="url" className="h-7 text-xs" placeholder="https://yourstore.com" value={ad.linkUrl} onChange={e => onUpdate({ linkUrl: e.target.value })} data-testid={`input-url-${adSetIdx}-${adIdx}`} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Call to Action</Label>
+              <Select value={ad.callToAction} onValueChange={(v) => onUpdate({ callToAction: v })}>
+                <SelectTrigger className="h-7 text-xs" data-testid={`select-cta-${adSetIdx}-${adIdx}`}><SelectValue /></SelectTrigger>
+                <SelectContent>{CTA_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+          </div>
+        </>
+      )}
+
+      {ad.format === "single_image" && (
+        <div className="space-y-1">
+          <Label className="text-xs">Image URL</Label>
+          <Input type="url" className="h-7 text-xs" placeholder="https://example.com/image.jpg" value={ad.imageUrl} onChange={e => onUpdate({ imageUrl: e.target.value })} data-testid={`input-imgurl-${adSetIdx}-${adIdx}`} />
+          {mediaData?.media?.length > 0 && (
+            <div className="flex gap-1.5 overflow-x-auto pb-1 mt-1">
+              {mediaData.media.filter((m: any) => m.type === "image").slice(0, 6).map((m: any) => (
+                <button key={m.id} onClick={() => onUpdate({ imageUrl: m.url })} className={`shrink-0 w-10 h-10 rounded border-2 overflow-hidden ${ad.imageUrl === m.url ? "border-primary" : "border-transparent hover:border-muted-foreground/30"}`}>
+                  <img src={m.url} alt={m.name} className="w-full h-full object-cover" />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {ad.format === "video" && (
+        <div className="space-y-2">
+          <div className="space-y-1">
+            <Label className="text-xs">Video ID</Label>
+            <Input className="h-7 text-xs" placeholder="Meta Video ID" value={ad.videoId} onChange={e => onUpdate({ videoId: e.target.value })} data-testid={`input-vid-${adSetIdx}-${adIdx}`} />
+            {mediaData?.media?.length > 0 && (
+              <div className="flex gap-1.5 overflow-x-auto pb-1 mt-1">
+                {mediaData.media.filter((m: any) => m.type === "video").slice(0, 6).map((m: any) => (
+                  <button key={m.id} onClick={() => onUpdate({ videoId: m.metaMediaHash || "" })} className={`shrink-0 px-2 py-1 rounded border text-[10px] ${ad.videoId === m.metaMediaHash ? "border-primary bg-primary/10" : "border-muted"}`}>
+                    <Film className="w-3 h-3 mx-auto mb-0.5" />{m.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Thumbnail URL</Label>
+            <Input type="url" className="h-7 text-xs" placeholder="https://example.com/thumb.jpg" value={ad.thumbnailUrl} onChange={e => onUpdate({ thumbnailUrl: e.target.value })} data-testid={`input-thumb-${adSetIdx}-${adIdx}`} />
+          </div>
+        </div>
+      )}
+
+      {ad.format === "carousel" && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs">Carousel Cards ({ad.carouselCards.length})</Label>
+            <Button variant="outline" size="sm" className="h-6 text-[10px] px-1.5"
+              onClick={() => onUpdate({ carouselCards: [...ad.carouselCards, { id: uid(), imageUrl: "", headline: "", description: "", linkUrl: "" }] })}
+              disabled={ad.carouselCards.length >= 10}
+            ><Plus className="w-2.5 h-2.5 mr-0.5" /> Card</Button>
+          </div>
+          {ad.carouselCards.map((card, cIdx) => (
+            <div key={card.id} className="border rounded p-2 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-medium">Card {cIdx + 1}</span>
+                <Button variant="ghost" size="sm" className="h-5 w-5 p-0"
+                  onClick={() => { if (ad.carouselCards.length > 2) onUpdate({ carouselCards: ad.carouselCards.filter(c => c.id !== card.id) }); }}
+                  disabled={ad.carouselCards.length <= 2}
+                ><Trash2 className="w-2.5 h-2.5" /></Button>
+              </div>
+              <Input placeholder="Image URL" className="h-6 text-[10px]" value={card.imageUrl}
+                onChange={e => onUpdate({ carouselCards: ad.carouselCards.map(c => c.id === card.id ? { ...c, imageUrl: e.target.value } : c) })}
+              />
+              <div className="grid grid-cols-2 gap-1">
+                <Input placeholder="Headline" className="h-6 text-[10px]" value={card.headline}
+                  onChange={e => onUpdate({ carouselCards: ad.carouselCards.map(c => c.id === card.id ? { ...c, headline: e.target.value } : c) })}
+                />
+                <Input placeholder="Card URL" className="h-6 text-[10px]" value={card.linkUrl}
+                  onChange={e => onUpdate({ carouselCards: ad.carouselCards.map(c => c.id === card.id ? { ...c, linkUrl: e.target.value } : c) })}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showPreview && ad.format !== "existing_post" && (
+        <>
+          <Separator />
+          <AdPreview primaryText={ad.primaryText} headline={ad.headline} imageUrl={ad.imageUrl} thumbnailUrl={ad.thumbnailUrl}
+            linkUrl={ad.linkUrl} callToAction={ad.callToAction} pageName={pageName} format={ad.format} carouselCards={ad.carouselCards} />
+        </>
+      )}
+      {showPreview && ad.format === "existing_post" && ad.selectedPost && (
+        <>
+          <Separator />
+          <div className="border rounded-lg overflow-hidden bg-white dark:bg-zinc-900 max-w-xs mx-auto shadow-sm">
+            <div className="p-2 flex items-center gap-2">
+              <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-[10px] font-bold">{(pageName || "P")[0]}</div>
+              <div>
+                <p className="text-xs font-semibold">{pageName || "Your Page"}</p>
+                <p className="text-[9px] text-muted-foreground">Sponsored</p>
+              </div>
+            </div>
+            <div className="px-2 pb-1"><p className="text-xs">{ad.selectedPost.message || "(No text)"}</p></div>
+            {ad.selectedPost.fullPicture && <img src={ad.selectedPost.fullPicture} alt="Post" className="w-full aspect-square object-cover" />}
+          </div>
+        </>
       )}
     </div>
   );

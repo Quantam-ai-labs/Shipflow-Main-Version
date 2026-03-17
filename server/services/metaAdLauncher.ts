@@ -726,6 +726,263 @@ export async function launchAd(
   }
 }
 
+export interface MultiAdSetConfig {
+  campaignName: string;
+  objective: string;
+  budgetLevel: "adset" | "campaign";
+  budgetType?: "daily" | "lifetime";
+  dailyBudget?: string;
+  lifetimeBudget?: string;
+  spendingLimit?: string;
+  bidStrategy?: string;
+  bidAmount?: string;
+  pageId: string;
+  pixelId?: string;
+  conversionEvent?: string;
+  status?: string;
+  adSets: Array<{
+    name: string;
+    targeting: any;
+    optimizationGoal?: string;
+    dailyBudget?: string;
+    lifetimeBudget?: string;
+    budgetType?: "daily" | "lifetime";
+    bidStrategy?: string;
+    bidAmount?: string;
+    useAdvantageAudience?: boolean;
+    startTime?: string;
+    endTime?: string;
+    ads: Array<{
+      name: string;
+      creative: {
+        format?: "single_image" | "video" | "carousel" | "existing_post";
+        existingPostId?: string;
+        existingPostSource?: "facebook" | "instagram" | "partner";
+        primaryText?: string;
+        headline?: string;
+        description?: string;
+        linkUrl?: string;
+        imageUrl?: string;
+        imageHash?: string;
+        videoId?: string;
+        thumbnailUrl?: string;
+        callToAction?: string;
+        carouselCards?: Array<{
+          imageUrl?: string;
+          imageHash?: string;
+          headline?: string;
+          description?: string;
+          linkUrl: string;
+        }>;
+      };
+    }>;
+  }>;
+}
+
+export interface MultiLaunchResult {
+  campaignId: string;
+  adSets: Array<{
+    adSetId?: string;
+    name: string;
+    error?: string;
+    ads: Array<{
+      adId?: string;
+      creativeId?: string;
+      name: string;
+      error?: string;
+    }>;
+  }>;
+  totalAdSets: number;
+  totalAds: number;
+  succeededAdSets: number;
+  succeededAds: number;
+  failedAdSets: number;
+  failedAds: number;
+}
+
+export async function launchMultiAdSetCampaign(
+  merchantId: string,
+  jobId: string,
+  config: MultiAdSetConfig
+): Promise<MultiLaunchResult> {
+  const isCbo = config.budgetLevel === "campaign";
+  let currentStep = "Campaign";
+  try {
+    await db.update(adLaunchJobs)
+      .set({ status: "launching" })
+      .where(eq(adLaunchJobs.id, jobId));
+
+    currentStep = "Campaign";
+    const campaignId = await createCampaign(merchantId, {
+      name: config.campaignName,
+      objective: config.objective,
+      status: config.status || "PAUSED",
+      isCbo,
+      dailyBudget: config.dailyBudget,
+      lifetimeBudget: config.lifetimeBudget,
+      budgetType: config.budgetType,
+      spendingLimit: config.spendingLimit,
+    });
+
+    const result: MultiLaunchResult = {
+      campaignId,
+      adSets: [],
+      totalAdSets: config.adSets.length,
+      totalAds: config.adSets.reduce((sum, as2) => sum + as2.ads.length, 0),
+      succeededAdSets: 0,
+      succeededAds: 0,
+      failedAdSets: 0,
+      failedAds: 0,
+    };
+
+    for (let asIdx = 0; asIdx < config.adSets.length; asIdx++) {
+      const adSetConfig = config.adSets[asIdx];
+      const adSetResult: MultiLaunchResult["adSets"][0] = {
+        name: adSetConfig.name,
+        ads: [],
+      };
+
+      try {
+        let optimizationGoal = adSetConfig.optimizationGoal;
+        if (!optimizationGoal) {
+          const objectiveDefaults: Record<string, string> = {
+            OUTCOME_SALES: config.pixelId ? "OFFSITE_CONVERSIONS" : "LINK_CLICKS",
+            OUTCOME_LEADS: config.pixelId ? "LEAD_GENERATION" : "LINK_CLICKS",
+            OUTCOME_ENGAGEMENT: "POST_ENGAGEMENT",
+            OUTCOME_AWARENESS: "REACH",
+            OUTCOME_TRAFFIC: "LANDING_PAGE_VIEWS",
+            OUTCOME_APP_PROMOTION: "LINK_CLICKS",
+          };
+          optimizationGoal = objectiveDefaults[config.objective] || (config.pixelId ? "OFFSITE_CONVERSIONS" : "LINK_CLICKS");
+        }
+
+        const conversionGoals = ["OFFSITE_CONVERSIONS", "LEAD_GENERATION"];
+        if (conversionGoals.includes(optimizationGoal) && !config.pixelId) {
+          optimizationGoal = "LINK_CLICKS";
+        }
+        const needsPromotedObject = config.pixelId && conversionGoals.includes(optimizationGoal);
+        const promotedObject: Record<string, any> = {};
+        if (needsPromotedObject) {
+          promotedObject.pixel_id = config.pixelId;
+          promotedObject.custom_event_type = config.conversionEvent || "PURCHASE";
+        }
+
+        currentStep = `Ad Set ${asIdx + 1}`;
+        const adsetId = await createAdSet(merchantId, {
+          name: adSetConfig.name,
+          campaignId,
+          dailyBudget: adSetConfig.dailyBudget || config.dailyBudget,
+          lifetimeBudget: adSetConfig.lifetimeBudget || config.lifetimeBudget,
+          budgetType: adSetConfig.budgetType || config.budgetType,
+          bidStrategy: adSetConfig.bidStrategy || config.bidStrategy,
+          bidAmount: adSetConfig.bidAmount || config.bidAmount,
+          optimizationGoal,
+          targeting: adSetConfig.targeting,
+          useAdvantageAudience: adSetConfig.useAdvantageAudience,
+          promotedObject: Object.keys(promotedObject).length > 0 ? promotedObject : undefined,
+          status: config.status || "PAUSED",
+          startTime: adSetConfig.startTime,
+          endTime: adSetConfig.endTime,
+          isCbo,
+        });
+
+        adSetResult.adSetId = adsetId;
+        result.succeededAdSets++;
+
+        for (let adIdx = 0; adIdx < adSetConfig.ads.length; adIdx++) {
+          const adConfig = adSetConfig.ads[adIdx];
+          const adResult: MultiLaunchResult["adSets"][0]["ads"][0] = {
+            name: adConfig.name,
+          };
+
+          try {
+            const isExistingPost = !!adConfig.creative.existingPostId;
+            let imageHash = adConfig.creative.imageHash;
+
+            if (!isExistingPost && !imageHash && adConfig.creative.imageUrl && adConfig.creative.format !== "carousel") {
+              currentStep = `Ad Set ${asIdx + 1} > Ad ${adIdx + 1} Image Upload`;
+              const uploaded = await uploadImageToMeta(merchantId, adConfig.creative.imageUrl);
+              imageHash = uploaded.hash;
+            }
+
+            currentStep = `Ad Set ${asIdx + 1} > Ad ${adIdx + 1} Creative`;
+            const creativeId = await createAdCreative(merchantId, {
+              name: `${adConfig.name} - Creative`,
+              pageId: config.pageId,
+              format: adConfig.creative.format,
+              existingPostId: adConfig.creative.existingPostId,
+              existingPostSource: adConfig.creative.existingPostSource,
+              imageHash: isExistingPost ? undefined : imageHash,
+              imageUrl: isExistingPost ? undefined : (!imageHash ? adConfig.creative.imageUrl : undefined),
+              videoId: isExistingPost ? undefined : adConfig.creative.videoId,
+              thumbnailUrl: isExistingPost ? undefined : adConfig.creative.thumbnailUrl,
+              primaryText: adConfig.creative.primaryText,
+              headline: adConfig.creative.headline,
+              description: adConfig.creative.description,
+              linkUrl: adConfig.creative.linkUrl,
+              callToAction: adConfig.creative.callToAction,
+              carouselCards: isExistingPost ? undefined : adConfig.creative.carouselCards,
+            });
+
+            currentStep = `Ad Set ${asIdx + 1} > Ad ${adIdx + 1}`;
+            const adId = await createAd(merchantId, {
+              name: adConfig.name,
+              adsetId: adsetId,
+              creativeId,
+              status: config.status || "PAUSED",
+            });
+
+            adResult.adId = adId;
+            adResult.creativeId = creativeId;
+            result.succeededAds++;
+          } catch (adError: any) {
+            adResult.error = `[${currentStep}] ${adError.message}`;
+            result.failedAds++;
+            console.error(`[MetaAdLauncher] Ad creation failed at ${currentStep}:`, adError.message);
+          }
+
+          adSetResult.ads.push(adResult);
+        }
+      } catch (adSetError: any) {
+        adSetResult.error = `[${currentStep}] ${adSetError.message}`;
+        result.failedAdSets++;
+        result.failedAds += adSetConfig.ads.length;
+        adSetConfig.ads.forEach(ad => {
+          adSetResult.ads.push({ name: ad.name, error: "Skipped (ad set creation failed)" });
+        });
+        console.error(`[MetaAdLauncher] Ad set creation failed at ${currentStep}:`, adSetError.message);
+      }
+
+      result.adSets.push(adSetResult);
+    }
+
+    const allSucceeded = result.failedAdSets === 0 && result.failedAds === 0;
+    const allFailed = result.succeededAdSets === 0 && result.succeededAds === 0;
+
+    await db.update(adLaunchJobs)
+      .set({
+        status: allSucceeded ? "launched" : allFailed ? "failed" : "partial",
+        metaCampaignId: campaignId,
+        metaAdsetId: result.adSets.map(a => a.adSetId).filter(Boolean).join(","),
+        metaAdId: result.adSets.flatMap(a => a.ads.map(ad => ad.adId)).filter(Boolean).join(","),
+        resultJson: result,
+        launchedAt: new Date(),
+        errorMessage: allSucceeded ? undefined : `${result.failedAdSets} ad set(s) and ${result.failedAds} ad(s) failed`,
+      })
+      .where(eq(adLaunchJobs.id, jobId));
+
+    return result;
+  } catch (error: any) {
+    const stepMsg = `[${currentStep}] ${error.message}`;
+    await db.update(adLaunchJobs)
+      .set({ status: "failed", errorMessage: stepMsg })
+      .where(eq(adLaunchJobs.id, jobId));
+    const enrichedError = new Error(error.message);
+    (enrichedError as any).step = currentStep;
+    throw enrichedError;
+  }
+}
+
 export async function bulkLaunchAds(
   merchantId: string,
   ads: Array<{
