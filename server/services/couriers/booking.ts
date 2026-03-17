@@ -301,7 +301,6 @@ export async function bookLeopardsPacket(
 
   try {
     console.log(`[Leopards] Booking order ${packet.orderNumber}...`);
-    console.log(`[Leopards] Request body:`, JSON.stringify(requestBody, null, 2));
 
     const resp = await fetchWithRetry("https://merchantapi.leopardscourier.com/api/bookPacket/format/json/", {
       method: "POST",
