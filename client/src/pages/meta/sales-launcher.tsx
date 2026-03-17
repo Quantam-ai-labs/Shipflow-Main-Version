@@ -46,6 +46,11 @@ interface LaunchStage {
   data?: Record<string, unknown>;
 }
 
+interface CreatedEntitySummary {
+  adsetId: string;
+  ads: { creativeId: string; adId: string }[];
+}
+
 interface LaunchResult {
   success: boolean;
   jobId: string;
@@ -54,6 +59,7 @@ interface LaunchResult {
   adsetId?: string;
   creativeId?: string;
   adId?: string;
+  createdEntities?: CreatedEntitySummary[];
   validationIssues?: ValidationIssue[];
   error?: string;
   errorStage?: string;
@@ -73,7 +79,7 @@ interface AdConfig {
   videoUploading: boolean;
   selectedPostId: string;
   selectedPostSource: "facebook" | "instagram";
-  selectedPostPreview: any;
+  selectedPostPreview: MetaPost | null;
   primaryText: string;
   headline: string;
   description: string;
@@ -324,19 +330,19 @@ export default function SalesLauncher() {
   const [countrySearch, setCountrySearch] = useState("");
   const [citySearch, setCitySearch] = useState("");
 
-  const metaStatusQuery = useQuery<any>({ queryKey: ["/api/meta/oauth/status"] });
+  const metaStatusQuery = useQuery<{ connected: boolean; adAccountId?: string; adAccountCurrency?: string }>({ queryKey: ["/api/meta/oauth/status"] });
   const metaStatus = metaStatusQuery.data;
   const isConnected = metaStatus?.connected === true;
 
-  const pagesQuery = useQuery<any>({ queryKey: ["/api/meta/pages"], enabled: isConnected });
+  const pagesQuery = useQuery<{ pages: MetaPage[] }>({ queryKey: ["/api/meta/pages"], enabled: isConnected });
   const pages = pagesQuery.data?.pages || [];
   const [selectedPageId, setSelectedPageId] = useState("");
 
-  const pixelsQuery = useQuery<any>({ queryKey: ["/api/meta/pixels"], enabled: isConnected });
+  const pixelsQuery = useQuery<{ pixels: MetaPixel[] }>({ queryKey: ["/api/meta/pixels"], enabled: isConnected });
   const pixels = pixelsQuery.data?.pixels || [];
   const [selectedPixelId, setSelectedPixelId] = useState("");
 
-  const igAccountsQuery = useQuery<any>({ queryKey: ["/api/meta/instagram-accounts"], enabled: isConnected });
+  const igAccountsQuery = useQuery<{ instagramAccounts: MetaIgAccount[] }>({ queryKey: ["/api/meta/instagram-accounts"], enabled: isConnected });
   const igAccounts: MetaIgAccount[] = igAccountsQuery.data?.instagramAccounts || [];
   const [selectedIgAccountId, setSelectedIgAccountId] = useState("");
 
@@ -349,7 +355,7 @@ export default function SalesLauncher() {
   const fbPostSearchParams = new URLSearchParams();
   if (postSearch) fbPostSearchParams.set("search", postSearch);
   fbPostSearchParams.set("includeVideos", "true");
-  const fbPostsQuery = useQuery<any>({
+  const fbPostsQuery = useQuery<{ posts: MetaPost[] }>({
     queryKey: [`/api/meta/page-posts?${fbPostSearchParams.toString()}`],
     enabled: isConnected && anyAdUsesExistingPost,
   });
@@ -357,25 +363,25 @@ export default function SalesLauncher() {
   if (postSearch) igQueryParams.set("search", postSearch);
   if (selectedIgAccountId && selectedIgAccountId !== "none") igQueryParams.set("igAccountId", selectedIgAccountId);
   const igQueryString = igQueryParams.toString() ? `?${igQueryParams.toString()}` : "";
-  const igPostsQuery = useQuery<any>({
+  const igPostsQuery = useQuery<{ posts: MetaPost[] }>({
     queryKey: [`/api/meta/ig-media${igQueryString}`],
     enabled: isConnected && anyAdUsesExistingPost && !!selectedIgAccountId && selectedIgAccountId !== "none",
   });
-  const adImagesQuery = useQuery<any>({
+  const adImagesQuery = useQuery<{ images: { hash: string; name?: string; url?: string; createdTime?: string }[] }>({
     queryKey: ["/api/meta/ad-account-images"],
     enabled: isConnected && anyAdUsesExistingPost,
   });
-  const adVideosQuery = useQuery<any>({
+  const adVideosQuery = useQuery<{ videos: { id: string; title?: string; picture?: string; createdTime?: string }[] }>({
     queryKey: ["/api/meta/ad-account-videos"],
     enabled: isConnected && anyAdUsesExistingPost,
   });
   const fbPosts: MetaPost[] = fbPostsQuery.data?.posts || [];
   const igPosts: MetaPost[] = igPostsQuery.data?.posts || [];
-  const libraryImages: MetaPost[] = (adImagesQuery.data?.images || []).map((img: any) => ({
+  const libraryImages: MetaPost[] = (adImagesQuery.data?.images || []).map((img) => ({
     id: `lib_img_${img.hash}`, message: img.name || "Ad Image", fullPicture: img.url || "",
     createdTime: img.createdTime, type: "image", source: "library",
   }));
-  const libraryVideos: MetaPost[] = (adVideosQuery.data?.videos || []).map((v: any) => ({
+  const libraryVideos: MetaPost[] = (adVideosQuery.data?.videos || []).map((v) => ({
     id: `lib_vid_${v.id}`, message: v.title || "Ad Video", fullPicture: v.picture || "",
     createdTime: v.createdTime, type: "video", source: "library",
   }));
@@ -484,9 +490,9 @@ export default function SalesLauncher() {
       updateAd(adSetIdx, adIdx, { imageHash: data.imageHash, imageUploading: false });
       if (data.imageUrl) updateAd(adSetIdx, adIdx, { imagePreview: data.imageUrl });
       toast({ title: "Image uploaded to Meta" });
-    } catch (err: any) {
+    } catch (err: unknown) {
       updateAd(adSetIdx, adIdx, { imageUploading: false });
-      toast({ title: "Image upload failed", description: err.message, variant: "destructive" });
+      toast({ title: "Image upload failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
     }
   };
 
@@ -499,9 +505,9 @@ export default function SalesLauncher() {
       updateAd(adSetIdx, adIdx, { videoId: data.videoId, videoStatus: "processing", videoUploading: false });
       toast({ title: "Video uploaded, processing..." });
       pollVideoStatus(adSetIdx, adIdx, data.videoId);
-    } catch (err: any) {
+    } catch (err: unknown) {
       updateAd(adSetIdx, adIdx, { videoUploading: false });
-      toast({ title: "Video upload failed", description: err.message, variant: "destructive" });
+      toast({ title: "Video upload failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
     }
   };
 
@@ -535,7 +541,7 @@ export default function SalesLauncher() {
         const data = await res.json();
         const job = data.job;
         if (!job) break;
-        const resultJson = job.resultJson as { stages?: LaunchStage[] } | null;
+        const resultJson = job.resultJson as { stages?: LaunchStage[]; createdEntities?: CreatedEntitySummary[] } | null;
         const stages = resultJson?.stages || [];
         setLaunchStages(stages);
         if (TERMINAL_STATUSES.includes(job.status)) {
@@ -549,6 +555,7 @@ export default function SalesLauncher() {
             adsetId: job.metaAdsetId || undefined,
             creativeId: job.metaCreativeId || undefined,
             adId: job.metaAdId || undefined,
+            createdEntities: resultJson?.createdEntities || undefined,
             error: job.errorMessage || undefined,
             errorStage: !success ? lastStage?.stage : undefined,
           });
@@ -1348,11 +1355,26 @@ export default function SalesLauncher() {
             )}
 
             {launchResult.success && launchResult.campaignId && (
-              <div className={`${glassInner} grid grid-cols-2 gap-2 text-xs p-3`}>
+              <div className={`${glassInner} space-y-2 text-xs p-3`}>
                 <div><span className="text-muted-foreground">Campaign:</span> <span className="font-mono text-[10px]">{launchResult.campaignId}</span></div>
-                {launchResult.adsetId && <div><span className="text-muted-foreground">Ad Set:</span> <span className="font-mono text-[10px]">{launchResult.adsetId}</span></div>}
-                {launchResult.creativeId && <div><span className="text-muted-foreground">Creative:</span> <span className="font-mono text-[10px]">{launchResult.creativeId}</span></div>}
-                {launchResult.adId && <div><span className="text-muted-foreground">Ad:</span> <span className="font-mono text-[10px]">{launchResult.adId}</span></div>}
+                {launchResult.createdEntities && launchResult.createdEntities.length > 0 ? (
+                  launchResult.createdEntities.map((entity, si) => (
+                    <div key={entity.adsetId} className="space-y-0.5">
+                      <div><span className="text-muted-foreground">Ad Set {si + 1}:</span> <span className="font-mono text-[10px]">{entity.adsetId}</span></div>
+                      {entity.ads.map((ad, ai) => (
+                        <div key={ad.adId} className="pl-3">
+                          <span className="text-muted-foreground">Ad {ai + 1}:</span> <span className="font-mono text-[10px]">{ad.adId}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ))
+                ) : (
+                  <>
+                    {launchResult.adsetId && <div><span className="text-muted-foreground">Ad Set:</span> <span className="font-mono text-[10px]">{launchResult.adsetId}</span></div>}
+                    {launchResult.creativeId && <div><span className="text-muted-foreground">Creative:</span> <span className="font-mono text-[10px]">{launchResult.creativeId}</span></div>}
+                    {launchResult.adId && <div><span className="text-muted-foreground">Ad:</span> <span className="font-mono text-[10px]">{launchResult.adId}</span></div>}
+                  </>
+                )}
               </div>
             )}
 
@@ -1388,8 +1410,21 @@ export default function SalesLauncher() {
   );
 }
 
+interface LaunchJobRecord {
+  id: string;
+  status: string;
+  campaignName?: string;
+  adName?: string;
+  metaCampaignId?: string;
+  metaAdsetId?: string;
+  metaAdId?: string;
+  errorMessage?: string;
+  createdAt?: string;
+  resultJson?: { createdEntities?: CreatedEntitySummary[] } | null;
+}
+
 function LaunchJobHistory() {
-  const jobsQuery = useQuery<any[]>({ queryKey: ["/api/meta/sales/launch-jobs"] });
+  const jobsQuery = useQuery<LaunchJobRecord[]>({ queryKey: ["/api/meta/sales/launch-jobs"] });
   const jobs = jobsQuery.data || [];
   const [expandedJob, setExpandedJob] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -1413,25 +1448,41 @@ function LaunchJobHistory() {
         </CollapsibleTrigger>
         <CollapsibleContent>
           <div className="px-5 pb-5 space-y-2">
-            {jobs.slice(0, 10).map((job: any) => (
-              <div key={job.id} className={`${glassInner} p-3 cursor-pointer hover:bg-white/50 dark:hover:bg-white/[0.05] transition-all`}
-                onClick={() => setExpandedJob(expandedJob === job.id ? null : job.id)} data-testid={`history-job-${job.id}`}>
-                <div className="flex items-center gap-2 text-xs">
-                  <StatusIcon status={job.status === "launched" || job.status === "draft" || job.status === "validated" ? "success" : job.status === "running" ? "running" : "failed"} />
-                  <span className="font-medium flex-1 truncate">{job.campaignName || job.adName || "Unnamed"}</span>
-                  <Badge variant="outline" className="text-[9px] uppercase">{job.status}</Badge>
-                  <span className="text-[10px] text-muted-foreground">{job.createdAt ? new Date(job.createdAt).toLocaleDateString("en-PK") : ""}</span>
-                </div>
-                {expandedJob === job.id && (
-                  <div className="mt-2 space-y-1 text-[10px]">
-                    {job.metaCampaignId && <div className="text-muted-foreground">Campaign: <span className="font-mono">{job.metaCampaignId}</span></div>}
-                    {job.metaAdsetId && <div className="text-muted-foreground">Ad Set: <span className="font-mono">{job.metaAdsetId}</span></div>}
-                    {job.metaAdId && <div className="text-muted-foreground">Ad: <span className="font-mono">{job.metaAdId}</span></div>}
-                    {job.errorMessage && <div className="text-red-600">{job.errorMessage}</div>}
+            {jobs.slice(0, 10).map((job) => {
+              const entities = job.resultJson?.createdEntities;
+              return (
+                <div key={job.id} className={`${glassInner} p-3 cursor-pointer hover:bg-white/50 dark:hover:bg-white/[0.05] transition-all`}
+                  onClick={() => setExpandedJob(expandedJob === job.id ? null : job.id)} data-testid={`history-job-${job.id}`}>
+                  <div className="flex items-center gap-2 text-xs">
+                    <StatusIcon status={job.status === "launched" || job.status === "draft" || job.status === "validated" ? "success" : job.status === "running" ? "running" : "failed"} />
+                    <span className="font-medium flex-1 truncate">{job.campaignName || job.adName || "Unnamed"}</span>
+                    <Badge variant="outline" className="text-[9px] uppercase">{job.status}</Badge>
+                    <span className="text-[10px] text-muted-foreground">{job.createdAt ? new Date(job.createdAt).toLocaleDateString("en-PK") : ""}</span>
                   </div>
-                )}
-              </div>
-            ))}
+                  {expandedJob === job.id && (
+                    <div className="mt-2 space-y-1 text-[10px]">
+                      {job.metaCampaignId && <div className="text-muted-foreground">Campaign: <span className="font-mono">{job.metaCampaignId}</span></div>}
+                      {entities && entities.length > 0 ? (
+                        entities.map((entity, si) => (
+                          <div key={entity.adsetId} className="space-y-0.5">
+                            <div className="text-muted-foreground">Ad Set {si + 1}: <span className="font-mono">{entity.adsetId}</span></div>
+                            {entity.ads.map((ad, ai) => (
+                              <div key={ad.adId} className="text-muted-foreground pl-3">Ad {ai + 1}: <span className="font-mono">{ad.adId}</span></div>
+                            ))}
+                          </div>
+                        ))
+                      ) : (
+                        <>
+                          {job.metaAdsetId && <div className="text-muted-foreground">Ad Set: <span className="font-mono">{job.metaAdsetId}</span></div>}
+                          {job.metaAdId && <div className="text-muted-foreground">Ad: <span className="font-mono">{job.metaAdId}</span></div>}
+                        </>
+                      )}
+                      {job.errorMessage && <div className="text-red-600">{job.errorMessage}</div>}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </CollapsibleContent>
       </div>
