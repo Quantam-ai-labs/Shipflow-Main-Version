@@ -1551,10 +1551,6 @@ export async function registerRoutes(
               token,
               order.shopifyFulfillmentId,
             );
-            console.log(
-              `[Cancel] Shopify fulfillment cancel result for ${order.shopifyFulfillmentId}:`,
-              fulfillmentCancelResult,
-            );
             if (!fulfillmentCancelResult.success) {
               console.warn(
                 `[Cancel] Shopify fulfillment cancel failed (non-blocking): ${fulfillmentCancelResult.error}`,
