@@ -330,7 +330,7 @@ export default function SalesLauncher() {
   const [countrySearch, setCountrySearch] = useState("");
   const [citySearch, setCitySearch] = useState("");
 
-  const metaStatusQuery = useQuery<{ connected: boolean; adAccountId?: string; adAccountCurrency?: string }>({ queryKey: ["/api/meta/oauth/status"] });
+  const metaStatusQuery = useQuery<{ connected: boolean; adAccountId?: string; adAccountCurrency?: string; businessName?: string }>({ queryKey: ["/api/meta/oauth/status"] });
   const metaStatus = metaStatusQuery.data;
   const isConnected = metaStatus?.connected === true;
 

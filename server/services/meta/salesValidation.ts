@@ -364,7 +364,7 @@ export function normalizeInput(raw: Record<string, unknown>): SalesLaunchInput {
   if (Array.isArray(raw.adSets) && raw.adSets.length > 0) {
     base.adSets = (raw.adSets as Array<Record<string, unknown>>).map((rawAdSet: Record<string, unknown>) => ({
       targetCountries: Array.isArray(rawAdSet.targetCountries) ? (rawAdSet.targetCountries as string[]).filter((c: unknown) => typeof c === "string") : [],
-      targetCities: Array.isArray(rawAdSet.targetCities) ? (rawAdSet.targetCities as Array<{ key?: string; name?: string }>).filter((c: { key?: string }) => c && typeof c.key === "string").map((c: { key: string; name?: string }) => ({ key: c.key, name: c.name })) : [],
+      targetCities: Array.isArray(rawAdSet.targetCities) ? (rawAdSet.targetCities as Array<{ key?: string; name?: string }>).filter((c: { key?: string }) => c && typeof c.key === "string").map((c: { key: string; name?: string }) => ({ key: c.key, ...(c.name ? { name: c.name } : {}) })) : [],
       dailyBudget: parseFloat(String(rawAdSet.dailyBudget || 0)) || 0,
       ads: Array.isArray(rawAdSet.ads) ? (rawAdSet.ads as Array<Record<string, unknown>>).map((rawAd: Record<string, unknown>) => ({
         mode: (["UPLOAD_IMAGE", "UPLOAD_VIDEO", "EXISTING_POST"].includes(String(rawAd.mode)) ? String(rawAd.mode) : "UPLOAD_IMAGE") as SalesLaunchAdInput["mode"],
