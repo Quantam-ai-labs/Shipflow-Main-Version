@@ -1495,10 +1495,6 @@ export async function registerRoutes(
                 apiSecret: creds.apiSecret || undefined,
               },
             );
-            console.log(
-              `[Cancel] Courier cancel result for ${oldCourierTracking}:`,
-              courierCancelResult,
-            );
             if (!courierCancelResult.success) {
               let alreadyCancelled = false;
               try {
