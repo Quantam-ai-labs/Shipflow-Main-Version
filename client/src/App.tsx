@@ -125,7 +125,7 @@ const SupportChatPage = lazy(() => import("@/pages/support/chat"));
 const SupportConnectionPage = lazy(() => import("@/pages/support/connection"));
 const SupportRoboCallPage = lazy(() => import("@/pages/support/robocall"));
 const SupportCallQueuePage = lazy(() => import("@/pages/support/call-queue"));
-const SalesLauncher = lazy(() => import("@/pages/meta/sales-launcher"));
+const SalesLauncher = lazy(() => import("@/pages/meta/launcher"));
 const MetaMediaLibrary = lazy(() => import("@/pages/meta/media-library"));
 const MetaBulkLaunch = lazy(() => import("@/pages/meta/bulk-launch"));
 const MetaCampaigns = lazy(() => import("@/pages/meta/campaigns"));
