@@ -513,6 +513,8 @@ export const waConversations = pgTable("wa_conversations", {
   label: varchar("label", { length: 50 }),
   assignedToUserId: varchar("assigned_to_user_id"),
   assignedToName: varchar("assigned_to_name", { length: 255 }),
+  aiPaused: boolean("ai_paused").default(false).notNull(),
+  aiPausedAt: timestamp("ai_paused_at"),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   index("idx_wa_conversations_merchant").on(table.merchantId),

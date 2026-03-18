@@ -5536,7 +5536,12 @@ export async function registerRoutes(
 
             // ✅ Step 8: Save response
             console.log(`      └─ Saving message response to database...`);
-            try {
+            const isDbError1 = (err: any) => {
+              const msg = (err.message || "").toLowerCase();
+              return msg.includes("timeout") || msg.includes("connection") || msg.includes("econnreset") || msg.includes("terminating") || msg.includes("deadlock") || err.code === "ETIMEDOUT" || err.code === "ECONNRESET";
+            };
+
+            const saveMsg1 = async () => {
               await storage.saveWhatsappResponse({
                 merchantId: matchedOrder.merchantId,
                 orderId: matchedOrder.id,
@@ -5548,29 +5553,37 @@ export async function registerRoutes(
               });
               console.log(`      ✅ Response saved`);
 
+              const contactName = value?.contacts?.[0]?.profile?.name ?? undefined;
+              const conv = await storage.upsertConversation({
+                merchantId: matchedOrder.merchantId,
+                contactPhone: normalizedPhone,
+                contactName,
+                orderId: matchedOrder.id,
+                orderNumber: matchedOrder.orderNumber,
+                lastMessage: messageBody.slice(0, 200),
+              });
+              await storage.createWaMessage({
+                conversationId: conv.id,
+                direction: "inbound",
+                senderName: contactName ?? fromPhone,
+                text: messageBody,
+                waMessageId,
+                status: "received",
+              });
+            };
+
+            try {
               try {
-                const contactName = value?.contacts?.[0]?.profile?.name ?? undefined;
-                const conv = await storage.upsertConversation({
-                  merchantId: matchedOrder.merchantId,
-                  contactPhone: normalizedPhone,
-                  contactName,
-                  orderId: matchedOrder.id,
-                  orderNumber: matchedOrder.orderNumber,
-                  lastMessage: messageBody.slice(0, 200),
-                });
-                await storage.createWaMessage({
-                  conversationId: conv.id,
-                  direction: "inbound",
-                  senderName: contactName ?? fromPhone,
-                  text: messageBody,
-                  waMessageId,
-                  status: "received",
-                });
-              } catch (convErr: any) {
-                console.warn(`      ⚠️ Conversation upsert failed: ${convErr.message}`);
+                await saveMsg1();
+              } catch (dbError: any) {
+                if (!isDbError1(dbError)) throw dbError;
+                console.error(`      ❌ DB timeout (attempt 1): ${dbError.message}`);
+                await new Promise(r => setTimeout(r, 2000));
+                console.log(`      Retrying message save (attempt 2)...`);
+                await saveMsg1();
+                console.log(`      ✅ Retry succeeded`);
               }
 
-              // ✅ Step 9: Process the response (CONFIRM/CANCEL logic)
               console.log(`      └─ Processing user response...`);
               const replyMerchant = await storage.getMerchant(matchedOrder.merchantId);
               await processWhatsAppOrderResponse(
@@ -5584,8 +5597,8 @@ export async function registerRoutes(
                 replyMerchant?.waPhoneNumberId || undefined,
                 replyMerchant?.waAccessToken || undefined,
               );
-            } catch (dbError: any) {
-              console.error(`      ❌ DATABASE ERROR: ${dbError.message}`);
+            } catch (err: any) {
+              console.error(`      ❌ CRITICAL: Message save failed! phone=${normalizedPhone}, msg="${messageBody.slice(0, 100)}", waId=${waMessageId}, error=${err.message}`);
             }
           }
         }
@@ -5759,7 +5772,12 @@ export async function registerRoutes(
               continue;
             }
 
-            try {
+            const isDbError = (err: any) => {
+              const msg = (err.message || "").toLowerCase();
+              return msg.includes("timeout") || msg.includes("connection") || msg.includes("econnreset") || msg.includes("terminating") || msg.includes("deadlock") || err.code === "ETIMEDOUT" || err.code === "ECONNRESET";
+            };
+
+            const saveMessageToDB = async (): Promise<string> => {
               await storage.saveWhatsappResponse({
                 merchantId: matchedOrder.merchantId,
                 orderId: matchedOrder.id,
@@ -5792,6 +5810,21 @@ export async function registerRoutes(
                 reactionEmoji,
                 referenceMessageId,
               });
+              return conv.id;
+            };
+
+            try {
+              let convId: string;
+              try {
+                convId = await saveMessageToDB();
+              } catch (dbErr: any) {
+                if (!isDbError(dbErr)) throw dbErr;
+                console.error(`[WhatsApp Webhook:${merchantId}] ${requestId} - DB timeout (attempt 1): ${dbErr.message}`);
+                await new Promise(r => setTimeout(r, 2000));
+                console.log(`[WhatsApp Webhook:${merchantId}] ${requestId} - Retrying message save (attempt 2)...`);
+                convId = await saveMessageToDB();
+                console.log(`[WhatsApp Webhook:${merchantId}] ${requestId} - ✅ Retry succeeded`);
+              }
 
               if (msgType === "text" || msgType === "button_reply") {
                 const replyMerchant2 = await storage.getMerchant(matchedOrder.merchantId);
@@ -5804,9 +5837,9 @@ export async function registerRoutes(
                 );
               }
 
-              sendAgentChatPushNotifications(matchedOrder.merchantId, contactName ?? fromPhone, messageBody, conv.id).catch(() => {});
-            } catch (dbErr: any) {
-              console.error(`[WhatsApp Webhook:${merchantId}] ${requestId} - DB error: ${dbErr.message}`);
+              sendAgentChatPushNotifications(matchedOrder.merchantId, contactName ?? fromPhone, messageBody, convId).catch(() => {});
+            } catch (err: any) {
+              console.error(`[WhatsApp Webhook:${merchantId}] ${requestId} - ❌ CRITICAL: Message save failed! phone=${fromPhone}, msg="${messageBody.slice(0, 100)}", waId=${waMessageId}, error=${err.message}`);
             }
           }
         }
@@ -5935,6 +5968,14 @@ export async function registerRoutes(
     orderNumber: string | null,
   ) {
     try {
+      if (conversationId) {
+        const conv = await storage.getConversationById(conversationId);
+        if (conv?.aiPaused) {
+          console.log(`${LOG_PREFIX_WA_AI} AI paused for conversation ${conversationId}, skipping auto-reply`);
+          return;
+        }
+      }
+
       const { generateAiReply } = await import("./services/whatsappAiReply");
       const result = await generateAiReply({
         merchantId,
@@ -5996,6 +6037,15 @@ export async function registerRoutes(
               }
             } catch (labelErr: any) {
               console.error(`${LOG_PREFIX_WA_AI} Failed to auto-label:`, labelErr.message);
+            }
+          }
+
+          if (result.classification === "human_handoff" || result.classification === "complaint" || result.classification === "return" || result.classification === "replacement") {
+            try {
+              await storage.pauseAiForConversation(merchantId, convId);
+              console.log(`${LOG_PREFIX_WA_AI} AI paused for conversation ${convId} due to ${result.classification}`);
+            } catch (pauseErr: any) {
+              console.error(`${LOG_PREFIX_WA_AI} Failed to pause AI:`, pauseErr.message);
             }
           }
         }
@@ -8008,6 +8058,11 @@ export async function registerRoutes(
         return res.status(400).json({ error: "WhatsApp credentials not configured" });
       }
 
+      if (!conv.aiPaused) {
+        await storage.pauseAiForConversation(merchantId, conv.id);
+        console.log(`[WhatsApp AI] AI auto-paused for conversation ${conv.id} — human agent replied`);
+      }
+
       await storage.upsertConversation({
         merchantId,
         contactPhone: conv.contactPhone,
@@ -8072,6 +8127,11 @@ export async function registerRoutes(
       const file = req.file;
       if (!file) return res.status(400).json({ error: "No file uploaded" });
       console.log("[WhatsApp Media] Received:", file.originalname, file.mimetype, file.size);
+
+      if (!conv.aiPaused) {
+        await storage.pauseAiForConversation(merchantId, conv.id);
+        console.log(`[WhatsApp AI] AI auto-paused for conversation ${conv.id} — human agent sent media`);
+      }
 
       const [merchantRow] = await db.select({
         waPhoneNumberId: merchants.waPhoneNumberId,
@@ -8280,6 +8340,27 @@ export async function registerRoutes(
       if (!merchantId) return;
       await storage.markConversationRead(merchantId, req.params.id);
       res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/support/conversations/:id/ai-toggle", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const conv = await storage.getConversationById(req.params.id);
+      if (!conv || conv.merchantId !== merchantId) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+      const { paused } = req.body;
+      if (typeof paused !== "boolean") return res.status(400).json({ error: "paused must be a boolean" });
+      if (paused) {
+        await storage.pauseAiForConversation(merchantId, req.params.id);
+      } else {
+        await storage.resumeAiForConversation(merchantId, req.params.id);
+      }
+      res.json({ success: true, aiPaused: paused });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -11347,6 +11428,11 @@ export async function registerRoutes(
         return res.status(400).json({ error: "WhatsApp credentials not configured" });
       }
 
+      if (!conv.aiPaused) {
+        await storage.pauseAiForConversation(merchantId, conv.id);
+        console.log(`[WhatsApp AI] AI auto-paused for conversation ${conv.id} — agent-chat agent replied`);
+      }
+
       await storage.upsertConversation({
         merchantId,
         contactPhone: conv.contactPhone,
@@ -11434,6 +11520,26 @@ export async function registerRoutes(
       const merchantId = (req as any).agentChatMerchantId as string;
       await storage.markConversationRead(merchantId, req.params.id);
       res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/agent-chat/conversations/:id/ai-toggle", agentChatAuth, async (req, res) => {
+    try {
+      const merchantId = (req as any).agentChatMerchantId as string;
+      const conv = await storage.getConversationById(req.params.id);
+      if (!conv || conv.merchantId !== merchantId) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+      const { paused } = req.body;
+      if (typeof paused !== "boolean") return res.status(400).json({ error: "paused must be a boolean" });
+      if (paused) {
+        await storage.pauseAiForConversation(merchantId, req.params.id);
+      } else {
+        await storage.resumeAiForConversation(merchantId, req.params.id);
+      }
+      res.json({ success: true, aiPaused: paused });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

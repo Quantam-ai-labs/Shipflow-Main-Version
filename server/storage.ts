@@ -263,6 +263,8 @@ export interface IStorage {
   updateConversationLabel(merchantId: string, convId: string, label: string | null): Promise<void>;
   updateConversationAssignment(merchantId: string, convId: string, userId: string | null, userName: string | null): Promise<void>;
   markConversationRead(merchantId: string, convId: string): Promise<void>;
+  pauseAiForConversation(merchantId: string, convId: string): Promise<void>;
+  resumeAiForConversation(merchantId: string, convId: string): Promise<void>;
 
   // RoboCall
   getRobocallCredentials(merchantId: string): Promise<{ email: string; apiKey: string } | null>;
@@ -2273,6 +2275,18 @@ export class DatabaseStorage implements IStorage {
   async markConversationRead(merchantId: string, convId: string): Promise<void> {
     await db.update(waConversations)
       .set({ unreadCount: 0 })
+      .where(and(eq(waConversations.id, convId), eq(waConversations.merchantId, merchantId)));
+  }
+
+  async pauseAiForConversation(merchantId: string, convId: string): Promise<void> {
+    await db.update(waConversations)
+      .set({ aiPaused: true, aiPausedAt: new Date() })
+      .where(and(eq(waConversations.id, convId), eq(waConversations.merchantId, merchantId)));
+  }
+
+  async resumeAiForConversation(merchantId: string, convId: string): Promise<void> {
+    await db.update(waConversations)
+      .set({ aiPaused: false, aiPausedAt: null })
       .where(and(eq(waConversations.id, convId), eq(waConversations.merchantId, merchantId)));
   }
 

@@ -54,7 +54,7 @@ const STATUS_MAP: Record<string, string> = {
   CANCELLED: "Cancelled",
 };
 
-export type AiClassification = "complaint" | "return" | "replacement" | null;
+export type AiClassification = "complaint" | "return" | "replacement" | "human_handoff" | null;
 
 export interface AiReplyResult {
   success: boolean;
@@ -298,6 +298,7 @@ The "classification" field must be one of:
 - "complaint" — if the customer is complaining about a problem (damaged item, wrong item, bad quality, late delivery, not received, etc.)
 - "return" — if the customer wants to return an item
 - "replacement" — if the customer wants a replacement item
+- "human_handoff" — if the customer explicitly asks to speak to a human agent, real person, manager, or supervisor
 - null — for all other messages (product inquiries, order status, general questions, greetings, etc.)
 
 CRITICAL RULES — FOLLOW EXACTLY:
@@ -324,6 +325,7 @@ COMPLAINT / RETURN / REPLACEMENT RULES:
 - When classifying as "return": Acknowledge the return request, and tell the customer that a team member from the returns department will assist them shortly.
 - When classifying as "replacement": Acknowledge the replacement request, and tell the customer that a team member will arrange the replacement and get back to them shortly.
 - For complaints/returns/replacements, do NOT try to resolve the issue yourself — always escalate to a human.
+- When classifying as "human_handoff": Acknowledge the customer's request, and tell them that a human agent will be connected shortly to assist them. Be reassuring and professional.
 
 ${knowledgeBase ? `STORE KNOWLEDGE BASE (policies, FAQs, shipping info):\n${knowledgeBase}\n` : ""}
 ${productCatalog ? `PRODUCT CATALOG:\n${productCatalog}\n` : "No products loaded."}
@@ -355,7 +357,7 @@ ${conversationHistory ? `RECENT CONVERSATION:\n${conversationHistory}\n` : ""}`;
       const parsed = JSON.parse(rawContent);
       reply = (parsed.reply || parsed.message || "").trim();
       const cls = parsed.classification;
-      if (cls === "complaint" || cls === "return" || cls === "replacement") {
+      if (cls === "complaint" || cls === "return" || cls === "replacement" || cls === "human_handoff") {
         classification = cls;
       }
     } catch {

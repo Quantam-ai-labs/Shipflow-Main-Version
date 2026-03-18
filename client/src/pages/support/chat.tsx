@@ -47,6 +47,8 @@ interface Conversation {
   label: string | null;
   assignedToUserId: string | null;
   assignedToName: string | null;
+  aiPaused: boolean;
+  aiPausedAt: string | null;
 }
 
 interface Message {
@@ -642,6 +644,14 @@ export default function SupportChatPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/support/conversations"] }),
   });
 
+  const aiToggleMutation = useMutation({
+    mutationFn: async ({ convId, paused }: { convId: string; paused: boolean }) =>
+      apiRequest("PATCH", `/api/support/conversations/${convId}/ai-toggle`, { paused }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/support/conversations"] });
+    },
+  });
+
   const reactMutation = useMutation({
     mutationFn: async ({ convId, emoji, waMessageId }: { convId: string; emoji: string; waMessageId: string }) =>
       apiRequest("POST", `/api/support/conversations/${convId}/react`, { emoji, waMessageId }),
@@ -943,6 +953,29 @@ export default function SupportChatPage() {
                   )}
                 </div>
               </div>
+
+              <Button
+                size="sm"
+                variant="ghost"
+                data-testid="button-ai-toggle"
+                className={cn(
+                  "flex items-center gap-1.5 text-xs font-medium rounded-full px-3 py-1 h-7 transition-colors",
+                  selectedConv.aiPaused
+                    ? "bg-white/10 text-white/70 hover:bg-white/20"
+                    : "bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/30"
+                )}
+                disabled={aiToggleMutation.isPending}
+                onClick={() => aiToggleMutation.mutate({ convId: selectedConv.id, paused: !selectedConv.aiPaused })}
+              >
+                {aiToggleMutation.isPending ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : selectedConv.aiPaused ? (
+                  <Pause className="w-3 h-3" />
+                ) : (
+                  <Play className="w-3 h-3" />
+                )}
+                {selectedConv.aiPaused ? "AI Off" : "AI On"}
+              </Button>
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
