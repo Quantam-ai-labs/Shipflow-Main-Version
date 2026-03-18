@@ -550,8 +550,8 @@ export default function SupportChatPage() {
       mediaRecorder.onstop = () => {
         stream.getTracks().forEach(t => t.stop());
         const blob = new Blob(recordingChunksRef.current, { type: "audio/ogg" });
-        const file = new File([blob], "voice-message.ogg", { type: "audio/ogg" });
-        mediaUploadMutation.mutate(file);
+        const audioFile = new globalThis.File([blob], "voice-message.ogg", { type: "audio/ogg" });
+        mediaUploadMutation.mutate(audioFile);
       };
       mediaRecorder.start();
       setIsRecording(true);
