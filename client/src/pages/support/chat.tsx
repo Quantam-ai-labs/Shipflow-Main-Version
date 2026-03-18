@@ -21,7 +21,7 @@ import {
   Smile, Bold, Italic, Strikethrough, Code, Filter,
   X, ChevronDown, Image as ImageIcon, Mic, FileText,
   MapPin, Users, Reply, Download, Play, Pause, Volume2,
-  ExternalLink, File, Video, Plus, Pencil, Settings2,
+  ExternalLink, File as FileIcon, Video, Plus, Pencil, Settings2,
   Paperclip, Camera, FileUp, StopCircle, Loader2,
 } from "lucide-react";
 import {
@@ -33,6 +33,7 @@ import {
 import { formatDistanceToNow, format, isToday, isYesterday } from "date-fns";
 import { cn } from "@/lib/utils";
 import { EmojiPicker } from "@/components/emoji-picker";
+import { useToast } from "@/hooks/use-toast";
 
 interface Conversation {
   id: string;
@@ -170,13 +171,14 @@ function AudioPlayer({ src }: { src: string }) {
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [loadError, setLoadError] = useState(false);
 
   const safeDuration = (d: number) => (isFinite(d) && !isNaN(d) && d > 0) ? d : 0;
 
   const toggle = () => {
     const a = audioRef.current;
-    if (!a) return;
-    if (playing) { a.pause(); } else { a.play(); }
+    if (!a || loadError) return;
+    if (playing) { a.pause(); } else { a.play().catch(() => setLoadError(true)); }
     setPlaying(!playing);
   };
 
@@ -192,6 +194,15 @@ function AudioPlayer({ src }: { src: string }) {
     const safe = safeDuration(d);
     if (safe > 0) setDuration(safe);
   };
+
+  if (loadError) {
+    return (
+      <div className="flex items-center gap-2 min-w-[220px] py-1 text-muted-foreground" data-testid="audio-player-error">
+        <Volume2 className="w-4 h-4 flex-shrink-0 opacity-50" />
+        <span className="text-xs">Audio unavailable</span>
+      </div>
+    );
+  }
 
   return (
     <div className="flex items-center gap-2.5 min-w-[220px] py-1" data-testid="audio-player">
@@ -213,6 +224,7 @@ function AudioPlayer({ src }: { src: string }) {
           }
         }}
         onEnded={() => { setPlaying(false); setProgress(0); setCurrentTime(0); }}
+        onError={() => setLoadError(true)}
       />
       <button
         onClick={toggle}
@@ -323,7 +335,7 @@ function MediaBubble({ msg, mediaProxyBase }: { msg: Message; mediaProxyBase: st
     return (
       <div className="flex items-center gap-3 p-2 rounded-md bg-muted/50 min-w-[200px]" data-testid={`media-document-${msg.id}`}>
         <div className="flex-shrink-0 w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center">
-          {isPdf ? <FileText className="w-5 h-5 text-red-500" /> : <File className="w-5 h-5 text-muted-foreground" />}
+          {isPdf ? <FileText className="w-5 h-5 text-red-500" /> : <FileIcon className="w-5 h-5 text-muted-foreground" />}
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-sm font-medium truncate">{fName}</div>
@@ -508,8 +520,10 @@ export default function SupportChatPage() {
     },
   });
 
+  const { toast } = useToast();
+
   const mediaUploadMutation = useMutation({
-    mutationFn: async (file: File) => {
+    mutationFn: async (file: globalThis.File) => {
       if (!selectedConvId) throw new Error("No conversation selected");
       const formData = new FormData();
       formData.append("file", file);
@@ -528,6 +542,9 @@ export default function SupportChatPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/support/conversations", selectedConvId, "messages"] });
       queryClient.invalidateQueries({ queryKey: ["/api/support/conversations"] });
     },
+    onError: (error: Error) => {
+      toast({ title: "Media send failed", description: error.message, variant: "destructive" });
+    },
   });
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -541,7 +558,13 @@ export default function SupportChatPage() {
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
+      const preferredMimes = [
+        { mime: "audio/ogg;codecs=opus", ext: "ogg", type: "audio/ogg" },
+        { mime: "audio/webm;codecs=opus", ext: "webm", type: "audio/webm" },
+        { mime: "audio/webm", ext: "webm", type: "audio/webm" },
+      ];
+      const supported = preferredMimes.find(m => MediaRecorder.isTypeSupported(m.mime)) || preferredMimes[1];
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: supported.mime });
       mediaRecorderRef.current = mediaRecorder;
       recordingChunksRef.current = [];
       mediaRecorder.ondataavailable = (e) => {
@@ -549,11 +572,11 @@ export default function SupportChatPage() {
       };
       mediaRecorder.onstop = () => {
         stream.getTracks().forEach(t => t.stop());
-        const blob = new Blob(recordingChunksRef.current, { type: "audio/ogg" });
-        const audioFile = new globalThis.File([blob], "voice-message.ogg", { type: "audio/ogg" });
+        const blob = new Blob(recordingChunksRef.current, { type: supported.type });
+        const audioFile = new File([blob], `voice-message.${supported.ext}`, { type: supported.type });
         mediaUploadMutation.mutate(audioFile);
       };
-      mediaRecorder.start();
+      mediaRecorder.start(250);
       setIsRecording(true);
       setRecordingDuration(0);
       recordingTimerRef.current = setInterval(() => {

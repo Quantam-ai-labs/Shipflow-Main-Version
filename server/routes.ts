@@ -8044,6 +8044,7 @@ export async function registerRoutes(
 
       const file = req.file;
       if (!file) return res.status(400).json({ error: "No file uploaded" });
+      console.log("[WhatsApp Media] Received:", file.originalname, file.mimetype, file.size);
 
       const [merchantRow] = await db.select({
         waPhoneNumberId: merchants.waPhoneNumberId,
