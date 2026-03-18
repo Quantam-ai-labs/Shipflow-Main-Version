@@ -5912,6 +5912,12 @@ export async function registerRoutes(
 
   const LOG_PREFIX_WA_AI = "[WhatsApp AI]";
 
+  const CLASSIFICATION_TO_LABEL: Record<string, string> = {
+    complaint: "Complaints",
+    return: "Returns",
+    replacement: "Replacements",
+  };
+
   async function handleAiAutoReply(
     merchantId: string,
     customerPhone: string,
@@ -5971,8 +5977,21 @@ export async function registerRoutes(
             contactPhone: customerPhone,
             lastMessage: result.reply.slice(0, 200),
           });
+
+          if (result.classification && CLASSIFICATION_TO_LABEL[result.classification]) {
+            try {
+              const conv = await storage.getConversationById(convId);
+              if (conv && !conv.label) {
+                const labelName = CLASSIFICATION_TO_LABEL[result.classification];
+                await storage.updateConversationLabel(merchantId, convId, labelName);
+                console.log(`${LOG_PREFIX_WA_AI} Auto-labeled conversation ${convId} as "${labelName}"`);
+              }
+            } catch (labelErr: any) {
+              console.error(`${LOG_PREFIX_WA_AI} Failed to auto-label:`, labelErr.message);
+            }
+          }
         }
-        console.log(`${LOG_PREFIX_WA_AI} AI reply sent to ${customerPhone}`);
+        console.log(`${LOG_PREFIX_WA_AI} AI reply sent to ${customerPhone}${result.classification ? ` [${result.classification}]` : ""}`);
       }
     } catch (error: any) {
       console.error(`${LOG_PREFIX_WA_AI} handleAiAutoReply error:`, error.message);

@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import { db } from "../db";
 import { merchants, products, waConversations, waMessages, orders } from "@shared/schema";
 import { eq, and, desc, or, ilike, sql } from "drizzle-orm";
+import { normalizePakistaniPhone } from "../utils/phone";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -13,6 +14,7 @@ const MAX_REPLY_LENGTH = 500;
 const MAX_KEYWORD_MATCHES = 30;
 const MAX_GENERAL_PRODUCTS = 100;
 const MAX_CONVERSATION_MESSAGES = 10;
+const MAX_PHONE_ORDERS = 10;
 
 const aiReplyLock = new Map<string, number>();
 const AI_LOCK_TTL_MS = 30_000;
@@ -40,11 +42,49 @@ function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
 }
 
-interface AiReplyResult {
+const STATUS_MAP: Record<string, string> = {
+  NEW: "Received",
+  PENDING: "Being Processed",
+  READY_TO_SHIP: "Ready to Ship",
+  HOLD: "On Hold",
+  BOOKED: "Booked with Courier",
+  FULFILLED: "Shipped / In Transit",
+  DELIVERED: "Delivered",
+  RETURN: "Returned",
+  CANCELLED: "Cancelled",
+};
+
+export type AiClassification = "complaint" | "return" | "replacement" | null;
+
+export interface AiReplyResult {
   success: boolean;
   reply?: string;
+  classification?: AiClassification;
   error?: string;
   skipped?: boolean;
+}
+
+function buildPhoneVariants(phone: string): string[] {
+  const digits = phone.replace(/[^\d]/g, "");
+  const variants = new Set<string>();
+  variants.add(phone);
+  variants.add(digits);
+  if (digits.startsWith("92") && digits.length >= 12) {
+    variants.add(digits);
+    variants.add(`+${digits}`);
+    variants.add(`0${digits.slice(2)}`);
+  } else if (digits.startsWith("0") && digits.length === 11) {
+    variants.add(digits);
+    variants.add(`92${digits.slice(1)}`);
+    variants.add(`+92${digits.slice(1)}`);
+  } else if (digits.startsWith("3") && digits.length === 10) {
+    variants.add(`0${digits}`);
+    variants.add(`92${digits}`);
+    variants.add(`+92${digits}`);
+  }
+  const normalized = normalizePakistaniPhone(phone);
+  if (normalized) variants.add(normalized);
+  return [...variants];
 }
 
 export async function generateAiReply(params: {
@@ -192,44 +232,73 @@ export async function generateAiReply(params: {
       }
     }
 
+    const orderFields = {
+      orderNumber: orders.orderNumber,
+      workflowStatus: orders.workflowStatus,
+      totalAmount: orders.totalAmount,
+      currency: orders.currency,
+      itemSummary: orders.itemSummary,
+      city: orders.city,
+      courierName: orders.courierName,
+      courierTracking: orders.courierTracking,
+      shipmentStatus: orders.shipmentStatus,
+      paymentMethod: orders.paymentMethod,
+      orderDate: orders.orderDate,
+    };
+
     let orderContext = "";
-    if (params.orderId) {
-      const [order] = await db.select({
-        orderNumber: orders.orderNumber,
-        workflowStatus: orders.workflowStatus,
-        totalAmount: orders.totalAmount,
-        currency: orders.currency,
-        itemSummary: orders.itemSummary,
-        city: orders.city,
-        courierName: orders.courierName,
-        courierTracking: orders.courierTracking,
-      }).from(orders)
+
+    const phoneVariants = buildPhoneVariants(customerPhone);
+    const phoneConditions = phoneVariants.map(v => eq(orders.customerPhone, v));
+    const phoneOrders = await db.select(orderFields).from(orders)
+      .where(and(
+        eq(orders.merchantId, merchantId),
+        or(...phoneConditions)
+      ))
+      .orderBy(desc(orders.orderDate))
+      .limit(MAX_PHONE_ORDERS);
+
+    if (phoneOrders.length > 0) {
+      const orderLines = phoneOrders.map((o, i) => {
+        const status = STATUS_MAP[o.workflowStatus || ""] || o.workflowStatus || "Unknown";
+        const date = o.orderDate ? new Date(o.orderDate).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" }) : "N/A";
+        let line = `${i + 1}. Order ${o.orderNumber} (${date})`;
+        line += `\n   Status: ${status}`;
+        line += `\n   Items: ${o.itemSummary || "N/A"}`;
+        line += `\n   Total: ${o.currency || "PKR"} ${o.totalAmount || "N/A"}`;
+        line += `\n   City: ${o.city || "N/A"}`;
+        line += `\n   Payment: ${o.paymentMethod || "N/A"}`;
+        if (o.courierName) line += `\n   Courier: ${o.courierName}`;
+        if (o.courierTracking) line += `\n   Tracking: ${o.courierTracking}`;
+        if (o.shipmentStatus) line += `\n   Shipment: ${o.shipmentStatus}`;
+        return line;
+      });
+      orderContext = `\nCUSTOMER'S ORDERS (${phoneOrders.length} found, most recent first):\n${orderLines.join("\n\n")}`;
+      console.log(`${LOG_PREFIX} Found ${phoneOrders.length} orders for phone ${customerPhone}`);
+    } else if (params.orderId) {
+      const [singleOrder] = await db.select(orderFields).from(orders)
         .where(and(eq(orders.id, params.orderId), eq(orders.merchantId, merchantId)))
         .limit(1);
-
-      if (order) {
-        const statusMap: Record<string, string> = {
-          NEW: "Received",
-          PENDING: "Being Processed",
-          READY_TO_SHIP: "Ready to Ship",
-          HOLD: "On Hold",
-          BOOKED: "Booked with Courier",
-          FULFILLED: "Shipped / In Transit",
-          DELIVERED: "Delivered",
-          RETURN: "Returned",
-          CANCELLED: "Cancelled",
-        };
-        orderContext = `
-CUSTOMER'S ORDER:
-- Order #${order.orderNumber}
-- Status: ${statusMap[order.workflowStatus || ""] || order.workflowStatus}
-- Items: ${order.itemSummary || "N/A"}
-- Total: ${order.currency || "PKR"} ${order.totalAmount || "N/A"}
-- City: ${order.city || "N/A"}${order.courierName ? `\n- Courier: ${order.courierName}` : ""}${order.courierTracking ? `\n- Tracking: ${order.courierTracking}` : ""}`;
+      if (singleOrder) {
+        const status = STATUS_MAP[singleOrder.workflowStatus || ""] || singleOrder.workflowStatus;
+        orderContext = `\nCUSTOMER'S ORDER:\n- Order ${singleOrder.orderNumber}\n- Status: ${status}\n- Items: ${singleOrder.itemSummary || "N/A"}\n- Total: ${singleOrder.currency || "PKR"} ${singleOrder.totalAmount || "N/A"}\n- City: ${singleOrder.city || "N/A"}`;
+        if (singleOrder.courierName) orderContext += `\n- Courier: ${singleOrder.courierName}`;
+        if (singleOrder.courierTracking) orderContext += `\n- Tracking: ${singleOrder.courierTracking}`;
       }
+    } else {
+      console.log(`${LOG_PREFIX} No orders found for phone ${customerPhone}`);
     }
 
     const systemPrompt = `You are a helpful store assistant for "${storeName}". You respond to customer messages on WhatsApp.
+
+You MUST respond with a JSON object in this exact format:
+{"reply": "your message to the customer", "classification": null}
+
+The "classification" field must be one of:
+- "complaint" — if the customer is complaining about a problem (damaged item, wrong item, bad quality, late delivery, not received, etc.)
+- "return" — if the customer wants to return an item
+- "replacement" — if the customer wants a replacement item
+- null — for all other messages (product inquiries, order status, general questions, greetings, etc.)
 
 CRITICAL RULES — FOLLOW EXACTLY:
 1. You ONLY know about ${storeName}'s products, policies, and orders listed below. NEVER use outside knowledge.
@@ -241,13 +310,24 @@ CRITICAL RULES — FOLLOW EXACTLY:
 7. NEVER make up or guess information. If the answer isn't in the provided data, say you'll check and get back to them.
 8. Respond in the SAME LANGUAGE the customer uses (Urdu, English, or Roman Urdu).
 9. Be friendly and professional. Use the customer's name if known.
-10. For order status questions, provide the current status from the order data. Do not promise specific delivery dates unless the data shows them.
-11. For product questions, use ONLY the catalog data provided. Include prices and availability.
-12. Maximum response length: ${MAX_REPLY_LENGTH} characters.
+10. Maximum response length: ${MAX_REPLY_LENGTH} characters.
+
+ORDER INQUIRY RULES:
+- If the customer asks about order status, provide details from the order data below.
+- If the customer has multiple orders, share the most recent order's details and mention you can look up any specific order by number.
+- If no orders are found for this customer, tell them you couldn't find any orders linked to their number and ask them to share their order number.
+- NEVER promise specific delivery dates unless the data explicitly shows them.
+- NEVER fabricate tracking numbers, courier names, or order details.
+
+COMPLAINT / RETURN / REPLACEMENT RULES:
+- When classifying as "complaint": Respond empathetically, acknowledge the issue, apologize for the inconvenience, and tell the customer that a team member will review their case and get back to them shortly.
+- When classifying as "return": Acknowledge the return request, and tell the customer that a team member from the returns department will assist them shortly.
+- When classifying as "replacement": Acknowledge the replacement request, and tell the customer that a team member will arrange the replacement and get back to them shortly.
+- For complaints/returns/replacements, do NOT try to resolve the issue yourself — always escalate to a human.
 
 ${knowledgeBase ? `STORE KNOWLEDGE BASE (policies, FAQs, shipping info):\n${knowledgeBase}\n` : ""}
 ${productCatalog ? `PRODUCT CATALOG:\n${productCatalog}\n` : "No products loaded."}
-${orderContext ? `${orderContext}\n` : ""}
+${orderContext ? `${orderContext}\n` : "No orders found for this customer's phone number."}
 ${conversationHistory ? `RECENT CONVERSATION:\n${conversationHistory}\n` : ""}`;
 
     const response = await openai.chat.completions.create({
@@ -256,23 +336,44 @@ ${conversationHistory ? `RECENT CONVERSATION:\n${conversationHistory}\n` : ""}`;
         { role: "system", content: systemPrompt },
         { role: "user", content: messageText },
       ],
-      max_tokens: 200,
+      max_tokens: 300,
       temperature: 0.3,
+      response_format: { type: "json_object" },
     });
 
-    let reply = response.choices?.[0]?.message?.content?.trim() || "";
+    const rawContent = response.choices?.[0]?.message?.content?.trim() || "";
+
+    if (!rawContent) {
+      releaseAiLock(lockKey);
+      return { success: false, error: "Empty AI response" };
+    }
+
+    let reply = "";
+    let classification: AiClassification = null;
+
+    try {
+      const parsed = JSON.parse(rawContent);
+      reply = (parsed.reply || parsed.message || "").trim();
+      const cls = parsed.classification;
+      if (cls === "complaint" || cls === "return" || cls === "replacement") {
+        classification = cls;
+      }
+    } catch {
+      reply = rawContent;
+      console.warn(`${LOG_PREFIX} Failed to parse JSON response, using raw text`);
+    }
 
     if (!reply) {
       releaseAiLock(lockKey);
-      return { success: false, error: "Empty AI response" };
+      return { success: false, error: "Empty reply in AI response" };
     }
 
     if (reply.length > MAX_REPLY_LENGTH) {
       reply = reply.substring(0, MAX_REPLY_LENGTH - 3) + "...";
     }
 
-    console.log(`${LOG_PREFIX} Generated reply for ${customerPhone}: "${reply.substring(0, 80)}..."`);
-    return { success: true, reply };
+    console.log(`${LOG_PREFIX} Generated reply for ${customerPhone}: "${reply.substring(0, 80)}..."${classification ? ` [classified: ${classification}]` : ""}`);
+    return { success: true, reply, classification };
   } catch (error: any) {
     releaseAiLock(lockKey);
     console.error(`${LOG_PREFIX} Error generating AI reply:`, error.message);
