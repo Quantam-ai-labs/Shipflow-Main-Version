@@ -8031,6 +8031,130 @@ export async function registerRoutes(
     }
   });
 
+  const multerUpload = (await import("multer")).default({ storage: (await import("multer")).default.memoryStorage(), limits: { fileSize: 16 * 1024 * 1024 } });
+
+  app.post("/api/support/conversations/:id/media", isAuthenticated, multerUpload.single("file"), async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const conv = await storage.getConversationById(req.params.id);
+      if (!conv || conv.merchantId !== merchantId) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+
+      const file = req.file;
+      if (!file) return res.status(400).json({ error: "No file uploaded" });
+
+      const [merchantRow] = await db.select({
+        waPhoneNumberId: merchants.waPhoneNumberId,
+        waAccessToken: merchants.waAccessToken,
+      }).from(merchants).where(eq(merchants.id, merchantId)).limit(1);
+
+      const phoneNumberId = merchantRow?.waPhoneNumberId;
+      const accessToken = merchantRow?.waAccessToken;
+      if (!phoneNumberId || !accessToken) {
+        return res.status(400).json({ error: "WhatsApp credentials not configured" });
+      }
+
+      const mime = file.mimetype as string;
+      let waType: string;
+      let captionField: string | undefined;
+      if (mime.startsWith("image/")) {
+        waType = "image";
+        captionField = file.originalname;
+      } else if (mime.startsWith("video/")) {
+        waType = "video";
+        captionField = file.originalname;
+      } else if (mime.startsWith("audio/") || mime === "application/ogg") {
+        waType = "audio";
+      } else {
+        waType = "document";
+        captionField = file.originalname;
+      }
+
+      const FormData = (await import("form-data")).default;
+      const formData = new FormData();
+      formData.append("messaging_product", "whatsapp");
+      formData.append("type", mime);
+      formData.append("file", file.buffer, { filename: file.originalname, contentType: mime });
+
+      const uploadRes = await fetch(`https://graph.facebook.com/v22.0/${phoneNumberId}/media`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}`, ...formData.getHeaders() },
+        body: formData as any,
+        signal: AbortSignal.timeout(30000),
+      });
+
+      if (!uploadRes.ok) {
+        const errText = await uploadRes.text().catch(() => "Upload error");
+        console.error("[WhatsApp Media] Upload failed:", errText);
+        return res.status(502).json({ error: "Failed to upload media to WhatsApp" });
+      }
+
+      const uploadData = await uploadRes.json() as any;
+      const mediaId = uploadData?.id;
+      if (!mediaId) return res.status(502).json({ error: "No media ID returned from WhatsApp" });
+
+      const waPayload: any = {
+        messaging_product: "whatsapp",
+        to: conv.contactPhone,
+        type: waType,
+        [waType]: {
+          id: mediaId,
+          ...(captionField && waType !== "audio" ? { caption: captionField } : {}),
+          ...(waType === "document" ? { filename: file.originalname } : {}),
+        },
+      };
+
+      const sendRes = await fetch(`https://graph.facebook.com/v22.0/${phoneNumberId}/messages`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify(waPayload),
+        signal: AbortSignal.timeout(15000),
+      });
+
+      let waMessageId: string | null = null;
+      let status = "sent";
+      if (sendRes.ok) {
+        const sendData = await sendRes.json() as any;
+        waMessageId = sendData?.messages?.[0]?.id || null;
+      } else {
+        status = "failed";
+        const errText = await sendRes.text().catch(() => "");
+        console.error("[WhatsApp Media] Send failed:", errText);
+      }
+
+      const displayText = waType === "image" ? "📷 Photo" : waType === "video" ? "🎬 Video" : waType === "audio" ? "🎵 Audio" : `📄 ${file.originalname}`;
+
+      await storage.upsertConversation({
+        merchantId,
+        contactPhone: conv.contactPhone,
+        contactName: conv.contactName ?? undefined,
+        orderId: conv.orderId,
+        orderNumber: conv.orderNumber,
+        lastMessage: displayText,
+      });
+
+      const msg = await storage.createWaMessage({
+        conversationId: conv.id,
+        direction: "outbound",
+        senderName: "Agent",
+        text: displayText,
+        status,
+        messageType: waType,
+        mediaUrl: `wa-media:${mediaId}`,
+        mimeType: mime,
+        fileName: file.originalname,
+        ...(waMessageId ? { waMessageId } : {}),
+      });
+
+      res.json(msg);
+    } catch (error: any) {
+      console.error("[WhatsApp Media] Error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.get("/api/support/labels", isAuthenticated, async (req: any, res) => {
     try {
       const merchantId = await requireMerchant(req, res);

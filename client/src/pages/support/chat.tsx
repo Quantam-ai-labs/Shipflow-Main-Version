@@ -22,6 +22,7 @@ import {
   X, ChevronDown, Image as ImageIcon, Mic, FileText,
   MapPin, Users, Reply, Download, Play, Pause, Volume2,
   ExternalLink, File, Video, Plus, Pencil, Settings2,
+  Paperclip, Camera, FileUp, StopCircle, Loader2,
 } from "lucide-react";
 import {
   Dialog,
@@ -113,7 +114,7 @@ function StatusTicks({ status }: { status: string | null }) {
 
 function renderFormattedText(text: string) {
   const parts: (string | JSX.Element)[] = [];
-  const regex = /(\*[^*]+\*)|(_[^_]+_)|(~[^~]+~)|(```[^`]+```)|(`[^`]+`)/g;
+  const regex = /(\*[^*]+\*)|(_[^_]+_)|(~[^~]+~)|(```[^`]+```)|(`[^`]+`)|(https?:\/\/[^\s<>"{}|\\^`\[\]]+)/g;
   let lastIndex = 0;
   let match;
   let key = 0;
@@ -133,6 +134,8 @@ function renderFormattedText(text: string) {
       parts.push(<em key={key++}>{m.slice(1, -1)}</em>);
     } else if (m.startsWith("~") && m.endsWith("~")) {
       parts.push(<s key={key++}>{m.slice(1, -1)}</s>);
+    } else if (m.startsWith("http")) {
+      parts.push(<a key={key++} href={m} target="_blank" rel="noopener noreferrer" className="text-blue-500 dark:text-blue-400 underline break-all hover:text-blue-600">{m}</a>);
     }
     lastIndex = match.index + m.length;
   }
@@ -416,6 +419,12 @@ export default function SupportChatPage() {
   const [editingLabel, setEditingLabel] = useState<WaLabel | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingChunksRef = useRef<Blob[]>([]);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
   const queryClient = useQueryClient();
 
   const { data: waLabels = [] } = useQuery<WaLabel[]>({
@@ -498,6 +507,73 @@ export default function SupportChatPage() {
       setMessageText(lastSentTextRef.current);
     },
   });
+
+  const mediaUploadMutation = useMutation({
+    mutationFn: async (file: File) => {
+      if (!selectedConvId) throw new Error("No conversation selected");
+      const formData = new FormData();
+      formData.append("file", file);
+      const resp = await fetch(`/api/support/conversations/${selectedConvId}/media`, {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ error: "Upload failed" }));
+        throw new Error(err.error || "Upload failed");
+      }
+      return resp.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/support/conversations", selectedConvId, "messages"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/support/conversations"] });
+    },
+  });
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      mediaUploadMutation.mutate(file);
+    }
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
+      mediaRecorderRef.current = mediaRecorder;
+      recordingChunksRef.current = [];
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) recordingChunksRef.current.push(e.data);
+      };
+      mediaRecorder.onstop = () => {
+        stream.getTracks().forEach(t => t.stop());
+        const blob = new Blob(recordingChunksRef.current, { type: "audio/ogg" });
+        const file = new File([blob], "voice-message.ogg", { type: "audio/ogg" });
+        mediaUploadMutation.mutate(file);
+      };
+      mediaRecorder.start();
+      setIsRecording(true);
+      setRecordingDuration(0);
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000);
+    } catch {
+      console.error("Microphone access denied");
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+    }
+    setIsRecording(false);
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+  };
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => apiRequest("DELETE", `/api/support/conversations/${id}`),
@@ -797,30 +873,30 @@ export default function SupportChatPage() {
 
       <div className="flex-1 flex flex-col min-w-0">
         {!selectedConv ? (
-          <div className="flex-1 flex items-center justify-center bg-card">
-            <div className="text-center space-y-3">
-              <div className="w-24 h-24 bg-muted rounded-full flex items-center justify-center mx-auto">
-                <MessageCircle className="w-12 h-12 text-muted-foreground" />
+          <div className="flex-1 flex items-center justify-center wa-chat-bg">
+            <div className="text-center space-y-4">
+              <div className="w-[200px] h-[200px] mx-auto opacity-30">
+                <svg viewBox="0 0 303 172" className="w-full h-full text-muted-foreground">
+                  <path fill="currentColor" d="M229.565 160.229c-1.167-5.6-15.846-7.676-15.846-7.676s-1.924-7.318 4.434-12.516c0 0-3.449-.449-5.629 1.542-.063-1.592.237-4.767 3.232-8.529 0 0-3.63.579-5.502 3.165-.063-1.17.021-3.36 1.308-5.862 0 0-4.725 3.133-5.044 9.18-.108 1.851.355 3.693.355 3.693s-2.366-2.079-4.188-3.384c-1.822-1.304-3.27-1.593-3.27-1.593.893 1.17 2.854 3.489 4.48 5.133 1.627 1.644 3.093 2.568 3.093 2.568s-1.376-.193-4.38-1.542c-3.003-1.35-4.245-1.869-4.245-1.869 1.82 2.198 5.27 4.135 7.135 5.017 1.864.882 2.854 1.044 2.854 1.044s-4.91 1.205-8.529 2.925c-3.618 1.72-5.273 3.043-5.273 3.043 4.188-.32 10.627-1.891 13.556-2.977 2.928-1.086 4.053-1.689 4.053-1.689s.466 1.415.94 3.768c.424 2.108.947 4.576 1.503 7.084l15.963-1.524zM173.468 86.532l.016-.018c1.277-1.456 3.471-1.552 4.876-.215l.004.004c1.404 1.338 1.457 3.577.117 4.981l-.016.018-15.493 17.679-5.013-4.78 15.51-17.649z" opacity=".3"/>
+                  <path fill="currentColor" d="M159.36 108.376l-14.193 15.161-8.058-7.685 14.221-15.176 8.03 7.7z" opacity=".15"/>
+                  <path fill="currentColor" d="M145.09 123.556L136.14 133l-7.993-7.623 8.887-9.437 8.057 7.616z" opacity=".08"/>
+                </svg>
               </div>
-              <h3 className="text-xl font-light text-foreground">WhatsApp Support</h3>
-              <p className="text-sm text-muted-foreground max-w-sm">Select a conversation from the sidebar to start chatting with your customers</p>
+              <h3 className="text-xl font-light text-foreground/60">WhatsApp Business</h3>
+              <p className="text-sm text-muted-foreground max-w-sm">Select a conversation to start chatting</p>
             </div>
           </div>
         ) : (
           <>
-            <div className="h-14 bg-card flex items-center px-4 gap-3 border-b border-border">
-              <div className={cn(
-                "w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold shrink-0",
-                getLabelInfo(selectedConv.label)?.color || "bg-primary"
-              )}>
+            <div className="h-[60px] wa-header flex items-center px-4 gap-3 shrink-0">
+              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-white font-semibold shrink-0">
                 {(selectedConv.contactName ?? selectedConv.contactPhone).charAt(0).toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-medium text-sm text-foreground" data-testid="text-selected-contact">
+                <p className="font-medium text-sm text-white" data-testid="text-selected-contact">
                   {selectedConv.contactName || `+${selectedConv.contactPhone}`}
                 </p>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
-                  <Phone className="w-3 h-3" />
+                <div className="flex items-center gap-2 text-xs text-white/70 flex-wrap">
                   <span>+{selectedConv.contactPhone}</span>
                   {selectedConv.orderNumber && (
                     <>
@@ -831,8 +907,15 @@ export default function SupportChatPage() {
                   {selectedConv.assignedToName && (
                     <>
                       <span>·</span>
-                      <UserPlus className="w-3 h-3" />
                       <span>{selectedConv.assignedToName}</span>
+                    </>
+                  )}
+                  {getLabelInfo(selectedConv.label) && (
+                    <>
+                      <span>·</span>
+                      <span className={cn("px-1.5 py-0 rounded text-[10px] text-white", getLabelInfo(selectedConv.label)!.color)}>
+                        {getLabelInfo(selectedConv.label)!.name}
+                      </span>
                     </>
                   )}
                 </div>
@@ -840,7 +923,7 @@ export default function SupportChatPage() {
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button size="icon" variant="ghost" data-testid="button-chat-menu">
+                  <Button size="icon" variant="ghost" data-testid="button-chat-menu" className="text-white hover:bg-white/10">
                     <MoreVertical className="w-5 h-5" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -922,11 +1005,11 @@ export default function SupportChatPage() {
               </DropdownMenu>
             </div>
 
-            <ScrollArea className="flex-1 bg-muted/30">
+            <ScrollArea className="flex-1 wa-chat-bg">
               <div className="px-[8%] py-4 space-y-1">
                 {messages.filter(m => m.messageType !== "reaction").length === 0 ? (
                   <div className="text-center py-8">
-                    <span className="bg-card text-muted-foreground text-xs px-4 py-2 rounded-md inline-block border border-border">
+                    <span className="bg-white dark:bg-[#202c33] text-muted-foreground text-xs px-4 py-2 rounded-lg inline-block shadow-sm">
                       No messages yet — start the conversation
                     </span>
                   </div>
@@ -934,7 +1017,7 @@ export default function SupportChatPage() {
                   messagesByDate.map(group => (
                     <div key={group.date}>
                       <div className="flex justify-center my-3">
-                        <span className="bg-card text-muted-foreground text-[11px] px-3 py-1 rounded-md border border-border">
+                        <span className="bg-white dark:bg-[#182229] text-[#54656f] dark:text-[#8696a0] text-[11px] px-3 py-1.5 rounded-lg shadow-sm">
                           {formatDateHeader(group.date)}
                         </span>
                       </div>
@@ -950,15 +1033,15 @@ export default function SupportChatPage() {
                             className={cn("flex mb-1 group", isOutbound ? "justify-end" : "justify-start")}
                             data-testid={`message-${msg.id}`}
                           >
-                            <div className="relative max-w-[65%]">
+                            <div className={cn("relative max-w-[65%]", isOutbound ? "mr-2" : "ml-2")}>
                               <div className={cn(
-                                "relative px-3 py-1.5 rounded-md text-sm border",
+                                "relative px-2.5 py-1.5 rounded-lg text-sm shadow-sm",
                                 isOutbound
-                                  ? "bg-primary/10 dark:bg-primary/20 text-foreground border-primary/20 rounded-tr-none"
-                                  : "bg-card text-foreground border-border rounded-tl-none"
+                                  ? "wa-bubble-out text-[#111b21] dark:text-[#e9edef] rounded-tr-none"
+                                  : "wa-bubble-in text-[#111b21] dark:text-[#e9edef] rounded-tl-none"
                               )}>
                                 {isButtonReply && (
-                                  <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium mb-1 bg-primary/10 text-primary">
+                                  <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium mb-1 bg-[#008069]/10 text-[#008069] dark:text-[#00a884]">
                                     <Reply className="w-3 h-3" />
                                     {msg.text}
                                   </div>
@@ -975,7 +1058,7 @@ export default function SupportChatPage() {
                                   "flex items-center gap-1 mt-0.5",
                                   isOutbound ? "justify-end" : ""
                                 )}>
-                                  <span className="text-[10px] text-muted-foreground">
+                                  <span className="text-[10px] text-[#667781] dark:text-[#8696a0]">
                                     {format(new Date(msg.createdAt), "HH:mm")}
                                   </span>
                                   {isOutbound && <StatusTicks status={msg.status} />}
@@ -985,7 +1068,7 @@ export default function SupportChatPage() {
                               {msgReactions.length > 0 && (
                                 <div className={cn("flex gap-0.5 mt-[-8px]", isOutbound ? "justify-end pr-2" : "pl-2")}>
                                   {msgReactions.map(r => (
-                                    <span key={r.id} className="bg-card border border-border rounded-full px-1.5 py-0.5 text-sm">
+                                    <span key={r.id} className="bg-white dark:bg-[#202c33] border border-black/5 dark:border-white/10 rounded-full px-1.5 py-0.5 text-sm shadow-sm">
                                       {r.reactionEmoji}
                                     </span>
                                   ))}
@@ -1016,36 +1099,56 @@ export default function SupportChatPage() {
               </div>
             </ScrollArea>
 
-            <div className="bg-card px-4 py-2 border-t border-border">
-              <div className="flex items-center gap-1 mb-1.5">
-                <Button size="icon" variant="ghost" onClick={() => insertFormatting("*", "*")} title="Bold" data-testid="button-format-bold" className="h-7 w-7">
+            <div className="wa-input-bar px-3 py-2">
+              <div className="flex items-center gap-1 mb-1">
+                <Button size="icon" variant="ghost" onClick={() => insertFormatting("*", "*")} title="Bold" data-testid="button-format-bold" className="h-7 w-7 text-[#54656f] dark:text-[#8696a0]">
                   <Bold className="w-4 h-4" />
                 </Button>
-                <Button size="icon" variant="ghost" onClick={() => insertFormatting("_", "_")} title="Italic" data-testid="button-format-italic" className="h-7 w-7">
+                <Button size="icon" variant="ghost" onClick={() => insertFormatting("_", "_")} title="Italic" data-testid="button-format-italic" className="h-7 w-7 text-[#54656f] dark:text-[#8696a0]">
                   <Italic className="w-4 h-4" />
                 </Button>
-                <Button size="icon" variant="ghost" onClick={() => insertFormatting("~", "~")} title="Strikethrough" data-testid="button-format-strike" className="h-7 w-7">
+                <Button size="icon" variant="ghost" onClick={() => insertFormatting("~", "~")} title="Strikethrough" data-testid="button-format-strike" className="h-7 w-7 text-[#54656f] dark:text-[#8696a0]">
                   <Strikethrough className="w-4 h-4" />
                 </Button>
-                <Button size="icon" variant="ghost" onClick={() => insertFormatting("```", "```")} title="Code" data-testid="button-format-code" className="h-7 w-7">
+                <Button size="icon" variant="ghost" onClick={() => insertFormatting("```", "```")} title="Code" data-testid="button-format-code" className="h-7 w-7 text-[#54656f] dark:text-[#8696a0]">
                   <Code className="w-4 h-4" />
                 </Button>
               </div>
 
-              <div className="flex items-end gap-2">
+              <div className="flex items-end gap-1.5">
                 <EmojiPicker
                   onSelect={(emoji) => {
                     setMessageText(prev => prev + emoji);
                     inputRef.current?.focus();
                   }}
                   trigger={
-                    <Button size="icon" variant="ghost" className="shrink-0 mb-0.5" data-testid="button-emoji-picker">
+                    <Button size="icon" variant="ghost" className="shrink-0 mb-0.5 text-[#54656f] dark:text-[#8696a0] hover:text-[#008069]" data-testid="button-emoji-picker">
                       <Smile className="w-5 h-5" />
                     </Button>
                   }
                   side="top"
                   align="start"
                 />
+                <div className="relative shrink-0 mb-0.5">
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    className="hidden"
+                    accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
+                    onChange={handleFileSelect}
+                    data-testid="input-file-upload"
+                  />
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="text-[#54656f] dark:text-[#8696a0] hover:text-[#008069]"
+                    disabled={mediaUploadMutation.isPending}
+                    data-testid="button-attach-file"
+                  >
+                    {mediaUploadMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Paperclip className="w-5 h-5" />}
+                  </Button>
+                </div>
                 <textarea
                   ref={inputRef}
                   placeholder="Type a message"
@@ -1053,20 +1156,39 @@ export default function SupportChatPage() {
                   onChange={(e) => setMessageText(e.target.value)}
                   onKeyDown={handleKeyDown}
                   rows={1}
-                  className="flex-1 resize-none bg-muted text-foreground rounded-md px-3 py-2.5 text-sm placeholder:text-muted-foreground border border-border outline-none focus:ring-1 focus:ring-ring max-h-[120px] min-h-[40px]"
+                  className="flex-1 resize-none bg-white dark:bg-[#2a3942] text-[#111b21] dark:text-[#e9edef] rounded-lg px-3 py-2.5 text-sm placeholder:text-[#667781] dark:placeholder:text-[#8696a0] outline-none focus:ring-0 max-h-[120px] min-h-[42px]"
                   style={{ height: "auto", overflow: messageText.split("\n").length > 3 ? "auto" : "hidden" }}
                   data-testid="input-message"
                 />
-                <Button
-                  size="icon"
-                  onClick={() => handleSend()}
-                  disabled={!messageText.trim() || sendMutation.isPending}
-                  className="shrink-0 mb-0.5"
-                  data-testid="button-send-message"
-                >
-                  <Send className="w-5 h-5" />
-                </Button>
+                {messageText.trim() ? (
+                  <Button
+                    size="icon"
+                    onClick={() => handleSend()}
+                    disabled={sendMutation.isPending}
+                    className="shrink-0 mb-0.5 bg-[#008069] hover:bg-[#017561] text-white rounded-full h-10 w-10"
+                    data-testid="button-send-message"
+                  >
+                    <Send className="w-5 h-5" />
+                  </Button>
+                ) : (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={isRecording ? stopRecording : startRecording}
+                    className={cn("shrink-0 mb-0.5 rounded-full h-10 w-10", isRecording ? "bg-red-500 hover:bg-red-600 text-white" : "text-[#54656f] dark:text-[#8696a0] hover:text-[#008069]")}
+                    disabled={mediaUploadMutation.isPending}
+                    data-testid="button-voice-record"
+                  >
+                    {isRecording ? <StopCircle className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                  </Button>
+                )}
               </div>
+              {isRecording && (
+                <div className="flex items-center gap-2 mt-2 text-red-500 text-xs animate-pulse">
+                  <div className="w-2 h-2 rounded-full bg-red-500" />
+                  Recording... {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}
+                </div>
+              )}
             </div>
           </>
         )}
