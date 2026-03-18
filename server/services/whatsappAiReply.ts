@@ -66,10 +66,12 @@ export async function generateAiReply(params: {
   try {
     const [merchant] = await db.select().from(merchants).where(eq(merchants.id, merchantId)).limit(1);
     if (!merchant) {
+      releaseAiLock(lockKey);
       return { success: false, error: "Merchant not found" };
     }
 
     if (!merchant.aiAutoReplyEnabled && !params.skipEnabledCheck) {
+      releaseAiLock(lockKey);
       return { success: false, skipped: true, error: "AI auto-reply disabled" };
     }
 
@@ -206,6 +208,7 @@ ${conversationHistory ? `RECENT CONVERSATION:\n${conversationHistory}\n` : ""}`;
     let reply = response.choices?.[0]?.message?.content?.trim() || "";
 
     if (!reply) {
+      releaseAiLock(lockKey);
       return { success: false, error: "Empty AI response" };
     }
 
@@ -216,10 +219,9 @@ ${conversationHistory ? `RECENT CONVERSATION:\n${conversationHistory}\n` : ""}`;
     console.log(`${LOG_PREFIX} Generated reply for ${customerPhone}: "${reply.substring(0, 80)}..."`);
     return { success: true, reply };
   } catch (error: any) {
+    releaseAiLock(lockKey);
     console.error(`${LOG_PREFIX} Error generating AI reply:`, error.message);
     return { success: false, error: error.message };
-  } finally {
-    releaseAiLock(lockKey);
   }
 }
 
