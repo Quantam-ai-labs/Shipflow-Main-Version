@@ -46,7 +46,7 @@ Preferred communication style: Simple, everyday language.
 - **Support Section**: Includes a dashboard for WA stats, templates (editor, automations, message logs), a chat agent inbox, connection management, and Robo Call (IVR testing).
 - **Order Confirmation Automation System**: A decision-engine-driven flow for new orders, including WhatsApp availability detection, structured reattempt policies, cross-channel cancellation, booking lock, manual resolution, and activity logging.
 - **RoboCall IVR System**: IVR call interface via BrandedSMS Pakistan, featuring persistent API credentials, balance checks, single/bulk calls, call history, DTMF response display, automated call time windows, and retry logic.
-- **WhatsApp Chat UI**: A full WhatsApp Desktop-style rebuild with PIN-gated access, conversation list, search, filters, chat panel, message status, formatting, emoji picker/reactions, label management, agent assignment, and conversation deletion.
+- **WhatsApp Chat UI**: A full WhatsApp Desktop-style rebuild with PIN-gated access, conversation list, search, filters, chat panel, message status, formatting, emoji picker/reactions, label management (database-backed custom labels via `wa_labels` table with CRUD API, Label Manager dialog, color picker, rename/delete cascading to conversations), agent assignment, and conversation deletion.
 - **Templates Tab**: Includes "Shopify Message Templates" page with Quick Start Presets, "Your Templates" list, and a rich template editor.
 - **Automations Tab**: Rules page for creating WhatsApp message automations based on order workflow status changes.
 - **Loadsheet System**: Features a Portal Loadsheet with scanning (USB barcode + camera QR) and a Warehouse PWA for mobile operations.

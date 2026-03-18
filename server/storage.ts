@@ -38,6 +38,8 @@ import {
   type PlatformSettings,
   whatsappResponses,
   type WhatsappResponse, type InsertWhatsappResponse,
+  waLabels,
+  type WaLabel, type InsertWaLabel,
   waConversations, waMessages,
   type WaConversation, type InsertWaConversation,
   type WaMessage, type InsertWaMessage,
@@ -241,6 +243,13 @@ export interface IStorage {
   saveWhatsappResponse(data: InsertWhatsappResponse): Promise<WhatsappResponse>;
   getWhatsappResponsesByOrder(merchantId: string, orderId: string): Promise<WhatsappResponse[]>;
   getWhatsappResponsesByPhone(merchantId: string, phone: string): Promise<WhatsappResponse[]>;
+
+  // WA Labels
+  getWaLabels(merchantId: string): Promise<WaLabel[]>;
+  createWaLabel(data: InsertWaLabel): Promise<WaLabel>;
+  updateWaLabel(merchantId: string, labelId: string, data: { name?: string; color?: string; sortOrder?: number }): Promise<WaLabel | undefined>;
+  deleteWaLabel(merchantId: string, labelId: string): Promise<void>;
+  seedDefaultWaLabels(merchantId: string): Promise<WaLabel[]>;
 
   // WA Conversations
   getConversations(merchantId: string): Promise<WaConversation[]>;
@@ -2178,6 +2187,75 @@ export class DatabaseStorage implements IStorage {
     const updates: Record<string, any> = { status };
     if (waMessageId) updates.waMessageId = waMessageId;
     await db.update(waMessages).set(updates).where(eq(waMessages.id, messageId));
+  }
+
+  async getWaLabels(merchantId: string): Promise<WaLabel[]> {
+    return db.select().from(waLabels)
+      .where(eq(waLabels.merchantId, merchantId))
+      .orderBy(asc(waLabels.sortOrder), asc(waLabels.name));
+  }
+
+  async createWaLabel(data: InsertWaLabel): Promise<WaLabel> {
+    const [label] = await db.insert(waLabels).values(data).returning();
+    return label;
+  }
+
+  async updateWaLabel(merchantId: string, labelId: string, data: { name?: string; color?: string; sortOrder?: number }): Promise<WaLabel | undefined> {
+    const existing = await db.select().from(waLabels)
+      .where(and(eq(waLabels.id, labelId), eq(waLabels.merchantId, merchantId)))
+      .limit(1);
+    const oldLabel = existing[0];
+    const [updated] = await db.update(waLabels)
+      .set(data)
+      .where(and(eq(waLabels.id, labelId), eq(waLabels.merchantId, merchantId)))
+      .returning();
+    if (updated && data.name && oldLabel && data.name !== oldLabel.name) {
+      await db.update(waConversations)
+        .set({ label: data.name })
+        .where(and(eq(waConversations.merchantId, merchantId), eq(waConversations.label, oldLabel.name)));
+    }
+    return updated;
+  }
+
+  async deleteWaLabel(merchantId: string, labelId: string): Promise<void> {
+    const existing = await db.select().from(waLabels)
+      .where(and(eq(waLabels.id, labelId), eq(waLabels.merchantId, merchantId)))
+      .limit(1);
+    const oldLabel = existing[0];
+    await db.delete(waLabels)
+      .where(and(eq(waLabels.id, labelId), eq(waLabels.merchantId, merchantId)));
+    if (oldLabel) {
+      await db.update(waConversations)
+        .set({ label: null })
+        .where(and(eq(waConversations.merchantId, merchantId), eq(waConversations.label, oldLabel.name)));
+    }
+  }
+
+  async seedDefaultWaLabels(merchantId: string): Promise<WaLabel[]> {
+    const existing = await this.getWaLabels(merchantId);
+    if (existing.length > 0) return existing;
+
+    const defaults = [
+      { name: "New", color: "bg-blue-500", sortOrder: 0, isSystem: true },
+      { name: "Open", color: "bg-green-500", sortOrder: 1, isSystem: true },
+      { name: "Pending", color: "bg-yellow-500", sortOrder: 2, isSystem: true },
+      { name: "Resolved", color: "bg-gray-400", sortOrder: 3, isSystem: true },
+      { name: "Spam", color: "bg-red-500", sortOrder: 4, isSystem: true },
+      { name: "Sales", color: "bg-purple-500", sortOrder: 5, isSystem: true },
+      { name: "Urgent", color: "bg-orange-500", sortOrder: 6, isSystem: true },
+      { name: "Complaints", color: "bg-rose-600", sortOrder: 7, isSystem: false },
+      { name: "Returns", color: "bg-amber-600", sortOrder: 8, isSystem: false },
+      { name: "Replacements", color: "bg-teal-500", sortOrder: 9, isSystem: false },
+    ];
+
+    const labels: WaLabel[] = [];
+    for (const d of defaults) {
+      const [label] = await db.insert(waLabels)
+        .values({ merchantId, ...d })
+        .returning();
+      labels.push(label);
+    }
+    return labels;
   }
 
   async updateConversationLabel(merchantId: string, convId: string, label: string | null): Promise<void> {

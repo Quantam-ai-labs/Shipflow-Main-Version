@@ -479,6 +479,25 @@ export type InsertWhatsappResponse = z.infer<typeof insertWhatsappResponseSchema
 export type WhatsappResponse = typeof whatsappResponses.$inferSelect;
 
 // ============================================
+// WA LABELS (Per-merchant customizable labels)
+// ============================================
+export const waLabels = pgTable("wa_labels", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 50 }).notNull(),
+  color: varchar("color", { length: 30 }).notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  isSystem: boolean("is_system").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_wa_labels_merchant").on(table.merchantId),
+]);
+
+export const insertWaLabelSchema = createInsertSchema(waLabels).omit({ id: true, createdAt: true });
+export type InsertWaLabel = z.infer<typeof insertWaLabelSchema>;
+export type WaLabel = typeof waLabels.$inferSelect;
+
+// ============================================
 // WA CONVERSATIONS (Per-merchant chat inbox)
 // ============================================
 export const waConversations = pgTable("wa_conversations", {

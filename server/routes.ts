@@ -8031,6 +8031,66 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/support/labels", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const labels = await storage.seedDefaultWaLabels(merchantId);
+      res.json(labels);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/support/labels", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { name, color, sortOrder } = req.body;
+      if (!name || !color) {
+        return res.status(400).json({ error: "Name and color are required" });
+      }
+      const label = await storage.createWaLabel({
+        merchantId,
+        name: name.trim(),
+        color,
+        sortOrder: sortOrder ?? 99,
+        isSystem: false,
+      });
+      res.json(label);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/support/labels/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { name, color, sortOrder } = req.body;
+      const updates: any = {};
+      if (name !== undefined) updates.name = name.trim();
+      if (color !== undefined) updates.color = color;
+      if (sortOrder !== undefined) updates.sortOrder = sortOrder;
+      const label = await storage.updateWaLabel(merchantId, req.params.id, updates);
+      if (!label) return res.status(404).json({ error: "Label not found" });
+      res.json(label);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/support/labels/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      await storage.deleteWaLabel(merchantId, req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.patch("/api/support/conversations/:id/label", isAuthenticated, async (req: any, res) => {
     try {
       const merchantId = await requireMerchant(req, res);
@@ -11173,6 +11233,16 @@ export async function registerRoutes(
       } catch (_) {
         await storage.updateWaMessageStatus(msg.id, "failed");
       }
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/agent-chat/labels", agentChatAuth, async (req, res) => {
+    try {
+      const merchantId = (req as any).agentChatMerchantId as string;
+      const labels = await storage.seedDefaultWaLabels(merchantId);
+      res.json(labels);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

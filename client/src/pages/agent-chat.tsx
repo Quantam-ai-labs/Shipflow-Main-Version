@@ -151,27 +151,15 @@ interface TeamMember {
 }
 
 
-const LABELS = [
-  { value: "new", label: "New", color: "bg-blue-500" },
-  { value: "open", label: "Open", color: "bg-green-500" },
-  { value: "pending", label: "Pending", color: "bg-yellow-500" },
-  { value: "resolved", label: "Resolved", color: "bg-gray-400" },
-  { value: "spam", label: "Spam", color: "bg-red-500" },
-  { value: "sales", label: "Sales", color: "bg-purple-500" },
-  { value: "urgent", label: "Urgent", color: "bg-orange-500" },
-];
-
-const LABEL_FILTERS = [
-  { value: "all", label: "All" },
-  { value: "unread", label: "Unread" },
-  ...LABELS,
-];
+interface WaLabelItem {
+  id: string;
+  name: string;
+  color: string;
+  sortOrder: number;
+  isSystem: boolean;
+}
 
 const QUICK_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏", "🔥", "✅"];
-
-function getLabelInfo(label: string | null) {
-  return LABELS.find(l => l.value === label) || null;
-}
 
 function formatChatTime(dateStr: string) {
   const d = new Date(dateStr);
@@ -802,9 +790,29 @@ function ConversationList({
   onLogout?: () => void;
   isRefreshing?: boolean;
 }) {
+  const slug = useContext(SlugContext);
   const [search, setSearch] = useState("");
   const [labelFilter, setLabelFilter] = useState("all");
   const [showFilters, setShowFilters] = useState(false);
+
+  const { data: agentLabels = [] } = useQuery<WaLabelItem[]>({
+    queryKey: ["/api/agent-chat/labels", slug],
+    queryFn: async () => {
+      const token = getStoredToken(slug);
+      if (!token) return [];
+      const resp = await fetch("/api/agent-chat/labels", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resp.ok) return [];
+      return resp.json();
+    },
+    enabled: !!slug,
+  });
+
+  const getLabelInfo = useCallback((label: string | null) => {
+    if (!label) return null;
+    return agentLabels.find(l => l.name === label) || null;
+  }, [agentLabels]);
 
   const filtered = conversations.filter(c => {
     if (labelFilter === "unread" && c.unreadCount === 0) return false;
@@ -875,22 +883,38 @@ function ConversationList({
 
       {showFilters && (
         <div className="px-4 pb-2 flex gap-1.5 flex-wrap">
-          {LABEL_FILTERS.map(f => (
+          <button
+            onClick={() => setLabelFilter("all")}
+            className={cn(
+              "px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors",
+              labelFilter === "all" ? "bg-blue-600 text-white" : "bg-slate-900 text-slate-400 active:bg-slate-800"
+            )}
+            data-testid="agent-filter-all"
+          >
+            All
+          </button>
+          <button
+            onClick={() => setLabelFilter("unread")}
+            className={cn(
+              "px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors",
+              labelFilter === "unread" ? "bg-blue-600 text-white" : "bg-slate-900 text-slate-400 active:bg-slate-800"
+            )}
+            data-testid="agent-filter-unread"
+          >
+            Unread
+          </button>
+          {agentLabels.map(l => (
             <button
-              key={f.value}
-              onClick={() => setLabelFilter(f.value)}
+              key={l.id}
+              onClick={() => setLabelFilter(l.name)}
               className={cn(
                 "px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors",
-                labelFilter === f.value
-                  ? "bg-blue-600 text-white"
-                  : "bg-slate-900 text-slate-400 active:bg-slate-800"
+                labelFilter === l.name ? "bg-blue-600 text-white" : "bg-slate-900 text-slate-400 active:bg-slate-800"
               )}
-              data-testid={`agent-filter-${f.value}`}
+              data-testid={`agent-filter-${l.name.toLowerCase()}`}
             >
-              {f.value !== "all" && f.value !== "unread" && "color" in f && (
-                <span className={cn("inline-block w-2 h-2 rounded-full mr-1.5", (f as any).color)} />
-              )}
-              {f.label}
+              <span className={cn("inline-block w-2 h-2 rounded-full mr-1.5", l.color)} />
+              {l.name}
             </button>
           ))}
         </div>
@@ -942,7 +966,7 @@ function ConversationList({
                     )}
                     {labelInfo && (
                       <span className={cn("text-[10px] text-white px-1.5 py-0.5 rounded", labelInfo.color)}>
-                        {labelInfo.label}
+                        {labelInfo.name}
                       </span>
                     )}
                   </div>
@@ -1006,6 +1030,25 @@ function ChatView({
     },
   });
   const teamMembers = teamData?.members ?? [];
+
+  const { data: chatViewLabels = [] } = useQuery<WaLabelItem[]>({
+    queryKey: ["/api/agent-chat/labels", slug],
+    queryFn: async () => {
+      const token = getStoredToken(slug);
+      if (!token) return [];
+      const resp = await fetch("/api/agent-chat/labels", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resp.ok) return [];
+      return resp.json();
+    },
+    enabled: !!slug,
+  });
+
+  const getLabelInfo = useCallback((label: string | null) => {
+    if (!label) return null;
+    return chatViewLabels.find(l => l.name === label) || null;
+  }, [chatViewLabels]);
 
   const prevMsgCountRef = useRef(0);
   const scrollToBottom = useCallback(() => {
@@ -1183,18 +1226,18 @@ function ChatView({
           <div>
             <p className="text-xs text-slate-500 font-medium uppercase tracking-wide mb-1.5">Label</p>
             <div className="flex gap-1.5 flex-wrap">
-              {LABELS.map(l => (
+              {chatViewLabels.map(l => (
                 <button
-                  key={l.value}
-                  onClick={() => { labelMutation.mutate({ label: l.value }); setShowActions(false); }}
+                  key={l.id}
+                  onClick={() => { labelMutation.mutate({ label: l.name }); setShowActions(false); }}
                   className={cn(
                     "px-3 py-1.5 rounded-lg text-xs font-medium active:opacity-80 transition-colors",
-                    conversation.label === l.value ? "ring-2 ring-white/30" : "",
+                    conversation.label === l.name ? "ring-2 ring-white/30" : "",
                     l.color, "text-white"
                   )}
-                  data-testid={`agent-label-${l.value}`}
+                  data-testid={`agent-label-${l.name.toLowerCase()}`}
                 >
-                  {l.label}
+                  {l.name}
                 </button>
               ))}
               {conversation.label && (

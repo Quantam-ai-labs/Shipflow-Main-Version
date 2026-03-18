@@ -21,8 +21,14 @@ import {
   Smile, Bold, Italic, Strikethrough, Code, Filter,
   X, ChevronDown, Image as ImageIcon, Mic, FileText,
   MapPin, Users, Reply, Download, Play, Pause, Volume2,
-  ExternalLink, File, Video,
+  ExternalLink, File, Video, Plus, Pencil, Settings2,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { formatDistanceToNow, format, isToday, isYesterday } from "date-fns";
 import { cn } from "@/lib/utils";
 import { EmojiPicker } from "@/components/emoji-picker";
@@ -65,26 +71,31 @@ interface TeamMember {
   role: string;
 }
 
-
-const LABELS = [
-  { value: "new", label: "New", color: "bg-blue-500" },
-  { value: "open", label: "Open", color: "bg-green-500" },
-  { value: "pending", label: "Pending", color: "bg-yellow-500" },
-  { value: "resolved", label: "Resolved", color: "bg-gray-400" },
-  { value: "spam", label: "Spam", color: "bg-red-500" },
-  { value: "sales", label: "Sales", color: "bg-purple-500" },
-  { value: "urgent", label: "Urgent", color: "bg-orange-500" },
-];
-
-const LABEL_FILTERS = [
-  { value: "all", label: "All" },
-  { value: "unread", label: "Unread" },
-  ...LABELS,
-];
-
-function getLabelInfo(label: string | null) {
-  return LABELS.find(l => l.value === label) || null;
+interface WaLabel {
+  id: string;
+  name: string;
+  color: string;
+  sortOrder: number;
+  isSystem: boolean;
 }
+
+const LABEL_COLORS = [
+  { value: "bg-blue-500", label: "Blue" },
+  { value: "bg-green-500", label: "Green" },
+  { value: "bg-yellow-500", label: "Yellow" },
+  { value: "bg-gray-400", label: "Gray" },
+  { value: "bg-red-500", label: "Red" },
+  { value: "bg-purple-500", label: "Purple" },
+  { value: "bg-orange-500", label: "Orange" },
+  { value: "bg-rose-600", label: "Rose" },
+  { value: "bg-amber-600", label: "Amber" },
+  { value: "bg-teal-500", label: "Teal" },
+  { value: "bg-indigo-500", label: "Indigo" },
+  { value: "bg-pink-500", label: "Pink" },
+  { value: "bg-cyan-500", label: "Cyan" },
+  { value: "bg-emerald-500", label: "Emerald" },
+  { value: "bg-lime-500", label: "Lime" },
+];
 
 function formatChatTime(dateStr: string) {
   const d = new Date(dateStr);
@@ -399,9 +410,22 @@ export default function SupportChatPage() {
   const [messageText, setMessageText] = useState("");
   const [labelFilter, setLabelFilter] = useState("all");
   const [showFilters, setShowFilters] = useState(false);
+  const [showLabelManager, setShowLabelManager] = useState(false);
+  const [newLabelName, setNewLabelName] = useState("");
+  const [newLabelColor, setNewLabelColor] = useState("bg-blue-500");
+  const [editingLabel, setEditingLabel] = useState<WaLabel | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const queryClient = useQueryClient();
+
+  const { data: waLabels = [] } = useQuery<WaLabel[]>({
+    queryKey: ["/api/support/labels"],
+  });
+
+  const getLabelInfo = useCallback((label: string | null) => {
+    if (!label) return null;
+    return waLabels.find(l => l.name === label) || null;
+  }, [waLabels]);
 
   const { data: conversations = [] } = useQuery<Conversation[]>({
     queryKey: ["/api/support/conversations"],
@@ -487,6 +511,30 @@ export default function SupportChatPage() {
     mutationFn: async ({ convId, label }: { convId: string; label: string | null }) =>
       apiRequest("PATCH", `/api/support/conversations/${convId}/label`, { label }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/support/conversations"] }),
+  });
+
+  const createLabelMutation = useMutation({
+    mutationFn: async ({ name, color }: { name: string; color: string }) =>
+      apiRequest("POST", "/api/support/labels", { name, color }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/support/labels"] });
+      setNewLabelName("");
+      setNewLabelColor("bg-blue-500");
+    },
+  });
+
+  const updateLabelMutation = useMutation({
+    mutationFn: async ({ id, name, color }: { id: string; name: string; color: string }) =>
+      apiRequest("PATCH", `/api/support/labels/${id}`, { name, color }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/support/labels"] });
+      setEditingLabel(null);
+    },
+  });
+
+  const deleteLabelMutation = useMutation({
+    mutationFn: async (id: string) => apiRequest("DELETE", `/api/support/labels/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/support/labels"] }),
   });
 
   const assignMutation = useMutation({
@@ -621,24 +669,54 @@ export default function SupportChatPage() {
 
         {showFilters && (
           <div className="px-3 pb-2 flex gap-1.5 flex-wrap">
-            {LABEL_FILTERS.map(f => (
+            <button
+              onClick={() => setLabelFilter("all")}
+              className={cn(
+                "px-3 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-all border",
+                labelFilter === "all"
+                  ? "bg-primary text-primary-foreground border-transparent"
+                  : "bg-card text-muted-foreground border-border hover-elevate"
+              )}
+              data-testid="filter-all"
+            >
+              All
+            </button>
+            <button
+              onClick={() => setLabelFilter("unread")}
+              className={cn(
+                "px-3 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-all border",
+                labelFilter === "unread"
+                  ? "bg-primary text-primary-foreground border-transparent"
+                  : "bg-card text-muted-foreground border-border hover-elevate"
+              )}
+              data-testid="filter-unread"
+            >
+              Unread
+            </button>
+            {waLabels.map(l => (
               <button
-                key={f.value}
-                onClick={() => setLabelFilter(f.value)}
+                key={l.id}
+                onClick={() => setLabelFilter(l.name)}
                 className={cn(
                   "px-3 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-all border",
-                  labelFilter === f.value
+                  labelFilter === l.name
                     ? "bg-primary text-primary-foreground border-transparent"
                     : "bg-card text-muted-foreground border-border hover-elevate"
                 )}
-                data-testid={`filter-${f.value}`}
+                data-testid={`filter-${l.name.toLowerCase()}`}
               >
-                {f.value !== "all" && f.value !== "unread" && (
-                  <span className={cn("inline-block w-2 h-2 rounded-full mr-1.5", (f as any).color)} />
-                )}
-                {f.label}
+                <span className={cn("inline-block w-2 h-2 rounded-full mr-1.5", l.color)} />
+                {l.name}
               </button>
             ))}
+            <button
+              onClick={() => setShowLabelManager(true)}
+              className="px-2 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-all border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-foreground"
+              data-testid="button-manage-labels"
+            >
+              <Settings2 className="w-3 h-3 inline mr-1" />
+              Manage
+            </button>
           </div>
         )}
 
@@ -692,7 +770,7 @@ export default function SupportChatPage() {
                       )}
                       {labelInfo && (
                         <span className={cn("text-[10px] text-white px-1.5 py-0.5 rounded", labelInfo.color)}>
-                          {labelInfo.label}
+                          {labelInfo.name}
                         </span>
                       )}
                     </div>
@@ -771,15 +849,15 @@ export default function SupportChatPage() {
                       Label
                     </DropdownMenuSubTrigger>
                     <DropdownMenuSubContent>
-                      {LABELS.map(l => (
+                      {waLabels.map(l => (
                         <DropdownMenuItem
-                          key={l.value}
-                          onClick={() => labelMutation.mutate({ convId: selectedConv.id, label: l.value })}
-                          data-testid={`label-${l.value}`}
+                          key={l.id}
+                          onClick={() => labelMutation.mutate({ convId: selectedConv.id, label: l.name })}
+                          data-testid={`label-${l.name.toLowerCase()}`}
                         >
                           <span className={cn("w-3 h-3 rounded-full mr-2", l.color)} />
-                          {l.label}
-                          {selectedConv.label === l.value && <Check className="w-4 h-4 ml-auto" />}
+                          {l.name}
+                          {selectedConv.label === l.name && <Check className="w-4 h-4 ml-auto" />}
                         </DropdownMenuItem>
                       ))}
                       <DropdownMenuSeparator />
@@ -991,6 +1069,129 @@ export default function SupportChatPage() {
           </>
         )}
       </div>
+
+      <Dialog open={showLabelManager} onOpenChange={setShowLabelManager}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Manage Labels</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2 max-h-[300px] overflow-y-auto">
+              {waLabels.map(l => (
+                <div key={l.id} className="flex items-center gap-2 p-2 rounded-md border border-border">
+                  {editingLabel?.id === l.id ? (
+                    <>
+                      <Input
+                        value={editingLabel.name}
+                        onChange={(e) => setEditingLabel({ ...editingLabel, name: e.target.value })}
+                        className="h-8 text-sm flex-1"
+                        data-testid={`input-edit-label-${l.id}`}
+                      />
+                      <div className="flex gap-1 flex-wrap">
+                        {LABEL_COLORS.map(c => (
+                          <button
+                            key={c.value}
+                            onClick={() => setEditingLabel({ ...editingLabel, color: c.value })}
+                            className={cn(
+                              "w-5 h-5 rounded-full border-2",
+                              c.value,
+                              editingLabel.color === c.value ? "border-foreground scale-110" : "border-transparent"
+                            )}
+                            title={c.label}
+                          />
+                        ))}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => updateLabelMutation.mutate({ id: l.id, name: editingLabel.name, color: editingLabel.color })}
+                        disabled={updateLabelMutation.isPending}
+                        data-testid={`button-save-label-${l.id}`}
+                      >
+                        <Check className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setEditingLabel(null)}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <span className={cn("w-4 h-4 rounded-full shrink-0", l.color)} />
+                      <span className="text-sm flex-1">{l.name}</span>
+                      {l.isSystem && (
+                        <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">System</span>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setEditingLabel({ ...l })}
+                        data-testid={`button-edit-label-${l.id}`}
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => deleteLabelMutation.mutate(l.id)}
+                        disabled={deleteLabelMutation.isPending}
+                        className="text-destructive hover:text-destructive"
+                        data-testid={`button-delete-label-${l.id}`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="border-t border-border pt-4 space-y-3">
+              <p className="text-sm font-medium">Add New Label</p>
+              <div className="flex items-center gap-2">
+                <Input
+                  placeholder="Label name..."
+                  value={newLabelName}
+                  onChange={(e) => setNewLabelName(e.target.value)}
+                  className="h-8 text-sm flex-1"
+                  data-testid="input-new-label-name"
+                />
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    if (newLabelName.trim()) {
+                      createLabelMutation.mutate({ name: newLabelName.trim(), color: newLabelColor });
+                    }
+                  }}
+                  disabled={!newLabelName.trim() || createLabelMutation.isPending}
+                  data-testid="button-create-label"
+                >
+                  <Plus className="w-4 h-4 mr-1" />
+                  Add
+                </Button>
+              </div>
+              <div className="flex gap-1.5 flex-wrap">
+                {LABEL_COLORS.map(c => (
+                  <button
+                    key={c.value}
+                    onClick={() => setNewLabelColor(c.value)}
+                    className={cn(
+                      "w-6 h-6 rounded-full border-2 transition-transform",
+                      c.value,
+                      newLabelColor === c.value ? "border-foreground scale-110" : "border-transparent"
+                    )}
+                    title={c.label}
+                    data-testid={`color-${c.label.toLowerCase()}`}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
