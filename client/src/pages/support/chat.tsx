@@ -755,10 +755,17 @@ export default function SupportChatPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
-                      <span className={cn("text-sm truncate", conv.unreadCount > 0 ? "font-bold text-foreground" : "text-foreground")} data-testid={`text-contact-${conv.id}`}>
-                        {conv.contactName || `+${conv.contactPhone}`}
-                      </span>
-                      <span className={cn("text-xs whitespace-nowrap", conv.unreadCount > 0 ? "text-primary font-medium" : "text-muted-foreground")}>
+                      <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                        <span className={cn("text-sm truncate", conv.unreadCount > 0 ? "font-bold text-foreground" : "text-foreground")} data-testid={`text-contact-${conv.id}`}>
+                          {conv.contactName || `+${conv.contactPhone}`}
+                        </span>
+                        {labelInfo && (
+                          <span className={cn("text-[9px] text-white px-1 py-0 rounded shrink-0 leading-tight", labelInfo.color)}>
+                            {labelInfo.name}
+                          </span>
+                        )}
+                      </div>
+                      <span className={cn("text-xs whitespace-nowrap shrink-0", conv.unreadCount > 0 ? "text-primary font-medium" : "text-muted-foreground")}>
                         {formatChatTime(conv.lastMessageAt)}
                       </span>
                     </div>
@@ -766,11 +773,6 @@ export default function SupportChatPage() {
                       {conv.orderNumber && (
                         <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-mono">
                           #{conv.orderNumber}
-                        </span>
-                      )}
-                      {labelInfo && (
-                        <span className={cn("text-[10px] text-white px-1.5 py-0.5 rounded", labelInfo.color)}>
-                          {labelInfo.name}
                         </span>
                       )}
                     </div>
