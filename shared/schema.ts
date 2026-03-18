@@ -77,6 +77,9 @@ export const merchants = pgTable("merchants", {
   waConfirmTemplate1: varchar("wa_confirm_template1", { length: 100 }),
   waConfirmTemplate2: varchar("wa_confirm_template2", { length: 100 }),
   waConfirmTemplate3: varchar("wa_confirm_template3", { length: 100 }),
+  aiAutoReplyEnabled: boolean("ai_auto_reply_enabled").notNull().default(false),
+  aiAutoReplyKnowledgeBase: text("ai_auto_reply_knowledge_base"),
+  aiAutoReplyStoreName: varchar("ai_auto_reply_store_name", { length: 255 }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -1170,6 +1173,7 @@ export const products = pgTable("products", {
   tags: text("tags"),
   totalInventory: integer("total_inventory").default(0),
   variants: jsonb("variants"),
+  description: text("description"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
   shopifySyncedAt: timestamp("shopify_synced_at"),

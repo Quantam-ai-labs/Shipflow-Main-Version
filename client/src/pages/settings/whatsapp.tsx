@@ -870,8 +870,196 @@ export default function SettingsWhatsApp() {
         </Card>
       )}
 
+      <AiAutoReplyCard />
+
       <AgentChatSessionsCard />
     </div>
+  );
+}
+
+function AiAutoReplyCard() {
+  const { toast } = useToast();
+  const [storeName, setStoreName] = useState("");
+  const [knowledgeBase, setKnowledgeBase] = useState("");
+  const [enabled, setEnabled] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [testMsg, setTestMsg] = useState("");
+  const [testReply, setTestReply] = useState<string | null>(null);
+
+  const { data, isLoading } = useQuery<{
+    aiAutoReplyEnabled: boolean;
+    aiAutoReplyKnowledgeBase: string;
+    aiAutoReplyStoreName: string;
+  }>({
+    queryKey: ["/api/support/ai-auto-reply"],
+    refetchOnWindowFocus: false,
+  });
+
+  if (data && !loaded) {
+    setEnabled(data.aiAutoReplyEnabled);
+    setStoreName(data.aiAutoReplyStoreName || "");
+    setKnowledgeBase(data.aiAutoReplyKnowledgeBase || "");
+    setLoaded(true);
+  }
+
+  const saveMutation = useMutation({
+    mutationFn: async () =>
+      apiRequest("PUT", "/api/support/ai-auto-reply", {
+        aiAutoReplyEnabled: enabled,
+        aiAutoReplyStoreName: storeName,
+        aiAutoReplyKnowledgeBase: knowledgeBase,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/support/ai-auto-reply"] });
+      toast({ title: "Saved", description: "AI Auto-Reply settings updated." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const testMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/support/ai-auto-reply/test", { testMessage: testMsg });
+      return (await res.json()) as { success: boolean; reply: string };
+    },
+    onSuccess: (result) => {
+      setTestReply(result.reply);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Test Failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <Skeleton className="h-40 w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-base flex items-center gap-2" data-testid="text-ai-reply-title">
+              <Zap className="w-4 h-4" />
+              AI Auto-Reply
+            </CardTitle>
+            <CardDescription>
+              Automatically reply to customer messages using AI trained on your store's products and policies.
+            </CardDescription>
+          </div>
+          <Badge
+            variant={enabled ? "default" : "secondary"}
+            className={enabled ? "bg-green-500 text-white no-default-hover-elevate no-default-active-elevate" : ""}
+            data-testid="status-ai-reply"
+          >
+            {enabled ? "Active" : "Inactive"}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <div className="flex items-center justify-between">
+          <div>
+            <Label className="text-sm font-medium">Enable AI Auto-Reply</Label>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              AI will respond to customer queries within the 24-hour WhatsApp window
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={enabled}
+            onClick={() => setEnabled(!enabled)}
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${enabled ? "bg-green-500" : "bg-muted"}`}
+            data-testid="toggle-ai-auto-reply"
+          >
+            <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${enabled ? "translate-x-5" : "translate-x-0"}`} />
+          </button>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="aiStoreName">Store Name</Label>
+          <Input
+            id="aiStoreName"
+            placeholder="e.g. My Awesome Store"
+            value={storeName}
+            onChange={(e) => setStoreName(e.target.value)}
+            data-testid="input-ai-store-name"
+          />
+          <p className="text-xs text-muted-foreground">
+            The AI will identify itself as a team member of this store
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="aiKnowledgeBase">Knowledge Base</Label>
+          <textarea
+            id="aiKnowledgeBase"
+            rows={8}
+            className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-y"
+            placeholder={"Add your store policies, FAQs, shipping info, return rules, store hours, brand tone...\n\nExample:\n- Free shipping on orders above PKR 3000\n- Returns accepted within 7 days\n- Delivery takes 3-5 business days\n- Store hours: Mon-Sat 10am-8pm\n- We only ship within Pakistan"}
+            value={knowledgeBase}
+            onChange={(e) => setKnowledgeBase(e.target.value)}
+            data-testid="textarea-ai-knowledge-base"
+          />
+          <p className="text-xs text-muted-foreground">
+            The AI will use this information along with your product catalog to answer questions. Be specific — the AI only knows what you tell it here.
+          </p>
+        </div>
+
+        <div className="flex gap-2">
+          <Button
+            onClick={() => saveMutation.mutate()}
+            disabled={saveMutation.isPending}
+            data-testid="button-save-ai-settings"
+          >
+            <Save className="w-4 h-4 mr-2" />
+            {saveMutation.isPending ? "Saving..." : "Save Settings"}
+          </Button>
+        </div>
+
+        <div className="border-t pt-4 space-y-3">
+          <Label className="text-sm font-medium flex items-center gap-2">
+            <FlaskConical className="w-4 h-4" />
+            Test AI Reply
+          </Label>
+          <p className="text-xs text-muted-foreground">
+            Type a sample customer message to preview how the AI would respond. Save your settings first.
+          </p>
+          <div className="flex gap-2">
+            <Input
+              placeholder="e.g. What's the price of your blue shirt?"
+              value={testMsg}
+              onChange={(e) => setTestMsg(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && testMsg.trim()) testMutation.mutate();
+              }}
+              data-testid="input-ai-test-message"
+            />
+            <Button
+              variant="outline"
+              onClick={() => testMutation.mutate()}
+              disabled={testMutation.isPending || !testMsg.trim()}
+              data-testid="button-test-ai-reply"
+            >
+              {testMutation.isPending ? "Thinking..." : "Test"}
+            </Button>
+          </div>
+          {testReply && (
+            <div className="rounded-lg border bg-green-50 dark:bg-green-950/20 p-3" data-testid="text-ai-test-reply">
+              <p className="text-xs font-medium text-green-700 dark:text-green-400 mb-1">AI would reply:</p>
+              <p className="text-sm">{testReply}</p>
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

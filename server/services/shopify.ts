@@ -1298,7 +1298,7 @@ export class ShopifyService {
     const allProducts: any[] = [];
     const headers = this.getAuthHeaders(accessToken);
 
-    let url: string | null = `https://${shop}/admin/api/2025-01/products.json?limit=250&fields=id,title,handle,vendor,product_type,status,image,images,tags,variants`;
+    let url: string | null = `https://${shop}/admin/api/2025-01/products.json?limit=250&fields=id,title,handle,vendor,product_type,status,image,images,tags,variants,body_html`;
     let pageCount = 0;
     let retryCount = 0;
     const maxRetries = 3;

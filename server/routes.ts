@@ -5750,6 +5750,12 @@ export async function registerRoutes(
                 referenceMessageId,
               });
               sendAgentChatPushNotifications(merchantId, contactName ?? fromPhone, messageBody, conv.id).catch(() => {});
+
+              if (msgType === "text" || msgType === "button_reply") {
+                handleAiAutoReply(merchantId, fromPhone, messageBody, conv.id, null, null).catch((e: any) =>
+                  console.error(`${LOG_PREFIX_WA_AI} Error in no-order AI reply:`, e.message)
+                );
+              }
               continue;
             }
 
@@ -5867,8 +5873,16 @@ export async function registerRoutes(
               `Order #${orderNumber} has been cancelled. No charges will be applied. If you have any questions, please contact support.`, replyPhoneId, replyAccessToken);
           }
         } else {
-          await sendWhatsAppReply(normalizedPhone,
-            `Thank you for your message regarding order #${orderNumber}. Our team will get back to you shortly.\n\nTo confirm or cancel, please reply with:\n*confirm* - to confirm the order\n*cancel* - to cancel the order`, replyPhoneId, replyAccessToken);
+          const aiMerchant = await storage.getMerchant(merchantId);
+          if (aiMerchant?.aiAutoReplyEnabled) {
+            const conv = await storage.getConversationByPhone(merchantId, normalizedPhone);
+            handleAiAutoReply(merchantId, normalizedPhone, messageBody, conv?.id || null, orderId, orderNumber).catch((e: any) =>
+              console.error(`${LOG_PREFIX_WA_AI} Error in order-query AI reply:`, e.message)
+            );
+          } else {
+            await sendWhatsAppReply(normalizedPhone,
+              `Thank you for your message regarding order #${orderNumber}. Our team will get back to you shortly.\n\nTo confirm or cancel, please reply with:\n*confirm* - to confirm the order\n*cancel* - to cancel the order`, replyPhoneId, replyAccessToken);
+          }
         }
       } else if (result.locked) {
         await sendWhatsAppReply(normalizedPhone,
@@ -5896,6 +5910,75 @@ export async function registerRoutes(
     }
   }
 
+  const LOG_PREFIX_WA_AI = "[WhatsApp AI]";
+
+  async function handleAiAutoReply(
+    merchantId: string,
+    customerPhone: string,
+    messageText: string,
+    conversationId: string | null,
+    orderId: string | null,
+    orderNumber: string | null,
+  ) {
+    try {
+      const { generateAiReply } = await import("./services/whatsappAiReply");
+      const result = await generateAiReply({
+        merchantId,
+        customerPhone,
+        messageText,
+        conversationId: conversationId || undefined,
+        orderId,
+        orderNumber,
+      });
+
+      if (!result.success || !result.reply) {
+        if (!result.skipped) {
+          console.error(`${LOG_PREFIX_WA_AI} AI reply failed for ${customerPhone}: ${result.error}`);
+        }
+        return;
+      }
+
+      const merchant = await storage.getMerchant(merchantId);
+      if (!merchant?.waPhoneNumberId || !merchant?.waAccessToken) {
+        console.warn(`${LOG_PREFIX_WA_AI} Cannot send AI reply: WA not configured for merchant ${merchantId}`);
+        return;
+      }
+
+      const sent = await sendWhatsAppReply(
+        customerPhone,
+        result.reply,
+        merchant.waPhoneNumberId,
+        merchant.waAccessToken,
+      );
+
+      if (sent) {
+        let convId = conversationId;
+        if (!convId) {
+          const conv = await storage.getConversationByPhone(merchantId, customerPhone);
+          convId = conv?.id || null;
+        }
+        if (convId) {
+          await storage.createWaMessage({
+            conversationId: convId,
+            direction: "outbound",
+            senderName: "AI Assistant",
+            text: result.reply,
+            status: "sent",
+            messageType: "text",
+          });
+          await storage.upsertConversation({
+            merchantId,
+            contactPhone: customerPhone,
+            lastMessage: result.reply.slice(0, 200),
+          });
+        }
+        console.log(`${LOG_PREFIX_WA_AI} AI reply sent to ${customerPhone}`);
+      }
+    } catch (error: any) {
+      console.error(`${LOG_PREFIX_WA_AI} handleAiAutoReply error:`, error.message);
+    }
+  }
+
   /**
    * Send WhatsApp reply message to customer
    */
@@ -5918,7 +6001,7 @@ export async function registerRoutes(
       const formattedPhone = phoneNumber.startsWith("+") ? phoneNumber : `+${phoneNumber}`;
 
       const response = await fetch(
-        `https://graph.instagram.com/v18.0/${phoneId}/messages`,
+        `https://graph.facebook.com/v22.0/${phoneId}/messages`,
         {
           method: "POST",
           headers: {
@@ -8114,6 +8197,59 @@ export async function registerRoutes(
       if (!merchantId) return;
       await db.update(merchants).set({ waDisconnected: false, updatedAt: new Date() }).where(eq(merchants.id, merchantId));
       res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/support/ai-auto-reply", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const merchant = await storage.getMerchant(merchantId);
+      res.json({
+        aiAutoReplyEnabled: merchant?.aiAutoReplyEnabled ?? false,
+        aiAutoReplyKnowledgeBase: merchant?.aiAutoReplyKnowledgeBase ?? "",
+        aiAutoReplyStoreName: merchant?.aiAutoReplyStoreName ?? "",
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.put("/api/support/ai-auto-reply", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { aiAutoReplyEnabled, aiAutoReplyKnowledgeBase, aiAutoReplyStoreName } = req.body;
+      const updateData: Record<string, unknown> = { updatedAt: new Date() };
+      if (typeof aiAutoReplyEnabled === "boolean") updateData.aiAutoReplyEnabled = aiAutoReplyEnabled;
+      if (typeof aiAutoReplyKnowledgeBase === "string") updateData.aiAutoReplyKnowledgeBase = aiAutoReplyKnowledgeBase;
+      if (typeof aiAutoReplyStoreName === "string") updateData.aiAutoReplyStoreName = aiAutoReplyStoreName.trim();
+      await db.update(merchants).set(updateData).where(eq(merchants.id, merchantId));
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/support/ai-auto-reply/test", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { testMessage } = req.body;
+      if (!testMessage || typeof testMessage !== "string" || testMessage.trim().length === 0) {
+        return res.status(400).json({ error: "Please enter a test message" });
+      }
+      const { testAiReply } = await import("./services/whatsappAiReply");
+      const result = await testAiReply({ merchantId, testMessage: testMessage.trim() });
+      if (result.success && result.reply) {
+        res.json({ success: true, reply: result.reply });
+      } else if (result.skipped) {
+        res.status(409).json({ success: false, error: result.error || "AI auto-reply is currently disabled or rate-limited" });
+      } else {
+        res.status(500).json({ success: false, error: result.error || "Failed to generate AI reply" });
+      }
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -14904,6 +15040,9 @@ export async function registerRoutes(
           height: img.height,
         }));
 
+        const rawHtml = sp.body_html || "";
+        const plainDescription = rawHtml.replace(/<[^>]*>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+
         await storage.upsertProduct(merchantId, String(sp.id), {
           title: sp.title,
           handle: sp.handle,
@@ -14915,6 +15054,7 @@ export async function registerRoutes(
           tags: sp.tags || "",
           totalInventory,
           variants: variantsData,
+          description: plainDescription || null,
         });
         synced++;
       }
