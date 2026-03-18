@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import { db } from "../db";
 import { merchants, products, waConversations, waMessages, orders } from "@shared/schema";
-import { eq, and, desc, or } from "drizzle-orm";
+import { eq, and, desc, or, ilike, sql } from "drizzle-orm";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -10,7 +10,8 @@ const openai = new OpenAI({
 
 const LOG_PREFIX = "[WhatsApp AI]";
 const MAX_REPLY_LENGTH = 500;
-const MAX_PRODUCTS = 50;
+const MAX_KEYWORD_MATCHES = 30;
+const MAX_GENERAL_PRODUCTS = 100;
 const MAX_CONVERSATION_MESSAGES = 10;
 
 const aiReplyLock = new Map<string, number>();
@@ -78,7 +79,7 @@ export async function generateAiReply(params: {
     const storeName = merchant.aiAutoReplyStoreName || merchant.name || "our store";
     const knowledgeBase = merchant.aiAutoReplyKnowledgeBase || "";
 
-    const activeProducts = await db.select({
+    const productFields = {
       title: products.title,
       description: products.description,
       status: products.status,
@@ -86,9 +87,61 @@ export async function generateAiReply(params: {
       variants: products.variants,
       productType: products.productType,
       tags: products.tags,
-    }).from(products)
-      .where(and(eq(products.merchantId, merchantId), eq(products.status, "active")))
-      .limit(MAX_PRODUCTS);
+    };
+
+    const stopWords = new Set(["the", "a", "an", "is", "are", "was", "were", "of", "in", "on", "at", "to", "for", "and", "or", "it", "its", "this", "that", "what", "how", "much", "many", "do", "does", "can", "will", "would", "should", "could", "please", "thanks", "thank", "you", "your", "my", "me", "i", "we", "he", "she", "they", "have", "has", "had", "about", "with", "from", "by", "price", "cost", "available", "stock", "kya", "hai", "ka", "ki", "ke", "ko", "se", "mein", "ye", "wo", "ap", "hain", "kitna", "kitne", "kitni", "konsa", "konsi", "bhi", "aur", "ya", "nahi"]);
+    const keywords = messageText
+      .toLowerCase()
+      .replace(/[^\w\s]/g, " ")
+      .split(/\s+/)
+      .filter((w) => w.length >= 2 && !stopWords.has(w));
+
+    type ProductRow = {
+      title: string | null;
+      description: string | null;
+      status: string | null;
+      totalInventory: number | null;
+      variants: unknown;
+      productType: string | null;
+      tags: string[] | null;
+    };
+
+    let keywordProducts: ProductRow[] = [];
+    if (keywords.length > 0) {
+      const keywordConditions = keywords.map((kw) => {
+        const pattern = `%${kw}%`;
+        return or(
+          ilike(products.title, pattern),
+          ilike(products.description, pattern),
+          ilike(products.productType, pattern),
+          ilike(products.tags, pattern)
+        );
+      });
+      keywordProducts = await db.select(productFields).from(products)
+        .where(and(
+          eq(products.merchantId, merchantId),
+          eq(products.status, "active"),
+          or(...keywordConditions)
+        ))
+        .limit(MAX_KEYWORD_MATCHES);
+    }
+
+    const keywordProductIds = new Set(keywordProducts.map((p) => p.title));
+
+    let activeProducts: ProductRow[] = [...keywordProducts];
+    const remainingSlots = MAX_GENERAL_PRODUCTS - activeProducts.length;
+    if (remainingSlots > 0) {
+      const generalProducts = await db.select(productFields).from(products)
+        .where(and(eq(products.merchantId, merchantId), eq(products.status, "active")))
+        .limit(remainingSlots + keywordProducts.length);
+      for (const gp of generalProducts) {
+        if (!keywordProductIds.has(gp.title) && activeProducts.length < MAX_GENERAL_PRODUCTS) {
+          activeProducts.push(gp);
+        }
+      }
+    }
+
+    console.log(`${LOG_PREFIX} Product context: ${keywordProducts.length} keyword matches + ${activeProducts.length - keywordProducts.length} general = ${activeProducts.length} total (keywords: ${keywords.join(", ")})`);
 
     let productCatalog = "";
     if (activeProducts.length > 0) {
