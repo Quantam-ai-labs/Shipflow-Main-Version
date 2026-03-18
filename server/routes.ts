@@ -5885,8 +5885,16 @@ export async function registerRoutes(
           }
         }
       } else if (result.locked) {
-        await sendWhatsAppReply(normalizedPhone,
-          `Order #${orderNumber} has already been processed and shipped. For any changes, please contact our support team.`, replyPhoneId, replyAccessToken);
+        const lockedMerchant = await storage.getMerchant(merchantId);
+        if (lockedMerchant?.aiAutoReplyEnabled) {
+          const conv = await storage.getConversationByPhone(merchantId, normalizedPhone);
+          handleAiAutoReply(merchantId, normalizedPhone, messageBody, conv?.id || null, orderId, orderNumber).catch((e: any) =>
+            console.error(`${LOG_PREFIX_WA_AI} Error in locked-order AI reply:`, e.message)
+          );
+        } else {
+          await sendWhatsAppReply(normalizedPhone,
+            `Order #${orderNumber} has already been processed and shipped. For any changes, please contact our support team.`, replyPhoneId, replyAccessToken);
+        }
       } else {
         console.log(`        Failed: ${result.error}`);
         await sendWhatsAppReply(normalizedPhone,
@@ -8107,8 +8115,14 @@ export async function registerRoutes(
 
       if (!uploadRes.ok) {
         const errText = await uploadRes.text().catch(() => "Upload error");
-        console.error("[WhatsApp Media] Upload failed:", errText);
-        return res.status(502).json({ error: "Failed to upload media to WhatsApp" });
+        console.error(`[WhatsApp Media] Upload failed (${uploadRes.status}): phoneNumberId=${phoneNumberId}, mime=${mime}, fileSize=${file.size}, fileName=${file.originalname}`);
+        console.error(`[WhatsApp Media] API response:`, errText);
+        let userError = "Failed to upload media to WhatsApp";
+        try {
+          const parsed = JSON.parse(errText);
+          if (parsed?.error?.message) userError = parsed.error.message;
+        } catch {}
+        return res.status(502).json({ error: userError });
       }
 
       const uploadData = await uploadRes.json() as any;
@@ -8141,7 +8155,8 @@ export async function registerRoutes(
       } else {
         status = "failed";
         const errText = await sendRes.text().catch(() => "");
-        console.error("[WhatsApp Media] Send failed:", errText);
+        console.error(`[WhatsApp Media] Send failed (${sendRes.status}): to=${conv.contactPhone}, type=${waType}, mediaId=${mediaId}`);
+        console.error(`[WhatsApp Media] Send API response:`, errText);
       }
 
       const displayText = waType === "image" ? "📷 Photo" : waType === "video" ? "🎬 Video" : waType === "audio" ? "🎵 Audio" : `📄 ${file.originalname}`;
