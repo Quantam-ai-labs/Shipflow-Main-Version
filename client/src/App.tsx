@@ -125,6 +125,7 @@ const SupportChatPage = lazy(() => import("@/pages/support/chat"));
 const SupportConnectionPage = lazy(() => import("@/pages/support/connection"));
 const SupportRoboCallPage = lazy(() => import("@/pages/support/robocall"));
 const SupportCallQueuePage = lazy(() => import("@/pages/support/call-queue"));
+const SupportComplaintsPage = lazy(() => import("@/pages/support/complaints"));
 const SalesLauncher = lazy(() => import("@/pages/meta/sales-launcher"));
 const MetaMediaLibrary = lazy(() => import("@/pages/meta/media-library"));
 const MetaBulkLaunch = lazy(() => import("@/pages/meta/bulk-launch"));
@@ -198,6 +199,7 @@ const routeToPageId: Record<string, string> = {
   "/support/connection": "support-connection",
   "/support/robocall": "support-robocall",
   "/support/call-queue": "support-call-queue",
+  "/support/complaints": "support-complaints",
   "/meta/launcher": "meta-sales-launcher",
   "/meta/bulk-launch": "meta-bulk-launch",
   "/meta/media-library": "meta-media-library",
@@ -309,6 +311,7 @@ function AppRoutes() {
       <Route path="/support/connection">{() => <ProtectedRoute component={SupportConnectionPage} path="/support/connection" />}</Route>
       <Route path="/support/robocall">{() => <ProtectedRoute component={SupportRoboCallPage} path="/support/robocall" />}</Route>
       <Route path="/support/call-queue">{() => <ProtectedRoute component={SupportCallQueuePage} path="/support/call-queue" />}</Route>
+      <Route path="/support/complaints">{() => <ProtectedRoute component={SupportComplaintsPage} path="/support/complaints" />}</Route>
       <Route path="/meta/launcher">{() => <ProtectedRoute component={SalesLauncher} path="/meta/launcher" />}</Route>
       <Route path="/meta/bulk-launch">{() => <ProtectedRoute component={MetaBulkLaunch} path="/meta/bulk-launch" />}</Route>
       <Route path="/meta/media-library">{() => <ProtectedRoute component={MetaMediaLibrary} path="/meta/media-library" />}</Route>

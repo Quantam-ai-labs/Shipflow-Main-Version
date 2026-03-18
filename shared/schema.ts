@@ -2429,3 +2429,49 @@ export const adAutomationRules = pgTable("ad_automation_rules", {
 export const insertAdAutomationRuleSchema = createInsertSchema(adAutomationRules).omit({ id: true, createdAt: true, updatedAt: true, lastTriggeredAt: true, triggerCount: true });
 export type InsertAdAutomationRule = z.infer<typeof insertAdAutomationRuleSchema>;
 export type AdAutomationRule = typeof adAutomationRules.$inferSelect;
+
+// ============================================
+// COMPLAINTS / TICKETS
+// ============================================
+export const complaints = pgTable("complaints", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  ticketNumber: varchar("ticket_number", { length: 20 }).notNull(),
+  conversationId: varchar("conversation_id"),
+  orderId: varchar("order_id"),
+  orderNumber: varchar("order_number", { length: 100 }),
+  customerName: varchar("customer_name", { length: 255 }),
+  customerPhone: varchar("customer_phone", { length: 50 }),
+  productDetails: text("product_details"),
+  deliveryDetails: text("delivery_details"),
+  trackingNumber: varchar("tracking_number", { length: 100 }),
+  source: varchar("source", { length: 30 }).notNull().default("other"),
+  reason: text("reason"),
+  status: varchar("status", { length: 30 }).notNull().default("logged"),
+  statusHistory: jsonb("status_history").default([]),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_complaints_merchant").on(table.merchantId),
+  index("idx_complaints_status").on(table.merchantId, table.status),
+  uniqueIndex("idx_complaints_ticket").on(table.merchantId, table.ticketNumber),
+]);
+
+export const insertComplaintSchema = createInsertSchema(complaints).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertComplaint = z.infer<typeof insertComplaintSchema>;
+export type Complaint = typeof complaints.$inferSelect;
+
+export const complaintTemplates = pgTable("complaint_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  status: varchar("status", { length: 30 }).notNull(),
+  messageTemplate: text("message_template").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("idx_complaint_templates_merchant_status").on(table.merchantId, table.status),
+]);
+
+export const insertComplaintTemplateSchema = createInsertSchema(complaintTemplates).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertComplaintTemplate = z.infer<typeof insertComplaintTemplateSchema>;
+export type ComplaintTemplate = typeof complaintTemplates.$inferSelect;

@@ -49,6 +49,10 @@ import {
   type WaAutomation, type InsertWaAutomation,
   robocallLogs,
   type RobocallLog, type InsertRobocallLog,
+  complaints,
+  type Complaint, type InsertComplaint,
+  complaintTemplates,
+  type ComplaintTemplate, type InsertComplaintTemplate,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, or, ilike, sql, count, inArray, isNull, isNotNull, gte, lte } from "drizzle-orm";
@@ -274,6 +278,18 @@ export interface IStorage {
   getRobocallLogs(merchantId: string, limit?: number): Promise<RobocallLog[]>;
   getRobocallLogByCallId(merchantId: string, callId: string): Promise<RobocallLog | undefined>;
   getRobocallLogsByStatus(merchantId: string, statuses: string[]): Promise<RobocallLog[]>;
+
+  // Complaints
+  createComplaint(data: InsertComplaint): Promise<Complaint>;
+  getComplaintById(merchantId: string, id: string): Promise<Complaint | undefined>;
+  getComplaintByTicketNumber(merchantId: string, ticketNumber: string): Promise<Complaint | undefined>;
+  getComplaints(merchantId: string, options?: { status?: string; search?: string; page?: number; pageSize?: number }): Promise<{ complaints: Complaint[]; total: number }>;
+  updateComplaintStatus(merchantId: string, id: string, status: string, changedBy: string): Promise<Complaint | undefined>;
+
+  // Complaint Templates
+  getComplaintTemplates(merchantId: string): Promise<ComplaintTemplate[]>;
+  upsertComplaintTemplate(merchantId: string, status: string, messageTemplate: string): Promise<ComplaintTemplate>;
+  seedDefaultComplaintTemplates(merchantId: string): Promise<ComplaintTemplate[]>;
 
   // Seed
   seedDemoData(): Promise<void>;
@@ -2235,7 +2251,6 @@ export class DatabaseStorage implements IStorage {
 
   async seedDefaultWaLabels(merchantId: string): Promise<WaLabel[]> {
     const existing = await this.getWaLabels(merchantId);
-    if (existing.length > 0) return existing;
 
     const defaults = [
       { name: "New", color: "bg-blue-500", sortOrder: 0, isSystem: true },
@@ -2248,16 +2263,34 @@ export class DatabaseStorage implements IStorage {
       { name: "Complaints", color: "bg-rose-600", sortOrder: 7, isSystem: false },
       { name: "Returns", color: "bg-amber-600", sortOrder: 8, isSystem: false },
       { name: "Replacements", color: "bg-teal-500", sortOrder: 9, isSystem: false },
+      { name: "Need Human", color: "bg-red-500", sortOrder: 10, isSystem: false },
+      { name: "Leads", color: "bg-emerald-500", sortOrder: 11, isSystem: false },
+      { name: "General Queries", color: "bg-cyan-500", sortOrder: 12, isSystem: false },
     ];
 
-    const labels: WaLabel[] = [];
-    for (const d of defaults) {
-      const [label] = await db.insert(waLabels)
-        .values({ merchantId, ...d })
-        .returning();
-      labels.push(label);
+    if (existing.length === 0) {
+      const labels: WaLabel[] = [];
+      for (const d of defaults) {
+        const [label] = await db.insert(waLabels)
+          .values({ merchantId, ...d })
+          .returning();
+        labels.push(label);
+      }
+      return labels;
     }
-    return labels;
+
+    const existingNames = new Set(existing.map(l => l.name));
+    for (const d of defaults) {
+      if (!existingNames.has(d.name)) {
+        try {
+          const [label] = await db.insert(waLabels)
+            .values({ merchantId, ...d })
+            .returning();
+          existing.push(label);
+        } catch {}
+      }
+    }
+    return existing;
   }
 
   async updateConversationLabel(merchantId: string, convId: string, label: string | null): Promise<void> {
@@ -2339,6 +2372,124 @@ export class DatabaseStorage implements IStorage {
         isNotNull(robocallLogs.callId),
       ))
       .orderBy(desc(robocallLogs.createdAt));
+  }
+
+  // ---- Complaints ----
+
+  private generateTicketNumber(): string {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let code = "";
+    for (let i = 0; i < 5; i++) code += chars[Math.floor(Math.random() * chars.length)];
+    return `TKT-${code}`;
+  }
+
+  async createComplaint(data: InsertComplaint): Promise<Complaint> {
+    let ticketNumber = data.ticketNumber || this.generateTicketNumber();
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        const [created] = await db.insert(complaints).values({ ...data, ticketNumber }).returning();
+        return created;
+      } catch (err: any) {
+        if (err.message?.includes("idx_complaints_ticket") && attempt < 4) {
+          ticketNumber = this.generateTicketNumber();
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw new Error("Failed to generate unique ticket number after 5 attempts");
+  }
+
+  async getComplaintById(merchantId: string, id: string): Promise<Complaint | undefined> {
+    const [c] = await db.select().from(complaints)
+      .where(and(eq(complaints.merchantId, merchantId), eq(complaints.id, id)));
+    return c;
+  }
+
+  async getComplaintByTicketNumber(merchantId: string, ticketNumber: string): Promise<Complaint | undefined> {
+    const [c] = await db.select().from(complaints)
+      .where(and(eq(complaints.merchantId, merchantId), eq(complaints.ticketNumber, ticketNumber.toUpperCase())));
+    return c;
+  }
+
+  async getComplaints(merchantId: string, options?: { status?: string; search?: string; page?: number; pageSize?: number }): Promise<{ complaints: Complaint[]; total: number }> {
+    const conditions = [eq(complaints.merchantId, merchantId)];
+    if (options?.status && options.status !== "all") {
+      conditions.push(eq(complaints.status, options.status));
+    }
+    if (options?.search) {
+      const s = `%${options.search}%`;
+      conditions.push(or(
+        ilike(complaints.ticketNumber, s),
+        ilike(complaints.customerName, s),
+        ilike(complaints.orderNumber, s),
+        ilike(complaints.customerPhone, s),
+      )!);
+    }
+    const where = and(...conditions);
+    const page = options?.page || 1;
+    const pageSize = options?.pageSize || 50;
+    const [{ value: total }] = await db.select({ value: count() }).from(complaints).where(where);
+    const rows = await db.select().from(complaints).where(where)
+      .orderBy(desc(complaints.createdAt))
+      .limit(pageSize).offset((page - 1) * pageSize);
+    return { complaints: rows, total: Number(total) };
+  }
+
+  async updateComplaintStatus(merchantId: string, id: string, status: string, changedBy: string): Promise<Complaint | undefined> {
+    const existing = await this.getComplaintById(merchantId, id);
+    if (!existing) return undefined;
+    const history = Array.isArray(existing.statusHistory) ? [...(existing.statusHistory as any[])] : [];
+    history.push({ status, changedAt: new Date().toISOString(), changedBy });
+    const [updated] = await db.update(complaints)
+      .set({ status, statusHistory: history, updatedAt: new Date() })
+      .where(and(eq(complaints.merchantId, merchantId), eq(complaints.id, id)))
+      .returning();
+    return updated;
+  }
+
+  // ---- Complaint Templates ----
+
+  async getComplaintTemplates(merchantId: string): Promise<ComplaintTemplate[]> {
+    return db.select().from(complaintTemplates)
+      .where(eq(complaintTemplates.merchantId, merchantId))
+      .orderBy(asc(complaintTemplates.status));
+  }
+
+  async upsertComplaintTemplate(merchantId: string, status: string, messageTemplate: string): Promise<ComplaintTemplate> {
+    const [existing] = await db.select().from(complaintTemplates)
+      .where(and(eq(complaintTemplates.merchantId, merchantId), eq(complaintTemplates.status, status)));
+    if (existing) {
+      const [updated] = await db.update(complaintTemplates)
+        .set({ messageTemplate, updatedAt: new Date() })
+        .where(eq(complaintTemplates.id, existing.id))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(complaintTemplates)
+      .values({ merchantId, status, messageTemplate })
+      .returning();
+    return created;
+  }
+
+  async seedDefaultComplaintTemplates(merchantId: string): Promise<ComplaintTemplate[]> {
+    const existing = await this.getComplaintTemplates(merchantId);
+    if (existing.length > 0) return existing;
+    const defaults: { status: string; messageTemplate: string }[] = [
+      { status: "logged", messageTemplate: "Dear {{customerName}}, your complaint has been registered. Ticket: {{ticketNumber}}. Our team will review and respond shortly." },
+      { status: "in_progress", messageTemplate: "Hi {{customerName}}, your complaint ({{ticketNumber}}) is being reviewed by our team. We'll update you soon." },
+      { status: "under_investigation", messageTemplate: "Hi {{customerName}}, we're investigating your complaint ({{ticketNumber}}). Thank you for your patience." },
+      { status: "resolving", messageTemplate: "Hi {{customerName}}, we're working on resolving your complaint ({{ticketNumber}}). You'll hear from us shortly." },
+      { status: "resolved", messageTemplate: "Hi {{customerName}}, your complaint ({{ticketNumber}}) has been resolved. Thank you for your patience. If you have further concerns, please reply here." },
+    ];
+    const results: ComplaintTemplate[] = [];
+    for (const d of defaults) {
+      const [created] = await db.insert(complaintTemplates)
+        .values({ merchantId, ...d })
+        .returning();
+      results.push(created);
+    }
+    return results;
   }
 
   async seedDemoData(): Promise<void> {

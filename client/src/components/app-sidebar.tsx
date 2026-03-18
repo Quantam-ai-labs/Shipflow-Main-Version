@@ -185,6 +185,7 @@ const allNavGroups: NavGroup[] = [
       { id: "support-dashboard", title: "Dashboard", url: "/support/dashboard", icon: LayoutDashboard },
       { id: "support-templates", title: "Templates", url: "/support/templates", icon: MessageCircle },
       { id: "support-chat", title: "Chat", url: "/support/chat", icon: Sparkles },
+      { id: "support-complaints", title: "Complaints", url: "/support/complaints", icon: ClipboardList },
       { id: "support-robocall", title: "Robo Call", url: "/support/robocall", icon: PhoneCall },
       { id: "support-call-queue", title: "Call Queue", url: "/support/call-queue", icon: ListOrdered },
     ],

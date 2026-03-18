@@ -5768,6 +5768,8 @@ export async function registerRoutes(
                 handleAiAutoReply(merchantId, fromPhone, messageBody, conv.id, null, null).catch((e: any) =>
                   console.error(`${LOG_PREFIX_WA_AI} Error in no-order AI reply:`, e.message)
                 );
+              } else if (!conv.label) {
+                storage.updateConversationLabel(merchantId, conv.id, "General Queries").catch(() => {});
               }
               continue;
             }
@@ -5835,6 +5837,11 @@ export async function registerRoutes(
                   replyMerchant2?.waPhoneNumberId || undefined,
                   replyMerchant2?.waAccessToken || undefined,
                 );
+              } else {
+                const convObj = await storage.getConversationById(convId);
+                if (convObj && !convObj.label) {
+                  storage.updateConversationLabel(matchedOrder.merchantId, convId, "General Queries").catch(() => {});
+                }
               }
 
               sendAgentChatPushNotifications(matchedOrder.merchantId, contactName ?? fromPhone, messageBody, convId).catch(() => {});
@@ -5957,6 +5964,19 @@ export async function registerRoutes(
     complaint: "Complaints",
     return: "Returns",
     replacement: "Replacements",
+    human_handoff: "Need Human",
+    lead: "Leads",
+    general_query: "General Queries",
+  };
+
+  const NOTIFY_CLASSIFICATIONS = new Set(["complaint", "return", "replacement", "human_handoff", "lead"]);
+
+  const CLASSIFICATION_NOTIFICATION_TITLES: Record<string, string> = {
+    complaint: "Customer Complaint",
+    return: "Return Request",
+    replacement: "Replacement Request",
+    human_handoff: "Human Agent Needed",
+    lead: "New Lead Detected",
   };
 
   async function handleAiAutoReply(
@@ -6028,8 +6048,9 @@ export async function registerRoutes(
           });
 
           if (result.classification && CLASSIFICATION_TO_LABEL[result.classification]) {
+            let conv: any = null;
             try {
-              const conv = await storage.getConversationById(convId);
+              conv = await storage.getConversationById(convId);
               if (conv && !conv.label) {
                 const labelName = CLASSIFICATION_TO_LABEL[result.classification];
                 await storage.updateConversationLabel(merchantId, convId, labelName);
@@ -6038,14 +6059,33 @@ export async function registerRoutes(
             } catch (labelErr: any) {
               console.error(`${LOG_PREFIX_WA_AI} Failed to auto-label:`, labelErr.message);
             }
-          }
 
-          if (result.classification === "human_handoff" || result.classification === "complaint" || result.classification === "return" || result.classification === "replacement") {
-            try {
-              await storage.pauseAiForConversation(merchantId, convId);
-              console.log(`${LOG_PREFIX_WA_AI} AI paused for conversation ${convId} due to ${result.classification}`);
-            } catch (pauseErr: any) {
-              console.error(`${LOG_PREFIX_WA_AI} Failed to pause AI:`, pauseErr.message);
+            const shouldPause = result.classification === "human_handoff" || result.classification === "complaint" || result.classification === "return" || result.classification === "replacement";
+            if (shouldPause) {
+              try {
+                await storage.pauseAiForConversation(merchantId, convId);
+                console.log(`${LOG_PREFIX_WA_AI} AI paused for conversation ${convId} due to ${result.classification}`);
+              } catch (pauseErr: any) {
+                console.error(`${LOG_PREFIX_WA_AI} Failed to pause AI:`, pauseErr.message);
+              }
+            }
+
+            if (NOTIFY_CLASSIFICATIONS.has(result.classification)) {
+              try {
+                const contactDisplay = conv?.contactName || customerPhone;
+                const orderRef = conv?.orderNumber ? ` (Order #${conv.orderNumber})` : "";
+                await createNotification({
+                  merchantId,
+                  type: `ai_${result.classification}`,
+                  title: CLASSIFICATION_NOTIFICATION_TITLES[result.classification] || result.classification,
+                  message: `${contactDisplay}${orderRef} — classified as ${CLASSIFICATION_TO_LABEL[result.classification]}`,
+                  orderId: conv?.orderId || undefined,
+                  orderNumber: conv?.orderNumber || undefined,
+                });
+                console.log(`${LOG_PREFIX_WA_AI} Notification sent for ${result.classification} on conversation ${convId}`);
+              } catch (notifyErr: any) {
+                console.error(`${LOG_PREFIX_WA_AI} Failed to create notification:`, notifyErr.message);
+              }
             }
           }
         }
@@ -16521,6 +16561,160 @@ export async function registerRoutes(
         ))
         .orderBy(desc(orderConfirmationLog.createdAt));
       res.json({ timeline });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ─── Complaint Management ────────────────────────────────────────────
+
+  app.get("/api/support/complaints", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { status, search, page, pageSize } = req.query;
+      const result = await storage.getComplaints(merchantId, {
+        status: status as string,
+        search: search as string,
+        page: page ? Number(page) : undefined,
+        pageSize: pageSize ? Number(pageSize) : undefined,
+      });
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/support/complaints/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const complaint = await storage.getComplaintById(merchantId, req.params.id);
+      if (!complaint) return res.status(404).json({ error: "Complaint not found" });
+      res.json(complaint);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/support/complaints", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { orderId, orderNumber, customerName, customerPhone, source, reason, conversationId } = req.body;
+
+      let productDetails: string | undefined;
+      let deliveryDetails: string | undefined;
+      let trackingNumber: string | undefined;
+
+      if (orderId) {
+        const order = await storage.getOrderById(merchantId, orderId);
+        if (order) {
+          if (order.lineItems && Array.isArray(order.lineItems)) {
+            productDetails = (order.lineItems as any[]).map((li: any) =>
+              `${li.title || li.name}${li.quantity ? ` x${li.quantity}` : ""}${li.price ? ` — PKR ${li.price}` : ""}`
+            ).join("\n");
+          }
+          const parts: string[] = [];
+          if (order.shippingAddress) parts.push(order.shippingAddress as string);
+          if (order.city) parts.push(order.city as string);
+          if (parts.length) deliveryDetails = parts.join(", ");
+          if (order.courierTracking) trackingNumber = order.courierTracking as string;
+        }
+      }
+
+      const complaint = await storage.createComplaint({
+        merchantId,
+        ticketNumber: "",
+        conversationId: conversationId || null,
+        orderId: orderId || null,
+        orderNumber: orderNumber || null,
+        customerName: customerName || null,
+        customerPhone: customerPhone || null,
+        productDetails: productDetails || null,
+        deliveryDetails: deliveryDetails || null,
+        trackingNumber: trackingNumber || null,
+        source: source || "other",
+        reason: reason || null,
+        status: "logged",
+        statusHistory: [{ status: "logged", changedAt: new Date().toISOString(), changedBy: req.user?.username || "system" }],
+      });
+
+      res.json(complaint);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/support/complaints/:id/status", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { status } = req.body;
+      const validStatuses = ["logged", "in_progress", "under_investigation", "resolving", "resolved"];
+      if (!validStatuses.includes(status)) {
+        return res.status(400).json({ error: `Invalid status. Must be one of: ${validStatuses.join(", ")}` });
+      }
+      const updated = await storage.updateComplaintStatus(merchantId, req.params.id, status, req.user?.username || "system");
+      if (!updated) return res.status(404).json({ error: "Complaint not found" });
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/support/complaints/:id/notify", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const complaint = await storage.getComplaintById(merchantId, req.params.id);
+      if (!complaint) return res.status(404).json({ error: "Complaint not found" });
+      if (!complaint.customerPhone) return res.status(400).json({ error: "No customer phone number" });
+
+      const { message } = req.body;
+      if (!message) return res.status(400).json({ error: "Message is required" });
+
+      const merchant = await storage.getMerchant(merchantId);
+      if (!merchant?.waPhoneNumberId || !merchant?.waAccessToken) {
+        return res.status(400).json({ error: "WhatsApp not configured" });
+      }
+
+      const sent = await sendWhatsAppReply(
+        complaint.customerPhone,
+        message,
+        merchant.waPhoneNumberId,
+        merchant.waAccessToken,
+      );
+
+      if (!sent) return res.status(500).json({ error: "Failed to send WhatsApp message" });
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/support/complaint-templates", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      let templates = await storage.getComplaintTemplates(merchantId);
+      if (templates.length === 0) {
+        templates = await storage.seedDefaultComplaintTemplates(merchantId);
+      }
+      res.json(templates);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.put("/api/support/complaint-templates/:status", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { messageTemplate } = req.body;
+      if (!messageTemplate) return res.status(400).json({ error: "messageTemplate is required" });
+      const template = await storage.upsertComplaintTemplate(merchantId, req.params.status, messageTemplate);
+      res.json(template);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

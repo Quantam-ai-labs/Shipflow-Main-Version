@@ -22,14 +22,24 @@ import {
   X, ChevronDown, Image as ImageIcon, Mic, FileText,
   MapPin, Users, Reply, Download, Play, Pause, Volume2,
   ExternalLink, File as FileIcon, Video, Plus, Pencil, Settings2,
-  Paperclip, Camera, FileUp, StopCircle, Loader2,
+  Paperclip, Camera, FileUp, StopCircle, Loader2, ClipboardList,
 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { formatDistanceToNow, format, isToday, isYesterday } from "date-fns";
 import { cn } from "@/lib/utils";
 import { EmojiPicker } from "@/components/emoji-picker";
@@ -439,6 +449,7 @@ export default function SupportChatPage() {
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
+  const [showFileComplaint, setShowFileComplaint] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: waLabels = [] } = useQuery<WaLabel[]>({
@@ -977,6 +988,17 @@ export default function SupportChatPage() {
                 {selectedConv.aiPaused ? "AI Off" : "AI On"}
               </Button>
 
+              <Button
+                size="sm"
+                variant="ghost"
+                data-testid="button-file-complaint"
+                className="flex items-center gap-1.5 text-xs font-medium rounded-full px-3 py-1 h-7 bg-white/10 text-white/70 hover:bg-white/20 transition-colors"
+                onClick={() => setShowFileComplaint(true)}
+              >
+                <ClipboardList className="w-3 h-3" />
+                File Complaint
+              </Button>
+
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button size="icon" variant="ghost" data-testid="button-chat-menu" className="text-white hover:bg-white/10">
@@ -1372,6 +1394,114 @@ export default function SupportChatPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {showFileComplaint && selectedConv && (
+        <FileComplaintFromChat
+          open={showFileComplaint}
+          onOpenChange={setShowFileComplaint}
+          conversation={selectedConv}
+        />
+      )}
     </div>
+  );
+}
+
+function FileComplaintFromChat({
+  open,
+  onOpenChange,
+  conversation,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  conversation: Conversation;
+}) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [reason, setReason] = useState("");
+  const [ticketCreated, setTicketCreated] = useState<string | null>(null);
+
+  const createMutation = useMutation({
+    mutationFn: async () =>
+      apiRequest("POST", "/api/support/complaints", {
+        orderId: conversation.orderId || undefined,
+        orderNumber: conversation.orderNumber || undefined,
+        customerName: conversation.contactName || undefined,
+        customerPhone: conversation.contactPhone || undefined,
+        conversationId: conversation.id,
+        source: "whatsapp_chat",
+        reason: reason || undefined,
+      }),
+    onSuccess: async (res: any) => {
+      const data = await res.json();
+      setTicketCreated(data.ticketNumber);
+      queryClient.invalidateQueries({ queryKey: ["/api/support/complaints"] });
+      toast({ title: "Complaint filed", description: `Ticket: ${data.ticketNumber}` });
+    },
+    onError: () => {
+      toast({ title: "Failed to create complaint", variant: "destructive" });
+    },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>File Complaint</DialogTitle>
+        </DialogHeader>
+        {ticketCreated ? (
+          <div className="text-center py-4 space-y-3">
+            <div className="w-12 h-12 bg-green-100 dark:bg-green-950/30 rounded-full flex items-center justify-center mx-auto">
+              <ClipboardList className="w-6 h-6 text-green-600" />
+            </div>
+            <div>
+              <p className="text-sm font-medium">Complaint Filed</p>
+              <p className="text-lg font-mono font-bold mt-1" data-testid="text-created-ticket">{ticketCreated}</p>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Customer: {conversation.contactName || conversation.contactPhone}
+            </p>
+            <Button size="sm" onClick={() => onOpenChange(false)} data-testid="button-close-complaint-success">
+              Close
+            </Button>
+          </div>
+        ) : (
+          <>
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between py-1 border-b">
+                <span className="text-muted-foreground">Customer</span>
+                <span className="font-medium">{conversation.contactName || conversation.contactPhone}</span>
+              </div>
+              {conversation.orderNumber && (
+                <div className="flex justify-between py-1 border-b">
+                  <span className="text-muted-foreground">Order</span>
+                  <span className="font-medium">{conversation.orderNumber}</span>
+                </div>
+              )}
+              <div className="space-y-1">
+                <Label className="text-xs">Reason for Complaint</Label>
+                <Textarea
+                  value={reason}
+                  onChange={e => setReason(e.target.value)}
+                  placeholder="Describe the issue..."
+                  rows={3}
+                  data-testid="textarea-complaint-reason"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+              <Button
+                onClick={() => createMutation.mutate()}
+                disabled={createMutation.isPending}
+                data-testid="button-submit-complaint"
+              >
+                {createMutation.isPending && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}
+                Create Ticket
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

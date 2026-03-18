@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { db } from "../db";
-import { merchants, products, waConversations, waMessages, orders } from "@shared/schema";
+import { merchants, products, waConversations, waMessages, orders, complaints } from "@shared/schema";
 import { eq, and, desc, or, ilike, sql } from "drizzle-orm";
 import { normalizePakistaniPhone } from "../utils/phone";
 
@@ -54,7 +54,7 @@ const STATUS_MAP: Record<string, string> = {
   CANCELLED: "Cancelled",
 };
 
-export type AiClassification = "complaint" | "return" | "replacement" | "human_handoff" | null;
+export type AiClassification = "complaint" | "return" | "replacement" | "human_handoff" | "lead" | "general_query" | null;
 
 export interface AiReplyResult {
   success: boolean;
@@ -289,6 +289,25 @@ export async function generateAiReply(params: {
       console.log(`${LOG_PREFIX} No orders found for phone ${customerPhone}`);
     }
 
+    let ticketContext = "";
+    const ticketMatch = messageText.match(/TKT-[A-Z0-9]{5}/i);
+    if (ticketMatch) {
+      const ticketNum = ticketMatch[0].toUpperCase();
+      const [ticket] = await db.select().from(complaints)
+        .where(and(eq(complaints.merchantId, merchantId), eq(complaints.ticketNumber, ticketNum)));
+      const phoneVariantsForTicket = buildPhoneVariants(customerPhone);
+      if (ticket && ticket.customerPhone && phoneVariantsForTicket.some(v => ticket.customerPhone!.includes(v) || v.includes(ticket.customerPhone!))) {
+        const statusLabels: Record<string, string> = {
+          logged: "Logged — Our team is reviewing your case",
+          in_progress: "In Progress — Our team is actively working on it",
+          under_investigation: "Under Investigation — We're looking into the details",
+          resolving: "Resolving — We're working on a solution",
+          resolved: "Resolved",
+        };
+        ticketContext = `\nCOMPLAINT TICKET FOUND:\n- Ticket: ${ticket.ticketNumber}\n- Status: ${statusLabels[ticket.status] || ticket.status}\n- Filed: ${ticket.createdAt ? new Date(ticket.createdAt).toLocaleDateString() : "N/A"}${ticket.orderNumber ? `\n- Order: ${ticket.orderNumber}` : ""}\nIMPORTANT: The customer is asking about this ticket. Share the ticket status information above. Do NOT classify this as a complaint again — set classification to null.`;
+      }
+    }
+
     const systemPrompt = `You are a helpful store assistant for "${storeName}". You respond to customer messages on WhatsApp.
 
 You MUST respond with a JSON object in this exact format:
@@ -298,8 +317,10 @@ The "classification" field must be one of:
 - "complaint" — if the customer is complaining about a problem (damaged item, wrong item, bad quality, late delivery, not received, etc.)
 - "return" — if the customer wants to return an item
 - "replacement" — if the customer wants a replacement item
-- "human_handoff" — if the customer explicitly asks to speak to a human agent, real person, manager, or supervisor
-- null — for all other messages (product inquiries, order status, general questions, greetings, etc.)
+- "human_handoff" — if the customer explicitly asks to speak to a human agent, real person, manager, or supervisor, OR if the conversation is confusing and you genuinely cannot handle it further, OR if you don't have the information needed to help
+- "lead" — if the customer wants to place a new order, asks to send another item, says "send me one more", provides their address/phone/name for delivery, or shows buying intent for a product
+- "general_query" — if the customer sends media (picture, video, audio, document) that you cannot process, or sends a message that is completely unclear and doesn't fit any other category
+- null — for routine messages you can handle (product inquiries, order status, general questions, greetings, etc.)
 
 CRITICAL RULES — FOLLOW EXACTLY:
 1. You ONLY know about ${storeName}'s products, policies, and orders listed below. NEVER use outside knowledge.
@@ -320,16 +341,19 @@ ORDER INQUIRY RULES:
 - NEVER promise specific delivery dates unless the data explicitly shows them.
 - NEVER fabricate tracking numbers, courier names, or order details.
 
-COMPLAINT / RETURN / REPLACEMENT RULES:
+CLASSIFICATION RESPONSE RULES:
 - When classifying as "complaint": Respond empathetically, acknowledge the issue, apologize for the inconvenience, and tell the customer that a team member will review their case and get back to them shortly.
 - When classifying as "return": Acknowledge the return request, and tell the customer that a team member from the returns department will assist them shortly.
 - When classifying as "replacement": Acknowledge the replacement request, and tell the customer that a team member will arrange the replacement and get back to them shortly.
 - For complaints/returns/replacements, do NOT try to resolve the issue yourself — always escalate to a human.
 - When classifying as "human_handoff": Acknowledge the customer's request, and tell them that a human agent will be connected shortly to assist them. Be reassuring and professional.
+- When classifying as "lead": Acknowledge the customer's interest enthusiastically, thank them, and tell them a team member will reach out to process their order shortly. If they shared details (address, phone, name), confirm you've noted them.
+- When classifying as "general_query": Respond politely that you've received their message and a team member will review and get back to them shortly. Do NOT try to interpret media you cannot see.
 
 ${knowledgeBase ? `STORE KNOWLEDGE BASE (policies, FAQs, shipping info):\n${knowledgeBase}\n` : ""}
 ${productCatalog ? `PRODUCT CATALOG:\n${productCatalog}\n` : "No products loaded."}
 ${orderContext ? `${orderContext}\n` : "No orders found for this customer's phone number."}
+${ticketContext ? `${ticketContext}\n` : ""}
 ${conversationHistory ? `RECENT CONVERSATION:\n${conversationHistory}\n` : ""}`;
 
     const response = await openai.chat.completions.create({
@@ -357,7 +381,7 @@ ${conversationHistory ? `RECENT CONVERSATION:\n${conversationHistory}\n` : ""}`;
       const parsed = JSON.parse(rawContent);
       reply = (parsed.reply || parsed.message || "").trim();
       const cls = parsed.classification;
-      if (cls === "complaint" || cls === "return" || cls === "replacement" || cls === "human_handoff") {
+      if (cls === "complaint" || cls === "return" || cls === "replacement" || cls === "human_handoff" || cls === "lead" || cls === "general_query") {
         classification = cls;
       }
     } catch {
