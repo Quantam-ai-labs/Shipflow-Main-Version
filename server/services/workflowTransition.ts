@@ -171,8 +171,9 @@ async function _transitionOrderInner(params: TransitionParams): Promise<Transiti
         .then(r => { if (!r.success) console.warn(`[ShopifyWriteBack] Cancel failed for ${orderId}: ${r.error}`); })
         .catch(e => console.error(`[ShopifyWriteBack] Cancel error:`, e));
     }
+    const ROBOCALL_ACTIONS = ['robocall_confirm', 'robocall_cancel', 'robo_cancel', 'robocall_exhausted'];
     const ROBO_TAG_STATUSES = ['READY_TO_SHIP', 'PENDING', 'CANCELLED'];
-    if (ROBO_TAG_STATUSES.includes(toStatus)) {
+    if (ROBO_TAG_STATUSES.includes(toStatus) && ROBOCALL_ACTIONS.includes(action)) {
       writeBackTags(merchantId, order.shopifyOrderId, toStatus)
         .then(r => { if (!r.success) console.warn(`[ShopifyWriteBack] Tag sync failed for ${orderId}: ${r.error}`); })
         .catch(e => console.error(`[ShopifyWriteBack] Tag sync error:`, e));
@@ -309,8 +310,9 @@ export async function bulkTransitionOrders(params: {
             const r = await writeBackCancel(merchantId, o.shopifyOrderId!, reason || "Cancelled in 1SOL.AI");
             if (!r.success) console.warn(`[ShopifyWriteBack] Bulk cancel failed for ${o.id}: ${r.error}`);
           }
+          const ROBOCALL_ACTIONS_BULK = ['robocall_confirm', 'robocall_cancel', 'robo_cancel', 'robocall_exhausted'];
           const ROBO_BULK_STATUSES = ['READY_TO_SHIP', 'PENDING', 'CANCELLED'];
-          if (ROBO_BULK_STATUSES.includes(toStatus)) {
+          if (ROBO_BULK_STATUSES.includes(toStatus) && ROBOCALL_ACTIONS_BULK.includes(action)) {
             const r = await writeBackTags(merchantId, o.shopifyOrderId!, toStatus);
             if (!r.success) console.warn(`[ShopifyWriteBack] Bulk tag sync failed for ${o.id}: ${r.error}`);
           }
@@ -385,7 +387,7 @@ export async function revertOrder(merchantId: string, orderId: string, actorUser
     }
 
     const ROBO_REVERT_STATUSES = ['READY_TO_SHIP', 'PENDING', 'CANCELLED'];
-    if (order.shopifyOrderId && ROBO_REVERT_STATUSES.includes(order.previousWorkflowStatus)) {
+    if (order.shopifyOrderId && ROBO_REVERT_STATUSES.includes(order.previousWorkflowStatus) && order.confirmationSource === "robocall") {
       writeBackTags(merchantId, order.shopifyOrderId, order.previousWorkflowStatus)
         .then(r => { if (!r.success) console.warn(`[ShopifyWriteBack] Revert tag sync failed for ${orderId}: ${r.error}`); })
         .catch(e => console.error(`[ShopifyWriteBack] Revert tag sync error:`, e));
