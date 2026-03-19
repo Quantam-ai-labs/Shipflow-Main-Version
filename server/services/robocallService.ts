@@ -324,13 +324,54 @@ export async function retryFailedCalls(merchantId: string): Promise<void> {
   }
 }
 
+async function handleExhaustedAttempts(order: any, merchant: any, totalAttempts: number): Promise<void> {
+  const currentOrder = await db.select({
+    workflowStatus: orders.workflowStatus,
+  }).from(orders).where(eq(orders.id, order.id)).limit(1);
+
+  if (!currentOrder[0] || currentOrder[0].workflowStatus === "HOLD") return;
+
+  const maxAttempts = merchant.robocallMaxAttempts ?? 3;
+
+  await transitionOrder({
+    merchantId: order.merchantId,
+    orderId: order.id,
+    toStatus: "HOLD",
+    action: "robocall_exhausted",
+    actorType: "system",
+    reason: `All ${maxAttempts} robocall attempts exhausted (${totalAttempts} total)`,
+  });
+
+  await logConfirmationEvent({
+    merchantId: order.merchantId,
+    orderId: order.id,
+    eventType: "ROBO_EXHAUSTED",
+    channel: "robocall",
+    note: `All ${maxAttempts} robocall attempts exhausted — moved to Hold`,
+  });
+
+  await createNotification({
+    merchantId: order.merchantId,
+    type: "robocall_exhausted",
+    title: `All robocall attempts exhausted for #${order.orderNumber}`,
+    message: `${maxAttempts} call attempts failed. Order moved to Hold for manual resolution.`,
+    orderId: order.id,
+    orderNumber: order.orderNumber || undefined,
+  });
+
+  console.log(`${LOG_PREFIX} Order #${order.orderNumber} moved to HOLD — all ${maxAttempts} robocall attempts exhausted`);
+}
+
 async function processOrderForCall(order: any, merchant: any): Promise<void> {
   const { totalAttempts, hasPendingCall, hasDeferred, latestCallTime } = await getOrderCallStats(order.merchantId, order.id);
 
   if (hasPendingCall) return;
 
   const maxAttempts = merchant.robocallMaxAttempts ?? 3;
-  if (totalAttempts >= maxAttempts) return;
+  if (totalAttempts >= maxAttempts) {
+    await handleExhaustedAttempts(order, merchant, totalAttempts);
+    return;
+  }
 
   if (latestCallTime) {
     const retryGap = (merchant.robocallRetryGapMinutes || 45) * 60 * 1000;
