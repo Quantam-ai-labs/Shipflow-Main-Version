@@ -5,9 +5,10 @@ import { toMerchantStartOfDay, DEFAULT_TIMEZONE } from '../utils/timezone';
 import { sendOrderStatusWhatsApp } from '../utils/integrations/whatsapp';
 import { initializeOrderConfirmation, logConfirmationEvent } from './confirmationEngine';
 import { db } from '../db';
-import { orders, robocallQueue, merchants } from '@shared/schema';
+import { orders, merchants } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
 import { formatPhoneForWhatsApp } from '../utils/integrations/whatsapp/sender';
+import { triggerRobocallForOrder } from './robocallService';
 
 async function handleNewOrderWaResult(
   merchantId: string,
@@ -36,7 +37,7 @@ async function handleNewOrderWaResult(
         updatedAt: new Date(),
       }).where(eq(orders.id, created.id));
 
-      await syncQueueForRobocall(merchantId, created, "WhatsApp unavailable — direct bypass to RoboCall");
+      await syncDirectRobocall(merchantId, created, "WhatsApp unavailable — direct bypass to RoboCall");
       console.log(`[Shopify Sync] Order #${created.orderNumber}: number not on WhatsApp, bypassed to RoboCall`);
     } else if (waResult?.sent) {
       await logConfirmationEvent({
@@ -83,7 +84,7 @@ async function handleNewOrderWaResult(
           note: `WhatsApp send failed with permanent error — escalating to RoboCall immediately`,
         }).catch(() => {});
 
-        await syncQueueForRobocall(merchantId, created, "WhatsApp template/parameter error — immediate bypass to RoboCall");
+        await syncDirectRobocall(merchantId, created, "WhatsApp template/parameter error — immediate bypass to RoboCall");
         console.log(`[Shopify Sync] Order #${created.orderNumber}: WA permanent error, bypassed to RoboCall`);
       } else {
         const retryAt = new Date(Date.now() + 30 * 60 * 1000);
@@ -107,72 +108,16 @@ async function handleNewOrderWaResult(
   }
 }
 
-function isWithinCallWindow(startTime: string, endTime: string): boolean {
-  const now = new Date();
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
-  const [startH, startM] = startTime.split(":").map(Number);
-  const [endH, endM] = endTime.split(":").map(Number);
-  return currentMinutes >= startH * 60 + startM && currentMinutes < endH * 60 + endM;
-}
-
-function getNextCallWindowStart(startTime: string): Date {
-  const [startH, startM] = startTime.split(":").map(Number);
-  const now = new Date();
-  const target = new Date(now);
-  target.setHours(startH, startM, 0, 0);
-  if (target <= now) target.setDate(target.getDate() + 1);
-  return target;
-}
-
-async function syncQueueForRobocall(
+async function syncDirectRobocall(
   merchantId: string,
   created: { id: string; orderNumber: string; customerPhone: string | null; customerName: string | null; totalAmount: string | null },
   reason: string = "WhatsApp unavailable — bypass to RoboCall",
 ) {
   const [merchant] = await db.select().from(merchants).where(eq(merchants.id, merchantId)).limit(1);
-  if (merchant?.robocallDisconnected) {
-    console.log(`[Shopify Sync] RoboCall disconnected for merchant, skipping queue for order #${created.orderNumber}`);
-    return;
-  }
-  if (!merchant?.robocallEmail || !merchant?.robocallApiKey || !created.customerPhone) return;
+  if (!merchant) return;
 
-  const formattedPhone = formatPhoneForWhatsApp(created.customerPhone);
-  if (!formattedPhone) return;
-
-  const existingQueue = await db.select({ id: robocallQueue.id }).from(robocallQueue)
-    .where(and(eq(robocallQueue.orderId, created.id), eq(robocallQueue.status, "waiting")))
-    .limit(1);
-  if (existingQueue.length > 0) return;
-
-  const startTime = merchant.robocallStartTime || "10:00";
-  const endTime = merchant.robocallEndTime || "20:00";
-  const withinWindow = isWithinCallWindow(startTime, endTime);
-  const scheduledAt = withinWindow ? new Date() : getNextCallWindowStart(startTime);
-
-  await db.insert(robocallQueue).values({
-    merchantId,
-    orderId: created.id,
-    orderNumber: created.orderNumber,
-    customerName: created.customerName,
-    phone: formattedPhone,
-    amount: created.totalAmount || "0",
-    brandName: merchant.name,
-    status: "waiting",
-    reason,
-    scheduledAt,
-    attemptCount: 0,
-    maxAttempts: merchant.robocallMaxAttempts ?? 3,
-    waResponseArrived: false,
-  });
-
-  await logConfirmationEvent({
-    merchantId,
-    orderId: created.id,
-    eventType: "CALL_QUEUED",
-    note: withinWindow
-      ? `RoboCall queued — ${reason}`
-      : `RoboCall queued — scheduled for ${scheduledAt.toISOString()} (${reason})`,
-  }).catch(() => {});
+  const order = { id: created.id, merchantId, orderNumber: created.orderNumber, customerPhone: created.customerPhone, totalAmount: created.totalAmount };
+  await triggerRobocallForOrder(order, merchant, reason);
 }
 
 interface ShopifyConfig {

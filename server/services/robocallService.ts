@@ -1,6 +1,6 @@
 import { db, withRetry } from "../db";
 import { orders, merchants, robocallLogs } from "@shared/schema";
-import { eq, and, isNull, isNotNull, desc } from "drizzle-orm";
+import { eq, and, isNull, isNotNull, desc, lte } from "drizzle-orm";
 import { logConfirmationEvent, processConfirmationResponse, createNotification } from "./confirmationEngine";
 import { storage } from "../storage";
 import { transitionOrder } from "./workflowTransition";
@@ -10,6 +10,7 @@ const LOG_PREFIX = "[RobocallService]";
 const ROBOCALL_API_BASE = "https://app.brandedsmspakistan.com/api";
 const RESPONSE_CHECK_INTERVAL_MS = 3 * 60 * 1000;
 const PENDING_CHECK_INTERVAL_MS = 5 * 60 * 1000;
+const MIN_PENDING_AGE_MS = 30 * 60 * 1000;
 const FINAL_VOICE_STATUSES = [2, 3, 4, 5, 6, 7, 9, 10];
 const CALL_STATUS_LABELS: Record<number, string> = {
   1: "Initiated", 2: "Congestion", 3: "No Response", 4: "Answered",
@@ -17,7 +18,7 @@ const CALL_STATUS_LABELS: Record<number, string> = {
   9: "Verified", 10: "Deleted", 11: "Queued",
 };
 
-export function isWithinCallWindow(startTime: string, endTime: string): boolean {
+export function isWithinCallWindow(startTime: string, endTime: string, timezone?: string): boolean {
   const now = new Date();
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
   const [startH, startM] = startTime.split(":").map(Number);
@@ -25,7 +26,7 @@ export function isWithinCallWindow(startTime: string, endTime: string): boolean 
   return currentMinutes >= (startH * 60 + startM) && currentMinutes < (endH * 60 + endM);
 }
 
-export function getNextCallWindowStart(startTime: string): Date {
+export function getNextCallWindowStart(startTime: string, timezone?: string): Date {
   const [startH, startM] = startTime.split(":").map(Number);
   const now = new Date();
   const target = new Date(now);
@@ -34,7 +35,7 @@ export function getNextCallWindowStart(startTime: string): Date {
   return target;
 }
 
-async function safeFetchJson(url: string): Promise<any> {
+export async function safeFetchJson(url: string): Promise<any> {
   try {
     const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
     const text = await response.text();
@@ -167,7 +168,7 @@ export async function triggerRobocallForOrder(order: any, merchant: any, reason:
   }
 }
 
-async function getOrderCallStats(merchantId: string, orderId: string): Promise<{ sentAttempts: number; hasPendingCall: boolean; latestCallTime: Date | null }> {
+async function getOrderCallStats(merchantId: string, orderId: string): Promise<{ totalAttempts: number; hasPendingCall: boolean; latestCallTime: Date | null }> {
   const logs = await db.select({
     id: robocallLogs.id,
     status: robocallLogs.status,
@@ -176,15 +177,147 @@ async function getOrderCallStats(merchantId: string, orderId: string): Promise<{
     .where(and(eq(robocallLogs.merchantId, merchantId), eq(robocallLogs.orderId, orderId)))
     .orderBy(desc(robocallLogs.createdAt));
 
-  const sentAttempts = logs.filter(l => l.status !== "Error").length;
+  const totalAttempts = logs.length;
   const hasPendingCall = logs.some(l => l.status === "Initiated");
   const latestCallTime = logs.length > 0 && logs[0].createdAt ? new Date(logs[0].createdAt) : null;
 
-  return { sentAttempts, hasPendingCall, latestCallTime };
+  return { totalAttempts, hasPendingCall, latestCallTime };
+}
+
+export async function checkAndSendPendingCalls(merchantId: string): Promise<void> {
+  try {
+    const merchant = await storage.getMerchant(merchantId);
+    if (!merchant || merchant.robocallDisconnected) return;
+    if (!merchant.robocallEmail || !merchant.robocallApiKey) return;
+
+    const startTime = merchant.robocallStartTime || "10:00";
+    const endTime = merchant.robocallEndTime || "20:00";
+    if (!isWithinCallWindow(startTime, endTime)) return;
+
+    const cutoff = new Date(Date.now() - MIN_PENDING_AGE_MS);
+
+    const pendingOrders = await withRetry(() => db.select({
+      id: orders.id,
+      merchantId: orders.merchantId,
+      orderNumber: orders.orderNumber,
+      customerPhone: orders.customerPhone,
+      totalAmount: orders.totalAmount,
+    }).from(orders)
+      .where(and(
+        eq(orders.merchantId, merchantId),
+        eq(orders.workflowStatus, "PENDING"),
+        eq(orders.pendingReasonType, "confirmation_pending"),
+        eq(orders.confirmationStatus, "pending"),
+        isNotNull(orders.customerPhone),
+        lte(orders.lastStatusChangedAt, cutoff),
+      ))
+      .limit(20), 'robocallService-checkPendingMerchant');
+
+    for (const order of pendingOrders) {
+      await processOrderForCall(order, merchant);
+    }
+  } catch (err: any) {
+    console.error(`${LOG_PREFIX} checkAndSendPendingCalls failed for merchant ${merchantId}:`, err.message);
+  }
+}
+
+export async function retryFailedCalls(merchantId: string): Promise<void> {
+  try {
+    const merchant = await storage.getMerchant(merchantId);
+    if (!merchant || merchant.robocallDisconnected) return;
+    if (!merchant.robocallEmail || !merchant.robocallApiKey) return;
+
+    const startTime = merchant.robocallStartTime || "10:00";
+    const endTime = merchant.robocallEndTime || "20:00";
+    if (!isWithinCallWindow(startTime, endTime)) return;
+
+    const pendingOrders = await withRetry(() => db.select({
+      id: orders.id,
+      merchantId: orders.merchantId,
+      orderNumber: orders.orderNumber,
+      customerPhone: orders.customerPhone,
+      totalAmount: orders.totalAmount,
+    }).from(orders)
+      .where(and(
+        eq(orders.merchantId, merchantId),
+        eq(orders.workflowStatus, "PENDING"),
+        eq(orders.pendingReasonType, "confirmation_pending"),
+        eq(orders.confirmationStatus, "pending"),
+        isNotNull(orders.customerPhone),
+      ))
+      .limit(20), 'robocallService-retryFailed');
+
+    for (const order of pendingOrders) {
+      const { totalAttempts, hasPendingCall, latestCallTime } = await getOrderCallStats(merchantId, order.id);
+      if (totalAttempts === 0 || hasPendingCall) continue;
+
+      const maxAttempts = merchant.robocallMaxAttempts ?? 3;
+      if (totalAttempts >= maxAttempts) continue;
+
+      if (latestCallTime) {
+        const retryGap = (merchant.robocallRetryGapMinutes || 45) * 60 * 1000;
+        if (Date.now() - latestCallTime.getTime() < retryGap) continue;
+      }
+
+      const formattedPhone = formatPhoneForWhatsApp(order.customerPhone);
+      if (!formattedPhone) continue;
+
+      await sendCallDirect({
+        merchantId,
+        merchant,
+        orderId: order.id,
+        orderNumber: order.orderNumber || "",
+        phone: formattedPhone,
+        amount: order.totalAmount || "0",
+        brandName: merchant.name,
+        source: "auto_retry",
+        attemptNumber: totalAttempts + 1,
+      });
+
+      await new Promise(r => setTimeout(r, 500));
+    }
+  } catch (err: any) {
+    console.error(`${LOG_PREFIX} retryFailedCalls failed for merchant ${merchantId}:`, err.message);
+  }
+}
+
+async function processOrderForCall(order: any, merchant: any): Promise<void> {
+  const { totalAttempts, hasPendingCall, latestCallTime } = await getOrderCallStats(order.merchantId, order.id);
+
+  if (hasPendingCall) return;
+
+  const maxAttempts = merchant.robocallMaxAttempts ?? 3;
+  if (totalAttempts >= maxAttempts) return;
+
+  if (latestCallTime) {
+    const retryGap = (merchant.robocallRetryGapMinutes || 45) * 60 * 1000;
+    if (Date.now() - latestCallTime.getTime() < retryGap) return;
+  }
+
+  const formattedPhone = formatPhoneForWhatsApp(order.customerPhone);
+  if (!formattedPhone) return;
+
+  const attemptNumber = totalAttempts + 1;
+
+  await sendCallDirect({
+    merchantId: order.merchantId,
+    merchant,
+    orderId: order.id,
+    orderNumber: order.orderNumber || "",
+    phone: formattedPhone,
+    amount: order.totalAmount || "0",
+    brandName: merchant.name,
+    source: totalAttempts === 0 ? "auto" : "auto_retry",
+    attemptNumber,
+  });
+
+  await new Promise(r => setTimeout(r, 500));
 }
 
 async function checkPendingOrdersForRobocall(): Promise<void> {
   try {
+    const cutoff = new Date(Date.now() - MIN_PENDING_AGE_MS);
+
     const pendingOrders = await withRetry(() => db.select({
       id: orders.id,
       merchantId: orders.merchantId,
@@ -201,6 +334,7 @@ async function checkPendingOrdersForRobocall(): Promise<void> {
         eq(orders.pendingReasonType, "confirmation_pending"),
         eq(orders.confirmationStatus, "pending"),
         isNotNull(orders.customerPhone),
+        lte(orders.lastStatusChangedAt, cutoff),
       ))
       .limit(50), 'robocallService-checkPending');
 
@@ -222,36 +356,7 @@ async function checkPendingOrdersForRobocall(): Promise<void> {
         const endTime = merchant.robocallEndTime || "20:00";
         if (!isWithinCallWindow(startTime, endTime)) continue;
 
-        const { sentAttempts, hasPendingCall, latestCallTime } = await getOrderCallStats(order.merchantId, order.id);
-
-        if (hasPendingCall) continue;
-
-        const maxAttempts = merchant.robocallMaxAttempts ?? 3;
-        if (sentAttempts >= maxAttempts) continue;
-
-        if (latestCallTime) {
-          const retryGap = (merchant.robocallRetryGapMinutes || 45) * 60 * 1000;
-          if (Date.now() - latestCallTime.getTime() < retryGap) continue;
-        }
-
-        const formattedPhone = formatPhoneForWhatsApp(order.customerPhone);
-        if (!formattedPhone) continue;
-
-        const attemptNumber = sentAttempts + 1;
-
-        await sendCallDirect({
-          merchantId: order.merchantId,
-          merchant,
-          orderId: order.id,
-          orderNumber: order.orderNumber || "",
-          phone: formattedPhone,
-          amount: order.totalAmount || "0",
-          brandName: merchant.name,
-          source: sentAttempts === 0 ? "auto" : "auto_retry",
-          attemptNumber,
-        });
-
-        await new Promise(r => setTimeout(r, 500));
+        await processOrderForCall(order, merchant);
       } catch (err: any) {
         console.error(`${LOG_PREFIX} Error processing pending order ${order.id}:`, err.message);
       }
@@ -349,9 +454,9 @@ async function checkCallResponses(): Promise<void> {
           });
 
           const maxAttempts = merchant.robocallMaxAttempts ?? 3;
-          const { sentAttempts } = await getOrderCallStats(log.merchantId, log.orderId);
+          const { totalAttempts } = await getOrderCallStats(log.merchantId, log.orderId);
 
-          if (sentAttempts >= maxAttempts) {
+          if (totalAttempts >= maxAttempts) {
             await transitionOrder({
               merchantId: log.merchantId,
               orderId: log.orderId,
@@ -398,9 +503,9 @@ async function checkCallResponses(): Promise<void> {
             });
 
             const maxAttempts = merchant.robocallMaxAttempts ?? 3;
-            const { sentAttempts } = await getOrderCallStats(log.merchantId, log.orderId);
+            const { totalAttempts } = await getOrderCallStats(log.merchantId, log.orderId);
 
-            if (sentAttempts >= maxAttempts) {
+            if (totalAttempts >= maxAttempts) {
               await transitionOrder({
                 merchantId: log.merchantId,
                 orderId: log.orderId,

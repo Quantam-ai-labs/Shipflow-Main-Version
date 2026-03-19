@@ -113,6 +113,7 @@ import { postexService } from "./services/couriers/postex";
 import { getCourierSyncMetrics, cleanupStaleManualSyncProgress, autoTransitionOrder, getLastCourierSyncResult } from "./services/courierSyncScheduler";
 import { getShopifySyncMetrics } from "./services/autoSync";
 import { processConfirmationResponse, logConfirmationEvent, createNotification } from "./services/confirmationEngine";
+import { sendCallDirect, safeFetchJson as robocallFetchJson } from "./services/robocallService";
 
 const oauthStateStore = new Map<
   string,
@@ -7852,7 +7853,6 @@ export async function registerRoutes(
       if (!Array.isArray(orderIds) || orderIds.length === 0) return res.status(400).json({ error: "No orders selected" });
 
       const { formatPhoneForWhatsApp } = await import("./utils/integrations/whatsapp/sender");
-      const { sendCallDirect } = await import("./services/robocallService");
 
       const [merchant] = await db.select().from(merchants).where(eq(merchants.id, merchantId)).limit(1);
       if (!merchant) return res.status(404).json({ error: "Merchant not found" });
@@ -16167,7 +16167,7 @@ export async function registerRoutes(
     try {
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
-      const { apiKey, email, to, amount, voiceId, brandName, orderNumber } = req.body;
+      const { apiKey, email, to, amount, voiceId, brandName, orderNumber, orderId } = req.body;
       if (!apiKey || !email || !to || !voiceId) return res.status(400).json({ error: "apiKey, email, phone number, and voiceId are required" });
 
       if (orderNumber) {
@@ -16189,33 +16189,21 @@ export async function registerRoutes(
         }
       }
 
-      const params = new URLSearchParams({
-        email,
-        key: apiKey,
-        to,
-        type: "dtmf",
-        voice_id: String(voiceId),
-        amount: String(amount || 0),
-        brand_name: brandName || "",
-        order_number: orderNumber || "",
-      });
-      const data = await safeFetchJson(`${ROBOCALL_API_BASE}/send-voice?${params.toString()}`);
-      const sms = data.sms;
-      const callIdFromApi = data.data?.call_id ? String(data.data.call_id) : (sms?.id ? String(sms.id) : (sms?.call_id ? String(sms.call_id) : (data.call_id ? String(data.call_id) : null)));
-      const isSuccess = !data.raw && sms?.code === "000";
-      await storage.createRobocallLog({
+      const result = await sendCallDirect({
         merchantId,
-        callId: callIdFromApi,
+        merchant: { robocallEmail: email, robocallApiKey: apiKey, robocallVoiceId: String(voiceId) },
+        orderId: orderId || "",
+        orderNumber: orderNumber || "",
         phone: to,
         amount: String(amount || 0),
-        voiceId: String(voiceId),
-        brandName: brandName || null,
-        orderNumber: orderNumber || null,
-        status: isSuccess ? "Initiated" : "Error",
-        error: data.raw ? data.error : (!isSuccess ? (sms?.response || "Send failed") : null),
+        brandName: brandName || undefined,
+        source: "manual",
       });
-      if (data.raw) return res.status(400).json({ error: data.error });
-      res.json(data);
+
+      if (!result.success) {
+        return res.status(400).json({ error: result.error });
+      }
+      res.json({ success: true, callId: result.callId });
     } catch (error: any) {
       console.error("[RoboCall] Send call error:", error);
       res.status(500).json({ error: error.message });
@@ -16232,33 +16220,17 @@ export async function registerRoutes(
       const results: any[] = [];
       for (const call of calls) {
         try {
-          const params = new URLSearchParams({
-            email,
-            key: apiKey,
-            to: call.to,
-            type: "dtmf",
-            voice_id: String(call.voiceId),
-            amount: String(call.amount || 0),
-            brand_name: call.brandName || "",
-            order_number: call.orderNumber || "",
-          });
-          const data = await safeFetchJson(`${ROBOCALL_API_BASE}/send-voice?${params.toString()}`);
-          const result = { to: call.to, ...(data.raw ? { error: data.error } : data) };
-          results.push(result);
-          const sms = data.sms;
-          const callIdFromApi = data.data?.call_id ? String(data.data.call_id) : (sms?.id ? String(sms.id) : (sms?.call_id ? String(sms.call_id) : (data.call_id ? String(data.call_id) : null)));
-          const isSuccess = !data.raw && sms?.code === "000";
-          await storage.createRobocallLog({
+          const result = await sendCallDirect({
             merchantId,
-            callId: callIdFromApi,
+            merchant: { robocallEmail: email, robocallApiKey: apiKey, robocallVoiceId: String(call.voiceId) },
+            orderId: call.orderId || "",
+            orderNumber: call.orderNumber || "",
             phone: call.to,
             amount: String(call.amount || 0),
-            voiceId: String(call.voiceId),
-            brandName: call.brandName || null,
-            orderNumber: call.orderNumber || null,
-            status: isSuccess ? "Initiated" : "Error",
-            error: data.raw ? data.error : (!isSuccess ? (sms?.response || "Send failed") : null),
+            brandName: call.brandName || undefined,
+            source: "manual_bulk",
           });
+          results.push({ to: call.to, success: result.success, callId: result.callId, error: result.error });
           await new Promise(resolve => setTimeout(resolve, 200));
         } catch (err: any) {
           results.push({ to: call.to, error: err.message });

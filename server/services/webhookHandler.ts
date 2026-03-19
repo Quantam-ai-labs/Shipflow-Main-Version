@@ -5,9 +5,10 @@ import { isRecentWriteBack } from './shopifyWriteBack';
 import { sendOrderStatusWhatsApp } from '../utils/integrations/whatsapp';
 import { initializeOrderConfirmation, logConfirmationEvent } from './confirmationEngine';
 import { db } from '../db';
-import { orders, robocallQueue, merchants } from '@shared/schema';
+import { orders, merchants } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
 import { formatPhoneForWhatsApp } from '../utils/integrations/whatsapp/sender';
+import { triggerRobocallForOrder } from './robocallService';
 
 async function db_updateWaSentAt(orderId: string, waAttemptCount: number = 1, templateName?: string) {
   try {
@@ -30,26 +31,7 @@ async function db_setNotOnWhatsApp(orderId: string) {
   } catch {}
 }
 
-function isWithinCallWindow(startTime: string, endTime: string): boolean {
-  const now = new Date();
-  const hours = now.getHours();
-  const minutes = now.getMinutes();
-  const currentMinutes = hours * 60 + minutes;
-  const [startH, startM] = startTime.split(":").map(Number);
-  const [endH, endM] = endTime.split(":").map(Number);
-  return currentMinutes >= startH * 60 + startM && currentMinutes < endH * 60 + endM;
-}
-
-function getNextCallWindowStart(startTime: string): Date {
-  const [startH, startM] = startTime.split(":").map(Number);
-  const now = new Date();
-  const target = new Date(now);
-  target.setHours(startH, startM, 0, 0);
-  if (target <= now) target.setDate(target.getDate() + 1);
-  return target;
-}
-
-async function queueForRobocall(params: {
+async function directTriggerRobocall(params: {
   merchantId: string;
   orderId: string;
   orderNumber: string;
@@ -60,50 +42,10 @@ async function queueForRobocall(params: {
 }): Promise<boolean> {
   const { merchantId, orderId, orderNumber, customerName, customerPhone, totalAmount, reason } = params;
   const [merchant] = await db.select().from(merchants).where(eq(merchants.id, merchantId)).limit(1);
-  if (merchant?.robocallDisconnected) {
-    console.log(`[Webhook] RoboCall disconnected for merchant, skipping queue for order #${orderNumber}`);
-    return false;
-  }
-  if (!merchant?.robocallEmail || !merchant?.robocallApiKey || !customerPhone) return false;
+  if (!merchant) return false;
 
-  const formattedPhone = formatPhoneForWhatsApp(customerPhone);
-  if (!formattedPhone) return false;
-
-  const existingQueue = await db.select({ id: robocallQueue.id }).from(robocallQueue)
-    .where(and(eq(robocallQueue.orderId, orderId), eq(robocallQueue.status, "waiting")))
-    .limit(1);
-  if (existingQueue.length > 0) return false;
-
-  const startTime = merchant.robocallStartTime || "10:00";
-  const endTime = merchant.robocallEndTime || "20:00";
-  const withinWindow = isWithinCallWindow(startTime, endTime);
-  const scheduledAt = withinWindow ? new Date() : getNextCallWindowStart(startTime);
-
-  await db.insert(robocallQueue).values({
-    merchantId,
-    orderId,
-    orderNumber,
-    customerName,
-    phone: formattedPhone,
-    amount: totalAmount,
-    brandName: merchant.name,
-    status: "waiting",
-    reason,
-    scheduledAt,
-    attemptCount: 0,
-    maxAttempts: merchant.robocallMaxAttempts ?? 3,
-    waResponseArrived: false,
-  });
-
-  await logConfirmationEvent({
-    merchantId,
-    orderId,
-    eventType: "CALL_QUEUED",
-    note: withinWindow
-      ? `RoboCall queued — ${reason}`
-      : `RoboCall queued — scheduled for ${scheduledAt.toISOString()} (${reason})`,
-  });
-
+  const order = { id: orderId, merchantId, orderNumber, customerName, customerPhone, totalAmount };
+  await triggerRobocallForOrder(order, merchant, reason);
   return true;
 }
 
@@ -402,7 +344,7 @@ export class WebhookHandler {
               updatedAt: new Date(),
             }).where(eq(orders.id, created.id));
 
-            await queueForRobocall({
+            await directTriggerRobocall({
               merchantId,
               orderId: created.id,
               orderNumber: created.orderNumber,
@@ -457,7 +399,7 @@ export class WebhookHandler {
                 note: `WhatsApp send failed with permanent error — escalating to RoboCall immediately`,
               }).catch(() => {});
 
-              await queueForRobocall({
+              await directTriggerRobocall({
                 merchantId,
                 orderId: created.id,
                 orderNumber: created.orderNumber,
