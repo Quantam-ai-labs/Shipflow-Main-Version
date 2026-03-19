@@ -1,6 +1,6 @@
 import { db, withRetry } from "../db";
 import { orders, merchants, robocallLogs } from "@shared/schema";
-import { eq, and, isNull, isNotNull, desc, lte } from "drizzle-orm";
+import { eq, and, isNotNull, desc } from "drizzle-orm";
 import { logConfirmationEvent, processConfirmationResponse, createNotification } from "./confirmationEngine";
 import { storage } from "../storage";
 import { transitionOrder } from "./workflowTransition";
@@ -9,7 +9,6 @@ import { formatPhoneForWhatsApp } from "../utils/integrations/whatsapp/sender";
 const LOG_PREFIX = "[RobocallService]";
 const ROBOCALL_API_BASE = "https://app.brandedsmspakistan.com/api";
 const RESPONSE_CHECK_INTERVAL_MS = 3 * 60 * 1000;
-const PENDING_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 const MIN_PENDING_AGE_MS = 12 * 60 * 60 * 1000;
 const FINAL_VOICE_STATUSES = [2, 3, 4, 5, 6, 7, 9, 10];
 const CALL_STATUS_LABELS: Record<number, string> = {
@@ -173,6 +172,20 @@ export async function triggerRobocallForOrder(order: any, merchant: any, reason:
       attemptNumber: 1,
     });
   } else {
+    await db.insert(robocallLogs).values({
+      merchantId: order.merchantId,
+      callId: null,
+      phone: formattedPhone,
+      amount: order.totalAmount || "0",
+      voiceId: merchant.robocallVoiceId || "735",
+      brandName: merchant.name || null,
+      orderNumber: order.orderNumber || "",
+      orderId: order.id,
+      source: "auto",
+      attemptNumber: 0,
+      status: "Deferred",
+    });
+
     await logConfirmationEvent({
       merchantId: order.merchantId,
       orderId: order.id,
@@ -184,7 +197,7 @@ export async function triggerRobocallForOrder(order: any, merchant: any, reason:
   }
 }
 
-async function getOrderCallStats(merchantId: string, orderId: string): Promise<{ totalAttempts: number; hasPendingCall: boolean; latestCallTime: Date | null }> {
+async function getOrderCallStats(merchantId: string, orderId: string): Promise<{ totalAttempts: number; hasActivity: boolean; hasPendingCall: boolean; hasDeferred: boolean; latestCallTime: Date | null }> {
   const logs = await db.select({
     id: robocallLogs.id,
     status: robocallLogs.status,
@@ -193,11 +206,15 @@ async function getOrderCallStats(merchantId: string, orderId: string): Promise<{
     .where(and(eq(robocallLogs.merchantId, merchantId), eq(robocallLogs.orderId, orderId)))
     .orderBy(desc(robocallLogs.createdAt));
 
-  const totalAttempts = logs.length;
+  const realLogs = logs.filter(l => l.status !== "Deferred");
+  const totalAttempts = realLogs.length;
+  const hasActivity = logs.length > 0;
   const hasPendingCall = logs.some(l => l.status === "Initiated");
-  const latestCallTime = logs.length > 0 && logs[0].createdAt ? new Date(logs[0].createdAt) : null;
+  const hasDeferred = logs.some(l => l.status === "Deferred");
+  const latestRealLog = realLogs.length > 0 ? realLogs[0] : null;
+  const latestCallTime = latestRealLog && latestRealLog.createdAt ? new Date(latestRealLog.createdAt) : null;
 
-  return { totalAttempts, hasPendingCall, latestCallTime };
+  return { totalAttempts, hasActivity, hasPendingCall, hasDeferred, latestCallTime };
 }
 
 export async function checkAndSendPendingCalls(merchantId: string): Promise<void> {
@@ -210,14 +227,13 @@ export async function checkAndSendPendingCalls(merchantId: string): Promise<void
     const endTime = merchant.robocallEndTime || "20:00";
     if (!isWithinCallWindow(startTime, endTime)) return;
 
-    const cutoff = new Date(Date.now() - MIN_PENDING_AGE_MS);
-
     const pendingOrders = await withRetry(() => db.select({
       id: orders.id,
       merchantId: orders.merchantId,
       orderNumber: orders.orderNumber,
       customerPhone: orders.customerPhone,
       totalAmount: orders.totalAmount,
+      lastStatusChangedAt: orders.lastStatusChangedAt,
     }).from(orders)
       .where(and(
         eq(orders.merchantId, merchantId),
@@ -225,12 +241,22 @@ export async function checkAndSendPendingCalls(merchantId: string): Promise<void
         eq(orders.pendingReasonType, "confirmation_pending"),
         eq(orders.confirmationStatus, "pending"),
         isNotNull(orders.customerPhone),
-        lte(orders.lastStatusChangedAt, cutoff),
       ))
-      .limit(20), 'robocallService-checkPendingMerchant');
+      .orderBy(orders.lastStatusChangedAt)
+      .limit(30), 'robocallService-checkPendingMerchant');
+
+    const cutoff = new Date(Date.now() - MIN_PENDING_AGE_MS);
 
     for (const order of pendingOrders) {
-      await processOrderForCall(order, merchant);
+      const { hasActivity } = await getOrderCallStats(merchantId, order.id);
+      if (hasActivity) {
+        await processOrderForCall(order, merchant);
+      } else {
+        const changedAt = order.lastStatusChangedAt ? new Date(order.lastStatusChangedAt) : null;
+        if (changedAt && changedAt <= cutoff) {
+          await processOrderForCall(order, merchant);
+        }
+      }
     }
   } catch (err: any) {
     console.error(`${LOG_PREFIX} checkAndSendPendingCalls failed for merchant ${merchantId}:`, err.message);
@@ -261,11 +287,12 @@ export async function retryFailedCalls(merchantId: string): Promise<void> {
         eq(orders.confirmationStatus, "pending"),
         isNotNull(orders.customerPhone),
       ))
+      .orderBy(orders.lastStatusChangedAt)
       .limit(20), 'robocallService-retryFailed');
 
     for (const order of pendingOrders) {
-      const { totalAttempts, hasPendingCall, latestCallTime } = await getOrderCallStats(merchantId, order.id);
-      if (totalAttempts === 0 || hasPendingCall) continue;
+      const { totalAttempts, hasActivity, hasPendingCall, latestCallTime } = await getOrderCallStats(merchantId, order.id);
+      if (!hasActivity || hasPendingCall) continue;
 
       const maxAttempts = merchant.robocallMaxAttempts ?? 3;
       if (totalAttempts >= maxAttempts) continue;
@@ -298,7 +325,7 @@ export async function retryFailedCalls(merchantId: string): Promise<void> {
 }
 
 async function processOrderForCall(order: any, merchant: any): Promise<void> {
-  const { totalAttempts, hasPendingCall, latestCallTime } = await getOrderCallStats(order.merchantId, order.id);
+  const { totalAttempts, hasPendingCall, hasDeferred, latestCallTime } = await getOrderCallStats(order.merchantId, order.id);
 
   if (hasPendingCall) return;
 
@@ -315,6 +342,16 @@ async function processOrderForCall(order: any, merchant: any): Promise<void> {
 
   const attemptNumber = totalAttempts + 1;
 
+  if (hasDeferred) {
+    await db.delete(robocallLogs).where(
+      and(
+        eq(robocallLogs.merchantId, order.merchantId),
+        eq(robocallLogs.orderId, order.id),
+        eq(robocallLogs.status, "Deferred"),
+      )
+    );
+  }
+
   await sendCallDirect({
     merchantId: order.merchantId,
     merchant,
@@ -328,58 +365,6 @@ async function processOrderForCall(order: any, merchant: any): Promise<void> {
   });
 
   await new Promise(r => setTimeout(r, 500));
-}
-
-async function checkPendingOrdersForRobocall(): Promise<void> {
-  try {
-    const cutoff = new Date(Date.now() - MIN_PENDING_AGE_MS);
-
-    const pendingOrders = await withRetry(() => db.select({
-      id: orders.id,
-      merchantId: orders.merchantId,
-      orderNumber: orders.orderNumber,
-      customerName: orders.customerName,
-      customerPhone: orders.customerPhone,
-      totalAmount: orders.totalAmount,
-      confirmationStatus: orders.confirmationStatus,
-      workflowStatus: orders.workflowStatus,
-      pendingReasonType: orders.pendingReasonType,
-    }).from(orders)
-      .where(and(
-        eq(orders.workflowStatus, "PENDING"),
-        eq(orders.pendingReasonType, "confirmation_pending"),
-        eq(orders.confirmationStatus, "pending"),
-        isNotNull(orders.customerPhone),
-        lte(orders.lastStatusChangedAt, cutoff),
-      ))
-      .limit(50), 'robocallService-checkPending');
-
-    if (pendingOrders.length === 0) return;
-
-    const merchantCache = new Map<string, any>();
-
-    for (const order of pendingOrders) {
-      try {
-        let merchant = merchantCache.get(order.merchantId);
-        if (!merchant) {
-          merchant = await storage.getMerchant(order.merchantId);
-          if (merchant) merchantCache.set(order.merchantId, merchant);
-        }
-        if (!merchant || merchant.robocallDisconnected) continue;
-        if (!merchant.robocallEmail || !merchant.robocallApiKey) continue;
-
-        const startTime = merchant.robocallStartTime || "10:00";
-        const endTime = merchant.robocallEndTime || "20:00";
-        if (!isWithinCallWindow(startTime, endTime)) continue;
-
-        await processOrderForCall(order, merchant);
-      } catch (err: any) {
-        console.error(`${LOG_PREFIX} Error processing pending order ${order.id}:`, err.message);
-      }
-    }
-  } catch (err: any) {
-    console.error(`${LOG_PREFIX} Pending orders check failed:`, err.message);
-  }
 }
 
 async function checkCallResponses(): Promise<void> {

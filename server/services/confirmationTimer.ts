@@ -329,14 +329,21 @@ async function checkExhaustedWaOrders() {
 
 async function checkRobocallsForMerchants() {
   try {
-    const allMerchants = await db.select({ id: merchants.id }).from(merchants).limit(50);
-    for (const m of allMerchants) {
-      try {
-        await checkAndSendPendingCalls(m.id);
-        await retryFailedCalls(m.id);
-      } catch (err: any) {
-        console.error(`${LOG_PREFIX} Robocall check failed for merchant ${m.id}:`, err.message);
+    let offset = 0;
+    const batchSize = 50;
+    while (true) {
+      const batch = await db.select({ id: merchants.id }).from(merchants).limit(batchSize).offset(offset);
+      if (batch.length === 0) break;
+      for (const m of batch) {
+        try {
+          await checkAndSendPendingCalls(m.id);
+          await retryFailedCalls(m.id);
+        } catch (err: any) {
+          console.error(`${LOG_PREFIX} Robocall check failed for merchant ${m.id}:`, err.message);
+        }
       }
+      if (batch.length < batchSize) break;
+      offset += batchSize;
     }
   } catch (err: any) {
     console.error(`${LOG_PREFIX} Robocall merchant loop failed:`, err.message);
