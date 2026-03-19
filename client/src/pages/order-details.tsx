@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Package,
   ArrowLeft,
@@ -59,13 +66,16 @@ import {
   MessageCircle,
   PhoneOff,
   BellOff,
+  PhoneCall,
+  Check,
+  CheckCheck,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Order, Shipment, ShipmentEvent, Remark } from "@shared/schema";
 import { ProductPicker, type PickedProduct } from "@/components/product-picker";
 import { Link, useParams } from "wouter";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, format, isToday, isYesterday } from "date-fns";
 import { formatPkDateTime, formatPkDate, formatPkShortDate } from "@/lib/dateFormat";
 import { useToast } from "@/hooks/use-toast";
 
@@ -755,6 +765,287 @@ function ConfirmationStatusCard({ order, orderId }: { order: OrderDetails; order
         )}
       </CardContent>
     </Card>
+  );
+}
+
+interface ChatMessage {
+  id: string;
+  conversationId: string;
+  direction: string;
+  senderName: string | null;
+  text: string | null;
+  status: string | null;
+  messageType: string | null;
+  mediaUrl: string | null;
+  createdAt: string;
+}
+
+function ChatStatusTicks({ status }: { status: string | null }) {
+  if (status === "read") return <CheckCheck className="w-3 h-3 text-blue-400 inline-block ml-1" />;
+  if (status === "delivered") return <CheckCheck className="w-3 h-3 text-muted-foreground inline-block ml-1" />;
+  if (status === "sent") return <Check className="w-3 h-3 text-muted-foreground inline-block ml-1" />;
+  return null;
+}
+
+function formatChatBubbleTime(dateStr: string) {
+  const d = new Date(dateStr);
+  if (isToday(d)) return format(d, "HH:mm");
+  if (isYesterday(d)) return "Yesterday " + format(d, "HH:mm");
+  return format(d, "dd/MM/yy HH:mm");
+}
+
+function WhatsAppChatPopup({ open, onClose, customerPhone, customerName }: {
+  open: boolean;
+  onClose: () => void;
+  customerPhone: string | null;
+  customerName: string | null;
+}) {
+  const [messageText, setMessageText] = useState("");
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const prevMsgCountRef = useRef(0);
+  const { toast } = useToast();
+
+  const { data: conversation, isLoading: convLoading } = useQuery<any>({
+    queryKey: ["/api/support/conversations/by-phone", customerPhone],
+    queryFn: async () => {
+      if (!customerPhone) return null;
+      const resp = await fetch(`/api/support/conversations/by-phone/${encodeURIComponent(customerPhone)}`, { credentials: "include" });
+      if (resp.status === 404) return null;
+      if (!resp.ok) throw new Error("Failed to load conversation");
+      return resp.json();
+    },
+    enabled: open && !!customerPhone,
+    staleTime: 5000,
+  });
+
+  const conversationId = conversation?.id;
+
+  const { data: messages = [] } = useQuery<ChatMessage[]>({
+    queryKey: ["/api/support/conversations", conversationId, "messages"],
+    queryFn: async () => {
+      if (!conversationId) return [];
+      const resp = await fetch(`/api/support/conversations/${conversationId}/messages`, { credentials: "include" });
+      return resp.json();
+    },
+    enabled: open && !!conversationId,
+    refetchInterval: open ? 6000 : false,
+    staleTime: 3000,
+  });
+
+  const scrollToBottom = useCallback(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, []);
+
+  useEffect(() => {
+    const count = messages.length;
+    if (count !== prevMsgCountRef.current) {
+      prevMsgCountRef.current = count;
+      setTimeout(scrollToBottom, 100);
+    }
+  }, [messages.length, scrollToBottom]);
+
+  const sendMutation = useMutation({
+    mutationFn: async (text: string) => {
+      await apiRequest("POST", `/api/support/conversations/${conversationId}/messages`, { text });
+    },
+    onSuccess: () => {
+      setMessageText("");
+      queryClient.invalidateQueries({ queryKey: ["/api/support/conversations", conversationId, "messages"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to send", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleSend = () => {
+    const trimmed = messageText.trim();
+    if (!trimmed || !conversationId) return;
+    sendMutation.mutate(trimmed);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-lg h-[70vh] flex flex-col p-0 gap-0" data-testid="dialog-whatsapp-chat">
+        <DialogHeader className="px-4 py-3 border-b flex-shrink-0">
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <MessageCircle className="w-5 h-5 text-green-600" />
+            <span>{customerName || customerPhone || "Customer"}</span>
+            {customerPhone && (
+              <span className="text-xs text-muted-foreground font-normal">{customerPhone}</span>
+            )}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto px-4 py-3" data-testid="chat-messages-area">
+          {convLoading ? (
+            <div className="flex items-center justify-center h-full">
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : !conversation ? (
+            <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-2" data-testid="chat-empty-state">
+              <MessageCircle className="w-10 h-10 opacity-30" />
+              <p className="text-sm">No WhatsApp conversation found for this customer</p>
+            </div>
+          ) : messages.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-2">
+              <MessageCircle className="w-10 h-10 opacity-30" />
+              <p className="text-sm">No messages yet</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {messages.map((msg) => {
+                const isOutbound = msg.direction === "outbound";
+                return (
+                  <div
+                    key={msg.id}
+                    className={`flex ${isOutbound ? "justify-end" : "justify-start"}`}
+                    data-testid={`chat-message-${msg.id}`}
+                  >
+                    <div
+                      className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${
+                        isOutbound
+                          ? "bg-green-600 text-white dark:bg-green-700"
+                          : "bg-muted"
+                      }`}
+                    >
+                      {msg.messageType && msg.messageType !== "text" && (
+                        <div className="text-xs opacity-70 mb-1 italic">
+                          {msg.messageType === "image" ? "📷 Image" :
+                           msg.messageType === "audio" ? "🎵 Audio" :
+                           msg.messageType === "video" ? "🎬 Video" :
+                           msg.messageType === "document" ? "📄 Document" :
+                           msg.messageType === "sticker" ? "🎨 Sticker" :
+                           msg.messageType === "location" ? "📍 Location" :
+                           msg.messageType}
+                        </div>
+                      )}
+                      <div className="whitespace-pre-wrap break-words leading-relaxed">
+                        {msg.text || ""}
+                      </div>
+                      <div className={`text-[10px] mt-1 ${isOutbound ? "text-green-200" : "text-muted-foreground"} text-right`}>
+                        {formatChatBubbleTime(msg.createdAt)}
+                        {isOutbound && <ChatStatusTicks status={msg.status} />}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              <div ref={messagesEndRef} />
+            </div>
+          )}
+        </div>
+
+        {conversation && (
+          <div className="border-t px-4 py-3 flex gap-2 flex-shrink-0" data-testid="chat-input-area">
+            <Input
+              value={messageText}
+              onChange={(e) => setMessageText(e.target.value)}
+              placeholder="Type a message..."
+              className="flex-1"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              data-testid="input-chat-message"
+            />
+            <Button
+              size="icon"
+              onClick={handleSend}
+              disabled={!messageText.trim() || sendMutation.isPending}
+              className="bg-green-600 hover:bg-green-700 text-white"
+              data-testid="button-send-chat"
+            >
+              {sendMutation.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Send className="w-4 h-4" />
+              )}
+            </Button>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function QuickActionsCard({ order, orderId }: { order: OrderDetails; orderId: string }) {
+  const [chatOpen, setChatOpen] = useState(false);
+  const { toast } = useToast();
+
+  const robocallMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", `/api/orders/${orderId}/trigger-robocall`);
+    },
+    onSuccess: () => {
+      toast({ title: "RoboCall initiated", description: `Calling ${order.customerPhone}...` });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders", orderId] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "RoboCall failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  return (
+    <>
+      <Card data-testid="card-quick-actions">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <PhoneCall className="w-5 h-5" />
+            Quick Actions
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Button
+            className="w-full justify-start gap-2"
+            variant="outline"
+            onClick={() => robocallMutation.mutate()}
+            disabled={robocallMutation.isPending || !order.customerPhone}
+            data-testid="button-manual-robocall"
+          >
+            {robocallMutation.isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Phone className="w-4 h-4 text-blue-600" />
+            )}
+            Manual RoboCall
+            {!order.customerPhone && (
+              <span className="text-xs text-muted-foreground ml-auto">No phone</span>
+            )}
+          </Button>
+
+          <Button
+            className="w-full justify-start gap-2"
+            variant="outline"
+            onClick={() => setChatOpen(true)}
+            disabled={!order.customerPhone}
+            data-testid="button-open-whatsapp-chat"
+          >
+            <MessageCircle className="w-4 h-4 text-green-600" />
+            Open WhatsApp Chat
+            {!order.customerPhone && (
+              <span className="text-xs text-muted-foreground ml-auto">No phone</span>
+            )}
+          </Button>
+
+          {order.customerPhone && (
+            <div className="text-xs text-muted-foreground pt-1">
+              Customer: {order.customerPhone}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <WhatsAppChatPopup
+        open={chatOpen}
+        onClose={() => setChatOpen(false)}
+        customerPhone={order.customerPhone}
+        customerName={order.customerName}
+      />
+    </>
   );
 }
 
@@ -1554,7 +1845,10 @@ export default function OrderDetails() {
         onSelect={handleProductPicked}
       />
 
-      <ConfirmationStatusCard order={order} orderId={id!} />
+      <div className="grid md:grid-cols-2 gap-4">
+        <ConfirmationStatusCard order={order} orderId={id!} />
+        <QuickActionsCard order={order} orderId={id!} />
+      </div>
 
       <div className="grid lg:grid-cols-3 gap-4">
         {/* Main Content */}

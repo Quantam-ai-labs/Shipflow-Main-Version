@@ -7900,6 +7900,38 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/orders/:id/trigger-robocall", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { formatPhoneForWhatsApp } = await import("./utils/integrations/whatsapp/sender");
+      const [merchant] = await db.select().from(merchants).where(eq(merchants.id, merchantId)).limit(1);
+      if (!merchant) return res.status(404).json({ error: "Merchant not found" });
+      if (merchant.robocallDisconnected) return res.status(400).json({ error: "RoboCall is disconnected" });
+      if (!merchant.robocallEmail || !merchant.robocallApiKey) return res.status(400).json({ error: "RoboCall not configured. Set up API key and email in RoboCall settings." });
+      const order = await storage.getOrderById(merchantId, req.params.id);
+      if (!order) return res.status(404).json({ error: "Order not found" });
+      if (!order.customerPhone) return res.status(400).json({ error: "Order has no customer phone number" });
+      const formattedPhone = formatPhoneForWhatsApp(order.customerPhone);
+      if (!formattedPhone) return res.status(400).json({ error: "Invalid phone number format" });
+      const result = await sendCallDirect({
+        merchantId,
+        merchant: { robocallEmail: merchant.robocallEmail!, robocallApiKey: merchant.robocallApiKey!, robocallVoiceId: merchant.robocallVoiceId, name: merchant.name },
+        orderId: order.id,
+        orderNumber: order.orderNumber || "",
+        phone: formattedPhone,
+        amount: order.totalAmount || "0",
+        brandName: merchant.name || undefined,
+        source: "manual",
+      });
+      if (!result.success) return res.status(400).json({ error: result.error });
+      res.json({ success: true, callId: result.callId });
+    } catch (error: any) {
+      console.error("[Manual RoboCall] Error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // ─────────────────────────────────────────────────────────────────────────
   // SUPPORT SECTION ROUTES
   // ─────────────────────────────────────────────────────────────────────────
@@ -8072,6 +8104,39 @@ export async function registerRoutes(
       if (!merchantId) return;
       const conversations = await storage.getConversations(merchantId);
       res.json(conversations);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/support/conversations/by-phone/:phone", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const phone = decodeURIComponent(req.params.phone);
+      if (!phone) return res.status(400).json({ error: "Phone number required" });
+      const normalized = normalizePakistaniPhone(phone);
+      const digits = phone.replace(/[^\d]/g, "");
+      const variants = new Set([
+        phone,
+        normalized,
+        digits,
+        `+${digits}`,
+        `0${digits}`,
+        digits.startsWith("92") ? `+${digits}` : null,
+        digits.startsWith("92") ? `0${digits.slice(2)}` : null,
+        normalized ? `92${normalized.slice(1)}` : null,
+        normalized ? `+92${normalized.slice(1)}` : null,
+      ].filter(Boolean) as string[]);
+      const allConvs = await storage.getConversations(merchantId);
+      const match = allConvs.find((c: any) => {
+        if (!c.contactPhone) return false;
+        const cNorm = normalizePakistaniPhone(c.contactPhone);
+        if (normalized && cNorm && normalized === cNorm) return true;
+        return variants.has(c.contactPhone);
+      });
+      if (!match) return res.status(404).json({ error: "No conversation found for this phone number" });
+      res.json(match);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
