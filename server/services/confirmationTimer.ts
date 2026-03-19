@@ -4,7 +4,7 @@ import { eq, and, lt, or, isNull, isNotNull, lte } from "drizzle-orm";
 import { logConfirmationEvent, createNotification } from "./confirmationEngine";
 import { formatPhoneForWhatsApp } from "../utils/integrations/whatsapp/sender";
 import { sendWhatsAppApiRequest } from "../utils/integrations/whatsapp/sender";
-import { triggerRobocallForOrder } from "./robocallService";
+import { triggerRobocallForOrder, checkAndSendPendingCalls, retryFailedCalls } from "./robocallService";
 
 const LOG_PREFIX = "[ConfirmationTimer]";
 const CHECK_INTERVAL_MS = 5 * 60 * 1000;
@@ -327,10 +327,27 @@ async function checkExhaustedWaOrders() {
   }
 }
 
+async function checkRobocallsForMerchants() {
+  try {
+    const allMerchants = await db.select({ id: merchants.id }).from(merchants).limit(50);
+    for (const m of allMerchants) {
+      try {
+        await checkAndSendPendingCalls(m.id);
+        await retryFailedCalls(m.id);
+      } catch (err: any) {
+        console.error(`${LOG_PREFIX} Robocall check failed for merchant ${m.id}:`, err.message);
+      }
+    }
+  } catch (err: any) {
+    console.error(`${LOG_PREFIX} Robocall merchant loop failed:`, err.message);
+  }
+}
+
 async function checkPendingOrders() {
   try {
     await checkWaReattempts();
     await checkExhaustedWaOrders();
+    await checkRobocallsForMerchants();
   } catch (err: any) {
     console.error(`${LOG_PREFIX} Check failed:`, err.message);
   }

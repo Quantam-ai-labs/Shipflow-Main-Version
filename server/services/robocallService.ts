@@ -10,7 +10,7 @@ const LOG_PREFIX = "[RobocallService]";
 const ROBOCALL_API_BASE = "https://app.brandedsmspakistan.com/api";
 const RESPONSE_CHECK_INTERVAL_MS = 3 * 60 * 1000;
 const PENDING_CHECK_INTERVAL_MS = 5 * 60 * 1000;
-const MIN_PENDING_AGE_MS = 30 * 60 * 1000;
+const MIN_PENDING_AGE_MS = 12 * 60 * 60 * 1000;
 const FINAL_VOICE_STATUSES = [2, 3, 4, 5, 6, 7, 9, 10];
 const CALL_STATUS_LABELS: Record<number, string> = {
   1: "Initiated", 2: "Congestion", 3: "No Response", 4: "Answered",
@@ -18,22 +18,38 @@ const CALL_STATUS_LABELS: Record<number, string> = {
   9: "Verified", 10: "Deleted", 11: "Queued",
 };
 
+const PKT_OFFSET_MS = 5 * 60 * 60 * 1000;
+
+function getNowInTimezone(timezone?: string): Date {
+  const tz = timezone || "Asia/Karachi";
+  try {
+    const str = new Date().toLocaleString("en-US", { timeZone: tz });
+    return new Date(str);
+  } catch {
+    const utcNow = new Date();
+    return new Date(utcNow.getTime() + PKT_OFFSET_MS);
+  }
+}
+
 export function isWithinCallWindow(startTime: string, endTime: string, timezone?: string): boolean {
-  const now = new Date();
+  const now = getNowInTimezone(timezone);
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
   const [startH, startM] = startTime.split(":").map(Number);
   const [endH, endM] = endTime.split(":").map(Number);
   return currentMinutes >= (startH * 60 + startM) && currentMinutes < (endH * 60 + endM);
 }
 
-export function getNextCallWindowStart(startTime: string, timezone?: string): Date {
+export function getNextWindowStart(startTime: string, timezone?: string): Date {
+  const now = getNowInTimezone(timezone);
   const [startH, startM] = startTime.split(":").map(Number);
-  const now = new Date();
   const target = new Date(now);
   target.setHours(startH, startM, 0, 0);
   if (target <= now) target.setDate(target.getDate() + 1);
-  return target;
+  const offsetMs = target.getTime() - now.getTime();
+  return new Date(Date.now() + offsetMs);
 }
+
+export const getNextCallWindowStart = getNextWindowStart;
 
 export async function safeFetchJson(url: string): Promise<any> {
   try {
@@ -539,20 +555,16 @@ async function checkCallResponses(): Promise<void> {
   }
 }
 
-let pendingInterval: ReturnType<typeof setInterval> | null = null;
 let responseInterval: ReturnType<typeof setInterval> | null = null;
 
 export function startRobocallService() {
-  if (pendingInterval) return;
-  console.log(`${LOG_PREFIX} Started — response check every ${RESPONSE_CHECK_INTERVAL_MS / 60000}min, pending check every ${PENDING_CHECK_INTERVAL_MS / 60000}min`);
+  if (responseInterval) return;
+  console.log(`${LOG_PREFIX} Started — response check every ${RESPONSE_CHECK_INTERVAL_MS / 60000}min (pending checks run via confirmationTimer)`);
   responseInterval = setInterval(checkCallResponses, RESPONSE_CHECK_INTERVAL_MS);
-  pendingInterval = setInterval(checkPendingOrdersForRobocall, PENDING_CHECK_INTERVAL_MS);
   setTimeout(checkCallResponses, 60_000);
-  setTimeout(checkPendingOrdersForRobocall, 2 * 60_000);
 }
 
 export function stopRobocallService() {
-  if (pendingInterval) { clearInterval(pendingInterval); pendingInterval = null; }
   if (responseInterval) { clearInterval(responseInterval); responseInterval = null; }
   console.log(`${LOG_PREFIX} Stopped`);
 }

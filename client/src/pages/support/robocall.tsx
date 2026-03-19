@@ -474,11 +474,10 @@ export default function RoboCallPage() {
         orderNumber,
       });
       const data = await res.json();
-      const sms = data.sms;
-      const callId = data.data?.call_id ? String(data.data.call_id) : (sms?.id ? String(sms.id) : (sms?.call_id ? String(sms.call_id) : (data.call_id ? String(data.call_id) : undefined)));
-      if (data.error || (sms && sms.code !== "000" && sms.code !== "200" && sms.code !== "201")) {
-        toast({ title: "Call Failed", description: data.error || sms?.response || "Unknown error", variant: "destructive" });
+      if (data.error || data.success === false) {
+        toast({ title: "Call Failed", description: data.error || "Unknown error", variant: "destructive" });
       } else {
+        const callId = data.callId || data.data?.call_id || data.sms?.id || undefined;
         toast({ title: "Call Sent", description: `Call initiated to ${phoneTo}${callId ? ` (ID: ${callId})` : ""}` });
         if (callId) pollCallStatus(callId);
         try {
@@ -518,7 +517,7 @@ export default function RoboCallPage() {
       const res = await apiRequest("POST", "/api/robocall/send-bulk", { apiKey, email, calls });
       const data = await res.json();
       if (data.results) {
-        const successCount = data.results.filter((r: any) => !r.error && r.sms?.code === "000").length;
+        const successCount = data.results.filter((r: any) => r.success === true || (!r.error && r.sms?.code === "000")).length;
         toast({ title: "Bulk Calls Sent", description: `${successCount} of ${data.results.length} calls initiated.` });
         try {
           const histRes = await apiRequest("GET", "/api/robocall/history");
