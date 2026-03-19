@@ -16087,19 +16087,17 @@ export async function registerRoutes(
     }
   }
 
-  app.all("/api/robocall/ivr-webhook", async (req: any, res) => {
-    const timestamp = new Date().toISOString();
-    console.log(`\n${"=".repeat(80)}`);
-    console.log(`[IVR-WEBHOOK] ${timestamp} — ${req.method} request received`);
-    console.log(`[IVR-WEBHOOK] Headers:`, JSON.stringify(req.headers, null, 2));
-    console.log(`[IVR-WEBHOOK] Query params:`, JSON.stringify(req.query, null, 2));
-    console.log(`[IVR-WEBHOOK] Body:`, JSON.stringify(req.body, null, 2));
-    console.log(`[IVR-WEBHOOK] Raw body type:`, typeof req.body);
-    if (req.method === "GET") {
-      console.log(`[IVR-WEBHOOK] Full URL:`, req.originalUrl);
+  app.post("/api/robocall/ivr-webhook", async (req: any, res) => {
+    try {
+      const body = req.body || {};
+      console.log(`[IVR-WEBHOOK] POST received:`, JSON.stringify(body));
+      const { processIvrWebhook } = await import("./services/robocallService");
+      const result = await processIvrWebhook(body);
+      res.status(200).json(result);
+    } catch (err: any) {
+      console.error(`[IVR-WEBHOOK] Error processing webhook:`, err.message);
+      res.status(200).json({ success: false, error: "Internal processing error" });
     }
-    console.log(`${"=".repeat(80)}\n`);
-    res.status(200).json({ success: true, received: true });
   });
 
   app.get("/api/robocall/credentials", isAuthenticated, async (req: any, res) => {

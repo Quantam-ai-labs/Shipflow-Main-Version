@@ -423,6 +423,12 @@ async function checkCallResponses(): Promise<void> {
     for (const log of initiatedCalls) {
       if (!log.callId) continue;
 
+      const [freshLog] = await db.select({ status: robocallLogs.status }).from(robocallLogs).where(eq(robocallLogs.id, log.id)).limit(1);
+      if (freshLog && freshLog.status !== "Initiated") {
+        console.log(`${LOG_PREFIX} Call ${log.callId} already processed by webhook (status=${freshLog.status}) — skipping poll`);
+        continue;
+      }
+
       let merchant = merchantCache.get(log.merchantId);
       if (!merchant) {
         merchant = await storage.getMerchant(log.merchantId);
@@ -579,6 +585,141 @@ async function checkCallResponses(): Promise<void> {
   } catch (err: any) {
     console.error(`${LOG_PREFIX} Response check failed:`, err.message);
   }
+}
+
+export async function processIvrWebhook(body: any): Promise<{ success: boolean; action?: string; skipped?: boolean; error?: string }> {
+  const voiceId = String(body.voice_id || "");
+  const dtmfRaw = parseInt(body.dtmf, 10);
+  const voiceStatus = parseInt(body.voice_status, 10);
+  const voiceSec = parseInt(body.voice_sec, 10) || 0;
+  const orderNumber = body.order_number || "";
+  const callerIdRaw = body.caller_id || "";
+  const vsName = body.vs_name || "";
+
+  if (!voiceId) {
+    return { success: false, error: "Missing voice_id" };
+  }
+
+  console.log(`${LOG_PREFIX} [IVR-WEBHOOK] Received: voice_id=${voiceId} dtmf=${dtmfRaw} status=${voiceStatus} (${vsName}) order=${orderNumber}`);
+
+  const [log] = await db.select().from(robocallLogs)
+    .where(eq(robocallLogs.callId, voiceId))
+    .limit(1);
+
+  if (!log) {
+    console.warn(`${LOG_PREFIX} [IVR-WEBHOOK] No robocall log found for callId=${voiceId} — ignoring`);
+    return { success: false, error: "Call not found" };
+  }
+
+  const statusLabel = CALL_STATUS_LABELS[voiceStatus] || vsName || `Status ${voiceStatus}`;
+  const dtmfValue = dtmfRaw > 0 ? dtmfRaw : null;
+
+  const isPendingStatus = log.status === "Initiated" || log.status === "Queued" || log.status === "Sent to SIP";
+  const hasNewDtmf = dtmfValue && !log.dtmf;
+  if (!isPendingStatus && !hasNewDtmf) {
+    console.log(`${LOG_PREFIX} [IVR-WEBHOOK] Call ${voiceId} already processed (status=${log.status}, dtmf=${log.dtmf}) — skipping`);
+    return { success: true, skipped: true };
+  }
+
+  await storage.updateRobocallLog(log.id, { status: statusLabel, dtmf: dtmfValue });
+
+  if (!log.orderId) {
+    console.log(`${LOG_PREFIX} [IVR-WEBHOOK] Call ${voiceId} has no orderId — log updated, no order action`);
+    return { success: true, action: "log_updated" };
+  }
+
+  const [currentOrder] = await db.select({
+    confirmationStatus: orders.confirmationStatus,
+    workflowStatus: orders.workflowStatus,
+    confirmationLocked: orders.confirmationLocked,
+  }).from(orders).where(eq(orders.id, log.orderId)).limit(1);
+
+  const orderAlreadyResolved = !currentOrder ||
+    currentOrder.confirmationStatus !== "pending" ||
+    currentOrder.confirmationLocked ||
+    !["NEW", "PENDING"].includes(currentOrder.workflowStatus || "");
+
+  if (orderAlreadyResolved) {
+    const dtmfNote = dtmfValue ? ` — DTMF ${dtmfValue} (${dtmfValue === 1 ? "confirm" : dtmfValue === 2 ? "cancel" : "other"})` : "";
+    await logConfirmationEvent({
+      merchantId: log.merchantId,
+      orderId: log.orderId,
+      eventType: "CALL_RESPONSE",
+      channel: "robocall",
+      responseClassification: statusLabel,
+      note: `[Webhook] Call ${statusLabel}${dtmfNote} (order already ${currentOrder?.confirmationStatus || "resolved"}, duration: ${voiceSec}s)`,
+      apiResponse: { voiceStatus, voiceSec, dtmf: dtmfValue, source: "ivr_webhook" },
+    });
+    return { success: true, action: "order_already_resolved" };
+  }
+
+  if (voiceStatus === 4 && dtmfValue) {
+    const action = dtmfValue === 1 ? "confirm" : dtmfValue === 2 ? "cancel" : null;
+    if (action) {
+      await processConfirmationResponse({
+        merchantId: log.merchantId,
+        orderId: log.orderId,
+        source: "robocall",
+        action,
+        payload: { callId: log.callId, dtmf: dtmfValue, voiceStatus, voiceSec, source: "ivr_webhook" },
+      });
+      console.log(`${LOG_PREFIX} [IVR-WEBHOOK] DTMF ${dtmfValue} for #${log.orderNumber} → ${action} (real-time)`);
+      return { success: true, action };
+    }
+  }
+
+  if (FINAL_VOICE_STATUSES.includes(voiceStatus)) {
+    await logConfirmationEvent({
+      merchantId: log.merchantId,
+      orderId: log.orderId,
+      eventType: "CALL_RESPONSE",
+      channel: "robocall",
+      responseClassification: statusLabel,
+      note: `[Webhook] Call ${statusLabel} — no DTMF input (attempt ${log.attemptNumber || 1}, duration: ${voiceSec}s)`,
+      apiResponse: { voiceStatus, voiceSec, dtmf: dtmfValue, source: "ivr_webhook" },
+    });
+
+    const merchant = await storage.getMerchant(log.merchantId);
+    if (merchant) {
+      const maxAttempts = merchant.robocallMaxAttempts ?? 3;
+      const { totalAttempts } = await getOrderCallStats(log.merchantId, log.orderId);
+
+      if (totalAttempts >= maxAttempts) {
+        await transitionOrder({
+          merchantId: log.merchantId,
+          orderId: log.orderId,
+          toStatus: "HOLD",
+          action: "robocall_exhausted",
+          actorType: "system",
+          reason: `All ${maxAttempts} robocall attempts exhausted — last result: ${statusLabel} (webhook)`,
+        });
+
+        await logConfirmationEvent({
+          merchantId: log.merchantId,
+          orderId: log.orderId,
+          eventType: "ROBO_EXHAUSTED",
+          channel: "robocall",
+          note: `[Webhook] All ${maxAttempts} robocall attempts exhausted — moved to Hold`,
+        });
+
+        await createNotification({
+          merchantId: log.merchantId,
+          type: "robocall_exhausted",
+          title: `All robocall attempts exhausted for #${log.orderNumber}`,
+          message: `${maxAttempts} call attempts failed (last: ${statusLabel}). Order moved to Hold for manual resolution.`,
+          orderId: log.orderId,
+          orderNumber: log.orderNumber || undefined,
+        });
+
+        console.log(`${LOG_PREFIX} [IVR-WEBHOOK] All ${maxAttempts} attempts exhausted for #${log.orderNumber} — moved to HOLD`);
+        return { success: true, action: "exhausted_hold" };
+      }
+    }
+
+    return { success: true, action: "no_dtmf" };
+  }
+
+  return { success: true, action: "non_final_status" };
 }
 
 let responseInterval: ReturnType<typeof setInterval> | null = null;

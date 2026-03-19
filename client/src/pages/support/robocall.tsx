@@ -38,6 +38,8 @@ import {
   Save,
   Unplug,
   PlugZap,
+  Copy,
+  Link,
 } from "lucide-react";
 
 interface CallRecord {
@@ -179,6 +181,36 @@ function TimeWindowSettings() {
               <Label htmlFor="defaultVoiceId">Default Voice ID</Label>
               <Input id="defaultVoiceId" value={defaultVoiceId} onChange={e => setDefaultVoiceId(e.target.value)} className="w-24" data-testid="input-default-voice-id" />
             </div>
+          </div>
+        </div>
+
+        <div>
+          <p className="text-sm font-medium mb-2 flex items-center gap-2">
+            <Link className="w-4 h-4" />
+            IVR Webhook URL
+          </p>
+          <p className="text-sm text-muted-foreground mb-3">
+            Paste this URL into your BrandedSMS portal under Voice Management → IVR Payload Settings. Add entries for DTMF 1 and DTMF 2 pointing to this URL.
+          </p>
+          <div className="flex items-center gap-2">
+            <Input
+              readOnly
+              value={`${window.location.origin}/api/robocall/ivr-webhook`}
+              className="font-mono text-xs flex-1"
+              data-testid="input-ivr-webhook-url"
+              onClick={(e) => (e.target as HTMLInputElement).select()}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              data-testid="button-copy-webhook-url"
+              onClick={() => {
+                navigator.clipboard.writeText(`${window.location.origin}/api/robocall/ivr-webhook`);
+                toast({ title: "Copied", description: "Webhook URL copied to clipboard." });
+              }}
+            >
+              <Copy className="w-4 h-4" />
+            </Button>
           </div>
         </div>
 
