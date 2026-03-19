@@ -588,7 +588,7 @@ async function checkCallResponses(): Promise<void> {
 }
 
 export async function processIvrWebhook(body: any): Promise<{ success: boolean; action?: string; skipped?: boolean; error?: string }> {
-  const voiceId = String(body.voice_id || "");
+  const voiceId = String(body.voice_id || "").trim();
   const dtmfRaw = parseInt(body.dtmf, 10);
   const voiceStatus = parseInt(body.voice_status, 10);
   const voiceSec = parseInt(body.voice_sec, 10) || 0;
@@ -596,8 +596,14 @@ export async function processIvrWebhook(body: any): Promise<{ success: boolean; 
   const callerIdRaw = body.caller_id || "";
   const vsName = body.vs_name || "";
 
-  if (!voiceId) {
-    return { success: false, error: "Missing voice_id" };
+  if (!voiceId || !/^\d+$/.test(voiceId)) {
+    return { success: false, error: "Invalid or missing voice_id" };
+  }
+  if (isNaN(voiceStatus) || voiceStatus < 1 || voiceStatus > 15) {
+    return { success: false, error: "Invalid voice_status" };
+  }
+  if (!isNaN(dtmfRaw) && (dtmfRaw < 0 || dtmfRaw > 9)) {
+    return { success: false, error: "Invalid dtmf value" };
   }
 
   console.log(`${LOG_PREFIX} [IVR-WEBHOOK] Received: voice_id=${voiceId} dtmf=${dtmfRaw} status=${voiceStatus} (${vsName}) order=${orderNumber}`);
