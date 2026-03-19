@@ -1,5 +1,5 @@
 import { db, withRetry } from "../db";
-import { orders, orderConfirmationLog, notifications, robocallQueue } from "@shared/schema";
+import { orders, orderConfirmationLog, notifications } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 import { transitionOrder } from "./workflowTransition";
 import { writeBackConfirmationTags } from "./shopifyWriteBack";
@@ -316,27 +316,16 @@ export async function processConfirmationResponse(params: {
     }
 
     if (action === "confirm" || action === "cancel") {
+      await db.update(orders).set({ waNextAttemptAt: null }).where(eq(orders.id, orderId));
+
       if (source === "whatsapp") {
-        const cancelledRobo = await db.update(robocallQueue).set({
-          waResponseArrived: true,
-          status: "skipped",
-          completedAt: now,
-        }).where(and(
-          eq(robocallQueue.orderId, orderId),
-          eq(robocallQueue.status, "waiting"),
-        ));
-
-        await db.update(orders).set({ waNextAttemptAt: null }).where(eq(orders.id, orderId));
-
         await logConfirmationEvent({
           merchantId, orderId,
-          eventType: "ROBO_QUEUE_CANCELLED",
+          eventType: "CHANNELS_CANCELLED",
           channel: "whatsapp",
-          note: `RoboCall queue cancelled — WhatsApp ${action} response received`,
+          note: `Automation channels cancelled — WhatsApp ${action} response received`,
         });
       } else if (source === "robocall") {
-        await db.update(orders).set({ waNextAttemptAt: null }).where(eq(orders.id, orderId));
-
         await logConfirmationEvent({
           merchantId, orderId,
           eventType: "WA_REMINDERS_CANCELLED",
@@ -344,17 +333,6 @@ export async function processConfirmationResponse(params: {
           note: `WhatsApp reminders cancelled — RoboCall ${action} response received`,
         });
       } else if (source === "manual") {
-        await db.update(robocallQueue).set({
-          waResponseArrived: true,
-          status: "skipped",
-          completedAt: now,
-        }).where(and(
-          eq(robocallQueue.orderId, orderId),
-          eq(robocallQueue.status, "waiting"),
-        ));
-
-        await db.update(orders).set({ waNextAttemptAt: null }).where(eq(orders.id, orderId));
-
         await logConfirmationEvent({
           merchantId, orderId,
           eventType: "CHANNELS_CANCELLED",

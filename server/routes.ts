@@ -43,7 +43,6 @@ import {
   agentChatSessions,
   pushSubscriptions,
   notifications,
-  robocallQueue,
   orderConfirmationLog,
   robocallLogs,
   shipmentBatches,
@@ -7853,7 +7852,7 @@ export async function registerRoutes(
       if (!Array.isArray(orderIds) || orderIds.length === 0) return res.status(400).json({ error: "No orders selected" });
 
       const { formatPhoneForWhatsApp } = await import("./utils/integrations/whatsapp/sender");
-      const { sendRobocallDirect } = await import("./services/robocallQueue");
+      const { sendCallDirect } = await import("./services/robocallService");
 
       const [merchant] = await db.select().from(merchants).where(eq(merchants.id, merchantId)).limit(1);
       if (!merchant) return res.status(404).json({ error: "Merchant not found" });
@@ -7871,7 +7870,7 @@ export async function registerRoutes(
         const formattedPhone = formatPhoneForWhatsApp(order.customerPhone);
         if (!formattedPhone) { skipped++; continue; }
 
-        const result = await sendRobocallDirect({
+        const result = await sendCallDirect({
           merchantId,
           merchant: { robocallEmail: merchant.robocallEmail!, robocallApiKey: merchant.robocallApiKey!, robocallVoiceId: merchant.robocallVoiceId, name: merchant.name },
           orderId: order.id,
@@ -7879,6 +7878,7 @@ export async function registerRoutes(
           phone: formattedPhone,
           amount: order.totalAmount || "0",
           brandName: merchant.name || undefined,
+          source: "manual",
         });
 
         if (result.success) {
@@ -16397,58 +16397,6 @@ export async function registerRoutes(
       await db.update(notifications).set({ read: true })
         .where(and(eq(notifications.merchantId, merchantId), eq(notifications.read, false)));
       res.json({ success: true });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // ─── Robocall Queue API ─────────────────────────────────────────────────
-
-  app.get("/api/robocall/queue", isAuthenticated, async (req: any, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-      const entries = await db.select().from(robocallQueue)
-        .where(eq(robocallQueue.merchantId, merchantId))
-        .orderBy(desc(robocallQueue.queuedAt))
-        .limit(200);
-      res.json({ entries });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.post("/api/robocall/queue/:id/retry", isAuthenticated, async (req: any, res) => {
-    try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
-      const { id } = req.params;
-      const [entry] = await db.select().from(robocallQueue)
-        .where(and(eq(robocallQueue.id, id), eq(robocallQueue.merchantId, merchantId)))
-        .limit(1);
-      if (!entry) return res.status(404).json({ error: "Queue entry not found" });
-      if (!["failed", "exhausted"].includes(entry.status)) {
-        return res.status(400).json({ error: `Cannot retry entry with status "${entry.status}"` });
-      }
-      await db.update(robocallQueue).set({
-        status: "waiting",
-        scheduledAt: new Date(),
-        nextRetryAt: null,
-        callId: null,
-        completedAt: null,
-        lastCallResult: null,
-        attemptCount: 0,
-      }).where(eq(robocallQueue.id, id));
-
-      const { logConfirmationEvent } = await import("./services/confirmationEngine");
-      await logConfirmationEvent({
-        merchantId,
-        orderId: entry.orderId,
-        eventType: "CALL_QUEUED",
-        note: `RoboCall manually retried — re-queued for sending`,
-      });
-
-      res.json({ success: true, message: "Queue entry retried" });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

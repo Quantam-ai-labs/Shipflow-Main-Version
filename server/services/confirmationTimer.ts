@@ -1,87 +1,14 @@
 import { db, withRetry } from "../db";
-import { orders, merchants, robocallQueue } from "@shared/schema";
+import { orders, merchants } from "@shared/schema";
 import { eq, and, lt, or, isNull, isNotNull, lte } from "drizzle-orm";
 import { logConfirmationEvent, createNotification } from "./confirmationEngine";
 import { formatPhoneForWhatsApp } from "../utils/integrations/whatsapp/sender";
 import { sendWhatsAppApiRequest } from "../utils/integrations/whatsapp/sender";
+import { triggerRobocallForOrder } from "./robocallService";
 
 const LOG_PREFIX = "[ConfirmationTimer]";
 const CHECK_INTERVAL_MS = 5 * 60 * 1000;
 
-function isWithinCallWindow(startTime: string, endTime: string): boolean {
-  const now = new Date();
-  const hours = now.getHours();
-  const minutes = now.getMinutes();
-  const currentMinutes = hours * 60 + minutes;
-
-  const [startH, startM] = startTime.split(":").map(Number);
-  const [endH, endM] = endTime.split(":").map(Number);
-  const startMinutes = startH * 60 + startM;
-  const endMinutes = endH * 60 + endM;
-
-  return currentMinutes >= startMinutes && currentMinutes < endMinutes;
-}
-
-function getNextCallWindowStart(startTime: string): Date {
-  const [startH, startM] = startTime.split(":").map(Number);
-  const now = new Date();
-  const target = new Date(now);
-  target.setHours(startH, startM, 0, 0);
-
-  if (target <= now) {
-    target.setDate(target.getDate() + 1);
-  }
-  return target;
-}
-
-async function queueOrderForRobocall(order: any, merchant: any, reason: string) {
-  if (merchant?.robocallDisconnected) {
-    console.log(`[ConfirmationTimer] RoboCall disconnected for merchant, skipping queue for order #${order.orderNumber}`);
-    return;
-  }
-  if (!merchant?.robocallEmail || !merchant?.robocallApiKey || !order.customerPhone) return;
-
-  const formattedPhone = formatPhoneForWhatsApp(order.customerPhone);
-  if (!formattedPhone) return;
-
-  const startTime = merchant.robocallStartTime || "10:00";
-  const endTime = merchant.robocallEndTime || "20:00";
-  const withinWindow = isWithinCallWindow(startTime, endTime);
-  const scheduledAt = withinWindow ? new Date() : getNextCallWindowStart(startTime);
-
-  const existingQueue = await db.select({ id: robocallQueue.id }).from(robocallQueue)
-    .where(and(
-      eq(robocallQueue.orderId, order.id),
-      eq(robocallQueue.status, "waiting"),
-    )).limit(1);
-
-  if (existingQueue.length > 0) return;
-
-  await db.insert(robocallQueue).values({
-    merchantId: order.merchantId,
-    orderId: order.id,
-    orderNumber: order.orderNumber,
-    customerName: order.customerName,
-    phone: formattedPhone,
-    amount: order.totalAmount,
-    brandName: merchant.name,
-    status: "waiting",
-    reason: withinWindow ? reason : `${reason} — scheduled for next call window (${startTime})`,
-    scheduledAt,
-    attemptCount: 0,
-    maxAttempts: merchant.robocallMaxAttempts ?? 3,
-    waResponseArrived: false,
-  });
-
-  await logConfirmationEvent({
-    merchantId: order.merchantId,
-    orderId: order.id,
-    eventType: "CALL_QUEUED",
-    note: withinWindow
-      ? `RoboCall queued — ${reason}`
-      : `RoboCall queued — scheduled for ${scheduledAt.toISOString()} (${reason})`,
-  });
-}
 
 function getTemplateForAttempt(merchant: any, attemptNumber: number): string | null {
   if (attemptNumber === 1) return merchant.waConfirmTemplate1 || null;
@@ -220,7 +147,7 @@ async function checkWaReattempts() {
             note: `No WhatsApp response after ${maxAttempts} attempts — moved to Confirmation Pending`,
           });
 
-          await queueOrderForRobocall(order, merchant, `WA exhausted (${maxAttempts} attempts) — escalating to RoboCall`);
+          await triggerRobocallForOrder(order, merchant, `WA exhausted (${maxAttempts} attempts) — escalating to RoboCall`);
           console.log(`${LOG_PREFIX} Order #${order.orderNumber} → Confirmation Pending (WA attempts exhausted)`);
           continue;
         }
@@ -258,7 +185,7 @@ async function checkWaReattempts() {
             note: `Number not on WhatsApp (detected on attempt ${nextAttemptNumber}) — bypassing to RoboCall`,
           });
 
-          await queueOrderForRobocall(order, merchant, "WhatsApp unavailable — direct bypass to RoboCall");
+          await triggerRobocallForOrder(order, merchant, "WhatsApp unavailable — direct bypass to RoboCall");
           continue;
         }
 
@@ -282,7 +209,7 @@ async function checkWaReattempts() {
             note: `WhatsApp permanent error on attempt ${nextAttemptNumber} — escalating to RoboCall immediately`,
           });
 
-          await queueOrderForRobocall(order, merchant, "WhatsApp template/parameter error — immediate bypass to RoboCall");
+          await triggerRobocallForOrder(order, merchant, "WhatsApp template/parameter error — immediate bypass to RoboCall");
           console.log(`${LOG_PREFIX} Order #${order.orderNumber}: WA permanent error on attempt ${nextAttemptNumber}, bypassed to RoboCall`);
           continue;
         }
@@ -389,7 +316,7 @@ async function checkExhaustedWaOrders() {
           note: `No WhatsApp response after ${maxAttempts} attempts — moved to Confirmation Pending`,
         });
 
-        await queueOrderForRobocall(order, merchant, `WA exhausted (${maxAttempts} attempts) — escalating to RoboCall`);
+        await triggerRobocallForOrder(order, merchant, `WA exhausted (${maxAttempts} attempts) — escalating to RoboCall`);
         console.log(`${LOG_PREFIX} Order #${order.orderNumber} → Confirmation Pending (WA exhausted, no nextAttemptAt)`);
       } catch (err: any) {
         console.error(`${LOG_PREFIX} Failed to process exhausted WA order ${order.id}:`, err.message);

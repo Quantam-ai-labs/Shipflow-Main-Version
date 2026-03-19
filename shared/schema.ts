@@ -2153,6 +2153,9 @@ export const robocallLogs = pgTable("robocall_logs", {
   voiceId: varchar("voice_id", { length: 10 }),
   brandName: varchar("brand_name", { length: 200 }),
   orderNumber: varchar("order_number", { length: 100 }),
+  orderId: varchar("order_id"),
+  source: varchar("source", { length: 20 }).default("manual"),
+  attemptNumber: integer("attempt_number").default(1),
   status: varchar("status", { length: 50 }).notNull().default("Initiated"),
   dtmf: integer("dtmf"),
   error: text("error"),
@@ -2161,6 +2164,7 @@ export const robocallLogs = pgTable("robocall_logs", {
 }, (table) => [
   index("idx_robocall_logs_merchant").on(table.merchantId),
   index("idx_robocall_logs_call_id").on(table.callId),
+  index("idx_robocall_logs_order_id").on(table.orderId),
 ]);
 
 export const insertRobocallLogSchema = createInsertSchema(robocallLogs).omit({ id: true, createdAt: true, updatedAt: true });
