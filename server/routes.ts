@@ -16087,6 +16087,21 @@ export async function registerRoutes(
     }
   }
 
+  app.all("/api/robocall/ivr-webhook", async (req: any, res) => {
+    const timestamp = new Date().toISOString();
+    console.log(`\n${"=".repeat(80)}`);
+    console.log(`[IVR-WEBHOOK] ${timestamp} — ${req.method} request received`);
+    console.log(`[IVR-WEBHOOK] Headers:`, JSON.stringify(req.headers, null, 2));
+    console.log(`[IVR-WEBHOOK] Query params:`, JSON.stringify(req.query, null, 2));
+    console.log(`[IVR-WEBHOOK] Body:`, JSON.stringify(req.body, null, 2));
+    console.log(`[IVR-WEBHOOK] Raw body type:`, typeof req.body);
+    if (req.method === "GET") {
+      console.log(`[IVR-WEBHOOK] Full URL:`, req.originalUrl);
+    }
+    console.log(`${"=".repeat(80)}\n`);
+    res.status(200).json({ success: true, received: true });
+  });
+
   app.get("/api/robocall/credentials", isAuthenticated, async (req: any, res) => {
     try {
       const merchantId = await requireMerchant(req, res);
