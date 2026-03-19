@@ -2209,8 +2209,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateWaMessageStatusByWaId(waMessageId: string, newStatus: string): Promise<boolean> {
-    const STATUS_RANK: Record<string, number> = { sent: 1, delivered: 2, read: 3, failed: 0 };
-    if (!(newStatus in STATUS_RANK)) return false;
+    const STATUS_RANK: Record<string, number> = { sent: 1, delivered: 2, read: 3 };
+    if (newStatus !== "failed" && !(newStatus in STATUS_RANK)) return false;
 
     const [msg] = await db.select({ id: waMessages.id, status: waMessages.status })
       .from(waMessages)
@@ -2218,13 +2218,13 @@ export class DatabaseStorage implements IStorage {
       .limit(1);
     if (!msg) return false;
 
-    const currentRank = STATUS_RANK[msg.status ?? ""] ?? 0;
-    const newRank = STATUS_RANK[newStatus];
+    if (msg.status === "failed") return false;
 
     if (newStatus === "failed") {
       if (msg.status === "delivered" || msg.status === "read") return false;
     } else {
-      if (newRank <= currentRank) return false;
+      const currentRank = STATUS_RANK[msg.status ?? ""] ?? 0;
+      if (STATUS_RANK[newStatus] <= currentRank) return false;
     }
 
     await db.update(waMessages).set({ status: newStatus }).where(eq(waMessages.id, msg.id));
