@@ -264,6 +264,7 @@ export interface IStorage {
   getWaMessages(conversationId: string): Promise<WaMessage[]>;
   createWaMessage(data: { conversationId: string; direction: string; senderName?: string | null; text?: string | null; waMessageId?: string | null; status?: string | null; messageType?: string | null; mediaUrl?: string | null; mimeType?: string | null; fileName?: string | null; reactionEmoji?: string | null; referenceMessageId?: string | null }): Promise<WaMessage>;
   updateWaMessageStatus(messageId: string, status: string, waMessageId?: string): Promise<void>;
+  updateWaMessageStatusByWaId(waMessageId: string, newStatus: string): Promise<boolean>;
   updateConversationLabel(merchantId: string, convId: string, label: string | null): Promise<void>;
   updateConversationAssignment(merchantId: string, convId: string, userId: string | null, userName: string | null): Promise<void>;
   markConversationRead(merchantId: string, convId: string): Promise<void>;
@@ -2205,6 +2206,29 @@ export class DatabaseStorage implements IStorage {
     const updates: Record<string, any> = { status };
     if (waMessageId) updates.waMessageId = waMessageId;
     await db.update(waMessages).set(updates).where(eq(waMessages.id, messageId));
+  }
+
+  async updateWaMessageStatusByWaId(waMessageId: string, newStatus: string): Promise<boolean> {
+    const STATUS_RANK: Record<string, number> = { sent: 1, delivered: 2, read: 3, failed: 0 };
+    if (!(newStatus in STATUS_RANK)) return false;
+
+    const [msg] = await db.select({ id: waMessages.id, status: waMessages.status })
+      .from(waMessages)
+      .where(eq(waMessages.waMessageId, waMessageId))
+      .limit(1);
+    if (!msg) return false;
+
+    const currentRank = STATUS_RANK[msg.status ?? ""] ?? 0;
+    const newRank = STATUS_RANK[newStatus];
+
+    if (newStatus === "failed") {
+      if (msg.status === "delivered" || msg.status === "read") return false;
+    } else {
+      if (newRank <= currentRank) return false;
+    }
+
+    await db.update(waMessages).set({ status: newStatus }).where(eq(waMessages.id, msg.id));
+    return true;
   }
 
   async getWaLabels(merchantId: string): Promise<WaLabel[]> {

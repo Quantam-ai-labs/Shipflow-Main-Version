@@ -22,7 +22,7 @@ import {
   X, ChevronDown, Image as ImageIcon, Mic, FileText,
   MapPin, Users, Reply, Download, Play, Pause, Volume2,
   ExternalLink, File as FileIcon, Video, Plus, Pencil, Settings2,
-  Paperclip, Camera, FileUp, StopCircle, Loader2, ClipboardList,
+  Paperclip, Camera, FileUp, StopCircle, Loader2, ClipboardList, AlertCircle,
 } from "lucide-react";
 import {
   Dialog,
@@ -122,6 +122,7 @@ function StatusTicks({ status }: { status: string | null }) {
   if (status === "read") return <CheckCheck className="w-3.5 h-3.5 text-blue-400 inline-block ml-1" />;
   if (status === "delivered") return <CheckCheck className="w-3.5 h-3.5 text-muted-foreground inline-block ml-1" />;
   if (status === "sent") return <Check className="w-3.5 h-3.5 text-muted-foreground inline-block ml-1" />;
+  if (status === "failed") return <AlertCircle className="w-3.5 h-3.5 text-red-500 inline-block ml-1" />;
   return null;
 }
 

@@ -5601,6 +5601,22 @@ export async function registerRoutes(
               console.error(`      ❌ CRITICAL: Message save failed! phone=${normalizedPhone}, msg="${messageBody.slice(0, 100)}", waId=${waMessageId}, error=${err.message}`);
             }
           }
+
+          const statuses = value?.statuses ?? [];
+          for (const statusUpdate of statuses) {
+            const waId = statusUpdate.id;
+            const newStatus = statusUpdate.status;
+            if (!waId || !newStatus) continue;
+            if (!["sent", "delivered", "read", "failed"].includes(newStatus)) continue;
+            try {
+              const updated = await storage.updateWaMessageStatusByWaId(waId, newStatus);
+              if (updated) {
+                console.log(`[WA Status] ${waId} → ${newStatus}`);
+              }
+            } catch (err: any) {
+              console.error(`[WA Status] Failed to update ${waId}: ${err.message}`);
+            }
+          }
         }
       }
 
@@ -5847,6 +5863,22 @@ export async function registerRoutes(
               sendAgentChatPushNotifications(matchedOrder.merchantId, contactName ?? fromPhone, messageBody, convId).catch(() => {});
             } catch (err: any) {
               console.error(`[WhatsApp Webhook:${merchantId}] ${requestId} - ❌ CRITICAL: Message save failed! phone=${fromPhone}, msg="${messageBody.slice(0, 100)}", waId=${waMessageId}, error=${err.message}`);
+            }
+          }
+
+          const statuses = value?.statuses ?? [];
+          for (const statusUpdate of statuses) {
+            const waId = statusUpdate.id;
+            const newStatus = statusUpdate.status;
+            if (!waId || !newStatus) continue;
+            if (!["sent", "delivered", "read", "failed"].includes(newStatus)) continue;
+            try {
+              const updated = await storage.updateWaMessageStatusByWaId(waId, newStatus);
+              if (updated) {
+                console.log(`[WA Status] ${waId} → ${newStatus}`);
+              }
+            } catch (err: any) {
+              console.error(`[WA Status] Failed to update ${waId}: ${err.message}`);
             }
           }
         }

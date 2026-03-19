@@ -545,6 +545,7 @@ export const waMessages = pgTable("wa_messages", {
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   index("idx_wa_messages_conversation").on(table.conversationId),
+  index("idx_wa_messages_wa_message_id").on(table.waMessageId),
 ]);
 
 export const insertWaMessageSchema = createInsertSchema(waMessages).omit({ id: true, createdAt: true });
