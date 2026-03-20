@@ -3,8 +3,11 @@ import {
   format,
   subDays,
   subMonths,
+  subWeeks,
   startOfMonth,
   endOfMonth,
+  startOfWeek,
+  endOfWeek,
   startOfQuarter,
   startOfYear,
 } from "date-fns";
@@ -38,26 +41,29 @@ const presets = [
     getValue: () => ({ from: subDays(new Date(), 1), to: subDays(new Date(), 1) }),
   },
   {
-    label: "Last 7 days",
-    getValue: () => ({ from: subDays(new Date(), 7), to: new Date() }),
+    label: "Last Week",
+    getValue: () => ({
+      from: startOfWeek(subWeeks(new Date(), 1), { weekStartsOn: 1 }),
+      to: endOfWeek(subWeeks(new Date(), 1), { weekStartsOn: 1 }),
+    }),
   },
   {
-    label: "Last 30 days",
-    getValue: () => ({ from: subDays(new Date(), 30), to: new Date() }),
-  },
-  {
-    label: "Month to date",
+    label: "This Month",
     getValue: () => ({
       from: startOfMonth(new Date()),
       to: new Date(),
     }),
   },
   {
-    label: "Last month",
+    label: "Last Month",
     getValue: () => ({
       from: startOfMonth(subMonths(new Date(), 1)),
       to: endOfMonth(subMonths(new Date(), 1)),
     }),
+  },
+  {
+    label: "Last 30 days",
+    getValue: () => ({ from: subDays(new Date(), 30), to: new Date() }),
   },
   {
     label: "Quarter to date",
@@ -75,7 +81,7 @@ const presets = [
   },
 ];
 
-function getPresetLabel(dateRange: DateRange | undefined): string | null {
+export function getPresetLabel(dateRange: DateRange | undefined): string | null {
   if (!dateRange?.from || !dateRange?.to) return null;
   const from = dateRange.from;
   const to = dateRange.to;
@@ -89,6 +95,10 @@ function getPresetLabel(dateRange: DateRange | undefined): string | null {
     }
   }
   return null;
+}
+
+export function getPresetByLabel(label: string) {
+  return presets.find((p) => p.label === label) || null;
 }
 
 export function DateRangePicker({
@@ -144,11 +154,15 @@ export function DateRangePicker({
     setView("presets");
   };
 
-  const triggerLabel = dateRange?.from
-    ? dateRange.to
-      ? `${format(dateRange.from, "dd-MM-yyyy")} - ${format(dateRange.to, "dd-MM-yyyy")}`
-      : format(dateRange.from, "dd-MM-yyyy")
-    : "All dates";
+  const triggerLabel = (() => {
+    if (!dateRange?.from) return "All dates";
+    const presetMatch = getPresetLabel(dateRange);
+    if (presetMatch) return presetMatch;
+    if (dateRange.to) {
+      return `${format(dateRange.from, "dd-MM-yyyy")} – ${format(dateRange.to, "dd-MM-yyyy")}`;
+    }
+    return format(dateRange.from, "dd-MM-yyyy");
+  })();
 
   return (
     <Popover open={open} onOpenChange={handleOpen}>

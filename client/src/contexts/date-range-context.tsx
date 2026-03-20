@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useMemo, useEffect, useCallback } from "react";
 import { DateRange } from "react-day-picker";
-import { dateRangeToParams } from "@/components/date-range-picker";
+import { dateRangeToParams, getPresetByLabel, getPresetLabel } from "@/components/date-range-picker";
 import { format, parse, startOfMonth } from "date-fns";
 
 const STORAGE_KEY = "shipflow-date-range";
@@ -22,6 +22,12 @@ function serializeRange(range: DateRange | undefined): string {
 
 function deserializeRange(stored: string): DateRange | undefined {
   if (!stored) return undefined;
+  if (stored.startsWith("preset:")) {
+    const label = stored.slice(7);
+    const preset = getPresetByLabel(label);
+    if (preset) return preset.getValue();
+    return { from: startOfMonth(new Date()), to: new Date() };
+  }
   if (stored.startsWith("custom:")) {
     const parts = stored.split(":");
     if (parts.length >= 3) {
@@ -48,7 +54,12 @@ export function DateRangeProvider({ children }: { children: React.ReactNode }) {
     setDateRangeState(range);
     try {
       if (range?.from) {
-        localStorage.setItem(STORAGE_KEY, serializeRange(range));
+        const presetName = getPresetLabel(range);
+        if (presetName) {
+          localStorage.setItem(STORAGE_KEY, `preset:${presetName}`);
+        } else {
+          localStorage.setItem(STORAGE_KEY, serializeRange(range));
+        }
       } else {
         localStorage.removeItem(STORAGE_KEY);
       }
