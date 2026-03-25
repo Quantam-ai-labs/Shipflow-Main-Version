@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
+import { CreateOrderDialog } from "@/components/create-order-dialog";
 import { AIInsightsBanner } from "@/components/ai-insights-banner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -469,6 +470,8 @@ export default function Pipeline() {
   const [pendingReasonFilter, setPendingReasonFilter] = useState("all");
   const [shipmentSubFilter, setShipmentSubFilter] = useState("all");
   const { dateRange, dateParams } = useDateRange();
+
+  const [createOrderOpen, setCreateOrderOpen] = useState(false);
 
   const [cancelModal, setCancelModal] = useState<{ open: boolean; orderIds: string[]; fromTab?: string }>({ open: false, orderIds: [] });
   const [cancelReason, setCancelReason] = useState("");
@@ -1349,6 +1352,13 @@ export default function Pipeline() {
 
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           {total > 0 && <span className="font-medium">{total.toLocaleString()} orders</span>}
+          <Button
+            size="sm"
+            onClick={() => setCreateOrderOpen(true)}
+            data-testid="button-create-order-open"
+          >
+            + Create Order
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -3431,6 +3441,8 @@ export default function Pipeline() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <CreateOrderDialog open={createOrderOpen} onClose={() => setCreateOrderOpen(false)} />
     </div>
   );
 }
