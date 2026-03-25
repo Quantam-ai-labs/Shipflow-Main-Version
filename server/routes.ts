@@ -16900,7 +16900,21 @@ export async function registerRoutes(
       }
 
       const completeData = await completeRes.json();
-      const order = completeData.order;
+      const completedDraft = completeData.draft_order;
+      const realOrderId = completedDraft?.order_id;
+
+      if (!realOrderId) {
+        console.error(`[CreateDraft] No order_id in complete response:`, JSON.stringify(completeData));
+        return res.status(400).json({ error: "Order was created but order ID not returned by Shopify" });
+      }
+
+      // Fetch the real order to get its name (#1049 etc.)
+      const orderRes = await fetch(
+        `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/orders/${realOrderId}.json`,
+        { headers: { "X-Shopify-Access-Token": accessToken } }
+      );
+      const orderData = await orderRes.json();
+      const order = orderData.order;
 
       console.log(`[CreateDraft] Order created: ${order.name} (${order.id}) for merchant ${merchantId}`);
       res.json({
