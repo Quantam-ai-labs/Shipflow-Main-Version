@@ -7438,7 +7438,7 @@ export async function registerRoutes(
     try {
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
-      const { title, description, triggerStatus, delayMinutes, messageText, templateName } = req.body;
+      const { title, description, triggerStatus, delayMinutes, messageText, templateName, excludeDraftOrders } = req.body;
       if (!title || typeof title !== "string" || title.trim().length === 0) {
         return res.status(400).json({ error: "title is required" });
       }
@@ -7454,6 +7454,7 @@ export async function registerRoutes(
         messageText: messageText ? String(messageText).trim() : null,
         templateName: templateName && templateName !== "none" ? String(templateName).trim() : null,
         isActive: true,
+        excludeDraftOrders: typeof excludeDraftOrders === "boolean" ? excludeDraftOrders : false,
       });
       res.json(automation);
     } catch (error: any) {
@@ -7465,7 +7466,7 @@ export async function registerRoutes(
     try {
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
-      const { title, description, triggerStatus, delayMinutes, messageText, templateName, isActive } = req.body;
+      const { title, description, triggerStatus, delayMinutes, messageText, templateName, isActive, excludeDraftOrders } = req.body;
       const updateData: Record<string, any> = {};
       if (title !== undefined) updateData.title = String(title).trim();
       if (description !== undefined) updateData.description = description ? String(description).trim() : null;
@@ -7474,6 +7475,7 @@ export async function registerRoutes(
       if (messageText !== undefined) updateData.messageText = messageText ? String(messageText).trim() : null;
       if (templateName !== undefined) updateData.templateName = templateName && templateName !== "none" ? String(templateName).trim() : null;
       if (isActive !== undefined) updateData.isActive = Boolean(isActive);
+      if (excludeDraftOrders !== undefined) updateData.excludeDraftOrders = Boolean(excludeDraftOrders);
       const updated = await storage.updateWaAutomation(merchantId, req.params.id, updateData);
       if (!updated) return res.status(404).json({ error: "Automation not found" });
       res.json(updated);

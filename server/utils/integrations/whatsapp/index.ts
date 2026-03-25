@@ -1,5 +1,5 @@
 import { db } from "../../../db";
-import { orderChangeLog, merchants } from "@shared/schema";
+import { orderChangeLog, merchants, orders } from "@shared/schema";
 import { eq, and, sql } from "drizzle-orm";
 import type { WaAutomation } from "@shared/schema";
 import { storage } from "../../../storage";
@@ -125,7 +125,32 @@ export async function sendOrderStatusWhatsApp(
     let anyNotOnWA = false;
     let lastError: string | undefined;
 
+    let draftAutoConfirmed = false;
+
     for (const automation of automations) {
+      if (automation.excludeDraftOrders && params.orderSource === "shopify_draft_order") {
+        console.log(`${LOG_PREFIX} Skip automation "${automation.title}" for order ${params.orderNumber}: draft order excluded`);
+        if (!draftAutoConfirmed) {
+          draftAutoConfirmed = true;
+          try {
+            const existingOrder = await storage.getOrderById(params.merchantId, params.orderId);
+            if (existingOrder && existingOrder.confirmationStatus !== "confirmed") {
+              const existingTags = Array.isArray(existingOrder.tags) ? existingOrder.tags : [];
+              const newTags = existingTags.includes("draft_confirmed") ? existingTags : [...existingTags, "draft_confirmed"];
+              await storage.updateOrder(params.merchantId, params.orderId, {
+                confirmationStatus: "confirmed",
+                confirmationSource: "draft",
+                tags: newTags,
+              });
+              console.log(`${LOG_PREFIX} Auto-confirmed draft order ${params.orderNumber} (excluded from automation "${automation.title}")`);
+            }
+          } catch (confirmErr: any) {
+            console.warn(`${LOG_PREFIX} Failed to auto-confirm draft order ${params.orderNumber}:`, confirmErr.message);
+          }
+        }
+        continue;
+      }
+
       const fireAutomation = async () => {
         try {
           const dedupeKey = `wa:${params.orderId}:${params.toStatus}:${automation.id}`;

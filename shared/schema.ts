@@ -445,6 +445,7 @@ export const waAutomations = pgTable("wa_automations", {
   messageText: text("message_text"),
   templateName: varchar("template_name", { length: 255 }),
   isActive: boolean("is_active").default(true).notNull(),
+  excludeDraftOrders: boolean("exclude_draft_orders").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [

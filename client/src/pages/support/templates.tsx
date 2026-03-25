@@ -45,6 +45,7 @@ interface WaAutomation {
   messageText: string | null;
   templateName: string | null;
   isActive: boolean;
+  excludeDraftOrders: boolean;
   createdAt: string;
 }
 
@@ -530,6 +531,7 @@ function AutomationDialog({
   onSave: (data: {
     title: string; description: string; triggerStatus: string;
     delayMinutes: number; messageText: string; templateName: string;
+    excludeDraftOrders: boolean;
   }) => void;
   isSaving: boolean;
   templates: WaMetaTemplate[];
@@ -541,6 +543,7 @@ function AutomationDialog({
   const [delayMinutes, setDelayMinutes] = useState(0);
   const [messageText, setMessageText] = useState("");
   const [templateName, setTemplateName] = useState("none");
+  const [excludeDraftOrders, setExcludeDraftOrders] = useState(false);
 
   useEffect(() => {
     if (editData) {
@@ -550,15 +553,17 @@ function AutomationDialog({
       setDelayMinutes(editData.delayMinutes);
       setMessageText(editData.messageText ?? "");
       setTemplateName(editData.templateName ?? "none");
+      setExcludeDraftOrders(editData.excludeDraftOrders ?? false);
     } else {
       setTitle(""); setDescription(""); setTriggerStatus("NEW");
       setDelayMinutes(0); setMessageText(""); setTemplateName("none");
+      setExcludeDraftOrders(false);
     }
   }, [editData, open]);
 
   const handleSave = () => {
     if (!title.trim() || !triggerStatus) return;
-    onSave({ title: title.trim(), description: description.trim(), triggerStatus, delayMinutes, messageText: messageText.trim(), templateName });
+    onSave({ title: title.trim(), description: description.trim(), triggerStatus, delayMinutes, messageText: messageText.trim(), templateName, excludeDraftOrders });
   };
 
   return (
@@ -651,6 +656,21 @@ function AutomationDialog({
             </Select>
           </div>
 
+          <div className="flex items-start justify-between gap-4 rounded-md border p-3 bg-muted/30">
+            <div className="space-y-0.5">
+              <Label htmlFor="auto-exclude-draft" className="text-sm font-medium">Exclude Draft Orders</Label>
+              <p className="text-xs text-muted-foreground">
+                Draft orders created by agents are already confirmed — enabling this skips the automation for draft-sourced orders.
+              </p>
+            </div>
+            <Switch
+              id="auto-exclude-draft"
+              checked={excludeDraftOrders}
+              onCheckedChange={setExcludeDraftOrders}
+              data-testid="switch-exclude-draft-orders"
+            />
+          </div>
+
           <div className="flex justify-end pt-2">
             <Button
               onClick={handleSave}
@@ -715,6 +735,11 @@ function AutomationCard({
         )}
         {vars.length > 0 && (
           <p><span className="text-foreground">Variables:</span> {vars.join(", ")}</p>
+        )}
+        {automation.excludeDraftOrders && (
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-500/50 text-amber-600 dark:text-amber-400 mt-1" data-testid={`badge-exclude-draft-${automation.id}`}>
+            Excludes Drafts
+          </Badge>
         )}
       </div>
 

@@ -300,6 +300,31 @@ export class WebhookHandler {
         resultOrderId = created.id;
         console.log(`[Webhook] Created new order ${transformedOrder.orderNumber} (${topic})`);
 
+        const isDraftOrder = created.orderSource === "shopify_draft_order";
+
+        if (isDraftOrder) {
+          const newAutomations = await storage.getWaAutomationsByTrigger(merchantId, 'NEW');
+          const allExcludeDraft = newAutomations.length > 0 && newAutomations.every(a => a.excludeDraftOrders);
+          if (allExcludeDraft) {
+            console.log(`[Webhook] Order #${created.orderNumber}: draft order — all NEW automations exclude drafts, auto-confirming`);
+            const existingTags = Array.isArray(created.tags) ? created.tags : [];
+            await storage.updateOrder(merchantId, created.id, {
+              confirmationStatus: "confirmed",
+              confirmationSource: "draft",
+              tags: [...existingTags, "draft_confirmed"],
+            });
+            await logConfirmationEvent({
+              merchantId,
+              orderId: created.id,
+              eventType: "CONFIRMED",
+              channel: "system",
+              note: "Draft order auto-confirmed — excluded from all NEW automations",
+            }).catch(() => {});
+            await storage.updateWebhookEventStatus(webhookEvent.id, 'processed');
+            return { success: true, action: 'created', orderId: created.id };
+          }
+        }
+
         initializeOrderConfirmation({
           merchantId,
           orderId: created.id,
@@ -321,6 +346,7 @@ export class WebhookHandler {
             itemSummary: created.itemSummary,
             lineItems: Array.isArray(created.lineItems) ? (created.lineItems as any[]) : null,
             shopDomain: (created as any).shopDomain || null,
+            orderSource: created.orderSource,
           });
 
           if (waResult?.notOnWhatsApp) {
