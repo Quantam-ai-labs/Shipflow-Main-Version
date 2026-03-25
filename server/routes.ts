@@ -5957,16 +5957,8 @@ export async function registerRoutes(
           }
         }
       } else if (result.locked) {
-        const lockedMerchant = await storage.getMerchant(merchantId);
-        if (lockedMerchant?.aiAutoReplyEnabled) {
-          const conv = await storage.getConversationByPhone(merchantId, normalizedPhone);
-          handleAiAutoReply(merchantId, normalizedPhone, messageBody, conv?.id || null, orderId, orderNumber).catch((e: any) =>
-            console.error(`${LOG_PREFIX_WA_AI} Error in locked-order AI reply:`, e.message)
-          );
-        } else {
-          await sendWhatsAppReply(normalizedPhone,
-            `Order #${orderNumber} has already been processed and shipped. For any changes, please contact our support team.`, replyPhoneId, replyAccessToken);
-        }
+        await sendWhatsAppReply(normalizedPhone,
+          `Order #${orderNumber} has already been confirmed and is being processed. For any changes, please contact our support team.`, replyPhoneId, replyAccessToken);
       } else {
         console.log(`        Failed: ${result.error}`);
         await sendWhatsAppReply(normalizedPhone,
