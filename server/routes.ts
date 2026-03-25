@@ -16888,7 +16888,7 @@ export async function registerRoutes(
 
       const completeUrl = `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/draft_orders/${draftId}/complete.json?payment_pending=${!markAsPaid}`;
       const completeRes = await fetch(completeUrl, {
-        method: "POST",
+        method: "PUT",
         headers: { "X-Shopify-Access-Token": accessToken, "Content-Type": "application/json" },
         body: JSON.stringify({}),
       });
