@@ -16752,5 +16752,164 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/shopify/customers/search", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const q = (req.query.q as string || "").trim();
+      if (!q) return res.json([]);
+      const store = await storage.getShopifyStore(merchantId);
+      if (!store?.accessToken || !store.shopDomain || !store.isConnected) {
+        return res.status(400).json({ error: "Shopify not connected" });
+      }
+      const accessToken = decryptToken(store.accessToken);
+      const url = `https://${store.shopDomain}/admin/api/2025-01/customers/search.json?query=${encodeURIComponent(q)}&limit=10&fields=id,first_name,last_name,phone,email,default_address`;
+      const response = await fetch(url, {
+        headers: { "X-Shopify-Access-Token": accessToken, "Content-Type": "application/json" },
+      });
+      if (!response.ok) {
+        const errText = await response.text();
+        return res.status(400).json({ error: `Shopify error: ${errText}` });
+      }
+      const data = await response.json();
+      const customers = (data.customers || []).map((c: any) => ({
+        id: String(c.id),
+        name: `${c.first_name || ""} ${c.last_name || ""}`.trim(),
+        phone: c.phone || null,
+        email: c.email || null,
+        address: c.default_address ? {
+          address1: c.default_address.address1 || "",
+          city: c.default_address.city || "",
+          province: c.default_address.province || null,
+          zip: c.default_address.zip || null,
+          name: c.default_address.name || "",
+        } : null,
+      }));
+      res.json(customers);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/orders/create-draft", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const { customer, lineItems, discountType, discountValue, shippingAmount, markAsPaid, note, tags } = req.body;
+
+      if (!lineItems || !Array.isArray(lineItems) || lineItems.length === 0) {
+        return res.status(400).json({ error: "At least one line item is required" });
+      }
+
+      const store = await storage.getShopifyStore(merchantId);
+      if (!store?.accessToken || !store.shopDomain || !store.isConnected) {
+        return res.status(400).json({ error: "Shopify not connected" });
+      }
+      const accessToken = decryptToken(store.accessToken);
+      const shopDomain = store.shopDomain;
+      const SHOPIFY_API_VERSION = "2025-01";
+
+      const draftLineItems = lineItems.map((item: any) => ({
+        variant_id: parseInt(item.shopifyVariantId),
+        quantity: parseInt(item.quantity) || 1,
+        price: String(parseFloat(item.price).toFixed(2)),
+      }));
+
+      const draftOrderBody: any = {
+        line_items: draftLineItems,
+        note: note || "",
+        tags: Array.isArray(tags) ? tags.join(", ") : (tags || ""),
+        send_invoice: false,
+        currency: "PKR",
+      };
+
+      if (customer?.shopifyCustomerId) {
+        draftOrderBody.customer = { id: parseInt(customer.shopifyCustomerId) };
+      }
+
+      const customerName = (customer?.name || "").trim();
+      const nameParts = customerName.split(" ");
+      if (customer?.address || customer?.phone || customerName) {
+        draftOrderBody.shipping_address = {
+          first_name: nameParts[0] || customerName || "Customer",
+          last_name: nameParts.slice(1).join(" ") || "",
+          phone: customer?.phone || "",
+          address1: customer?.address || "",
+          city: customer?.city || "",
+          country: "Pakistan",
+          country_code: "PK",
+          province: customer?.province || null,
+          zip: customer?.zip || null,
+        };
+      }
+
+      const discVal = parseFloat(discountValue || "0");
+      if (discountType && discVal > 0) {
+        draftOrderBody.applied_discount = {
+          value_type: discountType === "percentage" ? "percentage" : "fixed_amount",
+          value: String(discVal),
+          amount: String(discVal),
+          title: "Discount",
+        };
+      }
+
+      const shipAmt = parseFloat(shippingAmount || "0");
+      if (shipAmt > 0) {
+        draftOrderBody.shipping_line = {
+          price: String(shipAmt.toFixed(2)),
+          title: "Delivery",
+        };
+      }
+
+      const createUrl = `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/draft_orders.json`;
+      const createRes = await fetch(createUrl, {
+        method: "POST",
+        headers: { "X-Shopify-Access-Token": accessToken, "Content-Type": "application/json" },
+        body: JSON.stringify({ draft_order: draftOrderBody }),
+      });
+
+      if (!createRes.ok) {
+        const errText = await createRes.text();
+        console.error(`[CreateDraft] Shopify draft order creation failed: ${createRes.status} ${errText}`);
+        let parsedErr: any = {};
+        try { parsedErr = JSON.parse(errText); } catch {}
+        const errMsg = parsedErr?.errors ? JSON.stringify(parsedErr.errors) : errText;
+        return res.status(400).json({ error: `Shopify error: ${errMsg}` });
+      }
+
+      const createData = await createRes.json();
+      const draft = createData.draft_order;
+      const invoiceUrl: string | null = draft.invoice_url || null;
+      const draftId = draft.id;
+
+      const completeUrl = `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/draft_orders/${draftId}/complete.json`;
+      const completeRes = await fetch(completeUrl, {
+        method: "PUT",
+        headers: { "X-Shopify-Access-Token": accessToken, "Content-Type": "application/json" },
+        body: JSON.stringify({ payment_pending: !markAsPaid }),
+      });
+
+      if (!completeRes.ok) {
+        const errText = await completeRes.text();
+        console.error(`[CreateDraft] Shopify draft complete failed: ${completeRes.status} ${errText}`);
+        return res.status(400).json({ error: `Failed to complete order: ${errText}` });
+      }
+
+      const completeData = await completeRes.json();
+      const order = completeData.order;
+
+      console.log(`[CreateDraft] Order created: ${order.name} (${order.id}) for merchant ${merchantId}`);
+      res.json({
+        orderNumber: order.name,
+        shopifyOrderId: String(order.id),
+        invoiceUrl,
+      });
+    } catch (error: any) {
+      console.error("[CreateDraft] Error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   return httpServer;
 }

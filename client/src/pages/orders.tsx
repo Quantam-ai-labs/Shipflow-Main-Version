@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import { CreateOrderDialog } from "@/components/create-order-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -131,6 +132,7 @@ export default function Orders() {
   const [pageSize] = useState(200);
   
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [createOrderOpen, setCreateOrderOpen] = useState(false);
   const courierSyncPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -485,6 +487,15 @@ export default function Orders() {
             Sync Orders
           </Button>
 
+          <Button
+            size="sm"
+            onClick={() => setCreateOrderOpen(true)}
+            className="gap-2"
+            data-testid="button-create-order-open"
+          >
+            + Create Order
+          </Button>
+
           {syncStatus?.autoSyncEnabled && (
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground" data-testid="status-auto-sync">
               <span className="relative flex h-2 w-2">
@@ -834,6 +845,8 @@ export default function Orders() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <CreateOrderDialog open={createOrderOpen} onClose={() => setCreateOrderOpen(false)} />
     </div>
   );
 }
