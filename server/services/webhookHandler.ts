@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { storage } from '../storage';
 import { shopifyService } from './shopify';
-import { isRecentWriteBack } from './shopifyWriteBack';
+import { isRecentWriteBack, writeBackAddTag } from './shopifyWriteBack';
 import { sendOrderStatusWhatsApp } from '../utils/integrations/whatsapp';
 import { initializeOrderConfirmation, logConfirmationEvent } from './confirmationEngine';
 import { db } from '../db';
@@ -312,8 +312,12 @@ export class WebhookHandler {
             await storage.updateOrder(merchantId, created.id, {
               confirmationStatus: "confirmed",
               confirmationSource: "draft",
-              tags: [...existingTags, "draft_confirmed"],
+              tags: [...existingTags, "Auto-Confirmed"],
             });
+            if (created.shopifyOrderId) {
+              writeBackAddTag(merchantId, created.shopifyOrderId, "Auto-Confirmed")
+                .catch(err => console.warn(`[Webhook] Failed to write Auto-Confirmed tag to Shopify for ${created.orderNumber}:`, err.message));
+            }
             await logConfirmationEvent({
               merchantId,
               orderId: created.id,

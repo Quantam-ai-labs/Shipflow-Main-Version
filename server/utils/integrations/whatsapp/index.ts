@@ -136,12 +136,17 @@ export async function sendOrderStatusWhatsApp(
             const existingOrder = await storage.getOrderById(params.merchantId, params.orderId);
             if (existingOrder && existingOrder.confirmationStatus !== "confirmed") {
               const existingTags = Array.isArray(existingOrder.tags) ? existingOrder.tags : [];
-              const newTags = existingTags.includes("draft_confirmed") ? existingTags : [...existingTags, "draft_confirmed"];
+              const newTags = existingTags.includes("Auto-Confirmed") ? existingTags : [...existingTags, "Auto-Confirmed"];
               await storage.updateOrder(params.merchantId, params.orderId, {
                 confirmationStatus: "confirmed",
                 confirmationSource: "draft",
                 tags: newTags,
               });
+              if (existingOrder.shopifyOrderId) {
+                import("../../../services/shopifyWriteBack").then(({ writeBackAddTag }) =>
+                  writeBackAddTag(params.merchantId, existingOrder.shopifyOrderId!, "Auto-Confirmed")
+                ).catch(err => console.warn(`${LOG_PREFIX} Failed to write Auto-Confirmed tag to Shopify for ${params.orderNumber}:`, err.message));
+              }
               console.log(`${LOG_PREFIX} Auto-confirmed draft order ${params.orderNumber} (excluded from automation "${automation.title}")`);
               if (existingOrder.workflowStatus === "PENDING") {
                 import("../../../services/workflowTransition").then(({ transitionOrder }) =>
