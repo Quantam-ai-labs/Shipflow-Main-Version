@@ -143,9 +143,8 @@ export async function sendOrderStatusWhatsApp(
                 tags: newTags,
               });
               console.log(`${LOG_PREFIX} Auto-confirmed draft order ${params.orderNumber} (excluded from automation "${automation.title}")`);
-              const TRANSITIONABLE = ["NEW", "PENDING", "HOLD"];
-              if (TRANSITIONABLE.includes(existingOrder.workflowStatus)) {
-                import("../../services/workflowTransition").then(({ transitionOrder }) =>
+              if (existingOrder.workflowStatus === "PENDING") {
+                import("../../../services/workflowTransition").then(({ transitionOrder }) =>
                   transitionOrder({
                     merchantId: params.merchantId,
                     orderId: params.orderId,
