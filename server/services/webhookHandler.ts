@@ -304,39 +304,35 @@ export class WebhookHandler {
         const isDraftOrder = created.orderSource === "shopify_draft_order";
 
         if (isDraftOrder) {
-          const newAutomations = await storage.getWaAutomationsByTrigger(merchantId, 'NEW');
-          const allExcludeDraft = newAutomations.length > 0 && newAutomations.every(a => a.excludeDraftOrders);
-          if (allExcludeDraft) {
-            console.log(`[Webhook] Order #${created.orderNumber}: draft order — all NEW automations exclude drafts, auto-confirming`);
-            const existingTags = Array.isArray(created.tags) ? created.tags : [];
-            await storage.updateOrder(merchantId, created.id, {
-              confirmationStatus: "confirmed",
-              confirmationSource: "draft",
-              tags: [...existingTags, "Auto-Confirmed"],
-            });
-            if (created.shopifyOrderId) {
-              writeBackAddTag(merchantId, created.shopifyOrderId, "Auto-Confirmed")
-                .catch(err => console.warn(`[Webhook] Failed to write Auto-Confirmed tag to Shopify for ${created.orderNumber}:`, err.message));
-            }
-            await logConfirmationEvent({
-              merchantId,
-              orderId: created.id,
-              eventType: "CONFIRMED",
-              channel: "system",
-              note: "Draft order auto-confirmed — excluded from all NEW automations",
-            }).catch(() => {});
-            transitionOrder({
-              merchantId,
-              orderId: created.id,
-              toStatus: "READY_TO_SHIP",
-              action: "draft_confirm",
-              actorType: "system",
-              actorName: "System",
-              reason: "Draft order auto-confirmed — excluded from all NEW automations",
-            }).catch(err => console.warn(`[Webhook] Failed to transition draft order ${created.orderNumber} to READY_TO_SHIP:`, err.message));
-            await storage.updateWebhookEventStatus(webhookEvent.id, 'processed');
-            return { success: true, action: 'created', orderId: created.id };
+          console.log(`[Webhook] Order ${created.orderNumber}: manually created draft order — auto-confirming to READY_TO_SHIP`);
+          const existingTags = Array.isArray(created.tags) ? created.tags : [];
+          await storage.updateOrder(merchantId, created.id, {
+            confirmationStatus: "confirmed",
+            confirmationSource: "draft",
+            tags: [...existingTags, "Auto-Confirmed"],
+          });
+          if (created.shopifyOrderId) {
+            writeBackAddTag(merchantId, created.shopifyOrderId, "Auto-Confirmed")
+              .catch(err => console.warn(`[Webhook] Failed to write Auto-Confirmed tag to Shopify for ${created.orderNumber}:`, err.message));
           }
+          await logConfirmationEvent({
+            merchantId,
+            orderId: created.id,
+            eventType: "CONFIRMED",
+            channel: "system",
+            note: "Draft order auto-confirmed — manually created order",
+          }).catch(() => {});
+          transitionOrder({
+            merchantId,
+            orderId: created.id,
+            toStatus: "READY_TO_SHIP",
+            action: "draft_confirm",
+            actorType: "system",
+            actorName: "System",
+            reason: "Draft order auto-confirmed — manually created order",
+          }).catch(err => console.warn(`[Webhook] Failed to transition draft order ${created.orderNumber} to READY_TO_SHIP:`, err.message));
+          await storage.updateWebhookEventStatus(webhookEvent.id, 'processed');
+          return { success: true, action: 'created', orderId: created.id };
         }
 
         initializeOrderConfirmation({
