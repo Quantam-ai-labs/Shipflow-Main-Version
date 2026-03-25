@@ -374,9 +374,12 @@ export function CreateOrderDialog({ open, onClose }: CreateOrderDialogProps) {
     },
     onSuccess: (data) => {
       if (data.error) {
+        const isShopifyConn = /not connected|shopify/i.test(data.error);
+        if (isShopifyConn) setShopifyError(data.error);
         toast({ title: "Failed to create order", description: data.error, variant: "destructive" });
         return;
       }
+      setShopifyError(null);
       setResult(data);
     },
     onError: (err: any) => {
