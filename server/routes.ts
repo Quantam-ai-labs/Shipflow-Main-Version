@@ -16846,10 +16846,13 @@ export async function registerRoutes(
 
       const discVal = parseFloat(discountValue || "0");
       if (discountType && discVal > 0) {
+        const subtotal = draftLineItems.reduce((sum: number, item: any) => sum + parseFloat(item.price) * item.quantity, 0);
+        const isPercentage = discountType === "percentage";
+        const discountAmount = isPercentage ? (subtotal * discVal) / 100 : discVal;
         draftOrderBody.applied_discount = {
-          value_type: discountType === "percentage" ? "percentage" : "fixed_amount",
+          value_type: isPercentage ? "percentage" : "fixed_amount",
           value: String(discVal),
-          amount: String(discVal),
+          amount: discountAmount.toFixed(2),
           title: "Discount",
         };
       }
