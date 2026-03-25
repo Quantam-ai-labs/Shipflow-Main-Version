@@ -1234,7 +1234,12 @@ export class ShopifyService {
       utmTerm: utmParams.utmTerm,
       fbClickId: utmParams.fbClickId,
       rawShopifyData: shopifyOrder as unknown as Record<string, any>,
-      orderSource: shopifyOrder.source_name || null,
+      orderSource: (() => {
+        const sourceName = shopifyOrder.source_name;
+        const appId = (shopifyOrder as any).app_id != null ? String((shopifyOrder as any).app_id) : null;
+        if (sourceName && appId && sourceName === appId) return "shopify_draft_order";
+        return sourceName || null;
+      })(),
       shopDomain: (shopifyOrder as any)._shopDomain || null,
     };
   }
