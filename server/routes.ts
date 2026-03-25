@@ -16886,11 +16886,11 @@ export async function registerRoutes(
       const invoiceUrl: string | null = draft.invoice_url || null;
       const draftId = draft.id;
 
-      const completeUrl = `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/draft_orders/${draftId}/complete.json`;
+      const completeUrl = `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/draft_orders/${draftId}/complete.json?payment_pending=${!markAsPaid}`;
       const completeRes = await fetch(completeUrl, {
-        method: "PUT",
+        method: "POST",
         headers: { "X-Shopify-Access-Token": accessToken, "Content-Type": "application/json" },
-        body: JSON.stringify({ payment_pending: !markAsPaid }),
+        body: JSON.stringify({}),
       });
 
       if (!completeRes.ok) {
