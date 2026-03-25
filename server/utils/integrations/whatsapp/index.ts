@@ -208,6 +208,7 @@ export async function sendOrderStatusWhatsApp(
           const effectiveTemplateName = tmplName || "custom_message";
 
           let templateParams: string[] | null = null;
+          let metaTemplateBody: string | null = null;
           if (tmplName) {
             const [metaTemplate] = await db.select({ body: waMetaTemplates.body })
               .from(waMetaTemplates)
@@ -218,6 +219,7 @@ export async function sendOrderStatusWhatsApp(
               .limit(1);
 
             if (metaTemplate?.body) {
+              metaTemplateBody = metaTemplate.body;
               templateParams = buildTemplateParamsFromBody(metaTemplate.body, vars);
             }
             if (!templateParams && automation.messageText) {
@@ -258,19 +260,29 @@ export async function sendOrderStatusWhatsApp(
             anySent = true;
             console.log(`${LOG_PREFIX} Automation "${automation.title}" sent successfully for order ${params.orderNumber}`);
             try {
+              const displayText = (() => {
+                if (msgText) return msgText;
+                if (metaTemplateBody) {
+                  if (templateParams && templateParams.length > 0) {
+                    return metaTemplateBody.replace(/\{\{(\d+)\}\}/g, (_, n) => templateParams[parseInt(n) - 1] ?? `{{${n}}}`);
+                  }
+                  return interpolateMessageBody(metaTemplateBody, vars);
+                }
+                return `[Template: ${effectiveTemplateName}]`;
+              })();
               const conv = await storage.upsertConversation({
                 merchantId: params.merchantId,
                 contactPhone: formattedPhone,
                 contactName: params.customerName,
                 orderId: params.orderId,
                 orderNumber: params.orderNumber,
-                lastMessage: (msgText || effectiveTemplateName).slice(0, 200),
+                lastMessage: displayText.slice(0, 200),
               });
               await storage.createWaMessage({
                 conversationId: conv.id,
                 direction: "outbound",
                 senderName: "System",
-                text: msgText || `[Template: ${effectiveTemplateName}]`,
+                text: displayText,
                 waMessageId: result.messageId,
                 status: "sent",
               });
