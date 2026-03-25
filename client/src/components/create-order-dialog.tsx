@@ -316,6 +316,7 @@ export function CreateOrderDialog({ open, onClose }: CreateOrderDialogProps) {
   const [debouncedCustomerSearch, setDebouncedCustomerSearch] = useState("");
   const [customerDropdownOpen, setCustomerDropdownOpen] = useState(false);
   const [showNewCustomer, setShowNewCustomer] = useState(false);
+  const [shopifyError, setShopifyError] = useState<string | null>(null);
 
   const [discountExpanded, setDiscountExpanded] = useState(false);
   const [discountType, setDiscountType] = useState<"fixed" | "percentage">("fixed");
@@ -354,7 +355,14 @@ export function CreateOrderDialog({ open, onClose }: CreateOrderDialogProps) {
     queryFn: async () => {
       if (!debouncedCustomerSearch) return [];
       const res = await fetch(`/api/shopify/customers/search?q=${encodeURIComponent(debouncedCustomerSearch)}`, { credentials: "include" });
-      return res.json();
+      const data = await res.json();
+      if (!res.ok) {
+        const msg = data?.error || "Shopify not connected";
+        setShopifyError(msg);
+        return [];
+      }
+      setShopifyError(null);
+      return Array.isArray(data) ? data : [];
     },
     enabled: !!debouncedCustomerSearch,
   });
@@ -391,6 +399,7 @@ export function CreateOrderDialog({ open, onClose }: CreateOrderDialogProps) {
     setTags("");
     setTagInput("");
     setResult(null);
+    setShopifyError(null);
   }
 
   function handleClose() {
@@ -696,6 +705,11 @@ export function CreateOrderDialog({ open, onClose }: CreateOrderDialogProps) {
                     </h3>
                   </div>
                   <div className="p-4 flex flex-col gap-3">
+                    {shopifyError && (
+                      <div className="rounded-md bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 px-3 py-2 text-xs text-amber-700 dark:text-amber-300" data-testid="status-shopify-error">
+                        ⚠ {shopifyError} — customer search unavailable
+                      </div>
+                    )}
                     <div className="relative" ref={customerDropdownRef}>
                       <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
