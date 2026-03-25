@@ -88,6 +88,22 @@ interface CreateOrderResult {
   invoiceUrl: string | null;
 }
 
+interface OrderSnapshot {
+  lineItems: LineItem[];
+  customer: CustomerForm;
+  subtotal: number;
+  discountAmount: number;
+  discountType: "fixed" | "percentage";
+  discountValue: string;
+  discountExpanded: boolean;
+  shipAmt: number;
+  total: number;
+  markAsPaid: boolean;
+  note: string;
+  tags: string;
+  createdAt: string;
+}
+
 interface ProductPickerProps {
   open: boolean;
   onClose: () => void;
@@ -332,8 +348,10 @@ export function CreateOrderDialog({ open, onClose }: CreateOrderDialogProps) {
 
   const [productPickerOpen, setProductPickerOpen] = useState(false);
   const [result, setResult] = useState<CreateOrderResult | null>(null);
+  const [orderSnapshot, setOrderSnapshot] = useState<OrderSnapshot | null>(null);
 
   const customerDropdownRef = useRef<HTMLDivElement>(null);
+  const pendingSnapshotRef = useRef<OrderSnapshot | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedCustomerSearch(customerSearch), 400);
@@ -380,6 +398,10 @@ export function CreateOrderDialog({ open, onClose }: CreateOrderDialogProps) {
         return;
       }
       setShopifyError(null);
+      if (pendingSnapshotRef.current) {
+        setOrderSnapshot(pendingSnapshotRef.current);
+        pendingSnapshotRef.current = null;
+      }
       setResult(data);
     },
     onError: (err: any) => {
@@ -402,6 +424,7 @@ export function CreateOrderDialog({ open, onClose }: CreateOrderDialogProps) {
     setTags("");
     setTagInput("");
     setResult(null);
+    setOrderSnapshot(null);
     setShopifyError(null);
   }
 
@@ -481,34 +504,173 @@ export function CreateOrderDialog({ open, onClose }: CreateOrderDialogProps) {
       note,
       tags,
     };
+    pendingSnapshotRef.current = {
+      lineItems,
+      customer,
+      subtotal,
+      discountAmount,
+      discountType,
+      discountValue,
+      discountExpanded,
+      shipAmt,
+      total,
+      markAsPaid,
+      note,
+      tags,
+      createdAt: new Date().toLocaleString("en-PK", { dateStyle: "medium", timeStyle: "short" }),
+    };
     createMutation.mutate(payload);
   }
 
-  if (result) {
+  if (result && orderSnapshot) {
+    const snap = orderSnapshot;
+    const tagList = snap.tags ? snap.tags.split(",").map((t) => t.trim()).filter(Boolean) : [];
     return (
       <Sheet open={open} onOpenChange={(v) => !v && handleClose()}>
-        <SheetContent side="right" className="w-full sm:max-w-2xl flex flex-col items-center justify-center gap-6 text-center">
-          <div className="w-16 h-16 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center">
-            <CheckCircle className="w-8 h-8 text-green-600 dark:text-green-400" />
+        <SheetContent side="right" className="w-full sm:max-w-2xl flex flex-col p-0 overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center shrink-0">
+                <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Order Confirmed</p>
+                <p className="text-lg font-bold font-mono leading-tight">{result.orderNumber}</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <Badge variant={snap.markAsPaid ? "default" : "secondary"} className="text-xs">
+                {snap.markAsPaid ? "Paid" : "COD"}
+              </Badge>
+              <p className="text-xs text-muted-foreground mt-1">{snap.createdAt}</p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-xl font-semibold mb-1">Order Created!</h2>
-            <p className="text-muted-foreground text-sm">Order <span className="font-mono font-medium text-foreground">{result.orderNumber}</span> has been created in Shopify and is processing into your pipeline.</p>
+
+          {/* Scrollable body */}
+          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+
+            {/* Customer */}
+            {(snap.customer.name || snap.customer.phone || snap.customer.address) && (
+              <div className="rounded-lg border bg-muted/20 p-4 space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Customer</p>
+                {snap.customer.name && <p className="font-medium text-sm">{snap.customer.name}</p>}
+                {snap.customer.phone && <p className="text-sm text-muted-foreground">{snap.customer.phone}</p>}
+                {(snap.customer.address || snap.customer.city) && (
+                  <p className="text-sm text-muted-foreground">
+                    {[snap.customer.address, snap.customer.city].filter(Boolean).join(", ")}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Products */}
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Products</p>
+              <div className="space-y-3">
+                {snap.lineItems.map((item, i) => (
+                  <div key={i} className="flex items-center gap-3" data-testid={`invoice-item-${i}`}>
+                    {item.imageUrl ? (
+                      <img src={item.imageUrl} alt={item.productTitle} className="w-12 h-12 rounded-md object-cover border shrink-0" />
+                    ) : (
+                      <div className="w-12 h-12 rounded-md border bg-muted flex items-center justify-center shrink-0">
+                        <Package className="w-5 h-5 text-muted-foreground" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{item.productTitle}</p>
+                      {item.variantTitle && item.variantTitle !== "Default Title" && (
+                        <p className="text-xs text-muted-foreground">{item.variantTitle}</p>
+                      )}
+                      <p className="text-xs text-muted-foreground">Qty: {item.quantity} × PKR {item.price.toLocaleString()}</p>
+                    </div>
+                    <p className="text-sm font-semibold shrink-0">PKR {(item.price * item.quantity).toLocaleString()}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Divider */}
+            <div className="border-t" />
+
+            {/* Charges */}
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Payment Summary</p>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Subtotal ({snap.lineItems.reduce((s, i) => s + i.quantity, 0)} items)</span>
+                <span>PKR {snap.subtotal.toLocaleString()}</span>
+              </div>
+              {snap.discountExpanded && snap.discountAmount > 0 && (
+                <div className="flex justify-between text-sm text-green-600 dark:text-green-400">
+                  <span>
+                    Discount
+                    {snap.discountType === "percentage" ? ` (${snap.discountValue}%)` : ""}
+                  </span>
+                  <span>− PKR {snap.discountAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                </div>
+              )}
+              {snap.shipAmt > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Shipping</span>
+                  <span>PKR {snap.shipAmt.toLocaleString()}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-base font-bold border-t pt-2 mt-1">
+                <span>Total</span>
+                <span>PKR {snap.total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Payment Method</span>
+                <span className={snap.markAsPaid ? "text-green-600 dark:text-green-400 font-medium" : "font-medium"}>
+                  {snap.markAsPaid ? "Paid" : "Cash on Delivery (COD)"}
+                </span>
+              </div>
+            </div>
+
+            {/* Notes */}
+            {snap.note && (
+              <>
+                <div className="border-t" />
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Note</p>
+                  <p className="text-sm text-muted-foreground">{snap.note}</p>
+                </div>
+              </>
+            )}
+
+            {/* Tags */}
+            {tagList.length > 0 && (
+              <>
+                <div className="border-t" />
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Tags</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {tagList.map((tag) => (
+                      <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
-          <div className="flex flex-col gap-3 w-full max-w-xs">
+
+          {/* Footer actions */}
+          <div className="px-6 py-4 border-t shrink-0 flex flex-col gap-2">
             {result.invoiceUrl && (
-              <Button asChild variant="outline" className="w-full gap-2">
-                <a href={result.invoiceUrl} target="_blank" rel="noopener noreferrer" data-testid="link-view-invoice">
-                  <ExternalLink className="w-4 h-4" /> View Invoice
+              <Button asChild variant="outline" className="w-full gap-2" data-testid="link-view-invoice">
+                <a href={result.invoiceUrl} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="w-4 h-4" /> View Shopify Invoice
                 </a>
               </Button>
             )}
-            <Button onClick={reset} className="w-full" data-testid="button-create-another">
-              Create Another Order
-            </Button>
-            <Button variant="ghost" onClick={handleClose} className="w-full">
-              Close
-            </Button>
+            <div className="flex gap-2">
+              <Button onClick={reset} className="flex-1" data-testid="button-create-another">
+                Create Another Order
+              </Button>
+              <Button variant="outline" onClick={handleClose} className="flex-1">
+                Close
+              </Button>
+            </div>
           </div>
         </SheetContent>
       </Sheet>
