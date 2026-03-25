@@ -143,6 +143,20 @@ export async function sendOrderStatusWhatsApp(
                 tags: newTags,
               });
               console.log(`${LOG_PREFIX} Auto-confirmed draft order ${params.orderNumber} (excluded from automation "${automation.title}")`);
+              const TRANSITIONABLE = ["NEW", "PENDING", "HOLD"];
+              if (TRANSITIONABLE.includes(existingOrder.workflowStatus)) {
+                import("../../services/workflowTransition").then(({ transitionOrder }) =>
+                  transitionOrder({
+                    merchantId: params.merchantId,
+                    orderId: params.orderId,
+                    toStatus: "READY_TO_SHIP",
+                    action: "draft_confirm",
+                    actorType: "system",
+                    actorName: "System",
+                    reason: `Draft order auto-confirmed — excluded from automation "${automation.title}"`,
+                  })
+                ).catch(err => console.warn(`${LOG_PREFIX} Failed to transition draft order ${params.orderNumber} to READY_TO_SHIP:`, err.message));
+              }
             }
           } catch (confirmErr: any) {
             console.warn(`${LOG_PREFIX} Failed to auto-confirm draft order ${params.orderNumber}:`, confirmErr.message);

@@ -9,6 +9,7 @@ import { orders, merchants } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
 import { formatPhoneForWhatsApp } from '../utils/integrations/whatsapp/sender';
 import { triggerRobocallForOrder } from './robocallService';
+import { transitionOrder } from './workflowTransition';
 
 async function db_updateWaSentAt(orderId: string, waAttemptCount: number = 1, templateName?: string) {
   try {
@@ -320,6 +321,15 @@ export class WebhookHandler {
               channel: "system",
               note: "Draft order auto-confirmed — excluded from all NEW automations",
             }).catch(() => {});
+            transitionOrder({
+              merchantId,
+              orderId: created.id,
+              toStatus: "READY_TO_SHIP",
+              action: "draft_confirm",
+              actorType: "system",
+              actorName: "System",
+              reason: "Draft order auto-confirmed — excluded from all NEW automations",
+            }).catch(err => console.warn(`[Webhook] Failed to transition draft order ${created.orderNumber} to READY_TO_SHIP:`, err.message));
             await storage.updateWebhookEventStatus(webhookEvent.id, 'processed');
             return { success: true, action: 'created', orderId: created.id };
           }
