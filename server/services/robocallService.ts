@@ -86,7 +86,7 @@ export async function sendCallDirect(params: {
     order_number: (orderNumber || "").replace(/^#/, ""),
   });
 
-  let preLog: { id: string } | null = null;
+  let preLog: { id: string };
   try {
     preLog = await storage.createRobocallLog({
       merchantId,
@@ -99,10 +99,11 @@ export async function sendCallDirect(params: {
       orderId,
       source: source || "auto",
       attemptNumber: attemptNumber || 1,
-      status: "Queued",
+      status: "Initiated",
     });
   } catch (preLogErr: any) {
-    console.error(`${LOG_PREFIX} Failed to pre-log robocall for #${orderNumber}:`, preLogErr.message);
+    console.error(`${LOG_PREFIX} Pre-call log insert failed for #${orderNumber} — aborting call to preserve audit trail:`, preLogErr.message);
+    return { success: false, error: `Pre-call log failed: ${preLogErr.message}` };
   }
 
   const data = await safeFetchJson(`${ROBOCALL_API_BASE}/send-voice?${urlParams.toString()}`);
@@ -110,12 +111,10 @@ export async function sendCallDirect(params: {
   const callId = smsData?.id || smsData?.call_id || data?.data?.call_id || null;
 
   if (callId) {
-    if (preLog) {
-      try {
-        await storage.updateRobocallLog(preLog.id, { callId: String(callId), status: "Initiated" });
-      } catch (logErr: any) {
-        console.error(`${LOG_PREFIX} Failed to update robocall log with callId ${callId}:`, logErr.message);
-      }
+    try {
+      await storage.updateRobocallLog(preLog.id, { callId: String(callId) });
+    } catch (logErr: any) {
+      console.error(`${LOG_PREFIX} Failed to update robocall log with callId ${callId}:`, logErr.message);
     }
 
     await logConfirmationEvent({
@@ -131,12 +130,10 @@ export async function sendCallDirect(params: {
   } else {
     const errorMsg = data?.error || "No call ID returned";
 
-    if (preLog) {
-      try {
-        await storage.updateRobocallLog(preLog.id, { status: "Error", error: errorMsg });
-      } catch (logErr: any) {
-        console.error(`${LOG_PREFIX} Failed to update error robocall log for #${orderNumber}:`, logErr.message);
-      }
+    try {
+      await storage.updateRobocallLog(preLog.id, { status: "Error", error: errorMsg });
+    } catch (logErr: any) {
+      console.error(`${LOG_PREFIX} Failed to update error robocall log for #${orderNumber}:`, logErr.message);
     }
 
     await logConfirmationEvent({
@@ -772,11 +769,18 @@ async function checkHoldEscalations(): Promise<void> {
 
         if (recentReminder) continue;
 
+        const heldMs = order.lastStatusChangedAt
+          ? Date.now() - new Date(order.lastStatusChangedAt).getTime()
+          : HOLD_REMINDER_THRESHOLD_MS;
+        const heldHours = Math.floor(heldMs / 3600000);
+        const heldMins = Math.floor((heldMs % 3600000) / 60000);
+        const heldDuration = heldHours > 0 ? `${heldHours}h ${heldMins}m` : `${heldMins}m`;
+
         await createNotification({
           merchantId: order.merchantId,
           type: "hold_reminder",
           title: `Order #${order.orderNumber} stuck in Hold`,
-          message: `This order has been in Hold for more than 24 hours${order.pendingReason ? ` — Reason: ${order.pendingReason}` : ""}. Please take manual action.`,
+          message: `This order has been in Hold for ${heldDuration}${order.pendingReason ? ` — Reason: ${order.pendingReason}` : ""}. Please take manual action.`,
           orderId: order.id,
           orderNumber: order.orderNumber || undefined,
         });
