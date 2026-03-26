@@ -5483,44 +5483,44 @@ export async function registerRoutes(
       }
 
       // ✅ Step 2: Persist all events to wa_raw_events BEFORE sending 200.
-      // This guarantees zero-drop: the event is durably stored before we ACK Meta.
-      const rawEventsToBatch: import("@shared/schema").WaRawEvent[] = [];
-      const entries = body?.entry ?? [];
+      // This guarantees zero-drop: all events are durably stored before we ACK Meta.
+      // Merchant lookups are cached per phoneNumberId; all inserts run in parallel.
+      const merchantCache = new Map<string, string | null>();
+      const persistTasks: Promise<import("@shared/schema").WaRawEvent | null>[] = [];
 
-      for (const entry of entries) {
+      for (const entry of (body?.entry ?? [])) {
         for (const change of (entry?.changes ?? [])) {
           if (change?.field !== "messages") continue;
           const value = change.value;
-          const phoneNumberId = value?.metadata?.phone_number_id ?? "";
+          const phoneNumberId: string = value?.metadata?.phone_number_id ?? "";
 
-          // Resolve merchant for tenant isolation
-          let webhookMerchantId: string | null = null;
-          if (phoneNumberId) {
-            const [resolvedMerchant] = await db
-              .select({ id: merchants.id })
-              .from(merchants)
-              .where(eq(merchants.waPhoneNumberId, phoneNumberId))
-              .limit(1);
-            webhookMerchantId = resolvedMerchant?.id ?? null;
+          // Resolve merchant once per phone_number_id, cache result within this request
+          if (!merchantCache.has(phoneNumberId)) {
+            let mid: string | null = null;
+            if (phoneNumberId) {
+              const [row] = await db.select({ id: merchants.id }).from(merchants)
+                .where(eq(merchants.waPhoneNumberId, phoneNumberId)).limit(1);
+              mid = row?.id ?? null;
+            }
+            merchantCache.set(phoneNumberId, mid);
           }
+          const webhookMerchantId = merchantCache.get(phoneNumberId) ?? null;
 
           for (const message of (value?.messages ?? [])) {
-            const fromPhone = (message.from ?? "").replace(/^\+/, "");
-            const waMessageId = message.id ?? "";
-            const messageType = message.type ?? "text";
-            try {
-              const rawEvent = await persistRawMessageEvent({
+            persistTasks.push(
+              persistRawMessageEvent({
                 merchantId: webhookMerchantId,
-                eventType: messageType,
-                waMessageId,
-                fromPhone,
+                eventType: message.type ?? "text",
+                waMessageId: message.id ?? "",
+                fromPhone: (message.from ?? "").replace(/^\+/, ""),
                 webhookSource: "generic",
                 payload: { message, contacts: value?.contacts ?? [], metadata: value?.metadata ?? {}, webhookMerchantId },
-              });
-              rawEventsToBatch.push(rawEvent);
-            } catch (e: any) {
-              console.error(`[WhatsApp Webhook] ${requestId} - CRITICAL: failed to persist message event: ${e.message}`);
-            }
+              }).catch((e: any) => {
+                // Log full payload so it can be recovered from server logs even if DB insert fails
+                console.error(`[WhatsApp Webhook] ${requestId} - CRITICAL persist failure: ${e.message} | payload=${JSON.stringify({ message, merchantId: webhookMerchantId })}`);
+                return null;
+              })
+            );
           }
 
           for (const statusUpdate of (value?.statuses ?? [])) {
@@ -5528,23 +5528,27 @@ export async function registerRoutes(
             const newStatus = statusUpdate.status;
             if (!waId || !newStatus) continue;
             if (!["sent", "delivered", "read", "failed"].includes(newStatus)) continue;
-            try {
-              const rawEvent = await persistRawStatusEvent({
+            persistTasks.push(
+              persistRawStatusEvent({
                 merchantId: webhookMerchantId,
                 waMessageId: waId,
                 webhookSource: "generic",
                 payload: statusUpdate,
-              });
-              rawEventsToBatch.push(rawEvent);
-            } catch (e: any) {
-              console.error(`[WhatsApp Webhook] ${requestId} - CRITICAL: failed to persist status event: ${e.message}`);
-            }
+              }).catch((e: any) => {
+                console.error(`[WhatsApp Webhook] ${requestId} - CRITICAL status persist failure: ${e.message} | payload=${JSON.stringify(statusUpdate)}`);
+                return null;
+              })
+            );
           }
         }
       }
 
-      // ✅ Step 3: ACK Meta — all events are now durably in wa_raw_events
-      console.log(`[WhatsApp Webhook] ${requestId} - Persisted ${rawEventsToBatch.length} events — sending 200 OK`);
+      // Await all inserts in parallel for speed; filter out any that failed
+      const rawEventResults = await Promise.all(persistTasks);
+      const rawEventsToBatch = rawEventResults.filter(Boolean) as import("@shared/schema").WaRawEvent[];
+
+      // ✅ Step 3: ACK Meta — all successfully persisted events are in wa_raw_events
+      console.log(`[WhatsApp Webhook] ${requestId} - Persisted ${rawEventsToBatch.length}/${persistTasks.length} events — sending 200 OK`);
       res.status(200).json({ status: "ok" });
 
       // ✅ Step 4: Kick off async processing for all persisted events (fire-and-forget)
@@ -5597,30 +5601,29 @@ export async function registerRoutes(
         return;
       }
 
-      // Persist all events BEFORE ACK — durable zero-drop guarantee
-      const rawEventsToBatch: import("@shared/schema").WaRawEvent[] = [];
+      // Persist all events BEFORE ACK — durable zero-drop guarantee.
+      // All inserts launched in parallel; failures are logged with full payload for recovery.
+      const persistTasks: Promise<import("@shared/schema").WaRawEvent | null>[] = [];
+
       for (const entry of (body?.entry ?? [])) {
         for (const change of (entry?.changes ?? [])) {
           if (change?.field !== "messages") continue;
           const value = change.value;
 
           for (const message of (value?.messages ?? [])) {
-            const fromPhone = (message.from ?? "").replace(/^\+/, "");
-            const waMessageId = message.id ?? "";
-            const rawType = message.type ?? "text";
-            try {
-              const rawEvent = await persistRawMessageEvent({
+            persistTasks.push(
+              persistRawMessageEvent({
                 merchantId,
-                eventType: rawType,
-                waMessageId,
-                fromPhone,
+                eventType: message.type ?? "text",
+                waMessageId: message.id ?? "",
+                fromPhone: (message.from ?? "").replace(/^\+/, ""),
                 webhookSource: "merchant",
                 payload: { message, contacts: value?.contacts ?? [], metadata: value?.metadata ?? {} },
-              });
-              rawEventsToBatch.push(rawEvent);
-            } catch (e: any) {
-              console.error(`[WhatsApp Webhook:${merchantId}] ${requestId} - CRITICAL: persist failed: ${e.message}`);
-            }
+              }).catch((e: any) => {
+                console.error(`[WhatsApp Webhook:${merchantId}] ${requestId} - CRITICAL persist failure: ${e.message} | payload=${JSON.stringify(message)}`);
+                return null;
+              })
+            );
           }
 
           for (const statusUpdate of (value?.statuses ?? [])) {
@@ -5628,22 +5631,25 @@ export async function registerRoutes(
             const newStatus = statusUpdate.status;
             if (!waId || !newStatus) continue;
             if (!["sent", "delivered", "read", "failed"].includes(newStatus)) continue;
-            try {
-              const rawEvent = await persistRawStatusEvent({
+            persistTasks.push(
+              persistRawStatusEvent({
                 merchantId,
                 waMessageId: waId,
                 webhookSource: "merchant",
                 payload: statusUpdate,
-              });
-              rawEventsToBatch.push(rawEvent);
-            } catch (e: any) {
-              console.error(`[WhatsApp Webhook:${merchantId}] ${requestId} - CRITICAL: persist failed: ${e.message}`);
-            }
+              }).catch((e: any) => {
+                console.error(`[WhatsApp Webhook:${merchantId}] ${requestId} - CRITICAL status persist failure: ${e.message} | payload=${JSON.stringify(statusUpdate)}`);
+                return null;
+              })
+            );
           }
         }
       }
 
-      // ACK Meta after all persists confirmed
+      const rawEventResults = await Promise.all(persistTasks);
+      const rawEventsToBatch = rawEventResults.filter(Boolean) as import("@shared/schema").WaRawEvent[];
+
+      // ACK Meta after all persists attempted
       res.status(200).json({ status: "ok" });
 
       // Schedule async processing (fire-and-forget)

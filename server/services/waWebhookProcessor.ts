@@ -268,10 +268,13 @@ async function handleMessageEvent(rawEvent: WaRawEvent): Promise<void> {
   const contactName: string | undefined = contacts[0]?.profile?.name;
 
   // ── Deletion ──────────────────────────────────────────────────────────────
+  // For WhatsApp deleted events, message.id IS the ID of the deleted message.
+  // Some API versions may also provide it under message.deleted?.message_id as a backup.
   if (rawType === "deleted") {
-    if (waMessageId) {
-      await storage.softDeleteWaMessage(waMessageId);
-      console.log(`${LOG} Message deleted by customer: ${waMessageId}`);
+    const deletedTargetId = message.id ?? message.deleted?.message_id ?? "";
+    if (deletedTargetId) {
+      await storage.softDeleteWaMessage(deletedTargetId);
+      console.log(`${LOG} Message deleted by customer: ${deletedTargetId}`);
     }
     return;
   }
@@ -283,9 +286,10 @@ async function handleMessageEvent(rawEvent: WaRawEvent): Promise<void> {
 
     let reactionParked = false;
     if (targetWaId) {
-      const applied = await storage.applyReactionToWaMessage(targetWaId, emoji);
+      // Pass phone as reactionFrom so it's set on the target message row
+      const applied = await storage.applyReactionToWaMessage(targetWaId, emoji, phone || null);
       if (applied) {
-        console.log(`${LOG} Reaction ${emoji || "(removed)"} applied to message ${targetWaId}`);
+        console.log(`${LOG} Reaction ${emoji || "(removed)"} applied to message ${targetWaId} from ${phone}`);
       } else {
         // Target message not yet in DB — park for later reconciliation.
         // Set waMessageId to targetWaId so getPendingReactionsForTarget can find this event.
@@ -490,7 +494,8 @@ async function reconcilePendingReactions(targetWaId: string): Promise<void> {
     for (const evt of pending) {
       const msgPayload = (evt.payload as any)?.message;
       const emoji: string = msgPayload?.reaction?.emoji ?? "";
-      const applied = await storage.applyReactionToWaMessage(targetWaId, emoji);
+      const fromPhone: string = evt.fromPhone ?? "";
+      const applied = await storage.applyReactionToWaMessage(targetWaId, emoji, fromPhone || null);
       if (applied) {
         await storage.updateWaRawEventStatus(evt.id, "processed", { processedAt: new Date() }).catch(() => {});
         console.log(`${LOG} Reconciled pending reaction ${emoji} on message ${targetWaId}`);

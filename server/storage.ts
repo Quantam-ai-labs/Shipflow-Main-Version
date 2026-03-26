@@ -306,7 +306,7 @@ export interface IStorage {
   getWebhookHealthStats(merchantId?: string): Promise<{ total: number; processed: number; failed: number; pending: number; retrying: number; byType: Record<string, number> }>;
   getPendingReactionsForTarget(targetWaMessageId: string): Promise<WaRawEvent[]>;
   softDeleteWaMessage(waMessageId: string): Promise<void>;
-  applyReactionToWaMessage(waMessageId: string, emoji: string): Promise<boolean>;
+  applyReactionToWaMessage(waMessageId: string, emoji: string, fromPhone?: string | null): Promise<boolean>;
   getWaMessageByWaId(waMessageId: string): Promise<WaMessage | undefined>;
 
   // WA Failed Events (permanent failure queue)
@@ -2642,9 +2642,11 @@ export class DatabaseStorage implements IStorage {
       .where(eq(waMessages.waMessageId, waMessageId));
   }
 
-  async applyReactionToWaMessage(waMessageId: string, emoji: string): Promise<boolean> {
+  async applyReactionToWaMessage(waMessageId: string, emoji: string, fromPhone?: string | null): Promise<boolean> {
+    const updates: Record<string, any> = { reactionEmoji: emoji || null };
+    if (fromPhone) updates.reactionFrom = fromPhone;
     const result = await db.update(waMessages)
-      .set({ reactionEmoji: emoji || null })
+      .set(updates)
       .where(eq(waMessages.waMessageId, waMessageId))
       .returning({ id: waMessages.id });
     return result.length > 0;
