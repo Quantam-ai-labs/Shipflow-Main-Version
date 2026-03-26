@@ -53,6 +53,8 @@ import {
   type Complaint, type InsertComplaint,
   complaintTemplates,
   type ComplaintTemplate, type InsertComplaintTemplate,
+  waRawEvents,
+  type WaRawEvent, type InsertWaRawEvent,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, or, ilike, sql, count, inArray, isNull, isNotNull, gte, lte } from "drizzle-orm";
@@ -293,6 +295,16 @@ export interface IStorage {
   getComplaintTemplates(merchantId: string): Promise<ComplaintTemplate[]>;
   upsertComplaintTemplate(merchantId: string, status: string, messageTemplate: string): Promise<ComplaintTemplate>;
   seedDefaultComplaintTemplates(merchantId: string): Promise<ComplaintTemplate[]>;
+
+  // WA Raw Events (zero-drop safety net)
+  createWaRawEvent(data: InsertWaRawEvent): Promise<WaRawEvent>;
+  updateWaRawEventStatus(id: string, status: string, opts?: { processedAt?: Date; error?: string; retryCount?: number; nextRetryAt?: Date | null }): Promise<void>;
+  getPendingWaRawEvents(limit?: number): Promise<WaRawEvent[]>;
+  getWaRawEventsByStatus(status: string, merchantId?: string, limit?: number): Promise<WaRawEvent[]>;
+  getWebhookHealthStats(merchantId?: string): Promise<{ total: number; processed: number; failed: number; pending: number; retrying: number; byType: Record<string, number> }>;
+  softDeleteWaMessage(waMessageId: string): Promise<void>;
+  applyReactionToWaMessage(waMessageId: string, emoji: string): Promise<boolean>;
+  getWaMessageByWaId(waMessageId: string): Promise<WaMessage | undefined>;
 
   // Seed
   seedDemoData(): Promise<void>;
@@ -2544,6 +2556,94 @@ export class DatabaseStorage implements IStorage {
       results.push(created);
     }
     return results;
+  }
+
+  // ─── WA Raw Events ──────────────────────────────────────────────────────────
+
+  async createWaRawEvent(data: InsertWaRawEvent): Promise<WaRawEvent> {
+    const [created] = await db.insert(waRawEvents).values(data).returning();
+    return created;
+  }
+
+  async updateWaRawEventStatus(
+    id: string,
+    status: string,
+    opts: { processedAt?: Date; error?: string; retryCount?: number; nextRetryAt?: Date | null } = {},
+  ): Promise<void> {
+    const update: Record<string, any> = { status };
+    if (opts.processedAt !== undefined) update.processedAt = opts.processedAt;
+    if (opts.error !== undefined) update.error = opts.error;
+    if (opts.retryCount !== undefined) update.retryCount = opts.retryCount;
+    if (opts.nextRetryAt !== undefined) update.nextRetryAt = opts.nextRetryAt;
+    await db.update(waRawEvents).set(update).where(eq(waRawEvents.id, id));
+  }
+
+  async getPendingWaRawEvents(limit = 100): Promise<WaRawEvent[]> {
+    return db.select().from(waRawEvents)
+      .where(or(
+        eq(waRawEvents.status, "pending"),
+        eq(waRawEvents.status, "retrying"),
+      ))
+      .orderBy(asc(waRawEvents.receivedAt))
+      .limit(limit);
+  }
+
+  async getWaRawEventsByStatus(status: string, merchantId?: string, limit = 50): Promise<WaRawEvent[]> {
+    const conditions = [eq(waRawEvents.status, status)];
+    if (merchantId) conditions.push(eq(waRawEvents.merchantId, merchantId));
+    return db.select().from(waRawEvents)
+      .where(and(...conditions))
+      .orderBy(desc(waRawEvents.receivedAt))
+      .limit(limit);
+  }
+
+  async getWebhookHealthStats(merchantId?: string): Promise<{ total: number; processed: number; failed: number; pending: number; retrying: number; byType: Record<string, number> }> {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const conditions: any[] = [gte(waRawEvents.receivedAt, todayStart)];
+    if (merchantId) conditions.push(eq(waRawEvents.merchantId, merchantId));
+
+    const rows = await db.select({
+      status: waRawEvents.status,
+      eventType: waRawEvents.eventType,
+      cnt: count(),
+    })
+      .from(waRawEvents)
+      .where(and(...conditions))
+      .groupBy(waRawEvents.status, waRawEvents.eventType);
+
+    let total = 0, processed = 0, failed = 0, pending = 0, retrying = 0;
+    const byType: Record<string, number> = {};
+    for (const row of rows) {
+      const n = Number(row.cnt);
+      total += n;
+      if (row.status === "processed") processed += n;
+      else if (row.status === "failed") failed += n;
+      else if (row.status === "pending") pending += n;
+      else if (row.status === "retrying") retrying += n;
+      byType[row.eventType] = (byType[row.eventType] ?? 0) + n;
+    }
+    return { total, processed, failed, pending, retrying, byType };
+  }
+
+  async softDeleteWaMessage(waMessageId: string): Promise<void> {
+    await db.update(waMessages)
+      .set({ deletedByCustomerAt: new Date() })
+      .where(eq(waMessages.waMessageId, waMessageId));
+  }
+
+  async applyReactionToWaMessage(waMessageId: string, emoji: string): Promise<boolean> {
+    const result = await db.update(waMessages)
+      .set({ reactionEmoji: emoji || null })
+      .where(eq(waMessages.waMessageId, waMessageId))
+      .returning({ id: waMessages.id });
+    return result.length > 0;
+  }
+
+  async getWaMessageByWaId(waMessageId: string): Promise<WaMessage | undefined> {
+    const [msg] = await db.select().from(waMessages).where(eq(waMessages.waMessageId, waMessageId)).limit(1);
+    return msg;
   }
 
   async seedDemoData(): Promise<void> {

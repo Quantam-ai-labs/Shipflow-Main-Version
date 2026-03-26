@@ -114,6 +114,7 @@ import { getCourierSyncMetrics, cleanupStaleManualSyncProgress, autoTransitionOr
 import { getShopifySyncMetrics } from "./services/autoSync";
 import { processConfirmationResponse, logConfirmationEvent, createNotification } from "./services/confirmationEngine";
 import { sendCallDirect, safeFetchJson as robocallFetchJson } from "./services/robocallService";
+import { persistAndProcessMessage, persistAndProcessStatus } from "./services/waWebhookProcessor";
 
 const oauthStateStore = new Map<
   string,
@@ -5540,6 +5541,42 @@ export async function registerRoutes(
             const normalizedPhone = fromPhone.replace(/^\+/, "");
             console.log(`      └─ Normalized: ${normalizedPhone}`);
 
+            // Zero-drop safety net: persist raw event before any processing
+            let genRawEventId: string | null = null;
+            try {
+              const rawEvt = await storage.createWaRawEvent({
+                merchantId: webhookMerchantId,
+                eventType: messageType,
+                waMessageId,
+                fromPhone: normalizedPhone,
+                webhookSource: "generic",
+                payload: { message, contacts: value?.contacts ?? [], metadata: value?.metadata ?? {}, webhookMerchantId },
+                status: "pending",
+                retryCount: 0,
+              });
+              genRawEventId = rawEvt.id;
+            } catch (rawErr: any) {
+              console.error(`[WhatsApp Webhook] ${requestId} - Raw event persist failed: ${rawErr.message}`);
+            }
+
+            // Handle message deletion (customer deleted a message on their phone)
+            if (messageType === "deleted") {
+              if (waMessageId) storage.softDeleteWaMessage(waMessageId).catch(() => {});
+              if (genRawEventId) storage.updateWaRawEventStatus(genRawEventId, "processed", { processedAt: new Date() }).catch(() => {});
+              console.log(`      ✅ Deletion handled: ${waMessageId}`);
+              continue;
+            }
+
+            // Handle reaction (apply emoji to the original message)
+            if (messageType === "reaction") {
+              const rxEmoji = message.reaction?.emoji ?? "";
+              const rxTargetId = message.reaction?.message_id ?? "";
+              if (rxTargetId) storage.applyReactionToWaMessage(rxTargetId, rxEmoji).catch(() => {});
+              if (genRawEventId) storage.updateWaRawEventStatus(genRawEventId, "processed", { processedAt: new Date() }).catch(() => {});
+              console.log(`      ✅ Reaction handled: ${rxEmoji || "(removed)"} on ${rxTargetId}`);
+              continue;
+            }
+
             // ✅ Step 7: Find matching order (scoped to resolved merchant if available)
             console.log(`      └─ Querying database for matching order...`);
             const orderWhereConditions = [
@@ -5657,6 +5694,11 @@ export async function registerRoutes(
             } catch (processErr: any) {
               console.error(`      ❌ processWhatsAppOrderResponse error: phone=${normalizedPhone}, order=${matchedOrder.orderNumber}, error=${processErr.message}`);
             }
+
+            // Mark raw event as processed
+            if (genRawEventId) {
+              storage.updateWaRawEventStatus(genRawEventId, "processed", { processedAt: new Date() }).catch(() => {});
+            }
           }
 
           const statuses = value?.statuses ?? [];
@@ -5665,6 +5707,13 @@ export async function registerRoutes(
             const newStatus = statusUpdate.status;
             if (!waId || !newStatus) continue;
             if (!["sent", "delivered", "read", "failed"].includes(newStatus)) continue;
+            // Save raw event for status update
+            persistAndProcessStatus({
+              merchantId: webhookMerchantId,
+              waMessageId: waId,
+              webhookSource: "generic",
+              payload: statusUpdate,
+            }).catch(() => {});
             try {
               const updated = await storage.updateWaMessageStatusByWaId(waId, newStatus);
               if (updated) {
@@ -5795,6 +5844,40 @@ export async function registerRoutes(
               messageBody = contactNames || "Contact shared";
               mediaUrl = JSON.stringify(contacts);
               msgType = "contacts";
+            } else if (rawType === "deleted") {
+              msgType = "deleted";
+              messageBody = "[Message deleted]";
+            }
+
+            // Zero-drop safety net: persist raw event before any processing
+            let mxRawEventId: string | null = null;
+            try {
+              const rawEvt = await storage.createWaRawEvent({
+                merchantId,
+                eventType: rawType,
+                waMessageId,
+                fromPhone,
+                webhookSource: "merchant",
+                payload: { message, contacts: value?.contacts ?? [], metadata: value?.metadata ?? {} },
+                status: "pending",
+                retryCount: 0,
+              });
+              mxRawEventId = rawEvt.id;
+            } catch (rawErr: any) {
+              console.error(`[WhatsApp Webhook:${merchantId}] Raw event persist failed: ${rawErr.message}`);
+            }
+
+            // Handle message deletion — soft-delete the message, no further processing needed
+            if (rawType === "deleted") {
+              if (waMessageId) storage.softDeleteWaMessage(waMessageId).catch(() => {});
+              if (mxRawEventId) storage.updateWaRawEventStatus(mxRawEventId, "processed", { processedAt: new Date() }).catch(() => {});
+              console.log(`[WhatsApp Webhook:${merchantId}] Deletion handled: ${waMessageId}`);
+              continue;
+            }
+
+            // For reactions: also apply the emoji to the original message
+            if (rawType === "reaction" && referenceMessageId) {
+              storage.applyReactionToWaMessage(referenceMessageId, reactionEmoji ?? "").catch(() => {});
             }
 
             const [matchedOrder] = await db
@@ -5931,8 +6014,16 @@ export async function registerRoutes(
               if (convId) {
                 sendAgentChatPushNotifications(matchedOrder.merchantId, contactName ?? fromPhone, messageBody, convId).catch(() => {});
               }
+
+              // Mark raw event as processed
+              if (mxRawEventId) {
+                storage.updateWaRawEventStatus(mxRawEventId, "processed", { processedAt: new Date() }).catch(() => {});
+              }
             } catch (err: any) {
               console.error(`[WhatsApp Webhook:${merchantId}] ${requestId} - ❌ FATAL WhatsApp processing error: ${err.message}`);
+              if (mxRawEventId) {
+                storage.updateWaRawEventStatus(mxRawEventId, "failed", { error: err.message }).catch(() => {});
+              }
             }
           }
 
@@ -5942,6 +6033,13 @@ export async function registerRoutes(
             const newStatus = statusUpdate.status;
             if (!waId || !newStatus) continue;
             if (!["sent", "delivered", "read", "failed"].includes(newStatus)) continue;
+            // Save raw event for status update
+            persistAndProcessStatus({
+              merchantId,
+              waMessageId: waId,
+              webhookSource: "merchant",
+              payload: statusUpdate,
+            }).catch(() => {});
             try {
               const updated = await storage.updateWaMessageStatusByWaId(waId, newStatus);
               if (updated) {
@@ -13840,6 +13938,18 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Platform stats error:", error);
       res.status(500).json({ message: "Failed to fetch platform stats" });
+    }
+  });
+
+  app.get("/api/admin/webhook-health", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+      const stats = await storage.getWebhookHealthStats();
+      res.json(stats);
+    } catch (error: any) {
+      console.error("Webhook health error:", error);
+      res.status(500).json({ message: "Failed to fetch webhook health stats" });
     }
   });
 

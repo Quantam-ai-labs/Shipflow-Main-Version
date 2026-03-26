@@ -7,6 +7,7 @@ import { startCourierSyncScheduler } from "./services/courierSyncScheduler";
 import { startMarketingSyncScheduler } from "./services/metaAds";
 import { startConfirmationTimer } from "./services/confirmationTimer";
 import { startRobocallService } from "./services/robocallService";
+import { recoverPendingEvents } from "./services/waWebhookProcessor";
 import { db } from "./db";
 import { shopifyStores, users, courierAccounts } from "../shared/schema";
 import { eq } from "drizzle-orm";
@@ -200,6 +201,7 @@ function scheduleStartupRecovery() {
       setTimeout(() => startRobocallService(), 35000);
       scheduleStartupRecovery();
       setTimeout(() => warmCourierCityCache(), 10000);
+      setTimeout(() => recoverPendingEvents().catch((err: any) => console.error("[WA Recovery] Startup recovery failed:", err.message)), 45000);
     },
   );
 })();

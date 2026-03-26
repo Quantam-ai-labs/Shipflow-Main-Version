@@ -546,6 +546,7 @@ export const waMessages = pgTable("wa_messages", {
   fileName: varchar("file_name", { length: 500 }),
   reactionEmoji: varchar("reaction_emoji", { length: 10 }),
   referenceMessageId: varchar("reference_message_id", { length: 255 }),
+  deletedByCustomerAt: timestamp("deleted_by_customer_at"),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   index("idx_wa_messages_conversation").on(table.conversationId),
@@ -2490,3 +2491,32 @@ export const complaintTemplates = pgTable("complaint_templates", {
 export const insertComplaintTemplateSchema = createInsertSchema(complaintTemplates).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertComplaintTemplate = z.infer<typeof insertComplaintTemplateSchema>;
 export type ComplaintTemplate = typeof complaintTemplates.$inferSelect;
+
+// ============================================
+// WA RAW EVENTS (Zero-drop webhook safety net)
+// Every Meta webhook event is saved here before processing.
+// Processing happens async; failures are retried up to 3 times.
+// ============================================
+export const waRawEvents = pgTable("wa_raw_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id"),
+  eventType: varchar("event_type", { length: 30 }).notNull(),
+  waMessageId: varchar("wa_message_id", { length: 255 }),
+  fromPhone: varchar("from_phone", { length: 50 }),
+  webhookSource: varchar("webhook_source", { length: 20 }).default("generic"),
+  payload: jsonb("payload").notNull(),
+  receivedAt: timestamp("received_at").defaultNow(),
+  processedAt: timestamp("processed_at"),
+  status: varchar("status", { length: 20 }).default("pending").notNull(),
+  retryCount: integer("retry_count").default(0).notNull(),
+  nextRetryAt: timestamp("next_retry_at"),
+  error: text("error"),
+}, (table) => [
+  index("idx_wa_raw_events_merchant").on(table.merchantId),
+  index("idx_wa_raw_events_status").on(table.status),
+  index("idx_wa_raw_events_wa_message_id").on(table.waMessageId),
+]);
+
+export const insertWaRawEventSchema = createInsertSchema(waRawEvents).omit({ id: true, receivedAt: true });
+export type InsertWaRawEvent = z.infer<typeof insertWaRawEventSchema>;
+export type WaRawEvent = typeof waRawEvents.$inferSelect;
