@@ -5993,16 +5993,62 @@ export async function registerRoutes(
           }
         }
       } else if (result.locked) {
-        const aiMerchantLocked = await storage.getMerchant(merchantId);
-        if (aiMerchantLocked?.aiAutoReplyEnabled) {
-          const convLocked = await storage.getConversationByPhone(merchantId, normalizedPhone);
-          console.log(`        Order #${orderNumber} is locked (${orderForStatus?.workflowStatus}) — routing post-booking message to AI: "${messageBody.slice(0, 80)}"`);
-          handleAiAutoReply(merchantId, normalizedPhone, messageBody, convLocked?.id || null, orderId, orderNumber).catch((e: any) =>
-            console.error(`${LOG_PREFIX_WA_AI} Error in post-booking AI reply:`, e.message)
-          );
+        // --- Urgent keyword detection for post-booking messages ---
+        const URGENT_ORDER_STATUSES = new Set(["BOOKED", "FULFILLED", "DELIVERED"]);
+        const URGENT_KEYWORDS = [
+          "cancel", "cancellation", "cancelled", "hold", "stop", "return",
+          "refund", "don't deliver", "dont deliver", "do not deliver",
+          "نہ لاؤ", "واپس", "رکاؤ", "کینسل", "رکنا", "واپسی",
+        ];
+        const msgLower = messageBody.toLowerCase();
+        const isUrgentStatus = URGENT_ORDER_STATUSES.has(orderForStatus?.workflowStatus ?? "");
+        const isUrgentKeyword = URGENT_KEYWORDS.some(kw => msgLower.includes(kw.toLowerCase()));
+
+        if (isUrgentStatus && isUrgentKeyword) {
+          console.log(`        URGENT: post-booking cancellation/hold/return request for #${orderNumber} (status=${orderForStatus?.workflowStatus}): "${messageBody.slice(0, 80)}"`);
+          try {
+            const existingLabels = await storage.getWaLabels(merchantId);
+            let urgentLabel = existingLabels.find(l => l.name === "Urgent");
+            if (!urgentLabel) {
+              urgentLabel = await storage.createWaLabel({
+                merchantId,
+                name: "Urgent",
+                color: "bg-red-500",
+                sortOrder: 6,
+                isSystem: true,
+              });
+            }
+            const convUrgent = await storage.getConversationByPhone(merchantId, normalizedPhone);
+            if (convUrgent) {
+              await storage.updateConversationLabel(merchantId, convUrgent.id, "Urgent");
+              await storage.pauseAiForConversation(merchantId, convUrgent.id);
+            }
+            await sendWhatsAppReply(normalizedPhone,
+              `Your request has been flagged for urgent review. Our team will contact you immediately.`,
+              replyPhoneId, replyAccessToken);
+            await createNotification({
+              merchantId,
+              type: "urgent_cancellation_request",
+              title: `Urgent: Customer wants to cancel/hold order ${orderNumber}`,
+              message: `Customer message: "${messageBody.slice(0, 120)}" — Order status: ${orderForStatus?.workflowStatus ?? "BOOKED"}`,
+              orderId,
+              orderNumber,
+            });
+          } catch (urgentErr: any) {
+            console.error(`        Error handling urgent post-booking request:`, urgentErr.message);
+          }
         } else {
-          await sendWhatsAppReply(normalizedPhone,
-            `Order #${orderNumber} has already been confirmed and is being processed. For any changes, please contact our support team.`, replyPhoneId, replyAccessToken);
+          const aiMerchantLocked = await storage.getMerchant(merchantId);
+          if (aiMerchantLocked?.aiAutoReplyEnabled) {
+            const convLocked = await storage.getConversationByPhone(merchantId, normalizedPhone);
+            console.log(`        Order #${orderNumber} is locked (${orderForStatus?.workflowStatus}) — routing post-booking message to AI: "${messageBody.slice(0, 80)}"`);
+            handleAiAutoReply(merchantId, normalizedPhone, messageBody, convLocked?.id || null, orderId, orderNumber).catch((e: any) =>
+              console.error(`${LOG_PREFIX_WA_AI} Error in post-booking AI reply:`, e.message)
+            );
+          } else {
+            await sendWhatsAppReply(normalizedPhone,
+              `Order #${orderNumber} has already been confirmed and is being processed. For any changes, please contact our support team.`, replyPhoneId, replyAccessToken);
+          }
         }
       } else {
         console.log(`        Failed: ${result.error}`);
