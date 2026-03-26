@@ -98,6 +98,7 @@ interface Message {
   reactionEmoji: string | null;
   referenceMessageId: string | null;
   waMessageId: string | null;
+  linkPreviewUrl: string | null;
   createdAt: string;
   deliveredAt: string | null;
   readAt: string | null;
@@ -1064,9 +1065,9 @@ export default function SupportChatPage() {
 
   const lastSentTextRef = useRef("");
   const sendMutation = useMutation({
-    mutationFn: async ({ text, referenceMessageId }: { text: string; referenceMessageId?: string }) => {
+    mutationFn: async ({ text, referenceMessageId, linkPreviewUrl }: { text: string; referenceMessageId?: string; linkPreviewUrl?: string | null }) => {
       lastSentTextRef.current = text;
-      return apiRequest("POST", `/api/support/conversations/${selectedConvId}/messages`, { text, referenceMessageId });
+      return apiRequest("POST", `/api/support/conversations/${selectedConvId}/messages`, { text, referenceMessageId, linkPreviewUrl: linkPreviewUrl ?? null });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/support/conversations", selectedConvId, "messages"] });
@@ -1397,10 +1398,11 @@ export default function SupportChatPage() {
     e?.preventDefault();
     if (!messageText.trim() || !selectedConvId || sendMutation.isPending) return;
     const text = messageText.trim();
+    const previewUrl = linkPreview?.url ?? null;
     setMessageText("");
     setLinkPreview(null);
     setLinkPreviewDismissed(false);
-    sendMutation.mutate({ text, referenceMessageId: replyingTo?.id });
+    sendMutation.mutate({ text, referenceMessageId: replyingTo?.id, linkPreviewUrl: previewUrl });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -2259,11 +2261,13 @@ export default function SupportChatPage() {
                                         : renderFormattedText(msg.text || "")}
                                     </div>
                                   )}
-                                  {/* Rich link preview card (lazy-fetched per URL) */}
+                                  {/* Rich link preview card — use stored linkPreviewUrl if persisted, else extract from text */}
                                   {!isButtonReply && !isNonText && (() => {
-                                    const urlMatch = (msg.text || "").match(/https?:\/\/[^\s<>"{}|\\^`[\]]+/);
-                                    if (!urlMatch) return null;
-                                    return <LinkPreviewBubble url={urlMatch[0]} />;
+                                    const previewUrl = msg.linkPreviewUrl
+                                      || (msg.text || "").match(/https?:\/\/[^\s<>"{}|\\^`[\]]+/)?.[0]
+                                      || null;
+                                    if (!previewUrl) return null;
+                                    return <LinkPreviewBubble url={previewUrl} />;
                                   })()}
                                   <div className={cn(
                                     "flex items-center gap-1 mt-0.5",

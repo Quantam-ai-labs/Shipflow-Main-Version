@@ -8185,7 +8185,7 @@ export async function registerRoutes(
       if (!conv || conv.merchantId !== merchantId) {
         return res.status(404).json({ error: "Conversation not found" });
       }
-      const { text, referenceMessageId: clientRefMsgId } = req.body;
+      const { text, referenceMessageId: clientRefMsgId, linkPreviewUrl } = req.body;
       if (!text?.trim()) return res.status(400).json({ error: "Message text required" });
 
       const [merchantRow] = await db.select({
@@ -8228,6 +8228,7 @@ export async function registerRoutes(
         text: text.trim(),
         status: "sent",
         referenceMessageId: clientRefMsgId ?? null,
+        linkPreviewUrl: linkPreviewUrl && typeof linkPreviewUrl === "string" ? linkPreviewUrl : null,
       });
 
       res.json(msg);

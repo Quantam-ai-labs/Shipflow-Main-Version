@@ -547,6 +547,7 @@ export const waMessages = pgTable("wa_messages", {
   reactionEmoji: varchar("reaction_emoji", { length: 10 }),
   reactionFrom: varchar("reaction_from", { length: 50 }),
   referenceMessageId: varchar("reference_message_id", { length: 255 }),
+  linkPreviewUrl: text("link_preview_url"),
   deletedByCustomerAt: timestamp("deleted_by_customer_at"),
   deliveredAt: timestamp("delivered_at"),
   readAt: timestamp("read_at"),
