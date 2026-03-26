@@ -5566,7 +5566,8 @@ export async function registerRoutes(
 
       console.log(`\n${'='.repeat(80)}\n`);
     } catch (err: any) {
-      if (!res.headersSent) res.status(200).json({ status: "ok" });
+      // Return 500 on any unhandled exception so Meta retries the delivery (zero-drop guarantee).
+      if (!res.headersSent) res.status(500).json({ error: "internal_error" });
       console.error(`\n[WhatsApp Webhook] ${requestId} - FATAL ERROR`);
       console.error(`Message: ${err.message}`);
       console.error(`Stack: ${err.stack}\n`);
