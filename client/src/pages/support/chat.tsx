@@ -498,16 +498,6 @@ export default function SupportChatPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [contextMenu]);
 
-  // Auto-select conversation when navigated from a notification deep-link (?orderId=...)
-  useEffect(() => {
-    if (!deepLinkOrderId || deepLinkApplied.current || conversations.length === 0) return;
-    const match = conversations.find(c => c.orderId === deepLinkOrderId);
-    if (match) {
-      deepLinkApplied.current = true;
-      setSelectedConvId(match.id);
-    }
-  }, [conversations, deepLinkOrderId]);
-
   // Reply-to-message state
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
 
@@ -552,6 +542,16 @@ export default function SupportChatPage() {
   });
 
   const archivedCount = isArchivedView ? conversations.length : archivedConversations.length;
+
+  // Auto-select conversation when navigated from a notification deep-link (?orderId=...)
+  useEffect(() => {
+    if (!deepLinkOrderId || deepLinkApplied.current || conversations.length === 0) return;
+    const match = conversations.find(c => c.orderId === deepLinkOrderId);
+    if (match) {
+      deepLinkApplied.current = true;
+      setSelectedConvId(match.id);
+    }
+  }, [conversations, deepLinkOrderId]);
 
   const { data: messages = [] } = useQuery<Message[]>({
     queryKey: ["/api/support/conversations", selectedConvId, "messages"],
