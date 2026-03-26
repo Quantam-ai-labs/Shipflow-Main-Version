@@ -352,6 +352,7 @@ CLASSIFICATION RESPONSE RULES:
 - When classifying as "human_handoff": Acknowledge the customer's request, and tell them that a human agent will be connected shortly to assist them. Be reassuring and professional.
 - When classifying as "lead": Acknowledge the customer's interest enthusiastically, thank them, and tell them a team member will reach out to process their order shortly. If they shared details (address, phone, name), confirm you've noted them.
 - When classifying as "general_query": Respond politely that you've received their message and a team member will review and get back to them shortly. Do NOT try to interpret media you cannot see.
+- When classifying as "urgent_request": Acknowledge their request with empathy. Assure them that their message has been received and our team will contact them urgently to resolve the situation. Do NOT confirm whether cancellation/return will be accepted — just say the team will follow up. Keep it brief and reassuring.
 
 ${knowledgeBase ? `STORE KNOWLEDGE BASE (policies, FAQs, shipping info):\n${knowledgeBase}\n` : ""}
 ${productCatalog ? `PRODUCT CATALOG:\n${productCatalog}\n` : "No products loaded."}
@@ -384,7 +385,7 @@ ${conversationHistory ? `RECENT CONVERSATION:\n${conversationHistory}\n` : ""}`;
       const parsed = JSON.parse(rawContent);
       reply = (parsed.reply || parsed.message || "").trim();
       const cls = parsed.classification;
-      if (cls === "complaint" || cls === "return" || cls === "replacement" || cls === "human_handoff" || cls === "conflict" || cls === "lead" || cls === "general_query") {
+      if (cls === "complaint" || cls === "return" || cls === "replacement" || cls === "human_handoff" || cls === "conflict" || cls === "lead" || cls === "general_query" || cls === "urgent_request") {
         classification = cls;
       }
     } catch {
