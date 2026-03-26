@@ -8716,6 +8716,7 @@ export async function registerRoutes(
         aiAutoReplyEnabled: merchant?.aiAutoReplyEnabled ?? false,
         aiAutoReplyKnowledgeBase: merchant?.aiAutoReplyKnowledgeBase ?? "",
         aiAutoReplyStoreName: merchant?.aiAutoReplyStoreName ?? "",
+        waAutoUnarchiveOnNewMessage: merchant?.waAutoUnarchiveOnNewMessage ?? true,
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -8726,11 +8727,12 @@ export async function registerRoutes(
     try {
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
-      const { aiAutoReplyEnabled, aiAutoReplyKnowledgeBase, aiAutoReplyStoreName } = req.body;
+      const { aiAutoReplyEnabled, aiAutoReplyKnowledgeBase, aiAutoReplyStoreName, waAutoUnarchiveOnNewMessage } = req.body;
       const updateData: Record<string, unknown> = { updatedAt: new Date() };
       if (typeof aiAutoReplyEnabled === "boolean") updateData.aiAutoReplyEnabled = aiAutoReplyEnabled;
       if (typeof aiAutoReplyKnowledgeBase === "string") updateData.aiAutoReplyKnowledgeBase = aiAutoReplyKnowledgeBase;
       if (typeof aiAutoReplyStoreName === "string") updateData.aiAutoReplyStoreName = aiAutoReplyStoreName.trim();
+      if (typeof waAutoUnarchiveOnNewMessage === "boolean") updateData.waAutoUnarchiveOnNewMessage = waAutoUnarchiveOnNewMessage;
       await db.update(merchants).set(updateData).where(eq(merchants.id, merchantId));
       res.json({ success: true });
     } catch (error: any) {

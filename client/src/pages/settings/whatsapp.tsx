@@ -882,6 +882,7 @@ function AiAutoReplyCard() {
   const [storeName, setStoreName] = useState("");
   const [knowledgeBase, setKnowledgeBase] = useState("");
   const [enabled, setEnabled] = useState(false);
+  const [autoUnarchive, setAutoUnarchive] = useState(true);
   const [loaded, setLoaded] = useState(false);
   const [testMsg, setTestMsg] = useState("");
   const [testReply, setTestReply] = useState<string | null>(null);
@@ -890,6 +891,7 @@ function AiAutoReplyCard() {
     aiAutoReplyEnabled: boolean;
     aiAutoReplyKnowledgeBase: string;
     aiAutoReplyStoreName: string;
+    waAutoUnarchiveOnNewMessage: boolean;
   }>({
     queryKey: ["/api/support/ai-auto-reply"],
     refetchOnWindowFocus: false,
@@ -899,6 +901,7 @@ function AiAutoReplyCard() {
     setEnabled(data.aiAutoReplyEnabled);
     setStoreName(data.aiAutoReplyStoreName || "");
     setKnowledgeBase(data.aiAutoReplyKnowledgeBase || "");
+    setAutoUnarchive(data.waAutoUnarchiveOnNewMessage ?? true);
     setLoaded(true);
   }
 
@@ -908,6 +911,7 @@ function AiAutoReplyCard() {
         aiAutoReplyEnabled: enabled,
         aiAutoReplyStoreName: storeName,
         aiAutoReplyKnowledgeBase: knowledgeBase,
+        waAutoUnarchiveOnNewMessage: autoUnarchive,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/support/ai-auto-reply"] });
@@ -980,6 +984,25 @@ function AiAutoReplyCard() {
             data-testid="toggle-ai-auto-reply"
           >
             <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${enabled ? "translate-x-5" : "translate-x-0"}`} />
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <Label className="text-sm font-medium">Auto-unarchive on new message</Label>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              When a customer messages on an archived chat, automatically move it back to the active inbox
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={autoUnarchive}
+            onClick={() => setAutoUnarchive(!autoUnarchive)}
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${autoUnarchive ? "bg-green-500" : "bg-muted"}`}
+            data-testid="toggle-auto-unarchive"
+          >
+            <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${autoUnarchive ? "translate-x-5" : "translate-x-0"}`} />
           </button>
         </div>
 

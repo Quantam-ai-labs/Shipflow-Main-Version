@@ -477,6 +477,22 @@ export default function SupportChatPage() {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; conv: Conversation } | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+        setContextMenu(null);
+      }
+    };
+    if (contextMenu) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [contextMenu]);
+
   // Reply-to-message state
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
 
@@ -508,6 +524,19 @@ export default function SupportChatPage() {
     refetchInterval: 10000,
     staleTime: 5000,
   });
+
+  const { data: archivedConversations = [] } = useQuery<Conversation[]>({
+    queryKey: ["/api/support/conversations", true],
+    queryFn: async () => {
+      const resp = await fetch("/api/support/conversations?archived=true", { credentials: "include" });
+      return resp.json();
+    },
+    refetchInterval: 30000,
+    staleTime: 15000,
+    enabled: !isArchivedView,
+  });
+
+  const archivedCount = isArchivedView ? conversations.length : archivedConversations.length;
 
   const { data: messages = [] } = useQuery<Message[]>({
     queryKey: ["/api/support/conversations", selectedConvId, "messages"],
@@ -928,6 +957,14 @@ export default function SupportChatPage() {
               >
                 {f.key === "archived" && <Archive className="w-3 h-3" />}
                 {f.label}
+                {f.key === "archived" && archivedCount > 0 && (
+                  <span className={cn(
+                    "rounded-full px-1.5 py-0 text-[10px] font-bold leading-tight",
+                    labelFilter === "archived" ? "bg-white/20 text-white" : "bg-muted-foreground/20 text-muted-foreground"
+                  )}>
+                    {archivedCount}
+                  </span>
+                )}
               </button>
             ))}
             {waLabels.map(l => (
@@ -1045,8 +1082,7 @@ export default function SupportChatPage() {
                   }}
                   onContextMenu={(e) => {
                     e.preventDefault();
-                    setSelectMode(true);
-                    setSelectedIds(new Set([conv.id]));
+                    setContextMenu({ x: e.clientX, y: e.clientY, conv });
                   }}
                 >
                   {selectMode && (
@@ -1138,6 +1174,71 @@ export default function SupportChatPage() {
           </div>
         )}
       </div>
+
+      {/* Right-click context menu */}
+      {contextMenu && (
+        <div
+          ref={contextMenuRef}
+          className="fixed z-50 bg-popover border border-border rounded-lg shadow-lg py-1 min-w-[180px]"
+          style={{
+            top: Math.min(contextMenu.y, window.innerHeight - 200),
+            left: Math.min(contextMenu.x, window.innerWidth - 200),
+          }}
+          data-testid="conversation-context-menu"
+        >
+          <button
+            className="w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-accent rounded transition-colors"
+            onClick={() => {
+              setSelectedConvId(contextMenu.conv.id);
+              setContextMenu(null);
+            }}
+            data-testid="context-menu-open"
+          >
+            <MessageCircle className="w-4 h-4" />
+            Open chat
+          </button>
+          <button
+            className="w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-accent rounded transition-colors"
+            onClick={() => {
+              setSelectMode(true);
+              setSelectedIds(new Set([contextMenu.conv.id]));
+              setContextMenu(null);
+            }}
+            data-testid="context-menu-select"
+          >
+            <CheckSquare className="w-4 h-4" />
+            Select
+          </button>
+          <div className="border-t border-border my-1" />
+          <button
+            className="w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-accent rounded transition-colors"
+            onClick={() => {
+              archiveMutation.mutate({ ids: [contextMenu.conv.id], unarchive: contextMenu.conv.isArchived });
+              if (selectedConvId === contextMenu.conv.id && !contextMenu.conv.isArchived) setSelectedConvId(null);
+              setContextMenu(null);
+            }}
+            data-testid="context-menu-archive"
+          >
+            {contextMenu.conv.isArchived ? (
+              <><ArchiveRestore className="w-4 h-4" />Unarchive</>
+            ) : (
+              <><Archive className="w-4 h-4" />Archive</>
+            )}
+          </button>
+          <div className="border-t border-border my-1" />
+          <button
+            className="w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-accent text-destructive rounded transition-colors"
+            onClick={() => {
+              deleteMutation.mutate(contextMenu.conv.id);
+              setContextMenu(null);
+            }}
+            data-testid="context-menu-delete"
+          >
+            <Trash2 className="w-4 h-4" />
+            Delete
+          </button>
+        </div>
+      )}
 
       <div className="flex-1 flex flex-col min-w-0">
         {!selectedConv ? (
