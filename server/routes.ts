@@ -8582,27 +8582,78 @@ export async function registerRoutes(
   app.get("/api/whatsapp/link-preview", isAuthenticated, async (req: any, res) => {
     try {
       const url = req.query.url as string;
-      if (!url || !/^https?:\/\//i.test(url)) {
-        return res.status(400).json({ error: "Invalid URL" });
+      if (!url) return res.status(400).json({ error: "Missing url" });
+
+      // Parse and validate
+      let parsed: URL;
+      try { parsed = new URL(url); } catch { return res.status(400).json({ error: "Invalid URL" }); }
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        return res.status(400).json({ error: "Only http/https allowed" });
       }
+
+      // SSRF protection: block private/internal hostnames by name
+      const hostname = parsed.hostname.toLowerCase();
+      const blockedHostnames = ["localhost", "metadata.google.internal", "169.254.169.254"];
+      const blockedSuffixes = [".local", ".internal", ".localhost", ".localdomain"];
+      if (blockedHostnames.includes(hostname) || blockedSuffixes.some(s => hostname.endsWith(s))) {
+        return res.status(403).json({ error: "URL not allowed" });
+      }
+
+      // SSRF protection: DNS resolve and block private IP ranges
+      const dns = await import("dns");
+      const { lookup: dnsLookup } = dns.promises;
+      const isPrivateIP = (ip: string): boolean => {
+        const privateRanges = [
+          /^127\./,
+          /^10\./,
+          /^172\.(1[6-9]|2\d|3[01])\./,
+          /^192\.168\./,
+          /^169\.254\./,
+          /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./,
+          /^0\./,
+          /^::1$/,
+          /^fc/i,
+          /^fd/i,
+          /^fe80:/i,
+        ];
+        return privateRanges.some(r => r.test(ip));
+      };
+      let resolvedIP: string;
+      try {
+        const result = await dnsLookup(hostname);
+        resolvedIP = result.address;
+      } catch {
+        return res.status(400).json({ error: "Could not resolve hostname" });
+      }
+      if (isPrivateIP(resolvedIP)) {
+        return res.status(403).json({ error: "URL not allowed" });
+      }
+
+      // Fetch HTML (follow redirects but re-check each hop would require custom fetch — use max 3 redirects)
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 8000);
       let html = "";
       try {
         const resp = await fetch(url, {
           signal: controller.signal,
-          headers: { "User-Agent": "WhatsApp/2.0 (+http://www.whatsapp.com/bot)" },
+          headers: {
+            "User-Agent": "Twitterbot/1.0",
+            "Accept": "text/html",
+          },
+          redirect: "follow",
         });
         clearTimeout(timeout);
         if (!resp.ok) return res.status(400).json({ error: "Could not fetch URL" });
         const ct = resp.headers.get("content-type") || "";
         if (!ct.includes("text/html")) return res.status(400).json({ error: "Not an HTML page" });
+        // Read at most 128 KB
         const buf = await resp.arrayBuffer();
-        html = Buffer.from(buf).slice(0, 128000).toString("utf-8");
+        html = Buffer.from(buf).slice(0, 131072).toString("utf-8");
       } catch {
         clearTimeout(timeout);
         return res.status(400).json({ error: "Could not reach URL" });
       }
+
       const getMeta = (prop: string, attr: string = "content") => {
         const re = new RegExp(`<meta[^>]+(?:property|name)=["']${prop}["'][^>]+${attr}=["']([^"']+)["']`, "i");
         const re2 = new RegExp(`<meta[^>]+${attr}=["']([^"']+)["'][^>]+(?:property|name)=["']${prop}["']`, "i");

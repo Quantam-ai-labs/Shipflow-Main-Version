@@ -1358,6 +1358,8 @@ export default function SupportChatPage() {
     if (!messageText.trim() || !selectedConvId || sendMutation.isPending) return;
     const text = messageText.trim();
     setMessageText("");
+    setLinkPreview(null);
+    setLinkPreviewDismissed(false);
     sendMutation.mutate({ text, referenceMessageId: replyingTo?.id });
   };
 
@@ -2215,6 +2217,26 @@ export default function SupportChatPage() {
                                       {renderFormattedText(msg.text || "")}
                                     </div>
                                   )}
+                                  {/* Link preview chip for messages containing URLs */}
+                                  {!isButtonReply && !isNonText && (() => {
+                                    const urlMatch = (msg.text || "").match(/https?:\/\/[^\s<>"{}|\\^`[\]]+/);
+                                    if (!urlMatch) return null;
+                                    const url = urlMatch[0];
+                                    let domain = "";
+                                    try { domain = new URL(url).hostname.replace(/^www\./, ""); } catch {}
+                                    return (
+                                      <a
+                                        href={url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center gap-1.5 mt-1.5 px-2 py-1.5 rounded-md border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition-colors no-underline group/link"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <ExternalLink className="w-3 h-3 text-[#008069] shrink-0" />
+                                        <span className="text-[11px] text-[#008069] truncate max-w-[160px]">{domain || url.slice(0, 30)}</span>
+                                      </a>
+                                    );
+                                  })()}
                                   <div className={cn(
                                     "flex items-center gap-1 mt-0.5",
                                     isOutbound ? "justify-end" : ""
@@ -2743,8 +2765,7 @@ export default function SupportChatPage() {
             {/* Links */}
             <TabsContent value="links" className="flex-1 overflow-y-auto px-4 py-3 mt-0">
               {(() => {
-                const urlRegex = /https?:\/\/[^\s<>"{}|\\^`\[\]]+/g;
-                const linkMessages = messages.filter(m => m.text && urlRegex.test(m.text));
+                const linkMessages = messages.filter(m => m.text && /https?:\/\/[^\s<>"{}|\\^`[\]]+/.test(m.text));
                 if (linkMessages.length === 0) {
                   return (
                     <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
@@ -2867,26 +2888,45 @@ export default function SupportChatPage() {
                       </div>
                     )}
                   </div>
-                  <Button
-                    className="w-full bg-[#008069] hover:bg-[#017561] text-white"
-                    onClick={() => {
-                      if (selectedConvId && selectedTemplate) {
-                        sendTemplateMutation.mutate({
-                          convId: selectedConvId,
-                          templateId: selectedTemplate.id,
-                        });
-                      }
-                    }}
-                    disabled={sendTemplateMutation.isPending}
-                    data-testid="button-send-template"
-                  >
-                    {sendTemplateMutation.isPending ? (
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    ) : (
-                      <Send className="w-4 h-4 mr-2" />
-                    )}
-                    Send Template
-                  </Button>
+                  <div className="flex flex-col gap-2">
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => {
+                        if (selectedTemplate?.body) {
+                          setMessageText(selectedTemplate.body);
+                          setTemplatePickerOpen(false);
+                          setSelectedTemplate(null);
+                          setTemplateSearch("");
+                          setTimeout(() => inputRef.current?.focus(), 50);
+                        }
+                      }}
+                      data-testid="button-fill-template"
+                    >
+                      <Pencil className="w-4 h-4 mr-2" />
+                      Fill in Compose
+                    </Button>
+                    <Button
+                      className="w-full bg-[#008069] hover:bg-[#017561] text-white"
+                      onClick={() => {
+                        if (selectedConvId && selectedTemplate) {
+                          sendTemplateMutation.mutate({
+                            convId: selectedConvId,
+                            templateId: selectedTemplate.id,
+                          });
+                        }
+                      }}
+                      disabled={sendTemplateMutation.isPending}
+                      data-testid="button-send-template"
+                    >
+                      {sendTemplateMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Send className="w-4 h-4 mr-2" />
+                      )}
+                      Send Now
+                    </Button>
+                  </div>
                 </>
               ) : (
                 <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
