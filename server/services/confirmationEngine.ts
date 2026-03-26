@@ -107,6 +107,7 @@ const NOTIFICATION_CATEGORY_MAP: Record<string, { category: string; resolvable: 
   robocall_exhausted:           { category: "confirmation", resolvable: true },
   shopify_writeback_failed:     { category: "other",        resolvable: false },
   urgent_cancellation_request:  { category: "chat",         resolvable: true },
+  ai_urgent_request:            { category: "chat",         resolvable: true },
 };
 
 export async function createNotification(params: {

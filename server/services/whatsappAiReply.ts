@@ -54,7 +54,7 @@ const STATUS_MAP: Record<string, string> = {
   CANCELLED: "Cancelled",
 };
 
-export type AiClassification = "complaint" | "return" | "replacement" | "human_handoff" | "conflict" | "lead" | "general_query" | null;
+export type AiClassification = "complaint" | "return" | "replacement" | "human_handoff" | "conflict" | "lead" | "general_query" | "urgent_request" | null;
 
 export interface AiReplyResult {
   success: boolean;
@@ -318,6 +318,7 @@ The "classification" field must be one of:
 - "return" — if the customer wants to return an item
 - "replacement" — if the customer wants a replacement item
 - "conflict" — ONLY if the customer's message CONTRADICTS their prior confirmed order with clear cancellation/change intent. Examples that ARE conflict: "actually don't send it", "I changed my mind don't deliver", "cancel the order I confirmed", "wrong address I need to change it before you ship", "please stop the order". Examples that are NOT conflict (use null instead): "is open parcel allowed?", "what's the delivery time?", "can I pay on delivery?", "how do I track my order?". Do NOT classify informational questions as conflict — only classify when the customer clearly wants to cancel or stop the order they confirmed.
+- "urgent_request" — ONLY when the customer's order is already in a post-booking stage (status: Booked with Courier, Shipped/In Transit, or Delivered) AND the customer clearly wants to cancel, return, stop delivery, hold the shipment, or get a refund. This covers all phrasings: English ("cancel my order", "please stop delivery", "return it", "I don't want it anymore", "refund me"), Roman Urdu ("wapis le jao", "cancel kar do parcel", "nahi chahiye ab", "rok lo", "dobara mat lana", "wapis bhej do"), Urdu script ("واپس", "رکاؤ", "کینسل کرو"), and misspellings. Do NOT use for pre-booking inquiries or routine post-delivery questions.
 - "human_handoff" — ONLY if the customer EXPLICITLY asks to speak to a human agent, real person, manager, or supervisor using clear direct language
 - "lead" — if the customer wants to place a new order, asks to send another item, says "send me one more", provides their address/phone/name for delivery, or shows buying intent for a product
 - "general_query" — if the customer sends media (picture, video, audio, document) that you cannot process, or sends a message that is completely unclear and doesn't fit any other category

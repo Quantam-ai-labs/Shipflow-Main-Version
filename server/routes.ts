@@ -6030,66 +6030,19 @@ export async function registerRoutes(
           }
         }
       } else if (result.locked) {
-        // --- Urgent keyword detection for post-booking messages ---
-        const URGENT_ORDER_STATUSES = new Set(["BOOKED", "FULFILLED", "DELIVERED"]);
-        const URGENT_KEYWORDS = [
-          "cancel", "cancellation", "cancelled", "hold", "stop", "return",
-          "refund", "don't deliver", "dont deliver", "do not deliver",
-          "نہ لاؤ", "واپس", "رکاؤ", "کینسل", "رکنا", "واپسی",
-        ];
-        const msgLower = messageBody.toLowerCase();
-        const isUrgentStatus = URGENT_ORDER_STATUSES.has(orderForStatus?.workflowStatus ?? "");
-        const isUrgentKeyword = URGENT_KEYWORDS.some(kw => msgLower.includes(kw.toLowerCase()));
-
-        if (isUrgentStatus && isUrgentKeyword) {
-          console.log(`        URGENT: post-booking cancellation/hold/return request for #${orderNumber} (status=${orderForStatus?.workflowStatus}): "${messageBody.slice(0, 80)}"`);
-          try {
-            const existingLabels = await storage.getWaLabels(merchantId);
-            let urgentLabel = existingLabels.find(l => l.name === "Urgent");
-            if (!urgentLabel) {
-              urgentLabel = await storage.createWaLabel({
-                merchantId,
-                name: "Urgent",
-                color: "bg-red-500",
-                sortOrder: 6,
-                isSystem: true,
-              });
-            } else if (urgentLabel.color !== "bg-red-500") {
-              await storage.updateWaLabel(merchantId, urgentLabel.id, { color: "bg-red-500" });
-            }
-            const convUrgent = await storage.getConversationByPhone(merchantId, normalizedPhone);
-            if (convUrgent) {
-              await storage.updateConversationLabel(merchantId, convUrgent.id, "Urgent");
-              await storage.pauseAiForConversation(merchantId, convUrgent.id);
-            }
-            await sendWhatsAppReply(normalizedPhone,
-              `Your request has been flagged for urgent review. Our team will contact you immediately.`,
-              replyPhoneId, replyAccessToken);
-            await createNotification({
-              merchantId,
-              type: "urgent_cancellation_request",
-              title: `Urgent: Customer wants to cancel/hold order #${orderNumber}`,
-              message: `Customer message: "${messageBody.slice(0, 120)}" — Order status: ${orderForStatus?.workflowStatus ?? "BOOKED"}`,
-              orderId,
-              orderNumber,
-              category: "chat",
-              resolvable: true,
-            });
-          } catch (urgentErr: any) {
-            console.error(`        Error handling urgent post-booking request:`, urgentErr.message);
-          }
+        // Post-booking message: route to AI for universal intent detection.
+        // The AI will classify urgent requests (cancel/return/hold after booking) as "urgent_request"
+        // which triggers the Urgent label, pauses AI, and creates a chat notification.
+        const aiMerchantLocked = await storage.getMerchant(merchantId);
+        if (aiMerchantLocked?.aiAutoReplyEnabled) {
+          const convLocked = await storage.getConversationByPhone(merchantId, normalizedPhone);
+          console.log(`        Order #${orderNumber} is locked (${orderForStatus?.workflowStatus}) — routing post-booking message to AI: "${messageBody.slice(0, 80)}"`);
+          handleAiAutoReply(merchantId, normalizedPhone, messageBody, convLocked?.id || null, orderId, orderNumber).catch((e: any) =>
+            console.error(`${LOG_PREFIX_WA_AI} Error in post-booking AI reply:`, e.message)
+          );
         } else {
-          const aiMerchantLocked = await storage.getMerchant(merchantId);
-          if (aiMerchantLocked?.aiAutoReplyEnabled) {
-            const convLocked = await storage.getConversationByPhone(merchantId, normalizedPhone);
-            console.log(`        Order #${orderNumber} is locked (${orderForStatus?.workflowStatus}) — routing post-booking message to AI: "${messageBody.slice(0, 80)}"`);
-            handleAiAutoReply(merchantId, normalizedPhone, messageBody, convLocked?.id || null, orderId, orderNumber).catch((e: any) =>
-              console.error(`${LOG_PREFIX_WA_AI} Error in post-booking AI reply:`, e.message)
-            );
-          } else {
-            await sendWhatsAppReply(normalizedPhone,
-              `Order #${orderNumber} has already been confirmed and is being processed. For any changes, please contact our support team.`, replyPhoneId, replyAccessToken);
-          }
+          await sendWhatsAppReply(normalizedPhone,
+            `Order #${orderNumber} has already been confirmed and is being processed. For any changes, please contact our support team.`, replyPhoneId, replyAccessToken);
         }
       } else {
         console.log(`        Failed: ${result.error}`);
@@ -6124,9 +6077,10 @@ export async function registerRoutes(
     conflict: "Conflicts",
     lead: "Leads",
     general_query: "General Queries",
+    urgent_request: "Urgent",
   };
 
-  const NOTIFY_CLASSIFICATIONS = new Set(["complaint", "return", "replacement", "human_handoff", "conflict", "lead"]);
+  const NOTIFY_CLASSIFICATIONS = new Set(["complaint", "return", "replacement", "human_handoff", "conflict", "lead", "urgent_request"]);
 
   const CLASSIFICATION_NOTIFICATION_TITLES: Record<string, string> = {
     complaint: "Customer Complaint",
@@ -6135,7 +6089,11 @@ export async function registerRoutes(
     human_handoff: "Human Agent Needed",
     conflict: "Order Conflict Detected",
     lead: "New Lead Detected",
+    urgent_request: "Urgent: Customer Wants to Cancel/Hold",
   };
+
+  // Label priority for escalation — a conversation can only be re-labelled to a higher-priority label
+  const LABEL_PRIORITY = ["Leads", "General Queries", "Complaints", "Returns", "Replacements", "Conflicts", "Need Human", "Urgent"];
 
   async function handleAiAutoReply(
     merchantId: string,
@@ -6209,16 +6167,22 @@ export async function registerRoutes(
             let conv: any = null;
             try {
               conv = await storage.getConversationById(convId);
-              if (conv && !conv.label) {
+              if (conv) {
                 const labelName = CLASSIFICATION_TO_LABEL[result.classification];
-                await storage.updateConversationLabel(merchantId, convId, labelName);
-                console.log(`${LOG_PREFIX_WA_AI} Auto-labeled conversation ${convId} as "${labelName}"`);
+                const currentPriority = LABEL_PRIORITY.indexOf(conv.label || "");
+                const newPriority = LABEL_PRIORITY.indexOf(labelName);
+                if (newPriority > currentPriority) {
+                  await storage.updateConversationLabel(merchantId, convId, labelName);
+                  console.log(`${LOG_PREFIX_WA_AI} Auto-labeled conversation ${convId} as "${labelName}" (escalated from "${conv.label || "none"}")`);
+                } else {
+                  console.log(`${LOG_PREFIX_WA_AI} Skipping label downgrade for ${convId}: "${conv.label}" → "${labelName}" (no escalation)`);
+                }
               }
             } catch (labelErr: any) {
               console.error(`${LOG_PREFIX_WA_AI} Failed to auto-label:`, labelErr.message);
             }
 
-            const shouldPause = result.classification === "complaint" || result.classification === "return" || result.classification === "replacement";
+            const shouldPause = result.classification === "complaint" || result.classification === "return" || result.classification === "replacement" || result.classification === "urgent_request";
             if (shouldPause) {
               try {
                 await storage.pauseAiForConversation(merchantId, convId);
