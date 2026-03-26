@@ -8185,7 +8185,7 @@ export async function registerRoutes(
       if (!conv || conv.merchantId !== merchantId) {
         return res.status(404).json({ error: "Conversation not found" });
       }
-      const { text, referenceMessageId: clientRefMsgId, linkPreviewUrl } = req.body;
+      const { text, referenceMessageId: clientRefMsgId, linkPreviewUrl, linkPreviewData } = req.body;
       if (!text?.trim()) return res.status(400).json({ error: "Message text required" });
 
       const [merchantRow] = await db.select({
@@ -8221,6 +8221,7 @@ export async function registerRoutes(
         replyWaMessageId = refMsg?.waMessageId ?? null;
       }
 
+      const storedLinkPreviewData = linkPreviewData && typeof linkPreviewData === "object" && "url" in linkPreviewData ? linkPreviewData as { url: string; title: string | null; description: string | null; image: string | null; siteName: string | null } : null;
       const msg = await storage.createWaMessage({
         conversationId: conv.id,
         direction: "outbound",
@@ -8228,7 +8229,8 @@ export async function registerRoutes(
         text: text.trim(),
         status: "sent",
         referenceMessageId: clientRefMsgId ?? null,
-        linkPreviewUrl: linkPreviewUrl && typeof linkPreviewUrl === "string" ? linkPreviewUrl : null,
+        linkPreviewUrl: linkPreviewUrl && typeof linkPreviewUrl === "string" ? linkPreviewUrl : (storedLinkPreviewData?.url ?? null),
+        linkPreviewData: storedLinkPreviewData,
       });
 
       res.json(msg);

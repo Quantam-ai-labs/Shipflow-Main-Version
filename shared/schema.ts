@@ -548,6 +548,7 @@ export const waMessages = pgTable("wa_messages", {
   reactionFrom: varchar("reaction_from", { length: 50 }),
   referenceMessageId: varchar("reference_message_id", { length: 255 }),
   linkPreviewUrl: text("link_preview_url"),
+  linkPreviewData: jsonb("link_preview_data").$type<{ url: string; title: string | null; description: string | null; image: string | null; siteName: string | null } | null>(),
   deletedByCustomerAt: timestamp("deleted_by_customer_at"),
   deliveredAt: timestamp("delivered_at"),
   readAt: timestamp("read_at"),

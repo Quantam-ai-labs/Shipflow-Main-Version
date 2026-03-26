@@ -99,6 +99,7 @@ interface Message {
   referenceMessageId: string | null;
   waMessageId: string | null;
   linkPreviewUrl: string | null;
+  linkPreviewData: { url: string; title: string | null; description: string | null; image: string | null; siteName: string | null } | null;
   createdAt: string;
   deliveredAt: string | null;
   readAt: string | null;
@@ -119,6 +120,31 @@ interface WaLabel {
   isSystem: boolean;
 }
 
+interface WaContact {
+  name?: { formatted_name?: string };
+  phones?: Array<{ phone?: string }>;
+}
+
+interface WaTemplateButton {
+  type: "QUICK_REPLY" | "URL" | "PHONE_NUMBER" | string;
+  text: string;
+  url?: string | null;
+  phone_number?: string | null;
+}
+
+interface WaTemplateComponentParameter {
+  type: string;
+  text?: string;
+  [key: string]: unknown;
+}
+
+interface WaTemplateComponent {
+  type: "header" | "body" | "button" | string;
+  parameters?: WaTemplateComponentParameter[];
+  sub_type?: string;
+  index?: number;
+}
+
 interface WaMetaTemplate {
   id: string;
   name: string;
@@ -128,7 +154,7 @@ interface WaMetaTemplate {
   headerText: string | null;
   body: string | null;
   footer: string | null;
-  buttons: any[];
+  buttons: WaTemplateButton[];
   status: string;
 }
 
@@ -249,18 +275,23 @@ function highlightSearchText(text: string, query: string): JSX.Element {
   );
 }
 
-function LinkPreviewBubble({ url }: { url: string }) {
-  const { data } = useQuery<{ url: string; title: string | null; description: string | null; image: string | null; siteName: string | null }>({
-    queryKey: ["/api/whatsapp/link-preview", url],
+type LinkPreviewData = { url: string; title: string | null; description: string | null; image: string | null; siteName: string | null };
+
+function LinkPreviewBubble({ storedData, url }: { storedData?: LinkPreviewData | null; url?: string | null }) {
+  const resolvedUrl = storedData?.url ?? url ?? null;
+  const { data: fetchedData } = useQuery<LinkPreviewData | null>({
+    queryKey: ["/api/whatsapp/link-preview", resolvedUrl],
     queryFn: async () => {
-      const resp = await fetch(`/api/whatsapp/link-preview?url=${encodeURIComponent(url)}`, { credentials: "include" });
+      if (!resolvedUrl) return null;
+      const resp = await fetch(`/api/whatsapp/link-preview?url=${encodeURIComponent(resolvedUrl)}`, { credentials: "include" });
       if (!resp.ok) return null;
       return resp.json();
     },
-    enabled: !!url,
+    enabled: !storedData && !!resolvedUrl,
     staleTime: 1000 * 60 * 30,
     retry: false,
   });
+  const data = storedData ?? fetchedData;
   if (!data || (!data.title && !data.description)) return null;
   return (
     <div className="mt-1.5 rounded-md border border-black/10 dark:border-white/10 overflow-hidden bg-black/5 dark:bg-white/5">
@@ -510,7 +541,7 @@ function MediaBubble({ msg, mediaProxyBase }: { msg: Message; mediaProxyBase: st
   }
 
   if (msg.messageType === "contacts") {
-    let contacts: any[] = [];
+    let contacts: WaContact[] = [];
     try { contacts = JSON.parse(msg.mediaUrl || "[]"); } catch { }
     if (contacts.length === 0) {
       return (
@@ -522,9 +553,9 @@ function MediaBubble({ msg, mediaProxyBase }: { msg: Message; mediaProxyBase: st
     }
     return (
       <div className="space-y-2" data-testid={`media-contacts-${msg.id}`}>
-        {contacts.map((c: any, i: number) => {
+        {contacts.map((c: WaContact, i: number) => {
           const name = c.name?.formatted_name || "Unknown";
-          const phones = c.phones?.map((p: any) => p.phone).filter(Boolean) || [];
+          const phones = c.phones?.map((p) => p.phone).filter(Boolean) || [];
           return (
             <div key={i} className="flex items-center gap-3 p-2 rounded-md bg-muted/50">
               <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -1065,9 +1096,9 @@ export default function SupportChatPage() {
 
   const lastSentTextRef = useRef("");
   const sendMutation = useMutation({
-    mutationFn: async ({ text, referenceMessageId, linkPreviewUrl }: { text: string; referenceMessageId?: string; linkPreviewUrl?: string | null }) => {
+    mutationFn: async ({ text, referenceMessageId, linkPreviewUrl, linkPreviewData }: { text: string; referenceMessageId?: string; linkPreviewUrl?: string | null; linkPreviewData?: LinkPreview | null }) => {
       lastSentTextRef.current = text;
-      return apiRequest("POST", `/api/support/conversations/${selectedConvId}/messages`, { text, referenceMessageId, linkPreviewUrl: linkPreviewUrl ?? null });
+      return apiRequest("POST", `/api/support/conversations/${selectedConvId}/messages`, { text, referenceMessageId, linkPreviewUrl: linkPreviewUrl ?? null, linkPreviewData: linkPreviewData ?? null });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/support/conversations", selectedConvId, "messages"] });
@@ -1270,7 +1301,7 @@ export default function SupportChatPage() {
   });
 
   const sendTemplateMutation = useMutation({
-    mutationFn: async ({ convId, templateId, components }: { convId: string; templateId: string; components?: any[] }) =>
+    mutationFn: async ({ convId, templateId, components }: { convId: string; templateId: string; components?: WaTemplateComponent[] }) =>
       apiRequest("POST", `/api/support/conversations/${convId}/send-template`, { templateId, components }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/support/conversations", selectedConvId, "messages"] });
@@ -1398,11 +1429,11 @@ export default function SupportChatPage() {
     e?.preventDefault();
     if (!messageText.trim() || !selectedConvId || sendMutation.isPending) return;
     const text = messageText.trim();
-    const previewUrl = linkPreview?.url ?? null;
+    const capturedPreview = linkPreview ? { ...linkPreview } : null;
     setMessageText("");
     setLinkPreview(null);
     setLinkPreviewDismissed(false);
-    sendMutation.mutate({ text, referenceMessageId: replyingTo?.id, linkPreviewUrl: previewUrl });
+    sendMutation.mutate({ text, referenceMessageId: replyingTo?.id, linkPreviewUrl: capturedPreview?.url ?? null, linkPreviewData: capturedPreview });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -2256,18 +2287,19 @@ export default function SupportChatPage() {
                                   )}
                                   {!isButtonReply && !isNonText && (
                                     <div className="whitespace-pre-wrap break-words leading-relaxed">
-                                      {isCurrentSearchTarget && msg.text
+                                      {isSearchMatch && msg.text && msgSearchQuery
                                         ? highlightSearchText(msg.text, msgSearchQuery)
                                         : renderFormattedText(msg.text || "")}
                                     </div>
                                   )}
-                                  {/* Rich link preview card — use stored linkPreviewUrl if persisted, else extract from text */}
+                                  {/* Rich link preview card — use stored linkPreviewData if persisted (no refetch), else lazy-fetch by URL */}
                                   {!isButtonReply && !isNonText && (() => {
-                                    const previewUrl = msg.linkPreviewUrl
-                                      || (msg.text || "").match(/https?:\/\/[^\s<>"{}|\\^`[\]]+/)?.[0]
-                                      || null;
-                                    if (!previewUrl) return null;
-                                    return <LinkPreviewBubble url={previewUrl} />;
+                                    if (msg.linkPreviewData) {
+                                      return <LinkPreviewBubble storedData={msg.linkPreviewData} />;
+                                    }
+                                    const extractedUrl = (msg.text || "").match(/https?:\/\/[^\s<>"{}|\\^`[\]]+/)?.[0] ?? null;
+                                    if (!extractedUrl) return null;
+                                    return <LinkPreviewBubble url={extractedUrl} />;
                                   })()}
                                   <div className={cn(
                                     "flex items-center gap-1 mt-0.5",
@@ -2912,7 +2944,7 @@ export default function SupportChatPage() {
                     )}
                     {selectedTemplate.buttons && selectedTemplate.buttons.length > 0 && (
                       <div className="mt-2 space-y-1 border-t border-black/10 dark:border-white/10 pt-2">
-                        {selectedTemplate.buttons.map((btn: any, i: number) => (
+                        {selectedTemplate.buttons.map((btn: WaTemplateButton, i: number) => (
                           <div key={i} className="text-[11px] text-[#008069] font-medium text-center py-0.5">
                             {btn.text || btn}
                           </div>
@@ -2998,7 +3030,7 @@ function FileComplaintFromChat({
         source: "whatsapp_chat",
         reason: reason || undefined,
       }),
-    onSuccess: async (res: any) => {
+    onSuccess: async (res: Response) => {
       const data = await res.json();
       setTicketCreated(data.ticketNumber);
       queryClient.invalidateQueries({ queryKey: ["/api/support/complaints"] });
