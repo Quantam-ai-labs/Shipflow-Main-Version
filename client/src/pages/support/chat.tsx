@@ -277,7 +277,7 @@ function highlightSearchText(text: string, query: string): JSX.Element {
 
 type LinkPreviewData = { url: string; title: string | null; description: string | null; image: string | null; siteName: string | null };
 
-function LinkPreviewBubble({ storedData, url }: { storedData?: LinkPreviewData | null; url?: string | null }) {
+function LinkPreviewBubble({ storedData, url, messageId }: { storedData?: LinkPreviewData | null; url?: string | null; messageId?: string | null }) {
   const resolvedUrl = storedData?.url ?? url ?? null;
   const { data: fetchedData } = useQuery<LinkPreviewData | null>({
     queryKey: ["/api/whatsapp/link-preview", resolvedUrl],
@@ -291,6 +291,21 @@ function LinkPreviewBubble({ storedData, url }: { storedData?: LinkPreviewData |
     staleTime: 1000 * 60 * 30,
     retry: false,
   });
+
+  // Persist fetched OG data back to the message record for durable first-view caching
+  const persistedRef = useRef(false);
+  useEffect(() => {
+    if (!fetchedData || storedData || !messageId || persistedRef.current) return;
+    if (!fetchedData.title && !fetchedData.description) return;
+    persistedRef.current = true;
+    fetch(`/api/support/messages/${messageId}/link-preview`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ linkPreviewUrl: fetchedData.url, linkPreviewData: fetchedData }),
+    }).catch(() => { /* fire-and-forget */ });
+  }, [fetchedData, storedData, messageId]);
+
   const data = storedData ?? fetchedData;
   if (!data || (!data.title && !data.description)) return null;
   return (
@@ -1295,7 +1310,7 @@ export default function SupportChatPage() {
 
   const reactMutation = useMutation({
     mutationFn: async ({ convId, emoji, waMessageId }: { convId: string; emoji: string; waMessageId: string }) =>
-      apiRequest("POST", `/api/support/conversations/${convId}/react`, { emoji, waMessageId }),
+      apiRequest("POST", `/api/whatsapp/messages/${waMessageId}/react`, { emoji, conversationId: convId }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/support/conversations", selectedConvId, "messages"] });
     },
@@ -2295,14 +2310,14 @@ export default function SupportChatPage() {
                                         : renderFormattedText(msg.text || "")}
                                     </div>
                                   )}
-                                  {/* Rich link preview card — use stored linkPreviewData if persisted (no refetch), else lazy-fetch by URL */}
+                                  {/* Rich link preview card — use stored linkPreviewData if persisted (no refetch), else lazy-fetch and persist on first view */}
                                   {!isButtonReply && !isNonText && (() => {
                                     if (msg.linkPreviewData) {
-                                      return <LinkPreviewBubble storedData={msg.linkPreviewData} />;
+                                      return <LinkPreviewBubble storedData={msg.linkPreviewData} messageId={msg.id} />;
                                     }
                                     const extractedUrl = (msg.text || "").match(/https?:\/\/[^\s<>"{}|\\^`[\]]+/)?.[0] ?? null;
                                     if (!extractedUrl) return null;
-                                    return <LinkPreviewBubble url={extractedUrl} />;
+                                    return <LinkPreviewBubble url={extractedUrl} messageId={msg.id} />;
                                   })()}
                                   <div className={cn(
                                     "flex items-center gap-1 mt-0.5",
@@ -2767,26 +2782,30 @@ export default function SupportChatPage() {
                 }
                 return (
                   <div className="grid grid-cols-3 gap-1">
-                    {mediaMessages.map(m => (
-                      <div key={m.id} className="aspect-square rounded-md overflow-hidden bg-muted border border-border">
-                        {m.messageType === "image" ? (
-                          <img
-                            src={`/api/whatsapp/media/${m.mediaId}`}
-                            alt="Media"
-                            className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
-                            onClick={() => {
-                              setGalleryOpen(false);
-                              jumpToMessage(m.id);
-                            }}
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-black/10 cursor-pointer hover:bg-black/20 transition-colors"
-                            onClick={() => { setGalleryOpen(false); jumpToMessage(m.id); }}>
-                            <Play className="w-8 h-8 text-white/80" />
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                    {mediaMessages.map(m => {
+                      const mediaId = extractMediaId(m.mediaUrl);
+                      const mediaHref = mediaId ? `/api/whatsapp/media/${mediaId}` : m.mediaUrl || "#";
+                      return (
+                        <div key={m.id} className="aspect-square rounded-md overflow-hidden bg-muted border border-border">
+                          {m.messageType === "image" ? (
+                            <a href={mediaHref} target="_blank" rel="noopener noreferrer">
+                              <img
+                                src={mediaHref}
+                                alt="Media"
+                                className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                                data-testid={`gallery-photo-${m.id}`}
+                              />
+                            </a>
+                          ) : (
+                            <a href={mediaHref} target="_blank" rel="noopener noreferrer"
+                              className="w-full h-full flex items-center justify-center bg-black/10 cursor-pointer hover:bg-black/20 transition-colors"
+                              data-testid={`gallery-video-${m.id}`}>
+                              <Play className="w-8 h-8 text-white/80" />
+                            </a>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 );
               })()}
@@ -2808,22 +2827,29 @@ export default function SupportChatPage() {
                 }
                 return (
                   <div className="space-y-2">
-                    {docMessages.map(m => (
-                      <div
-                        key={m.id}
-                        className="flex items-center gap-3 p-2 rounded-lg border border-border hover:bg-muted/50 cursor-pointer transition-colors"
-                        onClick={() => { setGalleryOpen(false); jumpToMessage(m.id); }}
-                        data-testid={`gallery-doc-${m.id}`}
-                      >
-                        <div className="w-10 h-10 rounded-md bg-[#008069]/10 flex items-center justify-center shrink-0">
-                          <FileText className="w-5 h-5 text-[#008069]" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium truncate">{m.mediaFilename || m.messageType}</p>
-                          <p className="text-[11px] text-muted-foreground">{format(new Date(m.createdAt), "MMM d, yyyy · HH:mm")}</p>
-                        </div>
-                      </div>
-                    ))}
+                    {docMessages.map(m => {
+                      const mediaId = extractMediaId(m.mediaUrl);
+                      const mediaHref = mediaId ? `/api/whatsapp/media/${mediaId}` : m.mediaUrl || "#";
+                      return (
+                        <a
+                          key={m.id}
+                          href={mediaHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-3 p-2 rounded-lg border border-border hover:bg-muted/50 cursor-pointer transition-colors no-underline"
+                          data-testid={`gallery-doc-${m.id}`}
+                        >
+                          <div className="w-10 h-10 rounded-md bg-[#008069]/10 flex items-center justify-center shrink-0">
+                            <FileText className="w-5 h-5 text-[#008069]" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium truncate text-foreground">{m.fileName || m.messageType}</p>
+                            <p className="text-[11px] text-muted-foreground">{format(new Date(m.createdAt), "MMM d, yyyy · HH:mm")}</p>
+                          </div>
+                          <ExternalLink className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                        </a>
+                      );
+                    })}
                   </div>
                 );
               })()}
@@ -2846,26 +2872,23 @@ export default function SupportChatPage() {
                     {linkMessages.map(m => {
                       const urls = m.text!.match(/https?:\/\/[^\s<>"{}|\\^`\[\]]+/g) || [];
                       return urls.map((url, idx) => (
-                        <div
+                        <a
                           key={`${m.id}-${idx}`}
-                          className="flex items-start gap-2 p-2.5 rounded-lg border border-border hover:bg-muted/50 cursor-pointer transition-colors"
-                          onClick={() => { setGalleryOpen(false); jumpToMessage(m.id); }}
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-start gap-2 p-2.5 rounded-lg border border-border hover:bg-muted/50 cursor-pointer transition-colors no-underline"
                           data-testid={`gallery-link-${m.id}-${idx}`}
                         >
                           <LinkIcon className="w-4 h-4 text-[#008069] mt-0.5 shrink-0" />
                           <div className="flex-1 min-w-0">
-                            <a
-                              href={url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs text-[#008069] hover:underline break-all"
-                              onClick={(e) => e.stopPropagation()}
-                            >
+                            <p className="text-xs text-[#008069] break-all">
                               {url.length > 55 ? url.slice(0, 55) + "…" : url}
-                            </a>
+                            </p>
                             <p className="text-[10px] text-muted-foreground mt-0.5">{format(new Date(m.createdAt), "MMM d · HH:mm")}</p>
                           </div>
-                        </div>
+                          <ExternalLink className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                        </a>
                       ));
                     })}
                   </div>

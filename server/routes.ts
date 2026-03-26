@@ -8771,12 +8771,14 @@ export async function registerRoutes(
         return res.status(400).json({ error: "WhatsApp credentials not configured" });
       }
 
-      const waComponents: any[] = components || [];
+      type WaTemplateComponentParam = { type: string; text?: string; [key: string]: unknown };
+      type WaTemplateComponent = { type: string; parameters?: WaTemplateComponentParam[]; sub_type?: string; index?: number };
+      const waComponents: WaTemplateComponent[] = Array.isArray(components) ? components : [];
 
-      const waPayload: any = {
-        messaging_product: "whatsapp",
+      const waPayload = {
+        messaging_product: "whatsapp" as const,
         to: conv.contactPhone,
-        type: "template",
+        type: "template" as const,
         template: {
           name: template.name,
           language: { code: template.language || "en" },
@@ -8794,7 +8796,7 @@ export async function registerRoutes(
         signal: AbortSignal.timeout(10000),
       });
 
-      const waData = await waRes.json() as any;
+      const waData = await waRes.json() as { messages?: Array<{ id: string }>; error?: { message?: string } };
       if (!waRes.ok) {
         return res.status(400).json({ error: waData?.error?.message || "Failed to send template" });
       }
@@ -8822,6 +8824,34 @@ export async function registerRoutes(
       res.json(msg);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Persist fetched OG link-preview data back to message (first-view historical cache)
+  app.patch("/api/support/messages/:messageId/link-preview", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { messageId } = req.params;
+      const { linkPreviewUrl, linkPreviewData } = req.body;
+      if (!linkPreviewUrl && !linkPreviewData) return res.status(400).json({ error: "No preview data provided" });
+      // Verify the message belongs to a conversation of this merchant
+      const [msgRow] = await db.select({ conversationId: waMessages.conversationId, linkPreviewData: waMessages.linkPreviewData })
+        .from(waMessages).where(eq(waMessages.id, messageId)).limit(1);
+      if (!msgRow) return res.status(404).json({ error: "Message not found" });
+      // Skip if already has stored data (idempotent)
+      if (msgRow.linkPreviewData) return res.json({ ok: true, skipped: true });
+      const conv = await storage.getConversationById(msgRow.conversationId);
+      if (!conv || conv.merchantId !== merchantId) return res.status(403).json({ error: "Forbidden" });
+      await db.update(waMessages)
+        .set({
+          linkPreviewUrl: linkPreviewUrl ?? null,
+          linkPreviewData: linkPreviewData ?? null,
+        })
+        .where(eq(waMessages.id, messageId));
+      res.json({ ok: true });
+    } catch (error: unknown) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
     }
   });
 
