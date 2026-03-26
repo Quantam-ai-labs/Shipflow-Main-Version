@@ -5908,7 +5908,7 @@ export async function registerRoutes(
       const lowerMessage = messageBody.toLowerCase().trim();
       console.log(`        Analyzing message: "${lowerMessage}"`);
 
-      const orderForStatus = await storage.getOrder(merchantId, orderId);
+      const orderForStatus = await storage.getOrderById(merchantId, orderId);
       const alreadyActed = orderForStatus?.confirmationStatus === "confirmed" ||
         orderForStatus?.confirmationStatus === "cancelled" ||
         orderForStatus?.confirmationStatus === "manual_confirmed" ||
@@ -5969,8 +5969,17 @@ export async function registerRoutes(
           }
         }
       } else if (result.locked) {
-        await sendWhatsAppReply(normalizedPhone,
-          `Order #${orderNumber} has already been confirmed and is being processed. For any changes, please contact our support team.`, replyPhoneId, replyAccessToken);
+        const aiMerchantLocked = await storage.getMerchant(merchantId);
+        if (aiMerchantLocked?.aiAutoReplyEnabled) {
+          const convLocked = await storage.getConversationByPhone(merchantId, normalizedPhone);
+          console.log(`        Order #${orderNumber} is locked (${orderForStatus?.workflowStatus}) — routing post-booking message to AI: "${messageBody.slice(0, 80)}"`);
+          handleAiAutoReply(merchantId, normalizedPhone, messageBody, convLocked?.id || null, orderId, orderNumber).catch((e: any) =>
+            console.error(`${LOG_PREFIX_WA_AI} Error in post-booking AI reply:`, e.message)
+          );
+        } else {
+          await sendWhatsAppReply(normalizedPhone,
+            `Order #${orderNumber} has already been confirmed and is being processed. For any changes, please contact our support team.`, replyPhoneId, replyAccessToken);
+        }
       } else {
         console.log(`        Failed: ${result.error}`);
         await sendWhatsAppReply(normalizedPhone,
