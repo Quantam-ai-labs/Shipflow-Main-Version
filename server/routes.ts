@@ -8153,10 +8153,18 @@ export async function registerRoutes(
       if (!conv || conv.merchantId !== merchantId) {
         return res.status(404).json({ error: "Conversation not found" });
       }
-      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
-      const offset = req.query.offset ? parseInt(req.query.offset as string, 10) : 0;
-      if (limit !== undefined) {
-        // Paginated request: return envelope with metadata
+      const rawLimit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+      const rawOffset = req.query.offset ? parseInt(req.query.offset as string, 10) : 0;
+      if (rawLimit !== undefined) {
+        // Paginated request: validate and clamp params
+        if (!Number.isFinite(rawLimit) || rawLimit < 1) {
+          return res.status(400).json({ error: "limit must be a positive integer" });
+        }
+        if (!Number.isFinite(rawOffset) || rawOffset < 0) {
+          return res.status(400).json({ error: "offset must be a non-negative integer" });
+        }
+        const limit = Math.min(rawLimit, 200); // cap at 200 messages per page
+        const offset = rawOffset;
         const total = await storage.countWaMessages(req.params.id);
         const messages = await storage.getWaMessages(req.params.id, { limit, offset });
         return res.json({ messages, total, hasMore: (offset + limit) < total });
