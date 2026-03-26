@@ -749,6 +749,7 @@ async function checkHoldEscalations(): Promise<void> {
           eq(orders.workflowStatus, "HOLD"),
           lt(orders.lastStatusChangedAt, cutoff),
         ))
+        .orderBy(orders.lastStatusChangedAt)
         .limit(30),
       'robocallService-checkHoldEscalations',
     );
