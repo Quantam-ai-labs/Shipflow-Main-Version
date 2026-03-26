@@ -109,13 +109,30 @@ const CATEGORY_BADGE: Record<string, { label: string; className: string }> = {
   other:        { label: "Other",        className: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300" },
 };
 
+const HISTORY_PAGE_SIZE = 50;
+
 function NotificationHistoryCard() {
-  const [showAll, setShowAll] = useState(false);
-  const { data, isLoading } = useQuery<{ notifications: HistoryNotification[]; hasMore: boolean }>({
-    queryKey: ["/api/notifications/history"],
+  const [offset, setOffset] = useState(0);
+  const [allItems, setAllItems] = useState<HistoryNotification[]>([]);
+  const [hasMore, setHasMore] = useState(false);
+
+  const { data, isLoading, isFetching } = useQuery<{ notifications: HistoryNotification[]; hasMore: boolean }>({
+    queryKey: ["/api/notifications/history", offset],
+    queryFn: () => fetch(`/api/notifications/history?limit=${HISTORY_PAGE_SIZE}&offset=${offset}`).then(r => r.json()),
   });
 
-  const notifications = data?.notifications ?? [];
+  useEffect(() => {
+    if (data) {
+      if (offset === 0) {
+        setAllItems(data.notifications);
+      } else {
+        setAllItems(prev => [...prev, ...data.notifications]);
+      }
+      setHasMore(data.hasMore);
+    }
+  }, [data, offset]);
+
+  const totalShown = allItems.length;
 
   return (
     <Card>
@@ -123,8 +140,8 @@ function NotificationHistoryCard() {
         <CardTitle className="text-lg flex items-center gap-2">
           <Bell className="w-5 h-5" />
           Notification History
-          {notifications.length > 0 && (
-            <Badge variant="secondary" className="ml-1">{notifications.length}{data?.hasMore ? "+" : ""} resolved</Badge>
+          {totalShown > 0 && (
+            <Badge variant="secondary" className="ml-1">{totalShown}{hasMore ? "+" : ""} resolved</Badge>
           )}
         </CardTitle>
         <CardDescription>
@@ -132,18 +149,18 @@ function NotificationHistoryCard() {
         </CardDescription>
       </CardHeader>
       <CardContent className="p-0">
-        {isLoading ? (
+        {isLoading && offset === 0 ? (
           <div className="p-6 space-y-3">
             {[1,2,3].map(i => <Skeleton key={i} className="h-12 w-full" />)}
           </div>
-        ) : notifications.length === 0 ? (
+        ) : allItems.length === 0 ? (
           <div className="p-8 text-center text-sm text-muted-foreground">
             No resolved notifications yet.
           </div>
         ) : (
           <>
             <div data-testid="settings-notification-history-list" className="divide-y">
-              {(showAll ? notifications : notifications.slice(0, 10)).map(n => {
+              {allItems.map(n => {
                 const badge = CATEGORY_BADGE[n.category] ?? CATEGORY_BADGE.other;
                 return (
                   <div
@@ -173,10 +190,16 @@ function NotificationHistoryCard() {
                 );
               })}
             </div>
-            {notifications.length > 10 && (
+            {hasMore && (
               <div className="px-6 py-3 border-t">
-                <Button variant="ghost" size="sm" className="w-full text-xs" onClick={() => setShowAll(s => !s)}>
-                  {showAll ? "Show less" : `Show all ${notifications.length}${data?.hasMore ? "+" : ""}`}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full text-xs"
+                  disabled={isFetching}
+                  onClick={() => setOffset(prev => prev + HISTORY_PAGE_SIZE)}
+                >
+                  {isFetching ? "Loading…" : "Load more"}
                 </Button>
               </div>
             )}

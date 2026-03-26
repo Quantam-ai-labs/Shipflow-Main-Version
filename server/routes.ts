@@ -16615,9 +16615,14 @@ export async function registerRoutes(
       const resolvedByName = user?.name || user?.email || user?.username || "Agent";
       const [updated] = await db.update(notifications)
         .set({ resolvedAt: new Date(), resolvedByUserId, resolvedByName, read: true })
-        .where(and(eq(notifications.id, req.params.id), eq(notifications.merchantId, merchantId)))
+        .where(and(
+          eq(notifications.id, req.params.id),
+          eq(notifications.merchantId, merchantId),
+          eq(notifications.resolvable, true),
+          isNull(notifications.resolvedAt),
+        ))
         .returning();
-      if (!updated) return res.status(404).json({ error: "Notification not found" });
+      if (!updated) return res.status(404).json({ error: "Notification not found or already resolved" });
       res.json({ success: true, notification: updated });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
