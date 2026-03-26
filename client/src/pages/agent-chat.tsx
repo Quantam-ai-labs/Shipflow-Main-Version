@@ -1684,7 +1684,6 @@ export default function AgentChatPage() {
   }, [connectAgentSse, hasAccess, slug]);
 
   const agentConvPollInterval = sseConnected ? 60_000 : (isVisible ? 5000 : false);
-  const agentMsgPollInterval = sseConnected ? 30_000 : 3000;
 
   const cachedConvs = useMemo(() => slug ? getCachedConversations(slug) : null, [slug]);
 
