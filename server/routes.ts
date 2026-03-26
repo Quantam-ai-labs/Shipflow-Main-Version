@@ -6086,7 +6086,7 @@ export async function registerRoutes(
               console.error(`${LOG_PREFIX_WA_AI} Failed to auto-label:`, labelErr.message);
             }
 
-            const shouldPause = result.classification === "complaint" || result.classification === "return" || result.classification === "replacement" || result.classification === "conflict";
+            const shouldPause = result.classification === "complaint" || result.classification === "return" || result.classification === "replacement" || result.classification === "conflict" || result.classification === "human_handoff";
             if (shouldPause) {
               try {
                 await storage.pauseAiForConversation(merchantId, convId);
@@ -8159,6 +8159,28 @@ export async function registerRoutes(
       if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: "ids required" });
       await storage.unarchiveConversations(merchantId, ids);
       res.json({ success: true, count: ids.length });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/support/conversations/:id/archive", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      await storage.archiveConversations(merchantId, [req.params.id]);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/support/conversations/:id/unarchive", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      await storage.unarchiveConversations(merchantId, [req.params.id]);
+      res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
