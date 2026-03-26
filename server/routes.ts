@@ -13443,6 +13443,75 @@ export async function registerRoutes(
     return userId;
   }
 
+  // ⚠️ ONE-TIME DATA REPAIR — Remove after use
+  app.post("/api/admin/repair-whatsapp-stuck-2026-03-26", async (req, res) => {
+    const { repairToken } = req.body;
+    if (repairToken !== "repair-wa-stuck-lala-20260326") {
+      return res.status(403).json({ error: "Invalid token" });
+    }
+
+    try {
+      // Find all stuck orders with valid WhatsApp Confirm button responses
+      const stuckRows = await db.execute(sql`
+        SELECT DISTINCT ON (o.id)
+          o.id as order_id,
+          o.merchant_id,
+          o.order_number,
+          o.workflow_status,
+          wr.received_at
+        FROM orders o
+        JOIN whatsapp_responses wr ON wr.order_id = o.id
+        WHERE o.merchant_id = '63d76766-32d7-47ab-8b46-d3c479bcb58a'
+          AND wr.message_type = 'button'
+          AND wr.message_body = 'Confirm'
+          AND o.workflow_status IN ('NEW', 'HOLD')
+          AND o.confirmation_status != 'confirmed'
+          AND wr.received_at >= '2026-03-26 00:00:00'
+        ORDER BY o.id, wr.received_at ASC
+      `);
+
+      const results: any[] = [];
+
+      for (const row of stuckRows.rows as any[]) {
+        try {
+          const result = await processConfirmationResponse({
+            merchantId: row.merchant_id,
+            orderId: row.order_id,
+            source: "whatsapp",
+            action: "confirm",
+            payload: { phoneNumber: "repair", messageBody: "Confirm", raw: "Confirm", repairDate: "2026-03-26" },
+            note: "Data repair: WhatsApp Confirm button response was saved but never processed due to webhook bug",
+          });
+
+          results.push({
+            orderNumber: row.order_number,
+            orderId: row.order_id,
+            fromStatus: row.workflow_status,
+            success: result.success,
+            newStatus: result.newStatus,
+            error: result.error,
+          });
+        } catch (err: any) {
+          results.push({
+            orderNumber: row.order_number,
+            orderId: row.order_id,
+            fromStatus: row.workflow_status,
+            success: false,
+            error: err.message,
+          });
+        }
+      }
+
+      const succeeded = results.filter(r => r.success).length;
+      const failed = results.filter(r => !r.success).length;
+      console.log(`[RepairJob] Completed: ${succeeded} confirmed, ${failed} failed out of ${results.length} orders`);
+      return res.json({ total: results.length, succeeded, failed, results });
+    } catch (err: any) {
+      console.error("[RepairJob] Fatal error:", err.message);
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get("/api/admin/diagnostics", isAuthenticated, async (req, res) => {
     try {
       const user = req.user as any;
