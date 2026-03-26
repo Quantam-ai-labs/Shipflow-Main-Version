@@ -6017,6 +6017,8 @@ export async function registerRoutes(
                 sortOrder: 6,
                 isSystem: true,
               });
+            } else if (urgentLabel.color !== "bg-red-500") {
+              await storage.updateWaLabel(merchantId, urgentLabel.id, { color: "bg-red-500" });
             }
             const convUrgent = await storage.getConversationByPhone(merchantId, normalizedPhone);
             if (convUrgent) {
@@ -6029,10 +6031,12 @@ export async function registerRoutes(
             await createNotification({
               merchantId,
               type: "urgent_cancellation_request",
-              title: `Urgent: Customer wants to cancel/hold order ${orderNumber}`,
+              title: `Urgent: Customer wants to cancel/hold order #${orderNumber}`,
               message: `Customer message: "${messageBody.slice(0, 120)}" — Order status: ${orderForStatus?.workflowStatus ?? "BOOKED"}`,
               orderId,
               orderNumber,
+              category: "chat",
+              resolvable: true,
             });
           } catch (urgentErr: any) {
             console.error(`        Error handling urgent post-booking request:`, urgentErr.message);
