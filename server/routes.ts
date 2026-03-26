@@ -6147,14 +6147,16 @@ export async function registerRoutes(
             if (NOTIFY_CLASSIFICATIONS.has(result.classification)) {
               try {
                 const contactDisplay = conv?.contactName || customerPhone;
-                const orderRef = conv?.orderNumber ? ` (Order #${conv.orderNumber})` : "";
+                const notifOrderId = conv?.orderId || orderId || undefined;
+                const notifOrderNumber = conv?.orderNumber || orderNumber || undefined;
+                const orderRef = notifOrderNumber ? ` (Order #${notifOrderNumber})` : "";
                 await createNotification({
                   merchantId,
                   type: `ai_${result.classification}`,
                   title: CLASSIFICATION_NOTIFICATION_TITLES[result.classification] || result.classification,
                   message: `${contactDisplay}${orderRef} — classified as ${CLASSIFICATION_TO_LABEL[result.classification]}`,
-                  orderId: conv?.orderId || undefined,
-                  orderNumber: conv?.orderNumber || undefined,
+                  orderId: notifOrderId,
+                  orderNumber: notifOrderNumber,
                 });
                 console.log(`${LOG_PREFIX_WA_AI} Notification sent for ${result.classification} on conversation ${convId}`);
               } catch (notifyErr: any) {
