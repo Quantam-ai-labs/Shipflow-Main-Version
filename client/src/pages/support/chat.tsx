@@ -17,14 +17,21 @@ import {
   DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   MessageCircle, Search, Send, Trash2, Phone,
   MoreVertical, Tag, UserPlus, Check, CheckCheck,
   Smile, Bold, Italic, Strikethrough, Code, Filter,
   X, ChevronDown, Image as ImageIcon, Mic, FileText,
-  MapPin, Users, Reply, Download, Play, Pause, Volume2,
+  MapPin, Users, Reply, Download, Play, Pause, Volume2, VolumeX,
   ExternalLink, File as FileIcon, Video, Plus, Pencil, Settings2,
   Paperclip, Camera, FileUp, StopCircle, Loader2, ClipboardList, AlertCircle,
-  Archive, ArchiveRestore, CheckSquare, Square, MinusSquare,
+  Archive, ArchiveRestore, CheckSquare, Square, MinusSquare, Copy, Info,
+  ArrowDown,
 } from "lucide-react";
 import {
   Dialog,
@@ -122,12 +129,44 @@ function formatChatTime(dateStr: string) {
   return format(d, "dd/MM/yy");
 }
 
-function StatusTicks({ status }: { status: string | null }) {
-  if (status === "read") return <CheckCheck className="w-3.5 h-3.5 text-blue-400 inline-block ml-1" />;
-  if (status === "delivered") return <CheckCheck className="w-3.5 h-3.5 text-muted-foreground inline-block ml-1" />;
-  if (status === "sent") return <Check className="w-3.5 h-3.5 text-muted-foreground inline-block ml-1" />;
-  if (status === "failed") return <AlertCircle className="w-3.5 h-3.5 text-red-500 inline-block ml-1" />;
-  return null;
+function StatusTicks({ status, createdAt, sentAt, deliveredAt, readAt }: {
+  status: string | null;
+  createdAt?: string;
+  sentAt?: string;
+  deliveredAt?: string;
+  readAt?: string;
+}) {
+  const formatTimestamp = (ts: string | undefined) =>
+    ts ? format(new Date(ts), "MMM d, HH:mm:ss") : null;
+
+  const tooltipLines: string[] = [];
+  if (createdAt) tooltipLines.push(`Sent: ${formatTimestamp(createdAt)}`);
+  if (deliveredAt) tooltipLines.push(`Delivered: ${formatTimestamp(deliveredAt)}`);
+  if (readAt) tooltipLines.push(`Read: ${formatTimestamp(readAt)}`);
+
+  const icon =
+    status === "read" ? <CheckCheck className="w-3.5 h-3.5 text-blue-400 inline-block ml-1" /> :
+    status === "delivered" ? <CheckCheck className="w-3.5 h-3.5 text-muted-foreground inline-block ml-1" /> :
+    status === "sent" ? <Check className="w-3.5 h-3.5 text-muted-foreground inline-block ml-1" /> :
+    status === "failed" ? <AlertCircle className="w-3.5 h-3.5 text-red-500 inline-block ml-1" /> :
+    null;
+
+  if (!icon) return null;
+
+  if (tooltipLines.length === 0) return icon;
+
+  return (
+    <TooltipProvider delayDuration={400}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="cursor-default">{icon}</span>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-xs">
+          {tooltipLines.map((line, i) => <div key={i}>{line}</div>)}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 }
 
 function renderFormattedText(text: string) {
@@ -436,22 +475,55 @@ function MediaBubble({ msg, mediaProxyBase }: { msg: Message; mediaProxyBase: st
   );
 }
 
-function QuotedMessagePreview({ msg, messages }: { msg: Message; messages: Message[] }) {
+function QuotedMessagePreview({ msg, messages, onJumpToQuoted }: {
+  msg: Message;
+  messages: Message[];
+  onJumpToQuoted?: (id: string) => void;
+}) {
   const quoted = messages.find(m => m.id === msg.referenceMessageId);
   if (!quoted) return null;
   const isInboundQuote = quoted.direction === "inbound";
   const previewText = quoted.text || (quoted.messageType === "image" ? "📷 Image" : quoted.messageType === "audio" ? "🎵 Audio" : quoted.messageType === "video" ? "🎬 Video" : quoted.messageType === "document" ? "📄 Document" : "Message");
   return (
-    <div className={cn(
-      "mb-1.5 rounded-md px-2 py-1 text-xs border-l-[3px] bg-black/5 dark:bg-white/5",
-      isInboundQuote ? "border-l-[#128C7E]" : "border-l-[#007AFF]"
-    )}>
+    <div
+      className={cn(
+        "mb-1.5 rounded-md px-2 py-1 text-xs border-l-[3px] bg-black/5 dark:bg-white/5 cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 transition-colors",
+        isInboundQuote ? "border-l-[#128C7E]" : "border-l-[#007AFF]"
+      )}
+      onClick={() => onJumpToQuoted?.(quoted.id)}
+    >
       <div className={cn("font-semibold mb-0.5", isInboundQuote ? "text-[#128C7E]" : "text-[#007AFF]")}>
         {isInboundQuote ? (quoted.senderName || "Customer") : (quoted.senderName || "You")}
       </div>
       <div className="truncate text-[#54656f] dark:text-[#8696a0]">{previewText}</div>
     </div>
   );
+}
+
+// Web Audio notification sound
+let audioCtx: AudioContext | null = null;
+function playNotificationSound() {
+  try {
+    if (!audioCtx) audioCtx = new AudioContext();
+    const ctx = audioCtx;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.15);
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.3);
+  } catch {}
+}
+
+// Message context menu component
+interface MsgContextMenuState {
+  x: number;
+  y: number;
+  msg: Message;
 }
 
 export default function SupportChatPage() {
@@ -469,6 +541,7 @@ export default function SupportChatPage() {
   const [newLabelColor, setNewLabelColor] = useState("bg-blue-500");
   const [editingLabel, setEditingLabel] = useState<WaLabel | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesScrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -482,10 +555,44 @@ export default function SupportChatPage() {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  // Context menu state
+  // Context menu state (conversation list)
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; conv: Conversation } | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
 
+  // Message context menu state
+  const [msgContextMenu, setMsgContextMenu] = useState<MsgContextMenuState | null>(null);
+  const msgContextMenuRef = useRef<HTMLDivElement>(null);
+
+  // Scroll-to-bottom FAB / new messages banner state
+  const [showScrollFab, setShowScrollFab] = useState(false);
+  const [newMsgCount, setNewMsgCount] = useState(0);
+  const isNearBottomRef = useRef(true);
+
+  // Highlighted message (jump-to-quoted flash)
+  const [highlightedMsgId, setHighlightedMsgId] = useState<string | null>(null);
+  const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Mute toggle
+  const [soundMuted, setSoundMuted] = useState(() => {
+    try { return localStorage.getItem("chat-sound-muted") === "true"; } catch { return false; }
+  });
+
+  // Reply-to-message state
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+
+  // Clipboard image paste state
+  const [pastedImage, setPastedImage] = useState<{ blob: Blob; previewUrl: string } | null>(null);
+  const [isUploadingPaste, setIsUploadingPaste] = useState(false);
+
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  // Persist mute preference
+  useEffect(() => {
+    try { localStorage.setItem("chat-sound-muted", String(soundMuted)); } catch {}
+  }, [soundMuted]);
+
+  // Close conversation context menu on outside click
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
@@ -498,24 +605,35 @@ export default function SupportChatPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [contextMenu]);
 
-  // Reply-to-message state
-  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
-
-  // Clipboard image paste state
-  const [pastedImage, setPastedImage] = useState<{ blob: Blob; previewUrl: string } | null>(null);
-  const [isUploadingPaste, setIsUploadingPaste] = useState(false);
-
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
+  // Close message context menu on outside click or Escape
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (msgContextMenuRef.current && !msgContextMenuRef.current.contains(e.target as Node)) {
+        setMsgContextMenu(null);
+      }
+    };
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMsgContextMenu(null);
+    };
+    if (msgContextMenu) {
+      document.addEventListener("mousedown", handleClickOutside);
+      document.addEventListener("keydown", handleEsc);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEsc);
+    };
+  }, [msgContextMenu]);
 
   // ── SSE real-time connection ─────────────────────────────────────────────────
-  // Falls back to polling if SSE fails after 3 reconnect attempts.
   const sseFailCount = useRef(0);
   const sseRef = useRef<EventSource | null>(null);
   const sseBackoffRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [sseConnected, setSseConnected] = useState(false);
   const selectedConvIdRef = useRef<string | null>(null);
   selectedConvIdRef.current = selectedConvId;
+  const soundMutedRef = useRef(soundMuted);
+  soundMutedRef.current = soundMuted;
 
   const connectSse = useCallback(() => {
     if (sseRef.current) {
@@ -534,7 +652,6 @@ export default function SupportChatPage() {
       try {
         const data = JSON.parse(event.data);
         if (data.type === "new_message") {
-          // If message payload included, append to cache directly to avoid a round-trip
           if (data.conversationId && data.conversationId === selectedConvIdRef.current) {
             if (data.message) {
               queryClient.setQueryData<Message[]>(
@@ -542,6 +659,13 @@ export default function SupportChatPage() {
                 (old) => {
                   if (!old) return [data.message];
                   if (old.some(m => m.id === data.message.id)) return old;
+                  // Only auto-scroll if near bottom; otherwise increment new msg count
+                  if (!isNearBottomRef.current && data.message.direction === "inbound") {
+                    setNewMsgCount(c => c + 1);
+                  }
+                  if (!soundMutedRef.current && data.message.direction === "inbound") {
+                    playNotificationSound();
+                  }
                   return [...old, data.message];
                 }
               );
@@ -550,11 +674,14 @@ export default function SupportChatPage() {
                 queryKey: ["/api/support/conversations", data.conversationId, "messages"],
               });
             }
+          } else {
+            // Notification sound for messages in other conversations
+            if (!soundMutedRef.current) {
+              playNotificationSound();
+            }
           }
-          // Always refresh conversation list to update last message + unread badge
           queryClient.invalidateQueries({ queryKey: ["/api/support/conversations"] });
         } else if (data.type === "status_update") {
-          // Update tick status in the active conversation messages cache
           if (data.conversationId && data.conversationId === selectedConvIdRef.current) {
             queryClient.setQueryData<Message[]>(
               ["/api/support/conversations", data.conversationId, "messages"],
@@ -577,8 +704,6 @@ export default function SupportChatPage() {
       es.close();
       sseRef.current = null;
       sseFailCount.current += 1;
-      // Exponential backoff for first 3 attempts: 1s, 2s, 4s
-      // After that use long-tail polling (30s) so SSE reconnects when server recovers
       const delay = sseFailCount.current <= 3
         ? Math.min(1000 * Math.pow(2, sseFailCount.current - 1), 30_000)
         : 30_000;
@@ -595,7 +720,6 @@ export default function SupportChatPage() {
     };
   }, [connectSse]);
 
-  // Polling interval: slow when SSE is live, normal when SSE is down (fallback mode)
   const convPollInterval = sseConnected ? 60_000 : 10_000;
   const msgPollInterval = sseConnected ? 30_000 : 8_000;
 
@@ -634,7 +758,6 @@ export default function SupportChatPage() {
 
   const archivedCount = isArchivedView ? conversations.length : archivedConversations.length;
 
-  // Auto-select conversation when navigated from a notification deep-link (?orderId=...)
   useEffect(() => {
     if (!deepLinkOrderId || deepLinkApplied.current || conversations.length === 0) return;
     const match = conversations.find(c => c.orderId === deepLinkOrderId);
@@ -661,25 +784,56 @@ export default function SupportChatPage() {
   });
   const teamMembers = teamData?.members ?? [];
 
-  const prevMsgCountRef = useRef(0);
-  const scrollToBottom = useCallback(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
+  // ── Scroll helpers ───────────────────────────────────────────────────────────
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
+    const container = messagesScrollRef.current;
+    if (!container) return;
+    container.scrollTo({ top: container.scrollHeight, behavior });
   }, []);
 
+  // Track scroll position to show/hide FAB and "near bottom" flag
+  const handleChatScroll = useCallback(() => {
+    const container = messagesScrollRef.current;
+    if (!container) return;
+    const distFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    const nearBottom = distFromBottom < 200;
+    isNearBottomRef.current = nearBottom;
+    setShowScrollFab(!nearBottom);
+    if (nearBottom) setNewMsgCount(0);
+  }, []);
+
+  const prevMsgCountRef = useRef(0);
+
+  // Auto-scroll only if near bottom
   useEffect(() => {
     const count = messages.length;
     if (count !== prevMsgCountRef.current) {
       prevMsgCountRef.current = count;
-      scrollToBottom();
+      if (isNearBottomRef.current) {
+        scrollToBottom();
+      }
     }
   }, [messages.length, scrollToBottom]);
 
+  // When switching conversations: reset counters and scroll to bottom
   useEffect(() => {
     prevMsgCountRef.current = 0;
-    scrollToBottom();
+    setNewMsgCount(0);
+    setShowScrollFab(false);
+    isNearBottomRef.current = true;
+    // Instant scroll on conv switch
+    setTimeout(() => scrollToBottom("instant" as ScrollBehavior), 50);
   }, [selectedConvId, scrollToBottom]);
+
+  // Jump to a specific message and flash-highlight it
+  const jumpToMessage = useCallback((msgId: string) => {
+    const el = document.querySelector(`[data-msg-id="${msgId}"]`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
+    setHighlightedMsgId(msgId);
+    highlightTimeoutRef.current = setTimeout(() => setHighlightedMsgId(null), 1500);
+  }, []);
 
   // Reset select mode when switching views
   useEffect(() => {
@@ -711,6 +865,8 @@ export default function SupportChatPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/support/conversations"] });
       setReplyingTo(null);
       inputRef.current?.focus();
+      // Scroll to bottom after sending
+      setTimeout(() => scrollToBottom(), 100);
     },
     onError: () => {
       setMessageText(lastSentTextRef.current);
@@ -988,6 +1144,14 @@ export default function SupportChatPage() {
   };
 
   const allSelected = filtered.length > 0 && filtered.every(c => selectedIds.has(c.id));
+
+  // Copy message text to clipboard
+  const copyMessageText = (msg: Message) => {
+    const text = msg.text || "";
+    if (!text) return;
+    navigator.clipboard.writeText(text).catch(() => {});
+    toast({ title: "Copied", description: "Message text copied to clipboard" });
+  };
 
   return (
     <div className="flex h-full overflow-hidden bg-background">
@@ -1281,7 +1445,7 @@ export default function SupportChatPage() {
         )}
       </div>
 
-      {/* Right-click context menu */}
+      {/* Conversation right-click context menu */}
       {contextMenu && (
         <div
           ref={contextMenuRef}
@@ -1343,6 +1507,57 @@ export default function SupportChatPage() {
             <Trash2 className="w-4 h-4" />
             Delete
           </button>
+        </div>
+      )}
+
+      {/* Message right-click context menu */}
+      {msgContextMenu && (
+        <div
+          ref={msgContextMenuRef}
+          className="fixed z-50 bg-popover border border-border rounded-lg shadow-lg py-1 min-w-[160px]"
+          style={{
+            top: Math.min(msgContextMenu.y, window.innerHeight - 160),
+            left: Math.min(msgContextMenu.x, window.innerWidth - 180),
+          }}
+          data-testid="message-context-menu"
+        >
+          <button
+            className="w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-accent rounded transition-colors"
+            onClick={() => {
+              setReplyingTo(msgContextMenu.msg);
+              setMsgContextMenu(null);
+              inputRef.current?.focus();
+            }}
+            data-testid="msg-ctx-reply"
+          >
+            <Reply className="w-4 h-4" />
+            Reply
+          </button>
+          {msgContextMenu.msg.text && (
+            <button
+              className="w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-accent rounded transition-colors"
+              onClick={() => {
+                copyMessageText(msgContextMenu.msg);
+                setMsgContextMenu(null);
+              }}
+              data-testid="msg-ctx-copy"
+            >
+              <Copy className="w-4 h-4" />
+              Copy text
+            </button>
+          )}
+          <div className="border-t border-border my-1" />
+          <div className="px-3 py-1.5 text-[10px] text-muted-foreground space-y-0.5">
+            <div className="flex items-center gap-1.5">
+              <Info className="w-3 h-3 shrink-0" />
+              <span>Sent {format(new Date(msgContextMenu.msg.createdAt), "MMM d, HH:mm")}</span>
+            </div>
+            {msgContextMenu.msg.status && (
+              <div className="pl-4 capitalize text-[10px]">
+                Status: {msgContextMenu.msg.status}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -1430,6 +1645,18 @@ export default function SupportChatPage() {
                 File Complaint
               </Button>
 
+              {/* Mute toggle */}
+              <Button
+                size="icon"
+                variant="ghost"
+                data-testid="button-sound-toggle"
+                className="text-white hover:bg-white/10 h-8 w-8"
+                onClick={() => setSoundMuted(m => !m)}
+                title={soundMuted ? "Unmute notifications" : "Mute notifications"}
+              >
+                {soundMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+              </Button>
+
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button size="icon" variant="ghost" data-testid="button-chat-menu" className="text-white hover:bg-white/10">
@@ -1493,7 +1720,7 @@ export default function SupportChatPage() {
                       <DropdownMenuItem
                         onClick={() => assignMutation.mutate({ convId: selectedConv.id, userId: null, userName: null })}
                         className="text-muted-foreground"
-                        data-testid="assign-clear"
+                        data-testid="assign-unassign"
                       >
                         <X className="w-4 h-4 mr-2" />
                         Unassign
@@ -1527,117 +1754,165 @@ export default function SupportChatPage() {
               </DropdownMenu>
             </div>
 
-            <ScrollArea className="flex-1 wa-chat-bg">
+            {/* Chat message area with scroll tracking */}
+            <div className="flex-1 relative overflow-hidden">
+              <div
+                className="absolute inset-0 overflow-y-auto wa-chat-bg"
+                ref={messagesScrollRef}
+                onScroll={handleChatScroll}
+              >
               <div className="px-[8%] py-4 space-y-1">
-                {messages.filter(m => m.messageType !== "reaction").length === 0 ? (
-                  <div className="text-center py-8">
-                    <span className="bg-white dark:bg-[#202c33] text-muted-foreground text-xs px-4 py-2 rounded-lg inline-block shadow-sm">
-                      No messages yet — start the conversation
-                    </span>
-                  </div>
-                ) : (
-                  messagesByDate.map(group => (
-                    <div key={group.date}>
-                      <div className="flex justify-center my-3">
-                        <span className="bg-white dark:bg-[#182229] text-[#54656f] dark:text-[#8696a0] text-[11px] px-3 py-1.5 rounded-lg shadow-sm">
-                          {formatDateHeader(group.date)}
-                        </span>
-                      </div>
-                      {group.messages.map(msg => {
-                        const isOutbound = msg.direction === "outbound";
-                        const msgReactions = getReactionsForMessage(msg.waMessageId);
-                        const isButtonReply = msg.messageType === "button_reply";
-                        const isNonText = msg.messageType && !["text", "button_reply"].includes(msg.messageType);
-                        const hasQuote = !!msg.referenceMessageId && messages.some(m => m.id === msg.referenceMessageId);
+                  {messages.filter(m => m.messageType !== "reaction").length === 0 ? (
+                    <div className="text-center py-8">
+                      <span className="bg-white dark:bg-[#202c33] text-muted-foreground text-xs px-4 py-2 rounded-lg inline-block shadow-sm">
+                        No messages yet — start the conversation
+                      </span>
+                    </div>
+                  ) : (
+                    messagesByDate.map(group => (
+                      <div key={group.date}>
+                        <div className="flex justify-center my-3">
+                          <span className="bg-white dark:bg-[#182229] text-[#54656f] dark:text-[#8696a0] text-[11px] px-3 py-1.5 rounded-lg shadow-sm">
+                            {formatDateHeader(group.date)}
+                          </span>
+                        </div>
+                        {group.messages.map(msg => {
+                          const isOutbound = msg.direction === "outbound";
+                          const msgReactions = getReactionsForMessage(msg.waMessageId);
+                          const isButtonReply = msg.messageType === "button_reply";
+                          const isNonText = msg.messageType && !["text", "button_reply"].includes(msg.messageType);
+                          const hasQuote = !!msg.referenceMessageId && messages.some(m => m.id === msg.referenceMessageId);
+                          const isHighlighted = highlightedMsgId === msg.id;
 
-                        return (
-                          <div
-                            key={msg.id}
-                            className={cn("flex mb-1 group", isOutbound ? "justify-end" : "justify-start")}
-                            data-testid={`message-${msg.id}`}
-                          >
-                            <div className={cn("relative max-w-[65%]", isOutbound ? "mr-2" : "ml-2")}>
-                              <div className={cn(
-                                "relative px-2.5 py-1.5 rounded-lg text-sm shadow-sm",
-                                isOutbound
-                                  ? "wa-bubble-out text-[#111b21] dark:text-[#e9edef] rounded-tr-none"
-                                  : "wa-bubble-in text-[#111b21] dark:text-[#e9edef] rounded-tl-none"
-                              )}>
-                                {hasQuote && (
-                                  <QuotedMessagePreview msg={msg} messages={messages} />
-                                )}
-                                {isButtonReply && (
-                                  <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium mb-1 bg-[#008069]/10 text-[#008069] dark:text-[#00a884]">
-                                    <Reply className="w-3 h-3" />
-                                    {msg.text}
-                                  </div>
-                                )}
-                                {!isButtonReply && isNonText && (
-                                  <MediaBubble msg={msg} mediaProxyBase="/api/whatsapp/media" />
-                                )}
-                                {!isButtonReply && !isNonText && (
-                                  <div className="whitespace-pre-wrap break-words leading-relaxed">
-                                    {renderFormattedText(msg.text || "")}
-                                  </div>
-                                )}
+                          return (
+                            <div
+                              key={msg.id}
+                              data-msg-id={msg.id}
+                              className={cn("flex mb-1 group", isOutbound ? "justify-end" : "justify-start")}
+                              data-testid={`message-${msg.id}`}
+                              onContextMenu={(e) => {
+                                e.preventDefault();
+                                setMsgContextMenu({ x: e.clientX, y: e.clientY, msg });
+                              }}
+                            >
+                              <div className={cn("relative max-w-[65%]", isOutbound ? "mr-2" : "ml-2")}>
                                 <div className={cn(
-                                  "flex items-center gap-1 mt-0.5",
-                                  isOutbound ? "justify-end" : ""
+                                  "relative px-2.5 py-1.5 rounded-lg text-sm shadow-sm transition-colors duration-300",
+                                  isOutbound
+                                    ? "wa-bubble-out text-[#111b21] dark:text-[#e9edef] rounded-tr-none"
+                                    : "wa-bubble-in text-[#111b21] dark:text-[#e9edef] rounded-tl-none",
+                                  isHighlighted && "ring-2 ring-yellow-400 ring-offset-1 bg-yellow-50 dark:bg-yellow-900/30"
                                 )}>
-                                  <span className="text-[10px] text-[#667781] dark:text-[#8696a0]">
-                                    {format(new Date(msg.createdAt), "HH:mm")}
-                                  </span>
-                                  {isOutbound && <StatusTicks status={msg.status} />}
-                                </div>
-                              </div>
-
-                              {msgReactions.length > 0 && (
-                                <div className={cn("flex gap-0.5 mt-[-8px]", isOutbound ? "justify-end pr-2" : "pl-2")}>
-                                  {msgReactions.map(r => (
-                                    <span key={r.id} className="bg-white dark:bg-[#202c33] border border-black/5 dark:border-white/10 rounded-full px-1.5 py-0.5 text-sm shadow-sm">
-                                      {r.reactionEmoji}
+                                  {hasQuote && (
+                                    <QuotedMessagePreview
+                                      msg={msg}
+                                      messages={messages}
+                                      onJumpToQuoted={jumpToMessage}
+                                    />
+                                  )}
+                                  {isButtonReply && (
+                                    <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium mb-1 bg-[#008069]/10 text-[#008069] dark:text-[#00a884]">
+                                      <Reply className="w-3 h-3" />
+                                      {msg.text}
+                                    </div>
+                                  )}
+                                  {!isButtonReply && isNonText && (
+                                    <MediaBubble msg={msg} mediaProxyBase="/api/whatsapp/media" />
+                                  )}
+                                  {!isButtonReply && !isNonText && (
+                                    <div className="whitespace-pre-wrap break-words leading-relaxed">
+                                      {renderFormattedText(msg.text || "")}
+                                    </div>
+                                  )}
+                                  <div className={cn(
+                                    "flex items-center gap-1 mt-0.5",
+                                    isOutbound ? "justify-end" : ""
+                                  )}>
+                                    <span className="text-[10px] text-[#667781] dark:text-[#8696a0]">
+                                      {format(new Date(msg.createdAt), "HH:mm")}
                                     </span>
-                                  ))}
+                                    {isOutbound && (
+                                      <StatusTicks
+                                        status={msg.status}
+                                        createdAt={msg.createdAt}
+                                      />
+                                    )}
+                                  </div>
                                 </div>
-                              )}
 
-                              {/* Hover action buttons */}
-                              <div className={cn(
-                                "absolute top-1 invisible group-hover:visible transition-opacity flex gap-0.5",
-                                isOutbound ? "right-full mr-1" : "left-full ml-1"
-                              )}>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  className="h-7 w-7 bg-white/80 dark:bg-[#202c33]/80 shadow-sm rounded-full"
-                                  onClick={() => setReplyingTo(msg)}
-                                  title="Reply"
-                                  data-testid={`reply-${msg.id}`}
-                                >
-                                  <Reply className="w-3.5 h-3.5" />
-                                </Button>
-                                {!isOutbound && msg.waMessageId && (
-                                  <EmojiPicker
-                                    onSelect={(emoji) => reactMutation.mutate({ convId: selectedConv.id, emoji, waMessageId: msg.waMessageId! })}
-                                    trigger={
-                                      <Button size="icon" variant="ghost" className="h-7 w-7 bg-white/80 dark:bg-[#202c33]/80 shadow-sm rounded-full" data-testid={`react-${msg.id}`}>
-                                        <Smile className="w-3.5 h-3.5" />
-                                      </Button>
-                                    }
-                                    side={isOutbound ? "left" : "right"}
-                                  />
+                                {msgReactions.length > 0 && (
+                                  <div className={cn("flex gap-0.5 mt-[-8px]", isOutbound ? "justify-end pr-2" : "pl-2")}>
+                                    {msgReactions.map(r => (
+                                      <span key={r.id} className="bg-white dark:bg-[#202c33] border border-black/5 dark:border-white/10 rounded-full px-1.5 py-0.5 text-sm shadow-sm">
+                                        {r.reactionEmoji}
+                                      </span>
+                                    ))}
+                                  </div>
                                 )}
+
+                                {/* Hover action buttons */}
+                                <div className={cn(
+                                  "absolute top-1 invisible group-hover:visible transition-opacity flex gap-0.5",
+                                  isOutbound ? "right-full mr-1" : "left-full ml-1"
+                                )}>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-7 w-7 bg-white/80 dark:bg-[#202c33]/80 shadow-sm rounded-full"
+                                    onClick={() => setReplyingTo(msg)}
+                                    title="Reply"
+                                    data-testid={`reply-${msg.id}`}
+                                  >
+                                    <Reply className="w-3.5 h-3.5" />
+                                  </Button>
+                                  {!isOutbound && msg.waMessageId && (
+                                    <EmojiPicker
+                                      onSelect={(emoji) => reactMutation.mutate({ convId: selectedConv.id, emoji, waMessageId: msg.waMessageId! })}
+                                      trigger={
+                                        <Button size="icon" variant="ghost" className="h-7 w-7 bg-white/80 dark:bg-[#202c33]/80 shadow-sm rounded-full" data-testid={`react-${msg.id}`}>
+                                          <Smile className="w-3.5 h-3.5" />
+                                        </Button>
+                                      }
+                                      side={isOutbound ? "left" : "right"}
+                                    />
+                                  )}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ))
-                )}
-                <div ref={messagesEndRef} />
+                          );
+                        })}
+                      </div>
+                    ))
+                  )}
+                  <div ref={messagesEndRef} />
+                </div>
               </div>
-            </ScrollArea>
+
+              {/* "↓ N new messages" banner */}
+              {showScrollFab && newMsgCount > 0 && (
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
+                  <button
+                    onClick={() => { scrollToBottom(); setNewMsgCount(0); }}
+                    className="pointer-events-auto flex items-center gap-2 bg-[#008069] hover:bg-[#017561] text-white px-4 py-2 rounded-full shadow-lg text-sm font-medium transition-colors"
+                    data-testid="banner-new-messages"
+                  >
+                    <ArrowDown className="w-4 h-4" />
+                    {newMsgCount} new message{newMsgCount > 1 ? "s" : ""}
+                  </button>
+                </div>
+              )}
+
+              {/* Scroll-to-bottom FAB */}
+              {showScrollFab && newMsgCount === 0 && (
+                <button
+                  onClick={() => scrollToBottom()}
+                  className="absolute bottom-4 right-4 z-10 w-10 h-10 bg-white dark:bg-[#202c33] border border-border rounded-full shadow-lg flex items-center justify-center hover:bg-accent transition-colors"
+                  data-testid="fab-scroll-bottom"
+                >
+                  <ChevronDown className="w-5 h-5 text-muted-foreground" />
+                </button>
+              )}
+            </div>
 
             <div className="wa-input-bar px-3 py-2">
               {/* Pasted image preview */}
@@ -1981,47 +2256,47 @@ function FileComplaintFromChat({
             <p className="text-xs text-muted-foreground">
               Customer: {conversation.contactName || conversation.contactPhone}
             </p>
-            <Button size="sm" onClick={() => onOpenChange(false)} data-testid="button-close-complaint-success">
-              Close
+            <Button size="sm" onClick={() => onOpenChange(false)} data-testid="button-close-complaint">
+              Done
             </Button>
           </div>
         ) : (
-          <>
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between py-1 border-b">
-                <span className="text-muted-foreground">Customer</span>
-                <span className="font-medium">{conversation.contactName || conversation.contactPhone}</span>
-              </div>
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm text-muted-foreground mb-1">
+                Customer: <span className="font-medium text-foreground">{conversation.contactName || conversation.contactPhone}</span>
+              </p>
               {conversation.orderNumber && (
-                <div className="flex justify-between py-1 border-b">
-                  <span className="text-muted-foreground">Order</span>
-                  <span className="font-medium">{conversation.orderNumber}</span>
-                </div>
+                <p className="text-sm text-muted-foreground">
+                  Order: <span className="font-mono font-medium text-foreground">#{conversation.orderNumber}</span>
+                </p>
               )}
-              <div className="space-y-1">
-                <Label className="text-xs">Reason for Complaint</Label>
-                <Textarea
-                  value={reason}
-                  onChange={e => setReason(e.target.value)}
-                  placeholder="Describe the issue..."
-                  rows={3}
-                  data-testid="textarea-complaint-reason"
-                />
-              </div>
+            </div>
+            <div>
+              <Label htmlFor="complaint-reason" className="text-sm font-medium">Reason (optional)</Label>
+              <Textarea
+                id="complaint-reason"
+                placeholder="Describe the issue..."
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                className="mt-1 h-24 resize-none"
+                data-testid="textarea-complaint-reason"
+              />
             </div>
             <DialogFooter>
-              <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>Cancel</Button>
+              <Button variant="outline" onClick={() => onOpenChange(false)} data-testid="button-cancel-complaint">
+                Cancel
+              </Button>
               <Button
-                size="sm"
                 onClick={() => createMutation.mutate()}
                 disabled={createMutation.isPending}
                 data-testid="button-submit-complaint"
               >
-                {createMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+                {createMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
                 File Complaint
               </Button>
             </DialogFooter>
-          </>
+          </div>
         )}
       </DialogContent>
     </Dialog>
