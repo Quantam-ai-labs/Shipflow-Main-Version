@@ -243,15 +243,17 @@ async function handleStatusEvent(rawEvent: WaRawEvent): Promise<void> {
   if (!waMessageId || !newStatus) return;
   if (!["sent", "delivered", "read", "failed"].includes(newStatus)) return;
 
+  // Look up the message before updating so we have its conversationId for SSE broadcast
+  const existingMsg = await storage.getWaMessageByWaId(waMessageId).catch(() => null);
   const updated = await storage.updateWaMessageStatusByWaId(waMessageId, newStatus);
   if (updated) {
     console.log(`${LOG} Status update: ${waMessageId} → ${newStatus}`);
     // Broadcast tick update to all SSE clients for this merchant
-    if (rawEvent.merchantId) {
+    if (rawEvent.merchantId && existingMsg?.conversationId) {
       broadcastToMerchant(rawEvent.merchantId, "status_update", {
         waMessageId,
         status: newStatus,
-        conversationId: updated.conversationId,
+        conversationId: existingMsg.conversationId,
       });
     }
   }
@@ -403,6 +405,7 @@ async function handleMessageEvent(rawEvent: WaRawEvent): Promise<void> {
   }
 
   // ── Order confirmation (text/button only) ─────────────────────────────────
+  const convId = saveResult?.convId ?? null;
   if (msgType === "text" || msgType === "button_reply") {
     // triggerOrderConfirmation returns true if an order was found and handled.
     // processWhatsAppOrderResponse already sends any necessary AI reply in that path.
