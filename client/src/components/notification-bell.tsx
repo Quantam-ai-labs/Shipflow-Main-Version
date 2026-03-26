@@ -1,5 +1,6 @@
 import { Bell, CheckCheck, Check, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
@@ -31,6 +32,16 @@ function invalidateNotifications() {
   NOTIFICATION_KEYS.forEach(k => queryClient.invalidateQueries({ queryKey: [k] }));
 }
 
+function getNavUrl(n: Notification): string | null {
+  if (n.category === "chat") {
+    return n.orderId ? `/support/chat?orderId=${n.orderId}` : "/support/chat";
+  }
+  if (n.orderId) {
+    return `/orders/detail/${n.orderId}`;
+  }
+  return null;
+}
+
 function EmptyState({ label }: { label: string }) {
   return (
     <div className="flex flex-col items-center justify-center py-10 px-4 text-center">
@@ -40,10 +51,12 @@ function EmptyState({ label }: { label: string }) {
   );
 }
 
-function NotificationItem({ n, onResolve, resolving }: {
+function NotificationItem({ n, onResolve, resolving, onNavigate, closePopover }: {
   n: Notification;
   onResolve: (id: string) => void;
   resolving: boolean;
+  onNavigate: (url: string) => void;
+  closePopover: () => void;
 }) {
   const markReadMutation = useMutation({
     mutationFn: async () => {
@@ -52,15 +65,21 @@ function NotificationItem({ n, onResolve, resolving }: {
     onSuccess: invalidateNotifications,
   });
 
+  const navUrl = getNavUrl(n);
+
   return (
     <div
       key={n.id}
       data-testid={`notification-item-${n.id}`}
-      className={`px-4 py-3 border-b last:border-b-0 transition-colors ${
+      className={`px-4 py-3 border-b last:border-b-0 transition-colors ${navUrl ? "cursor-pointer" : ""} ${
         !n.read ? "bg-muted/50 hover:bg-muted/70" : "hover:bg-muted/30"
       }`}
       onClick={() => {
         if (!n.read) markReadMutation.mutate();
+        if (navUrl) {
+          closePopover();
+          onNavigate(navUrl);
+        }
       }}
     >
       <div className="flex items-start gap-2">
@@ -101,12 +120,14 @@ function NotificationItem({ n, onResolve, resolving }: {
   );
 }
 
-function TabNotifications({ category, label, notifications, resolvingId, onResolve }: {
+function TabNotifications({ category, label, notifications, resolvingId, onResolve, onNavigate, closePopover }: {
   category: string;
   label: string;
   notifications: Notification[];
   resolvingId: string | null;
   onResolve: (id: string) => void;
+  onNavigate: (url: string) => void;
+  closePopover: () => void;
 }) {
   const filtered = notifications.filter(n => n.category === category);
   if (filtered.length === 0) return <EmptyState label={label} />;
@@ -118,6 +139,8 @@ function TabNotifications({ category, label, notifications, resolvingId, onResol
           n={n}
           onResolve={onResolve}
           resolving={resolvingId === n.id}
+          onNavigate={onNavigate}
+          closePopover={closePopover}
         />
       ))}
     </div>
@@ -126,6 +149,8 @@ function TabNotifications({ category, label, notifications, resolvingId, onResol
 
 export function NotificationBell() {
   const [resolvingId, setResolvingId] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+  const [, navigate] = useLocation();
 
   const { data: countData } = useQuery<{ count: number }>({
     queryKey: ["/api/notifications/unread-count"],
@@ -206,8 +231,16 @@ export function NotificationBell() {
     );
   }
 
+  const sharedTabProps = {
+    notifications,
+    resolvingId,
+    onResolve: (id: string) => resolveMutation.mutate(id),
+    onNavigate: navigate,
+    closePopover: () => setOpen(false),
+  };
+
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
           variant="ghost"
@@ -281,33 +314,15 @@ export function NotificationBell() {
             </TabsList>
 
             <TabsContent value="confirmation" className="mt-0">
-              <TabNotifications
-                category="confirmation"
-                label="confirmation"
-                notifications={notifications}
-                resolvingId={resolvingId}
-                onResolve={(id) => resolveMutation.mutate(id)}
-              />
+              <TabNotifications category="confirmation" label="confirmation" {...sharedTabProps} />
             </TabsContent>
 
             <TabsContent value="chat" className="mt-0">
-              <TabNotifications
-                category="chat"
-                label="chat"
-                notifications={notifications}
-                resolvingId={resolvingId}
-                onResolve={(id) => resolveMutation.mutate(id)}
-              />
+              <TabNotifications category="chat" label="chat" {...sharedTabProps} />
             </TabsContent>
 
             <TabsContent value="other" className="mt-0">
-              <TabNotifications
-                category="other"
-                label="other"
-                notifications={notifications}
-                resolvingId={resolvingId}
-                onResolve={(id) => resolveMutation.mutate(id)}
-              />
+              <TabNotifications category="other" label="other" {...sharedTabProps} />
             </TabsContent>
           </Tabs>
         )}

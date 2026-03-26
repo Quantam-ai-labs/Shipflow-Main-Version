@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useSearch } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Input } from "@/components/ui/input";
@@ -454,6 +455,10 @@ function QuotedMessagePreview({ msg, messages }: { msg: Message; messages: Messa
 }
 
 export default function SupportChatPage() {
+  const searchStr = useSearch();
+  const deepLinkOrderId = new URLSearchParams(searchStr).get("orderId");
+  const deepLinkApplied = useRef(false);
+
   const [selectedConvId, setSelectedConvId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [messageText, setMessageText] = useState("");
@@ -492,6 +497,16 @@ export default function SupportChatPage() {
     }
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [contextMenu]);
+
+  // Auto-select conversation when navigated from a notification deep-link (?orderId=...)
+  useEffect(() => {
+    if (!deepLinkOrderId || deepLinkApplied.current || conversations.length === 0) return;
+    const match = conversations.find(c => c.orderId === deepLinkOrderId);
+    if (match) {
+      deepLinkApplied.current = true;
+      setSelectedConvId(match.id);
+    }
+  }, [conversations, deepLinkOrderId]);
 
   // Reply-to-message state
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
