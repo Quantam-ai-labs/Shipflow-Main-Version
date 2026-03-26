@@ -2214,15 +2214,21 @@ export const notifications = pgTable("notifications", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   merchantId: varchar("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
   type: varchar("type", { length: 50 }).notNull(),
+  category: varchar("category", { length: 20 }).notNull().default("other"),
+  resolvable: boolean("resolvable").default(false),
   title: varchar("title", { length: 255 }).notNull(),
   message: text("message").notNull(),
   orderId: varchar("order_id"),
   orderNumber: varchar("order_number", { length: 100 }),
   read: boolean("read").default(false),
+  resolvedAt: timestamp("resolved_at"),
+  resolvedByUserId: varchar("resolved_by_user_id"),
+  resolvedByName: varchar("resolved_by_name", { length: 255 }),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   index("idx_notifications_merchant").on(table.merchantId),
   index("idx_notifications_read").on(table.merchantId, table.read),
+  index("idx_notifications_resolved").on(table.merchantId, table.resolvedAt),
 ]);
 
 export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true, createdAt: true });

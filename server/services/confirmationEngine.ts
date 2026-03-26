@@ -101,6 +101,14 @@ export async function logConfirmationEvent(params: {
   }
 }
 
+const NOTIFICATION_CATEGORY_MAP: Record<string, { category: string; resolvable: boolean }> = {
+  late_response:                { category: "confirmation", resolvable: true },
+  conflict_detected:            { category: "confirmation", resolvable: true },
+  robocall_exhausted:           { category: "confirmation", resolvable: true },
+  shopify_writeback_failed:     { category: "other",        resolvable: false },
+  urgent_cancellation_request:  { category: "chat",         resolvable: true },
+};
+
 export async function createNotification(params: {
   merchantId: string;
   type: string;
@@ -108,11 +116,16 @@ export async function createNotification(params: {
   message: string;
   orderId?: string;
   orderNumber?: string;
+  category?: string;
+  resolvable?: boolean;
 }): Promise<void> {
   try {
+    const defaults = NOTIFICATION_CATEGORY_MAP[params.type] ?? { category: "other", resolvable: false };
     await db.insert(notifications).values({
       merchantId: params.merchantId,
       type: params.type,
+      category: params.category ?? defaults.category,
+      resolvable: params.resolvable ?? defaults.resolvable,
       title: params.title,
       message: params.message,
       orderId: params.orderId || null,

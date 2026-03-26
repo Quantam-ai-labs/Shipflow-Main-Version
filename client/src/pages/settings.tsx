@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { formatDistanceToNow } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -89,6 +90,102 @@ const SETTINGS_TABS = [
   { id: "team",          label: "Team",           icon: Users,           active: "from-indigo-500 to-indigo-600",   inactive: "from-indigo-500/10 to-indigo-500/5 border-indigo-500/20 text-indigo-400 hover:from-indigo-500/20" },
   { id: "accounting",    label: "Accounting",     icon: Cog,             active: "from-amber-500 to-amber-600",     inactive: "from-amber-500/10 to-amber-500/5 border-amber-500/20 text-amber-400 hover:from-amber-500/20" },
 ];
+
+interface HistoryNotification {
+  id: string;
+  type: string;
+  category: string;
+  title: string;
+  message: string;
+  orderNumber: string | null;
+  resolvedByName: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+}
+
+const CATEGORY_BADGE: Record<string, { label: string; className: string }> = {
+  confirmation: { label: "Confirmation", className: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" },
+  chat:         { label: "Chat",         className: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200" },
+  other:        { label: "Other",        className: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300" },
+};
+
+function NotificationHistoryCard() {
+  const [showAll, setShowAll] = useState(false);
+  const { data, isLoading } = useQuery<{ notifications: HistoryNotification[]; hasMore: boolean }>({
+    queryKey: ["/api/notifications/history"],
+  });
+
+  const notifications = data?.notifications ?? [];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg flex items-center gap-2">
+          <Bell className="w-5 h-5" />
+          Notification History
+          {notifications.length > 0 && (
+            <Badge variant="secondary" className="ml-1">{notifications.length}{data?.hasMore ? "+" : ""} resolved</Badge>
+          )}
+        </CardTitle>
+        <CardDescription>
+          All resolved notifications, ordered by resolution time.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="p-0">
+        {isLoading ? (
+          <div className="p-6 space-y-3">
+            {[1,2,3].map(i => <Skeleton key={i} className="h-12 w-full" />)}
+          </div>
+        ) : notifications.length === 0 ? (
+          <div className="p-8 text-center text-sm text-muted-foreground">
+            No resolved notifications yet.
+          </div>
+        ) : (
+          <>
+            <div data-testid="settings-notification-history-list" className="divide-y">
+              {(showAll ? notifications : notifications.slice(0, 10)).map(n => {
+                const badge = CATEGORY_BADGE[n.category] ?? CATEGORY_BADGE.other;
+                return (
+                  <div
+                    key={n.id}
+                    data-testid={`settings-notification-history-item-${n.id}`}
+                    className="flex items-start gap-3 px-6 py-3 hover:bg-muted/30 transition-colors"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`inline-flex text-[10px] font-semibold px-1.5 py-0.5 rounded ${badge.className}`}>
+                          {badge.label}
+                        </span>
+                        {n.orderNumber && (
+                          <span className="text-xs font-mono text-muted-foreground">#{n.orderNumber}</span>
+                        )}
+                      </div>
+                      <p className="text-sm font-medium mt-1 leading-snug">{n.title}</p>
+                      <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{n.message}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-xs font-medium text-foreground">{n.resolvedByName || "Agent"}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        {n.resolvedAt ? formatDistanceToNow(new Date(n.resolvedAt), { addSuffix: true }) : "—"}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {notifications.length > 10 && (
+              <div className="px-6 py-3 border-t">
+                <Button variant="ghost" size="sm" className="w-full text-xs" onClick={() => setShowAll(s => !s)}>
+                  {showAll ? "Show less" : `Show all ${notifications.length}${data?.hasMore ? "+" : ""}`}
+                </Button>
+              </div>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function Settings() {
   const { toast } = useToast();
@@ -282,7 +379,7 @@ export default function Settings() {
 
 
         {activeTab === "notifications" && (
-          <div className="max-w-3xl">
+          <div className="max-w-3xl space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
@@ -344,6 +441,8 @@ export default function Settings() {
                 )}
               </CardContent>
             </Card>
+
+            <NotificationHistoryCard />
           </div>
         )}
 

@@ -16523,9 +16523,12 @@ export async function registerRoutes(
     try {
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
-      const limit = parseInt(req.query.limit) || 50;
+      const limit = parseInt(req.query.limit as string) || 100;
       const notifs = await db.select().from(notifications)
-        .where(eq(notifications.merchantId, merchantId))
+        .where(and(
+          eq(notifications.merchantId, merchantId),
+          isNull(notifications.resolvedAt),
+        ))
         .orderBy(desc(notifications.createdAt))
         .limit(limit);
       res.json({ notifications: notifs });
@@ -16540,7 +16543,11 @@ export async function registerRoutes(
       if (!merchantId) return;
       const [result] = await db.select({ count: sql<number>`count(*)::int` })
         .from(notifications)
-        .where(and(eq(notifications.merchantId, merchantId), eq(notifications.read, false)));
+        .where(and(
+          eq(notifications.merchantId, merchantId),
+          eq(notifications.read, false),
+          isNull(notifications.resolvedAt),
+        ));
       res.json({ count: result?.count || 0 });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -16566,6 +16573,62 @@ export async function registerRoutes(
       await db.update(notifications).set({ read: true })
         .where(and(eq(notifications.merchantId, merchantId), eq(notifications.read, false)));
       res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/notifications/:id/resolve", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const user = req.user as any;
+      const resolvedByUserId = user?.id || user?.claims?.sub || "unknown";
+      const resolvedByName = user?.name || user?.email || user?.username || "Agent";
+      const [updated] = await db.update(notifications)
+        .set({ resolvedAt: new Date(), resolvedByUserId, resolvedByName, read: true })
+        .where(and(eq(notifications.id, req.params.id), eq(notifications.merchantId, merchantId)))
+        .returning();
+      if (!updated) return res.status(404).json({ error: "Notification not found" });
+      res.json({ success: true, notification: updated });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/notifications/clear-all", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      await db.update(notifications)
+        .set({ read: true })
+        .where(and(
+          eq(notifications.merchantId, merchantId),
+          eq(notifications.resolvable, false),
+          isNull(notifications.resolvedAt),
+        ));
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/notifications/history", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = parseInt(req.query.offset as string) || 0;
+      const history = await db.select().from(notifications)
+        .where(and(
+          eq(notifications.merchantId, merchantId),
+          isNotNull(notifications.resolvedAt),
+        ))
+        .orderBy(desc(notifications.resolvedAt))
+        .limit(limit + 1)
+        .offset(offset);
+      const hasMore = history.length > limit;
+      res.json({ notifications: history.slice(0, limit), hasMore });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
