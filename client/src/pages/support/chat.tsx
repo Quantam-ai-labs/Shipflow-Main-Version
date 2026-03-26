@@ -31,7 +31,7 @@ import {
   ExternalLink, File as FileIcon, Video, Plus, Pencil, Settings2,
   Paperclip, Camera, FileUp, StopCircle, Loader2, ClipboardList, AlertCircle,
   Archive, ArchiveRestore, CheckSquare, Square, MinusSquare, Copy, Info,
-  ArrowDown,
+  ArrowDown, ChevronUp, Zap, Images, Link as LinkIcon, GalleryHorizontal,
 } from "lucide-react";
 import {
   Dialog,
@@ -40,6 +40,18 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
@@ -104,6 +116,27 @@ interface WaLabel {
   color: string;
   sortOrder: number;
   isSystem: boolean;
+}
+
+interface WaMetaTemplate {
+  id: string;
+  name: string;
+  language: string;
+  category: string;
+  headerType: string;
+  headerText: string | null;
+  body: string | null;
+  footer: string | null;
+  buttons: any[];
+  status: string;
+}
+
+interface LinkPreview {
+  url: string;
+  title: string | null;
+  description: string | null;
+  image: string | null;
+  siteName: string | null;
 }
 
 const LABEL_COLORS = [
@@ -596,6 +629,26 @@ export default function SupportChatPage() {
   // Clipboard image paste state
   const [pastedImage, setPastedImage] = useState<{ blob: Blob; previewUrl: string } | null>(null);
   const [isUploadingPaste, setIsUploadingPaste] = useState(false);
+
+  // In-conversation message search state
+  const [msgSearchOpen, setMsgSearchOpen] = useState(false);
+  const [msgSearchQuery, setMsgSearchQuery] = useState("");
+  const [msgSearchMatchIds, setMsgSearchMatchIds] = useState<string[]>([]);
+  const [msgSearchIndex, setMsgSearchIndex] = useState(0);
+  const msgSearchInputRef = useRef<HTMLInputElement>(null);
+
+  // Gallery panel state
+  const [galleryOpen, setGalleryOpen] = useState(false);
+
+  // Template picker state
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
+  const [templateSearch, setTemplateSearch] = useState("");
+  const [selectedTemplate, setSelectedTemplate] = useState<WaMetaTemplate | null>(null);
+
+  // Link preview state (compose)
+  const [linkPreview, setLinkPreview] = useState<LinkPreview | null>(null);
+  const [linkPreviewDismissed, setLinkPreviewDismissed] = useState(false);
+  const linkPreviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -1174,6 +1227,101 @@ export default function SupportChatPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/support/conversations", selectedConvId, "messages"] });
     },
   });
+
+  const sendTemplateMutation = useMutation({
+    mutationFn: async ({ convId, templateId, components }: { convId: string; templateId: string; components?: any[] }) =>
+      apiRequest("POST", `/api/support/conversations/${convId}/send-template`, { templateId, components }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/support/conversations", selectedConvId, "messages"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/support/conversations"] });
+      setTemplatePickerOpen(false);
+      setSelectedTemplate(null);
+      setTimeout(() => scrollToBottom(), 100);
+      toast({ title: "Template sent" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to send template", description: err.message, variant: "destructive" });
+    },
+  });
+
+  // Template data
+  const { data: waTemplates = [] } = useQuery<WaMetaTemplate[]>({
+    queryKey: ["/api/wa-meta-templates"],
+    enabled: templatePickerOpen,
+  });
+
+  const filteredTemplates = useMemo(() => {
+    if (!templateSearch.trim()) return waTemplates.filter(t => t.status === "approved");
+    const q = templateSearch.toLowerCase();
+    return waTemplates.filter(t =>
+      t.status === "approved" &&
+      (t.name.toLowerCase().includes(q) || (t.body || "").toLowerCase().includes(q))
+    );
+  }, [waTemplates, templateSearch]);
+
+  // Link preview debounce logic
+  useEffect(() => {
+    if (linkPreviewTimerRef.current) clearTimeout(linkPreviewTimerRef.current);
+    if (linkPreviewDismissed) return;
+
+    const urlMatch = messageText.match(/https?:\/\/[^\s<>"{}|\\^`\[\]]+/);
+    if (!urlMatch) {
+      setLinkPreview(null);
+      return;
+    }
+    const url = urlMatch[0];
+    if (linkPreview?.url === url) return;
+
+    linkPreviewTimerRef.current = setTimeout(async () => {
+      try {
+        const resp = await fetch(`/api/whatsapp/link-preview?url=${encodeURIComponent(url)}`, { credentials: "include" });
+        if (!resp.ok) { setLinkPreview(null); return; }
+        const data: LinkPreview = await resp.json();
+        if (data.title || data.description) setLinkPreview(data);
+        else setLinkPreview(null);
+      } catch { setLinkPreview(null); }
+    }, 600);
+
+    return () => { if (linkPreviewTimerRef.current) clearTimeout(linkPreviewTimerRef.current); };
+  }, [messageText, linkPreviewDismissed]);
+
+  // Reset link preview when conversation changes or message sent
+  useEffect(() => {
+    setLinkPreview(null);
+    setLinkPreviewDismissed(false);
+  }, [selectedConvId]);
+
+  // Message search logic
+  useEffect(() => {
+    if (!msgSearchOpen || !msgSearchQuery.trim() || msgSearchQuery.trim().length < 2) {
+      setMsgSearchMatchIds([]);
+      setMsgSearchIndex(0);
+      return;
+    }
+    const q = msgSearchQuery.toLowerCase();
+    const matched = messages
+      .filter(m => m.messageType !== "reaction" && m.text && m.text.toLowerCase().includes(q))
+      .map(m => m.id);
+    setMsgSearchMatchIds(matched);
+    setMsgSearchIndex(matched.length > 0 ? matched.length - 1 : 0); // start at newest
+  }, [msgSearchQuery, msgSearchOpen, messages]);
+
+  useEffect(() => {
+    if (!msgSearchOpen) {
+      setMsgSearchQuery("");
+      setMsgSearchMatchIds([]);
+      setMsgSearchIndex(0);
+    } else {
+      setTimeout(() => msgSearchInputRef.current?.focus(), 50);
+    }
+  }, [msgSearchOpen]);
+
+  // Jump to highlighted search result
+  useEffect(() => {
+    if (msgSearchMatchIds.length === 0) return;
+    const id = msgSearchMatchIds[msgSearchIndex];
+    if (id) jumpToMessage(id);
+  }, [msgSearchMatchIds, msgSearchIndex]);
 
   const messagesByDate = useMemo(() => {
     const groups: { date: string; messages: Message[] }[] = [];
@@ -1765,6 +1913,18 @@ export default function SupportChatPage() {
                 File Complaint
               </Button>
 
+              {/* In-chat search toggle */}
+              <Button
+                size="icon"
+                variant="ghost"
+                data-testid="button-msg-search"
+                className={cn("text-white hover:bg-white/10 h-8 w-8", msgSearchOpen && "bg-white/20")}
+                onClick={() => setMsgSearchOpen(v => !v)}
+                title="Search messages"
+              >
+                <Search className="w-4 h-4" />
+              </Button>
+
               {/* Mute toggle */}
               <Button
                 size="icon"
@@ -1851,6 +2011,16 @@ export default function SupportChatPage() {
                   <DropdownMenuSeparator />
 
                   <DropdownMenuItem
+                    onClick={() => setGalleryOpen(true)}
+                    data-testid="button-view-media"
+                  >
+                    <Images className="w-4 h-4 mr-2" />
+                    View Media &amp; Links
+                  </DropdownMenuItem>
+
+                  <DropdownMenuSeparator />
+
+                  <DropdownMenuItem
                     onClick={() => archiveMutation.mutate({ ids: [selectedConv.id], unarchive: selectedConv.isArchived })}
                     data-testid="button-archive-selected"
                   >
@@ -1873,6 +2043,73 @@ export default function SupportChatPage() {
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
+
+            {/* In-conversation search bar */}
+            {msgSearchOpen && (
+              <div className="px-3 py-2 bg-[#f0f2f5] dark:bg-[#1f2c34] border-b border-border flex items-center gap-2" data-testid="msg-search-bar">
+                <Search className="w-4 h-4 text-muted-foreground shrink-0" />
+                <input
+                  ref={msgSearchInputRef}
+                  type="text"
+                  placeholder="Search messages..."
+                  value={msgSearchQuery}
+                  onChange={(e) => setMsgSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") { setMsgSearchOpen(false); return; }
+                    if (e.key === "Enter" || e.key === "ArrowDown") {
+                      e.preventDefault();
+                      if (msgSearchMatchIds.length > 0) {
+                        setMsgSearchIndex(i => i === 0 ? msgSearchMatchIds.length - 1 : i - 1);
+                      }
+                    }
+                    if (e.key === "ArrowUp") {
+                      e.preventDefault();
+                      if (msgSearchMatchIds.length > 0) {
+                        setMsgSearchIndex(i => i === msgSearchMatchIds.length - 1 ? 0 : i + 1);
+                      }
+                    }
+                  }}
+                  className="flex-1 bg-transparent text-sm outline-none text-foreground placeholder:text-muted-foreground"
+                  data-testid="input-msg-search"
+                />
+                {msgSearchQuery && (
+                  <span className="text-xs text-muted-foreground shrink-0">
+                    {msgSearchMatchIds.length > 0 ? `${msgSearchMatchIds.length - msgSearchIndex}/${msgSearchMatchIds.length}` : "0 results"}
+                  </span>
+                )}
+                {msgSearchMatchIds.length > 1 && (
+                  <>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-6 w-6 shrink-0"
+                      onClick={() => setMsgSearchIndex(i => i === msgSearchMatchIds.length - 1 ? 0 : i + 1)}
+                      data-testid="button-search-prev"
+                    >
+                      <ChevronUp className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-6 w-6 shrink-0"
+                      onClick={() => setMsgSearchIndex(i => i === 0 ? msgSearchMatchIds.length - 1 : i - 1)}
+                      data-testid="button-search-next"
+                    >
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    </Button>
+                  </>
+                )}
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-6 w-6 shrink-0"
+                  onClick={() => setMsgSearchOpen(false)}
+                  data-testid="button-close-msg-search"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            )}
 
             {/* Chat message area with scroll tracking */}
             <div className="flex-1 relative overflow-hidden">
@@ -1915,6 +2152,8 @@ export default function SupportChatPage() {
                           const isNonText = msg.messageType && !["text", "button_reply"].includes(msg.messageType);
                           const hasQuote = !!msg.referenceMessageId && messages.some(m => m.id === msg.referenceMessageId);
                           const isHighlighted = highlightedMsgId === msg.id;
+                          const isSearchMatch = msgSearchMatchIds.includes(msg.id);
+                          const isCurrentSearchTarget = isSearchMatch && msgSearchMatchIds[msgSearchIndex] === msg.id;
 
                           return (
                             <div
@@ -1951,7 +2190,9 @@ export default function SupportChatPage() {
                                   isOutbound
                                     ? "wa-bubble-out text-[#111b21] dark:text-[#e9edef] rounded-tr-none"
                                     : "wa-bubble-in text-[#111b21] dark:text-[#e9edef] rounded-tl-none",
-                                  isHighlighted && "ring-2 ring-yellow-400 ring-offset-1 bg-yellow-50 dark:bg-yellow-900/30"
+                                  isHighlighted && "ring-2 ring-yellow-400 ring-offset-1 bg-yellow-50 dark:bg-yellow-900/30",
+                                  isCurrentSearchTarget && "ring-2 ring-[#008069] ring-offset-1 bg-[#008069]/10 dark:bg-[#008069]/20",
+                                  isSearchMatch && !isCurrentSearchTarget && "ring-1 ring-[#008069]/40 bg-[#008069]/5 dark:bg-[#008069]/10"
                                 )}>
                                   {hasQuote && (
                                     <QuotedMessagePreview
@@ -2017,7 +2258,7 @@ export default function SupportChatPage() {
                                   >
                                     <Reply className="w-3.5 h-3.5" />
                                   </Button>
-                                  {!isOutbound && msg.waMessageId && (
+                                  {msg.waMessageId && (
                                     <EmojiPicker
                                       onSelect={(emoji) => reactMutation.mutate({ convId: selectedConv.id, emoji, waMessageId: msg.waMessageId! })}
                                       trigger={
@@ -2070,6 +2311,35 @@ export default function SupportChatPage() {
                 </div>
               )}
             </div>
+
+            {/* Link preview card above compose */}
+            {linkPreview && !linkPreviewDismissed && (
+              <div className="mx-3 mb-1 rounded-lg border border-border bg-card overflow-hidden flex items-start gap-2 shadow-sm" data-testid="link-preview-card">
+                {linkPreview.image && (
+                  <img src={linkPreview.image} alt={linkPreview.title || "Preview"} className="w-16 h-16 object-cover shrink-0" />
+                )}
+                <div className="flex-1 min-w-0 p-2">
+                  {linkPreview.siteName && (
+                    <p className="text-[10px] text-[#008069] font-medium uppercase tracking-wide mb-0.5">{linkPreview.siteName}</p>
+                  )}
+                  {linkPreview.title && (
+                    <p className="text-xs font-semibold text-foreground line-clamp-1">{linkPreview.title}</p>
+                  )}
+                  {linkPreview.description && (
+                    <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">{linkPreview.description}</p>
+                  )}
+                </div>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-6 w-6 shrink-0 m-1 text-muted-foreground"
+                  onClick={() => { setLinkPreviewDismissed(true); setLinkPreview(null); }}
+                  data-testid="button-dismiss-link-preview"
+                >
+                  <X className="w-3 h-3" />
+                </Button>
+              </div>
+            )}
 
             <div className="wa-input-bar px-3 py-2">
               {/* Pasted image preview */}
@@ -2142,6 +2412,17 @@ export default function SupportChatPage() {
                 </Button>
                 <Button size="icon" variant="ghost" onClick={() => insertFormatting("```", "```")} title="Code" data-testid="button-format-code" className="h-7 w-7 text-[#54656f] dark:text-[#8696a0]">
                   <Code className="w-4 h-4" />
+                </Button>
+                <div className="w-px h-4 bg-border mx-0.5" />
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => setTemplatePickerOpen(true)}
+                  title="Send template message"
+                  data-testid="button-template-picker"
+                  className="h-7 w-7 text-[#008069] hover:text-[#008069] hover:bg-[#008069]/10"
+                >
+                  <Zap className="w-4 h-4" />
                 </Button>
               </div>
 
@@ -2355,6 +2636,267 @@ export default function SupportChatPage() {
           conversation={selectedConv}
         />
       )}
+
+      {/* Gallery Sheet — Photos, Documents, Links */}
+      <Sheet open={galleryOpen} onOpenChange={setGalleryOpen}>
+        <SheetContent side="right" className="w-[380px] sm:w-[420px] p-0 flex flex-col" data-testid="gallery-sheet">
+          <SheetHeader className="px-4 py-3 border-b border-border">
+            <SheetTitle className="flex items-center gap-2">
+              <GalleryHorizontal className="w-4 h-4 text-[#008069]" />
+              Media, Docs &amp; Links
+            </SheetTitle>
+          </SheetHeader>
+          <Tabs defaultValue="photos" className="flex-1 flex flex-col overflow-hidden">
+            <TabsList className="mx-4 mt-3 mb-0 shrink-0">
+              <TabsTrigger value="photos" className="flex-1" data-testid="tab-gallery-photos">
+                <Images className="w-3.5 h-3.5 mr-1" />
+                Photos
+              </TabsTrigger>
+              <TabsTrigger value="docs" className="flex-1" data-testid="tab-gallery-docs">
+                <FileText className="w-3.5 h-3.5 mr-1" />
+                Docs
+              </TabsTrigger>
+              <TabsTrigger value="links" className="flex-1" data-testid="tab-gallery-links">
+                <LinkIcon className="w-3.5 h-3.5 mr-1" />
+                Links
+              </TabsTrigger>
+            </TabsList>
+
+            {/* Photos & Videos */}
+            <TabsContent value="photos" className="flex-1 overflow-y-auto px-4 py-3 mt-0">
+              {(() => {
+                const mediaMessages = messages.filter(m =>
+                  m.messageType === "image" || m.messageType === "video"
+                );
+                if (mediaMessages.length === 0) {
+                  return (
+                    <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                      <Images className="w-10 h-10 mb-2 opacity-30" />
+                      <p className="text-sm">No photos or videos yet</p>
+                    </div>
+                  );
+                }
+                return (
+                  <div className="grid grid-cols-3 gap-1">
+                    {mediaMessages.map(m => (
+                      <div key={m.id} className="aspect-square rounded-md overflow-hidden bg-muted border border-border">
+                        {m.messageType === "image" ? (
+                          <img
+                            src={`/api/whatsapp/media/${m.mediaId}`}
+                            alt="Media"
+                            className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                            onClick={() => {
+                              setGalleryOpen(false);
+                              jumpToMessage(m.id);
+                            }}
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center bg-black/10 cursor-pointer hover:bg-black/20 transition-colors"
+                            onClick={() => { setGalleryOpen(false); jumpToMessage(m.id); }}>
+                            <Play className="w-8 h-8 text-white/80" />
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </TabsContent>
+
+            {/* Documents */}
+            <TabsContent value="docs" className="flex-1 overflow-y-auto px-4 py-3 mt-0">
+              {(() => {
+                const docMessages = messages.filter(m =>
+                  m.messageType === "document" || m.messageType === "audio" || m.messageType === "sticker"
+                );
+                if (docMessages.length === 0) {
+                  return (
+                    <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                      <FileText className="w-10 h-10 mb-2 opacity-30" />
+                      <p className="text-sm">No documents yet</p>
+                    </div>
+                  );
+                }
+                return (
+                  <div className="space-y-2">
+                    {docMessages.map(m => (
+                      <div
+                        key={m.id}
+                        className="flex items-center gap-3 p-2 rounded-lg border border-border hover:bg-muted/50 cursor-pointer transition-colors"
+                        onClick={() => { setGalleryOpen(false); jumpToMessage(m.id); }}
+                        data-testid={`gallery-doc-${m.id}`}
+                      >
+                        <div className="w-10 h-10 rounded-md bg-[#008069]/10 flex items-center justify-center shrink-0">
+                          <FileText className="w-5 h-5 text-[#008069]" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium truncate">{m.mediaFilename || m.messageType}</p>
+                          <p className="text-[11px] text-muted-foreground">{format(new Date(m.createdAt), "MMM d, yyyy · HH:mm")}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </TabsContent>
+
+            {/* Links */}
+            <TabsContent value="links" className="flex-1 overflow-y-auto px-4 py-3 mt-0">
+              {(() => {
+                const urlRegex = /https?:\/\/[^\s<>"{}|\\^`\[\]]+/g;
+                const linkMessages = messages.filter(m => m.text && urlRegex.test(m.text));
+                if (linkMessages.length === 0) {
+                  return (
+                    <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                      <LinkIcon className="w-10 h-10 mb-2 opacity-30" />
+                      <p className="text-sm">No links shared yet</p>
+                    </div>
+                  );
+                }
+                return (
+                  <div className="space-y-2">
+                    {linkMessages.map(m => {
+                      const urls = m.text!.match(/https?:\/\/[^\s<>"{}|\\^`\[\]]+/g) || [];
+                      return urls.map((url, idx) => (
+                        <div
+                          key={`${m.id}-${idx}`}
+                          className="flex items-start gap-2 p-2.5 rounded-lg border border-border hover:bg-muted/50 cursor-pointer transition-colors"
+                          onClick={() => { setGalleryOpen(false); jumpToMessage(m.id); }}
+                          data-testid={`gallery-link-${m.id}-${idx}`}
+                        >
+                          <LinkIcon className="w-4 h-4 text-[#008069] mt-0.5 shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <a
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-[#008069] hover:underline break-all"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {url.length > 55 ? url.slice(0, 55) + "…" : url}
+                            </a>
+                            <p className="text-[10px] text-muted-foreground mt-0.5">{format(new Date(m.createdAt), "MMM d · HH:mm")}</p>
+                          </div>
+                        </div>
+                      ));
+                    })}
+                  </div>
+                );
+              })()}
+            </TabsContent>
+          </Tabs>
+        </SheetContent>
+      </Sheet>
+
+      {/* Template Picker Dialog */}
+      <Dialog open={templatePickerOpen} onOpenChange={(v) => { setTemplatePickerOpen(v); if (!v) { setSelectedTemplate(null); setTemplateSearch(""); } }}>
+        <DialogContent className="max-w-lg max-h-[80vh] flex flex-col p-0 gap-0" data-testid="template-picker-dialog">
+          <DialogHeader className="px-4 pt-4 pb-3 border-b border-border shrink-0">
+            <DialogTitle className="flex items-center gap-2">
+              <Zap className="w-4 h-4 text-[#008069]" />
+              Send Template Message
+            </DialogTitle>
+          </DialogHeader>
+
+          {/* Search */}
+          <div className="px-4 py-2 border-b border-border shrink-0">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Search templates..."
+                value={templateSearch}
+                onChange={(e) => setTemplateSearch(e.target.value)}
+                className="pl-8 h-8 text-sm"
+                data-testid="input-template-search"
+              />
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-hidden flex">
+            {/* Template list */}
+            <div className="w-1/2 border-r border-border overflow-y-auto">
+              {filteredTemplates.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full py-8 text-muted-foreground">
+                  <Zap className="w-8 h-8 mb-2 opacity-30" />
+                  <p className="text-sm">No approved templates</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-border">
+                  {filteredTemplates.map(t => (
+                    <button
+                      key={t.id}
+                      className={cn(
+                        "w-full text-left px-3 py-2.5 hover:bg-muted/50 transition-colors",
+                        selectedTemplate?.id === t.id && "bg-[#008069]/10 border-l-2 border-[#008069]"
+                      )}
+                      onClick={() => setSelectedTemplate(t)}
+                      data-testid={`template-item-${t.id}`}
+                    >
+                      <p className="text-xs font-medium text-foreground">{t.name}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">{t.body}</p>
+                      {t.category && (
+                        <span className="inline-block mt-1 text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded">
+                          {t.category}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Template preview */}
+            <div className="w-1/2 overflow-y-auto p-3 flex flex-col gap-3">
+              {selectedTemplate ? (
+                <>
+                  <div className="bg-[#dcf8c6] dark:bg-[#005c4b] rounded-lg p-3 text-sm text-[#111b21] dark:text-[#e9edef] whitespace-pre-wrap">
+                    {selectedTemplate.headerText && (
+                      <p className="font-semibold mb-1">{selectedTemplate.headerText}</p>
+                    )}
+                    <p className="text-xs leading-relaxed">{selectedTemplate.body}</p>
+                    {selectedTemplate.footer && (
+                      <p className="text-[11px] text-[#667781] dark:text-[#8696a0] mt-1">{selectedTemplate.footer}</p>
+                    )}
+                    {selectedTemplate.buttons && selectedTemplate.buttons.length > 0 && (
+                      <div className="mt-2 space-y-1 border-t border-black/10 dark:border-white/10 pt-2">
+                        {selectedTemplate.buttons.map((btn: any, i: number) => (
+                          <div key={i} className="text-[11px] text-[#008069] font-medium text-center py-0.5">
+                            {btn.text || btn}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <Button
+                    className="w-full bg-[#008069] hover:bg-[#017561] text-white"
+                    onClick={() => {
+                      if (selectedConvId && selectedTemplate) {
+                        sendTemplateMutation.mutate({
+                          convId: selectedConvId,
+                          templateId: selectedTemplate.id,
+                        });
+                      }
+                    }}
+                    disabled={sendTemplateMutation.isPending}
+                    data-testid="button-send-template"
+                  >
+                    {sendTemplateMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Send className="w-4 h-4 mr-2" />
+                    )}
+                    Send Template
+                  </Button>
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                  <p className="text-sm">Select a template to preview</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

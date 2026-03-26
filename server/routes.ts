@@ -8578,6 +8578,157 @@ export async function registerRoutes(
     }
   });
 
+  // Link preview endpoint – fetches OG metadata for a URL
+  app.get("/api/whatsapp/link-preview", isAuthenticated, async (req: any, res) => {
+    try {
+      const url = req.query.url as string;
+      if (!url || !/^https?:\/\//i.test(url)) {
+        return res.status(400).json({ error: "Invalid URL" });
+      }
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+      let html = "";
+      try {
+        const resp = await fetch(url, {
+          signal: controller.signal,
+          headers: { "User-Agent": "WhatsApp/2.0 (+http://www.whatsapp.com/bot)" },
+        });
+        clearTimeout(timeout);
+        if (!resp.ok) return res.status(400).json({ error: "Could not fetch URL" });
+        const ct = resp.headers.get("content-type") || "";
+        if (!ct.includes("text/html")) return res.status(400).json({ error: "Not an HTML page" });
+        const buf = await resp.arrayBuffer();
+        html = Buffer.from(buf).slice(0, 128000).toString("utf-8");
+      } catch {
+        clearTimeout(timeout);
+        return res.status(400).json({ error: "Could not reach URL" });
+      }
+      const getMeta = (prop: string, attr: string = "content") => {
+        const re = new RegExp(`<meta[^>]+(?:property|name)=["']${prop}["'][^>]+${attr}=["']([^"']+)["']`, "i");
+        const re2 = new RegExp(`<meta[^>]+${attr}=["']([^"']+)["'][^>]+(?:property|name)=["']${prop}["']`, "i");
+        return (re.exec(html) || re2.exec(html))?.[1]?.trim() || null;
+      };
+      const title =
+        getMeta("og:title") ||
+        getMeta("twitter:title") ||
+        /<title[^>]*>([^<]+)<\/title>/i.exec(html)?.[1]?.trim() ||
+        null;
+      const description =
+        getMeta("og:description") ||
+        getMeta("description") ||
+        getMeta("twitter:description") ||
+        null;
+      const image = getMeta("og:image") || getMeta("twitter:image") || null;
+      const siteName = getMeta("og:site_name") || null;
+
+      res.json({ url, title, description, image, siteName });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // In-conversation message search
+  app.get("/api/support/conversations/:id/search", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const conv = await storage.getConversationById(req.params.id);
+      if (!conv || conv.merchantId !== merchantId) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+      const q = (req.query.q as string || "").trim().toLowerCase();
+      if (!q || q.length < 2) return res.json({ results: [] });
+
+      // Fetch all messages (no limit) and filter server-side
+      const allMsgs = await storage.getWaMessages(req.params.id);
+      const results = allMsgs
+        .filter(m => m.text && m.text.toLowerCase().includes(q))
+        .map(m => ({ id: m.id, text: m.text, direction: m.direction, createdAt: m.createdAt }));
+      res.json({ results });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Send template to conversation
+  app.post("/api/support/conversations/:id/send-template", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const conv = await storage.getConversationById(req.params.id);
+      if (!conv || conv.merchantId !== merchantId) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+
+      const { templateId, components } = req.body;
+      if (!templateId) return res.status(400).json({ error: "templateId is required" });
+
+      const template = await storage.getWaMetaTemplateById(merchantId, templateId);
+      if (!template) return res.status(404).json({ error: "Template not found" });
+
+      const [merchantRow] = await db.select({
+        waPhoneNumberId: merchants.waPhoneNumberId,
+        waAccessToken: merchants.waAccessToken,
+      }).from(merchants).where(eq(merchants.id, merchantId)).limit(1);
+
+      if (!merchantRow?.waPhoneNumberId || !merchantRow?.waAccessToken) {
+        return res.status(400).json({ error: "WhatsApp credentials not configured" });
+      }
+
+      const waComponents: any[] = components || [];
+
+      const waPayload: any = {
+        messaging_product: "whatsapp",
+        to: conv.contactPhone,
+        type: "template",
+        template: {
+          name: template.name,
+          language: { code: template.language || "en" },
+          components: waComponents,
+        },
+      };
+
+      const waRes = await fetch(`https://graph.facebook.com/v22.0/${merchantRow.waPhoneNumberId}/messages`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${merchantRow.waAccessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(waPayload),
+        signal: AbortSignal.timeout(10000),
+      });
+
+      const waData = await waRes.json() as any;
+      if (!waRes.ok) {
+        return res.status(400).json({ error: waData?.error?.message || "Failed to send template" });
+      }
+
+      const waMessageId = waData?.messages?.[0]?.id || null;
+      const bodyText = template.body || template.name;
+
+      const msg = await storage.createWaMessage({
+        conversationId: conv.id,
+        direction: "outbound",
+        senderName: "Agent",
+        text: bodyText,
+        waMessageId,
+        status: "sent",
+        messageType: "text",
+      });
+
+      // Update conversation last message
+      await storage.upsertConversation({
+        merchantId,
+        contactPhone: conv.contactPhone,
+        lastMessage: bodyText.slice(0, 100),
+      });
+
+      res.json(msg);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.get("/api/support/connection", isAuthenticated, async (req: any, res) => {
     try {
       const merchantId = await requireMerchant(req, res);
