@@ -8581,6 +8581,52 @@ export async function registerRoutes(
     }
   });
 
+  // Alias: POST /api/whatsapp/messages/:waMessageId/react (finds conversation via waMessageId)
+  app.post("/api/whatsapp/messages/:waMessageId/react", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const waMessageId = req.params.waMessageId;
+      const { emoji, conversationId } = req.body;
+      if (!emoji) return res.status(400).json({ error: "emoji required" });
+      // Find conversation either by explicit conversationId or by looking up the message
+      let conv: { id: string; merchantId: string; contactPhone: string } | null = null;
+      if (conversationId) {
+        conv = await storage.getConversationById(conversationId) as typeof conv;
+      } else {
+        // Look up the message to find its conversation
+        const [msgRow] = await db.select({ conversationId: waMessages.conversationId })
+          .from(waMessages)
+          .where(eq(waMessages.waMessageId, waMessageId))
+          .limit(1);
+        if (msgRow) conv = await storage.getConversationById(msgRow.conversationId) as typeof conv;
+      }
+      if (!conv || conv.merchantId !== merchantId) return res.status(404).json({ error: "Conversation not found" });
+      const [merchantRow] = await db.select({ waPhoneNumberId: merchants.waPhoneNumberId, waAccessToken: merchants.waAccessToken })
+        .from(merchants).where(eq(merchants.id, merchantId)).limit(1);
+      const phoneNumberId = merchantRow?.waPhoneNumberId;
+      const accessToken = merchantRow?.waAccessToken;
+      if (!phoneNumberId || !accessToken) return res.status(400).json({ error: "WhatsApp credentials not configured" });
+      const waRes = await fetch(`https://graph.facebook.com/v22.0/${phoneNumberId}/messages`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ messaging_product: "whatsapp", to: conv.contactPhone, type: "reaction", reaction: { message_id: waMessageId, emoji } }),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!waRes.ok) {
+        const errData = await waRes.json().catch(() => ({})) as { error?: { message?: string } };
+        return res.status(400).json({ error: errData?.error?.message || "Failed to send reaction" });
+      }
+      const msg = await storage.createWaMessage({
+        conversationId: conv.id, direction: "outbound", senderName: "Agent",
+        messageType: "reaction", reactionEmoji: emoji, referenceMessageId: waMessageId, status: "sent",
+      });
+      res.json(msg);
+    } catch (error: unknown) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
   // Link preview endpoint – fetches OG metadata for a URL with SSRF protection
   app.get("/api/whatsapp/link-preview", isAuthenticated, async (req: any, res) => {
     // SSRF helpers (defined once, reused per redirect hop)

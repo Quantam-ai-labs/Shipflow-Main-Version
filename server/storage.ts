@@ -269,7 +269,7 @@ export interface IStorage {
   unarchiveConversations(merchantId: string, ids: string[]): Promise<void>;
   getWaMessages(conversationId: string, opts?: { limit?: number; offset?: number }): Promise<WaMessage[]>;
   countWaMessages(conversationId: string): Promise<number>;
-  createWaMessage(data: { conversationId: string; direction: string; senderName?: string | null; text?: string | null; waMessageId?: string | null; status?: string | null; messageType?: string | null; mediaUrl?: string | null; mimeType?: string | null; fileName?: string | null; reactionEmoji?: string | null; reactionFrom?: string | null; referenceMessageId?: string | null }): Promise<WaMessage>;
+  createWaMessage(data: { conversationId: string; direction: string; senderName?: string | null; text?: string | null; waMessageId?: string | null; status?: string | null; messageType?: string | null; mediaUrl?: string | null; mimeType?: string | null; fileName?: string | null; reactionEmoji?: string | null; reactionFrom?: string | null; referenceMessageId?: string | null; linkPreviewUrl?: string | null; linkPreviewData?: { url: string; title: string | null; description: string | null; image: string | null; siteName: string | null } | null }): Promise<WaMessage>;
   updateWaMessageStatus(messageId: string, status: string, waMessageId?: string): Promise<void>;
   updateWaMessageStatusByWaId(waMessageId: string, newStatus: string): Promise<boolean>;
   updateConversationLabel(merchantId: string, convId: string, label: string | null): Promise<void>;
@@ -2251,7 +2251,7 @@ export class DatabaseStorage implements IStorage {
     return Number(row?.count ?? 0);
   }
 
-  async createWaMessage(data: { conversationId: string; direction: string; senderName?: string | null; text?: string | null; waMessageId?: string | null; status?: string | null; messageType?: string | null; mediaUrl?: string | null; mimeType?: string | null; fileName?: string | null; reactionEmoji?: string | null; reactionFrom?: string | null; referenceMessageId?: string | null }): Promise<WaMessage> {
+  async createWaMessage(data: { conversationId: string; direction: string; senderName?: string | null; text?: string | null; waMessageId?: string | null; status?: string | null; messageType?: string | null; mediaUrl?: string | null; mimeType?: string | null; fileName?: string | null; reactionEmoji?: string | null; reactionFrom?: string | null; referenceMessageId?: string | null; linkPreviewUrl?: string | null; linkPreviewData?: { url: string; title: string | null; description: string | null; image: string | null; siteName: string | null } | null }): Promise<WaMessage> {
     const [row] = await db.insert(waMessages).values({
       conversationId: data.conversationId,
       direction: data.direction,
@@ -2266,6 +2266,8 @@ export class DatabaseStorage implements IStorage {
       reactionEmoji: data.reactionEmoji,
       reactionFrom: data.reactionFrom,
       referenceMessageId: data.referenceMessageId,
+      linkPreviewUrl: data.linkPreviewUrl ?? null,
+      linkPreviewData: data.linkPreviewData ?? null,
     }).returning();
     return row;
   }

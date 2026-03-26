@@ -716,6 +716,7 @@ export default function SupportChatPage() {
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   const [templateSearch, setTemplateSearch] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState<WaMetaTemplate | null>(null);
+  const [templateVars, setTemplateVars] = useState<Record<string, string>>({});
 
   // Link preview state (compose)
   const [linkPreview, setLinkPreview] = useState<LinkPreview | null>(null);
@@ -1308,6 +1309,8 @@ export default function SupportChatPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/support/conversations"] });
       setTemplatePickerOpen(false);
       setSelectedTemplate(null);
+      setTemplateSearch("");
+      setTemplateVars({});
       setTimeout(() => scrollToBottom(), 100);
       toast({ title: "Template sent" });
     },
@@ -2874,7 +2877,7 @@ export default function SupportChatPage() {
       </Sheet>
 
       {/* Template Picker Dialog */}
-      <Dialog open={templatePickerOpen} onOpenChange={(v) => { setTemplatePickerOpen(v); if (!v) { setSelectedTemplate(null); setTemplateSearch(""); } }}>
+      <Dialog open={templatePickerOpen} onOpenChange={(v) => { setTemplatePickerOpen(v); if (!v) { setSelectedTemplate(null); setTemplateSearch(""); setTemplateVars({}); } }}>
         <DialogContent className="max-w-lg max-h-[80vh] flex flex-col p-0 gap-0" data-testid="template-picker-dialog">
           <DialogHeader className="px-4 pt-4 pb-3 border-b border-border shrink-0">
             <DialogTitle className="flex items-center gap-2">
@@ -2914,7 +2917,7 @@ export default function SupportChatPage() {
                         "w-full text-left px-3 py-2.5 hover:bg-muted/50 transition-colors",
                         selectedTemplate?.id === t.id && "bg-[#008069]/10 border-l-2 border-[#008069]"
                       )}
-                      onClick={() => setSelectedTemplate(t)}
+                      onClick={() => { setSelectedTemplate(t); setTemplateVars({}); }}
                       data-testid={`template-item-${t.id}`}
                     >
                       <p className="text-xs font-medium text-foreground">{t.name}</p>
@@ -2930,69 +2933,96 @@ export default function SupportChatPage() {
               )}
             </div>
 
-            {/* Template preview */}
+            {/* Template preview + variable inputs */}
             <div className="w-1/2 overflow-y-auto p-3 flex flex-col gap-3">
-              {selectedTemplate ? (
-                <>
-                  <div className="bg-[#dcf8c6] dark:bg-[#005c4b] rounded-lg p-3 text-sm text-[#111b21] dark:text-[#e9edef] whitespace-pre-wrap">
-                    {selectedTemplate.headerText && (
-                      <p className="font-semibold mb-1">{selectedTemplate.headerText}</p>
-                    )}
-                    <p className="text-xs leading-relaxed">{selectedTemplate.body}</p>
-                    {selectedTemplate.footer && (
-                      <p className="text-[11px] text-[#667781] dark:text-[#8696a0] mt-1">{selectedTemplate.footer}</p>
-                    )}
-                    {selectedTemplate.buttons && selectedTemplate.buttons.length > 0 && (
-                      <div className="mt-2 space-y-1 border-t border-black/10 dark:border-white/10 pt-2">
-                        {selectedTemplate.buttons.map((btn: WaTemplateButton, i: number) => (
-                          <div key={i} className="text-[11px] text-[#008069] font-medium text-center py-0.5">
-                            {btn.text || btn}
+              {selectedTemplate ? (() => {
+                const bodyVarNums = [...new Set(Array.from(selectedTemplate.body?.matchAll(/\{\{(\d+)\}\}/g) || []).map(m => m[1]))].sort();
+                const resolvedBody = bodyVarNums.reduce((t, n) => t.replaceAll(`{{${n}}}`, templateVars[n] || `{{${n}}}`), selectedTemplate.body || "");
+                const components: WaTemplateComponent[] = bodyVarNums.length > 0 ? [{
+                  type: "body",
+                  parameters: bodyVarNums.map(n => ({ type: "text", text: templateVars[n] || "" })),
+                }] : [];
+                return (
+                  <>
+                    <div className="bg-[#dcf8c6] dark:bg-[#005c4b] rounded-lg p-3 text-sm text-[#111b21] dark:text-[#e9edef] whitespace-pre-wrap">
+                      {selectedTemplate.headerText && (
+                        <p className="font-semibold mb-1">{selectedTemplate.headerText}</p>
+                      )}
+                      <p className="text-xs leading-relaxed">{resolvedBody}</p>
+                      {selectedTemplate.footer && (
+                        <p className="text-[11px] text-[#667781] dark:text-[#8696a0] mt-1">{selectedTemplate.footer}</p>
+                      )}
+                      {selectedTemplate.buttons && selectedTemplate.buttons.length > 0 && (
+                        <div className="mt-2 space-y-1 border-t border-black/10 dark:border-white/10 pt-2">
+                          {selectedTemplate.buttons.map((btn: WaTemplateButton, i: number) => (
+                            <div key={i} className="text-[11px] text-[#008069] font-medium text-center py-0.5">
+                              {btn.text}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {bodyVarNums.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Fill Variables</p>
+                        {bodyVarNums.map(n => (
+                          <div key={n}>
+                            <label className="text-xs text-muted-foreground mb-0.5 block">{`{{${n}}}`}</label>
+                            <Input
+                              placeholder={`Variable ${n}`}
+                              value={templateVars[n] || ""}
+                              onChange={(e) => setTemplateVars(prev => ({ ...prev, [n]: e.target.value }))}
+                              className="h-7 text-xs"
+                              data-testid={`input-template-var-${n}`}
+                            />
                           </div>
                         ))}
                       </div>
                     )}
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <Button
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => {
-                        if (selectedTemplate?.body) {
-                          setMessageText(selectedTemplate.body);
-                          setTemplatePickerOpen(false);
-                          setSelectedTemplate(null);
-                          setTemplateSearch("");
-                          setTimeout(() => inputRef.current?.focus(), 50);
-                        }
-                      }}
-                      data-testid="button-fill-template"
-                    >
-                      <Pencil className="w-4 h-4 mr-2" />
-                      Fill in Compose
-                    </Button>
-                    <Button
-                      className="w-full bg-[#008069] hover:bg-[#017561] text-white"
-                      onClick={() => {
-                        if (selectedConvId && selectedTemplate) {
-                          sendTemplateMutation.mutate({
-                            convId: selectedConvId,
-                            templateId: selectedTemplate.id,
-                          });
-                        }
-                      }}
-                      disabled={sendTemplateMutation.isPending}
-                      data-testid="button-send-template"
-                    >
-                      {sendTemplateMutation.isPending ? (
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      ) : (
-                        <Send className="w-4 h-4 mr-2" />
-                      )}
-                      Send Now
-                    </Button>
-                  </div>
-                </>
-              ) : (
+                    <div className="flex flex-col gap-2">
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => {
+                          if (selectedTemplate?.body) {
+                            setMessageText(resolvedBody);
+                            setTemplatePickerOpen(false);
+                            setSelectedTemplate(null);
+                            setTemplateSearch("");
+                            setTemplateVars({});
+                            setTimeout(() => inputRef.current?.focus(), 50);
+                          }
+                        }}
+                        data-testid="button-fill-template"
+                      >
+                        <Pencil className="w-4 h-4 mr-2" />
+                        Fill in Compose
+                      </Button>
+                      <Button
+                        className="w-full bg-[#008069] hover:bg-[#017561] text-white"
+                        onClick={() => {
+                          if (selectedConvId && selectedTemplate) {
+                            sendTemplateMutation.mutate({
+                              convId: selectedConvId,
+                              templateId: selectedTemplate.id,
+                              components: components.length > 0 ? components : undefined,
+                            });
+                          }
+                        }}
+                        disabled={sendTemplateMutation.isPending}
+                        data-testid="button-send-template"
+                      >
+                        {sendTemplateMutation.isPending ? (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <Send className="w-4 h-4 mr-2" />
+                        )}
+                        Send Now
+                      </Button>
+                    </div>
+                  </>
+                );
+              })() : (
                 <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
                   <p className="text-sm">Select a template to preview</p>
                 </div>
