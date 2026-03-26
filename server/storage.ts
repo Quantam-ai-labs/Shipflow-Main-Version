@@ -2229,16 +2229,19 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getWaMessages(conversationId: string, opts?: { limit?: number; offset?: number }): Promise<WaMessage[]> {
-    const q = db.select().from(waMessages)
-      .where(eq(waMessages.conversationId, conversationId))
-      .orderBy(asc(waMessages.createdAt));
     if (opts?.limit !== undefined) {
-      // Fetch the last N messages (most recent) using offset from end
+      // Fetch a specific page of messages (most recent first) using offset from end
       const total = await this.countWaMessages(conversationId);
       const off = Math.max(0, total - (opts.offset ?? 0) - opts.limit);
-      return (q as any).limit(opts.limit).offset(off);
+      return db.select().from(waMessages)
+        .where(eq(waMessages.conversationId, conversationId))
+        .orderBy(asc(waMessages.createdAt))
+        .limit(opts.limit)
+        .offset(off);
     }
-    return q;
+    return db.select().from(waMessages)
+      .where(eq(waMessages.conversationId, conversationId))
+      .orderBy(asc(waMessages.createdAt));
   }
 
   async countWaMessages(conversationId: string): Promise<number> {
@@ -2292,7 +2295,10 @@ export class DatabaseStorage implements IStorage {
       if (STATUS_RANK[newStatus] <= currentRank) return false;
     }
 
-    await db.update(waMessages).set({ status: newStatus }).where(eq(waMessages.id, msg.id));
+    const setFields: Record<string, string | Date> = { status: newStatus };
+    if (newStatus === "delivered") setFields.deliveredAt = new Date();
+    if (newStatus === "read") setFields.readAt = new Date();
+    await db.update(waMessages).set(setFields).where(eq(waMessages.id, msg.id));
     return true;
   }
 

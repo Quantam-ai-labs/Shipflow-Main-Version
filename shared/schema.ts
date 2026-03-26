@@ -548,6 +548,8 @@ export const waMessages = pgTable("wa_messages", {
   reactionFrom: varchar("reaction_from", { length: 50 }),
   referenceMessageId: varchar("reference_message_id", { length: 255 }),
   deletedByCustomerAt: timestamp("deleted_by_customer_at"),
+  deliveredAt: timestamp("delivered_at"),
+  readAt: timestamp("read_at"),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   index("idx_wa_messages_conversation").on(table.conversationId),

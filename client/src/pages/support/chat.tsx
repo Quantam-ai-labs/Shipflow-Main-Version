@@ -87,6 +87,8 @@ interface Message {
   referenceMessageId: string | null;
   waMessageId: string | null;
   createdAt: string;
+  deliveredAt: string | null;
+  readAt: string | null;
 }
 
 interface TeamMember {
@@ -131,12 +133,12 @@ function formatChatTime(dateStr: string) {
 
 function StatusTicks({ status, createdAt, sentAt, deliveredAt, readAt }: {
   status: string | null;
-  createdAt?: string;
-  sentAt?: string;
-  deliveredAt?: string;
-  readAt?: string;
+  createdAt?: string | Date;
+  sentAt?: string | Date;
+  deliveredAt?: string | Date;
+  readAt?: string | Date;
 }) {
-  const formatTimestamp = (ts: string | undefined) =>
+  const formatTimestamp = (ts: string | Date | undefined) =>
     ts ? format(new Date(ts), "MMM d, HH:mm:ss") : null;
 
   const tooltipLines: string[] = [];
@@ -858,10 +860,10 @@ export default function SupportChatPage() {
   const teamMembers = teamData?.members ?? [];
 
   // ── Scroll helpers ───────────────────────────────────────────────────────────
-  const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
+  const scrollToBottom = useCallback((behavior: "smooth" | "instant" | "auto" = "smooth") => {
     const container = messagesScrollRef.current;
     if (!container) return;
-    container.scrollTo({ top: container.scrollHeight, behavior });
+    container.scrollTo({ top: container.scrollHeight, behavior: behavior as ScrollBehavior });
   }, []);
 
   // Track scroll position to show/hide FAB and "near bottom" flag
@@ -881,16 +883,31 @@ export default function SupportChatPage() {
 
   const prevMsgCountRef = useRef(0);
 
-  // Auto-scroll only if near bottom
+  // Track last-seen messages for polling-based new message detection
+  const prevMessagesRef = useRef<Message[]>([]);
+
+  // Auto-scroll only if near bottom; also count new inbound messages for polling fallback
   useEffect(() => {
     const count = messages.length;
     if (count !== prevMsgCountRef.current) {
+      // Detect new inbound messages received via polling (when SSE is down)
+      if (count > prevMsgCountRef.current && prevMessagesRef.current.length > 0) {
+        const prevIds = new Set(prevMessagesRef.current.map(m => m.id));
+        const newInbound = messages.filter(m => !prevIds.has(m.id) && m.direction === "inbound");
+        if (newInbound.length > 0 && !isNearBottomRef.current) {
+          setNewMsgCount(c => c + newInbound.length);
+        }
+        if (newInbound.length > 0 && !soundMutedRef.current) {
+          playNotificationSound();
+        }
+      }
       prevMsgCountRef.current = count;
+      prevMessagesRef.current = messages;
       if (isNearBottomRef.current) {
         scrollToBottom();
       }
     }
-  }, [messages.length, scrollToBottom]);
+  }, [messages, scrollToBottom]);
 
   // When switching conversations: reset counters and scroll to bottom
   useEffect(() => {
@@ -899,7 +916,7 @@ export default function SupportChatPage() {
     setShowScrollFab(false);
     isNearBottomRef.current = true;
     // Instant scroll on conv switch
-    setTimeout(() => scrollToBottom("instant" as ScrollBehavior), 50);
+    setTimeout(() => scrollToBottom("instant"), 50);
   }, [selectedConvId, scrollToBottom]);
 
   // Jump to a specific message and flash-highlight it; loads older pages if not rendered yet
@@ -1638,11 +1655,16 @@ export default function SupportChatPage() {
           <div className="px-3 py-1.5 text-[10px] text-muted-foreground space-y-0.5">
             <div className="flex items-center gap-1.5">
               <Info className="w-3 h-3 shrink-0" />
-              <span>Sent {format(new Date(msgContextMenu.msg.createdAt), "MMM d, HH:mm")}</span>
+              <span>Sent: {format(new Date(msgContextMenu.msg.createdAt), "MMM d, HH:mm:ss")}</span>
             </div>
-            {msgContextMenu.msg.status && (
-              <div className="pl-4 capitalize text-[10px]">
-                Status: {msgContextMenu.msg.status}
+            {msgContextMenu.msg.deliveredAt != null && (
+              <div className="pl-4 text-[10px]">
+                Delivered: {format(new Date(msgContextMenu.msg.deliveredAt), "MMM d, HH:mm:ss")}
+              </div>
+            )}
+            {msgContextMenu.msg.readAt != null && (
+              <div className="pl-4 text-[10px]">
+                Read: {format(new Date(msgContextMenu.msg.readAt), "MMM d, HH:mm:ss")}
               </div>
             )}
           </div>
@@ -1952,7 +1974,9 @@ export default function SupportChatPage() {
                                     {isOutbound && (
                                       <StatusTicks
                                         status={msg.status}
-                                        createdAt={msg.createdAt}
+                                        createdAt={msg.createdAt ?? undefined}
+                                        deliveredAt={msg.deliveredAt ?? undefined}
+                                        readAt={msg.readAt ?? undefined}
                                       />
                                     )}
                                   </div>
