@@ -5616,18 +5616,31 @@ export async function registerRoutes(
               });
             };
 
+            // Step 1: Save message to DB (isolated — failures must NOT block confirmation processing)
             try {
               try {
                 await saveMsg1();
               } catch (dbError: any) {
-                if (!isDbError1(dbError)) throw dbError;
-                console.error(`      ❌ DB timeout (attempt 1): ${dbError.message}`);
-                await new Promise(r => setTimeout(r, 2000));
-                console.log(`      Retrying message save (attempt 2)...`);
-                await saveMsg1();
-                console.log(`      ✅ Retry succeeded`);
+                if (!isDbError1(dbError)) {
+                  console.error(`      ❌ Message save failed (non-retryable): ${dbError.message}`);
+                } else {
+                  console.error(`      ❌ DB timeout (attempt 1): ${dbError.message}`);
+                  await new Promise(r => setTimeout(r, 2000));
+                  console.log(`      Retrying message save (attempt 2)...`);
+                  try {
+                    await saveMsg1();
+                    console.log(`      ✅ Retry succeeded`);
+                  } catch (retryErr: any) {
+                    console.error(`      ❌ Message save failed after retry: ${retryErr.message}`);
+                  }
+                }
               }
+            } catch (saveErr: any) {
+              console.error(`      ❌ Unexpected save error: ${saveErr.message}`);
+            }
 
+            // Step 2: Process confirmation response (ALWAYS runs — decoupled from Step 1)
+            try {
               console.log(`      └─ Processing user response...`);
               const replyMerchant = await storage.getMerchant(matchedOrder.merchantId);
               await processWhatsAppOrderResponse(
@@ -5641,8 +5654,8 @@ export async function registerRoutes(
                 replyMerchant?.waPhoneNumberId || undefined,
                 replyMerchant?.waAccessToken || undefined,
               );
-            } catch (err: any) {
-              console.error(`      ❌ CRITICAL: Message save failed! phone=${normalizedPhone}, msg="${messageBody.slice(0, 100)}", waId=${waMessageId}, error=${err.message}`);
+            } catch (processErr: any) {
+              console.error(`      ❌ processWhatsAppOrderResponse error: phone=${normalizedPhone}, order=${matchedOrder.orderNumber}, error=${processErr.message}`);
             }
           }
 
@@ -6078,7 +6091,7 @@ export async function registerRoutes(
             `Order #${orderNumber} has already been confirmed and is being processed. For any changes, please contact our support team.`, replyPhoneId, replyAccessToken);
         }
       } else {
-        console.log(`        Failed: ${result.error}`);
+        console.error(`        ❌ processConfirmationResponse failed for order #${orderNumber} (${orderId}): ${result.error}`);
         await sendWhatsAppReply(normalizedPhone,
           `Sorry, there was an issue processing your response for order #${orderNumber}. Please try again or contact support.`, replyPhoneId, replyAccessToken);
       }
