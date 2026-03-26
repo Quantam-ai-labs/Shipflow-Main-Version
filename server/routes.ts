@@ -5986,8 +5986,10 @@ export async function registerRoutes(
         return msg.includes(signal);
       }
 
+      // Strip trailing punctuation so "yes!", "ok.", "no," classify correctly
+      const trimmedLower = lowerMessage.trim().replace(/[!.,؟?،]+$/g, "").trim();
+
       let action: "confirm" | "cancel" | "query";
-      const trimmedLower = lowerMessage.trim();
       if (CANCEL_SIGNALS.some(s => matchesSignal(trimmedLower, s))) {
         action = "cancel";
       } else if (CONFIRM_SIGNALS.some(s => matchesSignal(trimmedLower, s))) {
