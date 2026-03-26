@@ -5908,6 +5908,27 @@ export async function registerRoutes(
       const lowerMessage = messageBody.toLowerCase().trim();
       console.log(`        Analyzing message: "${lowerMessage}"`);
 
+      const orderForStatus = await storage.getOrder(merchantId, orderId);
+      const alreadyActed = orderForStatus?.confirmationStatus === "confirmed" ||
+        orderForStatus?.confirmationStatus === "cancelled" ||
+        orderForStatus?.confirmationStatus === "manual_confirmed" ||
+        orderForStatus?.confirmationStatus === "manual_cancelled";
+
+      if (alreadyActed) {
+        const aiMerchant = await storage.getMerchant(merchantId);
+        if (aiMerchant?.aiAutoReplyEnabled) {
+          const conv = await storage.getConversationByPhone(merchantId, normalizedPhone);
+          console.log(`        Order #${orderNumber} already ${orderForStatus?.confirmationStatus} — routing follow-up to AI: "${messageBody.slice(0, 80)}"`);
+          handleAiAutoReply(merchantId, normalizedPhone, messageBody, conv?.id || null, orderId, orderNumber).catch((e: any) =>
+            console.error(`${LOG_PREFIX_WA_AI} Error in post-confirm AI reply:`, e.message)
+          );
+        } else {
+          await sendWhatsAppReply(normalizedPhone,
+            `Thank you for your message regarding order #${orderNumber}. Our team will get back to you shortly.`, replyPhoneId, replyAccessToken);
+        }
+        return;
+      }
+
       let action: "confirm" | "cancel" | "query";
       if (lowerMessage.includes("confirm")) {
         action = "confirm";
@@ -5929,26 +5950,16 @@ export async function registerRoutes(
 
       if (result.success) {
         if (action === "confirm") {
-          if (result.conflict) {
-            await sendWhatsAppReply(normalizedPhone,
-              `Your response for order #${orderNumber} has been noted. Our team will review and confirm shortly.`, replyPhoneId, replyAccessToken);
-          } else {
-            await sendWhatsAppReply(normalizedPhone,
-              `Thank you! Order #${orderNumber} has been confirmed. We'll process and ship it shortly.`, replyPhoneId, replyAccessToken);
-          }
+          await sendWhatsAppReply(normalizedPhone,
+            `Thank you! Order #${orderNumber} has been confirmed. We'll process and ship it shortly.`, replyPhoneId, replyAccessToken);
         } else if (action === "cancel") {
-          if (result.conflict) {
-            await sendWhatsAppReply(normalizedPhone,
-              `Your cancellation request for order #${orderNumber} has been noted. Our team will review shortly.`, replyPhoneId, replyAccessToken);
-          } else {
-            await sendWhatsAppReply(normalizedPhone,
-              `Order #${orderNumber} has been cancelled. No charges will be applied. If you have any questions, please contact support.`, replyPhoneId, replyAccessToken);
-          }
+          await sendWhatsAppReply(normalizedPhone,
+            `Order #${orderNumber} has been cancelled. No charges will be applied. If you have any questions, please contact support.`, replyPhoneId, replyAccessToken);
         } else {
           const aiMerchant = await storage.getMerchant(merchantId);
           if (aiMerchant?.aiAutoReplyEnabled) {
             const conv = await storage.getConversationByPhone(merchantId, normalizedPhone);
-            console.log(`        Routing post-confirm query to AI for order #${orderNumber}: "${messageBody.slice(0, 80)}"`);
+            console.log(`        Routing query to AI for order #${orderNumber}: "${messageBody.slice(0, 80)}"`);
             handleAiAutoReply(merchantId, normalizedPhone, messageBody, conv?.id || null, orderId, orderNumber).catch((e: any) =>
               console.error(`${LOG_PREFIX_WA_AI} Error in order-query AI reply:`, e.message)
             );
@@ -6097,14 +6108,16 @@ export async function registerRoutes(
               }
             }
 
-            if (result.classification === "conflict" && conv?.orderId) {
+            const conflictOrderId = conv?.orderId || orderId;
+            if (result.classification === "conflict" && conflictOrderId) {
               try {
                 const { transitionOrder } = await import("./services/workflowTransition");
                 const { logConfirmationEvent: logCE } = await import("./services/confirmationEngine");
-                console.log(`${LOG_PREFIX_WA_AI} AI conflict detected for order ${conv.orderNumber} — transitioning to HOLD`);
+                const conflictOrderNumber = conv?.orderNumber || orderNumber || "N/A";
+                console.log(`${LOG_PREFIX_WA_AI} AI conflict detected for order ${conflictOrderNumber} — transitioning to HOLD`);
                 const holdResult = await transitionOrder({
                   merchantId,
-                  orderId: conv.orderId,
+                  orderId: conflictOrderId,
                   toStatus: "HOLD",
                   action: "ai_conflict",
                   actorType: "system",
@@ -6116,13 +6129,13 @@ export async function registerRoutes(
                 if (holdResult.success) {
                   await logCE({
                     merchantId,
-                    orderId: conv.orderId,
+                    orderId: conflictOrderId,
                     eventType: "AI_CONFLICT_HOLD",
                     channel: "whatsapp",
                     newStatus: "HOLD",
                     note: `AI classified post-confirm message as conflict: "${messageText.slice(0, 150)}". AI replied: "${(result.reply || "").slice(0, 150)}". Order moved to Hold — manual agent review required.`,
                   });
-                  console.log(`${LOG_PREFIX_WA_AI} Order ${conv.orderNumber} moved to HOLD due to AI conflict classification`);
+                  console.log(`${LOG_PREFIX_WA_AI} Order ${conflictOrderNumber} moved to HOLD due to AI conflict classification`);
                 } else {
                   console.warn(`${LOG_PREFIX_WA_AI} Failed to transition order to HOLD: ${holdResult.error}`);
                 }
