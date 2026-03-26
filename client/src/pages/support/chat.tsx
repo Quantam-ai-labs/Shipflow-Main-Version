@@ -534,11 +534,22 @@ export default function SupportChatPage() {
       try {
         const data = JSON.parse(event.data);
         if (data.type === "new_message") {
-          // Instantly refresh messages for the active conversation
+          // If message payload included, append to cache directly to avoid a round-trip
           if (data.conversationId && data.conversationId === selectedConvIdRef.current) {
-            queryClient.invalidateQueries({
-              queryKey: ["/api/support/conversations", data.conversationId, "messages"],
-            });
+            if (data.message) {
+              queryClient.setQueryData<Message[]>(
+                ["/api/support/conversations", data.conversationId, "messages"],
+                (old) => {
+                  if (!old) return [data.message];
+                  if (old.some(m => m.id === data.message.id)) return old;
+                  return [...old, data.message];
+                }
+              );
+            } else {
+              queryClient.invalidateQueries({
+                queryKey: ["/api/support/conversations", data.conversationId, "messages"],
+              });
+            }
           }
           // Always refresh conversation list to update last message + unread badge
           queryClient.invalidateQueries({ queryKey: ["/api/support/conversations"] });
@@ -566,12 +577,11 @@ export default function SupportChatPage() {
       es.close();
       sseRef.current = null;
       sseFailCount.current += 1;
-      if (sseFailCount.current >= 3) {
-        // SSE unreachable — silently rely on polling fallback
-        return;
-      }
-      // Exponential backoff: 1s, 2s, 4s
-      const delay = Math.min(1000 * Math.pow(2, sseFailCount.current - 1), 30_000);
+      // Exponential backoff for first 3 attempts: 1s, 2s, 4s
+      // After that use long-tail polling (30s) so SSE reconnects when server recovers
+      const delay = sseFailCount.current <= 3
+        ? Math.min(1000 * Math.pow(2, sseFailCount.current - 1), 30_000)
+        : 30_000;
       sseBackoffRef.current = setTimeout(connectSse, delay);
     };
   }, [queryClient]);

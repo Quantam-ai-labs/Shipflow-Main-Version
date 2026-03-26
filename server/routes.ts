@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import express from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import { registerSseClient, unregisterSseClient, broadcastToMerchant as _broadcastToMerchant } from "./services/sseManager";
+import { registerSseClient, unregisterSseClient } from "./services/sseManager";
 import webpush from "web-push";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";

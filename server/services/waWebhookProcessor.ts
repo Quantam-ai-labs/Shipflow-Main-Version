@@ -387,17 +387,18 @@ async function handleMessageEvent(rawEvent: WaRawEvent): Promise<void> {
     return;
   }
 
-  const convId = await saveInboxMessage(
+  const saveResult = await saveInboxMessage(
     resolvedMerchantId, phone, contactName, waMessageId,
     msgType, messageBody, mediaUrl, mimeType, fileName,
     null, null, null, message,
   );
 
   // ── Push notification + SSE broadcast ──────────────────────────────────────
-  if (convId) {
+  if (saveResult) {
+    const { convId, message: savedMessage } = saveResult;
     sendAgentChatPushNotifications(resolvedMerchantId, contactName ?? phone, messageBody, convId).catch(() => {});
-    // Broadcast new_message so SSE clients update instantly (no next poll wait)
-    broadcastToMerchant(resolvedMerchantId, "new_message", { conversationId: convId });
+    // Include message payload so SSE clients can append directly to cache (zero extra fetch)
+    broadcastToMerchant(resolvedMerchantId, "new_message", { conversationId: convId, message: savedMessage });
     broadcastToMerchant(resolvedMerchantId, "conversation_update", { conversationId: convId });
   }
 
@@ -439,7 +440,7 @@ async function saveInboxMessage(
   reactionFrom: string | null,
   referenceMessageId: string | null,
   rawMessage: Record<string, any>,
-): Promise<string | null> {
+): Promise<{ convId: string; message: any } | null> {
   try {
     // Idempotency: skip if this waMessageId was already saved inline during the same webhook call
     if (waMessageId) {
@@ -447,7 +448,7 @@ async function saveInboxMessage(
       if (existing) {
         console.log(`${LOG} Idempotency: waMessageId ${waMessageId} already in wa_messages — skipping duplicate save`);
         const conv = await storage.getConversationById(existing.conversationId);
-        return conv?.id ?? null;
+        return conv ? { convId: conv.id, message: existing } : null;
       }
     }
 
@@ -475,7 +476,7 @@ async function saveInboxMessage(
       lastMessage: messageBody.slice(0, 200),
     });
 
-    await storage.createWaMessage({
+    const savedMessage = await storage.createWaMessage({
       conversationId: conv.id,
       direction: "inbound",
       senderName: contactName ?? phone,
@@ -496,7 +497,7 @@ async function saveInboxMessage(
       reconcilePendingReactions(waMessageId).catch(() => {});
     }
 
-    return conv.id;
+    return { convId: conv.id, message: savedMessage };
   } catch (err: any) {
     console.error(`${LOG} saveInboxMessage failed for ${phone}: ${err.message}`);
     throw err;

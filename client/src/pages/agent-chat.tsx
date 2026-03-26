@@ -1624,9 +1624,20 @@ export default function AgentChatPage() {
         const data = JSON.parse(event.data);
         if (data.type === "new_message") {
           if (data.conversationId && data.conversationId === selectedConvIdRef.current) {
-            queryClient.invalidateQueries({
-              queryKey: ["/api/agent-chat/conversations", slug, data.conversationId, "messages"],
-            });
+            if (data.message) {
+              queryClient.setQueryData<Message[]>(
+                ["/api/agent-chat/conversations", slug, data.conversationId, "messages"],
+                (old) => {
+                  if (!old) return [data.message];
+                  if (old.some(m => m.id === data.message.id)) return old;
+                  return [...old, data.message];
+                }
+              );
+            } else {
+              queryClient.invalidateQueries({
+                queryKey: ["/api/agent-chat/conversations", slug, data.conversationId, "messages"],
+              });
+            }
           }
           queryClient.invalidateQueries({ queryKey: ["/api/agent-chat/conversations", slug] });
         } else if (data.type === "status_update") {
@@ -1651,8 +1662,10 @@ export default function AgentChatPage() {
       es.close();
       sseRef.current = null;
       sseFailCount.current += 1;
-      if (sseFailCount.current >= 3) return;
-      const delay = Math.min(1000 * Math.pow(2, sseFailCount.current - 1), 30_000);
+      // Exponential backoff for first 3 attempts, then long-tail 30s retries
+      const delay = sseFailCount.current <= 3
+        ? Math.min(1000 * Math.pow(2, sseFailCount.current - 1), 30_000)
+        : 30_000;
       sseBackoffRef.current = setTimeout(connectAgentSse, delay);
     };
   }, [slug, hasAccess, queryClient]);
