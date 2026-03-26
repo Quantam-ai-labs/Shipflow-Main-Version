@@ -86,27 +86,36 @@ export async function sendCallDirect(params: {
     order_number: (orderNumber || "").replace(/^#/, ""),
   });
 
+  let preLog: { id: string } | null = null;
+  try {
+    preLog = await storage.createRobocallLog({
+      merchantId,
+      callId: null,
+      phone,
+      amount,
+      voiceId,
+      brandName: brandName || merchant.name || null,
+      orderNumber,
+      orderId,
+      source: source || "auto",
+      attemptNumber: attemptNumber || 1,
+      status: "Queued",
+    });
+  } catch (preLogErr: any) {
+    console.error(`${LOG_PREFIX} Failed to pre-log robocall for #${orderNumber}:`, preLogErr.message);
+  }
+
   const data = await safeFetchJson(`${ROBOCALL_API_BASE}/send-voice?${urlParams.toString()}`);
   const smsData = data?.sms || data;
   const callId = smsData?.id || smsData?.call_id || data?.data?.call_id || null;
 
   if (callId) {
-    try {
-      await db.insert(robocallLogs).values({
-        merchantId,
-        callId: String(callId),
-        phone,
-        amount,
-        voiceId,
-        brandName: brandName || merchant.name || null,
-        orderNumber,
-        orderId,
-        source: source || "auto",
-        attemptNumber: attemptNumber || 1,
-        status: "Initiated",
-      });
-    } catch (logErr: any) {
-      console.error(`${LOG_PREFIX} Failed to write robocall log for callId ${callId}:`, logErr.message);
+    if (preLog) {
+      try {
+        await storage.updateRobocallLog(preLog.id, { callId: String(callId), status: "Initiated" });
+      } catch (logErr: any) {
+        console.error(`${LOG_PREFIX} Failed to update robocall log with callId ${callId}:`, logErr.message);
+      }
     }
 
     await logConfirmationEvent({
@@ -121,23 +130,13 @@ export async function sendCallDirect(params: {
     return { success: true, callId: String(callId) };
   } else {
     const errorMsg = data?.error || "No call ID returned";
-    try {
-      await db.insert(robocallLogs).values({
-        merchantId,
-        callId: null,
-        phone,
-        amount,
-        voiceId,
-        brandName: brandName || merchant.name || null,
-        orderNumber,
-        orderId,
-        source: source || "auto",
-        attemptNumber: attemptNumber || 1,
-        status: "Error",
-        error: errorMsg,
-      });
-    } catch (logErr: any) {
-      console.error(`${LOG_PREFIX} Failed to write error robocall log for #${orderNumber}:`, logErr.message);
+
+    if (preLog) {
+      try {
+        await storage.updateRobocallLog(preLog.id, { status: "Error", error: errorMsg });
+      } catch (logErr: any) {
+        console.error(`${LOG_PREFIX} Failed to update error robocall log for #${orderNumber}:`, logErr.message);
+      }
     }
 
     await logConfirmationEvent({
