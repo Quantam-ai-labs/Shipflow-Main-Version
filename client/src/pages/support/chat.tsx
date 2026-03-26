@@ -41,6 +41,11 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   Sheet,
   SheetContent,
   SheetHeader,
@@ -720,6 +725,7 @@ export default function SupportChatPage() {
   // In-conversation message search state
   const [msgSearchOpen, setMsgSearchOpen] = useState(false);
   const [msgSearchQuery, setMsgSearchQuery] = useState("");
+  const [msgSearchDebounced, setMsgSearchDebounced] = useState("");
   const [msgSearchMatchIds, setMsgSearchMatchIds] = useState<string[]>([]);
   const [msgSearchIndex, setMsgSearchIndex] = useState(0);
   const msgSearchInputRef = useRef<HTMLInputElement>(null);
@@ -1381,7 +1387,26 @@ export default function SupportChatPage() {
     setLinkPreviewDismissed(false);
   }, [selectedConvId]);
 
-  // Message search logic
+  // Debounce search query 500ms before sending to server
+  useEffect(() => {
+    if (!msgSearchOpen) { setMsgSearchDebounced(""); return; }
+    const t = setTimeout(() => setMsgSearchDebounced(msgSearchQuery.trim()), 500);
+    return () => clearTimeout(t);
+  }, [msgSearchQuery, msgSearchOpen]);
+
+  // Server-backed search: fetches ALL historical messages (beyond loaded window)
+  const { data: serverSearchData } = useQuery<{ results: { id: string }[]; total: number }>({
+    queryKey: ["/api/whatsapp/conversations", selectedConvId, "search", msgSearchDebounced],
+    queryFn: async () => {
+      if (!selectedConvId || msgSearchDebounced.length < 2) return { results: [], total: 0, limit: 20, offset: 0 };
+      const res = await fetch(`/api/whatsapp/conversations/${selectedConvId}/search?q=${encodeURIComponent(msgSearchDebounced)}&limit=100`);
+      return res.json();
+    },
+    enabled: !!selectedConvId && msgSearchDebounced.length >= 2 && msgSearchOpen,
+    staleTime: 10_000,
+  });
+
+  // Message search logic: merge client-side local matches + server result IDs
   useEffect(() => {
     if (!msgSearchOpen || !msgSearchQuery.trim() || msgSearchQuery.trim().length < 2) {
       setMsgSearchMatchIds([]);
@@ -1389,12 +1414,15 @@ export default function SupportChatPage() {
       return;
     }
     const q = msgSearchQuery.toLowerCase();
-    const matched = messages
+    const localIds = messages
       .filter(m => m.messageType !== "reaction" && m.text && m.text.toLowerCase().includes(q))
       .map(m => m.id);
-    setMsgSearchMatchIds(matched);
-    setMsgSearchIndex(matched.length > 0 ? matched.length - 1 : 0); // start at newest
-  }, [msgSearchQuery, msgSearchOpen, messages]);
+    // Merge server IDs (covers historical messages not yet loaded) — keep order, deduplicate
+    const serverIds = (serverSearchData?.results ?? []).map((r: { id: string }) => r.id);
+    const merged = Array.from(new Set([...localIds, ...serverIds]));
+    setMsgSearchMatchIds(merged);
+    setMsgSearchIndex(merged.length > 0 ? merged.length - 1 : 0);
+  }, [msgSearchQuery, msgSearchOpen, messages, serverSearchData]);
 
   useEffect(() => {
     if (!msgSearchOpen) {
@@ -2363,15 +2391,18 @@ export default function SupportChatPage() {
                                     <Reply className="w-3.5 h-3.5" />
                                   </Button>
                                   {msg.waMessageId && (
-                                    <EmojiPicker
-                                      onSelect={(emoji) => reactMutation.mutate({ convId: selectedConv.id, emoji, waMessageId: msg.waMessageId! })}
-                                      trigger={
+                                    <Popover>
+                                      <PopoverTrigger asChild>
                                         <Button size="icon" variant="ghost" className="h-7 w-7 bg-white/80 dark:bg-[#202c33]/80 shadow-sm rounded-full" data-testid={`react-${msg.id}`}>
                                           <Smile className="w-3.5 h-3.5" />
                                         </Button>
-                                      }
-                                      side={isOutbound ? "left" : "right"}
-                                    />
+                                      </PopoverTrigger>
+                                      <PopoverContent side={isOutbound ? "left" : "right"} className="w-auto p-1.5 flex gap-0.5">
+                                        {["👍", "❤️", "😂", "😮", "😢", "🙏"].map(e => (
+                                          <button key={e} onClick={() => { reactMutation.mutate({ convId: selectedConv.id, emoji: e, waMessageId: msg.waMessageId! }); }} className="text-xl px-1 py-0.5 rounded hover:bg-muted transition-colors" data-testid={`react-emoji-${e}-${msg.id}`}>{e}</button>
+                                        ))}
+                                      </PopoverContent>
+                                    </Popover>
                                   )}
                                 </div>
                               </div>

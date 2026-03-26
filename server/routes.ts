@@ -8724,7 +8724,7 @@ export async function registerRoutes(
   });
 
   // In-conversation message search
-  app.get("/api/support/conversations/:id/search", isAuthenticated, async (req: any, res) => {
+  async function handleConversationSearch(req: any, res: any) {
     try {
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
@@ -8733,18 +8733,23 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Conversation not found" });
       }
       const q = (req.query.q as string || "").trim().toLowerCase();
-      if (!q || q.length < 2) return res.json({ results: [] });
-
-      // Fetch all messages (no limit) and filter server-side
+      if (!q || q.length < 2) return res.json({ results: [], total: 0, limit: 20, offset: 0 });
+      const limit = Math.min(parseInt(req.query.limit as string || "20", 10), 100);
+      const offset = parseInt(req.query.offset as string || "0", 10);
+      // Fetch all messages and filter; return paginated slice with total
       const allMsgs = await storage.getWaMessages(req.params.id);
-      const results = allMsgs
-        .filter(m => m.text && m.text.toLowerCase().includes(q))
+      const matched = allMsgs.filter(m => m.text && m.text.toLowerCase().includes(q));
+      const results = matched.slice(offset, offset + limit)
         .map(m => ({ id: m.id, text: m.text, direction: m.direction, createdAt: m.createdAt }));
-      res.json({ results });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.json({ results, total: matched.length, limit, offset });
+    } catch (error: unknown) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
     }
-  });
+  }
+
+  app.get("/api/support/conversations/:id/search", isAuthenticated, handleConversationSearch);
+  // Alias for WhatsApp-prefixed path
+  app.get("/api/whatsapp/conversations/:id/search", isAuthenticated, handleConversationSearch);
 
   // Send template to conversation
   app.post("/api/support/conversations/:id/send-template", isAuthenticated, async (req: any, res) => {
