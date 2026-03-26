@@ -5965,6 +5965,7 @@ export async function registerRoutes(
         "wapis", "stop",
         "نہیں", "کینسل", "واپس", "بند",
         "no", "nope", "nah",
+        "na",    // Required: standalone "na" = Urdu/Roman-Urdu "no" (word-boundary matched)
       ];
       const CONFIRM_SIGNALS = [
         "ji haan", "ji han", "sahi hai", "theek hai", "thik hai",
@@ -5975,6 +5976,7 @@ export async function registerRoutes(
         "اوکے", "ہاں", "جی", "جی ہاں", "بالکل",
         "yes", "yep", "yeah", "yup", "yap",
         "ok", "ji",
+        "ha",    // Required: standalone "ha" = Urdu/Roman-Urdu "yes" (word-boundary matched)
       ];
 
       function matchesSignal(msg: string, signal: string): boolean {
