@@ -22,6 +22,8 @@ import { storage } from "../storage";
 import { merchants, orders } from "../../shared/schema";
 import { eq, and, or, desc } from "drizzle-orm";
 import type { WaRawEvent } from "../../shared/schema";
+import { sendAgentChatPushNotifications } from "./agentChatNotificationService";
+import { handleAiAutoReply } from "./aiAutoReplyService";
 
 const LOG = "[WA-Processor]";
 const MAX_RETRIES = 3;
@@ -289,15 +291,31 @@ async function handleMessageEvent(rawEvent: WaRawEvent): Promise<void> {
     return;
   }
 
-  await saveInboxMessage(
+  const convId = await saveInboxMessage(
     resolvedMerchantId, phone, contactName, waMessageId,
     msgType, messageBody, mediaUrl, mimeType, fileName,
     null, null, message,
   );
 
+  // ── Push notification to agent ─────────────────────────────────────────
+  if (convId) {
+    sendAgentChatPushNotifications(resolvedMerchantId, contactName ?? phone, messageBody, convId).catch(() => {});
+  }
+
   // ── Order confirmation (text/button only) ─────────────────────────────────
   if (msgType === "text" || msgType === "button_reply") {
     await triggerOrderConfirmation(resolvedMerchantId, phone, messageBody, message, waMessageId);
+
+    // ── AI auto-reply ───────────────────────────────────────────────────────
+    const conv = convId ? await storage.getConversationById(convId).catch(() => null) : null;
+    handleAiAutoReply(
+      resolvedMerchantId,
+      phone,
+      messageBody,
+      convId,
+      conv?.orderId ?? null,
+      conv?.orderNumber ?? null,
+    ).catch(() => {});
   }
 }
 
@@ -382,8 +400,7 @@ async function triggerOrderConfirmation(
   waMessageId: string,
 ): Promise<void> {
   try {
-    // Lazy import to avoid circular dependencies
-    const { processWhatsAppOrderResponse } = await import("../services/confirmationEngine");
+    const { processWhatsAppOrderResponse } = await import("./waOrderConfirmation");
     const merchant = await storage.getMerchant(merchantId);
 
     const [matchedOrder] = await db

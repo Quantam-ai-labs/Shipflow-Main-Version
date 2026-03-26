@@ -2793,6 +2793,18 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/merchants/webhook-health", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const stats = await storage.getWebhookHealthStats(merchantId);
+      res.json(stats);
+    } catch (error: any) {
+      console.error("Merchant webhook health error:", error);
+      res.status(500).json({ message: "Failed to fetch webhook health" });
+    }
+  });
+
   app.get("/api/merchants/issue-preset", isAuthenticated, async (req, res) => {
     try {
       const merchantId = await requireMerchant(req, res);
@@ -5515,213 +5527,53 @@ export async function registerRoutes(
             console.warn(`  │  │  └─ ⚠️ No merchant found for phone ID ${phoneNumberId}, processing without merchant scope`);
           }
 
-          // ✅ Step 5: Process messages
+          // ✅ Step 5: Persist each message to wa_raw_events and hand off to async processor
           const messages = value?.messages ?? [];
           console.log(`  │  │  ├─ Messages: ${messages.length}`);
 
           for (let msgIndex = 0; msgIndex < messages.length; msgIndex++) {
             const message = messages[msgIndex];
-            const fromPhone = message.from ?? "";
+            const fromPhone = (message.from ?? "").replace(/^\+/, "");
             const waMessageId = message.id ?? "";
             const messageType = message.type ?? "text";
-            const messageBody =
-              message.text?.body ??
-              message.button?.text ??
-              message.interactive?.button_reply?.title ??
-              message.interactive?.list_reply?.title ??
-              "[non-text message]";
 
             console.log(`\n    [Message ${msgIndex + 1}/${messages.length}]`);
-            console.log(`      ├─ From Phone: ${fromPhone}`);
+            console.log(`      ├─ From: ${fromPhone}`);
             console.log(`      ├─ Type: ${messageType}`);
-            console.log(`      ├─ ID: ${waMessageId}`);
-            console.log(`      └─ Text: "${messageBody}"`);
+            console.log(`      └─ ID: ${waMessageId}`);
 
-            // ✅ Step 6: Normalize phone number
-            const normalizedPhone = fromPhone.replace(/^\+/, "");
-            console.log(`      └─ Normalized: ${normalizedPhone}`);
-
-            // Zero-drop safety net: persist raw event before any processing
-            let genRawEventId: string | null = null;
-            try {
-              const rawEvt = await storage.createWaRawEvent({
-                merchantId: webhookMerchantId,
-                eventType: messageType,
-                waMessageId,
-                fromPhone: normalizedPhone,
-                webhookSource: "generic",
-                payload: { message, contacts: value?.contacts ?? [], metadata: value?.metadata ?? {}, webhookMerchantId },
-                status: "pending",
-                retryCount: 0,
-              });
-              genRawEventId = rawEvt.id;
-            } catch (rawErr: any) {
-              console.error(`[WhatsApp Webhook] ${requestId} - Raw event persist failed: ${rawErr.message}`);
-            }
-
-            // Handle message deletion (customer deleted a message on their phone)
-            if (messageType === "deleted") {
-              if (waMessageId) storage.softDeleteWaMessage(waMessageId).catch(() => {});
-              if (genRawEventId) storage.updateWaRawEventStatus(genRawEventId, "processed", { processedAt: new Date() }).catch(() => {});
-              console.log(`      ✅ Deletion handled: ${waMessageId}`);
-              continue;
-            }
-
-            // Handle reaction (apply emoji to the original message)
-            if (messageType === "reaction") {
-              const rxEmoji = message.reaction?.emoji ?? "";
-              const rxTargetId = message.reaction?.message_id ?? "";
-              if (rxTargetId) storage.applyReactionToWaMessage(rxTargetId, rxEmoji).catch(() => {});
-              if (genRawEventId) storage.updateWaRawEventStatus(genRawEventId, "processed", { processedAt: new Date() }).catch(() => {});
-              console.log(`      ✅ Reaction handled: ${rxEmoji || "(removed)"} on ${rxTargetId}`);
-              continue;
-            }
-
-            // ✅ Step 7: Find matching order (scoped to resolved merchant if available)
-            console.log(`      └─ Querying database for matching order...`);
-            const orderWhereConditions = [
-              or(
-                eq(orders.customerPhone, normalizedPhone),
-                eq(orders.customerPhone, `+${normalizedPhone}`),
-                eq(orders.customerPhone, `0${normalizedPhone.slice(2)}`),
-              ),
-            ];
-            if (webhookMerchantId) {
-              orderWhereConditions.push(eq(orders.merchantId, webhookMerchantId));
-            }
-            const [matchedOrder] = await db
-              .select({
-                id: orders.id,
-                merchantId: orders.merchantId,
-                status: orders.workflowStatus,
-                orderNumber: orders.orderNumber,
-                shopifyOrderId: orders.shopifyOrderId,
-                tags: orders.tags,
-              })
-              .from(orders)
-              .where(and(...orderWhereConditions))
-              .orderBy(desc(orders.createdAt))
-              .limit(1);
-
-            if (!matchedOrder) {
-              console.warn(`      ❌ NO MATCHING ORDER FOUND`);
-              console.warn(`         Tried patterns: ${normalizedPhone}, +${normalizedPhone}, 0${normalizedPhone.slice(2)}`);
-              continue;
-            }
-
-            console.log(`      ✅ ORDER FOUND`);
-            console.log(`         ├─ Order ID: ${matchedOrder.id}`);
-            console.log(`         ├─ Merchant ID: ${matchedOrder.merchantId}`);
-            console.log(`         ├─ Order Number: ${matchedOrder.orderNumber}`);
-            console.log(`         └─ Current Status: ${matchedOrder.status}`);
-
-            // ✅ Step 8: Save response
-            console.log(`      └─ Saving message response to database...`);
-            const isDbError1 = (err: any) => {
-              const msg = (err.message || "").toLowerCase();
-              return msg.includes("timeout") || msg.includes("connection") || msg.includes("econnreset") || msg.includes("terminating") || msg.includes("deadlock") || err.code === "ETIMEDOUT" || err.code === "ECONNRESET";
-            };
-
-            const saveMsg1 = async () => {
-              await storage.saveWhatsappResponse({
-                merchantId: matchedOrder.merchantId,
-                orderId: matchedOrder.id,
-                waMessageId,
-                fromPhone: normalizedPhone,
-                messageType,
-                messageBody,
-                rawPayload: message,
-              });
-              console.log(`      ✅ Response saved`);
-
-              const contactName = value?.contacts?.[0]?.profile?.name ?? undefined;
-              const conv = await storage.upsertConversation({
-                merchantId: matchedOrder.merchantId,
-                contactPhone: normalizedPhone,
-                contactName,
-                orderId: matchedOrder.id,
-                orderNumber: matchedOrder.orderNumber,
-                lastMessage: messageBody.slice(0, 200),
-              });
-              await storage.createWaMessage({
-                conversationId: conv.id,
-                direction: "inbound",
-                senderName: contactName ?? fromPhone,
-                text: messageBody,
-                waMessageId,
-                status: "received",
-              });
-            };
-
-            // Step 1: Save message to DB (isolated — failures must NOT block confirmation processing)
-            try {
-              try {
-                await saveMsg1();
-              } catch (dbError: any) {
-                if (!isDbError1(dbError)) {
-                  console.error(`      ❌ Message save failed (non-retryable): ${dbError.message}`);
-                } else {
-                  console.error(`      ❌ DB timeout (attempt 1): ${dbError.message}`);
-                  await new Promise(r => setTimeout(r, 2000));
-                  console.log(`      Retrying message save (attempt 2)...`);
-                  try {
-                    await saveMsg1();
-                    console.log(`      ✅ Retry succeeded`);
-                  } catch (retryErr: any) {
-                    console.error(`      ❌ Message save failed after retry: ${retryErr.message}`);
-                  }
-                }
-              }
-            } catch (saveErr: any) {
-              console.error(`      ❌ Unexpected save error: ${saveErr.message}`);
-            }
-
-            // Step 2: Process confirmation response (ALWAYS runs — decoupled from Step 1)
-            try {
-              console.log(`      └─ Processing user response...`);
-              const replyMerchant = await storage.getMerchant(matchedOrder.merchantId);
-              await processWhatsAppOrderResponse(
-                matchedOrder.merchantId,
-                matchedOrder.id,
-                matchedOrder.orderNumber,
-                messageBody,
-                fromPhone,
-                normalizedPhone,
-                matchedOrder.shopifyOrderId,
-                replyMerchant?.waPhoneNumberId || undefined,
-                replyMerchant?.waAccessToken || undefined,
-              );
-            } catch (processErr: any) {
-              console.error(`      ❌ processWhatsAppOrderResponse error: phone=${normalizedPhone}, order=${matchedOrder.orderNumber}, error=${processErr.message}`);
-            }
-
-            // Mark raw event as processed
-            if (genRawEventId) {
-              storage.updateWaRawEventStatus(genRawEventId, "processed", { processedAt: new Date() }).catch(() => {});
-            }
+            // Persist-first then async process (zero-drop architecture)
+            persistAndProcessMessage({
+              merchantId: webhookMerchantId,
+              eventType: messageType,
+              waMessageId,
+              fromPhone,
+              webhookSource: "generic",
+              payload: {
+                message,
+                contacts: value?.contacts ?? [],
+                metadata: value?.metadata ?? {},
+                webhookMerchantId,
+              },
+            }).catch((err: any) => {
+              console.error(`[WhatsApp Webhook] ${requestId} - persistAndProcessMessage error: ${err.message}`);
+            });
           }
 
+          // ✅ Step 6: Persist each status update to wa_raw_events and hand off to async processor
           const statuses = value?.statuses ?? [];
           for (const statusUpdate of statuses) {
             const waId = statusUpdate.id;
             const newStatus = statusUpdate.status;
             if (!waId || !newStatus) continue;
             if (!["sent", "delivered", "read", "failed"].includes(newStatus)) continue;
-            // Save raw event for status update
+
             persistAndProcessStatus({
               merchantId: webhookMerchantId,
               waMessageId: waId,
               webhookSource: "generic",
               payload: statusUpdate,
             }).catch(() => {});
-            try {
-              const updated = await storage.updateWaMessageStatusByWaId(waId, newStatus);
-              if (updated) {
-                console.log(`[WA Status] ${waId} → ${newStatus}`);
-              }
-            } catch (err: any) {
-              console.error(`[WA Status] Failed to update ${waId}: ${err.message}`);
-            }
           }
         }
       }
@@ -5776,278 +5628,44 @@ export async function registerRoutes(
           const value = change.value;
           const messages = value?.messages ?? [];
 
+          // Persist-first then async process (zero-drop architecture)
           for (const message of messages) {
             const fromPhone = (message.from ?? "").replace(/^\+/, "");
             const waMessageId = message.id ?? "";
             const rawType = message.type ?? "text";
 
-            let msgType = "text";
-            let messageBody = "[non-text message]";
-            let mediaUrl: string | null = null;
-            let mimeType: string | null = null;
-            let fileName: string | null = null;
-            let reactionEmoji: string | null = null;
-            let referenceMessageId: string | null = null;
+            console.log(`[WhatsApp Webhook:${merchantId}] ${requestId} - Message: type=${rawType} id=${waMessageId} from=${fromPhone}`);
 
-            if (rawType === "text") {
-              messageBody = message.text?.body ?? "";
-              msgType = "text";
-            } else if (rawType === "button") {
-              messageBody = message.button?.text ?? "";
-              msgType = "button_reply";
-            } else if (rawType === "interactive") {
-              messageBody = message.interactive?.button_reply?.title ?? message.interactive?.list_reply?.title ?? "";
-              msgType = "button_reply";
-            } else if (rawType === "reaction") {
-              reactionEmoji = message.reaction?.emoji ?? "";
-              referenceMessageId = message.reaction?.message_id ?? null;
-              messageBody = reactionEmoji ? `Reacted ${reactionEmoji}` : "Removed reaction";
-              msgType = "reaction";
-            } else if (rawType === "image") {
-              messageBody = message.image?.caption ?? "📷 Image";
-              mediaUrl = message.image?.id ? `wa-media:${message.image.id}` : null;
-              mimeType = message.image?.mime_type ?? null;
-              msgType = "image";
-            } else if (rawType === "sticker") {
-              messageBody = "🎨 Sticker";
-              mediaUrl = message.sticker?.id ? `wa-media:${message.sticker.id}` : null;
-              mimeType = message.sticker?.mime_type ?? null;
-              msgType = "sticker";
-            } else if (rawType === "document") {
-              messageBody = message.document?.caption ?? message.document?.filename ?? "📄 Document";
-              mediaUrl = message.document?.id ? `wa-media:${message.document.id}` : null;
-              mimeType = message.document?.mime_type ?? null;
-              fileName = message.document?.filename ?? null;
-              msgType = "document";
-            } else if (rawType === "audio" || rawType === "voice") {
-              messageBody = "🎵 Audio";
-              const audioId = message.audio?.id || message.voice?.id;
-              mediaUrl = audioId ? `wa-media:${audioId}` : null;
-              mimeType = message.audio?.mime_type ?? message.voice?.mime_type ?? null;
-              msgType = "audio";
-            } else if (rawType === "video") {
-              messageBody = message.video?.caption ?? "🎬 Video";
-              mediaUrl = message.video?.id ? `wa-media:${message.video.id}` : null;
-              mimeType = message.video?.mime_type ?? null;
-              msgType = "video";
-            } else if (rawType === "location") {
-              const lat = message.location?.latitude;
-              const lng = message.location?.longitude;
-              const locName = message.location?.name ?? "";
-              const locAddr = message.location?.address ?? "";
-              messageBody = locName || locAddr || `${lat},${lng}`;
-              mediaUrl = `geo:${lat},${lng}`;
-              msgType = "location";
-            } else if (rawType === "contacts") {
-              const contacts = message.contacts ?? [];
-              const contactNames = contacts.map((c: any) => c.name?.formatted_name ?? "Unknown").join(", ");
-              messageBody = contactNames || "Contact shared";
-              mediaUrl = JSON.stringify(contacts);
-              msgType = "contacts";
-            } else if (rawType === "deleted") {
-              msgType = "deleted";
-              messageBody = "[Message deleted]";
-            }
-
-            // Zero-drop safety net: persist raw event before any processing
-            let mxRawEventId: string | null = null;
-            try {
-              const rawEvt = await storage.createWaRawEvent({
-                merchantId,
-                eventType: rawType,
-                waMessageId,
-                fromPhone,
-                webhookSource: "merchant",
-                payload: { message, contacts: value?.contacts ?? [], metadata: value?.metadata ?? {} },
-                status: "pending",
-                retryCount: 0,
-              });
-              mxRawEventId = rawEvt.id;
-            } catch (rawErr: any) {
-              console.error(`[WhatsApp Webhook:${merchantId}] Raw event persist failed: ${rawErr.message}`);
-            }
-
-            // Handle message deletion — soft-delete the message, no further processing needed
-            if (rawType === "deleted") {
-              if (waMessageId) storage.softDeleteWaMessage(waMessageId).catch(() => {});
-              if (mxRawEventId) storage.updateWaRawEventStatus(mxRawEventId, "processed", { processedAt: new Date() }).catch(() => {});
-              console.log(`[WhatsApp Webhook:${merchantId}] Deletion handled: ${waMessageId}`);
-              continue;
-            }
-
-            // For reactions: also apply the emoji to the original message
-            if (rawType === "reaction" && referenceMessageId) {
-              storage.applyReactionToWaMessage(referenceMessageId, reactionEmoji ?? "").catch(() => {});
-            }
-
-            const [matchedOrder] = await db
-              .select({ id: orders.id, merchantId: orders.merchantId, status: orders.workflowStatus, orderNumber: orders.orderNumber, shopifyOrderId: orders.shopifyOrderId, tags: orders.tags })
-              .from(orders)
-              .where(and(
-                eq(orders.merchantId, merchantId),
-                or(
-                  eq(orders.customerPhone, fromPhone),
-                  eq(orders.customerPhone, `+${fromPhone}`),
-                  eq(orders.customerPhone, `0${fromPhone.slice(2)}`),
-                )
-              ))
-              .orderBy(desc(orders.createdAt))
-              .limit(1);
-
-            const contactName = value?.contacts?.[0]?.profile?.name ?? undefined;
-
-            if (!matchedOrder) {
-              console.warn(`[WhatsApp Webhook:${merchantId}] ${requestId} - No order for phone ${fromPhone}, saving to inbox anyway`);
-              const conv = await storage.upsertConversation({
-                merchantId,
-                contactPhone: fromPhone,
-                contactName,
-                lastMessage: messageBody.slice(0, 200),
-              });
-              await storage.createWaMessage({
-                conversationId: conv.id,
-                direction: "inbound",
-                senderName: contactName ?? fromPhone,
-                text: messageBody,
-                waMessageId,
-                status: "received",
-                messageType: msgType,
-                mediaUrl,
-                mimeType,
-                fileName,
-                reactionEmoji,
-                referenceMessageId,
-              });
-              sendAgentChatPushNotifications(merchantId, contactName ?? fromPhone, messageBody, conv.id).catch(() => {});
-
-              if (msgType === "text" || msgType === "button_reply") {
-                handleAiAutoReply(merchantId, fromPhone, messageBody, conv.id, null, null).catch((e: any) =>
-                  console.error(`${LOG_PREFIX_WA_AI} Error in no-order AI reply:`, e.message)
-                );
-              } else if (!conv.label) {
-                storage.updateConversationLabel(merchantId, conv.id, "General Queries").catch(() => {});
-              }
-              continue;
-            }
-
-            const isDbError = (err: any) => {
-              const msg = (err.message || "").toLowerCase();
-              return msg.includes("timeout") || msg.includes("connection") || msg.includes("econnreset") || msg.includes("terminating") || msg.includes("deadlock") || err.code === "ETIMEDOUT" || err.code === "ECONNRESET";
-            };
-
-            const saveMessageToDB = async (): Promise<string> => {
-              await storage.saveWhatsappResponse({
-                merchantId: matchedOrder.merchantId,
-                orderId: matchedOrder.id,
-                waMessageId,
-                fromPhone,
-                messageType: rawType,
-                messageBody,
-                rawPayload: message,
-              });
-
-              const conv = await storage.upsertConversation({
-                merchantId: matchedOrder.merchantId,
-                contactPhone: fromPhone,
-                contactName,
-                orderId: matchedOrder.id,
-                orderNumber: matchedOrder.orderNumber,
-                lastMessage: messageBody.slice(0, 200),
-              });
-              await storage.createWaMessage({
-                conversationId: conv.id,
-                direction: "inbound",
-                senderName: contactName ?? fromPhone,
-                text: messageBody,
-                waMessageId,
-                status: "received",
-                messageType: msgType,
-                mediaUrl,
-                mimeType,
-                fileName,
-                reactionEmoji,
-                referenceMessageId,
-              });
-              return conv.id;
-            };
-
-            try {
-              let convId: string | null = null;
-              try {
-                convId = await saveMessageToDB();
-              } catch (dbErr: any) {
-                if (!isDbError(dbErr)) {
-                  console.error(`[WhatsApp Webhook:${merchantId}] ${requestId} - ❌ CRITICAL: Message save failed! phone=${fromPhone}, msg="${messageBody.slice(0, 100)}", waId=${waMessageId}, error=${dbErr.message}`);
-                } else {
-                  console.error(`[WhatsApp Webhook:${merchantId}] ${requestId} - DB timeout (attempt 1): ${dbErr.message}`);
-                  await new Promise(r => setTimeout(r, 2000));
-                  console.log(`[WhatsApp Webhook:${merchantId}] ${requestId} - Retrying message save (attempt 2)...`);
-                  try {
-                    convId = await saveMessageToDB();
-                    console.log(`[WhatsApp Webhook:${merchantId}] ${requestId} - ✅ Retry succeeded`);
-                  } catch (retryErr: any) {
-                    console.error(`[WhatsApp Webhook:${merchantId}] ${requestId} - ❌ CRITICAL: Message save failed after retry! phone=${fromPhone}, waId=${waMessageId}, error=${retryErr.message}`);
-                  }
-                }
-              }
-
-              if (msgType === "text" || msgType === "button_reply") {
-                try {
-                  const replyMerchant2 = await storage.getMerchant(matchedOrder.merchantId);
-                  await processWhatsAppOrderResponse(
-                    matchedOrder.merchantId, matchedOrder.id,
-                    matchedOrder.orderNumber, messageBody, fromPhone, fromPhone,
-                    matchedOrder.shopifyOrderId,
-                    replyMerchant2?.waPhoneNumberId || undefined,
-                    replyMerchant2?.waAccessToken || undefined,
-                  );
-                } catch (processErr: any) {
-                  console.error(`[WhatsApp Webhook:${merchantId}] ${requestId} - processWhatsAppOrderResponse error: ${processErr.message}`);
-                }
-              } else if (convId) {
-                const convObj = await storage.getConversationById(convId);
-                if (convObj && !convObj.label) {
-                  storage.updateConversationLabel(matchedOrder.merchantId, convId, "General Queries").catch(() => {});
-                }
-              }
-
-              if (convId) {
-                sendAgentChatPushNotifications(matchedOrder.merchantId, contactName ?? fromPhone, messageBody, convId).catch(() => {});
-              }
-
-              // Mark raw event as processed
-              if (mxRawEventId) {
-                storage.updateWaRawEventStatus(mxRawEventId, "processed", { processedAt: new Date() }).catch(() => {});
-              }
-            } catch (err: any) {
-              console.error(`[WhatsApp Webhook:${merchantId}] ${requestId} - ❌ FATAL WhatsApp processing error: ${err.message}`);
-              if (mxRawEventId) {
-                storage.updateWaRawEventStatus(mxRawEventId, "failed", { error: err.message }).catch(() => {});
-              }
-            }
+            persistAndProcessMessage({
+              merchantId,
+              eventType: rawType,
+              waMessageId,
+              fromPhone,
+              webhookSource: "merchant",
+              payload: {
+                message,
+                contacts: value?.contacts ?? [],
+                metadata: value?.metadata ?? {},
+              },
+            }).catch((err: any) => {
+              console.error(`[WhatsApp Webhook:${merchantId}] ${requestId} - persistAndProcessMessage error: ${err.message}`);
+            });
           }
 
+          // Persist-first then async process for status events
           const statuses = value?.statuses ?? [];
           for (const statusUpdate of statuses) {
             const waId = statusUpdate.id;
             const newStatus = statusUpdate.status;
             if (!waId || !newStatus) continue;
             if (!["sent", "delivered", "read", "failed"].includes(newStatus)) continue;
-            // Save raw event for status update
+
             persistAndProcessStatus({
               merchantId,
               waMessageId: waId,
               webhookSource: "merchant",
               payload: statusUpdate,
             }).catch(() => {});
-            try {
-              const updated = await storage.updateWaMessageStatusByWaId(waId, newStatus);
-              if (updated) {
-                console.log(`[WA Status] ${waId} → ${newStatus}`);
-              }
-            } catch (err: any) {
-              console.error(`[WA Status] Failed to update ${waId}: ${err.message}`);
-            }
           }
         }
       }
