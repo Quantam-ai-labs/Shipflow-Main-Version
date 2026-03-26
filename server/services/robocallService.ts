@@ -1,6 +1,6 @@
 import { db, withRetry } from "../db";
-import { orders, merchants, robocallLogs, notifications } from "@shared/schema";
-import { eq, and, isNotNull, desc, lt, gt } from "drizzle-orm";
+import { orders, merchants, robocallLogs, notifications, workflowAuditLog } from "@shared/schema";
+import { eq, and, isNotNull, desc, lt, gt, inArray } from "drizzle-orm";
 import { logConfirmationEvent, processConfirmationResponse, createNotification } from "./confirmationEngine";
 import { storage } from "../storage";
 import { transitionOrder } from "./workflowTransition";
@@ -733,7 +733,6 @@ export async function processIvrWebhook(body: any): Promise<{ success: boolean; 
 }
 
 const HOLD_REMINDER_THRESHOLD_MS = 24 * 60 * 60 * 1000;
-const HOLD_ESCALATION_CHECK_INTERVAL_MS = 30 * 60 * 1000;
 
 async function checkHoldEscalations(): Promise<void> {
   try {
@@ -744,7 +743,6 @@ async function checkHoldEscalations(): Promise<void> {
         id: orders.id,
         merchantId: orders.merchantId,
         orderNumber: orders.orderNumber,
-        pendingReason: orders.pendingReason,
         lastStatusChangedAt: orders.lastStatusChangedAt,
       }).from(orders)
         .where(and(
@@ -755,37 +753,59 @@ async function checkHoldEscalations(): Promise<void> {
       'robocallService-checkHoldEscalations',
     );
 
+    if (holdOrders.length === 0) return;
+
+    const orderIds = holdOrders.map(o => o.id);
+    const reminderCutoff = new Date(Date.now() - HOLD_REMINDER_THRESHOLD_MS);
+
+    const [recentReminders, holdAuditEntries] = await Promise.all([
+      db.select({ orderId: notifications.orderId })
+        .from(notifications)
+        .where(and(
+          inArray(notifications.orderId, orderIds),
+          eq(notifications.type, "hold_reminder"),
+          gt(notifications.createdAt, reminderCutoff),
+        )),
+      db.select({ orderId: workflowAuditLog.orderId, reason: workflowAuditLog.reason })
+        .from(workflowAuditLog)
+        .where(and(
+          inArray(workflowAuditLog.orderId, orderIds),
+          eq(workflowAuditLog.toStatus, "HOLD"),
+        ))
+        .orderBy(desc(workflowAuditLog.createdAt))
+        .limit(orderIds.length * 3),
+    ]);
+
+    const recentlyRemindedIds = new Set(recentReminders.map(r => r.orderId).filter(Boolean));
+    const holdReasonMap: Record<string, string | null> = {};
+    for (const entry of holdAuditEntries) {
+      if (!(entry.orderId in holdReasonMap)) {
+        holdReasonMap[entry.orderId] = entry.reason || null;
+      }
+    }
+
     for (const order of holdOrders) {
+      if (recentlyRemindedIds.has(order.id)) continue;
+
       try {
-        const reminderCutoff = new Date(Date.now() - HOLD_REMINDER_THRESHOLD_MS);
-        const [recentReminder] = await db.select({ id: notifications.id })
-          .from(notifications)
-          .where(and(
-            eq(notifications.orderId, order.id),
-            eq(notifications.type, "hold_reminder"),
-            gt(notifications.createdAt, reminderCutoff),
-          ))
-          .limit(1);
-
-        if (recentReminder) continue;
-
         const heldMs = order.lastStatusChangedAt
           ? Date.now() - new Date(order.lastStatusChangedAt).getTime()
           : HOLD_REMINDER_THRESHOLD_MS;
         const heldHours = Math.floor(heldMs / 3600000);
         const heldMins = Math.floor((heldMs % 3600000) / 60000);
         const heldDuration = heldHours > 0 ? `${heldHours}h ${heldMins}m` : `${heldMins}m`;
+        const holdReason = holdReasonMap[order.id];
 
         await createNotification({
           merchantId: order.merchantId,
           type: "hold_reminder",
           title: `Order #${order.orderNumber} stuck in Hold`,
-          message: `This order has been in Hold for ${heldDuration}${order.pendingReason ? ` — Reason: ${order.pendingReason}` : ""}. Please take manual action.`,
+          message: `This order has been in Hold for ${heldDuration}${holdReason ? ` — Reason: ${holdReason}` : ""}. Please take manual action.`,
           orderId: order.id,
           orderNumber: order.orderNumber || undefined,
         });
 
-        console.log(`${LOG_PREFIX} Hold reminder sent for #${order.orderNumber}`);
+        console.log(`${LOG_PREFIX} Hold reminder sent for #${order.orderNumber} (held ${heldDuration})`);
         await new Promise(r => setTimeout(r, 100));
       } catch (orderErr: any) {
         console.error(`${LOG_PREFIX} Hold escalation check failed for order ${order.id}:`, orderErr.message);
@@ -804,7 +824,7 @@ export function startRobocallService() {
   console.log(`${LOG_PREFIX} Started — response check every ${RESPONSE_CHECK_INTERVAL_MS / 60000}min (pending checks run via confirmationTimer)`);
   responseInterval = setInterval(checkCallResponses, RESPONSE_CHECK_INTERVAL_MS);
   setTimeout(checkCallResponses, 60_000);
-  holdEscalationInterval = setInterval(checkHoldEscalations, HOLD_ESCALATION_CHECK_INTERVAL_MS);
+  holdEscalationInterval = setInterval(checkHoldEscalations, RESPONSE_CHECK_INTERVAL_MS);
   setTimeout(checkHoldEscalations, 5 * 60_000);
 }
 

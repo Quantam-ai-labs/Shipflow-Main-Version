@@ -1035,6 +1035,8 @@ export async function registerRoutes(
             confirmedAt: new Date(),
             confirmedByUserId: userId,
             holdUntil: null,
+            confirmationStatus: "manual_confirmed",
+            confirmationSource: "manual",
           };
           break;
         case "fix-confirm":
@@ -1044,6 +1046,8 @@ export async function registerRoutes(
             confirmedByUserId: userId,
             pendingReason: null,
             pendingReasonType: null,
+            confirmationStatus: "manual_confirmed",
+            confirmationSource: "manual",
           };
           if (customerPhone) extraData.customerPhone = normalizePakistaniPhone(customerPhone) || customerPhone;
           if (shippingAddress) extraData.shippingAddress = shippingAddress;
@@ -1199,6 +1203,8 @@ export async function registerRoutes(
             confirmedAt: new Date(),
             confirmedByUserId: userId,
             holdUntil: null,
+            confirmationStatus: "manual_confirmed",
+            confirmationSource: "manual",
           };
           break;
         default:
