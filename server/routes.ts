@@ -610,6 +610,30 @@ export async function registerRoutes(
   // Seed demo data on startup
   await storage.seedDemoData();
 
+  // Backfill notification category/resolvable for rows that have the default values
+  // This is idempotent — safe to re-run on every startup
+  db.update(notifications).set({
+    category: sql`CASE type
+      WHEN 'late_response' THEN 'confirmation'
+      WHEN 'conflict_detected' THEN 'confirmation'
+      WHEN 'robocall_exhausted' THEN 'confirmation'
+      WHEN 'urgent_cancellation_request' THEN 'chat'
+      ELSE 'other'
+    END`,
+    resolvable: sql`CASE type
+      WHEN 'late_response' THEN true
+      WHEN 'conflict_detected' THEN true
+      WHEN 'robocall_exhausted' THEN true
+      WHEN 'urgent_cancellation_request' THEN true
+      ELSE false
+    END`,
+  })
+  .where(and(eq(notifications.category, "other"), eq(notifications.resolvable, false)))
+  .then((r) => {
+    if (r.rowCount && r.rowCount > 0) console.log(`[Notifications] Backfilled ${r.rowCount} notifications with category/resolvable`);
+  })
+  .catch((e: any) => console.error("[Notifications] Backfill error:", e.message));
+
   function normalizeCourierName(raw: string): string {
     const name = raw.toLowerCase().trim();
     if (name.includes("leopard")) return "leopards";
@@ -16528,6 +16552,10 @@ export async function registerRoutes(
         .where(and(
           eq(notifications.merchantId, merchantId),
           isNull(notifications.resolvedAt),
+          or(
+            eq(notifications.resolvable, true),
+            eq(notifications.read, false),
+          ),
         ))
         .orderBy(desc(notifications.createdAt))
         .limit(limit);

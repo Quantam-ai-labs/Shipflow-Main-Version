@@ -154,12 +154,36 @@ export function NotificationBell() {
     mutationFn: async (id: string) => {
       setResolvingId(id);
       await apiRequest("POST", `/api/notifications/${id}/resolve`);
+      return id;
+    },
+    onMutate: async (id: string) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/notifications"] });
+      const prev = queryClient.getQueryData<{ notifications: Notification[] }>(["/api/notifications"]);
+      queryClient.setQueryData<{ notifications: Notification[] }>(
+        ["/api/notifications"],
+        (old) => old ? { ...old, notifications: old.notifications.filter(n => n.id !== id) } : old
+      );
+      queryClient.setQueryData<{ count: number }>(
+        ["/api/notifications/unread-count"],
+        (old) => {
+          const removed = prev?.notifications.find(n => n.id === id);
+          if (old && removed && !removed.read) return { count: Math.max(0, old.count - 1) };
+          return old;
+        }
+      );
+      return { prev };
     },
     onSuccess: () => {
       setResolvingId(null);
       invalidateNotifications();
     },
-    onError: () => setResolvingId(null),
+    onError: (_err, _id, context: any) => {
+      setResolvingId(null);
+      if (context?.prev) {
+        queryClient.setQueryData(["/api/notifications"], context.prev);
+      }
+      invalidateNotifications();
+    },
   });
 
   const unreadCount = countData?.count ?? 0;
