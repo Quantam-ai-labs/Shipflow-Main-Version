@@ -17,9 +17,6 @@ import type { OrderNotificationParams } from "./types";
 
 export {
   WA_VARIABLE_CHIPS,
-  DEFAULT_MESSAGE_BODY,
-  DEFAULT_MESSAGE_BODIES,
-  getDefaultMessageBody,
   interpolateMessageBody,
   STATUS_LABELS,
   getStatusLabel,
@@ -201,11 +198,18 @@ export async function sendOrderStatusWhatsApp(
             return;
           }
 
-          const msgText = automation.messageText
-            ? interpolateMessageBody(automation.messageText, vars, params.toStatus)
+          const trimmedMsgText = automation.messageText?.trim() || null;
+          const msgText = trimmedMsgText
+            ? interpolateMessageBody(trimmedMsgText, vars)
             : null;
           const tmplName = automation.templateName || null;
-          const effectiveTemplateName = tmplName || "custom_message";
+
+          if (!tmplName) {
+            console.log(
+              `${LOG_PREFIX} Skip automation "${automation.title}" for order ${params.orderNumber}: no Meta-approved template configured`,
+            );
+            return;
+          }
 
           let templateParams: string[] | null = null;
           let metaTemplateBody: string | null = null;
@@ -234,7 +238,7 @@ export async function sendOrderStatusWhatsApp(
             `${LOG_PREFIX}   Order:    #${params.orderNumber} (${fromLabel} → ${toLabel})`,
           );
           console.log(`${LOG_PREFIX}   To:       ${formattedPhone}`);
-          console.log(`${LOG_PREFIX}   Template: "${effectiveTemplateName}"`);
+          console.log(`${LOG_PREFIX}   Template: "${tmplName}"`);
           if (templateParams) {
             console.log(
               `${LOG_PREFIX}   Params:   ${JSON.stringify(templateParams)}`,
@@ -248,7 +252,7 @@ export async function sendOrderStatusWhatsApp(
 
           const result = await sendWhatsAppApiRequest({
             formattedPhone,
-            templateName: effectiveTemplateName,
+            templateName: tmplName,
             messageText: msgText || "",
             orderNumber: params.orderNumber,
             templateParams: templateParams ?? undefined,
@@ -268,7 +272,7 @@ export async function sendOrderStatusWhatsApp(
                   }
                   return interpolateMessageBody(metaTemplateBody, vars);
                 }
-                return `[Template: ${effectiveTemplateName}]`;
+                return `[Template: ${tmplName}]`;
               })();
               const conv = await storage.upsertConversation({
                 merchantId: params.merchantId,
@@ -307,7 +311,7 @@ export async function sendOrderStatusWhatsApp(
               success: result.success,
               toStatus: params.toStatus,
               phone: result.phone ?? formattedPhone,
-              templateName: effectiveTemplateName,
+              templateName: tmplName,
               automationId: automation.id,
               automationTitle: automation.title,
               messageId: result.messageId,

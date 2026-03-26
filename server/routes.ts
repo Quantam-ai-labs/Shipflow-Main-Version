@@ -7548,7 +7548,7 @@ export async function registerRoutes(
       if (!templateName) return res.status(400).json({ error: "No template name in log entry" });
 
       const { formatPhoneForWhatsApp, sendWhatsAppApiRequest } = await import("./utils/integrations/whatsapp/sender");
-      const { buildVarsFromParams, interpolateMessageBody, buildTemplateParamsFromBody, extractMessageTextParams } = await import("./utils/integrations/whatsapp/variables");
+      const { buildVarsFromParams, buildTemplateParamsFromBody, extractMessageTextParams } = await import("./utils/integrations/whatsapp/variables");
 
       const formattedPhone = formatPhoneForWhatsApp(phone);
       if (!formattedPhone) return res.status(400).json({ error: "Invalid phone number format" });
@@ -7593,7 +7593,7 @@ export async function registerRoutes(
         }
       }
 
-      const msgText = meta?.messageText || interpolateMessageBody(null, vars, meta?.toStatus);
+      const msgText = meta?.messageText || "";
 
       const [merchantRow] = await db.select({
         waPhoneNumberId: merchants.waPhoneNumberId,
@@ -7720,7 +7720,7 @@ export async function registerRoutes(
       if (!templateName) return res.status(400).json({ error: "Template name is required" });
 
       const { formatPhoneForWhatsApp, sendWhatsAppApiRequest } = await import("./utils/integrations/whatsapp/sender");
-      const { buildVarsFromParams, buildTemplateParamsFromBody, interpolateMessageBody } = await import("./utils/integrations/whatsapp/variables");
+      const { buildVarsFromParams, buildTemplateParamsFromBody } = await import("./utils/integrations/whatsapp/variables");
 
       const [merchantRow] = await db.select({
         waPhoneNumberId: merchants.waPhoneNumberId,
@@ -7770,7 +7770,7 @@ export async function registerRoutes(
           templateParams = buildTemplateParamsFromBody(metaTemplate.body, vars) ?? undefined;
         }
 
-        const msgText = interpolateMessageBody(null, vars, order.workflowStatus || "NEW");
+        const msgText = "";
 
         try {
           const result = await sendWhatsAppApiRequest({

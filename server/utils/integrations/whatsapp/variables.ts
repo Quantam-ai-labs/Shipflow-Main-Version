@@ -30,26 +30,11 @@ export const WA_VARIABLE_CHIPS = [
   { key: "{{shipping_amount}}", label: "Shipping", description: "Shipping charge amount" },
 ] as const;
 
-export const DEFAULT_MESSAGE_BODIES: Record<string, string> = {
-  NEW: `Hello {{name}},\n\nYour order #{{order_number}} has been received!\n\n{{items}}\n\nTotal: Rs. {{order_total}}\n\nPlease reply *Confirm* or *Cancel*.`,
-  BOOKED: `Hello {{name}},\n\nYour order #{{order_number}} has been booked with {{courier_name}}.\n\n{{items}}\n\nTotal: Rs. {{order_total}}\nTracking: {{tracking_number}}\n\nThank you for shopping with us!`,
-  FULFILLED: `Hello {{name}},\n\nYour order #{{order_number}} is on its way!\n\n{{items}}\n\nTracking: {{tracking_number}} ({{courier_name}})\n\nThank you for shopping with us!`,
-  DELIVERED: `Hello {{name}},\n\nYour order #{{order_number}} has been delivered.\n\n{{items}}\n\nTotal: Rs. {{order_total}}\n\nThank you for shopping with us!`,
-};
-
-export const DEFAULT_MESSAGE_BODY = DEFAULT_MESSAGE_BODIES.DELIVERED;
-
-export function getDefaultMessageBody(status?: string): string {
-  if (status && DEFAULT_MESSAGE_BODIES[status]) return DEFAULT_MESSAGE_BODIES[status];
-  return DEFAULT_MESSAGE_BODY;
-}
-
 export function interpolateMessageBody(
   body: string | null | undefined,
   vars: Record<string, string>,
-  status?: string
 ): string {
-  const template = body && body.trim().length > 0 ? body : getDefaultMessageBody(status);
+  const template = body && body.trim().length > 0 ? body : "";
   return template
     .replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? `{{${key}}}`)
     .replace(/\{(\w+)\}/g, (_, key) => {
