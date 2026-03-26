@@ -5948,6 +5948,7 @@ export async function registerRoutes(
           const aiMerchant = await storage.getMerchant(merchantId);
           if (aiMerchant?.aiAutoReplyEnabled) {
             const conv = await storage.getConversationByPhone(merchantId, normalizedPhone);
+            console.log(`        Routing post-confirm query to AI for order #${orderNumber}: "${messageBody.slice(0, 80)}"`);
             handleAiAutoReply(merchantId, normalizedPhone, messageBody, conv?.id || null, orderId, orderNumber).catch((e: any) =>
               console.error(`${LOG_PREFIX_WA_AI} Error in order-query AI reply:`, e.message)
             );
@@ -6100,6 +6101,7 @@ export async function registerRoutes(
               try {
                 const { transitionOrder } = await import("./services/workflowTransition");
                 const { logConfirmationEvent: logCE } = await import("./services/confirmationEngine");
+                console.log(`${LOG_PREFIX_WA_AI} AI conflict detected for order ${conv.orderNumber} — transitioning to HOLD`);
                 const holdResult = await transitionOrder({
                   merchantId,
                   orderId: conv.orderId,
@@ -6107,8 +6109,9 @@ export async function registerRoutes(
                   action: "ai_conflict",
                   actorType: "system",
                   actorUserId: "whatsapp_ai",
-                  reason: `AI detected conflicting customer message — moved to Hold for manual review`,
-                  extraData: { aiConflictMessage: messageText },
+                  actorName: "AI Assistant",
+                  reason: `AI detected conflicting post-confirmation message from customer — held for manual review`,
+                  extraData: { aiConflictMessage: messageText, aiReply: result.reply },
                 });
                 if (holdResult.success) {
                   await logCE({
@@ -6117,14 +6120,14 @@ export async function registerRoutes(
                     eventType: "AI_CONFLICT_HOLD",
                     channel: "whatsapp",
                     newStatus: "HOLD",
-                    note: `AI classified message as conflict: "${messageText.slice(0, 100)}". Order moved to Hold for agent review.`,
+                    note: `AI classified post-confirm message as conflict: "${messageText.slice(0, 150)}". AI replied: "${(result.reply || "").slice(0, 150)}". Order moved to Hold — manual agent review required.`,
                   });
                   console.log(`${LOG_PREFIX_WA_AI} Order ${conv.orderNumber} moved to HOLD due to AI conflict classification`);
                 } else {
                   console.warn(`${LOG_PREFIX_WA_AI} Failed to transition order to HOLD: ${holdResult.error}`);
                 }
               } catch (conflictErr: any) {
-                console.error(`${LOG_PREFIX_WA_AI} Failed to handle conflict:`, conflictErr.message);
+                console.error(`${LOG_PREFIX_WA_AI} Failed to handle AI conflict:`, conflictErr.message);
               }
             }
 
