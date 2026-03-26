@@ -679,11 +679,6 @@ export default function SupportChatPage() {
                 queryKey: ["/api/support/conversations", data.conversationId, "messages"],
               });
             }
-          } else {
-            // Notification sound for messages in other conversations
-            if (!soundMutedRef.current) {
-              playNotificationSound();
-            }
           }
           queryClient.invalidateQueries({ queryKey: ["/api/support/conversations"] });
         } else if (data.type === "status_update") {
@@ -820,6 +815,10 @@ export default function SupportChatPage() {
     return [...olderOnly, ...latest];
   }, [paginatedMessages, latestPageData]);
 
+  // Ref for stable access to hasMoreMessages in async contexts
+  const hasMoreMessagesRef = useRef(hasMoreMessages);
+  hasMoreMessagesRef.current = hasMoreMessages;
+
   // Load older messages when user scrolls to top
   const loadOlderMessages = useCallback(async () => {
     if (!selectedConvId || isLoadingOlder || !hasMoreMessages) return;
@@ -931,12 +930,15 @@ export default function SupportChatPage() {
       return true;
     };
     if (tryJump()) return;
-    // Message not visible — load older pages until found (max 3 pages)
-    for (let attempt = 0; attempt < 3; attempt++) {
+    // Message not visible — load older pages until found or no more pages remain
+    for (;;) {
+      if (!hasMoreMessagesRef.current) return;
       await loadOlderMessages();
       await new Promise(r => requestAnimationFrame(r));
-      await new Promise(r => setTimeout(r, 100));
+      await new Promise(r => setTimeout(r, 150));
       if (tryJump()) return;
+      // loadOlderMessages sets isLoadingOlder guard — if hasMore went false, we're done
+      if (!hasMoreMessagesRef.current) return;
     }
   }, [loadOlderMessages]);
 

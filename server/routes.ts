@@ -8155,9 +8155,15 @@ export async function registerRoutes(
       }
       const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
       const offset = req.query.offset ? parseInt(req.query.offset as string, 10) : 0;
-      const total = await storage.countWaMessages(req.params.id);
-      const messages = await storage.getWaMessages(req.params.id, limit !== undefined ? { limit, offset } : undefined);
-      res.json({ messages, total, hasMore: limit !== undefined && (offset + limit) < total });
+      if (limit !== undefined) {
+        // Paginated request: return envelope with metadata
+        const total = await storage.countWaMessages(req.params.id);
+        const messages = await storage.getWaMessages(req.params.id, { limit, offset });
+        return res.json({ messages, total, hasMore: (offset + limit) < total });
+      }
+      // Legacy (no limit): return plain array for backwards compatibility
+      const messages = await storage.getWaMessages(req.params.id);
+      res.json(messages);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
