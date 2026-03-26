@@ -6086,7 +6086,7 @@ export async function registerRoutes(
               console.error(`${LOG_PREFIX_WA_AI} Failed to auto-label:`, labelErr.message);
             }
 
-            const shouldPause = result.classification === "complaint" || result.classification === "return" || result.classification === "replacement" || result.classification === "conflict" || result.classification === "human_handoff";
+            const shouldPause = result.classification === "complaint" || result.classification === "return" || result.classification === "replacement";
             if (shouldPause) {
               try {
                 await storage.pauseAiForConversation(merchantId, convId);
