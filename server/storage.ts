@@ -267,7 +267,8 @@ export interface IStorage {
   deleteConversation(id: string): Promise<void>;
   archiveConversations(merchantId: string, ids: string[]): Promise<void>;
   unarchiveConversations(merchantId: string, ids: string[]): Promise<void>;
-  getWaMessages(conversationId: string): Promise<WaMessage[]>;
+  getWaMessages(conversationId: string, opts?: { limit?: number; offset?: number }): Promise<WaMessage[]>;
+  countWaMessages(conversationId: string): Promise<number>;
   createWaMessage(data: { conversationId: string; direction: string; senderName?: string | null; text?: string | null; waMessageId?: string | null; status?: string | null; messageType?: string | null; mediaUrl?: string | null; mimeType?: string | null; fileName?: string | null; reactionEmoji?: string | null; reactionFrom?: string | null; referenceMessageId?: string | null }): Promise<WaMessage>;
   updateWaMessageStatus(messageId: string, status: string, waMessageId?: string): Promise<void>;
   updateWaMessageStatusByWaId(waMessageId: string, newStatus: string): Promise<boolean>;
@@ -2227,10 +2228,24 @@ export class DatabaseStorage implements IStorage {
     await db.delete(waConversations).where(eq(waConversations.id, id));
   }
 
-  async getWaMessages(conversationId: string): Promise<WaMessage[]> {
-    return db.select().from(waMessages)
+  async getWaMessages(conversationId: string, opts?: { limit?: number; offset?: number }): Promise<WaMessage[]> {
+    const q = db.select().from(waMessages)
       .where(eq(waMessages.conversationId, conversationId))
       .orderBy(asc(waMessages.createdAt));
+    if (opts?.limit !== undefined) {
+      // Fetch the last N messages (most recent) using offset from end
+      const total = await this.countWaMessages(conversationId);
+      const off = Math.max(0, total - (opts.offset ?? 0) - opts.limit);
+      return (q as any).limit(opts.limit).offset(off);
+    }
+    return q;
+  }
+
+  async countWaMessages(conversationId: string): Promise<number> {
+    const [row] = await db.select({ count: sql<number>`count(*)` })
+      .from(waMessages)
+      .where(eq(waMessages.conversationId, conversationId));
+    return Number(row?.count ?? 0);
   }
 
   async createWaMessage(data: { conversationId: string; direction: string; senderName?: string | null; text?: string | null; waMessageId?: string | null; status?: string | null; messageType?: string | null; mediaUrl?: string | null; mimeType?: string | null; fileName?: string | null; reactionEmoji?: string | null; reactionFrom?: string | null; referenceMessageId?: string | null }): Promise<WaMessage> {

@@ -8153,8 +8153,11 @@ export async function registerRoutes(
       if (!conv || conv.merchantId !== merchantId) {
         return res.status(404).json({ error: "Conversation not found" });
       }
-      const messages = await storage.getWaMessages(req.params.id);
-      res.json(messages);
+      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+      const offset = req.query.offset ? parseInt(req.query.offset as string, 10) : 0;
+      const total = await storage.countWaMessages(req.params.id);
+      const messages = await storage.getWaMessages(req.params.id, limit !== undefined ? { limit, offset } : undefined);
+      res.json({ messages, total, hasMore: limit !== undefined && (offset + limit) < total });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

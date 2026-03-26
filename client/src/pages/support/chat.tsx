@@ -577,6 +577,9 @@ export default function SupportChatPage() {
     try { return localStorage.getItem("chat-sound-muted") === "true"; } catch { return false; }
   });
 
+  // Long-press for mobile context menu
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Reply-to-message state
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
 
@@ -654,11 +657,11 @@ export default function SupportChatPage() {
         if (data.type === "new_message") {
           if (data.conversationId && data.conversationId === selectedConvIdRef.current) {
             if (data.message) {
-              queryClient.setQueryData<Message[]>(
+              queryClient.setQueryData<{ messages: Message[]; total: number; hasMore: boolean }>(
                 ["/api/support/conversations", data.conversationId, "messages"],
                 (old) => {
-                  if (!old) return [data.message];
-                  if (old.some(m => m.id === data.message.id)) return old;
+                  if (!old) return { messages: [data.message], total: 1, hasMore: false };
+                  if (old.messages.some(m => m.id === data.message.id)) return old;
                   // Only auto-scroll if near bottom; otherwise increment new msg count
                   if (!isNearBottomRef.current && data.message.direction === "inbound") {
                     setNewMsgCount(c => c + 1);
@@ -666,7 +669,7 @@ export default function SupportChatPage() {
                   if (!soundMutedRef.current && data.message.direction === "inbound") {
                     playNotificationSound();
                   }
-                  return [...old, data.message];
+                  return { ...old, messages: [...old.messages, data.message], total: old.total + 1 };
                 }
               );
             } else {
@@ -683,13 +686,16 @@ export default function SupportChatPage() {
           queryClient.invalidateQueries({ queryKey: ["/api/support/conversations"] });
         } else if (data.type === "status_update") {
           if (data.conversationId && data.conversationId === selectedConvIdRef.current) {
-            queryClient.setQueryData<Message[]>(
+            queryClient.setQueryData<{ messages: Message[]; total: number; hasMore: boolean }>(
               ["/api/support/conversations", data.conversationId, "messages"],
               (old) => {
                 if (!old) return old;
-                return old.map(msg =>
-                  msg.waMessageId === data.waMessageId ? { ...msg, status: data.status } : msg
-                );
+                return {
+                  ...old,
+                  messages: old.messages.map(msg =>
+                    msg.waMessageId === data.waMessageId ? { ...msg, status: data.status } : msg
+                  ),
+                };
               }
             );
           }
@@ -767,17 +773,84 @@ export default function SupportChatPage() {
     }
   }, [conversations, deepLinkOrderId]);
 
-  const { data: messages = [] } = useQuery<Message[]>({
+  // ── Pagination state ─────────────────────────────────────────────────────────
+  const PAGE_SIZE = 50;
+  const [paginatedMessages, setPaginatedMessages] = useState<Message[]>([]);
+  const [paginationOffset, setPaginationOffset] = useState(0); // how many older messages we've fetched beyond the initial page
+  const [hasMoreMessages, setHasMoreMessages] = useState(false);
+  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
+  const prevConvIdForPaginationRef = useRef<string | null>(null);
+
+  // Initial fetch of the last PAGE_SIZE messages
+  const { data: latestPageData, isLoading: isMessagesLoading } = useQuery<{ messages: Message[]; total: number; hasMore: boolean }>({
     queryKey: ["/api/support/conversations", selectedConvId, "messages"],
     queryFn: async () => {
-      if (!selectedConvId) return [];
-      const resp = await fetch(`/api/support/conversations/${selectedConvId}/messages`, { credentials: "include" });
+      if (!selectedConvId) return { messages: [], total: 0, hasMore: false };
+      const resp = await fetch(`/api/support/conversations/${selectedConvId}/messages?limit=${PAGE_SIZE}&offset=0`, { credentials: "include" });
+      if (!resp.ok) return { messages: [], total: 0, hasMore: false };
       return resp.json();
     },
     enabled: !!selectedConvId,
     refetchInterval: msgPollInterval,
     staleTime: 4000,
   });
+
+  // Merge latest page data with paginated (older) messages
+  useEffect(() => {
+    if (!latestPageData) return;
+    const convChanged = prevConvIdForPaginationRef.current !== selectedConvId;
+    if (convChanged) {
+      prevConvIdForPaginationRef.current = selectedConvId;
+      setPaginationOffset(0);
+      setPaginatedMessages([]);
+      setHasMoreMessages(latestPageData.hasMore);
+    } else {
+      setHasMoreMessages(latestPageData.hasMore);
+    }
+  }, [latestPageData, selectedConvId]);
+
+  // Combined messages: older pages prepended, latest page at end (deduplicated)
+  const messages = useMemo(() => {
+    const latest = latestPageData?.messages ?? [];
+    if (paginatedMessages.length === 0) return latest;
+    const latestIds = new Set(latest.map(m => m.id));
+    const olderOnly = paginatedMessages.filter(m => !latestIds.has(m.id));
+    return [...olderOnly, ...latest];
+  }, [paginatedMessages, latestPageData]);
+
+  // Load older messages when user scrolls to top
+  const loadOlderMessages = useCallback(async () => {
+    if (!selectedConvId || isLoadingOlder || !hasMoreMessages) return;
+    const container = messagesScrollRef.current;
+    const prevScrollHeight = container?.scrollHeight ?? 0;
+    const prevScrollTop = container?.scrollTop ?? 0;
+    setIsLoadingOlder(true);
+    try {
+      const newOffset = paginationOffset + PAGE_SIZE;
+      const resp = await fetch(
+        `/api/support/conversations/${selectedConvId}/messages?limit=${PAGE_SIZE}&offset=${newOffset}`,
+        { credentials: "include" }
+      );
+      if (!resp.ok) return;
+      const data: { messages: Message[]; total: number; hasMore: boolean } = await resp.json();
+      setHasMoreMessages(data.hasMore);
+      setPaginationOffset(newOffset);
+      setPaginatedMessages(prev => {
+        const existingIds = new Set(prev.map(m => m.id));
+        const novel = data.messages.filter(m => !existingIds.has(m.id));
+        return [...novel, ...prev];
+      });
+      // Preserve scroll position after prepend
+      requestAnimationFrame(() => {
+        if (container) {
+          const newScrollHeight = container.scrollHeight;
+          container.scrollTop = prevScrollTop + (newScrollHeight - prevScrollHeight);
+        }
+      });
+    } finally {
+      setIsLoadingOlder(false);
+    }
+  }, [selectedConvId, isLoadingOlder, hasMoreMessages, paginationOffset]);
 
   const { data: teamData } = useQuery<{ members: TeamMember[]; total: number }>({
     queryKey: ["/api/team"],
@@ -800,7 +873,11 @@ export default function SupportChatPage() {
     isNearBottomRef.current = nearBottom;
     setShowScrollFab(!nearBottom);
     if (nearBottom) setNewMsgCount(0);
-  }, []);
+    // Load older messages when scrolled near the top
+    if (container.scrollTop < 80) {
+      loadOlderMessages();
+    }
+  }, [loadOlderMessages]);
 
   const prevMsgCountRef = useRef(0);
 
@@ -825,15 +902,26 @@ export default function SupportChatPage() {
     setTimeout(() => scrollToBottom("instant" as ScrollBehavior), 50);
   }, [selectedConvId, scrollToBottom]);
 
-  // Jump to a specific message and flash-highlight it
-  const jumpToMessage = useCallback((msgId: string) => {
-    const el = document.querySelector(`[data-msg-id="${msgId}"]`);
-    if (!el) return;
-    el.scrollIntoView({ behavior: "smooth", block: "center" });
-    if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
-    setHighlightedMsgId(msgId);
-    highlightTimeoutRef.current = setTimeout(() => setHighlightedMsgId(null), 1500);
-  }, []);
+  // Jump to a specific message and flash-highlight it; loads older pages if not rendered yet
+  const jumpToMessage = useCallback(async (msgId: string) => {
+    const tryJump = () => {
+      const el = document.querySelector(`[data-msg-id="${msgId}"]`);
+      if (!el) return false;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
+      setHighlightedMsgId(msgId);
+      highlightTimeoutRef.current = setTimeout(() => setHighlightedMsgId(null), 1500);
+      return true;
+    };
+    if (tryJump()) return;
+    // Message not visible — load older pages until found (max 3 pages)
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await loadOlderMessages();
+      await new Promise(r => requestAnimationFrame(r));
+      await new Promise(r => setTimeout(r, 100));
+      if (tryJump()) return;
+    }
+  }, [loadOlderMessages]);
 
   // Reset select mode when switching views
   useEffect(() => {
@@ -1762,6 +1850,18 @@ export default function SupportChatPage() {
                 onScroll={handleChatScroll}
               >
               <div className="px-[8%] py-4 space-y-1">
+                  {/* Load older messages spinner */}
+                  {isLoadingOlder && (
+                    <div className="flex justify-center py-3">
+                      <span className="flex items-center gap-2 bg-white dark:bg-[#202c33] text-muted-foreground text-xs px-4 py-2 rounded-lg shadow-sm">
+                        <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        Loading earlier messages…
+                      </span>
+                    </div>
+                  )}
                   {messages.filter(m => m.messageType !== "reaction").length === 0 ? (
                     <div className="text-center py-8">
                       <span className="bg-white dark:bg-[#202c33] text-muted-foreground text-xs px-4 py-2 rounded-lg inline-block shadow-sm">
@@ -1793,6 +1893,24 @@ export default function SupportChatPage() {
                               onContextMenu={(e) => {
                                 e.preventDefault();
                                 setMsgContextMenu({ x: e.clientX, y: e.clientY, msg });
+                              }}
+                              onTouchStart={(e) => {
+                                const touch = e.touches[0];
+                                longPressTimerRef.current = setTimeout(() => {
+                                  setMsgContextMenu({ x: touch.clientX, y: touch.clientY, msg });
+                                }, 500);
+                              }}
+                              onTouchEnd={() => {
+                                if (longPressTimerRef.current) {
+                                  clearTimeout(longPressTimerRef.current);
+                                  longPressTimerRef.current = null;
+                                }
+                              }}
+                              onTouchMove={() => {
+                                if (longPressTimerRef.current) {
+                                  clearTimeout(longPressTimerRef.current);
+                                  longPressTimerRef.current = null;
+                                }
                               }}
                             >
                               <div className={cn("relative max-w-[65%]", isOutbound ? "mr-2" : "ml-2")}>
@@ -1888,9 +2006,25 @@ export default function SupportChatPage() {
                 </div>
               </div>
 
-              {/* "↓ N new messages" banner */}
+              {/* Scroll-to-bottom FAB with unread badge */}
+              {showScrollFab && (
+                <button
+                  onClick={() => { scrollToBottom(); setNewMsgCount(0); }}
+                  className="absolute bottom-4 right-4 z-10 w-10 h-10 bg-white dark:bg-[#202c33] border border-border rounded-full shadow-lg flex items-center justify-center hover:bg-accent transition-colors"
+                  data-testid="fab-scroll-bottom"
+                >
+                  <ChevronDown className="w-5 h-5 text-muted-foreground" />
+                  {newMsgCount > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 bg-[#008069] text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center leading-none" data-testid="fab-unread-badge">
+                      {newMsgCount > 99 ? "99+" : newMsgCount}
+                    </span>
+                  )}
+                </button>
+              )}
+
+              {/* "↓ N new messages" jump banner (shown when FAB has unread count) */}
               {showScrollFab && newMsgCount > 0 && (
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
+                <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
                   <button
                     onClick={() => { scrollToBottom(); setNewMsgCount(0); }}
                     className="pointer-events-auto flex items-center gap-2 bg-[#008069] hover:bg-[#017561] text-white px-4 py-2 rounded-full shadow-lg text-sm font-medium transition-colors"
@@ -1900,17 +2034,6 @@ export default function SupportChatPage() {
                     {newMsgCount} new message{newMsgCount > 1 ? "s" : ""}
                   </button>
                 </div>
-              )}
-
-              {/* Scroll-to-bottom FAB */}
-              {showScrollFab && newMsgCount === 0 && (
-                <button
-                  onClick={() => scrollToBottom()}
-                  className="absolute bottom-4 right-4 z-10 w-10 h-10 bg-white dark:bg-[#202c33] border border-border rounded-full shadow-lg flex items-center justify-center hover:bg-accent transition-colors"
-                  data-testid="fab-scroll-bottom"
-                >
-                  <ChevronDown className="w-5 h-5 text-muted-foreground" />
-                </button>
               )}
             </div>
 
