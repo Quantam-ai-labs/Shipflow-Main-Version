@@ -235,6 +235,46 @@ function renderFormattedText(text: string) {
   return parts;
 }
 
+function highlightSearchText(text: string, query: string): JSX.Element {
+  if (!query || query.length < 2) return <>{text}</>;
+  const idx = text.toLowerCase().indexOf(query.toLowerCase());
+  if (idx < 0) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark className="bg-yellow-300 dark:bg-yellow-600 text-inherit rounded-sm px-px">{text.slice(idx, idx + query.length)}</mark>
+      {highlightSearchText(text.slice(idx + query.length), query)}
+    </>
+  );
+}
+
+function LinkPreviewBubble({ url }: { url: string }) {
+  const { data } = useQuery<{ url: string; title: string | null; description: string | null; image: string | null; siteName: string | null }>({
+    queryKey: ["/api/whatsapp/link-preview", url],
+    queryFn: async () => {
+      const resp = await fetch(`/api/whatsapp/link-preview?url=${encodeURIComponent(url)}`, { credentials: "include" });
+      if (!resp.ok) return null;
+      return resp.json();
+    },
+    enabled: !!url,
+    staleTime: 1000 * 60 * 30,
+    retry: false,
+  });
+  if (!data || (!data.title && !data.description)) return null;
+  return (
+    <div className="mt-1.5 rounded-md border border-black/10 dark:border-white/10 overflow-hidden bg-black/5 dark:bg-white/5">
+      {data.image && (
+        <img src={data.image} alt={data.title || "Preview"} className="w-full h-24 object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+      )}
+      <div className="px-2.5 py-1.5">
+        {data.siteName && <p className="text-[10px] text-[#008069] font-semibold uppercase tracking-wide">{data.siteName}</p>}
+        {data.title && <p className="text-xs font-semibold leading-tight mt-0.5 line-clamp-2">{data.title}</p>}
+        {data.description && <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">{data.description}</p>}
+      </div>
+    </div>
+  );
+}
+
 function MessageTypeIcon({ type }: { type: string | null }) {
   switch (type) {
     case "image": return <ImageIcon className="w-3 h-3 inline mr-1" />;
@@ -2214,28 +2254,16 @@ export default function SupportChatPage() {
                                   )}
                                   {!isButtonReply && !isNonText && (
                                     <div className="whitespace-pre-wrap break-words leading-relaxed">
-                                      {renderFormattedText(msg.text || "")}
+                                      {isCurrentSearchTarget && msg.text
+                                        ? highlightSearchText(msg.text, msgSearchQuery)
+                                        : renderFormattedText(msg.text || "")}
                                     </div>
                                   )}
-                                  {/* Link preview chip for messages containing URLs */}
+                                  {/* Rich link preview card (lazy-fetched per URL) */}
                                   {!isButtonReply && !isNonText && (() => {
                                     const urlMatch = (msg.text || "").match(/https?:\/\/[^\s<>"{}|\\^`[\]]+/);
                                     if (!urlMatch) return null;
-                                    const url = urlMatch[0];
-                                    let domain = "";
-                                    try { domain = new URL(url).hostname.replace(/^www\./, ""); } catch {}
-                                    return (
-                                      <a
-                                        href={url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="flex items-center gap-1.5 mt-1.5 px-2 py-1.5 rounded-md border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition-colors no-underline group/link"
-                                        onClick={(e) => e.stopPropagation()}
-                                      >
-                                        <ExternalLink className="w-3 h-3 text-[#008069] shrink-0" />
-                                        <span className="text-[11px] text-[#008069] truncate max-w-[160px]">{domain || url.slice(0, 30)}</span>
-                                      </a>
-                                    );
+                                    return <LinkPreviewBubble url={urlMatch[0]} />;
                                   })()}
                                   <div className={cn(
                                     "flex items-center gap-1 mt-0.5",

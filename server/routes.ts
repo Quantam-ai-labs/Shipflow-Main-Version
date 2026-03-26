@@ -8578,101 +8578,97 @@ export async function registerRoutes(
     }
   });
 
-  // Link preview endpoint – fetches OG metadata for a URL
+  // Link preview endpoint – fetches OG metadata for a URL with SSRF protection
   app.get("/api/whatsapp/link-preview", isAuthenticated, async (req: any, res) => {
-    try {
-      const url = req.query.url as string;
-      if (!url) return res.status(400).json({ error: "Missing url" });
+    // SSRF helpers (defined once, reused per redirect hop)
+    const { promises: dnsP } = await import("dns");
+    const BLOCKED_HOSTNAMES = new Set(["localhost", "metadata.google.internal", "169.254.169.254"]);
+    const BLOCKED_SUFFIXES = [".local", ".internal", ".localhost", ".localdomain"];
+    const PRIVATE_IP_RE = [
+      /^127\./,
+      /^10\./,
+      /^172\.(1[6-9]|2\d|3[01])\./,
+      /^192\.168\./,
+      /^169\.254\./,
+      /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./,
+      /^0\./,
+      /^::1$/,
+      /^fc/i,
+      /^fd/i,
+      /^fe80:/i,
+    ];
 
-      // Parse and validate
+    const isPrivateIP = (ip: string) => PRIVATE_IP_RE.some(r => r.test(ip));
+
+    const validateUrl = async (rawUrl: string): Promise<{ ok: true; parsed: URL } | { ok: false; error: string }> => {
       let parsed: URL;
-      try { parsed = new URL(url); } catch { return res.status(400).json({ error: "Invalid URL" }); }
-      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-        return res.status(400).json({ error: "Only http/https allowed" });
-      }
+      try { parsed = new URL(rawUrl); } catch { return { ok: false, error: "Invalid URL" }; }
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return { ok: false, error: "Only http/https allowed" };
+      const host = parsed.hostname.toLowerCase();
+      if (BLOCKED_HOSTNAMES.has(host) || BLOCKED_SUFFIXES.some(s => host.endsWith(s))) return { ok: false, error: "URL not allowed" };
+      let ip: string;
+      try { ip = (await dnsP.lookup(host)).address; } catch { return { ok: false, error: "Cannot resolve hostname" }; }
+      if (isPrivateIP(ip)) return { ok: false, error: "URL not allowed" };
+      return { ok: true, parsed };
+    };
 
-      // SSRF protection: block private/internal hostnames by name
-      const hostname = parsed.hostname.toLowerCase();
-      const blockedHostnames = ["localhost", "metadata.google.internal", "169.254.169.254"];
-      const blockedSuffixes = [".local", ".internal", ".localhost", ".localdomain"];
-      if (blockedHostnames.includes(hostname) || blockedSuffixes.some(s => hostname.endsWith(s))) {
-        return res.status(403).json({ error: "URL not allowed" });
-      }
+    try {
+      const rawUrl = req.query.url as string;
+      if (!rawUrl) return res.status(400).json({ error: "Missing url" });
 
-      // SSRF protection: DNS resolve and block private IP ranges
-      const dns = await import("dns");
-      const { lookup: dnsLookup } = dns.promises;
-      const isPrivateIP = (ip: string): boolean => {
-        const privateRanges = [
-          /^127\./,
-          /^10\./,
-          /^172\.(1[6-9]|2\d|3[01])\./,
-          /^192\.168\./,
-          /^169\.254\./,
-          /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./,
-          /^0\./,
-          /^::1$/,
-          /^fc/i,
-          /^fd/i,
-          /^fe80:/i,
-        ];
-        return privateRanges.some(r => r.test(ip));
-      };
-      let resolvedIP: string;
-      try {
-        const result = await dnsLookup(hostname);
-        resolvedIP = result.address;
-      } catch {
-        return res.status(400).json({ error: "Could not resolve hostname" });
-      }
-      if (isPrivateIP(resolvedIP)) {
-        return res.status(403).json({ error: "URL not allowed" });
-      }
+      const initial = await validateUrl(rawUrl);
+      if (!initial.ok) return res.status(403).json({ error: initial.error });
 
-      // Fetch HTML (follow redirects but re-check each hop would require custom fetch — use max 3 redirects)
+      // Manually follow redirects — re-validate each hop
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 8000);
+      const timer = setTimeout(() => controller.abort(), 10000);
+      let currentUrl = rawUrl;
       let html = "";
+
       try {
-        const resp = await fetch(url, {
-          signal: controller.signal,
-          headers: {
-            "User-Agent": "Twitterbot/1.0",
-            "Accept": "text/html",
-          },
-          redirect: "follow",
-        });
-        clearTimeout(timeout);
-        if (!resp.ok) return res.status(400).json({ error: "Could not fetch URL" });
-        const ct = resp.headers.get("content-type") || "";
-        if (!ct.includes("text/html")) return res.status(400).json({ error: "Not an HTML page" });
-        // Read at most 128 KB
-        const buf = await resp.arrayBuffer();
-        html = Buffer.from(buf).slice(0, 131072).toString("utf-8");
+        for (let hop = 0; hop <= 5; hop++) {
+          const resp = await fetch(currentUrl, {
+            signal: controller.signal,
+            headers: { "User-Agent": "Twitterbot/1.0", Accept: "text/html" },
+            redirect: "manual",
+          });
+
+          if (resp.status >= 300 && resp.status < 400) {
+            const loc = resp.headers.get("location");
+            if (!loc) break;
+            const nextUrl = new URL(loc, currentUrl).toString();
+            const check = await validateUrl(nextUrl);
+            if (!check.ok) { clearTimeout(timer); return res.status(403).json({ error: check.error }); }
+            currentUrl = nextUrl;
+            continue;
+          }
+
+          if (!resp.ok) { clearTimeout(timer); return res.status(400).json({ error: "Could not fetch URL" }); }
+          const ct = resp.headers.get("content-type") || "";
+          if (!ct.includes("text/html")) { clearTimeout(timer); return res.status(400).json({ error: "Not an HTML page" }); }
+          const buf = await resp.arrayBuffer();
+          html = Buffer.from(buf).slice(0, 131072).toString("utf-8");
+          break;
+        }
       } catch {
-        clearTimeout(timeout);
+        clearTimeout(timer);
         return res.status(400).json({ error: "Could not reach URL" });
       }
+      clearTimeout(timer);
+      if (!html) return res.status(400).json({ error: "Could not fetch page" });
 
-      const getMeta = (prop: string, attr: string = "content") => {
-        const re = new RegExp(`<meta[^>]+(?:property|name)=["']${prop}["'][^>]+${attr}=["']([^"']+)["']`, "i");
-        const re2 = new RegExp(`<meta[^>]+${attr}=["']([^"']+)["'][^>]+(?:property|name)=["']${prop}["']`, "i");
-        return (re.exec(html) || re2.exec(html))?.[1]?.trim() || null;
+      const getMeta = (prop: string, attr = "content") => {
+        const r1 = new RegExp(`<meta[^>]+(?:property|name)=["']${prop}["'][^>]+${attr}=["']([^"']+)["']`, "i");
+        const r2 = new RegExp(`<meta[^>]+${attr}=["']([^"']+)["'][^>]+(?:property|name)=["']${prop}["']`, "i");
+        return (r1.exec(html) || r2.exec(html))?.[1]?.trim() ?? null;
       };
-      const title =
-        getMeta("og:title") ||
-        getMeta("twitter:title") ||
-        /<title[^>]*>([^<]+)<\/title>/i.exec(html)?.[1]?.trim() ||
-        null;
-      const description =
-        getMeta("og:description") ||
-        getMeta("description") ||
-        getMeta("twitter:description") ||
-        null;
+
+      const title = getMeta("og:title") || getMeta("twitter:title") || /<title[^>]*>([^<]+)<\/title>/i.exec(html)?.[1]?.trim() || null;
+      const description = getMeta("og:description") || getMeta("description") || getMeta("twitter:description") || null;
       const image = getMeta("og:image") || getMeta("twitter:image") || null;
       const siteName = getMeta("og:site_name") || null;
 
-      res.json({ url, title, description, image, siteName });
+      res.json({ url: rawUrl, title, description, image, siteName });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
