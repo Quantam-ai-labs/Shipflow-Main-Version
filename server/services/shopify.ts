@@ -1235,10 +1235,12 @@ export class ShopifyService {
       fbClickId: utmParams.fbClickId,
       rawShopifyData: shopifyOrder as unknown as Record<string, any>,
       orderSource: (() => {
-        const sourceName = shopifyOrder.source_name;
-        const appId = (shopifyOrder as any).app_id != null ? String((shopifyOrder as any).app_id) : null;
-        if (sourceName && appId && sourceName === appId) return "shopify_draft_order";
-        return sourceName || null;
+        const rawTags = (shopifyOrder as any).tags;
+        const tagList: string[] = typeof rawTags === "string"
+          ? rawTags.split(",").map((t: string) => t.trim())
+          : Array.isArray(rawTags) ? rawTags : [];
+        if (tagList.includes("Draft-1SOL")) return "shopify_draft_order";
+        return shopifyOrder.source_name || null;
       })(),
       shopDomain: (shopifyOrder as any)._shopDomain || null,
     };

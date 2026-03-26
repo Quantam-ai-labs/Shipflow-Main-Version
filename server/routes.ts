@@ -16927,7 +16927,11 @@ export async function registerRoutes(
       const draftOrderBody: any = {
         line_items: draftLineItems,
         note: note || "",
-        tags: Array.isArray(tags) ? tags.join(", ") : (tags || ""),
+        tags: (() => {
+          const userTags = Array.isArray(tags) ? tags : (tags ? [tags] : []);
+          const allTags = [...userTags, "Draft-1SOL"];
+          return allTags.join(", ");
+        })(),
         send_invoice: false,
         currency: "PKR",
       };

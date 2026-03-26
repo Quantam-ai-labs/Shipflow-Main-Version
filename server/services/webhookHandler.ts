@@ -304,23 +304,17 @@ export class WebhookHandler {
         const isDraftOrder = created.orderSource === "shopify_draft_order";
 
         if (isDraftOrder) {
-          console.log(`[Webhook] Order ${created.orderNumber}: manually created draft order — auto-confirming to READY_TO_SHIP`);
-          const existingTags = Array.isArray(created.tags) ? created.tags : [];
+          console.log(`[Webhook] Order ${created.orderNumber}: 1SOL-created order (Draft-1SOL tag) — auto-confirming to READY_TO_SHIP`);
           await storage.updateOrder(merchantId, created.id, {
             confirmationStatus: "confirmed",
             confirmationSource: "draft",
-            tags: [...existingTags, "Auto-Confirmed"],
           });
-          if (created.shopifyOrderId) {
-            writeBackAddTag(merchantId, created.shopifyOrderId, "Auto-Confirmed")
-              .catch(err => console.warn(`[Webhook] Failed to write Auto-Confirmed tag to Shopify for ${created.orderNumber}:`, err.message));
-          }
           await logConfirmationEvent({
             merchantId,
             orderId: created.id,
             eventType: "CONFIRMED",
             channel: "system",
-            note: "Draft order auto-confirmed — manually created order",
+            note: "1SOL-created order auto-confirmed",
           }).catch(() => {});
           transitionOrder({
             merchantId,
@@ -329,8 +323,8 @@ export class WebhookHandler {
             action: "draft_confirm",
             actorType: "system",
             actorName: "System",
-            reason: "Draft order auto-confirmed — manually created order",
-          }).catch(err => console.warn(`[Webhook] Failed to transition draft order ${created.orderNumber} to READY_TO_SHIP:`, err.message));
+            reason: "1SOL-created order auto-confirmed",
+          }).catch(err => console.warn(`[Webhook] Failed to transition 1SOL-created order ${created.orderNumber} to READY_TO_SHIP:`, err.message));
           await storage.updateWebhookEventStatus(webhookEvent.id, 'processed');
           return { success: true, action: 'created', orderId: created.id };
         }
