@@ -23,6 +23,7 @@ import {
   MapPin, Users, Reply, Download, Play, Pause, Volume2,
   ExternalLink, File as FileIcon, Video, Plus, Pencil, Settings2,
   Paperclip, Camera, FileUp, StopCircle, Loader2, ClipboardList, AlertCircle,
+  Archive, ArchiveRestore, CheckSquare, Square, MinusSquare,
 } from "lucide-react";
 import {
   Dialog,
@@ -59,6 +60,8 @@ interface Conversation {
   assignedToName: string | null;
   aiPaused: boolean;
   aiPausedAt: string | null;
+  isArchived: boolean;
+  archivedAt: string | null;
 }
 
 interface Message {
@@ -432,6 +435,24 @@ function MediaBubble({ msg, mediaProxyBase }: { msg: Message; mediaProxyBase: st
   );
 }
 
+function QuotedMessagePreview({ msg, messages }: { msg: Message; messages: Message[] }) {
+  const quoted = messages.find(m => m.id === msg.referenceMessageId);
+  if (!quoted) return null;
+  const isInboundQuote = quoted.direction === "inbound";
+  const previewText = quoted.text || (quoted.messageType === "image" ? "📷 Image" : quoted.messageType === "audio" ? "🎵 Audio" : quoted.messageType === "video" ? "🎬 Video" : quoted.messageType === "document" ? "📄 Document" : "Message");
+  return (
+    <div className={cn(
+      "mb-1.5 rounded-md px-2 py-1 text-xs border-l-[3px] bg-black/5 dark:bg-white/5",
+      isInboundQuote ? "border-l-[#128C7E]" : "border-l-[#007AFF]"
+    )}>
+      <div className={cn("font-semibold mb-0.5", isInboundQuote ? "text-[#128C7E]" : "text-[#007AFF]")}>
+        {isInboundQuote ? (quoted.senderName || "Customer") : (quoted.senderName || "You")}
+      </div>
+      <div className="truncate text-[#54656f] dark:text-[#8696a0]">{previewText}</div>
+    </div>
+  );
+}
+
 export default function SupportChatPage() {
   const [selectedConvId, setSelectedConvId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -451,7 +472,20 @@ export default function SupportChatPage() {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [showFileComplaint, setShowFileComplaint] = useState(false);
+
+  // Archive multi-select state
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Reply-to-message state
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+
+  // Clipboard image paste state
+  const [pastedImage, setPastedImage] = useState<{ blob: Blob; previewUrl: string } | null>(null);
+  const [isUploadingPaste, setIsUploadingPaste] = useState(false);
+
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const { data: waLabels = [] } = useQuery<WaLabel[]>({
     queryKey: ["/api/support/labels"],
@@ -462,8 +496,15 @@ export default function SupportChatPage() {
     return waLabels.find(l => l.name === label) || null;
   }, [waLabels]);
 
+  const isArchivedView = labelFilter === "archived";
+
   const { data: conversations = [] } = useQuery<Conversation[]>({
-    queryKey: ["/api/support/conversations"],
+    queryKey: ["/api/support/conversations", isArchivedView],
+    queryFn: async () => {
+      const url = isArchivedView ? "/api/support/conversations?archived=true" : "/api/support/conversations";
+      const resp = await fetch(url, { credentials: "include" });
+      return resp.json();
+    },
     refetchInterval: 10000,
     staleTime: 5000,
   });
@@ -505,6 +546,12 @@ export default function SupportChatPage() {
     scrollToBottom();
   }, [selectedConvId, scrollToBottom]);
 
+  // Reset select mode when switching views
+  useEffect(() => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  }, [labelFilter]);
+
   const markingReadRef = useRef(false);
   const selectedUnread = conversations.find(c => c.id === selectedConvId)?.unreadCount ?? 0;
   useEffect(() => {
@@ -520,21 +567,20 @@ export default function SupportChatPage() {
 
   const lastSentTextRef = useRef("");
   const sendMutation = useMutation({
-    mutationFn: async (text: string) => {
+    mutationFn: async ({ text, referenceMessageId }: { text: string; referenceMessageId?: string }) => {
       lastSentTextRef.current = text;
-      return apiRequest("POST", `/api/support/conversations/${selectedConvId}/messages`, { text });
+      return apiRequest("POST", `/api/support/conversations/${selectedConvId}/messages`, { text, referenceMessageId });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/support/conversations", selectedConvId, "messages"] });
       queryClient.invalidateQueries({ queryKey: ["/api/support/conversations"] });
+      setReplyingTo(null);
       inputRef.current?.focus();
     },
     onError: () => {
       setMessageText(lastSentTextRef.current);
     },
   });
-
-  const { toast } = useToast();
 
   const mediaUploadMutation = useMutation({
     mutationFn: async (file: globalThis.File) => {
@@ -555,9 +601,32 @@ export default function SupportChatPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/support/conversations", selectedConvId, "messages"] });
       queryClient.invalidateQueries({ queryKey: ["/api/support/conversations"] });
+      setPastedImage(prev => {
+        if (prev) URL.revokeObjectURL(prev.previewUrl);
+        return null;
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Media send failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const archiveMutation = useMutation({
+    mutationFn: async ({ ids, unarchive }: { ids: string[]; unarchive?: boolean }) =>
+      apiRequest("POST", `/api/support/conversations/${unarchive ? "unarchive" : "archive"}`, { ids }),
+    onSuccess: (_, { ids, unarchive }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/support/conversations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/support/conversations", true] });
+      queryClient.invalidateQueries({ queryKey: ["/api/support/conversations", false] });
+      setSelectedIds(new Set());
+      setSelectMode(false);
+      if (selectedConvId && ids.includes(selectedConvId) && !unarchive) {
+        setSelectedConvId(null);
+      }
+      toast({
+        title: unarchive ? "Unarchived" : "Archived",
+        description: `${ids.length} conversation${ids.length > 1 ? "s" : ""} ${unarchive ? "unarchived" : "archived"}`,
+      });
     },
   });
 
@@ -567,6 +636,34 @@ export default function SupportChatPage() {
       mediaUploadMutation.mutate(file);
     }
     if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    const items = Array.from(e.clipboardData.items);
+    const imageItem = items.find(item => item.type.startsWith("image/"));
+    if (!imageItem) return;
+    e.preventDefault();
+    const blob = imageItem.getAsFile();
+    if (!blob) return;
+    const previewUrl = URL.createObjectURL(blob);
+    setPastedImage({ blob, previewUrl });
+  }, []);
+
+  const sendPastedImage = async () => {
+    if (!pastedImage || !selectedConvId) return;
+    setIsUploadingPaste(true);
+    try {
+      const ext = pastedImage.blob.type.split("/")[1] || "png";
+      const file = new File([pastedImage.blob], `paste-${Date.now()}.${ext}`, { type: pastedImage.blob.type });
+      await mediaUploadMutation.mutateAsync(file);
+    } finally {
+      setIsUploadingPaste(false);
+    }
+  };
+
+  const clearPastedImage = () => {
+    if (pastedImage) URL.revokeObjectURL(pastedImage.previewUrl);
+    setPastedImage(null);
   };
 
   const startRecording = async () => {
@@ -689,7 +786,7 @@ export default function SupportChatPage() {
 
   const filtered = conversations.filter(c => {
     if (labelFilter === "unread" && c.unreadCount === 0) return false;
-    if (labelFilter !== "all" && labelFilter !== "unread" && c.label !== labelFilter) return false;
+    if (labelFilter !== "all" && labelFilter !== "unread" && labelFilter !== "archived" && c.label !== labelFilter) return false;
     if (!search.trim()) return true;
     const q = search.toLowerCase();
     return (
@@ -707,7 +804,7 @@ export default function SupportChatPage() {
     if (!messageText.trim() || !selectedConvId || sendMutation.isPending) return;
     const text = messageText.trim();
     setMessageText("");
-    sendMutation.mutate(text);
+    sendMutation.mutate({ text, referenceMessageId: replyingTo?.id });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -746,6 +843,17 @@ export default function SupportChatPage() {
     return format(d, "MMMM d, yyyy");
   }
 
+  const toggleSelectConv = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const allSelected = filtered.length > 0 && filtered.every(c => selectedIds.has(c.id));
+
   return (
     <div className="flex h-full overflow-hidden bg-background">
       <div className="w-[380px] border-r border-border flex flex-col shrink-0 bg-background">
@@ -754,20 +862,32 @@ export default function SupportChatPage() {
             <MessageCircle className="w-5 h-5 text-primary-foreground" />
           </div>
           <h2 className="font-semibold text-foreground text-sm flex-1">Chats</h2>
-          {totalUnread > 0 && (
-            <Badge variant="default" className="text-xs rounded-full" data-testid="badge-total-unread">
+          {!isArchivedView && totalUnread > 0 && (
+            <Badge variant="default" className="text-xs rounded-full bg-green-500 text-white border-green-500" data-testid="badge-total-unread">
               {totalUnread}
             </Badge>
           )}
-          <Button
-            size="icon"
-            variant="ghost"
-            onClick={() => setShowFilters(!showFilters)}
-            className={cn(showFilters && "text-primary")}
-            data-testid="button-toggle-filters"
-          >
-            <Filter className="w-5 h-5" />
-          </Button>
+          {selectMode ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => { setSelectMode(false); setSelectedIds(new Set()); }}
+              className="text-xs"
+              data-testid="button-cancel-select"
+            >
+              Cancel
+            </Button>
+          ) : (
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => setShowFilters(!showFilters)}
+              className={cn(showFilters && "text-primary")}
+              data-testid="button-toggle-filters"
+            >
+              <Filter className="w-5 h-5" />
+            </Button>
+          )}
         </div>
 
         <div className="px-3 py-2">
@@ -790,30 +910,26 @@ export default function SupportChatPage() {
 
         {showFilters && (
           <div className="px-3 pb-2 flex gap-1.5 flex-wrap">
-            <button
-              onClick={() => setLabelFilter("all")}
-              className={cn(
-                "px-3 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-all border",
-                labelFilter === "all"
-                  ? "bg-primary text-primary-foreground border-transparent"
-                  : "bg-card text-muted-foreground border-border hover-elevate"
-              )}
-              data-testid="filter-all"
-            >
-              All
-            </button>
-            <button
-              onClick={() => setLabelFilter("unread")}
-              className={cn(
-                "px-3 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-all border",
-                labelFilter === "unread"
-                  ? "bg-primary text-primary-foreground border-transparent"
-                  : "bg-card text-muted-foreground border-border hover-elevate"
-              )}
-              data-testid="filter-unread"
-            >
-              Unread
-            </button>
+            {[
+              { key: "all", label: "All" },
+              { key: "unread", label: "Unread" },
+              { key: "archived", label: "Archived" },
+            ].map(f => (
+              <button
+                key={f.key}
+                onClick={() => { setLabelFilter(f.key); setSelectedConvId(null); }}
+                className={cn(
+                  "px-3 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-all border flex items-center gap-1",
+                  labelFilter === f.key
+                    ? "bg-primary text-primary-foreground border-transparent"
+                    : "bg-card text-muted-foreground border-border hover-elevate"
+                )}
+                data-testid={`filter-${f.key}`}
+              >
+                {f.key === "archived" && <Archive className="w-3 h-3" />}
+                {f.label}
+              </button>
+            ))}
             {waLabels.map(l => (
               <button
                 key={l.id}
@@ -841,26 +957,105 @@ export default function SupportChatPage() {
           </div>
         )}
 
+        {/* Multi-select bulk action bar */}
+        {selectMode && selectedIds.size > 0 && (
+          <div className="px-3 pb-2 flex items-center gap-2 bg-accent/50 border-b border-border py-2">
+            <span className="text-xs font-medium flex-1">{selectedIds.size} selected</span>
+            {isArchivedView ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-xs h-7 gap-1"
+                disabled={archiveMutation.isPending}
+                onClick={() => archiveMutation.mutate({ ids: Array.from(selectedIds), unarchive: true })}
+                data-testid="button-bulk-unarchive"
+              >
+                <ArchiveRestore className="w-3.5 h-3.5" />
+                Unarchive
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-xs h-7 gap-1"
+                disabled={archiveMutation.isPending}
+                onClick={() => archiveMutation.mutate({ ids: Array.from(selectedIds) })}
+                data-testid="button-bulk-archive"
+              >
+                <Archive className="w-3.5 h-3.5" />
+                Archive
+              </Button>
+            )}
+          </div>
+        )}
+
+        {/* Select All header row */}
+        {selectMode && (
+          <div
+            className="px-3 py-1.5 flex items-center gap-2 cursor-pointer hover:bg-accent/30 border-b border-border"
+            onClick={() => {
+              if (allSelected) {
+                setSelectedIds(new Set());
+              } else {
+                setSelectedIds(new Set(filtered.map(c => c.id)));
+              }
+            }}
+            data-testid="button-select-all"
+          >
+            {allSelected ? (
+              <CheckSquare className="w-4 h-4 text-primary" />
+            ) : selectedIds.size > 0 ? (
+              <MinusSquare className="w-4 h-4 text-muted-foreground" />
+            ) : (
+              <Square className="w-4 h-4 text-muted-foreground" />
+            )}
+            <span className="text-xs text-muted-foreground">Select all</span>
+          </div>
+        )}
+
         <ScrollArea className="flex-1">
           {filtered.length === 0 ? (
             <div className="p-8 text-center text-muted-foreground text-sm">
               <MessageCircle className="w-12 h-12 mx-auto opacity-20 mb-3" />
-              {search ? "No conversations match your search" : "No conversations yet"}
+              {search
+                ? "No conversations match your search"
+                : isArchivedView
+                ? "No archived conversations"
+                : "No conversations yet"}
             </div>
           ) : (
             filtered.map((conv) => {
               const labelInfo = getLabelInfo(conv.label);
               const isSelected = selectedConvId === conv.id;
+              const isChecked = selectedIds.has(conv.id);
               return (
-                <button
+                <div
                   key={conv.id}
-                  onClick={() => setSelectedConvId(conv.id)}
                   className={cn(
-                    "w-full px-3 py-3 text-left transition-colors flex items-center gap-3 border-b border-border",
-                    isSelected ? "bg-accent" : "hover-elevate"
+                    "w-full px-3 py-3 text-left transition-colors flex items-center gap-3 border-b border-border cursor-pointer",
+                    isSelected && !selectMode ? "bg-accent" : "hover-elevate"
                   )}
                   data-testid={`button-conversation-${conv.id}`}
+                  onClick={() => {
+                    if (selectMode) {
+                      toggleSelectConv(conv.id);
+                    } else {
+                      setSelectedConvId(conv.id);
+                    }
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setSelectMode(true);
+                    setSelectedIds(new Set([conv.id]));
+                  }}
                 >
+                  {selectMode && (
+                    <div className="shrink-0 flex items-center justify-center" onClick={e => { e.stopPropagation(); toggleSelectConv(conv.id); }}>
+                      {isChecked
+                        ? <CheckSquare className="w-4 h-4 text-primary" />
+                        : <Square className="w-4 h-4 text-muted-foreground" />}
+                    </div>
+                  )}
                   <div className="relative shrink-0">
                     <div className={cn(
                       "w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-base",
@@ -869,7 +1064,7 @@ export default function SupportChatPage() {
                       {(conv.contactName ?? conv.contactPhone).charAt(0).toUpperCase()}
                     </div>
                     {conv.unreadCount > 0 && (
-                      <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-primary rounded-full text-primary-foreground text-[10px] flex items-center justify-center font-bold">
+                      <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-green-500 rounded-full text-white text-[10px] flex items-center justify-center font-bold shadow-sm">
                         {conv.unreadCount > 9 ? "9+" : conv.unreadCount}
                       </span>
                     )}
@@ -901,19 +1096,47 @@ export default function SupportChatPage() {
                       <p className={cn("text-xs truncate flex-1", conv.unreadCount > 0 ? "text-foreground" : "text-muted-foreground")}>
                         {conv.lastMessage || "No messages"}
                       </p>
-                      {conv.assignedToName && (
-                        <span className="text-[10px] text-muted-foreground ml-2 flex items-center gap-0.5 shrink-0">
-                          <UserPlus className="w-2.5 h-2.5" />
-                          {conv.assignedToName.split(" ")[0]}
-                        </span>
-                      )}
+                      <div className="flex items-center gap-1 shrink-0">
+                        {conv.assignedToName && (
+                          <span className="text-[10px] text-muted-foreground ml-2 flex items-center gap-0.5">
+                            <UserPlus className="w-2.5 h-2.5" />
+                            {conv.assignedToName.split(" ")[0]}
+                          </span>
+                        )}
+                        {!selectMode && (
+                          <button
+                            className="text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground p-0.5 rounded"
+                            onClick={e => {
+                              e.stopPropagation();
+                              archiveMutation.mutate({ ids: [conv.id], unarchive: conv.isArchived });
+                            }}
+                            title={conv.isArchived ? "Unarchive" : "Archive"}
+                            data-testid={`button-archive-${conv.id}`}
+                          >
+                            {conv.isArchived ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </button>
+                </div>
               );
             })
           )}
         </ScrollArea>
+
+        {!selectMode && filtered.length > 0 && (
+          <div className="px-3 py-1.5 border-t border-border flex items-center justify-between">
+            <button
+              onClick={() => setSelectMode(true)}
+              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 py-0.5"
+              data-testid="button-enter-select-mode"
+            >
+              <CheckSquare className="w-3.5 h-3.5" />
+              Select
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="flex-1 flex flex-col min-w-0">
@@ -1072,6 +1295,19 @@ export default function SupportChatPage() {
                   </DropdownMenuSub>
 
                   <DropdownMenuSeparator />
+
+                  <DropdownMenuItem
+                    onClick={() => archiveMutation.mutate({ ids: [selectedConv.id], unarchive: selectedConv.isArchived })}
+                    data-testid="button-archive-selected"
+                  >
+                    {selectedConv.isArchived ? (
+                      <><ArchiveRestore className="w-4 h-4 mr-2" />Unarchive conversation</>
+                    ) : (
+                      <><Archive className="w-4 h-4 mr-2" />Archive conversation</>
+                    )}
+                  </DropdownMenuItem>
+
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onClick={() => deleteMutation.mutate(selectedConv.id)}
                     className="text-destructive focus:text-destructive"
@@ -1105,6 +1341,7 @@ export default function SupportChatPage() {
                         const msgReactions = getReactionsForMessage(msg.waMessageId);
                         const isButtonReply = msg.messageType === "button_reply";
                         const isNonText = msg.messageType && !["text", "button_reply"].includes(msg.messageType);
+                        const hasQuote = !!msg.referenceMessageId && messages.some(m => m.id === msg.referenceMessageId);
 
                         return (
                           <div
@@ -1119,6 +1356,9 @@ export default function SupportChatPage() {
                                   ? "wa-bubble-out text-[#111b21] dark:text-[#e9edef] rounded-tr-none"
                                   : "wa-bubble-in text-[#111b21] dark:text-[#e9edef] rounded-tl-none"
                               )}>
+                                {hasQuote && (
+                                  <QuotedMessagePreview msg={msg} messages={messages} />
+                                )}
                                 {isButtonReply && (
                                   <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium mb-1 bg-[#008069]/10 text-[#008069] dark:text-[#00a884]">
                                     <Reply className="w-3 h-3" />
@@ -1154,19 +1394,33 @@ export default function SupportChatPage() {
                                 </div>
                               )}
 
-                              {!isOutbound && msg.waMessageId && (
-                                <div className="absolute top-1 right-[-32px] invisible group-hover:visible transition-opacity">
+                              {/* Hover action buttons */}
+                              <div className={cn(
+                                "absolute top-1 invisible group-hover:visible transition-opacity flex gap-0.5",
+                                isOutbound ? "right-full mr-1" : "left-full ml-1"
+                              )}>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-7 w-7 bg-white/80 dark:bg-[#202c33]/80 shadow-sm rounded-full"
+                                  onClick={() => setReplyingTo(msg)}
+                                  title="Reply"
+                                  data-testid={`reply-${msg.id}`}
+                                >
+                                  <Reply className="w-3.5 h-3.5" />
+                                </Button>
+                                {!isOutbound && msg.waMessageId && (
                                   <EmojiPicker
                                     onSelect={(emoji) => reactMutation.mutate({ convId: selectedConv.id, emoji, waMessageId: msg.waMessageId! })}
                                     trigger={
-                                      <Button size="icon" variant="ghost" className="h-7 w-7" data-testid={`react-${msg.id}`}>
-                                        <Smile className="w-4 h-4" />
+                                      <Button size="icon" variant="ghost" className="h-7 w-7 bg-white/80 dark:bg-[#202c33]/80 shadow-sm rounded-full" data-testid={`react-${msg.id}`}>
+                                        <Smile className="w-3.5 h-3.5" />
                                       </Button>
                                     }
-                                    side="right"
+                                    side={isOutbound ? "left" : "right"}
                                   />
-                                </div>
-                              )}
+                                )}
+                              </div>
                             </div>
                           </div>
                         );
@@ -1179,6 +1433,64 @@ export default function SupportChatPage() {
             </ScrollArea>
 
             <div className="wa-input-bar px-3 py-2">
+              {/* Pasted image preview */}
+              {pastedImage && (
+                <div className="flex items-center gap-3 mb-2 p-2 bg-muted/50 rounded-lg border border-border">
+                  <img
+                    src={pastedImage.previewUrl}
+                    alt="Paste preview"
+                    className="w-14 h-14 object-cover rounded-md"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-foreground">Image ready to send</p>
+                    <p className="text-[11px] text-muted-foreground">Click Send to deliver</p>
+                  </div>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="shrink-0 h-7 w-7 text-muted-foreground hover:text-destructive"
+                    onClick={clearPastedImage}
+                    data-testid="button-clear-pasted-image"
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={sendPastedImage}
+                    disabled={isUploadingPaste || mediaUploadMutation.isPending}
+                    className="shrink-0 bg-[#008069] hover:bg-[#017561] text-white h-8"
+                    data-testid="button-send-pasted-image"
+                  >
+                    {isUploadingPaste ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                    Send
+                  </Button>
+                </div>
+              )}
+
+              {/* Reply-to strip */}
+              {replyingTo && (
+                <div className="flex items-center gap-2 mb-1.5 px-2 py-1.5 bg-[#f0f2f5] dark:bg-[#2a3942] rounded-lg border-l-[3px] border-l-[#00a884]">
+                  <Reply className="w-3.5 h-3.5 text-[#00a884] shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[11px] font-semibold text-[#00a884]">
+                      {replyingTo.direction === "inbound" ? (replyingTo.senderName || "Customer") : "You"}
+                    </div>
+                    <div className="text-[11px] text-[#54656f] dark:text-[#8696a0] truncate">
+                      {replyingTo.text || (replyingTo.messageType === "image" ? "📷 Image" : replyingTo.messageType === "audio" ? "🎵 Audio" : "Message")}
+                    </div>
+                  </div>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
+                    onClick={() => setReplyingTo(null)}
+                    data-testid="button-cancel-reply"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              )}
+
               <div className="flex items-center gap-1 mb-1">
                 <Button size="icon" variant="ghost" onClick={() => insertFormatting("*", "*")} title="Bold" data-testid="button-format-bold" className="h-7 w-7 text-[#54656f] dark:text-[#8696a0]">
                   <Bold className="w-4 h-4" />
@@ -1230,10 +1542,11 @@ export default function SupportChatPage() {
                 </div>
                 <textarea
                   ref={inputRef}
-                  placeholder="Type a message"
+                  placeholder={replyingTo ? "Write a reply..." : "Type a message — or paste an image with Ctrl+V"}
                   value={messageText}
                   onChange={(e) => setMessageText(e.target.value)}
                   onKeyDown={handleKeyDown}
+                  onPaste={handlePaste}
                   rows={1}
                   className="flex-1 resize-none bg-white dark:bg-[#2a3942] text-[#111b21] dark:text-[#e9edef] rounded-lg px-3 py-2.5 text-sm placeholder:text-[#667781] dark:placeholder:text-[#8696a0] outline-none focus:ring-0 max-h-[120px] min-h-[42px]"
                   style={{ height: "auto", overflow: messageText.split("\n").length > 3 ? "auto" : "hidden" }}
@@ -1490,14 +1803,15 @@ function FileComplaintFromChat({
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+              <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>Cancel</Button>
               <Button
+                size="sm"
                 onClick={() => createMutation.mutate()}
                 disabled={createMutation.isPending}
                 data-testid="button-submit-complaint"
               >
-                {createMutation.isPending && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}
-                Create Ticket
+                {createMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+                File Complaint
               </Button>
             </DialogFooter>
           </>

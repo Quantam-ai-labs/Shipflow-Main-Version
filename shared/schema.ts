@@ -80,6 +80,7 @@ export const merchants = pgTable("merchants", {
   aiAutoReplyEnabled: boolean("ai_auto_reply_enabled").notNull().default(false),
   aiAutoReplyKnowledgeBase: text("ai_auto_reply_knowledge_base"),
   aiAutoReplyStoreName: varchar("ai_auto_reply_store_name", { length: 255 }),
+  waAutoUnarchiveOnNewMessage: boolean("wa_auto_unarchive_on_new_message").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -516,6 +517,8 @@ export const waConversations = pgTable("wa_conversations", {
   assignedToName: varchar("assigned_to_name", { length: 255 }),
   aiPaused: boolean("ai_paused").default(false).notNull(),
   aiPausedAt: timestamp("ai_paused_at"),
+  isArchived: boolean("is_archived").default(false).notNull(),
+  archivedAt: timestamp("archived_at"),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   index("idx_wa_conversations_merchant").on(table.merchantId),

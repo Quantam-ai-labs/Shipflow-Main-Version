@@ -54,7 +54,7 @@ const STATUS_MAP: Record<string, string> = {
   CANCELLED: "Cancelled",
 };
 
-export type AiClassification = "complaint" | "return" | "replacement" | "human_handoff" | "lead" | "general_query" | null;
+export type AiClassification = "complaint" | "return" | "replacement" | "human_handoff" | "conflict" | "lead" | "general_query" | null;
 
 export interface AiReplyResult {
   success: boolean;
@@ -317,10 +317,11 @@ The "classification" field must be one of:
 - "complaint" — if the customer is complaining about a problem (damaged item, wrong item, bad quality, late delivery, not received, etc.)
 - "return" — if the customer wants to return an item
 - "replacement" — if the customer wants a replacement item
-- "human_handoff" — if the customer explicitly asks to speak to a human agent, real person, manager, or supervisor, OR if the conversation is confusing and you genuinely cannot handle it further, OR if you don't have the information needed to help
+- "conflict" — if the customer's message CONTRADICTS their prior order confirmation: e.g. they previously confirmed an order but now want to cancel it, or previously cancelled but now want to proceed — AND their message makes this contradiction clear. Use this ONLY when order history shows a prior confirmation/cancellation that conflicts with what they are now asking.
+- "human_handoff" — ONLY if the customer EXPLICITLY asks to speak to a human agent, real person, manager, or supervisor using clear direct language
 - "lead" — if the customer wants to place a new order, asks to send another item, says "send me one more", provides their address/phone/name for delivery, or shows buying intent for a product
 - "general_query" — if the customer sends media (picture, video, audio, document) that you cannot process, or sends a message that is completely unclear and doesn't fit any other category
-- null — for routine messages you can handle (product inquiries, order status, general questions, greetings, etc.)
+- null — for routine messages you can handle (product inquiries, order status, general questions, greetings, etc.). Use null when you don't have information — do NOT use human_handoff just because you lack data.
 
 CRITICAL RULES — FOLLOW EXACTLY:
 1. You ONLY know about ${storeName}'s products, policies, and orders listed below. NEVER use outside knowledge.
@@ -346,6 +347,7 @@ CLASSIFICATION RESPONSE RULES:
 - When classifying as "return": Acknowledge the return request, and tell the customer that a team member from the returns department will assist them shortly.
 - When classifying as "replacement": Acknowledge the replacement request, and tell the customer that a team member will arrange the replacement and get back to them shortly.
 - For complaints/returns/replacements, do NOT try to resolve the issue yourself — always escalate to a human.
+- When classifying as "conflict": Acknowledge their message calmly, tell them your team has noted their request and will reach out to clarify and resolve the situation as soon as possible.
 - When classifying as "human_handoff": Acknowledge the customer's request, and tell them that a human agent will be connected shortly to assist them. Be reassuring and professional.
 - When classifying as "lead": Acknowledge the customer's interest enthusiastically, thank them, and tell them a team member will reach out to process their order shortly. If they shared details (address, phone, name), confirm you've noted them.
 - When classifying as "general_query": Respond politely that you've received their message and a team member will review and get back to them shortly. Do NOT try to interpret media you cannot see.
@@ -381,7 +383,7 @@ ${conversationHistory ? `RECENT CONVERSATION:\n${conversationHistory}\n` : ""}`;
       const parsed = JSON.parse(rawContent);
       reply = (parsed.reply || parsed.message || "").trim();
       const cls = parsed.classification;
-      if (cls === "complaint" || cls === "return" || cls === "replacement" || cls === "human_handoff" || cls === "lead" || cls === "general_query") {
+      if (cls === "complaint" || cls === "return" || cls === "replacement" || cls === "human_handoff" || cls === "conflict" || cls === "lead" || cls === "general_query") {
         classification = cls;
       }
     } catch {

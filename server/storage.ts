@@ -256,11 +256,13 @@ export interface IStorage {
   seedDefaultWaLabels(merchantId: string): Promise<WaLabel[]>;
 
   // WA Conversations
-  getConversations(merchantId: string): Promise<WaConversation[]>;
+  getConversations(merchantId: string, options?: { archived?: boolean }): Promise<WaConversation[]>;
   getConversationById(id: string): Promise<WaConversation | undefined>;
   getConversationByPhone(merchantId: string, phone: string): Promise<WaConversation | undefined>;
   upsertConversation(data: { merchantId: string; contactPhone: string; contactName?: string; orderId?: string | null; orderNumber?: string | null; lastMessage?: string | null }): Promise<WaConversation>;
   deleteConversation(id: string): Promise<void>;
+  archiveConversations(merchantId: string, ids: string[]): Promise<void>;
+  unarchiveConversations(merchantId: string, ids: string[]): Promise<void>;
   getWaMessages(conversationId: string): Promise<WaMessage[]>;
   createWaMessage(data: { conversationId: string; direction: string; senderName?: string | null; text?: string | null; waMessageId?: string | null; status?: string | null; messageType?: string | null; mediaUrl?: string | null; mimeType?: string | null; fileName?: string | null; reactionEmoji?: string | null; referenceMessageId?: string | null }): Promise<WaMessage>;
   updateWaMessageStatus(messageId: string, status: string, waMessageId?: string): Promise<void>;
@@ -2127,9 +2129,13 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(whatsappResponses.receivedAt));
   }
 
-  async getConversations(merchantId: string): Promise<WaConversation[]> {
+  async getConversations(merchantId: string, options?: { archived?: boolean }): Promise<WaConversation[]> {
+    const archived = options?.archived ?? false;
     return db.select().from(waConversations)
-      .where(eq(waConversations.merchantId, merchantId))
+      .where(and(
+        eq(waConversations.merchantId, merchantId),
+        eq(waConversations.isArchived, archived),
+      ))
       .orderBy(desc(waConversations.lastMessageAt));
   }
 
@@ -2147,15 +2153,24 @@ export class DatabaseStorage implements IStorage {
   async upsertConversation(data: { merchantId: string; contactPhone: string; contactName?: string; orderId?: string | null; orderNumber?: string | null; lastMessage?: string | null }): Promise<WaConversation> {
     const existing = await this.getConversationByPhone(data.merchantId, data.contactPhone);
     if (existing) {
+      const updateData: Record<string, any> = {
+        contactName: data.contactName ?? existing.contactName,
+        orderId: data.orderId !== undefined ? data.orderId : existing.orderId,
+        orderNumber: data.orderNumber !== undefined ? data.orderNumber : existing.orderNumber,
+        lastMessage: data.lastMessage ?? existing.lastMessage,
+        lastMessageAt: new Date(),
+        unreadCount: sql`${waConversations.unreadCount} + 1`,
+      };
+      if (existing.isArchived) {
+        const [merchantRow] = await db.select({ waAutoUnarchiveOnNewMessage: merchants.waAutoUnarchiveOnNewMessage })
+          .from(merchants).where(eq(merchants.id, data.merchantId)).limit(1);
+        if (merchantRow?.waAutoUnarchiveOnNewMessage !== false) {
+          updateData.isArchived = false;
+          updateData.archivedAt = null;
+        }
+      }
       const [row] = await db.update(waConversations)
-        .set({
-          contactName: data.contactName ?? existing.contactName,
-          orderId: data.orderId !== undefined ? data.orderId : existing.orderId,
-          orderNumber: data.orderNumber !== undefined ? data.orderNumber : existing.orderNumber,
-          lastMessage: data.lastMessage ?? existing.lastMessage,
-          lastMessageAt: new Date(),
-          unreadCount: sql`${waConversations.unreadCount} + 1`,
-        })
+        .set(updateData)
         .where(eq(waConversations.id, existing.id))
         .returning();
       return row;
@@ -2171,6 +2186,20 @@ export class DatabaseStorage implements IStorage {
       unreadCount: 1,
     }).returning();
     return row;
+  }
+
+  async archiveConversations(merchantId: string, ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    await db.update(waConversations)
+      .set({ isArchived: true, archivedAt: new Date() })
+      .where(and(eq(waConversations.merchantId, merchantId), inArray(waConversations.id, ids)));
+  }
+
+  async unarchiveConversations(merchantId: string, ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    await db.update(waConversations)
+      .set({ isArchived: false, archivedAt: null })
+      .where(and(eq(waConversations.merchantId, merchantId), inArray(waConversations.id, ids)));
   }
 
   async deleteConversation(id: string): Promise<void> {
@@ -2290,6 +2319,7 @@ export class DatabaseStorage implements IStorage {
       { name: "Need Human", color: "bg-red-500", sortOrder: 10, isSystem: false },
       { name: "Leads", color: "bg-emerald-500", sortOrder: 11, isSystem: false },
       { name: "General Queries", color: "bg-cyan-500", sortOrder: 12, isSystem: false },
+      { name: "Conflicts", color: "bg-red-600", sortOrder: 13, isSystem: false },
     ];
 
     if (existing.length === 0) {

@@ -203,7 +203,7 @@ export async function processConfirmationResponse(params: {
     const now = new Date();
     const responseCount = (order.confirmationResponseCount || 0) + 1;
     const previousAction = order.confirmationStatus;
-    const hasConflict = responseCount > 1 &&
+    const hasConflict = source !== "whatsapp" && responseCount > 1 &&
       ((previousAction === "confirmed" && action === "cancel") ||
        (previousAction === "cancelled" && action === "confirm") ||
        (previousAction === "manual_confirmed" && action === "cancel") ||

@@ -5989,17 +5989,19 @@ export async function registerRoutes(
     return: "Returns",
     replacement: "Replacements",
     human_handoff: "Need Human",
+    conflict: "Conflicts",
     lead: "Leads",
     general_query: "General Queries",
   };
 
-  const NOTIFY_CLASSIFICATIONS = new Set(["complaint", "return", "replacement", "human_handoff", "lead"]);
+  const NOTIFY_CLASSIFICATIONS = new Set(["complaint", "return", "replacement", "human_handoff", "conflict", "lead"]);
 
   const CLASSIFICATION_NOTIFICATION_TITLES: Record<string, string> = {
     complaint: "Customer Complaint",
     return: "Return Request",
     replacement: "Replacement Request",
     human_handoff: "Human Agent Needed",
+    conflict: "Order Conflict Detected",
     lead: "New Lead Detected",
   };
 
@@ -6084,13 +6086,45 @@ export async function registerRoutes(
               console.error(`${LOG_PREFIX_WA_AI} Failed to auto-label:`, labelErr.message);
             }
 
-            const shouldPause = result.classification === "human_handoff" || result.classification === "complaint" || result.classification === "return" || result.classification === "replacement";
+            const shouldPause = result.classification === "complaint" || result.classification === "return" || result.classification === "replacement" || result.classification === "conflict";
             if (shouldPause) {
               try {
                 await storage.pauseAiForConversation(merchantId, convId);
                 console.log(`${LOG_PREFIX_WA_AI} AI paused for conversation ${convId} due to ${result.classification}`);
               } catch (pauseErr: any) {
                 console.error(`${LOG_PREFIX_WA_AI} Failed to pause AI:`, pauseErr.message);
+              }
+            }
+
+            if (result.classification === "conflict" && conv?.orderId) {
+              try {
+                const { transitionOrder } = await import("./services/workflowTransition");
+                const { logConfirmationEvent: logCE } = await import("./services/confirmationEngine");
+                const holdResult = await transitionOrder({
+                  merchantId,
+                  orderId: conv.orderId,
+                  toStatus: "HOLD",
+                  action: "ai_conflict",
+                  actorType: "system",
+                  actorUserId: "whatsapp_ai",
+                  reason: `AI detected conflicting customer message — moved to Hold for manual review`,
+                  extraData: { aiConflictMessage: messageText },
+                });
+                if (holdResult.success) {
+                  await logCE({
+                    merchantId,
+                    orderId: conv.orderId,
+                    eventType: "AI_CONFLICT_HOLD",
+                    channel: "whatsapp",
+                    newStatus: "HOLD",
+                    note: `AI classified message as conflict: "${messageText.slice(0, 100)}". Order moved to Hold for agent review.`,
+                  });
+                  console.log(`${LOG_PREFIX_WA_AI} Order ${conv.orderNumber} moved to HOLD due to AI conflict classification`);
+                } else {
+                  console.warn(`${LOG_PREFIX_WA_AI} Failed to transition order to HOLD: ${holdResult.error}`);
+                }
+              } catch (conflictErr: any) {
+                console.error(`${LOG_PREFIX_WA_AI} Failed to handle conflict:`, conflictErr.message);
               }
             }
 
@@ -8096,8 +8130,35 @@ export async function registerRoutes(
     try {
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
-      const conversations = await storage.getConversations(merchantId);
+      const archived = req.query.archived === "true";
+      const conversations = await storage.getConversations(merchantId, { archived });
       res.json(conversations);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/support/conversations/archive", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { ids } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: "ids required" });
+      await storage.archiveConversations(merchantId, ids);
+      res.json({ success: true, count: ids.length });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/support/conversations/unarchive", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { ids } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: "ids required" });
+      await storage.unarchiveConversations(merchantId, ids);
+      res.json({ success: true, count: ids.length });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -8174,7 +8235,7 @@ export async function registerRoutes(
       if (!conv || conv.merchantId !== merchantId) {
         return res.status(404).json({ error: "Conversation not found" });
       }
-      const { text } = req.body;
+      const { text, referenceMessageId: clientRefMsgId } = req.body;
       if (!text?.trim()) return res.status(400).json({ error: "Message text required" });
 
       const [merchantRow] = await db.select({
@@ -8203,23 +8264,34 @@ export async function registerRoutes(
         lastMessage: text.trim().slice(0, 200),
       });
 
+      let replyWaMessageId: string | null = null;
+      if (clientRefMsgId) {
+        const allMsgs = await storage.getWaMessages(conv.id);
+        const refMsg = allMsgs.find(m => m.id === clientRefMsgId);
+        replyWaMessageId = refMsg?.waMessageId ?? null;
+      }
+
       const msg = await storage.createWaMessage({
         conversationId: conv.id,
         direction: "outbound",
         senderName: "Agent",
         text: text.trim(),
         status: "sent",
+        referenceMessageId: clientRefMsgId ?? null,
       });
 
       res.json(msg);
 
       const waApiUrl = `https://graph.facebook.com/v22.0/${phoneNumberId}/messages`;
-      const waPayload = {
+      const waPayload: any = {
         messaging_product: "whatsapp",
         to: conv.contactPhone,
         type: "text",
         text: { body: text.trim() },
       };
+      if (replyWaMessageId) {
+        waPayload.context = { message_id: replyWaMessageId };
+      }
       try {
         const waRes = await fetch(waApiUrl, {
           method: "POST",
@@ -8234,6 +8306,8 @@ export async function registerRoutes(
             await storage.updateWaMessageStatus(msg.id, "sent", waMessageId);
           }
         } else {
+          const errBody = await waRes.text().catch(() => "");
+          console.error(`[WhatsApp Send] Failed (${waRes.status}):`, errBody);
           await storage.updateWaMessageStatus(msg.id, "failed");
         }
       } catch (_) {
