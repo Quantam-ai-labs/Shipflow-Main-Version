@@ -5953,16 +5953,48 @@ export async function registerRoutes(
         return;
       }
 
+      // Smart confirm/cancel classifier — handles English, Roman Urdu, and Urdu affirmatives/negatives.
+      // Cancel signals are checked FIRST because they take priority (higher business stakes).
+      // Short signals (≤4 chars) are matched as whole words to avoid false positives.
+      const CANCEL_SIGNALS = [
+        "nahi chahiye", "mat bhejo", "mat karo", "band karo", "band kar do",
+        "cancel kar do", "cancel karo", "rok do", "don't want", "dont want",
+        "don't send", "dont send", "not interested",
+        "cancel", "cancelled", "cancellation",
+        "nahi", "nahin", "nai", "nay",
+        "wapis", "stop",
+        "نہیں", "کینسل", "واپس", "بند",
+        "no", "nope", "nah",
+      ];
+      const CONFIRM_SIGNALS = [
+        "ji haan", "ji han", "sahi hai", "theek hai", "thik hai",
+        "send kar do", "bej do", "bhej do", "bhejna", "bejh do",
+        "bilkul", "zaroor", "alright", "proceed", "approved", "agree",
+        "confirm", "confirmed", "okay", "sure",
+        "haan", "haa", "han",
+        "اوکے", "ہاں", "جی", "جی ہاں", "بالکل",
+        "yes", "yep", "yeah", "yup", "yap",
+        "ok", "ji",
+      ];
+
+      function matchesSignal(msg: string, signal: string): boolean {
+        if (signal.length <= 4) {
+          return msg === signal || new RegExp(`(?:^|\\s)${signal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\s|$)`).test(msg);
+        }
+        return msg.includes(signal);
+      }
+
       let action: "confirm" | "cancel" | "query";
-      if (lowerMessage.includes("confirm")) {
-        action = "confirm";
-      } else if (lowerMessage.includes("cancel")) {
+      const trimmedLower = lowerMessage.trim();
+      if (CANCEL_SIGNALS.some(s => matchesSignal(trimmedLower, s))) {
         action = "cancel";
+      } else if (CONFIRM_SIGNALS.some(s => matchesSignal(trimmedLower, s))) {
+        action = "confirm";
       } else {
         action = "query";
       }
 
-      console.log(`        → Classified as: ${action}`);
+      console.log(`        → Classified as: ${action} (message: "${lowerMessage.slice(0, 60)}")`);
 
       const result = await processConfirmationResponse({
         merchantId,
@@ -5974,11 +6006,12 @@ export async function registerRoutes(
 
       if (result.success) {
         if (action === "confirm") {
-          await sendWhatsAppReply(normalizedPhone,
-            `Thank you! Order #${orderNumber} has been confirmed. We'll process and ship it shortly.`, replyPhoneId, replyAccessToken);
+          // No reply on confirmation — order is silently moved to Ready to Ship
+          console.log(`        ✅ Order #${orderNumber} confirmed via WhatsApp — no reply sent (silent confirmation)`);
         } else if (action === "cancel") {
           await sendWhatsAppReply(normalizedPhone,
-            `Order #${orderNumber} has been cancelled. No charges will be applied. If you have any questions, please contact support.`, replyPhoneId, replyAccessToken);
+            `We've noted your cancellation for order #${orderNumber}. Could you briefly share why you'd like to cancel? Your feedback helps us improve.`,
+            replyPhoneId, replyAccessToken);
         } else {
           const aiMerchant = await storage.getMerchant(merchantId);
           if (aiMerchant?.aiAutoReplyEnabled) {
@@ -5989,7 +6022,7 @@ export async function registerRoutes(
             );
           } else {
             await sendWhatsAppReply(normalizedPhone,
-              `Thank you for your message regarding order #${orderNumber}. Our team will get back to you shortly.\n\nTo confirm or cancel, please reply with:\n*confirm* - to confirm the order\n*cancel* - to cancel the order`, replyPhoneId, replyAccessToken);
+              `Thank you for your message regarding order #${orderNumber}. Our team will get back to you shortly.\n\nTo confirm, reply *Yes*. To cancel, reply *No*.`, replyPhoneId, replyAccessToken);
           }
         }
       } else if (result.locked) {
