@@ -11896,6 +11896,17 @@ export async function registerRoutes(
       const payload = verifyAgentChatToken(token);
       if (!payload) return res.status(401).json({ message: "Invalid or expired token" });
 
+      // Enforce the same revocation semantics as agentChatAuth middleware
+      if (payload.sessionId) {
+        const [session] = await db.select({ isRevoked: agentChatSessions.isRevoked })
+          .from(agentChatSessions).where(eq(agentChatSessions.id, payload.sessionId)).limit(1);
+        if (session?.isRevoked) {
+          return res.status(401).json({ message: "Session has been revoked" });
+        }
+        db.update(agentChatSessions).set({ lastActiveAt: new Date() })
+          .where(eq(agentChatSessions.id, payload.sessionId)).catch(() => {});
+      }
+
       const merchantId = payload.merchantId;
 
       res.setHeader("Content-Type", "text/event-stream");
