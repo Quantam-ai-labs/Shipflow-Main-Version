@@ -55,6 +55,8 @@ import {
   type ComplaintTemplate, type InsertComplaintTemplate,
   waRawEvents,
   type WaRawEvent, type InsertWaRawEvent,
+  waFailedEvents,
+  type WaFailedEvent,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, or, ilike, sql, count, inArray, isNull, isNotNull, gte, lte } from "drizzle-orm";
@@ -266,7 +268,7 @@ export interface IStorage {
   archiveConversations(merchantId: string, ids: string[]): Promise<void>;
   unarchiveConversations(merchantId: string, ids: string[]): Promise<void>;
   getWaMessages(conversationId: string): Promise<WaMessage[]>;
-  createWaMessage(data: { conversationId: string; direction: string; senderName?: string | null; text?: string | null; waMessageId?: string | null; status?: string | null; messageType?: string | null; mediaUrl?: string | null; mimeType?: string | null; fileName?: string | null; reactionEmoji?: string | null; referenceMessageId?: string | null }): Promise<WaMessage>;
+  createWaMessage(data: { conversationId: string; direction: string; senderName?: string | null; text?: string | null; waMessageId?: string | null; status?: string | null; messageType?: string | null; mediaUrl?: string | null; mimeType?: string | null; fileName?: string | null; reactionEmoji?: string | null; reactionFrom?: string | null; referenceMessageId?: string | null }): Promise<WaMessage>;
   updateWaMessageStatus(messageId: string, status: string, waMessageId?: string): Promise<void>;
   updateWaMessageStatusByWaId(waMessageId: string, newStatus: string): Promise<boolean>;
   updateConversationLabel(merchantId: string, convId: string, label: string | null): Promise<void>;
@@ -302,9 +304,15 @@ export interface IStorage {
   getPendingWaRawEvents(limit?: number): Promise<WaRawEvent[]>;
   getWaRawEventsByStatus(status: string, merchantId?: string, limit?: number): Promise<WaRawEvent[]>;
   getWebhookHealthStats(merchantId?: string): Promise<{ total: number; processed: number; failed: number; pending: number; retrying: number; byType: Record<string, number> }>;
+  getPendingReactionsForTarget(targetWaMessageId: string): Promise<WaRawEvent[]>;
   softDeleteWaMessage(waMessageId: string): Promise<void>;
   applyReactionToWaMessage(waMessageId: string, emoji: string): Promise<boolean>;
   getWaMessageByWaId(waMessageId: string): Promise<WaMessage | undefined>;
+
+  // WA Failed Events (permanent failure queue)
+  createWaFailedEvent(data: { rawEventId: string; merchantId: string | null; eventType: string; webhookSource: string; payload: any; errorMessage: string; attemptCount: number }): Promise<WaFailedEvent>;
+  getWaFailedEvents(merchantId?: string, limit?: number): Promise<WaFailedEvent[]>;
+  resolveWaFailedEvent(id: number, resolvedBy: string): Promise<void>;
 
   // Seed
   seedDemoData(): Promise<void>;
@@ -2225,7 +2233,7 @@ export class DatabaseStorage implements IStorage {
       .orderBy(asc(waMessages.createdAt));
   }
 
-  async createWaMessage(data: { conversationId: string; direction: string; senderName?: string | null; text?: string | null; waMessageId?: string | null; status?: string | null; messageType?: string | null; mediaUrl?: string | null; mimeType?: string | null; fileName?: string | null; reactionEmoji?: string | null; referenceMessageId?: string | null }): Promise<WaMessage> {
+  async createWaMessage(data: { conversationId: string; direction: string; senderName?: string | null; text?: string | null; waMessageId?: string | null; status?: string | null; messageType?: string | null; mediaUrl?: string | null; mimeType?: string | null; fileName?: string | null; reactionEmoji?: string | null; reactionFrom?: string | null; referenceMessageId?: string | null }): Promise<WaMessage> {
     const [row] = await db.insert(waMessages).values({
       conversationId: data.conversationId,
       direction: data.direction,
@@ -2238,6 +2246,7 @@ export class DatabaseStorage implements IStorage {
       mimeType: data.mimeType,
       fileName: data.fileName,
       reactionEmoji: data.reactionEmoji,
+      reactionFrom: data.reactionFrom,
       referenceMessageId: data.referenceMessageId,
     }).returning();
     return row;
@@ -2644,6 +2653,53 @@ export class DatabaseStorage implements IStorage {
   async getWaMessageByWaId(waMessageId: string): Promise<WaMessage | undefined> {
     const [msg] = await db.select().from(waMessages).where(eq(waMessages.waMessageId, waMessageId)).limit(1);
     return msg;
+  }
+
+  async getPendingReactionsForTarget(targetWaMessageId: string): Promise<WaRawEvent[]> {
+    return db.select().from(waRawEvents)
+      .where(and(
+        eq(waRawEvents.status, "reaction_pending"),
+        eq(waRawEvents.waMessageId, targetWaMessageId),
+      ))
+      .orderBy(asc(waRawEvents.receivedAt));
+  }
+
+  // ─── WA Failed Events ────────────────────────────────────────────────────────
+
+  async createWaFailedEvent(data: {
+    rawEventId: string;
+    merchantId: string | null;
+    eventType: string;
+    webhookSource: string;
+    payload: any;
+    errorMessage: string;
+    attemptCount: number;
+  }): Promise<WaFailedEvent> {
+    const [created] = await db.insert(waFailedEvents).values({
+      rawEventId: data.rawEventId,
+      merchantId: data.merchantId,
+      eventType: data.eventType,
+      webhookSource: data.webhookSource,
+      payload: data.payload,
+      errorMessage: data.errorMessage,
+      attemptCount: data.attemptCount,
+    }).returning();
+    return created;
+  }
+
+  async getWaFailedEvents(merchantId?: string, limit = 100): Promise<WaFailedEvent[]> {
+    const conditions: any[] = [isNull(waFailedEvents.resolvedAt)];
+    if (merchantId) conditions.push(eq(waFailedEvents.merchantId, merchantId));
+    return db.select().from(waFailedEvents)
+      .where(and(...conditions))
+      .orderBy(desc(waFailedEvents.failedAt))
+      .limit(limit);
+  }
+
+  async resolveWaFailedEvent(id: number, resolvedBy: string): Promise<void> {
+    await db.update(waFailedEvents)
+      .set({ resolvedAt: new Date(), resolvedBy })
+      .where(eq(waFailedEvents.id, id));
   }
 
   async seedDemoData(): Promise<void> {

@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, integer, decimal, timestamp, boolean, jsonb, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, decimal, timestamp, boolean, jsonb, index, uniqueIndex, serial } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -545,6 +545,7 @@ export const waMessages = pgTable("wa_messages", {
   mimeType: varchar("mime_type", { length: 100 }),
   fileName: varchar("file_name", { length: 500 }),
   reactionEmoji: varchar("reaction_emoji", { length: 10 }),
+  reactionFrom: varchar("reaction_from", { length: 50 }),
   referenceMessageId: varchar("reference_message_id", { length: 255 }),
   deletedByCustomerAt: timestamp("deleted_by_customer_at"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -2520,3 +2521,27 @@ export const waRawEvents = pgTable("wa_raw_events", {
 export const insertWaRawEventSchema = createInsertSchema(waRawEvents).omit({ id: true, receivedAt: true });
 export type InsertWaRawEvent = z.infer<typeof insertWaRawEventSchema>;
 export type WaRawEvent = typeof waRawEvents.$inferSelect;
+
+// ============================================
+// WA FAILED EVENTS — permanent failure queue
+// Events that exhausted all retries land here
+// for admin/manual review and replay.
+// ============================================
+export const waFailedEvents = pgTable("wa_failed_events", {
+  id: serial("id").primaryKey(),
+  rawEventId: varchar("raw_event_id").references(() => waRawEvents.id),
+  merchantId: varchar("merchant_id"),
+  eventType: varchar("event_type", { length: 30 }),
+  webhookSource: varchar("webhook_source", { length: 20 }),
+  payload: jsonb("payload").notNull(),
+  errorMessage: text("error_message"),
+  attemptCount: integer("attempt_count").default(0),
+  failedAt: timestamp("failed_at").defaultNow(),
+  resolvedAt: timestamp("resolved_at"),
+  resolvedBy: varchar("resolved_by", { length: 255 }),
+}, (table) => [
+  index("idx_wa_failed_events_merchant").on(table.merchantId),
+  index("idx_wa_failed_events_failed_at").on(table.failedAt),
+]);
+
+export type WaFailedEvent = typeof waFailedEvents.$inferSelect;

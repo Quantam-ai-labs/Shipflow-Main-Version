@@ -19,7 +19,7 @@
 
 import { db } from "../db";
 import { storage } from "../storage";
-import { merchants, orders } from "../../shared/schema";
+import { merchants, orders, waRawEvents } from "../../shared/schema";
 import { eq, and, or, desc } from "drizzle-orm";
 import type { WaRawEvent } from "../../shared/schema";
 import { sendAgentChatPushNotifications } from "./agentChatNotificationService";
@@ -28,6 +28,11 @@ import { handleAiAutoReply } from "./aiAutoReplyService";
 const LOG = "[WA-Processor]";
 const MAX_RETRIES = 3;
 const RETRY_DELAYS_MS = [5_000, 30_000, 120_000];
+
+/** Thrown when a reaction is parked (target not found). Signals processWithRetry to NOT retry and NOT mark as processed. */
+class ReactionParkedError extends Error {
+  constructor() { super("reaction_parked"); }
+}
 
 // In-memory registry of scheduled retry timers (prevents duplicate scheduling)
 const scheduledRetries = new Set<string>();
@@ -90,6 +95,61 @@ export async function persistAndProcessStatus(params: {
 }
 
 /**
+ * PERSIST ONLY — writes raw message event to DB and returns it.
+ * Call scheduleProcessing() afterward to kick off async processing.
+ * Use this when you need the raw event persisted BEFORE sending 200 to Meta.
+ */
+export async function persistRawMessageEvent(params: {
+  merchantId: string | null;
+  eventType: string;
+  waMessageId: string;
+  fromPhone: string;
+  webhookSource: "generic" | "merchant";
+  payload: Record<string, any>;
+}): Promise<WaRawEvent> {
+  return storage.createWaRawEvent({
+    merchantId: params.merchantId,
+    eventType: params.eventType,
+    waMessageId: params.waMessageId,
+    fromPhone: params.fromPhone,
+    webhookSource: params.webhookSource,
+    payload: params.payload,
+    status: "pending",
+    retryCount: 0,
+  });
+}
+
+/**
+ * PERSIST ONLY — writes raw status event to DB and returns it.
+ * Call scheduleProcessing() afterward to kick off async processing.
+ */
+export async function persistRawStatusEvent(params: {
+  merchantId: string | null;
+  waMessageId: string;
+  webhookSource: "generic" | "merchant";
+  payload: Record<string, any>;
+}): Promise<WaRawEvent> {
+  return storage.createWaRawEvent({
+    merchantId: params.merchantId,
+    eventType: "status",
+    waMessageId: params.waMessageId,
+    fromPhone: null,
+    webhookSource: params.webhookSource,
+    payload: params.payload,
+    status: "pending",
+    retryCount: 0,
+  });
+}
+
+/**
+ * Schedule async processing for a raw event that has already been persisted.
+ * Fire-and-forget — returns immediately.
+ */
+export function scheduleProcessing(rawEvent: WaRawEvent): void {
+  processWithRetry(rawEvent).catch(() => {});
+}
+
+/**
  * On server startup: pick up any events that were left pending (e.g., from a
  * server crash mid-processing) and reprocess them.
  */
@@ -118,6 +178,9 @@ async function processWithRetry(rawEvent: WaRawEvent): Promise<void> {
       nextRetryAt: null,
     });
   } catch (err: any) {
+    // Reaction was parked (target message not yet in DB) — not an error, not a retry
+    if (err instanceof ReactionParkedError) return;
+
     const retryCount = (rawEvent.retryCount ?? 0) + 1;
     const errMsg = err.message ?? String(err);
 
@@ -127,6 +190,16 @@ async function processWithRetry(rawEvent: WaRawEvent): Promise<void> {
         retryCount,
         error: errMsg,
         nextRetryAt: null,
+      }).catch(() => {});
+      // Enqueue to permanent failure queue for admin review
+      storage.createWaFailedEvent({
+        rawEventId: rawEvent.id,
+        merchantId: rawEvent.merchantId ?? null,
+        eventType: rawEvent.eventType,
+        webhookSource: rawEvent.webhookSource ?? "generic",
+        payload: rawEvent.payload,
+        errorMessage: errMsg,
+        attemptCount: retryCount,
       }).catch(() => {});
     } else {
       const delayMs = RETRY_DELAYS_MS[retryCount - 1] ?? 120_000;
@@ -208,21 +281,31 @@ async function handleMessageEvent(rawEvent: WaRawEvent): Promise<void> {
     const emoji: string = message.reaction?.emoji ?? "";
     const targetWaId: string = message.reaction?.message_id ?? "";
 
+    let reactionParked = false;
     if (targetWaId) {
       const applied = await storage.applyReactionToWaMessage(targetWaId, emoji);
       if (applied) {
         console.log(`${LOG} Reaction ${emoji || "(removed)"} applied to message ${targetWaId}`);
       } else {
-        console.warn(`${LOG} Reaction target message not found: ${targetWaId} — saving as reaction message anyway`);
+        // Target message not yet in DB — park for later reconciliation.
+        // Set waMessageId to targetWaId so getPendingReactionsForTarget can find this event.
+        await db.update(waRawEvents)
+          .set({ status: "reaction_pending", waMessageId: targetWaId })
+          .where(eq(waRawEvents.id, rawEvent.id));
+        console.warn(`${LOG} Reaction target ${targetWaId} not found — parked as reaction_pending`);
+        reactionParked = true;
       }
     }
 
-    // Save the reaction as an inbound message too so it shows in the timeline
+    // Save the reaction as an inbound timeline message with reactionFrom = sender phone
     if (resolvedMerchantId && phone) {
       await saveInboxMessage(resolvedMerchantId, phone, contactName, waMessageId, "reaction",
         emoji ? `Reacted ${emoji}` : "Removed reaction",
-        null, null, null, emoji || null, targetWaId || null, message);
+        null, null, null, emoji || null, phone, targetWaId || null, message);
     }
+
+    // If parked, signal processWithRetry to leave status as reaction_pending (not processed)
+    if (reactionParked) throw new ReactionParkedError();
     return;
   }
 
@@ -294,7 +377,7 @@ async function handleMessageEvent(rawEvent: WaRawEvent): Promise<void> {
   const convId = await saveInboxMessage(
     resolvedMerchantId, phone, contactName, waMessageId,
     msgType, messageBody, mediaUrl, mimeType, fileName,
-    null, null, message,
+    null, null, null, message,
   );
 
   // ── Push notification to agent ─────────────────────────────────────────
@@ -332,6 +415,7 @@ async function saveInboxMessage(
   mimeType: string | null,
   fileName: string | null,
   reactionEmoji: string | null,
+  reactionFrom: string | null,
   referenceMessageId: string | null,
   rawMessage: Record<string, any>,
 ): Promise<string | null> {
@@ -382,13 +466,38 @@ async function saveInboxMessage(
       mimeType,
       fileName,
       reactionEmoji,
+      reactionFrom,
       referenceMessageId,
     });
+
+    // Reconcile any pending reactions that were waiting for this message
+    if (waMessageId && msgType !== "reaction") {
+      reconcilePendingReactions(waMessageId).catch(() => {});
+    }
 
     return conv.id;
   } catch (err: any) {
     console.error(`${LOG} saveInboxMessage failed for ${phone}: ${err.message}`);
     throw err;
+  }
+}
+
+async function reconcilePendingReactions(targetWaId: string): Promise<void> {
+  try {
+    const pending = await storage.getPendingReactionsForTarget(targetWaId);
+    if (pending.length === 0) return;
+    console.log(`${LOG} Reconciling ${pending.length} pending reaction(s) for message ${targetWaId}`);
+    for (const evt of pending) {
+      const msgPayload = (evt.payload as any)?.message;
+      const emoji: string = msgPayload?.reaction?.emoji ?? "";
+      const applied = await storage.applyReactionToWaMessage(targetWaId, emoji);
+      if (applied) {
+        await storage.updateWaRawEventStatus(evt.id, "processed", { processedAt: new Date() }).catch(() => {});
+        console.log(`${LOG} Reconciled pending reaction ${emoji} on message ${targetWaId}`);
+      }
+    }
+  } catch (err: any) {
+    console.error(`${LOG} reconcilePendingReactions error for ${targetWaId}: ${err.message}`);
   }
 }
 
