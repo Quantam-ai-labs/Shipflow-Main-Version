@@ -16929,7 +16929,7 @@ export async function registerRoutes(
         note: note || "",
         tags: (() => {
           const userTags = Array.isArray(tags) ? tags : (tags ? [tags] : []);
-          const allTags = [...userTags, "Draft-1SOL"];
+          const allTags = [...new Set([...userTags, "Draft-1SOL"])];
           return allTags.join(", ");
         })(),
         send_invoice: false,

@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { storage } from '../storage';
 import { shopifyService } from './shopify';
-import { isRecentWriteBack, writeBackAddTag } from './shopifyWriteBack';
+import { isRecentWriteBack } from './shopifyWriteBack';
 import { sendOrderStatusWhatsApp } from '../utils/integrations/whatsapp';
 import { initializeOrderConfirmation, logConfirmationEvent } from './confirmationEngine';
 import { db } from '../db';
