@@ -391,18 +391,23 @@ async function handleMessageEvent(rawEvent: WaRawEvent): Promise<void> {
 
   // ── Order confirmation (text/button only) ─────────────────────────────────
   if (msgType === "text" || msgType === "button_reply") {
-    await triggerOrderConfirmation(resolvedMerchantId, phone, messageBody, message, waMessageId);
+    // triggerOrderConfirmation returns true if an order was found and handled.
+    // processWhatsAppOrderResponse already sends any necessary AI reply in that path.
+    // Only call AI auto-reply if there was NO matched order (general enquiry).
+    const orderHandled = await triggerOrderConfirmation(resolvedMerchantId, phone, messageBody, message, waMessageId);
 
-    // ── AI auto-reply ───────────────────────────────────────────────────────
-    const conv = convId ? await storage.getConversationById(convId).catch(() => null) : null;
-    handleAiAutoReply(
-      resolvedMerchantId,
-      phone,
-      messageBody,
-      convId,
-      conv?.orderId ?? null,
-      conv?.orderNumber ?? null,
-    ).catch(() => {});
+    if (!orderHandled) {
+      // ── AI auto-reply (only when message is not an order confirmation) ───
+      const conv = convId ? await storage.getConversationById(convId).catch(() => null) : null;
+      handleAiAutoReply(
+        resolvedMerchantId,
+        phone,
+        messageBody,
+        convId,
+        conv?.orderId ?? null,
+        conv?.orderNumber ?? null,
+      ).catch(() => {});
+    }
   }
 }
 
@@ -506,13 +511,15 @@ async function reconcilePendingReactions(targetWaId: string): Promise<void> {
   }
 }
 
+// Returns true if an order was matched and handled (AI reply is sent inside processWhatsAppOrderResponse).
+// Returns false if no order was found — caller must trigger AI auto-reply separately.
 async function triggerOrderConfirmation(
   merchantId: string,
   phone: string,
   messageBody: string,
   rawMessage: Record<string, any>,
   waMessageId: string,
-): Promise<void> {
+): Promise<boolean> {
   try {
     const { processWhatsAppOrderResponse } = await import("./waOrderConfirmation");
     const merchant = await storage.getMerchant(merchantId);
@@ -537,7 +544,7 @@ async function triggerOrderConfirmation(
       .orderBy(desc(orders.createdAt))
       .limit(1);
 
-    if (!matchedOrder) return;
+    if (!matchedOrder) return false;
 
     await processWhatsAppOrderResponse(
       matchedOrder.merchantId,
@@ -550,7 +557,9 @@ async function triggerOrderConfirmation(
       merchant?.waPhoneNumberId ?? undefined,
       merchant?.waAccessToken ?? undefined,
     );
+    return true;
   } catch (err: any) {
     console.error(`${LOG} triggerOrderConfirmation error for ${phone}: ${err.message}`);
+    return false;
   }
 }

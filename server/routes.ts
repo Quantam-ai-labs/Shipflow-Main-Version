@@ -5543,12 +5543,20 @@ export async function registerRoutes(
         }
       }
 
-      // Await all inserts in parallel for speed; filter out any that failed
+      // Await all inserts in parallel for speed
       const rawEventResults = await Promise.all(persistTasks);
       const rawEventsToBatch = rawEventResults.filter(Boolean) as import("@shared/schema").WaRawEvent[];
 
-      // ✅ Step 3: ACK Meta — all successfully persisted events are in wa_raw_events
-      console.log(`[WhatsApp Webhook] ${requestId} - Persisted ${rawEventsToBatch.length}/${persistTasks.length} events — sending 200 OK`);
+      // ✅ Step 3: ACK Meta only when ALL events are durably stored.
+      // If any insert failed, return 5xx so Meta retries the entire delivery batch.
+      if (rawEventsToBatch.length < persistTasks.length) {
+        const failCount = persistTasks.length - rawEventsToBatch.length;
+        console.error(`[WhatsApp Webhook] ${requestId} - ${failCount} event(s) failed to persist — returning 500 so Meta retries`);
+        if (!res.headersSent) res.status(500).json({ error: "partial_persist_failure" });
+        return;
+      }
+
+      console.log(`[WhatsApp Webhook] ${requestId} - Persisted ${rawEventsToBatch.length} events — sending 200 OK`);
       res.status(200).json({ status: "ok" });
 
       // ✅ Step 4: Kick off async processing for all persisted events (fire-and-forget)
@@ -5649,7 +5657,14 @@ export async function registerRoutes(
       const rawEventResults = await Promise.all(persistTasks);
       const rawEventsToBatch = rawEventResults.filter(Boolean) as import("@shared/schema").WaRawEvent[];
 
-      // ACK Meta after all persists attempted
+      // ACK Meta only when ALL events durably persisted; return 5xx on any failure so Meta retries.
+      if (rawEventsToBatch.length < persistTasks.length) {
+        const failCount = persistTasks.length - rawEventsToBatch.length;
+        console.error(`[WhatsApp Webhook:${merchantId}] ${requestId} - ${failCount} event(s) failed to persist — returning 500`);
+        if (!res.headersSent) res.status(500).json({ error: "partial_persist_failure" });
+        return;
+      }
+
       res.status(200).json({ status: "ok" });
 
       // Schedule async processing (fire-and-forget)
@@ -5657,7 +5672,7 @@ export async function registerRoutes(
         scheduleProcessing(rawEvent);
       }
     } catch (err: any) {
-      if (!res.headersSent) res.status(200).json({ status: "ok" });
+      if (!res.headersSent) res.status(500).json({ error: "internal_error" });
       console.error(`[WhatsApp Webhook:${merchantId}] ${requestId} - FATAL: ${err.message}`);
     }
   });
@@ -13547,6 +13562,8 @@ export async function registerRoutes(
     }
   });
 
+  // Aggregated webhook health for super-admins only.
+  // Merchants use GET /api/merchants/webhook-health (scoped to their own data).
   app.get("/api/admin/webhook-health", isAuthenticated, async (req, res) => {
     try {
       const adminId = await requireSuperAdmin(req, res);
