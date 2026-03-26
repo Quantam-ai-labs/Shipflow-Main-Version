@@ -1,6 +1,6 @@
 import { db, withRetry } from "../db";
-import { orders, merchants, robocallLogs } from "@shared/schema";
-import { eq, and, isNotNull, desc } from "drizzle-orm";
+import { orders, merchants, robocallLogs, notifications } from "@shared/schema";
+import { eq, and, isNotNull, desc, lt, gt } from "drizzle-orm";
 import { logConfirmationEvent, processConfirmationResponse, createNotification } from "./confirmationEngine";
 import { storage } from "../storage";
 import { transitionOrder } from "./workflowTransition";
@@ -91,19 +91,23 @@ export async function sendCallDirect(params: {
   const callId = smsData?.id || smsData?.call_id || data?.data?.call_id || null;
 
   if (callId) {
-    await db.insert(robocallLogs).values({
-      merchantId,
-      callId: String(callId),
-      phone,
-      amount,
-      voiceId,
-      brandName: brandName || merchant.name || null,
-      orderNumber,
-      orderId,
-      source: source || "auto",
-      attemptNumber: attemptNumber || 1,
-      status: "Initiated",
-    });
+    try {
+      await db.insert(robocallLogs).values({
+        merchantId,
+        callId: String(callId),
+        phone,
+        amount,
+        voiceId,
+        brandName: brandName || merchant.name || null,
+        orderNumber,
+        orderId,
+        source: source || "auto",
+        attemptNumber: attemptNumber || 1,
+        status: "Initiated",
+      });
+    } catch (logErr: any) {
+      console.error(`${LOG_PREFIX} Failed to write robocall log for callId ${callId}:`, logErr.message);
+    }
 
     await logConfirmationEvent({
       merchantId, orderId,
@@ -117,20 +121,24 @@ export async function sendCallDirect(params: {
     return { success: true, callId: String(callId) };
   } else {
     const errorMsg = data?.error || "No call ID returned";
-    await db.insert(robocallLogs).values({
-      merchantId,
-      callId: null,
-      phone,
-      amount,
-      voiceId,
-      brandName: brandName || merchant.name || null,
-      orderNumber,
-      orderId,
-      source: source || "auto",
-      attemptNumber: attemptNumber || 1,
-      status: "Error",
-      error: errorMsg,
-    });
+    try {
+      await db.insert(robocallLogs).values({
+        merchantId,
+        callId: null,
+        phone,
+        amount,
+        voiceId,
+        brandName: brandName || merchant.name || null,
+        orderNumber,
+        orderId,
+        source: source || "auto",
+        attemptNumber: attemptNumber || 1,
+        status: "Error",
+        error: errorMsg,
+      });
+    } catch (logErr: any) {
+      console.error(`${LOG_PREFIX} Failed to write error robocall log for #${orderNumber}:`, logErr.message);
+    }
 
     await logConfirmationEvent({
       merchantId, orderId,
@@ -458,10 +466,10 @@ async function checkCallResponses(): Promise<void> {
           confirmationLocked: orders.confirmationLocked,
         }).from(orders).where(eq(orders.id, log.orderId)).limit(1);
 
+        const TERMINAL_STATUSES_POLL = ["BOOKED", "FULFILLED", "DELIVERED", "RETURN", "CANCELLED"];
         const orderAlreadyResolved = !currentOrder ||
-          currentOrder.confirmationStatus !== "pending" ||
           currentOrder.confirmationLocked ||
-          !["NEW", "PENDING"].includes(currentOrder.workflowStatus || "");
+          TERMINAL_STATUSES_POLL.includes(currentOrder.workflowStatus || "");
 
         if (orderAlreadyResolved) {
           const dtmfNote = dtmfValue ? ` — DTMF ${dtmfValue} (${dtmfValue === 1 ? "confirm" : dtmfValue === 2 ? "cancel" : "other"})` : "";
@@ -640,10 +648,10 @@ export async function processIvrWebhook(body: any): Promise<{ success: boolean; 
     confirmationLocked: orders.confirmationLocked,
   }).from(orders).where(eq(orders.id, log.orderId)).limit(1);
 
+  const TERMINAL_STATUSES_WEBHOOK = ["BOOKED", "FULFILLED", "DELIVERED", "RETURN", "CANCELLED"];
   const orderAlreadyResolved = !currentOrder ||
-    currentOrder.confirmationStatus !== "pending" ||
     currentOrder.confirmationLocked ||
-    !["NEW", "PENDING"].includes(currentOrder.workflowStatus || "");
+    TERMINAL_STATUSES_WEBHOOK.includes(currentOrder.workflowStatus || "");
 
   if (orderAlreadyResolved) {
     const dtmfNote = dtmfValue ? ` — DTMF ${dtmfValue} (${dtmfValue === 1 ? "confirm" : dtmfValue === 2 ? "cancel" : "other"})` : "";
@@ -728,16 +736,77 @@ export async function processIvrWebhook(body: any): Promise<{ success: boolean; 
   return { success: true, action: "non_final_status" };
 }
 
+const HOLD_REMINDER_THRESHOLD_MS = 24 * 60 * 60 * 1000;
+const HOLD_ESCALATION_CHECK_INTERVAL_MS = 30 * 60 * 1000;
+
+async function checkHoldEscalations(): Promise<void> {
+  try {
+    const cutoff = new Date(Date.now() - HOLD_REMINDER_THRESHOLD_MS);
+
+    const holdOrders = await withRetry(() =>
+      db.select({
+        id: orders.id,
+        merchantId: orders.merchantId,
+        orderNumber: orders.orderNumber,
+        pendingReason: orders.pendingReason,
+        lastStatusChangedAt: orders.lastStatusChangedAt,
+      }).from(orders)
+        .where(and(
+          eq(orders.workflowStatus, "HOLD"),
+          lt(orders.lastStatusChangedAt, cutoff),
+        ))
+        .limit(30),
+      'robocallService-checkHoldEscalations',
+    );
+
+    for (const order of holdOrders) {
+      try {
+        const reminderCutoff = new Date(Date.now() - HOLD_REMINDER_THRESHOLD_MS);
+        const [recentReminder] = await db.select({ id: notifications.id })
+          .from(notifications)
+          .where(and(
+            eq(notifications.orderId, order.id),
+            eq(notifications.type, "hold_reminder"),
+            gt(notifications.createdAt, reminderCutoff),
+          ))
+          .limit(1);
+
+        if (recentReminder) continue;
+
+        await createNotification({
+          merchantId: order.merchantId,
+          type: "hold_reminder",
+          title: `Order #${order.orderNumber} stuck in Hold`,
+          message: `This order has been in Hold for more than 24 hours${order.pendingReason ? ` — Reason: ${order.pendingReason}` : ""}. Please take manual action.`,
+          orderId: order.id,
+          orderNumber: order.orderNumber || undefined,
+        });
+
+        console.log(`${LOG_PREFIX} Hold reminder sent for #${order.orderNumber}`);
+        await new Promise(r => setTimeout(r, 100));
+      } catch (orderErr: any) {
+        console.error(`${LOG_PREFIX} Hold escalation check failed for order ${order.id}:`, orderErr.message);
+      }
+    }
+  } catch (err: any) {
+    console.error(`${LOG_PREFIX} Hold escalation check failed:`, err.message);
+  }
+}
+
 let responseInterval: ReturnType<typeof setInterval> | null = null;
+let holdEscalationInterval: ReturnType<typeof setInterval> | null = null;
 
 export function startRobocallService() {
   if (responseInterval) return;
   console.log(`${LOG_PREFIX} Started — response check every ${RESPONSE_CHECK_INTERVAL_MS / 60000}min (pending checks run via confirmationTimer)`);
   responseInterval = setInterval(checkCallResponses, RESPONSE_CHECK_INTERVAL_MS);
   setTimeout(checkCallResponses, 60_000);
+  holdEscalationInterval = setInterval(checkHoldEscalations, HOLD_ESCALATION_CHECK_INTERVAL_MS);
+  setTimeout(checkHoldEscalations, 5 * 60_000);
 }
 
 export function stopRobocallService() {
   if (responseInterval) { clearInterval(responseInterval); responseInterval = null; }
+  if (holdEscalationInterval) { clearInterval(holdEscalationInterval); holdEscalationInterval = null; }
   console.log(`${LOG_PREFIX} Stopped`);
 }

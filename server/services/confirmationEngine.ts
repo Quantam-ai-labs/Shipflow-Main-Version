@@ -105,6 +105,7 @@ const NOTIFICATION_CATEGORY_MAP: Record<string, { category: string; resolvable: 
   late_response:                { category: "confirmation", resolvable: true },
   conflict_detected:            { category: "confirmation", resolvable: true },
   robocall_exhausted:           { category: "confirmation", resolvable: true },
+  hold_reminder:                { category: "confirmation", resolvable: true },
   shopify_writeback_failed:     { category: "other",        resolvable: false },
   urgent_cancellation_request:  { category: "chat",         resolvable: true },
   ai_urgent_request:            { category: "chat",         resolvable: true },
@@ -258,6 +259,14 @@ export async function processConfirmationResponse(params: {
       conflictDetected: hasConflict || order.conflictDetected,
       updatedAt: now,
     };
+
+    if (!hasConflict) {
+      if (action === "confirm") {
+        updateData.confirmedAt = now;
+      } else if (action === "cancel") {
+        updateData.cancelledAt = now;
+      }
+    }
 
     if (source === "whatsapp") {
       updateData.waResponseAt = now;

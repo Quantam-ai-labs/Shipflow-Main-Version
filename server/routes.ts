@@ -986,7 +986,12 @@ export async function registerRoutes(
       switch (action) {
         case "confirm":
           toStatus = "READY_TO_SHIP";
-          extraData = { confirmedAt: new Date(), confirmedByUserId: userId };
+          extraData = {
+            confirmedAt: new Date(),
+            confirmedByUserId: userId,
+            confirmationStatus: "manual_confirmed",
+            confirmationSource: "manual",
+          };
           break;
         case "cancel":
           if (!cancelReason)
@@ -999,6 +1004,8 @@ export async function registerRoutes(
             cancelledAt: new Date(),
             cancelledByUserId: userId,
             cancelReason,
+            confirmationStatus: "manual_cancelled",
+            confirmationSource: "manual",
           };
           break;
         case "pending":
@@ -1143,7 +1150,12 @@ export async function registerRoutes(
       switch (action) {
         case "confirm":
           toStatus = "READY_TO_SHIP";
-          extraData = { confirmedAt: new Date(), confirmedByUserId: userId };
+          extraData = {
+            confirmedAt: new Date(),
+            confirmedByUserId: userId,
+            confirmationStatus: "manual_confirmed",
+            confirmationSource: "manual",
+          };
           break;
         case "cancel":
           if (!cancelReason)
@@ -1156,6 +1168,8 @@ export async function registerRoutes(
             cancelledAt: new Date(),
             cancelledByUserId: userId,
             cancelReason,
+            confirmationStatus: "manual_cancelled",
+            confirmationSource: "manual",
           };
           break;
         case "pending":
@@ -5856,37 +5870,50 @@ export async function registerRoutes(
             };
 
             try {
-              let convId: string;
+              let convId: string | null = null;
               try {
                 convId = await saveMessageToDB();
               } catch (dbErr: any) {
-                if (!isDbError(dbErr)) throw dbErr;
-                console.error(`[WhatsApp Webhook:${merchantId}] ${requestId} - DB timeout (attempt 1): ${dbErr.message}`);
-                await new Promise(r => setTimeout(r, 2000));
-                console.log(`[WhatsApp Webhook:${merchantId}] ${requestId} - Retrying message save (attempt 2)...`);
-                convId = await saveMessageToDB();
-                console.log(`[WhatsApp Webhook:${merchantId}] ${requestId} - ✅ Retry succeeded`);
+                if (!isDbError(dbErr)) {
+                  console.error(`[WhatsApp Webhook:${merchantId}] ${requestId} - ❌ CRITICAL: Message save failed! phone=${fromPhone}, msg="${messageBody.slice(0, 100)}", waId=${waMessageId}, error=${dbErr.message}`);
+                } else {
+                  console.error(`[WhatsApp Webhook:${merchantId}] ${requestId} - DB timeout (attempt 1): ${dbErr.message}`);
+                  await new Promise(r => setTimeout(r, 2000));
+                  console.log(`[WhatsApp Webhook:${merchantId}] ${requestId} - Retrying message save (attempt 2)...`);
+                  try {
+                    convId = await saveMessageToDB();
+                    console.log(`[WhatsApp Webhook:${merchantId}] ${requestId} - ✅ Retry succeeded`);
+                  } catch (retryErr: any) {
+                    console.error(`[WhatsApp Webhook:${merchantId}] ${requestId} - ❌ CRITICAL: Message save failed after retry! phone=${fromPhone}, waId=${waMessageId}, error=${retryErr.message}`);
+                  }
+                }
               }
 
               if (msgType === "text" || msgType === "button_reply") {
-                const replyMerchant2 = await storage.getMerchant(matchedOrder.merchantId);
-                await processWhatsAppOrderResponse(
-                  matchedOrder.merchantId, matchedOrder.id,
-                  matchedOrder.orderNumber, messageBody, fromPhone, fromPhone,
-                  matchedOrder.shopifyOrderId,
-                  replyMerchant2?.waPhoneNumberId || undefined,
-                  replyMerchant2?.waAccessToken || undefined,
-                );
-              } else {
+                try {
+                  const replyMerchant2 = await storage.getMerchant(matchedOrder.merchantId);
+                  await processWhatsAppOrderResponse(
+                    matchedOrder.merchantId, matchedOrder.id,
+                    matchedOrder.orderNumber, messageBody, fromPhone, fromPhone,
+                    matchedOrder.shopifyOrderId,
+                    replyMerchant2?.waPhoneNumberId || undefined,
+                    replyMerchant2?.waAccessToken || undefined,
+                  );
+                } catch (processErr: any) {
+                  console.error(`[WhatsApp Webhook:${merchantId}] ${requestId} - processWhatsAppOrderResponse error: ${processErr.message}`);
+                }
+              } else if (convId) {
                 const convObj = await storage.getConversationById(convId);
                 if (convObj && !convObj.label) {
                   storage.updateConversationLabel(matchedOrder.merchantId, convId, "General Queries").catch(() => {});
                 }
               }
 
-              sendAgentChatPushNotifications(matchedOrder.merchantId, contactName ?? fromPhone, messageBody, convId).catch(() => {});
+              if (convId) {
+                sendAgentChatPushNotifications(matchedOrder.merchantId, contactName ?? fromPhone, messageBody, convId).catch(() => {});
+              }
             } catch (err: any) {
-              console.error(`[WhatsApp Webhook:${merchantId}] ${requestId} - ❌ CRITICAL: Message save failed! phone=${fromPhone}, msg="${messageBody.slice(0, 100)}", waId=${waMessageId}, error=${err.message}`);
+              console.error(`[WhatsApp Webhook:${merchantId}] ${requestId} - ❌ FATAL WhatsApp processing error: ${err.message}`);
             }
           }
 
@@ -6234,11 +6261,15 @@ export async function registerRoutes(
                 const notifOrderId = conv?.orderId || orderId || undefined;
                 const notifOrderNumber = conv?.orderNumber || orderNumber || undefined;
                 const orderRef = notifOrderNumber ? ` (Order #${notifOrderNumber})` : "";
+                let notifMessage = `${contactDisplay}${orderRef} — classified as ${CLASSIFICATION_TO_LABEL[result.classification]}`;
+                if (result.classification === "conflict") {
+                  notifMessage = `${contactDisplay}${orderRef} sent a conflicting message: "${messageText.slice(0, 120)}". Order moved to Hold — manual review required.`;
+                }
                 await createNotification({
                   merchantId,
                   type: `ai_${result.classification}`,
                   title: CLASSIFICATION_NOTIFICATION_TITLES[result.classification] || result.classification,
-                  message: `${contactDisplay}${orderRef} — classified as ${CLASSIFICATION_TO_LABEL[result.classification]}`,
+                  message: notifMessage,
                   orderId: notifOrderId,
                   orderNumber: notifOrderNumber,
                 });
@@ -8041,6 +8072,10 @@ export async function registerRoutes(
       if (!merchant.robocallEmail || !merchant.robocallApiKey) return res.status(400).json({ error: "RoboCall not configured. Set up API key and email in RoboCall settings." });
       const order = await storage.getOrderById(merchantId, req.params.id);
       if (!order) return res.status(404).json({ error: "Order not found" });
+      const TERMINAL_ROBOCALL_STATUSES = ["BOOKED", "FULFILLED", "DELIVERED", "RETURN", "CANCELLED"];
+      if (TERMINAL_ROBOCALL_STATUSES.includes(order.workflowStatus || "")) {
+        return res.status(400).json({ error: `Cannot trigger robocall for an order in ${order.workflowStatus} status` });
+      }
       if (!order.customerPhone) return res.status(400).json({ error: "Order has no customer phone number" });
       const formattedPhone = formatPhoneForWhatsApp(order.customerPhone);
       if (!formattedPhone) return res.status(400).json({ error: "Invalid phone number format" });

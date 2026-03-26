@@ -1003,7 +1003,7 @@ function QuickActionsCard({ order, orderId }: { order: OrderDetails; orderId: st
             className="w-full justify-start gap-2"
             variant="outline"
             onClick={() => robocallMutation.mutate()}
-            disabled={robocallMutation.isPending || !order.customerPhone}
+            disabled={robocallMutation.isPending || !order.customerPhone || ["BOOKED", "FULFILLED", "DELIVERED", "RETURN", "CANCELLED"].includes(order.workflowStatus || "")}
             data-testid="button-manual-robocall"
           >
             {robocallMutation.isPending ? (
