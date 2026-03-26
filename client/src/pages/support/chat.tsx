@@ -508,6 +508,87 @@ export default function SupportChatPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
+  // ── SSE real-time connection ─────────────────────────────────────────────────
+  // Falls back to polling if SSE fails after 3 reconnect attempts.
+  const sseFailCount = useRef(0);
+  const sseRef = useRef<EventSource | null>(null);
+  const sseBackoffRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [sseConnected, setSseConnected] = useState(false);
+  const selectedConvIdRef = useRef<string | null>(null);
+  selectedConvIdRef.current = selectedConvId;
+
+  const connectSse = useCallback(() => {
+    if (sseRef.current) {
+      sseRef.current.close();
+      sseRef.current = null;
+    }
+    const es = new EventSource("/api/whatsapp/sse", { withCredentials: true });
+    sseRef.current = es;
+
+    es.onopen = () => {
+      sseFailCount.current = 0;
+      setSseConnected(true);
+    };
+
+    es.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === "new_message") {
+          // Instantly refresh messages for the active conversation
+          if (data.conversationId && data.conversationId === selectedConvIdRef.current) {
+            queryClient.invalidateQueries({
+              queryKey: ["/api/support/conversations", data.conversationId, "messages"],
+            });
+          }
+          // Always refresh conversation list to update last message + unread badge
+          queryClient.invalidateQueries({ queryKey: ["/api/support/conversations"] });
+        } else if (data.type === "status_update") {
+          // Update tick status in the active conversation messages cache
+          if (data.conversationId && data.conversationId === selectedConvIdRef.current) {
+            queryClient.setQueryData<Message[]>(
+              ["/api/support/conversations", data.conversationId, "messages"],
+              (old) => {
+                if (!old) return old;
+                return old.map(msg =>
+                  msg.waMessageId === data.waMessageId ? { ...msg, status: data.status } : msg
+                );
+              }
+            );
+          }
+        } else if (data.type === "conversation_update") {
+          queryClient.invalidateQueries({ queryKey: ["/api/support/conversations"] });
+        }
+      } catch {}
+    };
+
+    es.onerror = () => {
+      setSseConnected(false);
+      es.close();
+      sseRef.current = null;
+      sseFailCount.current += 1;
+      if (sseFailCount.current >= 3) {
+        // SSE unreachable — silently rely on polling fallback
+        return;
+      }
+      // Exponential backoff: 1s, 2s, 4s
+      const delay = Math.min(1000 * Math.pow(2, sseFailCount.current - 1), 30_000);
+      sseBackoffRef.current = setTimeout(connectSse, delay);
+    };
+  }, [queryClient]);
+
+  useEffect(() => {
+    connectSse();
+    return () => {
+      if (sseBackoffRef.current) clearTimeout(sseBackoffRef.current);
+      if (sseRef.current) { sseRef.current.close(); sseRef.current = null; }
+      setSseConnected(false);
+    };
+  }, [connectSse]);
+
+  // Polling interval: slow when SSE is live, normal when SSE is down (fallback mode)
+  const convPollInterval = sseConnected ? 60_000 : 10_000;
+  const msgPollInterval = sseConnected ? 30_000 : 8_000;
+
   const { data: waLabels = [] } = useQuery<WaLabel[]>({
     queryKey: ["/api/support/labels"],
   });
@@ -526,7 +607,7 @@ export default function SupportChatPage() {
       const resp = await fetch(url, { credentials: "include" });
       return resp.json();
     },
-    refetchInterval: 10000,
+    refetchInterval: convPollInterval,
     staleTime: 5000,
   });
 
@@ -561,7 +642,7 @@ export default function SupportChatPage() {
       return resp.json();
     },
     enabled: !!selectedConvId,
-    refetchInterval: 8000,
+    refetchInterval: msgPollInterval,
     staleTime: 4000,
   });
 

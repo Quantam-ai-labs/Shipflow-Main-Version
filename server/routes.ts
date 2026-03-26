@@ -2,6 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import express from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import { registerSseClient, unregisterSseClient, broadcastToMerchant as _broadcastToMerchant } from "./services/sseManager";
 import webpush from "web-push";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
@@ -2805,6 +2806,40 @@ export async function registerRoutes(
     } catch (error: any) {
       console.error("Merchant webhook health error:", error);
       res.status(500).json({ message: "Failed to fetch webhook health" });
+    }
+  });
+
+  // ─── WhatsApp SSE endpoint (merchant portal — cookie auth) ──────────────────
+  // Streams real-time events: new_message, status_update, conversation_update.
+  // Keepalive pings sent every 30s. Clients reconnect with exponential backoff.
+  app.get("/api/whatsapp/sse", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+      res.setHeader("X-Accel-Buffering", "no");
+      res.flushHeaders();
+
+      // Register this client
+      registerSseClient(merchantId, res);
+
+      // Send initial connected event
+      res.write(`data: ${JSON.stringify({ type: "connected", merchantId, ts: Date.now() })}\n\n`);
+
+      // Keepalive ping every 25 seconds to prevent proxy timeouts
+      const ping = setInterval(() => {
+        try { res.write(`data: ${JSON.stringify({ type: "ping", ts: Date.now() })}\n\n`); } catch { clearInterval(ping); }
+      }, 25_000);
+
+      req.on("close", () => {
+        clearInterval(ping);
+        unregisterSseClient(merchantId, res);
+      });
+    } catch (err: any) {
+      if (!res.headersSent) res.status(500).json({ message: "SSE setup failed" });
     }
   });
 
@@ -11847,6 +11882,41 @@ export async function registerRoutes(
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ error: "Failed to unsubscribe" });
+    }
+  });
+
+  // ─── Agent Chat SSE endpoint (bearer token via query param) ─────────────────
+  // EventSource doesn't support custom headers so the token is passed as ?token=...
+  // Streams new_message, status_update, conversation_update for the merchant.
+  app.get("/api/agent-chat/sse", async (req: any, res) => {
+    try {
+      const token = (req.query.token as string) || "";
+      if (!token) return res.status(401).json({ message: "Missing token" });
+
+      const payload = verifyAgentChatToken(token);
+      if (!payload) return res.status(401).json({ message: "Invalid or expired token" });
+
+      const merchantId = payload.merchantId;
+
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+      res.setHeader("X-Accel-Buffering", "no");
+      res.flushHeaders();
+
+      registerSseClient(merchantId, res);
+      res.write(`data: ${JSON.stringify({ type: "connected", ts: Date.now() })}\n\n`);
+
+      const ping = setInterval(() => {
+        try { res.write(`data: ${JSON.stringify({ type: "ping", ts: Date.now() })}\n\n`); } catch { clearInterval(ping); }
+      }, 25_000);
+
+      req.on("close", () => {
+        clearInterval(ping);
+        unregisterSseClient(merchantId, res);
+      });
+    } catch (err: any) {
+      if (!res.headersSent) res.status(500).json({ message: "SSE setup failed" });
     }
   });
 

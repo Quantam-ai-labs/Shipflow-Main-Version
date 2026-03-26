@@ -994,9 +994,11 @@ function ConversationList({
 function ChatView({
   conversation,
   onBack,
+  sseConnected = false,
 }: {
   conversation: Conversation;
   onBack: () => void;
+  sseConnected?: boolean;
 }) {
   const slug = useContext(SlugContext);
   const [messageText, setMessageText] = useState("");
@@ -1017,7 +1019,7 @@ function ChatView({
       setCachedMessages(slug, conversation.id, data);
       return data;
     },
-    refetchInterval: 3000,
+    refetchInterval: sseConnected ? 30_000 : 3000,
     staleTime: 2000,
   });
 
@@ -1602,6 +1604,75 @@ export default function AgentChatPage() {
   const [isVisible, setIsVisible] = useState(true);
   const queryClient = useQueryClient();
 
+  // ── SSE real-time connection ─────────────────────────────────────────────────
+  const sseFailCount = useRef(0);
+  const sseRef = useRef<EventSource | null>(null);
+  const sseBackoffRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [sseConnected, setSseConnected] = useState(false);
+  const selectedConvIdRef = useRef<string | null>(null);
+  selectedConvIdRef.current = selectedConvId;
+
+  const connectAgentSse = useCallback(() => {
+    const token = slug ? getStoredToken(slug) : null;
+    if (!token || !hasAccess) return;
+    if (sseRef.current) { sseRef.current.close(); sseRef.current = null; }
+    const es = new EventSource(`/api/agent-chat/sse?token=${encodeURIComponent(token)}`);
+    sseRef.current = es;
+    es.onopen = () => { sseFailCount.current = 0; setSseConnected(true); };
+    es.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === "new_message") {
+          if (data.conversationId && data.conversationId === selectedConvIdRef.current) {
+            queryClient.invalidateQueries({
+              queryKey: ["/api/agent-chat/conversations", slug, data.conversationId, "messages"],
+            });
+          }
+          queryClient.invalidateQueries({ queryKey: ["/api/agent-chat/conversations", slug] });
+        } else if (data.type === "status_update") {
+          if (data.conversationId && data.conversationId === selectedConvIdRef.current) {
+            queryClient.setQueryData<Message[]>(
+              ["/api/agent-chat/conversations", slug, data.conversationId, "messages"],
+              (old) => {
+                if (!old) return old;
+                return old.map(msg =>
+                  msg.waMessageId === data.waMessageId ? { ...msg, status: data.status } : msg
+                );
+              }
+            );
+          }
+        } else if (data.type === "conversation_update") {
+          queryClient.invalidateQueries({ queryKey: ["/api/agent-chat/conversations", slug] });
+        }
+      } catch {}
+    };
+    es.onerror = () => {
+      setSseConnected(false);
+      es.close();
+      sseRef.current = null;
+      sseFailCount.current += 1;
+      if (sseFailCount.current >= 3) return;
+      const delay = Math.min(1000 * Math.pow(2, sseFailCount.current - 1), 30_000);
+      sseBackoffRef.current = setTimeout(connectAgentSse, delay);
+    };
+  }, [slug, hasAccess, queryClient]);
+
+  useEffect(() => {
+    if (hasAccess && slug) {
+      connectAgentSse();
+    } else {
+      if (sseRef.current) { sseRef.current.close(); sseRef.current = null; }
+      setSseConnected(false);
+    }
+    return () => {
+      if (sseBackoffRef.current) clearTimeout(sseBackoffRef.current);
+      if (sseRef.current) { sseRef.current.close(); sseRef.current = null; }
+    };
+  }, [connectAgentSse, hasAccess, slug]);
+
+  const agentConvPollInterval = sseConnected ? 60_000 : (isVisible ? 5000 : false);
+  const agentMsgPollInterval = sseConnected ? 30_000 : 3000;
+
   const cachedConvs = useMemo(() => slug ? getCachedConversations(slug) : null, [slug]);
 
   const { data: merchantInfo } = useQuery<{ name: string; logoUrl: string | null; slug: string }>({
@@ -1634,7 +1705,7 @@ export default function AgentChatPage() {
       return data;
     },
     enabled: hasAccess && !!slug && isVisible,
-    refetchInterval: isVisible ? 5000 : false,
+    refetchInterval: agentConvPollInterval,
     staleTime: 3000,
   });
 
@@ -1763,6 +1834,7 @@ export default function AgentChatPage() {
           <ChatView
             conversation={selectedConv}
             onBack={() => setSelectedConvId(null)}
+            sseConnected={sseConnected}
           />
         </div>
       </SlugContext.Provider>

@@ -24,6 +24,7 @@ import { eq, and, or, desc } from "drizzle-orm";
 import type { WaRawEvent } from "../../shared/schema";
 import { sendAgentChatPushNotifications } from "./agentChatNotificationService";
 import { handleAiAutoReply } from "./aiAutoReplyService";
+import { broadcastToMerchant } from "./sseManager";
 
 const LOG = "[WA-Processor]";
 const MAX_RETRIES = 3;
@@ -245,6 +246,14 @@ async function handleStatusEvent(rawEvent: WaRawEvent): Promise<void> {
   const updated = await storage.updateWaMessageStatusByWaId(waMessageId, newStatus);
   if (updated) {
     console.log(`${LOG} Status update: ${waMessageId} → ${newStatus}`);
+    // Broadcast tick update to all SSE clients for this merchant
+    if (rawEvent.merchantId) {
+      broadcastToMerchant(rawEvent.merchantId, "status_update", {
+        waMessageId,
+        status: newStatus,
+        conversationId: updated.conversationId,
+      });
+    }
   }
 }
 
@@ -384,9 +393,12 @@ async function handleMessageEvent(rawEvent: WaRawEvent): Promise<void> {
     null, null, null, message,
   );
 
-  // ── Push notification to agent ─────────────────────────────────────────
+  // ── Push notification + SSE broadcast ──────────────────────────────────────
   if (convId) {
     sendAgentChatPushNotifications(resolvedMerchantId, contactName ?? phone, messageBody, convId).catch(() => {});
+    // Broadcast new_message so SSE clients update instantly (no next poll wait)
+    broadcastToMerchant(resolvedMerchantId, "new_message", { conversationId: convId });
+    broadcastToMerchant(resolvedMerchantId, "conversation_update", { conversationId: convId });
   }
 
   // ── Order confirmation (text/button only) ─────────────────────────────────
