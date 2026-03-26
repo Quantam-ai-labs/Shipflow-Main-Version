@@ -1069,7 +1069,7 @@ export default function SupportChatPage() {
                 <div
                   key={conv.id}
                   className={cn(
-                    "w-full px-3 py-3 text-left transition-colors flex items-center gap-3 border-b border-border cursor-pointer",
+                    "group w-full px-3 py-3 text-left transition-colors flex items-center gap-3 border-b border-border cursor-pointer",
                     isSelected && !selectMode ? "bg-accent" : "hover-elevate"
                   )}
                   data-testid={`button-conversation-${conv.id}`}
@@ -1141,7 +1141,7 @@ export default function SupportChatPage() {
                         )}
                         {!selectMode && (
                           <button
-                            className="text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground p-0.5 rounded"
+                            className="text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground p-0.5 rounded transition-opacity"
                             onClick={e => {
                               e.stopPropagation();
                               archiveMutation.mutate({ ids: [conv.id], unarchive: conv.isArchived });
