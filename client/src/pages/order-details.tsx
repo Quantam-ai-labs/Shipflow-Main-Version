@@ -359,8 +359,8 @@ function buildSmartTimeline(
         const et = confAsc[j].eventType;
         if (et === 'WA_RESPONSE') {
           const respRetryCount = confAsc[j].retryCount ?? null;
-          const matchesByCount = sentRetryCount !== null && respRetryCount !== null
-            ? respRetryCount === sentRetryCount
+          const matchesByCount = sentRetryCount !== null
+            ? (respRetryCount !== null && respRetryCount === sentRetryCount)
             : true;
           if (matchesByCount) { rIdx = j; break; }
         }
@@ -433,8 +433,10 @@ function buildSmartTimeline(
 
   const waSentOnlyTimes = confAll.filter(e => e.eventType === 'WA_SENT').map(e => e._time);
 
+  const hasConsumedTransitions = consumedTransitions.length > 0;
+
   for (const e of (auditLog || []).map(e => ({ ...e, _type: 'status', _time: new Date(e.createdAt).getTime() }))) {
-    const isRedundantAction = AUDIT_ACTIONS_ALWAYS_SUPPRESSED.has(e.action);
+    const isRedundantAction = hasConsumedTransitions && AUDIT_ACTIONS_ALWAYS_SUPPRESSED.has(e.action);
     const isDuplicateTransition = consumedTransitions.some(ct =>
       Math.abs(ct.time - e._time) < 10000 &&
       ct.toStatus !== null && ct.toStatus === e.toStatus
