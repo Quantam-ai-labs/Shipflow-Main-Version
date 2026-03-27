@@ -250,8 +250,8 @@ const STAGE_TO_STATUS: Record<string, string> = {
 const STAGE_TITLES: Record<string, string> = {
   ALL: "All Orders",
   NEW: "New Orders",
-  PENDING: "Pending Orders",
-  HOLD: "On Hold",
+  PENDING: "Confirmation Pending",
+  HOLD: "Conflicting Orders",
   READY_TO_SHIP: "Ready to Ship",
   BOOKED: "Booked",
   FULFILLED: "Fulfilled",
@@ -1857,6 +1857,18 @@ export default function Pipeline() {
                 <h3 className="text-lg font-medium mb-1">Inbox Zero</h3>
                 <p className="text-muted-foreground text-sm">All new orders have been processed</p>
               </>
+            ) : activeTab === "PENDING" ? (
+              <>
+                <Clock className="w-16 h-16 text-amber-400 mb-4" />
+                <h3 className="text-lg font-medium mb-1">No orders awaiting review</h3>
+                <p className="text-muted-foreground text-sm">Orders land here after all WA and RoboCall automation is exhausted</p>
+              </>
+            ) : activeTab === "HOLD" ? (
+              <>
+                <AlertCircle className="w-16 h-16 text-purple-400 mb-4" />
+                <h3 className="text-lg font-medium mb-1">No conflicting responses</h3>
+                <p className="text-muted-foreground text-sm">Orders with contradictory customer responses appear here for manual resolution</p>
+              </>
             ) : (
               <>
                 <Package className="w-16 h-16 text-muted-foreground/30 mb-4" />
@@ -1991,6 +2003,11 @@ export default function Pipeline() {
                           "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"
                         }`} title={`Confirmed via ${(order as any).confirmationSource}`} data-testid={`badge-source-${order.id}`}>
                           {(order as any).confirmationSource === "whatsapp" ? "WA" : (order as any).confirmationSource === "robocall" ? "RC" : "M"}
+                        </span>
+                      )}
+                      {activeTab === "NEW" && (order as any).waAttemptCount > 0 && !(order as any).waNextAttemptAt && !(order as any).waResponseAt && !(order as any).confirmationSource && (
+                        <span className="inline-flex items-center justify-center px-1 py-0.5 rounded text-[10px] font-medium leading-none bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300" title="RoboCall phase — all WA attempts exhausted" data-testid={`badge-robocall-phase-${order.id}`}>
+                          RC
                         </span>
                       )}
                       {(order as any).conflictDetected && (

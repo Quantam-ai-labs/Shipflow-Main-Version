@@ -129,11 +129,6 @@ async function checkWaReattempts() {
 
         if (currentAttemptCount >= maxAttempts) {
           await db.update(orders).set({
-            workflowStatus: "PENDING",
-            previousWorkflowStatus: "NEW",
-            pendingReason: `No WhatsApp response after ${maxAttempts} attempts`,
-            pendingReasonType: "confirmation_pending",
-            lastStatusChangedAt: now,
             waNextAttemptAt: null,
             updatedAt: now,
           }).where(eq(orders.id, order.id));
@@ -141,14 +136,15 @@ async function checkWaReattempts() {
           await logConfirmationEvent({
             merchantId: order.merchantId,
             orderId: order.id,
-            eventType: "MOVED_TO_PENDING",
+            eventType: "WA_EXHAUSTED",
+            channel: "whatsapp",
             oldStatus: "NEW",
-            newStatus: "PENDING",
-            note: `No WhatsApp response after ${maxAttempts} attempts — moved to Confirmation Pending`,
+            newStatus: "NEW",
+            note: `No WhatsApp response after ${maxAttempts} attempts — escalating to RoboCall (order stays in New Orders)`,
           });
 
           await triggerRobocallForOrder(order, merchant, `WA exhausted (${maxAttempts} attempts) — escalating to RoboCall`);
-          console.log(`${LOG_PREFIX} Order #${order.orderNumber} → Confirmation Pending (WA attempts exhausted)`);
+          console.log(`${LOG_PREFIX} Order #${order.orderNumber}: WA exhausted — escalating to RoboCall (stays in NEW)`);
           continue;
         }
 
@@ -168,11 +164,6 @@ async function checkWaReattempts() {
 
         if (freshOrder?.waNotOnWhatsApp) {
           await db.update(orders).set({
-            workflowStatus: "PENDING",
-            previousWorkflowStatus: "NEW",
-            pendingReason: "Number not on WhatsApp — routed to RoboCall",
-            pendingReasonType: "confirmation_pending",
-            lastStatusChangedAt: now,
             waNextAttemptAt: null,
             updatedAt: now,
           }).where(eq(orders.id, order.id));
@@ -182,7 +173,7 @@ async function checkWaReattempts() {
             orderId: order.id,
             eventType: "WA_NOT_AVAILABLE",
             channel: "whatsapp",
-            note: `Number not on WhatsApp (detected on attempt ${nextAttemptNumber}) — bypassing to RoboCall`,
+            note: `Number not on WhatsApp (detected on attempt ${nextAttemptNumber}) — bypassing to RoboCall (order stays in New Orders)`,
           });
 
           await triggerRobocallForOrder(order, merchant, "WhatsApp unavailable — direct bypass to RoboCall");
@@ -191,11 +182,6 @@ async function checkWaReattempts() {
 
         if (reminderResult.permanentError) {
           await db.update(orders).set({
-            workflowStatus: "PENDING",
-            previousWorkflowStatus: "NEW",
-            pendingReason: "WhatsApp template error — routed to RoboCall",
-            pendingReasonType: "confirmation_pending",
-            lastStatusChangedAt: now,
             waNextAttemptAt: null,
             updatedAt: now,
           }).where(eq(orders.id, order.id));
@@ -206,11 +192,11 @@ async function checkWaReattempts() {
             eventType: "WA_PERMANENT_FAILURE",
             channel: "whatsapp",
             errorDetails: reminderResult.error,
-            note: `WhatsApp permanent error on attempt ${nextAttemptNumber} — escalating to RoboCall immediately`,
+            note: `WhatsApp permanent error on attempt ${nextAttemptNumber} — escalating to RoboCall immediately (order stays in New Orders)`,
           });
 
           await triggerRobocallForOrder(order, merchant, "WhatsApp template/parameter error — immediate bypass to RoboCall");
-          console.log(`${LOG_PREFIX} Order #${order.orderNumber}: WA permanent error on attempt ${nextAttemptNumber}, bypassed to RoboCall`);
+          console.log(`${LOG_PREFIX} Order #${order.orderNumber}: WA permanent error on attempt ${nextAttemptNumber}, bypassed to RoboCall (stays in NEW)`);
           continue;
         }
 
@@ -298,26 +284,18 @@ async function checkExhaustedWaOrders() {
       if ((order.waAttemptCount || 0) < maxAttempts) continue;
 
       try {
-        await db.update(orders).set({
-          workflowStatus: "PENDING",
-          previousWorkflowStatus: "NEW",
-          pendingReason: `No WhatsApp response after ${maxAttempts} attempts`,
-          pendingReasonType: "confirmation_pending",
-          lastStatusChangedAt: now,
-          updatedAt: now,
-        }).where(eq(orders.id, order.id));
-
         await logConfirmationEvent({
           merchantId: order.merchantId,
           orderId: order.id,
-          eventType: "MOVED_TO_PENDING",
+          eventType: "WA_EXHAUSTED",
+          channel: "whatsapp",
           oldStatus: "NEW",
-          newStatus: "PENDING",
-          note: `No WhatsApp response after ${maxAttempts} attempts — moved to Confirmation Pending`,
+          newStatus: "NEW",
+          note: `No WhatsApp response after ${maxAttempts} attempts — escalating to RoboCall (order stays in New Orders)`,
         });
 
         await triggerRobocallForOrder(order, merchant, `WA exhausted (${maxAttempts} attempts) — escalating to RoboCall`);
-        console.log(`${LOG_PREFIX} Order #${order.orderNumber} → Confirmation Pending (WA exhausted, no nextAttemptAt)`);
+        console.log(`${LOG_PREFIX} Order #${order.orderNumber}: WA exhausted — escalating to RoboCall (stays in NEW)`);
       } catch (err: any) {
         console.error(`${LOG_PREFIX} Failed to process exhausted WA order ${order.id}:`, err.message);
       }

@@ -1,6 +1,6 @@
 import { db, withRetry } from "../db";
 import { orders, merchants, robocallLogs, notifications, workflowAuditLog } from "@shared/schema";
-import { eq, and, isNotNull, desc, lt, gt, inArray } from "drizzle-orm";
+import { eq, and, isNotNull, desc, lt, gt, inArray, or } from "drizzle-orm";
 import { logConfirmationEvent, processConfirmationResponse, createNotification } from "./confirmationEngine";
 import { storage } from "../storage";
 import { transitionOrder } from "./workflowTransition";
@@ -237,12 +237,15 @@ export async function checkAndSendPendingCalls(merchantId: string): Promise<void
       orderNumber: orders.orderNumber,
       customerPhone: orders.customerPhone,
       totalAmount: orders.totalAmount,
+      workflowStatus: orders.workflowStatus,
       lastStatusChangedAt: orders.lastStatusChangedAt,
     }).from(orders)
       .where(and(
         eq(orders.merchantId, merchantId),
-        eq(orders.workflowStatus, "PENDING"),
-        eq(orders.pendingReasonType, "confirmation_pending"),
+        or(
+          and(eq(orders.workflowStatus, "PENDING"), eq(orders.pendingReasonType, "confirmation_pending")),
+          eq(orders.workflowStatus, "NEW"),
+        ),
         eq(orders.confirmationStatus, "pending"),
         isNotNull(orders.customerPhone),
       ))
@@ -255,7 +258,7 @@ export async function checkAndSendPendingCalls(merchantId: string): Promise<void
       const { hasActivity } = await getOrderCallStats(merchantId, order.id);
       if (hasActivity) {
         await processOrderForCall(order, merchant);
-      } else {
+      } else if (order.workflowStatus === "PENDING") {
         const changedAt = order.lastStatusChangedAt ? new Date(order.lastStatusChangedAt) : null;
         if (changedAt && changedAt <= cutoff) {
           await processOrderForCall(order, merchant);
@@ -286,8 +289,10 @@ export async function retryFailedCalls(merchantId: string): Promise<void> {
     }).from(orders)
       .where(and(
         eq(orders.merchantId, merchantId),
-        eq(orders.workflowStatus, "PENDING"),
-        eq(orders.pendingReasonType, "confirmation_pending"),
+        or(
+          and(eq(orders.workflowStatus, "PENDING"), eq(orders.pendingReasonType, "confirmation_pending")),
+          eq(orders.workflowStatus, "NEW"),
+        ),
         eq(orders.confirmationStatus, "pending"),
         isNotNull(orders.customerPhone),
       ))
@@ -333,17 +338,21 @@ async function handleExhaustedAttempts(order: any, merchant: any, totalAttempts:
     workflowStatus: orders.workflowStatus,
   }).from(orders).where(eq(orders.id, order.id)).limit(1);
 
-  if (!currentOrder[0] || currentOrder[0].workflowStatus === "HOLD") return;
+  if (!currentOrder[0] || currentOrder[0].workflowStatus === "PENDING") return;
 
   const maxAttempts = merchant.robocallMaxAttempts ?? 3;
 
   await transitionOrder({
     merchantId: order.merchantId,
     orderId: order.id,
-    toStatus: "HOLD",
+    toStatus: "PENDING",
     action: "robocall_exhausted",
     actorType: "system",
     reason: `All ${maxAttempts} robocall attempts exhausted (${totalAttempts} total)`,
+    extraData: {
+      pendingReasonType: "confirmation_pending",
+      pendingReason: `All WA and RoboCall attempts exhausted (${maxAttempts} calls)`,
+    },
   });
 
   await logConfirmationEvent({
@@ -351,19 +360,19 @@ async function handleExhaustedAttempts(order: any, merchant: any, totalAttempts:
     orderId: order.id,
     eventType: "ROBO_EXHAUSTED",
     channel: "robocall",
-    note: `All ${maxAttempts} robocall attempts exhausted — moved to Hold`,
+    note: `All ${maxAttempts} robocall attempts exhausted — moved to Confirmation Pending`,
   });
 
   await createNotification({
     merchantId: order.merchantId,
     type: "robocall_exhausted",
     title: `All robocall attempts exhausted for #${order.orderNumber}`,
-    message: `${maxAttempts} call attempts failed. Order moved to Hold for manual resolution.`,
+    message: `${maxAttempts} call attempts failed. Order moved to Confirmation Pending for manual review.`,
     orderId: order.id,
     orderNumber: order.orderNumber || undefined,
   });
 
-  console.log(`${LOG_PREFIX} Order #${order.orderNumber} moved to HOLD — all ${maxAttempts} robocall attempts exhausted`);
+  console.log(`${LOG_PREFIX} Order #${order.orderNumber} moved to PENDING — all ${maxAttempts} robocall attempts exhausted`);
 }
 
 async function processOrderForCall(order: any, merchant: any): Promise<void> {
@@ -512,10 +521,14 @@ async function checkCallResponses(): Promise<void> {
             await transitionOrder({
               merchantId: log.merchantId,
               orderId: log.orderId,
-              toStatus: "HOLD",
+              toStatus: "PENDING",
               action: "robocall_exhausted",
               actorType: "system",
               reason: `All ${maxAttempts} robocall attempts exhausted — last result: ${statusLabel}`,
+              extraData: {
+                pendingReasonType: "confirmation_pending",
+                pendingReason: `All WA and RoboCall attempts exhausted (${maxAttempts} calls)`,
+              },
             });
 
             await logConfirmationEvent({
@@ -523,19 +536,19 @@ async function checkCallResponses(): Promise<void> {
               orderId: log.orderId,
               eventType: "ROBO_EXHAUSTED",
               channel: "robocall",
-              note: `All ${maxAttempts} robocall attempts exhausted — moved to Hold`,
+              note: `All ${maxAttempts} robocall attempts exhausted — moved to Confirmation Pending`,
             });
 
             await createNotification({
               merchantId: log.merchantId,
               type: "robocall_exhausted",
               title: `All robocall attempts exhausted for #${log.orderNumber}`,
-              message: `${maxAttempts} call attempts failed (last: ${statusLabel}). Order moved to Hold for manual resolution.`,
+              message: `${maxAttempts} call attempts failed (last: ${statusLabel}). Order moved to Confirmation Pending for manual review.`,
               orderId: log.orderId,
               orderNumber: log.orderNumber || undefined,
             });
 
-            console.log(`${LOG_PREFIX} All ${maxAttempts} attempts exhausted for #${log.orderNumber} — moved to HOLD`);
+            console.log(`${LOG_PREFIX} All ${maxAttempts} attempts exhausted for #${log.orderNumber} — moved to PENDING`);
           }
         } else if ([1, 8, 11].includes(smsData.voice_status)) {
           const createdTime = log.createdAt ? new Date(log.createdAt).getTime() : 0;
@@ -561,22 +574,26 @@ async function checkCallResponses(): Promise<void> {
               await transitionOrder({
                 merchantId: log.merchantId,
                 orderId: log.orderId,
-                toStatus: "HOLD",
+                toStatus: "PENDING",
                 action: "robocall_exhausted",
                 actorType: "system",
                 reason: `Robocall stuck at "${statusLabel}" — attempts exhausted`,
+                extraData: {
+                  pendingReasonType: "confirmation_pending",
+                  pendingReason: `All WA and RoboCall attempts exhausted (${maxAttempts} calls)`,
+                },
               });
 
               await createNotification({
                 merchantId: log.merchantId,
                 type: "robocall_exhausted",
                 title: `RoboCall timed out for #${log.orderNumber}`,
-                message: `Call stuck at "${statusLabel}" after ${maxAttempts} attempt(s). Order moved to Hold.`,
+                message: `Call stuck at "${statusLabel}" after ${maxAttempts} attempt(s). Order moved to Confirmation Pending.`,
                 orderId: log.orderId,
                 orderNumber: log.orderNumber || undefined,
               });
 
-              console.log(`${LOG_PREFIX} Attempts exhausted for #${log.orderNumber} after "${statusLabel}" timeout — moved to HOLD`);
+              console.log(`${LOG_PREFIX} Attempts exhausted for #${log.orderNumber} after "${statusLabel}" timeout — moved to PENDING`);
             }
           }
         }
@@ -698,10 +715,14 @@ export async function processIvrWebhook(body: any): Promise<{ success: boolean; 
         await transitionOrder({
           merchantId: log.merchantId,
           orderId: log.orderId,
-          toStatus: "HOLD",
+          toStatus: "PENDING",
           action: "robocall_exhausted",
           actorType: "system",
           reason: `All ${maxAttempts} robocall attempts exhausted — last result: ${statusLabel} (webhook)`,
+          extraData: {
+            pendingReasonType: "confirmation_pending",
+            pendingReason: `All WA and RoboCall attempts exhausted (${maxAttempts} calls)`,
+          },
         });
 
         await logConfirmationEvent({
@@ -709,20 +730,20 @@ export async function processIvrWebhook(body: any): Promise<{ success: boolean; 
           orderId: log.orderId,
           eventType: "ROBO_EXHAUSTED",
           channel: "robocall",
-          note: `[Webhook] All ${maxAttempts} robocall attempts exhausted — moved to Hold`,
+          note: `[Webhook] All ${maxAttempts} robocall attempts exhausted — moved to Confirmation Pending`,
         });
 
         await createNotification({
           merchantId: log.merchantId,
           type: "robocall_exhausted",
           title: `All robocall attempts exhausted for #${log.orderNumber}`,
-          message: `${maxAttempts} call attempts failed (last: ${statusLabel}). Order moved to Hold for manual resolution.`,
+          message: `${maxAttempts} call attempts failed (last: ${statusLabel}). Order moved to Confirmation Pending for manual review.`,
           orderId: log.orderId,
           orderNumber: log.orderNumber || undefined,
         });
 
-        console.log(`${LOG_PREFIX} [IVR-WEBHOOK] All ${maxAttempts} attempts exhausted for #${log.orderNumber} — moved to HOLD`);
-        return { success: true, action: "exhausted_hold" };
+        console.log(`${LOG_PREFIX} [IVR-WEBHOOK] All ${maxAttempts} attempts exhausted for #${log.orderNumber} — moved to PENDING`);
+        return { success: true, action: "exhausted_pending" };
       }
     }
 
