@@ -7526,14 +7526,15 @@ export async function registerRoutes(
         ))
         .limit(1);
 
-      if (metaTemplate?.body) {
-        templateParams = buildTemplateParamsFromBody(metaTemplate.body, vars);
+      let retryAutomation: any = null;
+      if (meta?.automationId) {
+        retryAutomation = await storage.getWaAutomationById(merchantId, meta.automationId);
       }
-      if (!templateParams && meta?.automationId) {
-        const automation = await storage.getWaAutomationById(merchantId, meta.automationId);
-        if (automation?.messageText) {
-          templateParams = extractMessageTextParams(automation.messageText, vars);
-        }
+      if (metaTemplate?.body) {
+        templateParams = buildTemplateParamsFromBody(metaTemplate.body, vars, retryAutomation?.variableOrder);
+      }
+      if (!templateParams && retryAutomation?.messageText) {
+        templateParams = extractMessageTextParams(retryAutomation.messageText, vars);
       }
 
       const msgText = meta?.messageText || "";

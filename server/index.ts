@@ -125,29 +125,35 @@ async function seedSuperAdmin() {
 async function patchShippingAutomationVariableOrder() {
   try {
     const SHIPPING_VAR_ORDER = ["name", "order_number", "courier_name", "tracking_number"];
-    // Target shipping automations across all merchants:
-    // - triggerStatus = FULFILLED (only shipping/delivery automations use this)
-    // - templateName IS NOT NULL (only template-based automations need positional mapping)
-    // - variableOrder IS NULL (not yet configured)
-    // - title or templateName contains "ship" (additional safeguard for shipping context)
+    const PROD_MERCHANT_ID = "63d76766-32d7-47ab-8b46-d3c479bcb58a";
+    const isProduction = process.env.NODE_ENV === "production";
+
+    // In production: strictly target the known Lala Import merchant's FULFILLED
+    // template-based shipping automations (title or templateName contains "ship").
+    // In dev/staging: target any merchant's shipping automations matching the same
+    // criteria — safe because the filter requires FULFILLED + template + "ship" match.
+    const whereConditions = and(
+      isProduction ? eq(waAutomations.merchantId, PROD_MERCHANT_ID) : undefined,
+      eq(waAutomations.triggerStatus, "FULFILLED"),
+      isNotNull(waAutomations.templateName),
+      isNull(waAutomations.variableOrder),
+      or(
+        ilike(waAutomations.title, "%ship%"),
+        ilike(waAutomations.templateName, "%ship%"),
+      ),
+    );
+
     const rows = await db
       .select({ id: waAutomations.id, merchantId: waAutomations.merchantId, title: waAutomations.title, templateName: waAutomations.templateName })
       .from(waAutomations)
-      .where(and(
-        eq(waAutomations.triggerStatus, "FULFILLED"),
-        isNotNull(waAutomations.templateName),
-        isNull(waAutomations.variableOrder),
-        or(
-          ilike(waAutomations.title, "%ship%"),
-          ilike(waAutomations.templateName, "%ship%"),
-        ),
-      ));
+      .where(whereConditions);
+
     if (rows.length === 0) return;
     for (const row of rows) {
       await db.update(waAutomations)
         .set({ variableOrder: SHIPPING_VAR_ORDER })
         .where(eq(waAutomations.id, row.id));
-      console.log(`[AutoPatch] Set variableOrder=${JSON.stringify(SHIPPING_VAR_ORDER)} on FULFILLED shipping automation "${row.title}" / template "${row.templateName}" (${row.id}) merchant=${row.merchantId}`);
+      console.log(`[AutoPatch] Set variableOrder=${JSON.stringify(SHIPPING_VAR_ORDER)} on FULFILLED shipping automation "${row.title}" template="${row.templateName}" id=${row.id} merchant=${row.merchantId}`);
     }
   } catch (err: any) {
     console.error("[AutoPatch] Failed to patch shipping automation variable order:", err.message);
