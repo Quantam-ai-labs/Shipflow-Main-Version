@@ -196,6 +196,7 @@ function getVariableNames(text: string | null): string[] {
     "{{order_total}}": "Order Total",
     "{{items}}": "Line Items",
     "{{tracking_number}}": "Tracking #",
+    "{{tracking_link}}": "Tracking Link",
     "{{courier_name}}": "Courier",
     "{{city}}": "City",
     "{{address}}": "Address",

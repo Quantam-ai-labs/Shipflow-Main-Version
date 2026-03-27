@@ -3,6 +3,7 @@ import { db } from "../db";
 import { merchants, products, waConversations, waMessages, orders, complaints } from "@shared/schema";
 import { eq, and, desc, or, ilike, sql } from "drizzle-orm";
 import { normalizePakistaniPhone } from "../utils/phone";
+import { buildTrackingLink } from "../utils/integrations/whatsapp/variables";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -269,12 +270,8 @@ export async function generateAiReply(params: {
       if (o.courierName) line += `\n   Courier: ${o.courierName}`;
       if (o.courierTracking) {
         line += `\n   Tracking Number: ${o.courierTracking}`;
-        const name = (o.courierName || "").toLowerCase();
-        if (name.includes("leopard")) {
-          line += `\n   Tracking Link: https://merchantapi.leopardscourier.com/track?no=${encodeURIComponent(o.courierTracking)}`;
-        } else if (name.includes("postex")) {
-          line += `\n   Tracking Link: https://postex.pk/tracking?cn=${encodeURIComponent(o.courierTracking)}`;
-        }
+        const trackingUrl = buildTrackingLink(o.courierName ?? "", o.courierTracking);
+        if (trackingUrl) line += `\n   Tracking Link: ${trackingUrl}`;
       }
       if (o.courierRawStatus) line += `\n   Courier Status: ${o.courierRawStatus}`;
       else if (o.shipmentStatus) line += `\n   Shipment: ${o.shipmentStatus}`;
