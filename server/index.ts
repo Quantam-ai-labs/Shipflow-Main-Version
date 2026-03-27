@@ -72,15 +72,20 @@ app.use((req, res, next) => {
 
 async function backfillAiNotificationCategories() {
   try {
-    const result = await db.execute(sql`
+    const rows = await db.execute<{ count: string }>(sql`
+      SELECT COUNT(*) as count FROM notifications
+      WHERE type LIKE 'ai_%' AND category = 'other'
+        AND merchant_id = '63d76766-32d7-47ab-8b46-d3c479bcb58a'
+    `);
+    const n = parseInt(rows[0]?.count ?? "0", 10);
+    if (n === 0) return;
+    await db.execute(sql`
       UPDATE notifications
       SET category = 'chat', resolvable = true
       WHERE type LIKE 'ai_%' AND category = 'other'
+        AND merchant_id = '63d76766-32d7-47ab-8b46-d3c479bcb58a'
     `);
-    const count = (result as any).rowCount ?? 0;
-    if (count > 0) {
-      console.log(`[NotifBackfill] Reclassified ${count} ai_* notifications: other → chat`);
-    }
+    console.log(`[NotifBackfill] Reclassified ${n} ai_* notifications: other → chat`);
   } catch (err: any) {
     console.error("[NotifBackfill] Failed:", err.message);
   }
