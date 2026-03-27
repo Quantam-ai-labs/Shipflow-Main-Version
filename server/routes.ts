@@ -14957,8 +14957,52 @@ export async function registerRoutes(
   });
 
   // ============================================
-  // DATA REPAIR: Fix misclassified HOLD orders
+  // DATA REPAIR: Fix misclassified HOLD orders for Lala Import (production)
+  // ONE-TIME USE — remove this endpoint after successful production run.
+  // Verified set of 70 order IDs from production DB snapshot (2026-03-27).
   // ============================================
+
+  // 69 HOLD → PENDING: confirmation_status=pending, conflict_detected=false
+  const REPAIR_TO_PENDING = [
+    "5a5e0dc5-7f71-44f8-9ef7-09b08a2eb861", "a0e9183b-d3ac-4a55-ad0a-667e674b8538",
+    "a8ea5c4a-6f02-4fa1-ac32-9f8cc2dc5a63", "062dcb87-54ee-4c02-ac10-1f01b2fe540d",
+    "f708effd-89e5-4b49-8cbe-d40f6bdf86e1", "0992e88a-d3a8-4bd6-a8f8-32db050c85bf",
+    "99b7569d-f91a-40bd-b808-d95b22d4c3fe", "af4b8447-1b72-44dd-86f1-803fbb2b76b9",
+    "b6f50788-759c-4c25-a045-a9106eeecd9e", "7fe4c176-5bf6-40af-8b3f-7fb5328e0fac",
+    "b66d988e-56ef-4163-9382-0768783e0336", "d1fee01c-fb8e-4307-bd5a-921a45014738",
+    "b7e0cfad-eefc-44c7-9dc2-f31e91ec6d0c", "3678d2a5-a1d0-494b-863e-05519d7b6424",
+    "58be5fdb-5e1e-4d05-a461-ffdc654586b4", "1f3a5f06-7f9b-4ec5-805c-5fbaf9b31893",
+    "dd1c5dd3-20be-4915-9445-a0c89f1d963b", "e4449692-fe64-4194-9398-fe0f8ed7e346",
+    "8cee76c0-79bc-4357-b8dd-9d3c40449cc1", "02c37406-7191-44dd-b236-adb565ff8084",
+    "2bdbe181-1b59-41aa-98af-8c22126be482", "337de456-d03d-4247-acc5-ca7c4507b70e",
+    "c5ca38f0-ada2-4508-aaa9-e015de5bb8c5", "ee8f5467-5009-45b3-bf94-d748a4ae80f5",
+    "2dd977b2-149f-4f95-b565-8d68ada400c0", "84ca51bd-df23-4bff-bd94-0c2ea0350d49",
+    "de47bb77-b858-4650-830a-e01ea8f8d822", "b8707572-5057-47cf-a0f5-2cc915936df0",
+    "340f0bbe-df87-4e27-9027-be60d4fdc35f", "49152b0f-d967-49da-96b9-f90b52e49f91",
+    "e68bd611-27ed-423c-a0dc-1a3879ea52e2", "e9dedb9d-fde3-4b67-8ec4-681051916e57",
+    "cfa7f654-6ef4-4754-bbe6-729e97a41c5c", "b715d4d9-2ac4-496c-b24d-fbf1737f383e",
+    "c24f238d-420d-4363-b2c7-cea63fddd901", "ceae0b32-c3ac-41a4-8e7d-0346e3e61bf3",
+    "eb4615f1-a8b4-49bc-9717-362b11a39921", "d1b97017-70f8-4c20-bc71-3a4153a85582",
+    "3ff87a77-cb2d-4deb-92df-aee77b64af5f", "19e59ad6-d56d-44bc-b0fc-08d17a971e03",
+    "fe86bf9c-e82a-42d6-8dbf-e2a26ae8a225", "e80208ae-d446-4915-a872-7b175ddc6afe",
+    "11ac9eb2-9097-4095-9383-7d05f3c69fb6", "48be6be3-abc5-44a0-86c2-60f55de6774c",
+    "493a384c-7a11-40c3-8a62-5a64e2e5b7ff", "47d00a7e-342f-47de-af6b-4cf2b748fa23",
+    "c93c25a8-1872-4ac7-a2ae-e8f86278a99f", "fb000e42-3ba8-41f3-ba0c-37a179cb91a3",
+    "caf33caa-f4d8-43be-b219-2ef25a6abe26", "ef0163ac-19c5-4791-8f37-4d2e7958728f",
+    "f05da3a5-c4fb-44b3-b7c6-5edbc5ac8d93", "bd8f1b28-3dc8-4c58-ba36-c09cd070b000",
+    "0d6a0006-b9c4-41ae-8ac8-031115ff04ee", "c3d1fb00-4a34-4ba6-8b18-4790f3283ab4",
+    "9b5b2adb-1d15-42d8-ae18-60ac67cd2953", "884de028-ff30-4a98-aa11-4a10afb9776d",
+    "66b41a64-a916-4346-a3b7-850f85b42a8e", "605e0f85-d2c8-4a4f-8d0d-64336b53dfdf",
+    "c73d2a0f-4abf-489d-81be-7a39e6885ffa", "0071cfcf-0989-4ade-9dba-20ede37169a1",
+    "ceaaa29e-8cf8-47e7-a048-e2561107e690", "16060a37-e5b3-453e-8597-2fc2e70994a2",
+    "8072d2cc-20e3-408f-b338-643e4d13a756", "ebb616ba-ce43-4b61-8aa7-239e572d3d4a",
+    "6a7b738e-d4b0-4ec8-bceb-f840101c3293", "da216a18-b94f-4113-982c-5c65281e006e",
+    "38391afb-f5a9-4a4c-a027-d8fc8fd2db9f", "1273db14-7ea8-417e-970e-c626bb5e9d29",
+    "0e8eadd8-f016-44b5-ae7c-6f15efd98099",
+  ];
+
+  // 1 HOLD → READY_TO_SHIP: confirmation_status=confirmed, conflict_detected=false (#26944)
+  const REPAIR_TO_READY = ["fd5d4db7-d9ad-4005-ba85-06925d163d56"];
 
   app.post("/api/admin/repair-hold-orders", isAuthenticated, async (req, res) => {
     try {
@@ -14967,58 +15011,58 @@ export async function registerRoutes(
 
       const LALA_MERCHANT_ID = "63d76766-32d7-47ab-8b46-d3c479bcb58a";
 
-      const holdOrders = await db
-        .select({
-          id: orders.id,
-          orderNumber: orders.orderNumber,
-          confirmationStatus: orders.confirmationStatus,
+      type RepairResult = { id: string; toStatus: string; success: boolean; skipped?: boolean; skipReason?: string; error?: string };
+      const results: RepairResult[] = [];
+
+      async function repairOne(orderId: string, toStatus: string) {
+        // Pre-flight: verify order is currently HOLD with conflict_detected=false
+        const [current] = await db.select({
+          workflowStatus: orders.workflowStatus,
           conflictDetected: orders.conflictDetected,
-        })
-        .from(orders)
-        .where(
-          and(
-            eq(orders.merchantId, LALA_MERCHANT_ID),
-            eq(orders.workflowStatus, "HOLD"),
-            eq(orders.conflictDetected, false),
-          ),
-        );
+          orderNumber: orders.orderNumber,
+        }).from(orders).where(and(eq(orders.id, orderId), eq(orders.merchantId, LALA_MERCHANT_ID)));
 
-      const results: Array<{ id: string; orderNumber: string; toStatus: string; success: boolean; error?: string }> = [];
+        if (!current) {
+          results.push({ id: orderId, toStatus, success: false, error: "Order not found in DB" });
+          return;
+        }
+        if (current.workflowStatus !== "HOLD") {
+          results.push({ id: orderId, toStatus, success: true, skipped: true, skipReason: `Already moved (status: ${current.workflowStatus})` });
+          return;
+        }
+        if (current.conflictDetected) {
+          results.push({ id: orderId, toStatus, success: false, error: "conflict_detected=true — refusing to move" });
+          return;
+        }
 
-      for (const order of holdOrders) {
-        const toStatus = order.confirmationStatus === "confirmed" ? "READY_TO_SHIP" : "PENDING";
         const result = await transitionOrder({
           merchantId: LALA_MERCHANT_ID,
-          orderId: order.id,
+          orderId,
           toStatus,
           action: "data_repair",
           actorType: "system",
           actorName: "Data Repair Script",
-          reason: `Misclassified HOLD order — moved to ${toStatus} via data repair (admin: ${adminId})`,
+          reason: `Misclassified HOLD (no conflict) — moved to ${toStatus} via data repair (admin: ${adminId})`,
         });
-        results.push({
-          id: order.id,
-          orderNumber: order.orderNumber ?? "",
-          toStatus,
-          success: result.success,
-          error: result.error,
-        });
+        results.push({ id: orderId, toStatus, success: result.success, error: result.error });
       }
 
-      const succeeded = results.filter((r) => r.success).length;
-      const failed = results.filter((r) => !r.success);
+      for (const id of REPAIR_TO_PENDING) await repairOne(id, "PENDING");
+      for (const id of REPAIR_TO_READY)   await repairOne(id, "READY_TO_SHIP");
 
-      console.log(`[DataRepair] Repaired ${succeeded}/${results.length} HOLD orders for Lala Import`);
-      if (failed.length > 0) {
-        console.error("[DataRepair] Failures:", failed);
-      }
+      const succeeded  = results.filter((r) => r.success && !r.skipped).length;
+      const skipped    = results.filter((r) => r.skipped).length;
+      const failed     = results.filter((r) => !r.success);
 
-      res.json({
-        message: `Repaired ${succeeded} of ${results.length} misclassified HOLD orders`,
-        succeeded,
-        failed: failed.length,
-        results,
-      });
+      const expectedMoved = REPAIR_TO_PENDING.length + REPAIR_TO_READY.length;
+      const assertion = (succeeded + skipped) === expectedMoved
+        ? "PASS: all expected orders accounted for"
+        : `WARN: expected ${expectedMoved} orders moved or skipped, got ${succeeded + skipped}`;
+
+      console.log(`[DataRepair] ${assertion} — ${succeeded} moved, ${skipped} already done, ${failed.length} errors`);
+      if (failed.length > 0) console.error("[DataRepair] Failures:", failed);
+
+      res.json({ message: assertion, succeeded, skipped, failed: failed.length, expectedTotal: expectedMoved, results });
     } catch (error: any) {
       console.error("Data repair error:", error);
       res.status(500).json({ message: "Repair failed", error: error.message });
