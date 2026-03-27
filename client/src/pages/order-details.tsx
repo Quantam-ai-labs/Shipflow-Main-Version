@@ -329,11 +329,6 @@ type SmartEntry =
   | { kind: 'status'; event: any; _time: number; key: string }
   | { kind: 'change'; event: any; _time: number; key: string };
 
-const CONFIRMATION_DRIVEN_ACTIONS = new Set([
-  'whatsapp_confirm', 'whatsapp_cancel', 'robocall_confirm', 'robocall_cancel',
-  'manual_confirm', 'manual_cancel', 'robocall_exhausted',
-]);
-
 function buildSmartTimeline(
   auditLog: any[] | undefined,
   changeLog: any[] | undefined,
@@ -345,7 +340,8 @@ function buildSmartTimeline(
   const confAsc = confAll.filter(e => !SUPPRESS.has(e.eventType)).sort((a, b) => a._time - b._time);
 
   const consumed = new Set<number>();
-  const consumedResponseTimes: number[] = [];
+  type ConsumedTransition = { time: number; toStatus: string | null };
+  const consumedTransitions: ConsumedTransition[] = [];
   const result: SmartEntry[] = [];
   let waNum = 0;
   let callNum = 0;
@@ -371,9 +367,14 @@ function buildSmartTimeline(
         if (et === 'WA_EXHAUSTED' || et === 'WA_SENT' || et === 'WA_REMINDER_SENT') break;
       }
       consumed.add(i);
-      if (rIdx >= 0) { consumed.add(rIdx); consumedResponseTimes.push(confAsc[rIdx]._time); }
-      const waExhaustedTime = confAsc.find(ev => ev.eventType === 'WA_EXHAUSTED')?._time;
-      const noReplyMs = rIdx < 0 ? (waExhaustedTime ?? Date.now()) - e._time : 0;
+      if (rIdx >= 0) {
+        consumed.add(rIdx);
+        const rc = confAsc[rIdx].responseClassification;
+        const toStatus = rc === 'confirm' ? 'CONFIRMED' : rc === 'cancel' ? 'CANCELLED' : null;
+        consumedTransitions.push({ time: confAsc[rIdx]._time, toStatus });
+      }
+      const nextCapTime = confAsc[i + 1]?._time ?? Date.now();
+      const noReplyMs = rIdx < 0 ? Math.max(0, nextCapTime - e._time) : 0;
       result.push({
         kind: 'wa_attempt', num: waNum, sent: e,
         response: rIdx >= 0 ? confAsc[rIdx] : null,
@@ -391,7 +392,12 @@ function buildSmartTimeline(
         if (et === 'CALL_ATTEMPTED') break;
       }
       consumed.add(i);
-      if (rIdx >= 0) { consumed.add(rIdx); consumedResponseTimes.push(confAsc[rIdx]._time); }
+      if (rIdx >= 0) {
+        consumed.add(rIdx);
+        const rc = confAsc[rIdx].responseClassification;
+        const toStatus = rc === 'confirm' ? 'CONFIRMED' : rc === 'cancel' ? 'CANCELLED' : null;
+        consumedTransitions.push({ time: confAsc[rIdx]._time, toStatus });
+      }
       result.push({ kind: 'call_attempt', num: callNum, sent: e, response: rIdx >= 0 ? confAsc[rIdx] : null, _time: e._time, key: `call-${i}` });
 
     } else if (e.eventType === 'CALL_DEFERRED') {
@@ -400,7 +406,7 @@ function buildSmartTimeline(
 
     } else if (e.eventType === 'MANUAL_OVERRIDE') {
       consumed.add(i);
-      consumedResponseTimes.push(e._time);
+      consumedTransitions.push({ time: e._time, toStatus: e.newStatus ?? null });
       result.push({ kind: 'confirmation', event: e, _time: e._time, key: `conf-${i}` });
 
     } else {
@@ -409,16 +415,18 @@ function buildSmartTimeline(
     }
   }
 
-  const waTimes = confAll.filter(e => e.eventType === 'WA_SENT' || e.eventType === 'WA_REMINDER_SENT').map(e => e._time);
+  const waSentOnlyTimes = confAll.filter(e => e.eventType === 'WA_SENT').map(e => e._time);
 
   for (const e of (auditLog || []).map(e => ({ ...e, _type: 'status', _time: new Date(e.createdAt).getTime() }))) {
-    const isConfirmationDriven = e.actorType === 'system' && CONFIRMATION_DRIVEN_ACTIONS.has(e.action);
-    const isCoveredByResponse = isConfirmationDriven && consumedResponseTimes.some(t => Math.abs(t - e._time) < 10000);
-    if (!isCoveredByResponse) result.push({ kind: 'status', event: e, _time: e._time, key: `status-${e.id}` });
+    const isDuplicateStatusChange = e.actorType === 'system' && consumedTransitions.some(ct =>
+      Math.abs(ct.time - e._time) < 10000 &&
+      (ct.toStatus === null || ct.toStatus === e.toStatus)
+    );
+    if (!isDuplicateStatusChange) result.push({ kind: 'status', event: e, _time: e._time, key: `status-${e.id}` });
   }
 
   for (const e of (changeLog || []).map(e => ({ ...e, _type: 'change', _time: new Date(e.createdAt).getTime() }))) {
-    if (e.changeType === 'WHATSAPP_SENT' && waTimes.some(t => Math.abs(t - e._time) < 60000)) continue;
+    if (e.changeType === 'WHATSAPP_SENT' && waSentOnlyTimes.some(t => Math.abs(t - e._time) < 60000)) continue;
     result.push({ kind: 'change', event: e, _time: e._time, key: `change-${e.id}` });
   }
 
