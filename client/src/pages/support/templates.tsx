@@ -105,6 +105,14 @@ const VARIABLE_OPTIONS = [
   { value: "shipping_amount", label: "Shipping Amount" },
 ];
 
+const DEFAULT_VAR_ORDER = ["name", "order_number", "items", "order_total", "tracking_number", "courier_name", "new_status", "city", "address", "shipping_amount"];
+
+function countTemplatePlaceholders(body: string): number {
+  const matches = body.match(/\{\{(\d+)\}\}/g);
+  if (!matches || matches.length === 0) return 0;
+  return Math.max(...matches.map(m => parseInt(m.replace(/[{}]/g, ""))));
+}
+
 const WORKFLOW_TRIGGERS = [
   { value: "NEW", label: "New Order" },
   { value: "PENDING", label: "Pending Confirmation" },
@@ -570,8 +578,23 @@ function AutomationDialog({
       setMessageText(editData.messageText ?? "");
       setTemplateName(editData.templateName ?? "none");
       setExcludeDraftOrders(editData.excludeDraftOrders ?? false);
-      setVariableOrder(editData.variableOrder ?? []);
-      setShowVarMapping(!!(editData.variableOrder && editData.variableOrder.length > 0));
+      if (editData.variableOrder && editData.variableOrder.length > 0) {
+        setVariableOrder(editData.variableOrder);
+        setShowVarMapping(true);
+      } else if (editData.templateName) {
+        const tpl = templates.find(t => t.name === editData.templateName);
+        const count = tpl?.body ? countTemplatePlaceholders(tpl.body) : 0;
+        if (count > 0) {
+          setVariableOrder(Array.from({ length: count }, (_, i) => DEFAULT_VAR_ORDER[i] ?? ""));
+          setShowVarMapping(true);
+        } else {
+          setVariableOrder([]);
+          setShowVarMapping(false);
+        }
+      } else {
+        setVariableOrder([]);
+        setShowVarMapping(false);
+      }
     } else {
       setTitle(""); setDescription(""); setTriggerStatus("NEW");
       setDelayMinutes(0); setMessageText(""); setTemplateName("none");
@@ -675,7 +698,21 @@ function AutomationDialog({
 
           <div className="space-y-1.5">
             <Label>Or use Template (overrides text)</Label>
-            <Select value={templateName} onValueChange={v => { setTemplateName(v); if (v === "none") { setShowVarMapping(false); setVariableOrder([]); } }}>
+            <Select value={templateName} onValueChange={v => {
+              setTemplateName(v);
+              if (v === "none") {
+                setShowVarMapping(false);
+                setVariableOrder([]);
+              } else {
+                const tpl = templates.find(t => t.name === v);
+                const count = tpl?.body ? countTemplatePlaceholders(tpl.body) : 0;
+                if (count > 0) {
+                  const slots = Array.from({ length: count }, (_, i) => DEFAULT_VAR_ORDER[i] ?? "");
+                  setVariableOrder(slots);
+                  setShowVarMapping(true);
+                }
+              }
+            }}>
               <SelectTrigger data-testid="select-automation-template">
                 <SelectValue />
               </SelectTrigger>

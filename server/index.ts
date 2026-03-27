@@ -126,11 +126,16 @@ async function patchShippingAutomationVariableOrder() {
   try {
     const LALA_MERCHANT_ID = "63d76766-32d7-47ab-8b46-d3c479bcb58a";
     const SHIPPING_VAR_ORDER = ["name", "order_number", "courier_name", "tracking_number"];
-    const rows = await db.select({ id: waAutomations.id, variableOrder: waAutomations.variableOrder })
+    // Only patch FULFILLED automations that are template-based (templateName IS NOT NULL)
+    // and have not yet been assigned a variableOrder. This specifically targets
+    // shipping/fulfilled template automations where positional params matter.
+    const { isNotNull } = await import("drizzle-orm");
+    const rows = await db.select({ id: waAutomations.id, templateName: waAutomations.templateName })
       .from(waAutomations)
       .where(and(
         eq(waAutomations.merchantId, LALA_MERCHANT_ID),
         eq(waAutomations.triggerStatus, "FULFILLED"),
+        isNotNull(waAutomations.templateName),
         isNull(waAutomations.variableOrder),
       ));
     if (rows.length === 0) return;
@@ -138,8 +143,8 @@ async function patchShippingAutomationVariableOrder() {
       await db.update(waAutomations)
         .set({ variableOrder: SHIPPING_VAR_ORDER })
         .where(eq(waAutomations.id, row.id));
+      console.log(`[AutoPatch] Set variableOrder=${JSON.stringify(SHIPPING_VAR_ORDER)} on FULFILLED automation "${row.templateName}" (${row.id})`);
     }
-    console.log(`[AutoPatch] Set variableOrder on ${rows.length} FULFILLED automation(s) for Lala Import`);
   } catch (err: any) {
     console.error("[AutoPatch] Failed to patch shipping automation variable order:", err.message);
   }
