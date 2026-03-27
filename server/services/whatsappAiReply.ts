@@ -17,7 +17,7 @@ const MAX_CONVERSATION_MESSAGES = 10;
 const MAX_PHONE_ORDERS = 10;
 
 const aiReplyLock = new Map<string, number>();
-const AI_LOCK_TTL_MS = 30_000;
+const AI_LOCK_TTL_MS = 8_000;
 
 function acquireAiLock(key: string): boolean {
   const now = Date.now();
@@ -235,16 +235,44 @@ export async function generateAiReply(params: {
     const orderFields = {
       orderNumber: orders.orderNumber,
       workflowStatus: orders.workflowStatus,
+      pendingReasonType: orders.pendingReasonType,
+      confirmationStatus: orders.confirmationStatus,
+      cancelReason: orders.cancelReason,
       totalAmount: orders.totalAmount,
       currency: orders.currency,
       itemSummary: orders.itemSummary,
       city: orders.city,
       courierName: orders.courierName,
       courierTracking: orders.courierTracking,
+      courierRawStatus: orders.courierRawStatus,
       shipmentStatus: orders.shipmentStatus,
       paymentMethod: orders.paymentMethod,
       orderDate: orders.orderDate,
     };
+
+    function resolveOrderStatus(o: { workflowStatus: string | null; pendingReasonType: string | null }): string {
+      if ((o.workflowStatus === "PENDING" || o.workflowStatus === "NEW") && o.pendingReasonType === "confirmation_pending") {
+        return "Awaiting Your Confirmation";
+      }
+      return STATUS_MAP[o.workflowStatus || ""] || o.workflowStatus || "Unknown";
+    }
+
+    function buildOrderLine(o: typeof phoneOrders[0], index: number): string {
+      const status = resolveOrderStatus(o);
+      const date = o.orderDate ? new Date(o.orderDate).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" }) : "N/A";
+      let line = `${index + 1}. Order ${o.orderNumber} (${date})`;
+      line += `\n   Status: ${status}`;
+      line += `\n   Items: ${o.itemSummary || "N/A"}`;
+      line += `\n   Total: ${o.currency || "PKR"} ${o.totalAmount || "N/A"}`;
+      line += `\n   City: ${o.city || "N/A"}`;
+      line += `\n   Payment: ${o.paymentMethod || "N/A"}`;
+      if (o.courierName) line += `\n   Courier: ${o.courierName}`;
+      if (o.courierTracking) line += `\n   Tracking: ${o.courierTracking}`;
+      if (o.courierRawStatus) line += `\n   Courier Status: ${o.courierRawStatus}`;
+      else if (o.shipmentStatus) line += `\n   Shipment: ${o.shipmentStatus}`;
+      if (o.cancelReason) line += `\n   Cancel Reason: ${o.cancelReason}`;
+      return line;
+    }
 
     let orderContext = "";
 
@@ -259,20 +287,7 @@ export async function generateAiReply(params: {
       .limit(MAX_PHONE_ORDERS);
 
     if (phoneOrders.length > 0) {
-      const orderLines = phoneOrders.map((o, i) => {
-        const status = STATUS_MAP[o.workflowStatus || ""] || o.workflowStatus || "Unknown";
-        const date = o.orderDate ? new Date(o.orderDate).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" }) : "N/A";
-        let line = `${i + 1}. Order ${o.orderNumber} (${date})`;
-        line += `\n   Status: ${status}`;
-        line += `\n   Items: ${o.itemSummary || "N/A"}`;
-        line += `\n   Total: ${o.currency || "PKR"} ${o.totalAmount || "N/A"}`;
-        line += `\n   City: ${o.city || "N/A"}`;
-        line += `\n   Payment: ${o.paymentMethod || "N/A"}`;
-        if (o.courierName) line += `\n   Courier: ${o.courierName}`;
-        if (o.courierTracking) line += `\n   Tracking: ${o.courierTracking}`;
-        if (o.shipmentStatus) line += `\n   Shipment: ${o.shipmentStatus}`;
-        return line;
-      });
+      const orderLines = phoneOrders.map((o, i) => buildOrderLine(o, i));
       orderContext = `\nCUSTOMER'S ORDERS (${phoneOrders.length} found, most recent first):\n${orderLines.join("\n\n")}`;
       console.log(`${LOG_PREFIX} Found ${phoneOrders.length} orders for phone ${customerPhone}`);
     } else if (params.orderId) {
@@ -280,10 +295,7 @@ export async function generateAiReply(params: {
         .where(and(eq(orders.id, params.orderId), eq(orders.merchantId, merchantId)))
         .limit(1);
       if (singleOrder) {
-        const status = STATUS_MAP[singleOrder.workflowStatus || ""] || singleOrder.workflowStatus;
-        orderContext = `\nCUSTOMER'S ORDER:\n- Order ${singleOrder.orderNumber}\n- Status: ${status}\n- Items: ${singleOrder.itemSummary || "N/A"}\n- Total: ${singleOrder.currency || "PKR"} ${singleOrder.totalAmount || "N/A"}\n- City: ${singleOrder.city || "N/A"}`;
-        if (singleOrder.courierName) orderContext += `\n- Courier: ${singleOrder.courierName}`;
-        if (singleOrder.courierTracking) orderContext += `\n- Tracking: ${singleOrder.courierTracking}`;
+        orderContext = `\nCUSTOMER'S ORDER:\n${buildOrderLine(singleOrder, 0).replace(/^1\. /, "- ")}`;
       }
     } else {
       console.log(`${LOG_PREFIX} No orders found for phone ${customerPhone}`);
@@ -337,11 +349,21 @@ CRITICAL RULES — FOLLOW EXACTLY:
 10. Maximum response length: ${MAX_REPLY_LENGTH} characters.
 
 ORDER INQUIRY RULES:
-- If the customer asks about order status, provide details from the order data below.
+- If the customer asks about order status, provide a specific, helpful answer using the exact order data below. Do NOT give a generic greeting or say you will check — answer directly with the information you have.
 - If the customer has multiple orders, share the most recent order's details and mention you can look up any specific order by number.
 - If no orders are found for this customer, tell them you couldn't find any orders linked to their number and ask them to share their order number.
 - NEVER promise specific delivery dates unless the data explicitly shows them.
 - NEVER fabricate tracking numbers, courier names, or order details.
+
+ORDER STATUS RESPONSE GUIDE — use the order's Status field to craft the reply:
+- Status "Awaiting Your Confirmation": Tell the customer their order is waiting for their confirmation. Ask them to reply with CONFIRM to confirm it or CANCEL to cancel it.
+- Status "Received" or "Being Processed": Tell the customer their order has been received and is being processed by the team.
+- Status "On Hold": Tell the customer their order is currently on hold and the team will follow up with them shortly.
+- Status "Ready to Ship": Tell the customer their order is confirmed, packed, and ready to be dispatched very soon.
+- Status "Booked with Courier" or "Shipped / In Transit": Tell the customer their order has been dispatched. Share the Courier name, Tracking number, and Courier Status if available in the data.
+- Status "Delivered": Tell the customer their order has been delivered successfully.
+- Status "Cancelled": Tell the customer their order was cancelled. If a Cancel Reason is available in the data, share it briefly.
+- Status "Returned": Tell the customer their order has been returned and the team will be in touch regarding next steps.
 
 CLASSIFICATION RESPONSE RULES:
 - When classifying as "complaint": Respond empathetically, acknowledge the issue, apologize for the inconvenience, and tell the customer that a team member will review their case and get back to them shortly.
@@ -403,6 +425,7 @@ ${conversationHistory ? `RECENT CONVERSATION:\n${conversationHistory}\n` : ""}`;
     }
 
     console.log(`${LOG_PREFIX} Generated reply for ${customerPhone}: "${reply.substring(0, 80)}..."${classification ? ` [classified: ${classification}]` : ""}`);
+    releaseAiLock(lockKey);
     return { success: true, reply, classification };
   } catch (error: any) {
     releaseAiLock(lockKey);
