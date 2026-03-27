@@ -366,19 +366,25 @@ function buildSmartTimeline(
         }
         if (et === 'WA_EXHAUSTED' || et === 'WA_SENT' || et === 'WA_REMINDER_SENT') break;
       }
+      let hasFailed = false;
+      for (let j = i + 1; j < confAsc.length; j++) {
+        const et2 = confAsc[j].eventType;
+        if (et2 === 'WA_PERMANENT_FAILURE') { hasFailed = true; break; }
+        if (et2 === 'WA_SENT' || et2 === 'WA_REMINDER_SENT' || et2 === 'WA_EXHAUSTED') break;
+      }
       consumed.add(i);
       if (rIdx >= 0) {
         consumed.add(rIdx);
         const rc = confAsc[rIdx].responseClassification;
         const toStatus = rc === 'confirm' ? 'CONFIRMED' : rc === 'cancel' ? 'CANCELLED' : null;
-        consumedTransitions.push({ time: confAsc[rIdx]._time, toStatus });
+        if (toStatus !== null) consumedTransitions.push({ time: confAsc[rIdx]._time, toStatus });
       }
       const nextCapTime = confAsc[i + 1]?._time ?? Date.now();
       const noReplyMs = rIdx < 0 ? Math.max(0, nextCapTime - e._time) : 0;
       result.push({
         kind: 'wa_attempt', num: waNum, sent: e,
         response: rIdx >= 0 ? confAsc[rIdx] : null,
-        hasFailed: !!e.errorDetails, noReplyMs,
+        hasFailed, noReplyMs,
         _time: e._time, key: `wa-${i}`,
       });
 
@@ -396,7 +402,7 @@ function buildSmartTimeline(
         consumed.add(rIdx);
         const rc = confAsc[rIdx].responseClassification;
         const toStatus = rc === 'confirm' ? 'CONFIRMED' : rc === 'cancel' ? 'CANCELLED' : null;
-        consumedTransitions.push({ time: confAsc[rIdx]._time, toStatus });
+        if (toStatus !== null) consumedTransitions.push({ time: confAsc[rIdx]._time, toStatus });
       }
       result.push({ kind: 'call_attempt', num: callNum, sent: e, response: rIdx >= 0 ? confAsc[rIdx] : null, _time: e._time, key: `call-${i}` });
 
@@ -406,7 +412,12 @@ function buildSmartTimeline(
 
     } else if (e.eventType === 'MANUAL_OVERRIDE') {
       consumed.add(i);
-      consumedTransitions.push({ time: e._time, toStatus: e.newStatus ?? null });
+      if (e.newStatus) consumedTransitions.push({ time: e._time, toStatus: e.newStatus });
+      result.push({ kind: 'confirmation', event: e, _time: e._time, key: `conf-${i}` });
+
+    } else if (e.eventType === 'ROBO_EXHAUSTED') {
+      consumed.add(i);
+      consumedTransitions.push({ time: e._time, toStatus: 'PENDING' });
       result.push({ kind: 'confirmation', event: e, _time: e._time, key: `conf-${i}` });
 
     } else {
@@ -420,7 +431,7 @@ function buildSmartTimeline(
   for (const e of (auditLog || []).map(e => ({ ...e, _type: 'status', _time: new Date(e.createdAt).getTime() }))) {
     const isDuplicateStatusChange = e.actorType === 'system' && consumedTransitions.some(ct =>
       Math.abs(ct.time - e._time) < 10000 &&
-      (ct.toStatus === null || ct.toStatus === e.toStatus)
+      ct.toStatus !== null && ct.toStatus === e.toStatus
     );
     if (!isDuplicateStatusChange) result.push({ kind: 'status', event: e, _time: e._time, key: `status-${e.id}` });
   }
@@ -754,7 +765,7 @@ function OrderTimeline({ orderId, auditLog, changeLog }: { orderId: string; audi
                     {entry.kind === 'change' && ev.changeType === 'FIELD_EDIT' && (
                       <div className="mt-1 space-y-0.5">
                         {Array.isArray(ev.metadata?.changes) ? (
-                          (ev.metadata.changes as { field: string; oldValue: string | null; newValue: string | null }[]).map((c: any, ci: number) => {
+                          (ev.metadata.changes as { field: string; oldValue: string | null; newValue: string | null }[]).map((c, ci) => {
                             const clabel = c.field.replace(/([A-Z])/g, ' $1').trim();
                             if (c.field === 'lineItems') {
                               const summarize = (v: string | null) => {
