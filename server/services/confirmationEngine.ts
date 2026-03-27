@@ -109,6 +109,12 @@ const NOTIFICATION_CATEGORY_MAP: Record<string, { category: string; resolvable: 
   shopify_writeback_failed:     { category: "other",        resolvable: false },
   urgent_cancellation_request:  { category: "chat",         resolvable: true },
   ai_urgent_request:            { category: "chat",         resolvable: true },
+  ai_conflict:                  { category: "chat",         resolvable: true },
+  ai_lead:                      { category: "chat",         resolvable: true },
+  ai_human_handoff:             { category: "chat",         resolvable: true },
+  ai_complaint:                 { category: "chat",         resolvable: true },
+  ai_replacement:               { category: "chat",         resolvable: true },
+  ai_return:                    { category: "chat",         resolvable: true },
 };
 
 export async function createNotification(params: {
