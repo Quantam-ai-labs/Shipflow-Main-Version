@@ -1523,9 +1523,30 @@ function CourierTrackingJourney({ orderId, order }: { orderId: string; order: Or
             </CardTitle>
           </div>
           <div className="flex items-center gap-1.5 flex-wrap">
-            <Badge variant="outline" className="font-mono text-[11px] px-2" data-testid="badge-tracking-number">
-              {order.courierTracking}
-            </Badge>
+            {(() => {
+              const cn = order.courierName?.toLowerCase() || "";
+              const trackingUrl = cn.includes("leopard")
+                ? `https://merchantapi.leopardscourier.com/track?no=${encodeURIComponent(order.courierTracking!)}`
+                : cn.includes("postex")
+                  ? `https://postex.pk/tracking?cn=${encodeURIComponent(order.courierTracking!)}`
+                  : null;
+              return trackingUrl ? (
+                <a
+                  href={trackingUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid="link-tracking-number"
+                >
+                  <Badge variant="outline" className="font-mono text-[11px] px-2 text-primary border-primary/40 hover:bg-primary/10 hover:border-primary cursor-pointer transition-colors underline underline-offset-2">
+                    {order.courierTracking}
+                  </Badge>
+                </a>
+              ) : (
+                <Badge variant="outline" className="font-mono text-[11px] px-2" data-testid="badge-tracking-number">
+                  {order.courierTracking}
+                </Badge>
+              );
+            })()}
             <Badge variant="secondary" className="text-[11px] capitalize px-2" data-testid="badge-courier-name">
               {order.courierName}
             </Badge>

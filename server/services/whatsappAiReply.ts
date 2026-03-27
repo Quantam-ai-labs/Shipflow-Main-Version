@@ -267,7 +267,15 @@ export async function generateAiReply(params: {
       line += `\n   City: ${o.city || "N/A"}`;
       line += `\n   Payment: ${o.paymentMethod || "N/A"}`;
       if (o.courierName) line += `\n   Courier: ${o.courierName}`;
-      if (o.courierTracking) line += `\n   Tracking: ${o.courierTracking}`;
+      if (o.courierTracking) {
+        line += `\n   Tracking Number: ${o.courierTracking}`;
+        const name = (o.courierName || "").toLowerCase();
+        if (name.includes("leopard")) {
+          line += `\n   Tracking Link: https://merchantapi.leopardscourier.com/track?no=${encodeURIComponent(o.courierTracking)}`;
+        } else if (name.includes("postex")) {
+          line += `\n   Tracking Link: https://postex.pk/tracking?cn=${encodeURIComponent(o.courierTracking)}`;
+        }
+      }
       if (o.courierRawStatus) line += `\n   Courier Status: ${o.courierRawStatus}`;
       else if (o.shipmentStatus) line += `\n   Shipment: ${o.shipmentStatus}`;
       if (o.cancelReason) line += `\n   Cancel Reason: ${o.cancelReason}`;
@@ -360,7 +368,7 @@ ORDER STATUS RESPONSE GUIDE — use the order's Status field to craft the reply:
 - Status "Received" or "Being Processed": Tell the customer their order has been received and is being processed by the team.
 - Status "On Hold": Tell the customer their order is currently on hold and the team will follow up with them shortly.
 - Status "Ready to Ship": Tell the customer their order is confirmed, packed, and ready to be dispatched very soon.
-- Status "Booked with Courier" or "Shipped / In Transit": Tell the customer their order has been dispatched. Share the Courier name, Tracking number, and Courier Status if available in the data.
+- Status "Booked with Courier" or "Shipped / In Transit": Tell the customer their order has been dispatched. Share the Courier name, Tracking Number, and Tracking Link if available in the data. Always include the Tracking Link so the customer can track it directly — share it as plain text, not as a markdown hyperlink.
 - Status "Delivered": Tell the customer their order has been delivered successfully.
 - Status "Cancelled": Tell the customer their order was cancelled. If a Cancel Reason is available in the data, share it briefly.
 - Status "Returned": Tell the customer their order has been returned and the team will be in touch regarding next steps.

@@ -79,6 +79,7 @@ const SAMPLE_VARS: Record<string, string> = {
   "{{order_total}}": "2,450",
   "{{items}}": "Heavy Duty Jump Starter x1 || Phone Holder x2",
   "{{tracking_number}}": "LP123456789PK",
+  "{{tracking_link}}": "https://merchantapi.leopardscourier.com/track?no=LP123456789PK",
   "{{courier_name}}": "Leopards",
   "{{city}}": "Karachi",
   "{{address}}": "Block 5, Clifton",
@@ -88,7 +89,7 @@ const SAMPLE_VARS: Record<string, string> = {
 
 const VARIABLE_CHIPS = [
   "{{name}}", "{{order_number}}", "{{order_total}}", "{{items}}",
-  "{{tracking_number}}", "{{courier_name}}", "{{city}}", "{{address}}",
+  "{{tracking_number}}", "{{tracking_link}}", "{{courier_name}}", "{{city}}", "{{address}}",
   "{{new_status}}", "{{shipping_amount}}",
 ];
 
@@ -98,6 +99,7 @@ const VARIABLE_OPTIONS = [
   { value: "order_total", label: "Order Total" },
   { value: "items", label: "Line Items" },
   { value: "tracking_number", label: "Tracking #" },
+  { value: "tracking_link", label: "Tracking Link (URL)" },
   { value: "courier_name", label: "Courier Name" },
   { value: "city", label: "City" },
   { value: "address", label: "Address" },
@@ -105,7 +107,7 @@ const VARIABLE_OPTIONS = [
   { value: "shipping_amount", label: "Shipping Amount" },
 ];
 
-const DEFAULT_VAR_ORDER = ["name", "order_number", "items", "order_total", "tracking_number", "courier_name", "new_status", "city", "address", "shipping_amount"];
+const DEFAULT_VAR_ORDER = ["name", "order_number", "items", "order_total", "tracking_number", "tracking_link", "courier_name", "new_status", "city", "address", "shipping_amount"];
 
 function countTemplatePlaceholders(body: string): number {
   const matches = body.match(/\{\{(\d+)\}\}/g);

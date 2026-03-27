@@ -23,12 +23,25 @@ export const WA_VARIABLE_CHIPS = [
   { key: "{{order_total}}", label: "Order Total", description: "Order total with currency" },
   { key: "{{items}}", label: "Items", description: "Product name - variant x qty || ..." },
   { key: "{{tracking_number}}", label: "Tracking No.", description: "Courier tracking number" },
+  { key: "{{tracking_link}}", label: "Tracking Link", description: "Full clickable tracking URL (Leopards or PostEx)" },
   { key: "{{courier_name}}", label: "Courier", description: "Courier company name" },
   { key: "{{city}}", label: "City", description: "Customer city" },
   { key: "{{address}}", label: "Address", description: "Shipping address" },
   { key: "{{new_status}}", label: "New Status", description: "New order status label" },
   { key: "{{shipping_amount}}", label: "Shipping", description: "Shipping charge amount" },
 ] as const;
+
+export function buildTrackingLink(courierName?: string | null, trackingNumber?: string | null): string {
+  if (!trackingNumber) return "";
+  const name = (courierName || "").toLowerCase();
+  if (name.includes("leopard")) {
+    return `https://merchantapi.leopardscourier.com/track?no=${encodeURIComponent(trackingNumber)}`;
+  }
+  if (name.includes("postex")) {
+    return `https://postex.pk/tracking?cn=${encodeURIComponent(trackingNumber)}`;
+  }
+  return "";
+}
 
 export function interpolateMessageBody(
   body: string | null | undefined,
@@ -61,7 +74,7 @@ function buildItemLines(
   return itemSummary || "your order";
 }
 
-export const DEFAULT_VAR_ORDER = ["name", "order_number", "items", "order_total", "tracking_number", "courier_name", "new_status", "city", "address", "shipping_amount"];
+export const DEFAULT_VAR_ORDER = ["name", "order_number", "items", "order_total", "tracking_number", "tracking_link", "courier_name", "new_status", "city", "address", "shipping_amount"];
 
 export function buildTemplateParamsFromBody(
   metaTemplateBody: string,
@@ -143,6 +156,7 @@ export function buildVarsFromParams(params: {
     shipping_amount: shippingStr,
     courier_name: params.courierName || "",
     tracking_number: params.courierTracking || "",
+    tracking_link: buildTrackingLink(params.courierName, params.courierTracking),
     // backward-compat aliases
     customer_name: params.customerName || "Customer",
     item_name: itemsStr,
