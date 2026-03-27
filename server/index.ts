@@ -72,12 +72,12 @@ app.use((req, res, next) => {
 
 async function backfillAiNotificationCategories() {
   try {
-    const rows = await db.execute<{ count: string }>(sql`
-      SELECT COUNT(*) as count FROM notifications
+    const { rows } = await db.execute<{ count: number }>(sql`
+      SELECT COUNT(*)::int AS count FROM notifications
       WHERE type LIKE 'ai_%' AND category = 'other'
         AND merchant_id = '63d76766-32d7-47ab-8b46-d3c479bcb58a'
     `);
-    const n = parseInt(rows[0]?.count ?? "0", 10);
+    const n = rows[0]?.count ?? 0;
     if (n === 0) return;
     await db.execute(sql`
       UPDATE notifications
