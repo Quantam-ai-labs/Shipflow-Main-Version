@@ -287,10 +287,18 @@ function getActivityColor(entry: any): string {
 function getActivityLabel(entry: any): string {
   if (entry._type === "status") {
     if (entry.action === "revert") return "Status Reverted";
-    if (entry.action === "auto_12h_pending") return "Auto-moved to Pending";
+    if (entry.action === "auto_12h_pending") return "Moved to Agent Queue (No Response)";
     if (entry.action === "courier_booked") return "Courier Booked";
     if (entry.action === "cancel_booking") return "Booking Cancelled";
     if (entry.action === "shopify_cancel") return "Shopify Cancelled";
+    if (entry.action === "conflict_hold") return "Conflicting Responses — Needs Review";
+    if (entry.action === "robocall_exhausted") return "All Calls Done — No Response";
+    if (entry.action === "whatsapp_confirm") return "Confirmed via WhatsApp";
+    if (entry.action === "whatsapp_cancel") return "Cancelled via WhatsApp";
+    if (entry.action === "robocall_confirm") return "Confirmed via Call";
+    if (entry.action === "robocall_cancel") return "Cancelled via Call";
+    if (entry.action === "manual_confirm") return "Manually Confirmed";
+    if (entry.action === "manual_cancel") return "Manually Cancelled";
     return "Status Changed";
   }
   switch (entry.changeType) {
@@ -304,13 +312,98 @@ function getActivityLabel(entry: any): string {
     case "REMARK_ADDED": return "Remark Added";
     case "FIELD_EDIT": return "Order Edited";
     case "WHATSAPP_SENT": return entry.newValue === "sent" ? "WhatsApp Sent" : "WhatsApp Failed";
-    case "WHATSAPP_CONFIRMED": return "WhatsApp Confirmed";
-    case "WHATSAPP_CANCELLED": return "WhatsApp Cancelled";
-    case "WHATSAPP_QUERY": return "WhatsApp Query";
-    case "ROBO_CONFIRMED": return "RoboCall Confirmed";
-    case "ROBO_CANCELLED": return "RoboCall Cancelled";
+    case "WHATSAPP_CONFIRMED": return "Confirmed via WhatsApp";
+    case "WHATSAPP_CANCELLED": return "Cancelled via WhatsApp";
+    case "WHATSAPP_QUERY": return "Customer Sent a Question";
+    case "ROBO_CONFIRMED": return "Confirmed via Call";
+    case "ROBO_CANCELLED": return "Cancelled via Call";
     default: return entry.changeType?.replace(/_/g, " ").replace(/\b\w/g, (l: string) => l.toUpperCase()) || "Change";
   }
+}
+
+type SmartEntry =
+  | { kind: 'wa_attempt'; num: number; sent: any; response: any | null; hasFailed: boolean; _time: number; key: string }
+  | { kind: 'call_attempt'; num: number; sent: any; response: any | null; _time: number; key: string }
+  | { kind: 'call_deferred'; event: any; _time: number; key: string }
+  | { kind: 'confirmation'; event: any; _time: number; key: string }
+  | { kind: 'status'; event: any; _time: number; key: string }
+  | { kind: 'change'; event: any; _time: number; key: string };
+
+function buildSmartTimeline(
+  auditLog: any[] | undefined,
+  changeLog: any[] | undefined,
+  confirmationTimeline: any[] | undefined,
+): SmartEntry[] {
+  const SUPPRESS = new Set(['TAGS_WRITTEN', 'CHANNELS_CANCELLED', 'WA_REMINDERS_CANCELLED', 'ROBO_QUEUE_CANCELLED', 'STATUS_CHANGED']);
+
+  const confAll = (confirmationTimeline || []).map(e => ({ ...e, _time: new Date(e.createdAt).getTime() }));
+  const confAsc = confAll.filter(e => !SUPPRESS.has(e.eventType)).sort((a, b) => a._time - b._time);
+
+  const consumed = new Set<number>();
+  const consumedTimes: number[] = [];
+  const result: SmartEntry[] = [];
+  let waNum = 0;
+  let callNum = 0;
+
+  for (let i = 0; i < confAsc.length; i++) {
+    if (consumed.has(i)) continue;
+    const e = confAsc[i];
+
+    if (e.eventType === 'WA_SENT' || e.eventType === 'WA_REMINDER_SENT') {
+      waNum++;
+      let rIdx = -1;
+      for (let j = i + 1; j < confAsc.length; j++) {
+        if (consumed.has(j)) continue;
+        const et = confAsc[j].eventType;
+        if (et === 'WA_RESPONSE') { rIdx = j; break; }
+        if (et === 'WA_EXHAUSTED' || et === 'WA_SENT' || et === 'WA_REMINDER_SENT') break;
+      }
+      consumed.add(i);
+      if (rIdx >= 0) { consumed.add(rIdx); consumedTimes.push(confAsc[rIdx]._time); }
+      result.push({ kind: 'wa_attempt', num: waNum, sent: e, response: rIdx >= 0 ? confAsc[rIdx] : null, hasFailed: !!e.errorDetails, _time: e._time, key: `wa-${i}` });
+
+    } else if (e.eventType === 'CALL_ATTEMPTED') {
+      callNum++;
+      let rIdx = -1;
+      for (let j = i + 1; j < confAsc.length; j++) {
+        if (consumed.has(j)) continue;
+        const et = confAsc[j].eventType;
+        if (et === 'CALL_RESPONSE') { rIdx = j; break; }
+        if (et === 'CALL_ATTEMPTED') break;
+      }
+      consumed.add(i);
+      if (rIdx >= 0) { consumed.add(rIdx); consumedTimes.push(confAsc[rIdx]._time); }
+      result.push({ kind: 'call_attempt', num: callNum, sent: e, response: rIdx >= 0 ? confAsc[rIdx] : null, _time: e._time, key: `call-${i}` });
+
+    } else if (e.eventType === 'CALL_DEFERRED') {
+      consumed.add(i);
+      result.push({ kind: 'call_deferred', event: e, _time: e._time, key: `deferred-${i}` });
+
+    } else if (e.eventType === 'MANUAL_OVERRIDE') {
+      consumed.add(i);
+      consumedTimes.push(e._time);
+      result.push({ kind: 'confirmation', event: e, _time: e._time, key: `conf-${i}` });
+
+    } else {
+      consumed.add(i);
+      result.push({ kind: 'confirmation', event: e, _time: e._time, key: `conf-${i}` });
+    }
+  }
+
+  const waTimes = confAll.filter(e => e.eventType === 'WA_SENT' || e.eventType === 'WA_REMINDER_SENT').map(e => e._time);
+
+  for (const e of (auditLog || []).map(e => ({ ...e, _type: 'status', _time: new Date(e.createdAt).getTime() }))) {
+    const isCovered = e.actorType === 'system' && consumedTimes.some(t => Math.abs(t - e._time) < 15000);
+    if (!isCovered) result.push({ kind: 'status', event: e, _time: e._time, key: `status-${e.id}` });
+  }
+
+  for (const e of (changeLog || []).map(e => ({ ...e, _type: 'change', _time: new Date(e.createdAt).getTime() }))) {
+    if (e.changeType === 'WHATSAPP_SENT' && waTimes.some(t => Math.abs(t - e._time) < 60000)) continue;
+    result.push({ kind: 'change', event: e, _time: e._time, key: `change-${e.id}` });
+  }
+
+  result.sort((a, b) => b._time - a._time);
+  return result;
 }
 
 function OrderTimeline({ orderId, auditLog, changeLog }: { orderId: string; auditLog: any[] | undefined; changeLog: any[] | undefined }) {
@@ -361,22 +454,101 @@ function OrderTimeline({ orderId, auditLog, changeLog }: { orderId: string; audi
     },
   });
 
-  const timeline: any[] = [];
-  if (auditLog) {
-    auditLog.forEach((e: any) => timeline.push({ ...e, _type: "status" as const, _time: new Date(e.createdAt).getTime() }));
-  }
-  if (changeLog) {
-    changeLog.forEach((e: any) => timeline.push({ ...e, _type: "change" as const, _time: new Date(e.createdAt).getTime() }));
-  }
-  if (confirmationData?.timeline) {
-    confirmationData.timeline.forEach((e: any) => timeline.push({ ...e, _type: "confirmation" as const, _time: new Date(e.createdAt).getTime() }));
-  }
-  timeline.sort((a, b) => b._time - a._time);
+  const smartTimeline = buildSmartTimeline(auditLog, changeLog, confirmationData?.timeline);
 
-  if (timeline.length === 0) return null;
+  if (smartTimeline.length === 0) return null;
 
-  const visible = expanded ? timeline : timeline.slice(0, COLLAPSED_COUNT);
-  const hasMore = timeline.length > COLLAPSED_COUNT;
+  const visible = expanded ? smartTimeline : smartTimeline.slice(0, COLLAPSED_COUNT);
+  const hasMore = smartTimeline.length > COLLAPSED_COUNT;
+
+  function renderCallOutcome(response: any) {
+    if (!response) {
+      return (
+        <div className="mt-2 px-3 py-1.5 rounded-md bg-muted/50 border border-border flex items-center gap-2">
+          <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+          <span className="text-xs text-muted-foreground">Connecting...</span>
+        </div>
+      );
+    }
+    const api = (typeof response.apiResponse === 'string' ? JSON.parse(response.apiResponse) : response.apiResponse) || {};
+    const vs = api.voiceStatus as number | undefined;
+    const dtmf = api.dtmf as number | null | undefined;
+    const sec = api.voiceSec as number | undefined;
+    const rc = response.responseClassification || '';
+    const dur = sec != null && sec > 0
+      ? `${Math.floor(sec / 60) > 0 ? `${Math.floor(sec / 60)}m ` : ''}${sec % 60}s`
+      : null;
+
+    if ((vs === 4 || rc === 'Answered') && dtmf === 1) {
+      return (
+        <div className="mt-2 px-3 py-2 rounded-md bg-green-50 dark:bg-green-950/60 border border-green-200 dark:border-green-800">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-green-600 dark:text-green-400 shrink-0" />
+            <span className="text-sm font-semibold text-green-700 dark:text-green-300">Confirmed (pressed 1)</span>
+          </div>
+          {dur && <p className="text-xs text-muted-foreground mt-0.5 ml-6">Duration: {dur}</p>}
+        </div>
+      );
+    }
+    if ((vs === 4 || rc === 'Answered') && dtmf === 2) {
+      return (
+        <div className="mt-2 px-3 py-2 rounded-md bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-800">
+          <div className="flex items-center gap-2">
+            <XCircle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0" />
+            <span className="text-sm font-semibold text-red-700 dark:text-red-300">Cancelled (pressed 2)</span>
+          </div>
+          {dur && <p className="text-xs text-muted-foreground mt-0.5 ml-6">Duration: {dur}</p>}
+        </div>
+      );
+    }
+    if (vs === 4 || rc === 'Answered') {
+      return (
+        <div className="mt-2 px-3 py-2 rounded-md bg-orange-50 dark:bg-orange-950/60 border border-orange-200 dark:border-orange-800">
+          <div className="flex items-center gap-2">
+            <PhoneCall className="w-4 h-4 text-orange-500 shrink-0" />
+            <span className="text-sm font-medium text-orange-700 dark:text-orange-300">Connected — No Button Pressed</span>
+          </div>
+          {dur && <p className="text-xs text-muted-foreground mt-0.5 ml-6">Duration: {dur}</p>}
+        </div>
+      );
+    }
+    if (vs === 5 || rc === 'Busy') {
+      return (
+        <div className="mt-2 px-3 py-2 rounded-md bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800">
+          <div className="flex items-center gap-2">
+            <Phone className="w-4 h-4 text-amber-500 shrink-0" />
+            <span className="text-sm font-medium text-amber-700 dark:text-amber-300">Line Busy</span>
+          </div>
+        </div>
+      );
+    }
+    if (vs === 2 || rc === 'Congestion') {
+      return (
+        <div className="mt-2 px-3 py-2 rounded-md bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700">
+          <div className="flex items-center gap-2">
+            <PhoneOff className="w-4 h-4 text-gray-400 shrink-0" />
+            <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Network Issue</span>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className="mt-2 px-3 py-2 rounded-md bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700">
+        <div className="flex items-center gap-2">
+          <PhoneOff className="w-4 h-4 text-gray-400 shrink-0" />
+          <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Not Picked Up</span>
+        </div>
+      </div>
+    );
+  }
+
+  function renderWaOutcome(response: any) {
+    if (!response) return <span className="text-xs text-muted-foreground italic">No reply received</span>;
+    const cls = response.responseClassification || '';
+    if (cls === 'confirm') return <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 border-green-200 dark:border-green-700">✓ Confirmed</Badge>;
+    if (cls === 'cancel') return <Badge className="bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 border-red-200 dark:border-red-700">✗ Cancelled</Badge>;
+    return <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 border-blue-200 dark:border-blue-700">Sent a Question</Badge>;
+  }
 
   return (
     <Card>
@@ -385,48 +557,42 @@ function OrderTimeline({ orderId, auditLog, changeLog }: { orderId: string; audi
           <History className="w-5 h-5" />
           Order Timeline
         </CardTitle>
-        <Badge variant="secondary" className="text-xs">{timeline.length}</Badge>
+        <Badge variant="secondary" className="text-xs">{smartTimeline.length}</Badge>
       </CardHeader>
       <CardContent>
         <div className="relative" data-testid="order-timeline-list">
           <div className="absolute left-4 top-0 bottom-0 w-px bg-border" />
           <div className="space-y-4">
-            {visible.map((entry: any, idx: number) => {
-              if (entry._type === "confirmation") {
-                const Icon = getTimelineEventIcon(entry.eventType);
-                const colorCls = getTimelineEventColor(entry.eventType);
-                const label = getTimelineEventLabel(entry.eventType);
-                const timeStr = entry.createdAt ? formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true }) : "";
+            {visible.map((entry, idx) => {
 
+              if (entry.kind === 'wa_attempt') {
+                const { num, sent, response, hasFailed } = entry;
+                const timeStr = sent.createdAt ? formatDistanceToNow(new Date(sent.createdAt), { addSuffix: true }) : '';
+                const phoneMatch = (sent.note || '').match(/\b(92\d{10}|0\d{10}|\d{11})\b/);
+                const phone = phoneMatch ? phoneMatch[0] : '';
+                const tplMatch = (sent.note || '').match(/template:\s*(\S+)/);
+                const template = tplMatch ? tplMatch[1] : '';
                 return (
-                  <div key={`confirmation-${entry.id || idx}`} className="flex items-start gap-3 relative" data-testid={`timeline-entry-${idx}`}>
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 z-10 ${colorCls}`}>
-                      <Icon className="w-3.5 h-3.5" />
+                  <div key={entry.key} className="flex items-start gap-3 relative" data-testid={`timeline-entry-${idx}`}>
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 z-10 text-green-500 bg-green-100 dark:bg-green-950">
+                      <MessageCircle className="w-3.5 h-3.5" />
                     </div>
                     <div className="flex-1 min-w-0 pt-0.5">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-medium">{label}</span>
-                        {getChannelBadge(entry.channel)}
+                        <span className="text-sm font-medium">WhatsApp Message #{num}</span>
+                        <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300 text-xs border-green-200 dark:border-green-800">whatsapp</Badge>
                       </div>
-                      {(entry.oldStatus || entry.newStatus) && (
-                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                          {entry.oldStatus && <Badge variant="outline" className="text-xs">{entry.oldStatus}</Badge>}
-                          {entry.oldStatus && entry.newStatus && <ArrowRightLeft className="w-3 h-3 text-muted-foreground" />}
-                          {entry.newStatus && <Badge variant="secondary" className="text-xs">{entry.newStatus}</Badge>}
-                        </div>
+                      {(phone || template) && (
+                        <p className="text-xs text-muted-foreground mt-0.5">{phone}{phone && template ? ' · ' : ''}{template ? `template: ${template}` : ''}</p>
                       )}
-                      {entry.note && (
-                        <p className="text-xs text-muted-foreground mt-0.5 break-words">{entry.note}</p>
-                      )}
-                      {entry.errorDetails && (entry.eventType === "WA_SENT" || entry.eventType === "WA_PERMANENT_FAILURE") && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="mt-1.5 h-6 text-xs gap-1.5 px-2"
-                          disabled={retryOrderMutation.isPending}
-                          onClick={() => retryOrderMutation.mutate()}
-                          data-testid={`retry-wa-confirmation-${entry.id}`}
-                        >
+                      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                        <span className="text-xs text-muted-foreground">Response:</span>
+                        {renderWaOutcome(response)}
+                      </div>
+                      {hasFailed && (
+                        <Button variant="outline" size="sm" className="mt-1.5 h-6 text-xs gap-1.5 px-2"
+                          disabled={retryOrderMutation.isPending} onClick={() => retryOrderMutation.mutate()}
+                          data-testid={`retry-wa-confirmation-${sent.id}`}>
                           {retryOrderMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
                           Retry WhatsApp
                         </Button>
@@ -437,14 +603,93 @@ function OrderTimeline({ orderId, auditLog, changeLog }: { orderId: string; audi
                 );
               }
 
-              const Icon = getActivityIcon(entry);
-              const colorCls = getActivityColor(entry);
-              const label = getActivityLabel(entry);
-              const actorDisplay = entry.actorName || (entry.actorType === "system" ? "System" : null);
-              const timeStr = entry.createdAt ? formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true }) : "";
+              if (entry.kind === 'call_attempt') {
+                const { num, sent, response } = entry;
+                const timeStr = sent.createdAt ? formatDistanceToNow(new Date(sent.createdAt), { addSuffix: true }) : '';
+                return (
+                  <div key={entry.key} className="flex items-start gap-3 relative" data-testid={`timeline-entry-${idx}`}>
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 z-10 text-indigo-500 bg-indigo-100 dark:bg-indigo-950">
+                      <Phone className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="flex-1 min-w-0 pt-0.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium">Call #{num}</span>
+                        <Badge variant="outline" className="bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 text-xs border-blue-200 dark:border-blue-800">robocall</Badge>
+                      </div>
+                      {renderCallOutcome(response)}
+                      <p className="text-xs text-muted-foreground/60 mt-1.5">{timeStr}</p>
+                    </div>
+                  </div>
+                );
+              }
+
+              if (entry.kind === 'call_deferred') {
+                const { event } = entry;
+                const timeStr = event.createdAt ? formatDistanceToNow(new Date(event.createdAt), { addSuffix: true }) : '';
+                return (
+                  <div key={entry.key} className="flex items-start gap-3 relative" data-testid={`timeline-entry-${idx}`}>
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 z-10 text-sky-500 bg-sky-100 dark:bg-sky-950">
+                      <Clock className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="flex-1 min-w-0 pt-0.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium">Call Scheduled</span>
+                        <Badge variant="outline" className="bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 text-xs border-blue-200 dark:border-blue-800">robocall</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">Outside call hours — will call between 10am–8pm</p>
+                      <p className="text-xs text-muted-foreground/60 mt-0.5">{timeStr}</p>
+                    </div>
+                  </div>
+                );
+              }
+
+              if (entry.kind === 'confirmation') {
+                const { event } = entry;
+                const Icon = getTimelineEventIcon(event.eventType);
+                const colorCls = getTimelineEventColor(event.eventType);
+                const label = getTimelineEventLabel(event.eventType);
+                const timeStr = event.createdAt ? formatDistanceToNow(new Date(event.createdAt), { addSuffix: true }) : '';
+                return (
+                  <div key={entry.key} className="flex items-start gap-3 relative" data-testid={`timeline-entry-${idx}`}>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 z-10 ${colorCls}`}>
+                      <Icon className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="flex-1 min-w-0 pt-0.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium">{label}</span>
+                        {getChannelBadge(event.channel)}
+                      </div>
+                      {(event.oldStatus || event.newStatus) && (
+                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                          {event.oldStatus && <Badge variant="outline" className="text-xs">{event.oldStatus}</Badge>}
+                          {event.oldStatus && event.newStatus && <ArrowRightLeft className="w-3 h-3 text-muted-foreground" />}
+                          {event.newStatus && <Badge variant="secondary" className="text-xs">{event.newStatus}</Badge>}
+                        </div>
+                      )}
+                      {event.note && <p className="text-xs text-muted-foreground mt-0.5 break-words">{event.note}</p>}
+                      {event.errorDetails && event.eventType === 'WA_PERMANENT_FAILURE' && (
+                        <Button variant="outline" size="sm" className="mt-1.5 h-6 text-xs gap-1.5 px-2"
+                          disabled={retryOrderMutation.isPending} onClick={() => retryOrderMutation.mutate()}
+                          data-testid={`retry-wa-confirmation-${event.id}`}>
+                          {retryOrderMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                          Retry WhatsApp
+                        </Button>
+                      )}
+                      <p className="text-xs text-muted-foreground/60 mt-0.5">{timeStr}</p>
+                    </div>
+                  </div>
+                );
+              }
+
+              const ev = entry.event;
+              const Icon = getActivityIcon(ev);
+              const colorCls = getActivityColor(ev);
+              const label = getActivityLabel(ev);
+              const actorDisplay = ev.actorName || (ev.actorType === 'system' ? 'System' : null);
+              const timeStr = ev.createdAt ? formatDistanceToNow(new Date(ev.createdAt), { addSuffix: true }) : '';
 
               return (
-                <div key={`${entry._type}-${entry.id || idx}`} className="flex items-start gap-3 relative" data-testid={`timeline-entry-${idx}`}>
+                <div key={entry.key} className="flex items-start gap-3 relative" data-testid={`timeline-entry-${idx}`}>
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 z-10 ${colorCls}`}>
                     <Icon className="w-3.5 h-3.5" />
                   </div>
@@ -458,26 +703,26 @@ function OrderTimeline({ orderId, auditLog, changeLog }: { orderId: string; audi
                         </span>
                       )}
                     </div>
-                    {entry._type === "status" && (
+                    {entry.kind === 'status' && (
                       <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                        <Badge variant="outline" className="text-xs">{entry.fromStatus}</Badge>
+                        <Badge variant="outline" className="text-xs">{ev.fromStatus}</Badge>
                         <ArrowRightLeft className="w-3 h-3 text-muted-foreground" />
-                        <Badge variant="secondary" className="text-xs">{entry.toStatus}</Badge>
+                        <Badge variant="secondary" className="text-xs">{ev.toStatus}</Badge>
                       </div>
                     )}
-                    {entry._type === "change" && entry.changeType === "FIELD_EDIT" && (
+                    {entry.kind === 'change' && ev.changeType === 'FIELD_EDIT' && (
                       <div className="mt-1 space-y-0.5">
-                        {Array.isArray(entry.metadata?.changes) ? (
-                          (entry.metadata.changes as { field: string; oldValue: string | null; newValue: string | null }[]).map((c: { field: string; oldValue: string | null; newValue: string | null }, ci: number) => {
-                            const label = c.field.replace(/([A-Z])/g, ' $1').trim();
-                            if (c.field === "lineItems") {
+                        {Array.isArray(ev.metadata?.changes) ? (
+                          (ev.metadata.changes as { field: string; oldValue: string | null; newValue: string | null }[]).map((c: any, ci: number) => {
+                            const clabel = c.field.replace(/([A-Z])/g, ' $1').trim();
+                            if (c.field === 'lineItems') {
                               const summarize = (v: string | null) => {
-                                if (!v) return "";
+                                if (!v) return '';
                                 try {
                                   const items = JSON.parse(v);
-                                  if (Array.isArray(items)) return items.map((i: any) => i.name || "Item").join(", ");
+                                  if (Array.isArray(items)) return items.map((i: any) => i.name || 'Item').join(', ');
                                 } catch {}
-                                return v.length > 80 ? v.slice(0, 80) + "..." : v;
+                                return v.length > 80 ? v.slice(0, 80) + '...' : v;
                               };
                               return (
                                 <div key={ci} className="flex flex-col gap-0.5">
@@ -489,7 +734,7 @@ function OrderTimeline({ orderId, auditLog, changeLog }: { orderId: string; audi
                             }
                             return (
                               <div key={ci} className="flex items-center gap-1.5 flex-wrap">
-                                <span className="text-xs font-medium capitalize">{label}</span>
+                                <span className="text-xs font-medium capitalize">{clabel}</span>
                                 {c.oldValue != null && (
                                   <>
                                     <span className="text-xs text-muted-foreground">from</span>
@@ -503,64 +748,52 @@ function OrderTimeline({ orderId, auditLog, changeLog }: { orderId: string; audi
                           })
                         ) : (
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-xs font-medium capitalize">{(entry.fieldName || "").replace(/([A-Z])/g, ' $1').trim()}</span>
-                            {entry.oldValue && (
+                            <span className="text-xs font-medium capitalize">{(ev.fieldName || '').replace(/([A-Z])/g, ' $1').trim()}</span>
+                            {ev.oldValue && (
                               <>
                                 <span className="text-xs text-muted-foreground">from</span>
-                                <span className="text-xs line-through text-muted-foreground/70 break-words">{entry.oldValue}</span>
+                                <span className="text-xs line-through text-muted-foreground/70 break-words">{ev.oldValue}</span>
                               </>
                             )}
                             <span className="text-xs text-muted-foreground">to</span>
-                            <span className="text-xs font-medium break-words">{entry.newValue}</span>
+                            <span className="text-xs font-medium break-words">{ev.newValue}</span>
                           </div>
                         )}
                       </div>
                     )}
-                    {entry._type === "change" && (entry.changeType === "PAYMENT_ADDED" || entry.changeType === "PAYMENT_DELETED" || entry.changeType === "PAYMENT_REMOVED") && entry.metadata && (
+                    {entry.kind === 'change' && (ev.changeType === 'PAYMENT_ADDED' || ev.changeType === 'PAYMENT_DELETED' || ev.changeType === 'PAYMENT_REMOVED') && ev.metadata && (
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        {entry.metadata.amount ? `Rs ${entry.metadata.amount}` : ""}{entry.metadata.method ? ` via ${entry.metadata.method}` : ""}
+                        {ev.metadata.amount ? `Rs ${ev.metadata.amount}` : ''}{ev.metadata.method ? ` via ${ev.metadata.method}` : ''}
                       </p>
                     )}
-                    {entry._type === "change" && entry.changeType === "REMARK_ADDED" && entry.newValue && (
-                      <p className="text-xs text-muted-foreground mt-0.5 break-words">"{entry.newValue}"</p>
+                    {entry.kind === 'change' && ev.changeType === 'REMARK_ADDED' && ev.newValue && (
+                      <p className="text-xs text-muted-foreground mt-0.5 break-words">"{ev.newValue}"</p>
                     )}
-                    {entry._type === "change" && entry.changeType === "WHATSAPP_SENT" && (
+                    {entry.kind === 'change' && ev.changeType === 'WHATSAPP_SENT' && (
                       <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
-                        {entry.metadata?.phone && (
-                          <span className="text-xs text-muted-foreground font-mono">{entry.metadata.phone}</span>
-                        )}
-                        {entry.metadata?.templateName && (
-                          <span className="text-xs text-muted-foreground">template: <span className="font-mono">{entry.metadata.templateName}</span></span>
-                        )}
-                        {entry.newValue === "failed" && entry.metadata?.error && (
-                          <span className="text-xs text-red-500 break-words" title={String(entry.metadata.error)}>
+                        {ev.metadata?.phone && <span className="text-xs text-muted-foreground font-mono">{ev.metadata.phone}</span>}
+                        {ev.metadata?.templateName && <span className="text-xs text-muted-foreground">template: <span className="font-mono">{ev.metadata.templateName}</span></span>}
+                        {ev.newValue === 'failed' && ev.metadata?.error && (
+                          <span className="text-xs text-red-500 break-words" title={String(ev.metadata.error)}>
                             {(() => {
-                              const err = String(entry.metadata.error);
-                              try {
-                                const match = err.match(/"message"\s*:\s*"([^"]+)"/);
-                                if (match) return match[1];
-                              } catch {}
-                              return err.length > 80 ? err.slice(0, 80) + "..." : err;
+                              const err = String(ev.metadata.error);
+                              try { const m = err.match(/"message"\s*:\s*"([^"]+)"/); if (m) return m[1]; } catch {}
+                              return err.length > 80 ? err.slice(0, 80) + '...' : err;
                             })()}
                           </span>
                         )}
-                        {entry.newValue === "failed" && entry.id && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-6 text-xs gap-1.5 px-2"
-                            disabled={retryLogMutation.isPending}
-                            onClick={() => retryLogMutation.mutate(entry.id)}
-                            data-testid={`retry-wa-log-${entry.id}`}
-                          >
+                        {ev.newValue === 'failed' && ev.id && (
+                          <Button variant="outline" size="sm" className="h-6 text-xs gap-1.5 px-2"
+                            disabled={retryLogMutation.isPending} onClick={() => retryLogMutation.mutate(ev.id)}
+                            data-testid={`retry-wa-log-${ev.id}`}>
                             {retryLogMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
                             Retry
                           </Button>
                         )}
                       </div>
                     )}
-                    {entry.reason && entry._type === "status" && (
-                      <p className="text-xs text-muted-foreground mt-0.5 break-words">{entry.reason}</p>
+                    {entry.kind === 'status' && ev.reason && (
+                      <p className="text-xs text-muted-foreground mt-0.5 break-words">{ev.reason}</p>
                     )}
                     <p className="text-xs text-muted-foreground/60 mt-0.5">{timeStr}</p>
                   </div>
@@ -570,23 +803,11 @@ function OrderTimeline({ orderId, auditLog, changeLog }: { orderId: string; audi
           </div>
         </div>
         {hasMore && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full mt-3"
-            onClick={() => setExpanded(!expanded)}
-            data-testid="button-toggle-timeline"
-          >
+          <Button variant="ghost" size="sm" className="w-full mt-3" onClick={() => setExpanded(!expanded)} data-testid="button-toggle-timeline">
             {expanded ? (
-              <>
-                <ChevronUp className="w-4 h-4 mr-1" />
-                Show Less
-              </>
+              <><ChevronUp className="w-4 h-4 mr-1" />Show Less</>
             ) : (
-              <>
-                <ChevronDown className="w-4 h-4 mr-1" />
-                Show All ({timeline.length})
-              </>
+              <><ChevronDown className="w-4 h-4 mr-1" />Show All ({smartTimeline.length})</>
             )}
           </Button>
         )}
@@ -1075,25 +1296,27 @@ function getTimelineEventIcon(eventType: string): React.ElementType {
 
 function getTimelineEventLabel(eventType: string): string {
   const map: Record<string, string> = {
-    ORDER_IMPORTED: "Order Imported",
-    WA_SENT: "WhatsApp Sent",
-    WA_RESPONSE: "WhatsApp Response",
-    WA_EXHAUSTED: "WA Exhausted → RoboCall",
-    WA_NOT_AVAILABLE: "Not on WhatsApp",
-    WA_REMINDER_SENT: "WA Reminder Sent",
-    WA_REMINDERS_CANCELLED: "WA Reminders Cancelled",
-    ROBO_QUEUE_CANCELLED: "RoboCall Queue Cancelled",
-    ROBO_EXHAUSTED: "RoboCall Exhausted → Pending",
-    CHANNELS_CANCELLED: "All Channels Cancelled",
-    MOVED_TO_PENDING: "Moved to Pending",
+    ORDER_IMPORTED: "Order Received",
+    WA_SENT: "WhatsApp Message Sent",
+    WA_RESPONSE: "Customer Replied",
+    WA_EXHAUSTED: "No WhatsApp Reply — Switched to Calling",
+    WA_NOT_AVAILABLE: "Not on WhatsApp — Switched to Calling",
+    WA_PERMANENT_FAILURE: "WhatsApp Error — Switched to Calling",
+    WA_REMINDER_SENT: "WhatsApp Reminder Sent",
+    WA_REMINDERS_CANCELLED: "WhatsApp Reminders Stopped",
+    ROBO_QUEUE_CANCELLED: "Call Queue Stopped",
+    ROBO_EXHAUSTED: "All Calls Done — No Response",
+    CHANNELS_CANCELLED: "Automation Stopped",
+    MOVED_TO_PENDING: "Sent to Agent Queue",
     CALL_QUEUED: "Call Queued",
-    CALL_ATTEMPTED: "Call Attempted",
-    CALL_RESPONSE: "Call Response",
+    CALL_ATTEMPTED: "Call Sent",
+    CALL_RESPONSE: "Call Result",
+    CALL_DEFERRED: "Call Scheduled",
     STATUS_CHANGED: "Status Changed",
-    TAGS_WRITTEN: "Tags Written",
-    MANUAL_OVERRIDE: "Manual Override",
+    TAGS_WRITTEN: "Tags Updated",
+    MANUAL_OVERRIDE: "Manual Confirmation",
     ORDER_BOOKED: "Order Booked",
-    LATE_RESPONSE_IGNORED: "Late Response Ignored",
+    LATE_RESPONSE_IGNORED: "Response Arrived Too Late",
   };
   return map[eventType] || eventType.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
 }
@@ -1104,16 +1327,18 @@ function getTimelineEventColor(eventType: string): string {
     WA_SENT: "text-green-500 bg-green-100 dark:bg-green-950",
     WA_RESPONSE: "text-green-600 bg-green-100 dark:bg-green-950",
     WA_EXHAUSTED: "text-orange-500 bg-orange-100 dark:bg-orange-950",
-    WA_NOT_AVAILABLE: "text-red-500 bg-red-100 dark:bg-red-950",
+    WA_NOT_AVAILABLE: "text-orange-500 bg-orange-100 dark:bg-orange-950",
+    WA_PERMANENT_FAILURE: "text-red-500 bg-red-100 dark:bg-red-950",
     WA_REMINDER_SENT: "text-teal-500 bg-teal-100 dark:bg-teal-950",
     WA_REMINDERS_CANCELLED: "text-gray-500 bg-gray-100 dark:bg-gray-950",
     ROBO_QUEUE_CANCELLED: "text-gray-500 bg-gray-100 dark:bg-gray-950",
-    ROBO_EXHAUSTED: "text-red-600 bg-red-100 dark:bg-red-950",
+    ROBO_EXHAUSTED: "text-orange-500 bg-orange-100 dark:bg-orange-950",
     CHANNELS_CANCELLED: "text-gray-600 bg-gray-100 dark:bg-gray-950",
     MOVED_TO_PENDING: "text-yellow-500 bg-yellow-100 dark:bg-yellow-950",
     CALL_QUEUED: "text-blue-500 bg-blue-100 dark:bg-blue-950",
     CALL_ATTEMPTED: "text-indigo-500 bg-indigo-100 dark:bg-indigo-950",
     CALL_RESPONSE: "text-indigo-600 bg-indigo-100 dark:bg-indigo-950",
+    CALL_DEFERRED: "text-sky-500 bg-sky-100 dark:bg-sky-950",
     STATUS_CHANGED: "text-purple-500 bg-purple-100 dark:bg-purple-950",
     TAGS_WRITTEN: "text-sky-500 bg-sky-100 dark:bg-sky-950",
     MANUAL_OVERRIDE: "text-amber-500 bg-amber-100 dark:bg-amber-950",
