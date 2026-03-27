@@ -176,7 +176,8 @@ async function runLalaHoldRepair() {
       failed++;
     }
 
-    console.log(`[LalaRepair] Done — ${moved} moved, ${failed} errors`);
+    const total = LALA_REPAIR_TO_PENDING.length + 1;
+    console.log(`[LalaRepair] Repaired ${moved}/${total} orders — ${failed} errors`);
   } catch (err: any) {
     console.error("[LalaRepair] Startup repair failed:", err.message);
   }
