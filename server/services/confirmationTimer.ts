@@ -1,6 +1,6 @@
 import { db, withRetry } from "../db";
-import { orders, merchants } from "@shared/schema";
-import { eq, and, lt, or, isNull, isNotNull, lte } from "drizzle-orm";
+import { orders, merchants, robocallLogs } from "@shared/schema";
+import { eq, and, lt, or, isNull, isNotNull, lte, inArray } from "drizzle-orm";
 import { logConfirmationEvent, createNotification } from "./confirmationEngine";
 import { formatPhoneForWhatsApp } from "../utils/integrations/whatsapp/sender";
 import { sendWhatsAppApiRequest } from "../utils/integrations/whatsapp/sender";
@@ -270,6 +270,13 @@ async function checkExhaustedWaOrders() {
 
     if (exhaustedOrders.length === 0) return;
 
+    const allOrderIds = exhaustedOrders.map(o => o.id);
+
+    const existingRobocallLogs = await db.selectDistinct({ orderId: robocallLogs.orderId })
+      .from(robocallLogs)
+      .where(inArray(robocallLogs.orderId, allOrderIds));
+    const ordersWithRobocallActivity = new Set(existingRobocallLogs.map(r => r.orderId).filter(Boolean));
+
     const merchantIds = [...new Set(exhaustedOrders.map(o => o.merchantId))];
     const merchantMap = new Map<string, any>();
     for (const mId of merchantIds) {
@@ -278,6 +285,10 @@ async function checkExhaustedWaOrders() {
     }
 
     for (const order of exhaustedOrders) {
+      if (ordersWithRobocallActivity.has(order.id)) {
+        continue;
+      }
+
       const merchant = merchantMap.get(order.merchantId);
       if (!merchant) continue;
       const maxAttempts = merchant.waMaxAttempts ?? 3;

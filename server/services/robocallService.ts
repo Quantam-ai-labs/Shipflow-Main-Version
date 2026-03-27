@@ -231,39 +231,69 @@ export async function checkAndSendPendingCalls(merchantId: string): Promise<void
     const endTime = merchant.robocallEndTime || "20:00";
     if (!isWithinCallWindow(startTime, endTime)) return;
 
-    const pendingOrders = await withRetry(() => db.select({
-      id: orders.id,
-      merchantId: orders.merchantId,
-      orderNumber: orders.orderNumber,
-      customerPhone: orders.customerPhone,
-      totalAmount: orders.totalAmount,
-      workflowStatus: orders.workflowStatus,
-      lastStatusChangedAt: orders.lastStatusChangedAt,
-    }).from(orders)
-      .where(and(
-        eq(orders.merchantId, merchantId),
-        or(
-          and(eq(orders.workflowStatus, "PENDING"), eq(orders.pendingReasonType, "confirmation_pending")),
-          eq(orders.workflowStatus, "NEW"),
-        ),
-        eq(orders.confirmationStatus, "pending"),
-        isNotNull(orders.customerPhone),
-      ))
-      .orderBy(orders.lastStatusChangedAt)
-      .limit(30), 'robocallService-checkPendingMerchant');
+    const newOrderIdsWithRobocall = await db.selectDistinct({ orderId: robocallLogs.orderId })
+      .from(robocallLogs)
+      .where(eq(robocallLogs.merchantId, merchantId));
+    const robocallOrderIds = newOrderIdsWithRobocall.map(r => r.orderId).filter(Boolean) as string[];
+
+    const [pendingConfirmationOrders, newRobocallOrders] = await Promise.all([
+      withRetry(() => db.select({
+        id: orders.id,
+        merchantId: orders.merchantId,
+        orderNumber: orders.orderNumber,
+        customerPhone: orders.customerPhone,
+        totalAmount: orders.totalAmount,
+        workflowStatus: orders.workflowStatus,
+        lastStatusChangedAt: orders.lastStatusChangedAt,
+      }).from(orders)
+        .where(and(
+          eq(orders.merchantId, merchantId),
+          eq(orders.workflowStatus, "PENDING"),
+          eq(orders.pendingReasonType, "confirmation_pending"),
+          eq(orders.confirmationStatus, "pending"),
+          isNotNull(orders.customerPhone),
+        ))
+        .orderBy(orders.lastStatusChangedAt)
+        .limit(20), 'robocallService-checkPendingConfirmation'),
+
+      robocallOrderIds.length > 0
+        ? withRetry(() => db.select({
+            id: orders.id,
+            merchantId: orders.merchantId,
+            orderNumber: orders.orderNumber,
+            customerPhone: orders.customerPhone,
+            totalAmount: orders.totalAmount,
+            workflowStatus: orders.workflowStatus,
+            lastStatusChangedAt: orders.lastStatusChangedAt,
+          }).from(orders)
+            .where(and(
+              eq(orders.merchantId, merchantId),
+              eq(orders.workflowStatus, "NEW"),
+              eq(orders.confirmationStatus, "pending"),
+              isNotNull(orders.customerPhone),
+              inArray(orders.id, robocallOrderIds),
+            ))
+            .orderBy(orders.lastStatusChangedAt)
+            .limit(20), 'robocallService-checkNewRobocall')
+        : Promise.resolve([]),
+    ]);
 
     const cutoff = new Date(Date.now() - MIN_PENDING_AGE_MS);
 
-    for (const order of pendingOrders) {
+    for (const order of pendingConfirmationOrders) {
       const { hasActivity } = await getOrderCallStats(merchantId, order.id);
       if (hasActivity) {
         await processOrderForCall(order, merchant);
-      } else if (order.workflowStatus === "PENDING") {
+      } else {
         const changedAt = order.lastStatusChangedAt ? new Date(order.lastStatusChangedAt) : null;
         if (changedAt && changedAt <= cutoff) {
           await processOrderForCall(order, merchant);
         }
       }
+    }
+
+    for (const order of newRobocallOrders) {
+      await processOrderForCall(order, merchant);
     }
   } catch (err: any) {
     console.error(`${LOG_PREFIX} checkAndSendPendingCalls failed for merchant ${merchantId}:`, err.message);
@@ -280,26 +310,52 @@ export async function retryFailedCalls(merchantId: string): Promise<void> {
     const endTime = merchant.robocallEndTime || "20:00";
     if (!isWithinCallWindow(startTime, endTime)) return;
 
-    const pendingOrders = await withRetry(() => db.select({
-      id: orders.id,
-      merchantId: orders.merchantId,
-      orderNumber: orders.orderNumber,
-      customerPhone: orders.customerPhone,
-      totalAmount: orders.totalAmount,
-    }).from(orders)
-      .where(and(
-        eq(orders.merchantId, merchantId),
-        or(
-          and(eq(orders.workflowStatus, "PENDING"), eq(orders.pendingReasonType, "confirmation_pending")),
-          eq(orders.workflowStatus, "NEW"),
-        ),
-        eq(orders.confirmationStatus, "pending"),
-        isNotNull(orders.customerPhone),
-      ))
-      .orderBy(orders.lastStatusChangedAt)
-      .limit(20), 'robocallService-retryFailed');
+    const newOrderIdsWithRobocall = await db.selectDistinct({ orderId: robocallLogs.orderId })
+      .from(robocallLogs)
+      .where(eq(robocallLogs.merchantId, merchantId));
+    const robocallOrderIds = newOrderIdsWithRobocall.map(r => r.orderId).filter(Boolean) as string[];
 
-    for (const order of pendingOrders) {
+    const [pendingOrders, newRobocallOrders] = await Promise.all([
+      withRetry(() => db.select({
+        id: orders.id,
+        merchantId: orders.merchantId,
+        orderNumber: orders.orderNumber,
+        customerPhone: orders.customerPhone,
+        totalAmount: orders.totalAmount,
+      }).from(orders)
+        .where(and(
+          eq(orders.merchantId, merchantId),
+          eq(orders.workflowStatus, "PENDING"),
+          eq(orders.pendingReasonType, "confirmation_pending"),
+          eq(orders.confirmationStatus, "pending"),
+          isNotNull(orders.customerPhone),
+        ))
+        .orderBy(orders.lastStatusChangedAt)
+        .limit(15), 'robocallService-retryFailedPending'),
+
+      robocallOrderIds.length > 0
+        ? withRetry(() => db.select({
+            id: orders.id,
+            merchantId: orders.merchantId,
+            orderNumber: orders.orderNumber,
+            customerPhone: orders.customerPhone,
+            totalAmount: orders.totalAmount,
+          }).from(orders)
+            .where(and(
+              eq(orders.merchantId, merchantId),
+              eq(orders.workflowStatus, "NEW"),
+              eq(orders.confirmationStatus, "pending"),
+              isNotNull(orders.customerPhone),
+              inArray(orders.id, robocallOrderIds),
+            ))
+            .orderBy(orders.lastStatusChangedAt)
+            .limit(15), 'robocallService-retryFailedNew')
+        : Promise.resolve([]),
+    ]);
+
+    const allOrders = [...pendingOrders, ...newRobocallOrders];
+
+    for (const order of allOrders) {
       const { totalAttempts, hasActivity, hasPendingCall, latestCallTime } = await getOrderCallStats(merchantId, order.id);
       if (!hasActivity || hasPendingCall) continue;
 
