@@ -9,8 +9,8 @@ import { startConfirmationTimer } from "./services/confirmationTimer";
 import { startRobocallService } from "./services/robocallService";
 import { recoverPendingEvents } from "./services/waWebhookProcessor";
 import { db } from "./db";
-import { shopifyStores, users, courierAccounts } from "../shared/schema";
-import { eq, sql } from "drizzle-orm";
+import { shopifyStores, users, courierAccounts, waAutomations } from "../shared/schema";
+import { eq, sql, and, isNull } from "drizzle-orm";
 import bcrypt from "bcrypt";
 
 const app = express();
@@ -122,6 +122,29 @@ async function seedSuperAdmin() {
   }
 }
 
+async function patchShippingAutomationVariableOrder() {
+  try {
+    const LALA_MERCHANT_ID = "63d76766-32d7-47ab-8b46-d3c479bcb58a";
+    const SHIPPING_VAR_ORDER = ["name", "order_number", "courier_name", "tracking_number"];
+    const rows = await db.select({ id: waAutomations.id, variableOrder: waAutomations.variableOrder })
+      .from(waAutomations)
+      .where(and(
+        eq(waAutomations.merchantId, LALA_MERCHANT_ID),
+        eq(waAutomations.triggerStatus, "FULFILLED"),
+        isNull(waAutomations.variableOrder),
+      ));
+    if (rows.length === 0) return;
+    for (const row of rows) {
+      await db.update(waAutomations)
+        .set({ variableOrder: SHIPPING_VAR_ORDER })
+        .where(eq(waAutomations.id, row.id));
+    }
+    console.log(`[AutoPatch] Set variableOrder on ${rows.length} FULFILLED automation(s) for Lala Import`);
+  } catch (err: any) {
+    console.error("[AutoPatch] Failed to patch shipping automation variable order:", err.message);
+  }
+}
+
 async function warmCourierCityCache() {
   try {
     const { loadLeopardsCities, loadPostExCities } = await import("./services/couriers/booking");
@@ -216,6 +239,7 @@ function scheduleStartupRecovery() {
       log(`serving on port ${port}`);
       seedSuperAdmin();
       backfillAiNotificationCategories();
+      patchShippingAutomationVariableOrder();
       startAutoSync();
       setTimeout(() => startCourierSyncScheduler(), 5000);
       setTimeout(() => startMarketingSyncScheduler(), 15000);

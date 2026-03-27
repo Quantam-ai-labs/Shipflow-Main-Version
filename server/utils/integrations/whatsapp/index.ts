@@ -224,7 +224,7 @@ export async function sendOrderStatusWhatsApp(
 
             if (metaTemplate?.body) {
               metaTemplateBody = metaTemplate.body;
-              templateParams = buildTemplateParamsFromBody(metaTemplate.body, vars);
+              templateParams = buildTemplateParamsFromBody(metaTemplate.body, vars, automation.variableOrder);
             }
             if (!templateParams && automation.messageText) {
               templateParams = extractMessageTextParams(automation.messageText, vars);

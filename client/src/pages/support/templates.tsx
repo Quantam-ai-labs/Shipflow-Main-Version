@@ -46,6 +46,7 @@ interface WaAutomation {
   templateName: string | null;
   isActive: boolean;
   excludeDraftOrders: boolean;
+  variableOrder: string[] | null;
   createdAt: string;
 }
 
@@ -89,6 +90,19 @@ const VARIABLE_CHIPS = [
   "{{name}}", "{{order_number}}", "{{order_total}}", "{{items}}",
   "{{tracking_number}}", "{{courier_name}}", "{{city}}", "{{address}}",
   "{{new_status}}", "{{shipping_amount}}",
+];
+
+const VARIABLE_OPTIONS = [
+  { value: "name", label: "Customer Name" },
+  { value: "order_number", label: "Order Number" },
+  { value: "order_total", label: "Order Total" },
+  { value: "items", label: "Line Items" },
+  { value: "tracking_number", label: "Tracking #" },
+  { value: "courier_name", label: "Courier Name" },
+  { value: "city", label: "City" },
+  { value: "address", label: "Address" },
+  { value: "new_status", label: "Status" },
+  { value: "shipping_amount", label: "Shipping Amount" },
 ];
 
 const WORKFLOW_TRIGGERS = [
@@ -531,7 +545,7 @@ function AutomationDialog({
   onSave: (data: {
     title: string; description: string; triggerStatus: string;
     delayMinutes: number; messageText: string; templateName: string;
-    excludeDraftOrders: boolean;
+    excludeDraftOrders: boolean; variableOrder: string[] | null;
   }) => void;
   isSaving: boolean;
   templates: WaMetaTemplate[];
@@ -544,6 +558,8 @@ function AutomationDialog({
   const [messageText, setMessageText] = useState("");
   const [templateName, setTemplateName] = useState("none");
   const [excludeDraftOrders, setExcludeDraftOrders] = useState(false);
+  const [variableOrder, setVariableOrder] = useState<string[]>([]);
+  const [showVarMapping, setShowVarMapping] = useState(false);
 
   useEffect(() => {
     if (editData) {
@@ -554,17 +570,33 @@ function AutomationDialog({
       setMessageText(editData.messageText ?? "");
       setTemplateName(editData.templateName ?? "none");
       setExcludeDraftOrders(editData.excludeDraftOrders ?? false);
+      setVariableOrder(editData.variableOrder ?? []);
+      setShowVarMapping(!!(editData.variableOrder && editData.variableOrder.length > 0));
     } else {
       setTitle(""); setDescription(""); setTriggerStatus("NEW");
       setDelayMinutes(0); setMessageText(""); setTemplateName("none");
       setExcludeDraftOrders(false);
+      setVariableOrder([]);
+      setShowVarMapping(false);
     }
   }, [editData, open]);
 
   const handleSave = () => {
     if (!title.trim() || !triggerStatus) return;
-    onSave({ title: title.trim(), description: description.trim(), triggerStatus, delayMinutes, messageText: messageText.trim(), templateName, excludeDraftOrders });
+    const finalVarOrder = showVarMapping && variableOrder.length > 0 ? variableOrder : null;
+    onSave({ title: title.trim(), description: description.trim(), triggerStatus, delayMinutes, messageText: messageText.trim(), templateName, excludeDraftOrders, variableOrder: finalVarOrder });
   };
+
+  const setVarAt = (index: number, value: string) => {
+    setVariableOrder(prev => {
+      const next = [...prev];
+      next[index] = value;
+      return next;
+    });
+  };
+
+  const addVarSlot = () => setVariableOrder(prev => [...prev, ""]);
+  const removeVarSlot = (index: number) => setVariableOrder(prev => prev.filter((_, i) => i !== index));
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
@@ -643,7 +675,7 @@ function AutomationDialog({
 
           <div className="space-y-1.5">
             <Label>Or use Template (overrides text)</Label>
-            <Select value={templateName} onValueChange={setTemplateName}>
+            <Select value={templateName} onValueChange={v => { setTemplateName(v); if (v === "none") { setShowVarMapping(false); setVariableOrder([]); } }}>
               <SelectTrigger data-testid="select-automation-template">
                 <SelectValue />
               </SelectTrigger>
@@ -655,6 +687,61 @@ function AutomationDialog({
               </SelectContent>
             </Select>
           </div>
+
+          {templateName !== "none" && (
+            <div className="rounded-md border bg-muted/30 overflow-hidden">
+              <button
+                type="button"
+                className="w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium hover:bg-muted/50 transition-colors"
+                onClick={() => setShowVarMapping(v => !v)}
+                data-testid="button-toggle-var-mapping"
+              >
+                <span className="flex items-center gap-1.5">
+                  <span>Variable Mapping</span>
+                  {variableOrder.filter(Boolean).length > 0 && (
+                    <span className="text-xs bg-primary/10 text-primary rounded-full px-1.5 py-0.5">{variableOrder.filter(Boolean).length} set</span>
+                  )}
+                </span>
+                <span className="text-muted-foreground text-xs">{showVarMapping ? "▲" : "▼"}</span>
+              </button>
+              {showVarMapping && (
+                <div className="px-3 pb-3 space-y-2 border-t">
+                  <p className="text-xs text-muted-foreground pt-2">
+                    Map each {"{{1}}"}, {"{{2}}"}, {"{{3}}"} placeholder in the template to the correct order variable.
+                  </p>
+                  {variableOrder.map((v, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground w-8 shrink-0">{`{{${i + 1}}}`}</span>
+                      <Select value={v || ""} onValueChange={val => setVarAt(i, val)}>
+                        <SelectTrigger className="h-8 text-sm flex-1" data-testid={`select-var-slot-${i}`}>
+                          <SelectValue placeholder="Select variable…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {VARIABLE_OPTIONS.map(opt => (
+                            <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <button
+                        type="button"
+                        className="text-muted-foreground hover:text-destructive transition-colors text-sm px-1"
+                        onClick={() => removeVarSlot(i)}
+                        data-testid={`button-remove-var-slot-${i}`}
+                      >×</button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    className="text-xs text-primary hover:underline mt-1"
+                    onClick={addVarSlot}
+                    data-testid="button-add-var-slot"
+                  >
+                    + Add slot
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="flex items-start justify-between gap-4 rounded-md border p-3 bg-muted/30">
             <div className="space-y-0.5">

@@ -61,9 +61,12 @@ function buildItemLines(
   return itemSummary || "your order";
 }
 
+export const DEFAULT_VAR_ORDER = ["name", "order_number", "items", "order_total", "tracking_number", "courier_name", "new_status", "city", "address", "shipping_amount"];
+
 export function buildTemplateParamsFromBody(
   metaTemplateBody: string,
-  vars: Record<string, string>
+  vars: Record<string, string>,
+  variableOrder?: string[] | null
 ): string[] | null {
   const paramMatches = metaTemplateBody.match(/\{\{(\d+)\}\}/g);
   if (!paramMatches || paramMatches.length === 0) return null;
@@ -71,7 +74,7 @@ export function buildTemplateParamsFromBody(
   const maxParam = Math.max(...paramMatches.map(m => parseInt(m.replace(/[{}]/g, ""))));
   const params: string[] = [];
 
-  const orderedVarNames = ["name", "order_number", "items", "order_total", "tracking_number", "courier_name", "new_status", "city", "address", "shipping_amount"];
+  const orderedVarNames = variableOrder && variableOrder.length > 0 ? variableOrder : DEFAULT_VAR_ORDER;
 
   for (let i = 0; i < maxParam; i++) {
     if (i < orderedVarNames.length) {
