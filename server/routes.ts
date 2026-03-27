@@ -15015,36 +15015,40 @@ export async function registerRoutes(
       const results: RepairResult[] = [];
 
       async function repairOne(orderId: string, toStatus: string) {
-        // Pre-flight: verify order is currently HOLD with conflict_detected=false
-        const [current] = await db.select({
-          workflowStatus: orders.workflowStatus,
-          conflictDetected: orders.conflictDetected,
-          orderNumber: orders.orderNumber,
-        }).from(orders).where(and(eq(orders.id, orderId), eq(orders.merchantId, LALA_MERCHANT_ID)));
+        try {
+          // Pre-flight: verify order is currently HOLD with conflict_detected=false
+          const [current] = await db.select({
+            workflowStatus: orders.workflowStatus,
+            conflictDetected: orders.conflictDetected,
+            orderNumber: orders.orderNumber,
+          }).from(orders).where(and(eq(orders.id, orderId), eq(orders.merchantId, LALA_MERCHANT_ID)));
 
-        if (!current) {
-          results.push({ id: orderId, toStatus, success: false, error: "Order not found in DB" });
-          return;
-        }
-        if (current.workflowStatus !== "HOLD") {
-          results.push({ id: orderId, toStatus, success: true, skipped: true, skipReason: `Already moved (status: ${current.workflowStatus})` });
-          return;
-        }
-        if (current.conflictDetected) {
-          results.push({ id: orderId, toStatus, success: false, error: "conflict_detected=true — refusing to move" });
-          return;
-        }
+          if (!current) {
+            results.push({ id: orderId, toStatus, success: false, error: "Order not found in DB" });
+            return;
+          }
+          if (current.workflowStatus !== "HOLD") {
+            results.push({ id: orderId, toStatus, success: true, skipped: true, skipReason: `Already moved (status: ${current.workflowStatus})` });
+            return;
+          }
+          if (current.conflictDetected) {
+            results.push({ id: orderId, toStatus, success: false, error: "conflict_detected=true — refusing to move" });
+            return;
+          }
 
-        const result = await transitionOrder({
-          merchantId: LALA_MERCHANT_ID,
-          orderId,
-          toStatus,
-          action: "data_repair",
-          actorType: "system",
-          actorName: "Data Repair Script",
-          reason: `Misclassified HOLD (no conflict) — moved to ${toStatus} via data repair (admin: ${adminId})`,
-        });
-        results.push({ id: orderId, toStatus, success: result.success, error: result.error });
+          const result = await transitionOrder({
+            merchantId: LALA_MERCHANT_ID,
+            orderId,
+            toStatus,
+            action: "data_repair",
+            actorType: "system",
+            actorName: "Data Repair Script",
+            reason: `Misclassified HOLD (no conflict) — moved to ${toStatus} via data repair (admin: ${adminId})`,
+          });
+          results.push({ id: orderId, toStatus, success: result.success, error: result.error });
+        } catch (err: any) {
+          results.push({ id: orderId, toStatus, success: false, error: `Unexpected error: ${err.message}` });
+        }
       }
 
       for (const id of REPAIR_TO_PENDING) await repairOne(id, "PENDING");
