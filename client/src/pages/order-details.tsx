@@ -322,12 +322,17 @@ function getActivityLabel(entry: any): string {
 }
 
 type SmartEntry =
-  | { kind: 'wa_attempt'; num: number; sent: any; response: any | null; hasFailed: boolean; _time: number; key: string }
+  | { kind: 'wa_attempt'; num: number; sent: any; response: any | null; hasFailed: boolean; noReplyMs: number; _time: number; key: string }
   | { kind: 'call_attempt'; num: number; sent: any; response: any | null; _time: number; key: string }
   | { kind: 'call_deferred'; event: any; _time: number; key: string }
   | { kind: 'confirmation'; event: any; _time: number; key: string }
   | { kind: 'status'; event: any; _time: number; key: string }
   | { kind: 'change'; event: any; _time: number; key: string };
+
+const CONFIRMATION_DRIVEN_ACTIONS = new Set([
+  'whatsapp_confirm', 'whatsapp_cancel', 'robocall_confirm', 'robocall_cancel',
+  'manual_confirm', 'manual_cancel', 'robocall_exhausted',
+]);
 
 function buildSmartTimeline(
   auditLog: any[] | undefined,
@@ -340,7 +345,7 @@ function buildSmartTimeline(
   const confAsc = confAll.filter(e => !SUPPRESS.has(e.eventType)).sort((a, b) => a._time - b._time);
 
   const consumed = new Set<number>();
-  const consumedTimes: number[] = [];
+  const consumedResponseTimes: number[] = [];
   const result: SmartEntry[] = [];
   let waNum = 0;
   let callNum = 0;
@@ -351,16 +356,30 @@ function buildSmartTimeline(
 
     if (e.eventType === 'WA_SENT' || e.eventType === 'WA_REMINDER_SENT') {
       waNum++;
+      const sentRetryCount = e.retryCount ?? null;
       let rIdx = -1;
       for (let j = i + 1; j < confAsc.length; j++) {
         if (consumed.has(j)) continue;
         const et = confAsc[j].eventType;
-        if (et === 'WA_RESPONSE') { rIdx = j; break; }
+        if (et === 'WA_RESPONSE') {
+          const respRetryCount = confAsc[j].retryCount ?? null;
+          const matchesByCount = sentRetryCount !== null && respRetryCount !== null
+            ? respRetryCount === sentRetryCount
+            : true;
+          if (matchesByCount) { rIdx = j; break; }
+        }
         if (et === 'WA_EXHAUSTED' || et === 'WA_SENT' || et === 'WA_REMINDER_SENT') break;
       }
       consumed.add(i);
-      if (rIdx >= 0) { consumed.add(rIdx); consumedTimes.push(confAsc[rIdx]._time); }
-      result.push({ kind: 'wa_attempt', num: waNum, sent: e, response: rIdx >= 0 ? confAsc[rIdx] : null, hasFailed: !!e.errorDetails, _time: e._time, key: `wa-${i}` });
+      if (rIdx >= 0) { consumed.add(rIdx); consumedResponseTimes.push(confAsc[rIdx]._time); }
+      const waExhaustedTime = confAsc.find(ev => ev.eventType === 'WA_EXHAUSTED')?._time;
+      const noReplyMs = rIdx < 0 ? (waExhaustedTime ?? Date.now()) - e._time : 0;
+      result.push({
+        kind: 'wa_attempt', num: waNum, sent: e,
+        response: rIdx >= 0 ? confAsc[rIdx] : null,
+        hasFailed: !!e.errorDetails, noReplyMs,
+        _time: e._time, key: `wa-${i}`,
+      });
 
     } else if (e.eventType === 'CALL_ATTEMPTED') {
       callNum++;
@@ -372,7 +391,7 @@ function buildSmartTimeline(
         if (et === 'CALL_ATTEMPTED') break;
       }
       consumed.add(i);
-      if (rIdx >= 0) { consumed.add(rIdx); consumedTimes.push(confAsc[rIdx]._time); }
+      if (rIdx >= 0) { consumed.add(rIdx); consumedResponseTimes.push(confAsc[rIdx]._time); }
       result.push({ kind: 'call_attempt', num: callNum, sent: e, response: rIdx >= 0 ? confAsc[rIdx] : null, _time: e._time, key: `call-${i}` });
 
     } else if (e.eventType === 'CALL_DEFERRED') {
@@ -381,7 +400,7 @@ function buildSmartTimeline(
 
     } else if (e.eventType === 'MANUAL_OVERRIDE') {
       consumed.add(i);
-      consumedTimes.push(e._time);
+      consumedResponseTimes.push(e._time);
       result.push({ kind: 'confirmation', event: e, _time: e._time, key: `conf-${i}` });
 
     } else {
@@ -393,8 +412,9 @@ function buildSmartTimeline(
   const waTimes = confAll.filter(e => e.eventType === 'WA_SENT' || e.eventType === 'WA_REMINDER_SENT').map(e => e._time);
 
   for (const e of (auditLog || []).map(e => ({ ...e, _type: 'status', _time: new Date(e.createdAt).getTime() }))) {
-    const isCovered = e.actorType === 'system' && consumedTimes.some(t => Math.abs(t - e._time) < 15000);
-    if (!isCovered) result.push({ kind: 'status', event: e, _time: e._time, key: `status-${e.id}` });
+    const isConfirmationDriven = e.actorType === 'system' && CONFIRMATION_DRIVEN_ACTIONS.has(e.action);
+    const isCoveredByResponse = isConfirmationDriven && consumedResponseTimes.some(t => Math.abs(t - e._time) < 10000);
+    if (!isCoveredByResponse) result.push({ kind: 'status', event: e, _time: e._time, key: `status-${e.id}` });
   }
 
   for (const e of (changeLog || []).map(e => ({ ...e, _type: 'change', _time: new Date(e.createdAt).getTime() }))) {
@@ -470,7 +490,8 @@ function OrderTimeline({ orderId, auditLog, changeLog }: { orderId: string; audi
         </div>
       );
     }
-    const api = (typeof response.apiResponse === 'string' ? JSON.parse(response.apiResponse) : response.apiResponse) || {};
+    let api: Record<string, any> = {};
+    try { api = (typeof response.apiResponse === 'string' ? JSON.parse(response.apiResponse) : response.apiResponse) || {}; } catch { api = {}; }
     const vs = api.voiceStatus as number | undefined;
     const dtmf = api.dtmf as number | null | undefined;
     const sec = api.voiceSec as number | undefined;
@@ -542,8 +563,20 @@ function OrderTimeline({ orderId, auditLog, changeLog }: { orderId: string; audi
     );
   }
 
-  function renderWaOutcome(response: any) {
-    if (!response) return <span className="text-xs text-muted-foreground italic">No reply received</span>;
+  function formatElapsed(ms: number): string {
+    const totalMin = Math.round(ms / 60000);
+    if (totalMin < 1) return 'less than a minute';
+    if (totalMin < 60) return `${totalMin}m`;
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  }
+
+  function renderWaOutcome(response: any, noReplyMs: number) {
+    if (!response) {
+      const elapsedLabel = noReplyMs > 0 ? `No reply after ${formatElapsed(noReplyMs)}` : 'No reply received';
+      return <span className="text-xs text-muted-foreground italic">{elapsedLabel}</span>;
+    }
     const cls = response.responseClassification || '';
     if (cls === 'confirm') return <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 border-green-200 dark:border-green-700">✓ Confirmed</Badge>;
     if (cls === 'cancel') return <Badge className="bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 border-red-200 dark:border-red-700">✗ Cancelled</Badge>;
@@ -566,7 +599,7 @@ function OrderTimeline({ orderId, auditLog, changeLog }: { orderId: string; audi
             {visible.map((entry, idx) => {
 
               if (entry.kind === 'wa_attempt') {
-                const { num, sent, response, hasFailed } = entry;
+                const { num, sent, response, hasFailed, noReplyMs } = entry;
                 const timeStr = sent.createdAt ? formatDistanceToNow(new Date(sent.createdAt), { addSuffix: true }) : '';
                 const phoneMatch = (sent.note || '').match(/\b(92\d{10}|0\d{10}|\d{11})\b/);
                 const phone = phoneMatch ? phoneMatch[0] : '';
@@ -587,7 +620,7 @@ function OrderTimeline({ orderId, auditLog, changeLog }: { orderId: string; audi
                       )}
                       <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                         <span className="text-xs text-muted-foreground">Response:</span>
-                        {renderWaOutcome(response)}
+                        {renderWaOutcome(response, noReplyMs)}
                       </div>
                       {hasFailed && (
                         <Button variant="outline" size="sm" className="mt-1.5 h-6 text-xs gap-1.5 px-2"
