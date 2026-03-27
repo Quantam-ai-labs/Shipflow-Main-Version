@@ -10,7 +10,7 @@ import { startRobocallService } from "./services/robocallService";
 import { recoverPendingEvents } from "./services/waWebhookProcessor";
 import { db } from "./db";
 import { shopifyStores, users, courierAccounts, waAutomations } from "../shared/schema";
-import { eq, sql, and, isNull } from "drizzle-orm";
+import { eq, sql, and, isNull, isNotNull, ilike, or } from "drizzle-orm";
 import bcrypt from "bcrypt";
 
 const app = express();
@@ -124,26 +124,30 @@ async function seedSuperAdmin() {
 
 async function patchShippingAutomationVariableOrder() {
   try {
-    const LALA_MERCHANT_ID = "63d76766-32d7-47ab-8b46-d3c479bcb58a";
     const SHIPPING_VAR_ORDER = ["name", "order_number", "courier_name", "tracking_number"];
-    // Only patch FULFILLED automations that are template-based (templateName IS NOT NULL)
-    // and have not yet been assigned a variableOrder. This specifically targets
-    // shipping/fulfilled template automations where positional params matter.
-    const { isNotNull } = await import("drizzle-orm");
-    const rows = await db.select({ id: waAutomations.id, templateName: waAutomations.templateName })
+    // Target shipping automations across all merchants:
+    // - triggerStatus = FULFILLED (only shipping/delivery automations use this)
+    // - templateName IS NOT NULL (only template-based automations need positional mapping)
+    // - variableOrder IS NULL (not yet configured)
+    // - title or templateName contains "ship" (additional safeguard for shipping context)
+    const rows = await db
+      .select({ id: waAutomations.id, merchantId: waAutomations.merchantId, title: waAutomations.title, templateName: waAutomations.templateName })
       .from(waAutomations)
       .where(and(
-        eq(waAutomations.merchantId, LALA_MERCHANT_ID),
         eq(waAutomations.triggerStatus, "FULFILLED"),
         isNotNull(waAutomations.templateName),
         isNull(waAutomations.variableOrder),
+        or(
+          ilike(waAutomations.title, "%ship%"),
+          ilike(waAutomations.templateName, "%ship%"),
+        ),
       ));
     if (rows.length === 0) return;
     for (const row of rows) {
       await db.update(waAutomations)
         .set({ variableOrder: SHIPPING_VAR_ORDER })
         .where(eq(waAutomations.id, row.id));
-      console.log(`[AutoPatch] Set variableOrder=${JSON.stringify(SHIPPING_VAR_ORDER)} on FULFILLED automation "${row.templateName}" (${row.id})`);
+      console.log(`[AutoPatch] Set variableOrder=${JSON.stringify(SHIPPING_VAR_ORDER)} on FULFILLED shipping automation "${row.title}" / template "${row.templateName}" (${row.id}) merchant=${row.merchantId}`);
     }
   } catch (err: any) {
     console.error("[AutoPatch] Failed to patch shipping automation variable order:", err.message);
