@@ -14957,6 +14957,75 @@ export async function registerRoutes(
   });
 
   // ============================================
+  // DATA REPAIR: Fix misclassified HOLD orders
+  // ============================================
+
+  app.post("/api/admin/repair-hold-orders", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+
+      const LALA_MERCHANT_ID = "63d76766-32d7-47ab-8b46-d3c479bcb58a";
+
+      const holdOrders = await db
+        .select({
+          id: orders.id,
+          orderNumber: orders.orderNumber,
+          confirmationStatus: orders.confirmationStatus,
+          conflictDetected: orders.conflictDetected,
+        })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.merchantId, LALA_MERCHANT_ID),
+            eq(orders.workflowStatus, "HOLD"),
+            eq(orders.conflictDetected, false),
+          ),
+        );
+
+      const results: Array<{ id: string; orderNumber: string; toStatus: string; success: boolean; error?: string }> = [];
+
+      for (const order of holdOrders) {
+        const toStatus = order.confirmationStatus === "confirmed" ? "READY_TO_SHIP" : "PENDING";
+        const result = await transitionOrder({
+          merchantId: LALA_MERCHANT_ID,
+          orderId: order.id,
+          toStatus,
+          action: "data_repair",
+          actorType: "system",
+          actorName: "Data Repair Script",
+          reason: `Misclassified HOLD order — moved to ${toStatus} via data repair (admin: ${adminId})`,
+        });
+        results.push({
+          id: order.id,
+          orderNumber: order.orderNumber ?? "",
+          toStatus,
+          success: result.success,
+          error: result.error,
+        });
+      }
+
+      const succeeded = results.filter((r) => r.success).length;
+      const failed = results.filter((r) => !r.success);
+
+      console.log(`[DataRepair] Repaired ${succeeded}/${results.length} HOLD orders for Lala Import`);
+      if (failed.length > 0) {
+        console.error("[DataRepair] Failures:", failed);
+      }
+
+      res.json({
+        message: `Repaired ${succeeded} of ${results.length} misclassified HOLD orders`,
+        succeeded,
+        failed: failed.length,
+        results,
+      });
+    } catch (error: any) {
+      console.error("Data repair error:", error);
+      res.status(500).json({ message: "Repair failed", error: error.message });
+    }
+  });
+
+  // ============================================
   // MERCHANT SETUP (Set password via invite link)
   // ============================================
 
