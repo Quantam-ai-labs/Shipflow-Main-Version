@@ -426,14 +426,21 @@ function buildSmartTimeline(
     }
   }
 
+  const AUDIT_ACTIONS_ALWAYS_SUPPRESSED = new Set([
+    'robocall_exhausted', 'whatsapp_confirm', 'whatsapp_cancel',
+    'robocall_confirm', 'robocall_cancel', 'manual_confirm', 'manual_cancel',
+  ]);
+
   const waSentOnlyTimes = confAll.filter(e => e.eventType === 'WA_SENT').map(e => e._time);
 
   for (const e of (auditLog || []).map(e => ({ ...e, _type: 'status', _time: new Date(e.createdAt).getTime() }))) {
-    const isDuplicateStatusChange = e.actorType === 'system' && consumedTransitions.some(ct =>
+    const isRedundantAction = AUDIT_ACTIONS_ALWAYS_SUPPRESSED.has(e.action);
+    const isDuplicateTransition = consumedTransitions.some(ct =>
       Math.abs(ct.time - e._time) < 10000 &&
       ct.toStatus !== null && ct.toStatus === e.toStatus
     );
-    if (!isDuplicateStatusChange) result.push({ kind: 'status', event: e, _time: e._time, key: `status-${e.id}` });
+    if (isRedundantAction || isDuplicateTransition) continue;
+    result.push({ kind: 'status', event: e, _time: e._time, key: `status-${e.id}` });
   }
 
   for (const e of (changeLog || []).map(e => ({ ...e, _type: 'change', _time: new Date(e.createdAt).getTime() }))) {
@@ -1327,7 +1334,9 @@ function getTimelineEventIcon(eventType: string): React.ElementType {
     ORDER_IMPORTED: Clock,
     WA_SENT: MessageCircle,
     WA_RESPONSE: MessageCircle,
+    WA_EXHAUSTED: AlertTriangle,
     WA_NOT_AVAILABLE: PhoneOff,
+    WA_PERMANENT_FAILURE: XCircle,
     WA_REMINDER_SENT: MessageCircle,
     WA_REMINDERS_CANCELLED: BellOff,
     ROBO_QUEUE_CANCELLED: PhoneOff,
