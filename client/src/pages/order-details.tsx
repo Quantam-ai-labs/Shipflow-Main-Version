@@ -942,7 +942,8 @@ function ConfirmationStatusCard({ order, orderId }: { order: OrderDetails; order
     },
   });
 
-  const showResolution = order.workflowStatus === "HOLD" || order.conflictDetected === true;
+  const PRE_BOOKING_STATUSES = ["NEW", "PENDING", "HOLD", "READY_TO_SHIP"];
+  const showResolution = PRE_BOOKING_STATUSES.includes(order.workflowStatus);
 
   return (
     <Card data-testid="card-confirmation-status">
