@@ -7356,6 +7356,18 @@ export async function registerRoutes(
   });
 
   // ── WA Automations ──────────────────────────────────────────────────────────
+  function parseRetryAttempts(raw: any): Array<{ messageText: string; delayHours: number }> | null {
+    if (!Array.isArray(raw) || raw.length === 0) return null;
+    const parsed = raw
+      .slice(0, 3)
+      .map((item: any) => ({
+        messageText: item?.messageText ? String(item.messageText).trim() : "",
+        delayHours: Math.max(1, Number(item?.delayHours) || 1),
+      }))
+      .filter((item) => item.messageText.length > 0);
+    return parsed.length > 0 ? parsed : null;
+  }
+
   app.get("/api/wa-automations", isAuthenticated, async (req, res) => {
     try {
       const merchantId = await requireMerchant(req, res);
@@ -7371,13 +7383,14 @@ export async function registerRoutes(
     try {
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
-      const { title, description, triggerStatus, delayMinutes, messageText, templateName, excludeDraftOrders, variableOrder } = req.body;
+      const { title, description, triggerStatus, delayMinutes, messageText, templateName, excludeDraftOrders, variableOrder, retryAttempts } = req.body;
       if (!title || typeof title !== "string" || title.trim().length === 0) {
         return res.status(400).json({ error: "title is required" });
       }
       if (!triggerStatus || typeof triggerStatus !== "string") {
         return res.status(400).json({ error: "triggerStatus is required" });
       }
+      const parsedRetryAttempts = parseRetryAttempts(retryAttempts);
       const automation = await storage.createWaAutomation({
         merchantId,
         title: title.trim(),
@@ -7389,6 +7402,7 @@ export async function registerRoutes(
         isActive: true,
         excludeDraftOrders: typeof excludeDraftOrders === "boolean" ? excludeDraftOrders : false,
         variableOrder: Array.isArray(variableOrder) && variableOrder.length > 0 ? variableOrder : null,
+        retryAttempts: parsedRetryAttempts,
       });
       res.json(automation);
     } catch (error: any) {
@@ -7400,7 +7414,7 @@ export async function registerRoutes(
     try {
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
-      const { title, description, triggerStatus, delayMinutes, messageText, templateName, isActive, excludeDraftOrders, variableOrder } = req.body;
+      const { title, description, triggerStatus, delayMinutes, messageText, templateName, isActive, excludeDraftOrders, variableOrder, retryAttempts } = req.body;
       const updateData: Record<string, any> = {};
       if (title !== undefined) updateData.title = String(title).trim();
       if (description !== undefined) updateData.description = description ? String(description).trim() : null;
@@ -7411,6 +7425,7 @@ export async function registerRoutes(
       if (isActive !== undefined) updateData.isActive = Boolean(isActive);
       if (excludeDraftOrders !== undefined) updateData.excludeDraftOrders = Boolean(excludeDraftOrders);
       if (variableOrder !== undefined) updateData.variableOrder = Array.isArray(variableOrder) && variableOrder.length > 0 ? variableOrder : null;
+      if (retryAttempts !== undefined) updateData.retryAttempts = parseRetryAttempts(retryAttempts);
       const updated = await storage.updateWaAutomation(merchantId, req.params.id, updateData);
       if (!updated) return res.status(404).json({ error: "Automation not found" });
       res.json(updated);

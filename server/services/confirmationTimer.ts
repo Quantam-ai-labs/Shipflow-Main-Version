@@ -18,9 +18,11 @@ function getRetryAttemptForIndex(automation: any, index: number): RetryAttempt |
 }
 
 function getMaxAttempts(automation: any, merchant: any): number {
+  const merchantMax: number = merchant.waMaxAttempts ?? 3;
+  if (merchantMax <= 1) return 1;
   const attempts: RetryAttempt[] | null = automation?.retryAttempts;
   if (attempts && attempts.length > 0) return 1 + attempts.length;
-  return merchant.waMaxAttempts ?? 3;
+  return merchantMax;
 }
 
 function getNextAttemptDelay(automation: any, merchant: any, currentAttempt: number): number | null {

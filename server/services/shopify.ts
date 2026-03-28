@@ -49,15 +49,19 @@ async function handleNewOrderWaResult(
       }).catch(() => {});
 
       const firstRetryDelayHours = waResult.retryAttempts?.[0]?.delayHours ?? null;
+      const [merchantData] = await db.select({
+        waMaxAttempts: merchants.waMaxAttempts,
+        waAttempt2DelayHours: merchants.waAttempt2DelayHours,
+      }).from(merchants).where(eq(merchants.id, merchantId)).limit(1);
+      const retriesEnabled = (merchantData?.waMaxAttempts ?? 3) > 1;
       let nextAttempt: Date | null = null;
-      if (firstRetryDelayHours != null) {
-        nextAttempt = new Date(Date.now() + firstRetryDelayHours * 60 * 60 * 1000);
-      } else {
-        const [merchantData] = await db.select({
-          waAttempt2DelayHours: merchants.waAttempt2DelayHours,
-        }).from(merchants).where(eq(merchants.id, merchantId)).limit(1);
-        const delayHours = merchantData?.waAttempt2DelayHours || 4;
-        nextAttempt = new Date(Date.now() + delayHours * 60 * 60 * 1000);
+      if (retriesEnabled) {
+        if (firstRetryDelayHours != null) {
+          nextAttempt = new Date(Date.now() + firstRetryDelayHours * 60 * 60 * 1000);
+        } else {
+          const delayHours = merchantData?.waAttempt2DelayHours || 4;
+          nextAttempt = new Date(Date.now() + delayHours * 60 * 60 * 1000);
+        }
       }
 
       await db.update(orders).set({
