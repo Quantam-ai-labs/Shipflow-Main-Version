@@ -29,7 +29,7 @@ import {
   X, ChevronDown, Image as ImageIcon, Mic, FileText,
   MapPin, Users, Reply, Download, Play, Pause, Volume2, VolumeX,
   ExternalLink, File as FileIcon, Video, Plus, Pencil, Settings2,
-  Paperclip, Camera, FileUp, StopCircle, Loader2, ClipboardList, AlertCircle,
+  Paperclip, Camera, FileUp, Loader2, ClipboardList, AlertCircle,
   Archive, ArchiveRestore, CheckSquare, Square, MinusSquare, Copy, Info,
   ArrowDown, ChevronUp, Zap, Images, Link as LinkIcon, GalleryHorizontal,
 } from "lucide-react";
@@ -392,7 +392,7 @@ function AudioPlayer({ src }: { src: string }) {
       <audio
         ref={audioRef}
         src={src}
-        preload="metadata"
+        preload="auto"
         onLoadedMetadata={handleDuration}
         onDurationChange={handleDuration}
         onCanPlay={handleDuration}
@@ -433,7 +433,7 @@ function AudioPlayer({ src }: { src: string }) {
               <div
                 key={i}
                 className={cn(
-                  "flex-1 rounded-full transition-colors duration-150",
+                  "flex-1 rounded-full",
                   isPlayed ? "bg-primary" : "bg-muted-foreground/30"
                 )}
                 style={{ height: `${h * 2}px` }}
@@ -677,6 +677,7 @@ export default function SupportChatPage() {
   const [editingLabel, setEditingLabel] = useState<WaLabel | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesScrollRef = useRef<HTMLDivElement>(null);
+  const firstConvLoadRef = useRef(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -684,6 +685,13 @@ export default function SupportChatPage() {
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
+  const recordingBarsRef = useRef<number[]>(new Array(22).fill(5));
+  const [recordingBars, setRecordingBars] = useState<number[]>(new Array(22).fill(5));
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const recordingRafRef = useRef<number | null>(null);
+  const recordDiscardRef = useRef(false);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
   const [showFileComplaint, setShowFileComplaint] = useState(false);
 
   // Archive multi-select state
@@ -1043,6 +1051,14 @@ export default function SupportChatPage() {
   // Auto-scroll only if near bottom; also count new inbound messages for polling fallback
   useEffect(() => {
     const count = messages.length;
+    // First load for this conversation: always scroll to bottom instantly
+    if (firstConvLoadRef.current && count > 0) {
+      firstConvLoadRef.current = false;
+      prevMsgCountRef.current = count;
+      prevMessagesRef.current = messages;
+      scrollToBottom("instant");
+      return;
+    }
     if (count !== prevMsgCountRef.current) {
       // Detect new inbound messages received via polling (when SSE is down)
       if (count > prevMsgCountRef.current && prevMessagesRef.current.length > 0) {
@@ -1063,15 +1079,14 @@ export default function SupportChatPage() {
     }
   }, [messages, scrollToBottom]);
 
-  // When switching conversations: reset counters and scroll to bottom
+  // When switching conversations: reset counters and mark first-load so messages effect scrolls to bottom
   useEffect(() => {
     prevMsgCountRef.current = 0;
     setNewMsgCount(0);
     setShowScrollFab(false);
     isNearBottomRef.current = true;
-    // Instant scroll on conv switch
-    setTimeout(() => scrollToBottom("instant"), 50);
-  }, [selectedConvId, scrollToBottom]);
+    firstConvLoadRef.current = true;
+  }, [selectedConvId]);
 
   // Jump to a specific message and flash-highlight it; loads older pages if not rendered yet
   const jumpToMessage = useCallback(async (msgId: string) => {
@@ -1219,9 +1234,33 @@ export default function SupportChatPage() {
     setPastedImage(null);
   };
 
+  const stopRecordingCleanup = () => {
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    if (recordingRafRef.current !== null) {
+      cancelAnimationFrame(recordingRafRef.current);
+      recordingRafRef.current = null;
+    }
+    try { audioContextRef.current?.close(); } catch {}
+    audioContextRef.current = null;
+    analyserRef.current = null;
+    if (recordingStreamRef.current) {
+      recordingStreamRef.current.getTracks().forEach(t => t.stop());
+      recordingStreamRef.current = null;
+    }
+    setIsRecording(false);
+    recordingBarsRef.current = new Array(22).fill(5);
+    setRecordingBars(new Array(22).fill(5));
+  };
+
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recordingStreamRef.current = stream;
+      recordDiscardRef.current = false;
+
       const preferredMimes = [
         { mime: "audio/ogg;codecs=opus", ext: "ogg", type: "audio/ogg" },
         { mime: "audio/webm;codecs=opus", ext: "webm", type: "audio/webm" },
@@ -1235,12 +1274,41 @@ export default function SupportChatPage() {
         if (e.data.size > 0) recordingChunksRef.current.push(e.data);
       };
       mediaRecorder.onstop = () => {
-        stream.getTracks().forEach(t => t.stop());
+        if (recordDiscardRef.current) return;
         const blob = new Blob(recordingChunksRef.current, { type: supported.type });
         const audioFile = new File([blob], `voice-message.${supported.ext}`, { type: supported.type });
         mediaUploadMutation.mutate(audioFile);
       };
       mediaRecorder.start(250);
+
+      try {
+        const audioCtx = new AudioContext();
+        audioContextRef.current = audioCtx;
+        const analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 64;
+        analyser.smoothingTimeConstant = 0.6;
+        analyserRef.current = analyser;
+        const source = audioCtx.createMediaStreamSource(stream);
+        source.connect(analyser);
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        const NUM_BARS = 22;
+        const tick = () => {
+          analyser.getByteTimeDomainData(dataArray);
+          const bars: number[] = [];
+          const step = Math.floor(dataArray.length / NUM_BARS);
+          for (let i = 0; i < NUM_BARS; i++) {
+            const val = dataArray[i * step] ?? 128;
+            const amplitude = Math.abs(val - 128) / 128;
+            bars.push(Math.max(4, Math.round(amplitude * 36) + 4));
+          }
+          recordingBarsRef.current = bars;
+          setRecordingBars([...bars]);
+          recordingRafRef.current = requestAnimationFrame(tick);
+        };
+        recordingRafRef.current = requestAnimationFrame(tick);
+      } catch {}
+
       setIsRecording(true);
       setRecordingDuration(0);
       recordingTimerRef.current = setInterval(() => {
@@ -1255,11 +1323,15 @@ export default function SupportChatPage() {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
     }
-    setIsRecording(false);
-    if (recordingTimerRef.current) {
-      clearInterval(recordingTimerRef.current);
-      recordingTimerRef.current = null;
+    stopRecordingCleanup();
+  };
+
+  const cancelRecording = () => {
+    recordDiscardRef.current = true;
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
     }
+    stopRecordingCleanup();
   };
 
   const deleteMutation = useMutation({
@@ -2535,106 +2607,140 @@ export default function SupportChatPage() {
                 </div>
               )}
 
-              <div className="flex items-center gap-1 mb-1">
-                <Button size="icon" variant="ghost" onClick={() => insertFormatting("*", "*")} title="Bold" data-testid="button-format-bold" className="h-7 w-7 text-[#54656f] dark:text-[#8696a0]">
-                  <Bold className="w-4 h-4" />
-                </Button>
-                <Button size="icon" variant="ghost" onClick={() => insertFormatting("_", "_")} title="Italic" data-testid="button-format-italic" className="h-7 w-7 text-[#54656f] dark:text-[#8696a0]">
-                  <Italic className="w-4 h-4" />
-                </Button>
-                <Button size="icon" variant="ghost" onClick={() => insertFormatting("~", "~")} title="Strikethrough" data-testid="button-format-strike" className="h-7 w-7 text-[#54656f] dark:text-[#8696a0]">
-                  <Strikethrough className="w-4 h-4" />
-                </Button>
-                <Button size="icon" variant="ghost" onClick={() => insertFormatting("```", "```")} title="Code" data-testid="button-format-code" className="h-7 w-7 text-[#54656f] dark:text-[#8696a0]">
-                  <Code className="w-4 h-4" />
-                </Button>
-                <div className="w-px h-4 bg-border mx-0.5" />
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  onClick={() => setTemplatePickerOpen(true)}
-                  title="Send template message"
-                  data-testid="button-template-picker"
-                  className="h-7 w-7 text-[#008069] hover:text-[#008069] hover:bg-[#008069]/10"
-                >
-                  <Zap className="w-4 h-4" />
-                </Button>
-              </div>
-
-              <div className="flex items-end gap-1.5">
-                <EmojiPicker
-                  onSelect={(emoji) => {
-                    setMessageText(prev => prev + emoji);
-                    inputRef.current?.focus();
-                  }}
-                  trigger={
-                    <Button size="icon" variant="ghost" className="shrink-0 mb-0.5 text-[#54656f] dark:text-[#8696a0] hover:text-[#008069]" data-testid="button-emoji-picker">
-                      <Smile className="w-5 h-5" />
+              {isRecording ? (
+                /* WhatsApp-style recording toolbar */
+                <div className="flex items-center gap-3 py-1" data-testid="recording-toolbar">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={cancelRecording}
+                    className="shrink-0 h-10 w-10 rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                    data-testid="button-cancel-recording"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </Button>
+                  <div className="flex-1 flex flex-col gap-0.5">
+                    <div className="flex items-end gap-[2px] h-8">
+                      {recordingBars.map((h, i) => (
+                        <div
+                          key={i}
+                          className="flex-1 rounded-full bg-red-500"
+                          style={{ height: `${h}px`, maxHeight: "32px", minHeight: "4px" }}
+                        />
+                      ))}
+                    </div>
+                    <span className="text-[11px] text-red-500 tabular-nums font-medium">
+                      {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}
+                    </span>
+                  </div>
+                  <Button
+                    size="icon"
+                    onClick={stopRecording}
+                    disabled={mediaUploadMutation.isPending}
+                    className="shrink-0 h-11 w-11 rounded-full bg-[#008069] hover:bg-[#017561] text-white shadow-md"
+                    data-testid="button-stop-send-recording"
+                  >
+                    {mediaUploadMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-1 mb-1">
+                    <Button size="icon" variant="ghost" onClick={() => insertFormatting("*", "*")} title="Bold" data-testid="button-format-bold" className="h-7 w-7 text-[#54656f] dark:text-[#8696a0]">
+                      <Bold className="w-4 h-4" />
                     </Button>
-                  }
-                  side="top"
-                  align="start"
-                />
-                <div className="relative shrink-0 mb-0.5">
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    className="hidden"
-                    accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
-                    onChange={handleFileSelect}
-                    data-testid="input-file-upload"
-                  />
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="text-[#54656f] dark:text-[#8696a0] hover:text-[#008069]"
-                    disabled={mediaUploadMutation.isPending}
-                    data-testid="button-attach-file"
-                  >
-                    {mediaUploadMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Paperclip className="w-5 h-5" />}
-                  </Button>
-                </div>
-                <textarea
-                  ref={inputRef}
-                  placeholder={replyingTo ? "Write a reply..." : "Type a message — or paste an image with Ctrl+V"}
-                  value={messageText}
-                  onChange={(e) => setMessageText(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  onPaste={handlePaste}
-                  rows={1}
-                  className="flex-1 resize-none bg-white dark:bg-[#2a3942] text-[#111b21] dark:text-[#e9edef] rounded-lg px-3 py-2.5 text-sm placeholder:text-[#667781] dark:placeholder:text-[#8696a0] outline-none focus:ring-0 max-h-[120px] min-h-[42px]"
-                  style={{ height: "auto", overflow: messageText.split("\n").length > 3 ? "auto" : "hidden" }}
-                  data-testid="input-message"
-                />
-                {messageText.trim() ? (
-                  <Button
-                    size="icon"
-                    onClick={() => handleSend()}
-                    disabled={sendMutation.isPending}
-                    className="shrink-0 mb-0.5 bg-[#008069] hover:bg-[#017561] text-white rounded-full h-10 w-10"
-                    data-testid="button-send-message"
-                  >
-                    <Send className="w-5 h-5" />
-                  </Button>
-                ) : (
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={isRecording ? stopRecording : startRecording}
-                    className={cn("shrink-0 mb-0.5 rounded-full h-10 w-10", isRecording ? "bg-red-500 hover:bg-red-600 text-white" : "text-[#54656f] dark:text-[#8696a0] hover:text-[#008069]")}
-                    disabled={mediaUploadMutation.isPending}
-                    data-testid="button-voice-record"
-                  >
-                    {isRecording ? <StopCircle className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-                  </Button>
-                )}
-              </div>
-              {isRecording && (
-                <div className="flex items-center gap-2 mt-2 text-red-500 text-xs animate-pulse">
-                  <div className="w-2 h-2 rounded-full bg-red-500" />
-                  Recording... {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}
-                </div>
+                    <Button size="icon" variant="ghost" onClick={() => insertFormatting("_", "_")} title="Italic" data-testid="button-format-italic" className="h-7 w-7 text-[#54656f] dark:text-[#8696a0]">
+                      <Italic className="w-4 h-4" />
+                    </Button>
+                    <Button size="icon" variant="ghost" onClick={() => insertFormatting("~", "~")} title="Strikethrough" data-testid="button-format-strike" className="h-7 w-7 text-[#54656f] dark:text-[#8696a0]">
+                      <Strikethrough className="w-4 h-4" />
+                    </Button>
+                    <Button size="icon" variant="ghost" onClick={() => insertFormatting("```", "```")} title="Code" data-testid="button-format-code" className="h-7 w-7 text-[#54656f] dark:text-[#8696a0]">
+                      <Code className="w-4 h-4" />
+                    </Button>
+                    <div className="w-px h-4 bg-border mx-0.5" />
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => setTemplatePickerOpen(true)}
+                      title="Send template message"
+                      data-testid="button-template-picker"
+                      className="h-7 w-7 text-[#008069] hover:text-[#008069] hover:bg-[#008069]/10"
+                    >
+                      <Zap className="w-4 h-4" />
+                    </Button>
+                  </div>
+
+                  <div className="flex items-end gap-1.5">
+                    <EmojiPicker
+                      onSelect={(emoji) => {
+                        setMessageText(prev => prev + emoji);
+                        inputRef.current?.focus();
+                      }}
+                      trigger={
+                        <Button size="icon" variant="ghost" className="shrink-0 mb-0.5 text-[#54656f] dark:text-[#8696a0] hover:text-[#008069]" data-testid="button-emoji-picker">
+                          <Smile className="w-5 h-5" />
+                        </Button>
+                      }
+                      side="top"
+                      align="start"
+                    />
+                    <div className="relative shrink-0 mb-0.5">
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        className="hidden"
+                        accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
+                        onChange={handleFileSelect}
+                        data-testid="input-file-upload"
+                      />
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="text-[#54656f] dark:text-[#8696a0] hover:text-[#008069]"
+                        disabled={mediaUploadMutation.isPending}
+                        data-testid="button-attach-file"
+                      >
+                        {mediaUploadMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Paperclip className="w-5 h-5" />}
+                      </Button>
+                    </div>
+                    <textarea
+                      ref={inputRef}
+                      placeholder={replyingTo ? "Write a reply..." : "Type a message — or paste an image with Ctrl+V"}
+                      value={messageText}
+                      onChange={(e) => setMessageText(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      onPaste={handlePaste}
+                      rows={1}
+                      className="flex-1 resize-none bg-white dark:bg-[#2a3942] text-[#111b21] dark:text-[#e9edef] rounded-lg px-3 py-2.5 text-sm placeholder:text-[#667781] dark:placeholder:text-[#8696a0] outline-none focus:ring-0 max-h-[120px] min-h-[42px]"
+                      style={{ height: "auto", overflow: messageText.split("\n").length > 3 ? "auto" : "hidden" }}
+                      data-testid="input-message"
+                    />
+                    {messageText.trim() ? (
+                      <Button
+                        size="icon"
+                        onClick={() => handleSend()}
+                        disabled={sendMutation.isPending}
+                        className="shrink-0 mb-0.5 bg-[#008069] hover:bg-[#017561] text-white rounded-full h-10 w-10"
+                        data-testid="button-send-message"
+                      >
+                        <Send className="w-5 h-5" />
+                      </Button>
+                    ) : (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={startRecording}
+                        className="shrink-0 mb-0.5 rounded-full h-10 w-10 text-[#54656f] dark:text-[#8696a0] hover:text-[#008069]"
+                        disabled={mediaUploadMutation.isPending}
+                        data-testid="button-voice-record"
+                      >
+                        <Mic className="w-5 h-5" />
+                      </Button>
+                    )}
+                  </div>
+                </>
               )}
             </div>
           </>

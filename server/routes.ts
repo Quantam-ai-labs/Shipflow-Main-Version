@@ -7905,7 +7905,7 @@ export async function registerRoutes(
       const accessToken = merchantRow?.waAccessToken;
       if (!accessToken) return res.status(500).json({ error: "WhatsApp not configured" });
 
-      const metaRes = await fetch(`https://graph.facebook.com/v21.0/${mediaId}`, {
+      const metaRes = await fetch(`https://graph.facebook.com/v22.0/${mediaId}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       if (!metaRes.ok) return res.status(metaRes.status).json({ error: "Failed to get media URL from Meta" });
@@ -8336,11 +8336,42 @@ export async function registerRoutes(
         captionField = file.originalname;
       }
 
+      // WhatsApp Cloud API does NOT support audio/webm — transcode to audio/ogg (OPUS) via ffmpeg
+      let uploadBuffer = file.buffer;
+      let uploadMime = mime;
+      let uploadFilename = file.originalname;
+      if (waType === "audio" && (mime.startsWith("audio/webm") || mime === "audio/webm")) {
+        try {
+          const { spawnSync } = await import("child_process");
+          const result = spawnSync("ffmpeg", [
+            "-f", "webm",
+            "-i", "pipe:0",
+            "-vn",
+            "-c:a", "libopus",
+            "-f", "ogg",
+            "pipe:1",
+          ], { input: file.buffer, maxBuffer: 32 * 1024 * 1024 });
+          if (result.error) throw result.error;
+          if (result.status !== 0 || !result.stdout || (result.stdout as Buffer).length === 0) {
+            const stderr = result.stderr?.toString() ?? "";
+            console.error("[WhatsApp Media] ffmpeg stderr:", stderr);
+            throw new Error(`ffmpeg exited with code ${result.status}`);
+          }
+          uploadBuffer = result.stdout as Buffer;
+          uploadMime = "audio/ogg";
+          uploadFilename = "voice-message.ogg";
+          console.log(`[WhatsApp Media] Transcoded webm→ogg: ${file.size} bytes → ${(uploadBuffer as Buffer).length} bytes`);
+        } catch (transcodeErr: any) {
+          console.error("[WhatsApp Media] ffmpeg transcode failed:", transcodeErr.message);
+          return res.status(500).json({ error: "Failed to transcode audio for WhatsApp" });
+        }
+      }
+
       const FormData = (await import("form-data")).default;
       const formData = new FormData();
       formData.append("messaging_product", "whatsapp");
-      formData.append("type", mime);
-      formData.append("file", file.buffer, { filename: file.originalname, contentType: mime });
+      formData.append("type", uploadMime);
+      formData.append("file", uploadBuffer, { filename: uploadFilename, contentType: uploadMime });
 
       const uploadRes = await fetch(`https://graph.facebook.com/v22.0/${phoneNumberId}/media`, {
         method: "POST",
@@ -8414,8 +8445,8 @@ export async function registerRoutes(
         status,
         messageType: waType,
         mediaUrl: `wa-media:${mediaId}`,
-        mimeType: mime,
-        fileName: file.originalname,
+        mimeType: uploadMime,
+        fileName: uploadFilename,
         ...(waMessageId ? { waMessageId } : {}),
       });
 
@@ -11810,7 +11841,7 @@ export async function registerRoutes(
       const accessToken = merchantRow?.waAccessToken;
       if (!accessToken) return res.status(500).json({ error: "WhatsApp not configured" });
 
-      const metaRes = await fetch(`https://graph.facebook.com/v21.0/${mediaId}`, {
+      const metaRes = await fetch(`https://graph.facebook.com/v22.0/${mediaId}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       if (!metaRes.ok) return res.status(metaRes.status).json({ error: "Failed to get media URL from Meta" });
