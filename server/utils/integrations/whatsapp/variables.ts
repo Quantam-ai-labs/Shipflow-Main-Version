@@ -23,7 +23,7 @@ export const WA_VARIABLE_CHIPS = [
   { key: "{{order_total}}", label: "Order Total", description: "Order total with currency" },
   { key: "{{items}}", label: "Items", description: "Product name - variant x qty || ..." },
   { key: "{{tracking_number}}", label: "Tracking No.", description: "Courier tracking number" },
-  { key: "{{tracking_link}}", label: "Tracking Link", description: "Full clickable tracking URL (Leopards, PostEx, TCS, Trax, OCS, Rider, M&P, Swyft, Call Courier)" },
+  { key: "{{tracking_link}}", label: "Tracking Link", description: "Full clickable tracking URL (Leopards or PostEx)" },
   { key: "{{courier_name}}", label: "Courier", description: "Courier company name" },
   { key: "{{city}}", label: "City", description: "Customer city" },
   { key: "{{address}}", label: "Address", description: "Shipping address" },
@@ -39,27 +39,6 @@ export function buildTrackingLink(courierName?: string | null, trackingNumber?: 
   }
   if (name.includes("postex")) {
     return `https://postex.pk/tracking?cn=${encodeURIComponent(trackingNumber)}`;
-  }
-  if (name.includes("tcs")) {
-    return `https://www.tcsexpress.com/track/${encodeURIComponent(trackingNumber)}`;
-  }
-  if (name.includes("trax")) {
-    return `https://traxdelivery.com/track/?tracking_number=${encodeURIComponent(trackingNumber)}`;
-  }
-  if (name.includes("ocs")) {
-    return `https://ocs.com.pk/tracking?awb=${encodeURIComponent(trackingNumber)}`;
-  }
-  if (name.includes("rider")) {
-    return `https://rider.com.pk/track/?tracking_code=${encodeURIComponent(trackingNumber)}`;
-  }
-  if (name.includes("m&p") || name.includes("mnp") || name.includes("mounted")) {
-    return `https://mnp.com.pk/track/?tnumber=${encodeURIComponent(trackingNumber)}`;
-  }
-  if (name.includes("swyft")) {
-    return `https://swyftlogistics.com/tracking?cn=${encodeURIComponent(trackingNumber)}`;
-  }
-  if (name.includes("call courier") || name.includes("callcourier")) {
-    return `https://callcourier.com.pk/tracking?q=${encodeURIComponent(trackingNumber)}`;
   }
   return "";
 }
