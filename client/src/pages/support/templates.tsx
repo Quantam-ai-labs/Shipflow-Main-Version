@@ -858,8 +858,8 @@ function AutomationDialog({
                 onClick={() => {
                   const tpl = templates.find(t => t.name === templateName);
                   const count = tpl?.body ? countTemplatePlaceholders(tpl.body) : DEFAULT_VAR_ORDER.length;
-                  setVariableOrder(DEFAULT_VAR_ORDER.slice(0, Math.max(count, 1)));
-                  setShowVarMapping(true);
+                  setVariableOrder(DEFAULT_VAR_ORDER.slice(0, count));
+                  setShowVarMapping(count > 0);
                 }}
                 data-testid="button-reset-var-order"
               >

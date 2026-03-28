@@ -789,6 +789,21 @@ export default function SupportChatPage() {
       .catch(() => setOrderVars(null));
   }, [templatePickerOpen, selectedConvId, selectedConvOrderId]);
 
+  // Rehydrate templateVars when orderVars resolves after a template was already selected
+  useEffect(() => {
+    if (!orderVars || !selectedTemplate?.body) return;
+    const nums = [...new Set(Array.from(selectedTemplate.body.matchAll(/\{\{(\d+)\}\}/g)).map(m => m[1]))].sort();
+    if (nums.length === 0) return;
+    setTemplateVars(prev => {
+      const next = { ...prev };
+      nums.forEach(n => {
+        const varKey = TEMPLATE_VAR_ORDER[parseInt(n) - 1];
+        if (varKey && orderVars[varKey] && !next[n]) next[n] = orderVars[varKey];
+      });
+      return next;
+    });
+  }, [orderVars, selectedTemplate]);
+
   // Close conversation context menu on outside click
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
