@@ -8342,25 +8342,36 @@ export async function registerRoutes(
       let uploadFilename = file.originalname;
       if (waType === "audio" && (mime.startsWith("audio/webm") || mime === "audio/webm")) {
         try {
-          const { spawnSync } = await import("child_process");
-          const result = spawnSync("ffmpeg", [
-            "-f", "webm",
-            "-i", "pipe:0",
-            "-vn",
-            "-c:a", "libopus",
-            "-f", "ogg",
-            "pipe:1",
-          ], { input: file.buffer, maxBuffer: 32 * 1024 * 1024 });
-          if (result.error) throw result.error;
-          if (result.status !== 0 || !result.stdout || (result.stdout as Buffer).length === 0) {
-            const stderr = result.stderr?.toString() ?? "";
-            console.error("[WhatsApp Media] ffmpeg stderr:", stderr);
-            throw new Error(`ffmpeg exited with code ${result.status}`);
-          }
-          uploadBuffer = result.stdout as Buffer;
+          const { spawn } = await import("child_process");
+          const transcoded = await new Promise<Buffer>((resolve, reject) => {
+            const proc = spawn("ffmpeg", [
+              "-f", "webm",
+              "-i", "pipe:0",
+              "-vn",
+              "-c:a", "libopus",
+              "-f", "ogg",
+              "pipe:1",
+            ]);
+            const chunks: Buffer[] = [];
+            const errChunks: Buffer[] = [];
+            proc.stdout.on("data", (d: Buffer) => chunks.push(d));
+            proc.stderr.on("data", (d: Buffer) => errChunks.push(d));
+            proc.on("error", reject);
+            proc.on("close", (code) => {
+              if (code !== 0 || chunks.length === 0) {
+                const errText = Buffer.concat(errChunks).toString();
+                console.error("[WhatsApp Media] ffmpeg stderr:", errText);
+                return reject(new Error(`ffmpeg exited with code ${code}`));
+              }
+              resolve(Buffer.concat(chunks));
+            });
+            proc.stdin.write(file.buffer);
+            proc.stdin.end();
+          });
+          uploadBuffer = transcoded;
           uploadMime = "audio/ogg";
           uploadFilename = "voice-message.ogg";
-          console.log(`[WhatsApp Media] Transcoded webm→ogg: ${file.size} bytes → ${(uploadBuffer as Buffer).length} bytes`);
+          console.log(`[WhatsApp Media] Transcoded webm→ogg: ${file.size} bytes → ${transcoded.length} bytes`);
         } catch (transcodeErr: any) {
           console.error("[WhatsApp Media] ffmpeg transcode failed:", transcodeErr.message);
           return res.status(500).json({ error: "Failed to transcode audio for WhatsApp" });

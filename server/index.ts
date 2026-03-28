@@ -252,6 +252,16 @@ function scheduleStartupRecovery() {
     },
     () => {
       log(`serving on port ${port}`);
+      // Verify ffmpeg is available for audio transcoding (webm → ogg for WhatsApp)
+      import("child_process").then(({ spawnSync }) => {
+        const check = spawnSync("ffmpeg", ["-version"], { encoding: "utf8" });
+        if (check.error || check.status !== 0) {
+          console.error("[ffmpeg] WARNING: ffmpeg not found or failed — WhatsApp audio sends (webm→ogg transcode) will fail.", check.error?.message ?? "");
+        } else {
+          const version = (check.stdout as string).split("\n")[0] ?? "unknown";
+          console.log(`[ffmpeg] Available: ${version}`);
+        }
+      });
       seedSuperAdmin();
       backfillAiNotificationCategories();
       patchShippingAutomationVariableOrder();
