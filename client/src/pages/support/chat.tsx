@@ -348,6 +348,21 @@ function extractMediaId(mediaUrl: string | null): string | null {
 
 const WAVEFORM_BARS = [3,5,8,4,7,10,6,9,4,7,5,8,11,6,4,9,7,5,10,8,6,3,7,5,9,4,8,6,10,5];
 
+const TEMPLATE_VAR_ORDER = ["name", "order_number", "items", "order_total", "tracking_number", "tracking_link", "courier_name", "new_status", "city", "address", "shipping_amount"];
+const TEMPLATE_VAR_LABELS: Record<string, string> = {
+  name: "Customer Name",
+  order_number: "Order #",
+  items: "Items",
+  order_total: "Total",
+  tracking_number: "Tracking #",
+  tracking_link: "Tracking Link (URL)",
+  courier_name: "Courier",
+  new_status: "Status",
+  city: "City",
+  address: "Address",
+  shipping_amount: "Shipping",
+};
+
 function AudioPlayer({ src }: { src: string }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
@@ -746,6 +761,7 @@ export default function SupportChatPage() {
   const [templateSearch, setTemplateSearch] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState<WaMetaTemplate | null>(null);
   const [templateVars, setTemplateVars] = useState<Record<string, string>>({});
+  const [orderVars, setOrderVars] = useState<Record<string, string> | null>(null);
 
   // Link preview state (compose)
   const [linkPreview, setLinkPreview] = useState<LinkPreview | null>(null);
@@ -759,6 +775,19 @@ export default function SupportChatPage() {
   useEffect(() => {
     try { localStorage.setItem("chat-sound-muted", String(soundMuted)); } catch {}
   }, [soundMuted]);
+
+  // Fetch order vars when template picker opens for a conversation with a linked order
+  const selectedConvOrderId = conversations.find(c => c.id === selectedConvId)?.orderId;
+  useEffect(() => {
+    if (!templatePickerOpen || !selectedConvId || !selectedConvOrderId) {
+      setOrderVars(null);
+      return;
+    }
+    fetch(`/api/support/conversations/${selectedConvId}/order-vars`, { credentials: "include" })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => setOrderVars(data?.vars ?? null))
+      .catch(() => setOrderVars(null));
+  }, [templatePickerOpen, selectedConvId, selectedConvOrderId]);
 
   // Close conversation context menu on outside click
   useEffect(() => {
@@ -3077,7 +3106,20 @@ export default function SupportChatPage() {
                         "w-full text-left px-3 py-2.5 hover:bg-muted/50 transition-colors",
                         selectedTemplate?.id === t.id && "bg-[#008069]/10 border-l-2 border-[#008069]"
                       )}
-                      onClick={() => { setSelectedTemplate(t); setTemplateVars({}); }}
+                      onClick={() => {
+                        setSelectedTemplate(t);
+                        if (orderVars && t.body) {
+                          const nums = [...new Set(Array.from(t.body.matchAll(/\{\{(\d+)\}\}/g)).map(m => m[1]))].sort();
+                          const autoFilled: Record<string, string> = {};
+                          nums.forEach(n => {
+                            const varKey = TEMPLATE_VAR_ORDER[parseInt(n) - 1];
+                            if (varKey && orderVars[varKey]) autoFilled[n] = orderVars[varKey];
+                          });
+                          setTemplateVars(autoFilled);
+                        } else {
+                          setTemplateVars({});
+                        }
+                      }}
                       data-testid={`template-item-${t.id}`}
                     >
                       <p className="text-xs font-medium text-foreground">{t.name}</p>
@@ -3124,19 +3166,29 @@ export default function SupportChatPage() {
                     </div>
                     {bodyVarNums.length > 0 && (
                       <div className="space-y-2">
-                        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Fill Variables</p>
-                        {bodyVarNums.map(n => (
-                          <div key={n}>
-                            <label className="text-xs text-muted-foreground mb-0.5 block">{`{{${n}}}`}</label>
-                            <Input
-                              placeholder={`Variable ${n}`}
-                              value={templateVars[n] || ""}
-                              onChange={(e) => setTemplateVars(prev => ({ ...prev, [n]: e.target.value }))}
-                              className="h-7 text-xs"
-                              data-testid={`input-template-var-${n}`}
-                            />
-                          </div>
-                        ))}
+                        <div className="flex items-center justify-between">
+                          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Fill Variables</p>
+                          {orderVars && <span className="text-[10px] text-[#008069] font-medium">Auto-filled from order</span>}
+                        </div>
+                        {bodyVarNums.map(n => {
+                          const varKey = TEMPLATE_VAR_ORDER[parseInt(n) - 1];
+                          const label = varKey ? TEMPLATE_VAR_LABELS[varKey] || varKey : `Variable ${n}`;
+                          return (
+                            <div key={n}>
+                              <label className="text-xs text-muted-foreground mb-0.5 block">
+                                <span className="font-mono">{`{{${n}}}`}</span>
+                                {varKey && <span className="ml-1 text-muted-foreground/70">— {label}</span>}
+                              </label>
+                              <Input
+                                placeholder={label}
+                                value={templateVars[n] || ""}
+                                onChange={(e) => setTemplateVars(prev => ({ ...prev, [n]: e.target.value }))}
+                                className="h-7 text-xs"
+                                data-testid={`input-template-var-${n}`}
+                              />
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                     <div className="flex flex-col gap-2">

@@ -8811,6 +8811,46 @@ export async function registerRoutes(
   // Alias for WhatsApp-prefixed path
   app.get("/api/whatsapp/conversations/:id/search", isAuthenticated, handleConversationSearch);
 
+  // Get pre-built order variable values for a conversation (template picker auto-fill)
+  app.get("/api/support/conversations/:id/order-vars", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const conv = await storage.getConversationById(req.params.id);
+      if (!conv || conv.merchantId !== merchantId) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+      if (!conv.orderId) return res.json({ vars: null });
+      const order = await storage.getOrderById(merchantId, conv.orderId);
+      if (!order) return res.json({ vars: null });
+      const { buildVarsFromParams, DEFAULT_VAR_ORDER } = await import("./utils/integrations/whatsapp/variables");
+      const lineItems = Array.isArray(order.lineItems)
+        ? (order.lineItems as any[]).map((li: any) => ({
+            name: li.name || li.title || "",
+            quantity: li.quantity || 1,
+            price: parseFloat(li.price || "0"),
+            variantTitle: li.variant_title || li.variantTitle || null,
+          }))
+        : [];
+      const vars = buildVarsFromParams({
+        customerName: order.customerName || "Customer",
+        orderNumber: order.orderNumber || "",
+        fromStatus: String(order.workflowStatus || ""),
+        toStatus: String(order.workflowStatus || ""),
+        totalAmount: order.totalAmount ? String(order.totalAmount) : null,
+        city: (order as any).city || null,
+        shippingAddress: order.shippingAddress || null,
+        courierName: order.courierName || null,
+        courierTracking: order.courierTracking || null,
+        itemSummary: order.itemSummary || null,
+        lineItems,
+      });
+      res.json({ vars, variableOrder: DEFAULT_VAR_ORDER });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Send template to conversation
   app.post("/api/support/conversations/:id/send-template", isAuthenticated, async (req: any, res) => {
     try {
