@@ -268,7 +268,7 @@ export async function sendOrderStatusWhatsApp(
             anySent = true;
             if (!firstAutomationId) {
               firstAutomationId = automation.id;
-              firstRetryAttempts = (automation as any).retryAttempts ?? null;
+              firstRetryAttempts = automation.retryAttempts ?? null;
               if (params.toStatus === "NEW") {
                 await db.update(orders).set({ waAutomationId: automation.id }).where(eq(orders.id, params.orderId));
               }

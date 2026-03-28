@@ -579,6 +579,7 @@ function AutomationDialog({
   const [variableOrder, setVariableOrder] = useState<string[]>([]);
   const [showVarMapping, setShowVarMapping] = useState(false);
   const [retryAttempts, setRetryAttempts] = useState<RetryAttempt[]>([]);
+  const [remindersOpen, setRemindersOpen] = useState(false);
   const retryTextRefs = useRef<(HTMLTextAreaElement | null)[]>([]);
 
   useEffect(() => {
@@ -590,7 +591,9 @@ function AutomationDialog({
       setMessageText(editData.messageText ?? "");
       setTemplateName(editData.templateName ?? "none");
       setExcludeDraftOrders(editData.excludeDraftOrders ?? false);
-      setRetryAttempts(editData.retryAttempts ?? []);
+      const existingRetries = editData.retryAttempts ?? [];
+      setRetryAttempts(existingRetries);
+      setRemindersOpen(existingRetries.length > 0);
       if (editData.variableOrder && editData.variableOrder.length > 0) {
         setVariableOrder(editData.variableOrder);
         setShowVarMapping(true);
@@ -822,14 +825,24 @@ function AutomationDialog({
           )}
 
           {triggerStatus === "NEW" && (
-            <div className="space-y-2 rounded-md border p-3 bg-muted/30">
-              <div className="flex items-center justify-between">
+            <div className="rounded-md border bg-muted/30 overflow-hidden">
+              <button
+                type="button"
+                className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-muted/50 transition-colors"
+                onClick={() => setRemindersOpen(o => !o)}
+                data-testid="button-toggle-reminders"
+              >
                 <div>
-                  <p className="text-sm font-medium">Follow-up Reminders</p>
+                  <p className="text-sm font-medium">Follow-up Reminders {retryAttempts.length > 0 && <span className="ml-1 text-xs text-muted-foreground font-normal">({retryAttempts.length})</span>}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     Send plain-text follow-ups when the customer doesn't respond. Up to 3 reminders.
                   </p>
                 </div>
+                {remindersOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0" /> : <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />}
+              </button>
+              {remindersOpen && (
+              <div className="space-y-2 px-3 pb-3">
+              <div className="flex items-center justify-end">
                 {retryAttempts.length < 3 && (
                   <Button
                     type="button"
@@ -895,6 +908,8 @@ function AutomationDialog({
                   />
                 </div>
               ))}
+              </div>
+              )}
             </div>
           )}
 
