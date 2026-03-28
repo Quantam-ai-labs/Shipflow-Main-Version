@@ -44,7 +44,7 @@ export function buildTrackingLink(courierName?: string | null, trackingNumber?: 
     return `https://www.tcsexpress.com/track/${encodeURIComponent(trackingNumber)}`;
   }
   if (name.includes("trax")) {
-    return `https://traxdelivery.com/track/?traking_number=${encodeURIComponent(trackingNumber)}`;
+    return `https://traxdelivery.com/track/?tracking_number=${encodeURIComponent(trackingNumber)}`;
   }
   if (name.includes("ocs")) {
     return `https://ocs.com.pk/tracking?awb=${encodeURIComponent(trackingNumber)}`;

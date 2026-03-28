@@ -631,7 +631,7 @@ function AutomationDialog({
       setShowVarMapping(false);
       setRetryAttempts([]);
     }
-  }, [editData, open]);
+  }, [editData, open, templates]);
 
   const handleSave = () => {
     if (!title.trim() || !triggerStatus) return;
@@ -763,8 +763,12 @@ function AutomationDialog({
                 const tpl = templates.find(t => t.name === v);
                 const count = tpl?.body ? countTemplatePlaceholders(tpl.body) : 0;
                 if (count > 0) {
-                  const slots = Array.from({ length: count }, (_, i) => DEFAULT_VAR_ORDER[i] ?? "");
-                  setVariableOrder(slots);
+                  setVariableOrder(prev => {
+                    if (prev.length >= count) return prev.slice(0, count);
+                    const existing = new Set(prev);
+                    const extras = DEFAULT_VAR_ORDER.filter(k => !existing.has(k));
+                    return [...prev, ...extras.slice(0, count - prev.length)];
+                  });
                   setShowVarMapping(true);
                 }
               }
