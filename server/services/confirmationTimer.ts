@@ -42,8 +42,8 @@ async function sendWaReminder(order: any, merchant: any, automation: any, attemp
   const formattedPhone = formatPhoneForWhatsApp(order.customerPhone);
   if (!formattedPhone) return { sent: false };
 
-  const retryIndex = attemptNumber - 1;
-  const retryAttempt = getRetryAttemptForIndex(automation, retryIndex);
+  const retryIndex = attemptNumber - 2;
+  const retryAttempt = retryIndex >= 0 ? getRetryAttemptForIndex(automation, retryIndex) : null;
 
   if (retryAttempt) {
     const rawText = retryAttempt.messageText?.trim();
@@ -233,7 +233,7 @@ async function checkWaReattempts() {
         }
 
         const nextAttemptNumber = currentAttemptCount + 1;
-        const retryAttempt = getRetryAttemptForIndex(automation, nextAttemptNumber - 1);
+        const retryAttempt = nextAttemptNumber >= 2 ? getRetryAttemptForIndex(automation, nextAttemptNumber - 2) : null;
         const reminderResult = await sendWaReminder(order, merchant, automation, nextAttemptNumber);
 
         await db.update(orders).set({
