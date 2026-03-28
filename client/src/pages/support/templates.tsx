@@ -35,6 +35,11 @@ interface WaMetaTemplate {
   createdAt: string;
 }
 
+interface RetryAttempt {
+  messageText: string;
+  delayHours: number;
+}
+
 interface WaAutomation {
   id: string;
   merchantId: string;
@@ -47,6 +52,7 @@ interface WaAutomation {
   isActive: boolean;
   excludeDraftOrders: boolean;
   variableOrder: string[] | null;
+  retryAttempts: RetryAttempt[] | null;
   createdAt: string;
 }
 
@@ -557,6 +563,7 @@ function AutomationDialog({
     title: string; description: string; triggerStatus: string;
     delayMinutes: number; messageText: string; templateName: string;
     excludeDraftOrders: boolean; variableOrder: string[] | null;
+    retryAttempts: RetryAttempt[] | null;
   }) => void;
   isSaving: boolean;
   templates: WaMetaTemplate[];
@@ -571,6 +578,8 @@ function AutomationDialog({
   const [excludeDraftOrders, setExcludeDraftOrders] = useState(false);
   const [variableOrder, setVariableOrder] = useState<string[]>([]);
   const [showVarMapping, setShowVarMapping] = useState(false);
+  const [retryAttempts, setRetryAttempts] = useState<RetryAttempt[]>([]);
+  const retryTextRefs = useRef<(HTMLTextAreaElement | null)[]>([]);
 
   useEffect(() => {
     if (editData) {
@@ -581,6 +590,7 @@ function AutomationDialog({
       setMessageText(editData.messageText ?? "");
       setTemplateName(editData.templateName ?? "none");
       setExcludeDraftOrders(editData.excludeDraftOrders ?? false);
+      setRetryAttempts(editData.retryAttempts ?? []);
       if (editData.variableOrder && editData.variableOrder.length > 0) {
         setVariableOrder(editData.variableOrder);
         setShowVarMapping(true);
@@ -604,13 +614,41 @@ function AutomationDialog({
       setExcludeDraftOrders(false);
       setVariableOrder([]);
       setShowVarMapping(false);
+      setRetryAttempts([]);
     }
   }, [editData, open]);
 
   const handleSave = () => {
     if (!title.trim() || !triggerStatus) return;
     const finalVarOrder = showVarMapping && variableOrder.length > 0 ? variableOrder : null;
-    onSave({ title: title.trim(), description: description.trim(), triggerStatus, delayMinutes, messageText: messageText.trim(), templateName, excludeDraftOrders, variableOrder: finalVarOrder });
+    const finalRetryAttempts = triggerStatus === "NEW" && retryAttempts.length > 0 ? retryAttempts : null;
+    onSave({ title: title.trim(), description: description.trim(), triggerStatus, delayMinutes, messageText: messageText.trim(), templateName, excludeDraftOrders, variableOrder: finalVarOrder, retryAttempts: finalRetryAttempts });
+  };
+
+  const addRetryAttempt = () => {
+    if (retryAttempts.length >= 3) return;
+    setRetryAttempts(prev => [...prev, { messageText: "", delayHours: 4 }]);
+  };
+
+  const removeRetryAttempt = (index: number) => {
+    setRetryAttempts(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const updateRetryAttempt = (index: number, field: keyof RetryAttempt, value: string | number) => {
+    setRetryAttempts(prev => prev.map((a, i) => i === index ? { ...a, [field]: value } : a));
+  };
+
+  const insertRetryVar = (index: number, chip: string) => {
+    const el = retryTextRefs.current[index];
+    if (!el) {
+      updateRetryAttempt(index, "messageText", retryAttempts[index].messageText + chip);
+      return;
+    }
+    const s = el.selectionStart ?? retryAttempts[index].messageText.length;
+    const e = el.selectionEnd ?? retryAttempts[index].messageText.length;
+    const next = retryAttempts[index].messageText.slice(0, s) + chip + retryAttempts[index].messageText.slice(e);
+    updateRetryAttempt(index, "messageText", next);
+    setTimeout(() => { el.focus(); el.setSelectionRange(s + chip.length, s + chip.length); }, 0);
   };
 
   const setVarAt = (index: number, value: string) => {
@@ -783,6 +821,83 @@ function AutomationDialog({
             </div>
           )}
 
+          {triggerStatus === "NEW" && (
+            <div className="space-y-2 rounded-md border p-3 bg-muted/30">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">Follow-up Reminders</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Send plain-text follow-ups when the customer doesn't respond. Up to 3 reminders.
+                  </p>
+                </div>
+                {retryAttempts.length < 3 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addRetryAttempt}
+                    className="text-xs shrink-0"
+                    data-testid="button-add-reminder"
+                  >
+                    <Plus className="w-3 h-3 mr-1" />
+                    Add Reminder
+                  </Button>
+                )}
+              </div>
+              {retryAttempts.length === 0 && (
+                <p className="text-xs text-muted-foreground italic">No follow-ups — only the initial message is sent.</p>
+              )}
+              {retryAttempts.map((attempt, i) => (
+                <div key={i} className="space-y-2 border rounded-md p-3 bg-background" data-testid={`retry-slot-${i}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-medium text-foreground">Reminder {i + 1}</p>
+                    <button
+                      type="button"
+                      onClick={() => removeRetryAttempt(i)}
+                      className="text-muted-foreground hover:text-destructive transition-colors text-sm px-1"
+                      data-testid={`button-remove-reminder-${i}`}
+                    >×</button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Label className="text-xs shrink-0 text-muted-foreground">Send after</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={72}
+                      value={attempt.delayHours}
+                      onChange={e => updateRetryAttempt(i, "delayHours", Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-20 h-7 text-sm"
+                      data-testid={`input-reminder-delay-${i}`}
+                    />
+                    <Label className="text-xs text-muted-foreground">hours with no response</Label>
+                  </div>
+                  <div className="flex flex-wrap gap-1 p-2 bg-muted/40 rounded border">
+                    {VARIABLE_CHIPS.map(chip => (
+                      <button
+                        key={chip}
+                        type="button"
+                        onClick={() => insertRetryVar(i, chip)}
+                        className="text-xs px-1.5 py-0.5 rounded border bg-background hover-elevate font-mono transition-colors text-muted-foreground"
+                        data-testid={`chip-reminder-var-${i}-${chip.replace(/[{}]/g, "")}`}
+                      >
+                        + {chip}
+                      </button>
+                    ))}
+                  </div>
+                  <Textarea
+                    ref={el => { retryTextRefs.current[i] = el; }}
+                    value={attempt.messageText}
+                    onChange={e => updateRetryAttempt(i, "messageText", e.target.value)}
+                    placeholder={`Hi {{name}}, just a reminder about your order #{{order_number}}. Please confirm!`}
+                    rows={3}
+                    className="font-mono text-sm resize-y"
+                    data-testid={`textarea-reminder-${i}`}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="flex items-start justify-between gap-4 rounded-md border p-3 bg-muted/30">
             <div className="space-y-0.5">
               <Label htmlFor="auto-exclude-draft" className="text-sm font-medium">Exclude Draft Orders</Label>
@@ -862,6 +977,9 @@ function AutomationCard({
         )}
         {vars.length > 0 && (
           <p><span className="text-foreground">Variables:</span> {vars.join(", ")}</p>
+        )}
+        {automation.retryAttempts && automation.retryAttempts.length > 0 && (
+          <p><span className="text-foreground">Follow-ups:</span> {automation.retryAttempts.length} reminder{automation.retryAttempts.length !== 1 ? "s" : ""} configured</p>
         )}
         {automation.excludeDraftOrders && (
           <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-500/50 text-amber-600 dark:text-amber-400 mt-1" data-testid={`badge-exclude-draft-${automation.id}`}>

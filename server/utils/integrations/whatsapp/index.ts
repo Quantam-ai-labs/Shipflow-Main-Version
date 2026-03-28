@@ -54,6 +54,8 @@ export interface WaSendOutcome {
   sent: boolean;
   notOnWhatsApp: boolean;
   error?: string;
+  automationId?: string;
+  retryAttempts?: Array<{ messageText: string; delayHours: number }> | null;
 }
 
 export async function sendOrderStatusWhatsApp(
@@ -121,6 +123,8 @@ export async function sendOrderStatusWhatsApp(
     let anySent = false;
     let anyNotOnWA = false;
     let lastError: string | undefined;
+    let firstAutomationId: string | undefined;
+    let firstRetryAttempts: Array<{ messageText: string; delayHours: number }> | null | undefined;
 
     let draftAutoConfirmed = false;
 
@@ -262,6 +266,13 @@ export async function sendOrderStatusWhatsApp(
 
           if (result.success) {
             anySent = true;
+            if (!firstAutomationId) {
+              firstAutomationId = automation.id;
+              firstRetryAttempts = (automation as any).retryAttempts ?? null;
+              if (params.toStatus === "NEW") {
+                await db.update(orders).set({ waAutomationId: automation.id }).where(eq(orders.id, params.orderId));
+              }
+            }
             console.log(`${LOG_PREFIX} Automation "${automation.title}" sent successfully for order ${params.orderNumber}`);
             try {
               const displayText = (() => {
@@ -349,7 +360,7 @@ export async function sendOrderStatusWhatsApp(
       }
     }
 
-    return { sent: anySent, notOnWhatsApp: anyNotOnWA, error: lastError };
+    return { sent: anySent, notOnWhatsApp: anyNotOnWA, error: lastError, automationId: firstAutomationId, retryAttempts: firstRetryAttempts };
   } catch (err: any) {
     console.error(
       `${LOG_PREFIX} Unexpected error for order ${params.orderId}:`,

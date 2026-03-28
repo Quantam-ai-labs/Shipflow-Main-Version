@@ -87,6 +87,67 @@ function buildTemplatePayload(
   };
 }
 
+export async function sendWhatsAppTextMessage(params: {
+  formattedPhone: string;
+  messageText: string;
+  orderNumber: string;
+  phoneNumberId?: string;
+  accessToken?: string;
+}): Promise<SendResult> {
+  const { formattedPhone, messageText, orderNumber } = params;
+  const token = params.accessToken;
+  const phoneNumberId = params.phoneNumberId;
+
+  if (!token) {
+    return { success: false, error: "WhatsApp not configured. Please connect your WhatsApp Business Account in Settings." };
+  }
+  if (!phoneNumberId) {
+    return { success: false, error: "WhatsApp Phone Number ID not configured" };
+  }
+
+  const payload = {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to: formattedPhone,
+    type: "text",
+    text: { preview_url: false, body: messageText },
+  };
+
+  const apiUrl = `https://graph.facebook.com/v22.0/${phoneNumberId}/messages`;
+  let response: Response;
+  try {
+    response = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(WHATSAPP_REQUEST_TIMEOUT_MS),
+    });
+  } catch (fetchErr: any) {
+    if (fetchErr.name === "TimeoutError" || fetchErr.name === "AbortError") {
+      console.error(`${LOG_PREFIX} Text message timed out for order ${orderNumber} to ${formattedPhone}`);
+      return { success: false, error: "Request timed out" };
+    }
+    return { success: false, error: `Network error: ${fetchErr.message || "Unknown"}` };
+  }
+
+  if (!response.ok) {
+    let errBody = "";
+    try { errBody = await response.text(); } catch { errBody = "(unable to read response body)"; }
+    console.error(`${LOG_PREFIX} API error ${response.status} for plain-text to ${formattedPhone} (order ${orderNumber}): ${errBody}`);
+    const notOnWA = isNotOnWhatsAppError(errBody);
+    return { success: false, error: `API error ${response.status}: ${errBody}`, phone: formattedPhone, notOnWhatsApp: notOnWA };
+  }
+
+  let result: any;
+  try { result = await response.json(); } catch { return { success: true, phone: formattedPhone }; }
+  const messageId = result?.messages?.[0]?.id || null;
+  console.log(`${LOG_PREFIX} ✓ Plain-text delivered to ${formattedPhone} for order ${orderNumber}${messageId ? ` (msgId: ${messageId})` : ""}`);
+  return { success: true, messageId: messageId || undefined, phone: formattedPhone };
+}
+
 export async function sendWhatsAppApiRequest(params: {
   formattedPhone: string;
   templateName: string;

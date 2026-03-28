@@ -81,13 +81,8 @@ interface SettingsData {
   endTime: string;
   voiceId: string;
   waMaxAttempts: number;
-  waAttempt2DelayHours: number;
-  waAttempt3DelayHours: number;
   robocallMaxAttempts: number;
   robocallRetryGapMinutes: number;
-  waConfirmTemplate1: string;
-  waConfirmTemplate2: string;
-  waConfirmTemplate3: string;
 }
 
 function TimeWindowSettings() {
@@ -99,15 +94,9 @@ function TimeWindowSettings() {
   const [endTime, setEndTime] = useState("20:00");
   const [defaultVoiceId, setDefaultVoiceId] = useState("735");
   const [waRetriesEnabled, setWaRetriesEnabled] = useState(false);
-  const [waMaxAttempts, setWaMaxAttempts] = useState("3");
-  const [waAttempt2DelayHours, setWaAttempt2DelayHours] = useState("4");
-  const [waAttempt3DelayHours, setWaAttempt3DelayHours] = useState("12");
   const [robocallRetriesEnabled, setRobocallRetriesEnabled] = useState(false);
   const [robocallMaxAttempts, setRobocallMaxAttempts] = useState("3");
   const [robocallRetryGapMinutes, setRobocallRetryGapMinutes] = useState("45");
-  const [waConfirmTemplate1, setWaConfirmTemplate1] = useState("");
-  const [waConfirmTemplate2, setWaConfirmTemplate2] = useState("");
-  const [waConfirmTemplate3, setWaConfirmTemplate3] = useState("");
 
   useEffect(() => {
     if (settings) {
@@ -116,16 +105,10 @@ function TimeWindowSettings() {
       setDefaultVoiceId(settings.voiceId);
       const waMax = settings.waMaxAttempts ?? 3;
       setWaRetriesEnabled(waMax > 1);
-      setWaMaxAttempts(String(waMax > 1 ? waMax : 3));
-      setWaAttempt2DelayHours(String(settings.waAttempt2DelayHours ?? 4));
-      setWaAttempt3DelayHours(String(settings.waAttempt3DelayHours ?? 12));
       const roboMax = settings.robocallMaxAttempts ?? 3;
       setRobocallRetriesEnabled(roboMax > 1);
       setRobocallMaxAttempts(String(roboMax > 1 ? roboMax : 3));
       setRobocallRetryGapMinutes(String(settings.robocallRetryGapMinutes ?? 45));
-      setWaConfirmTemplate1(settings.waConfirmTemplate1 || "");
-      setWaConfirmTemplate2(settings.waConfirmTemplate2 || "");
-      setWaConfirmTemplate3(settings.waConfirmTemplate3 || "");
     }
   }, [settings]);
 
@@ -135,14 +118,9 @@ function TimeWindowSettings() {
         startTime,
         endTime,
         voiceId: defaultVoiceId,
-        waMaxAttempts: waRetriesEnabled ? waMaxAttempts : "1",
-        waAttempt2DelayHours,
-        waAttempt3DelayHours,
+        waMaxAttempts: waRetriesEnabled ? "3" : "1",
         robocallMaxAttempts: robocallRetriesEnabled ? robocallMaxAttempts : "1",
         robocallRetryGapMinutes,
-        waConfirmTemplate1,
-        waConfirmTemplate2: waRetriesEnabled ? waConfirmTemplate2 : "",
-        waConfirmTemplate3: waRetriesEnabled ? waConfirmTemplate3 : "",
       });
     },
     onSuccess: () => {
@@ -222,43 +200,11 @@ function TimeWindowSettings() {
               <Switch id="waRetriesToggle" checked={waRetriesEnabled} onCheckedChange={setWaRetriesEnabled} data-testid="switch-wa-retries" />
             </div>
           </div>
-          <p className="text-sm text-muted-foreground mb-3">
+          <p className="text-sm text-muted-foreground">
             {waRetriesEnabled
-              ? "Configure how many WhatsApp confirmation attempts are made and the delay between each. After all WA attempts are exhausted, the order moves to RoboCall."
-              : "Only one WhatsApp message will be sent per order. Enable retries to send follow-up reminders."}
+              ? "Follow-up reminders are enabled. Configure the reminder messages and delays inside each New Order automation."
+              : "Only one WhatsApp message will be sent per order. Enable retries to send follow-up reminders configured per automation."}
           </p>
-          <div className="space-y-1 mb-3">
-            <Label htmlFor="waConfirmTemplate1">WhatsApp Template</Label>
-            <Input id="waConfirmTemplate1" placeholder="order_confirmation" value={waConfirmTemplate1} onChange={e => setWaConfirmTemplate1(e.target.value)} className="max-w-sm" data-testid="input-wa-template-1" />
-          </div>
-          {waRetriesEnabled && (
-            <>
-              <div className="flex flex-wrap items-end gap-4 mb-4">
-                <div className="space-y-1">
-                  <Label htmlFor="waMaxAttempts">Max WA Attempts</Label>
-                  <Input id="waMaxAttempts" type="number" min="2" max="10" value={waMaxAttempts} onChange={e => setWaMaxAttempts(e.target.value)} className="w-24" data-testid="input-wa-max-attempts" />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="waAttempt2DelayHours">Attempt 2 Delay (hrs)</Label>
-                  <Input id="waAttempt2DelayHours" type="number" min="1" max="72" value={waAttempt2DelayHours} onChange={e => setWaAttempt2DelayHours(e.target.value)} className="w-28" data-testid="input-wa-attempt2-delay" />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="waAttempt3DelayHours">Attempt 3 Delay (hrs)</Label>
-                  <Input id="waAttempt3DelayHours" type="number" min="1" max="72" value={waAttempt3DelayHours} onChange={e => setWaAttempt3DelayHours(e.target.value)} className="w-28" data-testid="input-wa-attempt3-delay" />
-                </div>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <Label htmlFor="waConfirmTemplate2">Template 2 (Reminder)</Label>
-                  <Input id="waConfirmTemplate2" placeholder="order_reminder" value={waConfirmTemplate2} onChange={e => setWaConfirmTemplate2(e.target.value)} data-testid="input-wa-template-2" />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="waConfirmTemplate3">Template 3 (Final Notice)</Label>
-                  <Input id="waConfirmTemplate3" placeholder="order_final_notice" value={waConfirmTemplate3} onChange={e => setWaConfirmTemplate3(e.target.value)} data-testid="input-wa-template-3" />
-                </div>
-              </div>
-            </>
-          )}
         </div>
 
         <div>

@@ -394,15 +394,22 @@ export class WebhookHandler {
               note: `Confirmation WhatsApp sent to ${created.customerPhone}`,
             }).catch(() => {});
 
-            const [merchantData] = await db.select({
-              waAttempt2DelayHours: merchants.waAttempt2DelayHours,
-            }).from(merchants).where(eq(merchants.id, merchantId)).limit(1);
-            const delayHours = merchantData?.waAttempt2DelayHours || 4;
-            const nextAttempt = new Date(Date.now() + delayHours * 60 * 60 * 1000);
+            const firstRetryDelayHours = waResult.retryAttempts?.[0]?.delayHours ?? null;
+            let nextAttempt: Date;
+            if (firstRetryDelayHours != null) {
+              nextAttempt = new Date(Date.now() + firstRetryDelayHours * 60 * 60 * 1000);
+            } else {
+              const [merchantData] = await db.select({
+                waAttempt2DelayHours: merchants.waAttempt2DelayHours,
+              }).from(merchants).where(eq(merchants.id, merchantId)).limit(1);
+              const delayHours = merchantData?.waAttempt2DelayHours || 4;
+              nextAttempt = new Date(Date.now() + delayHours * 60 * 60 * 1000);
+            }
 
             await db_updateWaSentAt(created.id, 1);
             await db.update(orders).set({
               waNextAttemptAt: nextAttempt,
+              ...(waResult.automationId ? { waAutomationId: waResult.automationId } : {}),
             }).where(eq(orders.id, created.id));
           } else {
             const errorStr = waResult?.error || "";

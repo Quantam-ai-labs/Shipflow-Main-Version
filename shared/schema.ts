@@ -304,6 +304,7 @@ export const orders = pgTable("orders", {
   waNextAttemptAt: timestamp("wa_next_attempt_at"),
   waLastTemplateUsed: varchar("wa_last_template_used", { length: 100 }),
   waNotOnWhatsApp: boolean("wa_not_on_whatsapp").default(false),
+  waAutomationId: varchar("wa_automation_id"),
 }, (table) => [
   index("idx_orders_merchant").on(table.merchantId),
   index("idx_orders_shopify_id").on(table.shopifyOrderId),
@@ -448,6 +449,7 @@ export const waAutomations = pgTable("wa_automations", {
   isActive: boolean("is_active").default(true).notNull(),
   excludeDraftOrders: boolean("exclude_draft_orders").default(false).notNull(),
   variableOrder: jsonb("variable_order").$type<string[]>(),
+  retryAttempts: jsonb("retry_attempts").$type<Array<{ messageText: string; delayHours: number }>>(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
