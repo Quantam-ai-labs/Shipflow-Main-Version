@@ -23,7 +23,7 @@ export const WA_VARIABLE_CHIPS = [
   { key: "{{order_total}}", label: "Order Total", description: "Order total with currency" },
   { key: "{{items}}", label: "Items", description: "Product name - variant x qty || ..." },
   { key: "{{tracking_number}}", label: "Tracking No.", description: "Courier tracking number" },
-  { key: "{{tracking_link}}", label: "Tracking Link", description: "Full clickable tracking URL (Leopards or PostEx)" },
+  { key: "{{tracking_link}}", label: "Tracking Link", description: "Full clickable tracking URL (Leopards, PostEx, TCS, Trax, OCS, Rider, M&P, Swyft, Call Courier)" },
   { key: "{{courier_name}}", label: "Courier", description: "Courier company name" },
   { key: "{{city}}", label: "City", description: "Customer city" },
   { key: "{{address}}", label: "Address", description: "Shipping address" },
@@ -39,6 +39,27 @@ export function buildTrackingLink(courierName?: string | null, trackingNumber?: 
   }
   if (name.includes("postex")) {
     return `https://postex.pk/tracking?cn=${encodeURIComponent(trackingNumber)}`;
+  }
+  if (name.includes("tcs")) {
+    return `https://www.tcsexpress.com/track/${encodeURIComponent(trackingNumber)}`;
+  }
+  if (name.includes("trax")) {
+    return `https://traxdelivery.com/track/?traking_number=${encodeURIComponent(trackingNumber)}`;
+  }
+  if (name.includes("ocs")) {
+    return `https://ocs.com.pk/tracking?awb=${encodeURIComponent(trackingNumber)}`;
+  }
+  if (name.includes("rider")) {
+    return `https://rider.com.pk/track/?tracking_code=${encodeURIComponent(trackingNumber)}`;
+  }
+  if (name.includes("m&p") || name.includes("mnp") || name.includes("mounted")) {
+    return `https://mnp.com.pk/track/?tnumber=${encodeURIComponent(trackingNumber)}`;
+  }
+  if (name.includes("swyft")) {
+    return `https://swyftlogistics.com/tracking?cn=${encodeURIComponent(trackingNumber)}`;
+  }
+  if (name.includes("call courier") || name.includes("callcourier")) {
+    return `https://callcourier.com.pk/tracking?q=${encodeURIComponent(trackingNumber)}`;
   }
   return "";
 }
@@ -87,14 +108,34 @@ export function buildTemplateParamsFromBody(
   const maxParam = Math.max(...paramMatches.map(m => parseInt(m.replace(/[{}]/g, ""))));
   const params: string[] = [];
 
-  const orderedVarNames = variableOrder && variableOrder.length > 0 ? variableOrder : DEFAULT_VAR_ORDER;
+  // If a custom variableOrder is provided but is shorter than the template's placeholder count,
+  // extend it by appending unused entries from DEFAULT_VAR_ORDER rather than silently using "-".
+  let orderedVarNames = variableOrder && variableOrder.length > 0 ? [...variableOrder] : [...DEFAULT_VAR_ORDER];
+  if (orderedVarNames.length < maxParam) {
+    const existing = new Set(orderedVarNames);
+    const extras = DEFAULT_VAR_ORDER.filter(v => !existing.has(v));
+    orderedVarNames = [...orderedVarNames, ...extras];
+    if (variableOrder && variableOrder.length > 0) {
+      console.warn(
+        `[WA Template] variableOrder has ${variableOrder.length} entries but template needs ${maxParam} params. ` +
+        `Auto-extended with: ${extras.slice(0, maxParam - variableOrder.length).join(", ")}`
+      );
+    }
+  }
 
   for (let i = 0; i < maxParam; i++) {
-    if (i < orderedVarNames.length) {
-      params.push(vars[orderedVarNames[i]] || "-");
-    } else {
-      params.push("-");
+    const varName = orderedVarNames[i] ?? "";
+    const value = (varName && vars[varName]) || "";
+
+    if (!value && varName === "tracking_link" && vars["tracking_number"]) {
+      console.warn(
+        `[WA Template] tracking_link is empty for param {{${i + 1}}} — ` +
+        `tracking_number="${vars["tracking_number"]}", courier="${vars["courier_name"] || "unknown"}". ` +
+        `Check that the courier name matches a supported courier in buildTrackingLink.`
+      );
     }
+
+    params.push(value || "-");
   }
 
   return params;

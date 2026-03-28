@@ -595,7 +595,19 @@ function AutomationDialog({
       setRetryAttempts(existingRetries);
       setRemindersOpen(existingRetries.length > 0);
       if (editData.variableOrder && editData.variableOrder.length > 0) {
-        setVariableOrder(editData.variableOrder);
+        // Saved variableOrder may be shorter than the template's placeholder count if
+        // the template was updated after the automation was saved. Auto-extend with
+        // unused DEFAULT_VAR_ORDER entries so no slots silently default to "-".
+        const tpl = editData.templateName ? templates.find(t => t.name === editData.templateName) : null;
+        const count = tpl?.body ? countTemplatePlaceholders(tpl.body) : editData.variableOrder.length;
+        if (count > editData.variableOrder.length) {
+          const existing = new Set(editData.variableOrder);
+          const extras = DEFAULT_VAR_ORDER.filter(v => !existing.has(v));
+          const extended = [...editData.variableOrder, ...extras.slice(0, count - editData.variableOrder.length)];
+          setVariableOrder(extended);
+        } else {
+          setVariableOrder(editData.variableOrder);
+        }
         setShowVarMapping(true);
       } else if (editData.templateName) {
         const tpl = templates.find(t => t.name === editData.templateName);
