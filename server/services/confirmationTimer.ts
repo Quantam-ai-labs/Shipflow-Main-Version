@@ -38,7 +38,7 @@ function getNextAttemptDelay(automation: any, merchant: any, currentAttempt: num
 
 const WA_PERMANENT_ERROR_RE = /\(#100\)|\(#131008\)|\(#132000\)|\(#132001\)|\(#132018\)/;
 
-async function sendWaReminder(order: any, merchant: any, automation: any, attemptNumber: number): Promise<{ sent: boolean; permanentError?: boolean; error?: string }> {
+async function sendWaReminder(order: any, merchant: any, automation: any, attemptNumber: number): Promise<{ sent: boolean; permanentError?: boolean; error?: string; templateUsed?: string | null }> {
   const formattedPhone = formatPhoneForWhatsApp(order.customerPhone);
   if (!formattedPhone) return { sent: false };
 
@@ -124,7 +124,7 @@ async function sendWaReminder(order: any, merchant: any, automation: any, attemp
 
     if (result.success) {
       console.log(`${LOG_PREFIX} WA reminder #${attemptNumber} sent for order #${order.orderNumber} (template: ${templateName})`);
-      return { sent: true };
+      return { sent: true, templateUsed: templateName };
     }
 
     if (result.notOnWhatsApp) {
@@ -238,7 +238,7 @@ async function checkWaReattempts() {
 
         await db.update(orders).set({
           waAttemptCount: nextAttemptNumber,
-          waLastTemplateUsed: retryAttempt ? null : (order.waLastTemplateUsed || null),
+          waLastTemplateUsed: reminderResult.templateUsed !== undefined ? reminderResult.templateUsed : (order.waLastTemplateUsed || null),
           updatedAt: now,
         }).where(eq(orders.id, order.id));
 
