@@ -487,7 +487,7 @@ export default function PaymentLedgerPage() {
                           <TableCell className="text-right font-medium text-red-500">
                             {hasFees ? `-Rs ${Number(record.totalDeduction).toLocaleString()}` : "--"}
                           </TableCell>
-                          <TableCell className="text-right font-semibold text-green-600 dark:text-green-400">
+                          <TableCell className="text-right font-semibold text-emerald-400">
                             {record.hasSyncedData
                               ? `Rs ${Number(record.calculatedNetPaid).toLocaleString()}`
                               : <span className="text-muted-foreground font-normal">Pending sync</span>
@@ -497,8 +497,8 @@ export default function PaymentLedgerPage() {
                             {record.courierPaymentStatus ? (
                               <Badge className={
                                 isSettled
-                                  ? "bg-green-500/10 text-green-600 border-green-500/20"
-                                  : "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                  : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
                               }>
                                 {record.courierPaymentStatus}
                               </Badge>
@@ -530,7 +530,7 @@ export default function PaymentLedgerPage() {
                                 href={record.courierSlipLink}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                                className="inline-flex items-center gap-1 text-sm text-blue-400 hover:underline"
                                 data-testid={`link-slip-${record.id}`}
                               >
                                 <ExternalLink className="w-3.5 h-3.5" />

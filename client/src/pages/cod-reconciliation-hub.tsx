@@ -551,7 +551,7 @@ function ReconciliationSection() {
                                 ? fmtPKR(String(Number(r.reversalFee || 0) + Number(r.reversalTax || 0)))
                                 : "--"}
                             </TableCell>
-                            <TableCell className="text-right font-semibold text-green-600 dark:text-green-400">
+                            <TableCell className="text-right font-semibold text-emerald-400">
                               {r.hasSyncedData !== undefined
                                 ? (r.hasSyncedData ? `Rs ${netPaid.toLocaleString()}` : <span className="text-muted-foreground font-normal">Pending sync</span>)
                                 : (record.netAmount ? fmtPKR(record.netAmount) : "--")
@@ -844,9 +844,9 @@ function SettlementsSection() {
           {[
             { label: "Settlements", value: summary.totalSettlements, icon: Hash, color: "" },
             { label: "Total COD", value: fmtCurrency(summary.totalCod), icon: Banknote, color: "" },
-            { label: "Net Received", value: fmtCurrency(summary.totalNet), icon: ArrowDownRight, color: "text-green-600 dark:text-green-400" },
-            { label: "Settled", value: summary.settledCount, icon: CheckCircle2, color: "text-green-600 dark:text-green-400" },
-            { label: "Pending", value: summary.pendingCount, icon: Clock, color: "text-amber-600 dark:text-amber-400" },
+            { label: "Net Received", value: fmtCurrency(summary.totalNet), icon: ArrowDownRight, color: "text-emerald-400" },
+            { label: "Settled", value: summary.settledCount, icon: CheckCircle2, color: "text-emerald-400" },
+            { label: "Pending", value: summary.pendingCount, icon: Clock, color: "text-amber-400" },
           ].map(({ label, value, icon: Icon, color }) => (
             <Card key={label}>
               <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
@@ -947,7 +947,7 @@ function SettlementsSection() {
                       </TableCell>
                       <TableCell className="text-right text-muted-foreground">{fmtCurrency(cheque.totalCod)}</TableCell>
                       <TableCell className="text-right text-muted-foreground">{fmtCurrency(cheque.totalDeductions)}</TableCell>
-                      <TableCell className="text-right font-medium text-green-600 dark:text-green-400">{fmtCurrency(cheque.totalNet)}</TableCell>
+                      <TableCell className="text-right font-medium text-emerald-400">{fmtCurrency(cheque.totalNet)}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{formatPkDate(cheque.settlementDate)}</TableCell>
                       <TableCell>
                         {cheque.slipLink ? (

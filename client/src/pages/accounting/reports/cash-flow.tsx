@@ -77,12 +77,12 @@ export default function AccountingCashFlow() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <SummaryCard title="Total Inflows" amount={totalInflow} color="text-green-600 dark:text-green-400" testId="text-total-inflow" />
-        <SummaryCard title="Total Outflows" amount={totalOutflow} color="text-red-600 dark:text-red-400" testId="text-total-outflow" />
+        <SummaryCard title="Total Inflows" amount={totalInflow} color="text-emerald-400" testId="text-total-inflow" />
+        <SummaryCard title="Total Outflows" amount={totalOutflow} color="text-red-400" testId="text-total-outflow" />
         <SummaryCard
           title="Net Cash Flow"
           amount={netFlow}
-          color={netFlow >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}
+          color={netFlow >= 0 ? "text-emerald-400" : "text-red-400"}
           testId="text-net-cash-flow"
         />
       </div>

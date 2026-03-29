@@ -88,7 +88,7 @@ export default function AccountingBalanceSheet() {
               <LineItem label="Inventory" amount={assets.inventory} />
               <LineItem label="Receivables" amount={assets.receivables} />
               <Separator className="my-2" />
-              <LineItem label="Total Assets" amount={assets.total} bold color="text-green-600 dark:text-green-400" />
+              <LineItem label="Total Assets" amount={assets.total} bold color="text-emerald-400" />
             </div>
           </CardContent>
         </Card>
@@ -101,7 +101,7 @@ export default function AccountingBalanceSheet() {
             <div className="space-y-1">
               <LineItem label="Payables" amount={liabilities.payables} />
               <Separator className="my-2" />
-              <LineItem label="Total Liabilities" amount={liabilities.total} bold color="text-red-600 dark:text-red-400" />
+              <LineItem label="Total Liabilities" amount={liabilities.total} bold color="text-red-400" />
             </div>
           </CardContent>
         </Card>
@@ -113,7 +113,7 @@ export default function AccountingBalanceSheet() {
             label="Net Worth (Assets - Liabilities)"
             amount={netWorth}
             bold
-            color={netWorth >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}
+            color={netWorth >= 0 ? "text-emerald-400" : "text-red-400"}
           />
         </CardContent>
       </Card>

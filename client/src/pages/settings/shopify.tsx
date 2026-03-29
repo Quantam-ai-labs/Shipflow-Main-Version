@@ -673,9 +673,9 @@ export default function ShopifySettings() {
               )}
               {scopeData?.hasScopeMismatch && (
                 <div className="flex items-start gap-2 text-sm p-3 rounded-md border border-yellow-500/30 bg-yellow-500/5" data-testid="scope-warning">
-                  <AlertTriangle className="w-4 h-4 shrink-0 text-yellow-600 mt-0.5" />
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
                   <div>
-                    <p className="font-medium text-yellow-700 dark:text-yellow-400">
+                    <p className="font-medium text-amber-400">
                       Missing Shopify permissions
                     </p>
                     <p className="text-muted-foreground mt-1">

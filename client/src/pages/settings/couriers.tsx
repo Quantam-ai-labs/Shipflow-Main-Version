@@ -839,7 +839,7 @@ export default function CouriersSettings() {
                                 <span className="text-muted-foreground mx-1">·</span>
                                 <span className="uppercase text-[10px]">{courierActivity.leopards.lastWebhook.rawStatus}</span>
                                 <span className="text-muted-foreground mx-1">→</span>
-                                <span className="text-green-500 dark:text-green-400">{courierActivity.leopards.lastWebhook.normalizedStatus.replace(/_/g, ' ')}</span>
+                                <span className="text-emerald-400">{courierActivity.leopards.lastWebhook.normalizedStatus.replace(/_/g, ' ')}</span>
                               </p>
                               <div className="flex items-center gap-1 mt-0.5">
                                 {(Date.now() - new Date(courierActivity.leopards.lastWebhook.receivedAt).getTime()) < 5 * 60_000 && (
@@ -865,7 +865,7 @@ export default function CouriersSettings() {
                               <p className="text-xs">
                                 <span className="text-foreground">{courierActivity.leopards.syncOrdersProcessed} processed</span>
                                 <span className="text-muted-foreground mx-1">·</span>
-                                <span className="text-green-500 dark:text-green-400">{courierActivity.leopards.lastSync.updated} updated</span>
+                                <span className="text-emerald-400">{courierActivity.leopards.lastSync.updated} updated</span>
                                 {courierActivity.leopards.lastSync.failed > 0 && (
                                   <>
                                     <span className="text-muted-foreground mx-1">·</span>
@@ -996,7 +996,7 @@ export default function CouriersSettings() {
                                 <span className="text-muted-foreground mx-1">·</span>
                                 <span className="text-[10px]">{courierActivity.postex.lastWebhook.rawStatus}</span>
                                 <span className="text-muted-foreground mx-1">→</span>
-                                <span className="text-green-500 dark:text-green-400">{courierActivity.postex.lastWebhook.normalizedStatus.replace(/_/g, ' ')}</span>
+                                <span className="text-emerald-400">{courierActivity.postex.lastWebhook.normalizedStatus.replace(/_/g, ' ')}</span>
                               </p>
                               <div className="flex items-center gap-1 mt-0.5">
                                 {(Date.now() - new Date(courierActivity.postex.lastWebhook.receivedAt).getTime()) < 5 * 60_000 && (
@@ -1022,7 +1022,7 @@ export default function CouriersSettings() {
                               <p className="text-xs">
                                 <span className="text-foreground">{courierActivity.postex.syncOrdersProcessed} processed</span>
                                 <span className="text-muted-foreground mx-1">·</span>
-                                <span className="text-green-500 dark:text-green-400">{courierActivity.postex.lastSync.updated} updated</span>
+                                <span className="text-emerald-400">{courierActivity.postex.lastSync.updated} updated</span>
                                 {courierActivity.postex.lastSync.failed > 0 && (
                                   <>
                                     <span className="text-muted-foreground mx-1">·</span>

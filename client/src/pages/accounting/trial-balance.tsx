@@ -63,7 +63,7 @@ export default function AccountingTrialBalance() {
           <p className="text-muted-foreground mt-2">
             Debit and credit totals by account
             {isBalanced && entries.length > 0 && (
-              <span className="ml-2 text-green-600 dark:text-green-400 font-medium">- Balanced</span>
+              <span className="ml-2 text-emerald-400 font-medium">- Balanced</span>
             )}
           </p>
         </div>

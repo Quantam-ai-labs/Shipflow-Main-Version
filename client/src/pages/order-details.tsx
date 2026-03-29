@@ -978,7 +978,7 @@ function ConfirmationStatusCard({ order, orderId }: { order: OrderDetails; order
           {(order as any).waNotOnWhatsApp && (
             <div className="flex justify-between gap-2">
               <span className="text-muted-foreground">WA Status</span>
-              <Badge variant="outline" className="text-red-600 border-red-300 dark:border-red-700 gap-1" data-testid="badge-not-on-whatsapp">
+              <Badge variant="outline" className="text-red-400 border-red-500/30 gap-1" data-testid="badge-not-on-whatsapp">
                 <PhoneOff className="w-3 h-3" />
                 Not on WhatsApp
               </Badge>
@@ -2704,7 +2704,7 @@ export default function OrderDetails() {
               </div>
 
               {paymentData?.isBooked && paymentData?.prepaidAmount > 0 && (
-                <p className="text-xs text-amber-600 dark:text-amber-400">
+                <p className="text-xs text-amber-400">
                   This order is already booked. COD cannot be changed unless rebooked.
                 </p>
               )}

@@ -2043,7 +2043,7 @@ export default function Pipeline() {
                       {order.orderDate ? formatPkDateTime(order.orderDate) : ""}
                     </div>
                     {(activeTab === "PENDING" || (activeTab === "ALL" && order.workflowStatus === "PENDING")) && order.lastStatusChangedAt && (
-                      <div className="text-xs text-amber-600 dark:text-amber-400" data-testid={`text-pending-duration-${order.id}`}>
+                      <div className="text-xs text-amber-400" data-testid={`text-pending-duration-${order.id}`}>
                         Pending {formatDistanceToNow(new Date(order.lastStatusChangedAt))}
                       </div>
                     )}

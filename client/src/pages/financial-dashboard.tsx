@@ -235,7 +235,7 @@ export default function FinancialDashboard() {
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <p className="text-sm text-muted-foreground">Net {isProfit ? "Profit" : "Loss"}</p>
-                    <p className={`text-2xl font-bold ${isProfit ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`} data-testid="text-net-profit">
+                    <p className={`text-2xl font-bold ${isProfit ? "text-emerald-400" : "text-red-400"}`} data-testid="text-net-profit">
                       {formatPKR(Math.abs(netProfit))}
                     </p>
                     <p className="text-xs text-muted-foreground">{isProfit ? "Positive" : "Negative"} margin</p>

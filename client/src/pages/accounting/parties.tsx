@@ -71,11 +71,11 @@ function formatPKR(amount: number | string): string {
 function getTypeBadgeVariant(type: string) {
   switch (type) {
     case "customer":
-      return "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800";
+      return "bg-blue-500/10 text-blue-400 border-blue-500/20";
     case "supplier":
-      return "bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800";
+      return "bg-orange-500/10 text-orange-400 border-orange-500/20";
     case "courier":
-      return "bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-800";
+      return "bg-violet-500/10 text-violet-400 border-violet-500/20";
     default:
       return "";
   }
@@ -299,9 +299,9 @@ export default function AccountingParties() {
                         <span
                           className={
                             balance > 0
-                              ? "text-green-600 dark:text-green-400"
+                              ? "text-emerald-400"
                               : balance < 0
-                                ? "text-red-600 dark:text-red-400"
+                                ? "text-red-400"
                                 : ""
                           }
                         >

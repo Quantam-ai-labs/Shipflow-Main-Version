@@ -178,13 +178,13 @@ function getImages(product: Product): ProductImage[] {
 function getInventoryBadge(qty: number) {
   if (qty <= 0)
     return (
-      <Badge className="bg-red-500/10 text-red-600 border-red-500/20" data-testid="badge-out-of-stock">
+      <Badge className="bg-red-500/10 text-red-400 border border-red-500/20" data-testid="badge-out-of-stock">
         Out of stock
       </Badge>
     );
   if (qty <= 5)
     return (
-      <Badge className="bg-amber-500/10 text-amber-600 border-amber-500/20" data-testid="badge-low-stock">
+      <Badge className="bg-amber-500/10 text-amber-400 border border-amber-500/20" data-testid="badge-low-stock">
         Low: {qty}
       </Badge>
     );
@@ -201,7 +201,7 @@ function getStatusBadge(status: string | null) {
   if (status === "draft")
     return <Badge className="bg-muted text-muted-foreground">Draft</Badge>;
   if (status === "archived")
-    return <Badge className="bg-red-500/10 text-red-600 border-red-500/20">Archived</Badge>;
+    return <Badge className="bg-red-500/10 text-red-400 border border-red-500/20">Archived</Badge>;
   return <Badge variant="outline">{status}</Badge>;
 }
 

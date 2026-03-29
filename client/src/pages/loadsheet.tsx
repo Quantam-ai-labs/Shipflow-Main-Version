@@ -621,7 +621,7 @@ export default function LoadsheetPage() {
                     <p className="text-xs text-muted-foreground italic">Select a courier above to begin scanning</p>
                   )}
                   {selectedCourier && selectedCourier.toLowerCase().includes("tcs") && (
-                    <p className="text-xs text-amber-600 dark:text-amber-400">TCS loadsheet generation via API is not yet supported. You can scan and track TCS shipments, but the loadsheet PDF must be generated from the TCS portal.</p>
+                    <p className="text-xs text-amber-400">TCS loadsheet generation via API is not yet supported. You can scan and track TCS shipments, but the loadsheet PDF must be generated from the TCS portal.</p>
                   )}
                 </div>
 
@@ -697,10 +697,10 @@ export default function LoadsheetPage() {
                   <div
                     className={`flex items-start gap-2 p-2.5 rounded-md text-sm transition-all ${
                       feedback.status === "valid"
-                        ? "bg-green-500/10 text-green-700 dark:text-green-400 border border-green-500/20"
+                        ? "bg-green-500/10 text-emerald-400 border border-green-500/20"
                         : feedback.status === "already_loaded"
-                        ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20"
-                        : "bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/20"
+                        ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                        : "bg-red-500/10 text-red-400 border border-red-500/20"
                     }`}
                     data-testid="scan-feedback"
                   >

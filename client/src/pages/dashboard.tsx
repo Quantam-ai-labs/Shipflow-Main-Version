@@ -766,7 +766,7 @@ function OrderSearchSection() {
                               <td className="px-3 py-1.5">
                                 <div className="font-medium text-sm">{Number(order.totalAmount).toLocaleString()}</div>
                                 {order.codPaymentStatus === "PAID" ? (
-                                  <Badge className="text-xs bg-green-500/10 text-green-600 border-green-500/20">Prepaid</Badge>
+                                  <Badge className="text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Prepaid</Badge>
                                 ) : order.codPaymentStatus === "PARTIALLY_PAID" ? (
                                   <span className="text-xs text-amber-600">COD: {Number(order.codRemaining ?? order.totalAmount).toLocaleString()}</span>
                                 ) : (

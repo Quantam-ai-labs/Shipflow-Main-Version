@@ -601,7 +601,7 @@ export function CreateOrderDialog({ open, onClose }: CreateOrderDialogProps) {
                 <span>PKR {snap.subtotal.toLocaleString()}</span>
               </div>
               {snap.discountExpanded && snap.discountAmount > 0 && (
-                <div className="flex justify-between text-sm text-green-600 dark:text-green-400">
+                <div className="flex justify-between text-sm text-emerald-400">
                   <span>
                     Discount
                     {snap.discountType === "percentage" ? ` (${snap.discountValue}%)` : ""}
@@ -621,7 +621,7 @@ export function CreateOrderDialog({ open, onClose }: CreateOrderDialogProps) {
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Payment Method</span>
-                <span className={snap.markAsPaid ? "text-green-600 dark:text-green-400 font-medium" : "font-medium"}>
+                <span className={snap.markAsPaid ? "text-emerald-400 font-medium" : "font-medium"}>
                   {snap.markAsPaid ? "Paid" : "Cash on Delivery (COD)"}
                 </span>
               </div>
@@ -852,7 +852,7 @@ export function CreateOrderDialog({ open, onClose }: CreateOrderDialogProps) {
                       </Label>
                     </div>
                     {markAsPaid && (
-                      <div className="pt-1 text-xs text-green-600 dark:text-green-400 font-medium pl-7">
+                      <div className="pt-1 text-xs text-emerald-400 font-medium pl-7">
                         ✓ Marking as paid
                       </div>
                     )}

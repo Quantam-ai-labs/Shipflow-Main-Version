@@ -100,7 +100,7 @@ function NotificationItem({ n, onResolve, resolving, onNavigate, closePopover }:
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7 shrink-0 text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-950"
+                  className="h-7 w-7 shrink-0 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
                   data-testid={`notification-resolve-btn-${n.id}`}
                   disabled={resolving}
                   onClick={(e) => {

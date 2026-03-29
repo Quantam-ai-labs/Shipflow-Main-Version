@@ -259,7 +259,7 @@ function renderFormattedText(text: string) {
     } else if (m.startsWith("~") && m.endsWith("~")) {
       parts.push(<s key={key++}>{m.slice(1, -1)}</s>);
     } else if (m.startsWith("http")) {
-      parts.push(<a key={key++} href={m} target="_blank" rel="noopener noreferrer" className="text-blue-500 dark:text-blue-400 underline break-all hover:text-blue-600">{m}</a>);
+      parts.push(<a key={key++} href={m} target="_blank" rel="noopener noreferrer" className="text-blue-400 underline break-all hover:text-blue-600">{m}</a>);
     }
     lastIndex = match.index + m.length;
   }

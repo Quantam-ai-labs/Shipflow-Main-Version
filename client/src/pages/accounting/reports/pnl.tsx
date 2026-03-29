@@ -93,7 +93,7 @@ export default function AccountingPnl() {
 
       <Card data-testid="card-gross-profit">
         <CardContent className="p-6">
-          <LineItem label="Gross Profit" amount={grossProfit} bold color={grossProfit >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"} />
+          <LineItem label="Gross Profit" amount={grossProfit} bold color={grossProfit >= 0 ? "text-emerald-400" : "text-red-400"} />
         </CardContent>
       </Card>
 
@@ -118,7 +118,7 @@ export default function AccountingPnl() {
 
       <Card data-testid="card-net-profit">
         <CardContent className="p-6">
-          <LineItem label="Net Profit" amount={netProfit} bold color={netProfit >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"} />
+          <LineItem label="Net Profit" amount={netProfit} bold color={netProfit >= 0 ? "text-emerald-400" : "text-red-400"} />
         </CardContent>
       </Card>
     </div>

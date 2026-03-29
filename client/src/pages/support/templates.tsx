@@ -843,10 +843,10 @@ function AutomationDialog({
           {/* Warning: tracking_link not mapped for shipping-related automations */}
           {templateName !== "none" && ["FULFILLED", "DELIVERED"].includes(triggerStatus) && !variableOrder.includes("tracking_link") && (
             <div className="flex items-start gap-2 rounded-md border border-yellow-500/40 bg-yellow-500/10 px-3 py-2.5">
-              <AlertTriangle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 shrink-0 mt-0.5" />
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-yellow-700 dark:text-yellow-300">Tracking link not mapped</p>
-                <p className="text-xs text-yellow-600/80 dark:text-yellow-400/80 mt-0.5">
+                <p className="text-xs font-medium text-amber-300">Tracking link not mapped</p>
+                <p className="text-xs text-amber-400/80 mt-0.5">
                   This automation triggers on <strong>{getTriggerLabel(triggerStatus)}</strong> but <code className="font-mono">tracking_link</code> is not assigned to any variable slot — customers won't receive the tracking URL.
                 </p>
               </div>
@@ -854,7 +854,7 @@ function AutomationDialog({
                 type="button"
                 variant="outline"
                 size="sm"
-                className="text-xs shrink-0 border-yellow-500/60 text-yellow-700 dark:text-yellow-300 hover:bg-yellow-500/20"
+                className="text-xs shrink-0 border-yellow-500/60 text-amber-300 hover:bg-yellow-500/20"
                 onClick={() => {
                   const tpl = templates.find(t => t.name === templateName);
                   const count = tpl?.body ? countTemplatePlaceholders(tpl.body) : DEFAULT_VAR_ORDER.length;
@@ -1042,7 +1042,7 @@ function AutomationCard({
           <p><span className="text-foreground">Follow-ups:</span> {automation.retryAttempts.length} reminder{automation.retryAttempts.length !== 1 ? "s" : ""} configured</p>
         )}
         {automation.excludeDraftOrders && (
-          <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-500/50 text-amber-600 dark:text-amber-400 mt-1" data-testid={`badge-exclude-draft-${automation.id}`}>
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-500/50 text-amber-400 mt-1" data-testid={`badge-exclude-draft-${automation.id}`}>
             Excludes Drafts
           </Badge>
         )}

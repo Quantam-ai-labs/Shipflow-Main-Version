@@ -376,7 +376,7 @@ function RawStatusMappingSection() {
                               <span className="text-[10px] text-muted-foreground shrink-0">System</span>
                             )}
                             {dirty && (
-                              <Badge variant="outline" className="text-[10px] shrink-0 border-amber-400 text-amber-700 dark:text-amber-400">
+                              <Badge variant="outline" className="text-[10px] shrink-0 border-amber-400 text-amber-400">
                                 Unsaved
                               </Badge>
                             )}

@@ -101,15 +101,15 @@ interface DueSummary {
 }
 
 const STATUS_BADGE_CLASSES: Record<string, string> = {
-  pending: "bg-amber-500/10 text-amber-600 border-amber-500/20",
-  partial: "bg-blue-500/10 text-blue-600 border-blue-500/20",
-  paid: "bg-green-500/10 text-green-600 border-green-500/20",
-  overdue: "bg-red-500/10 text-red-600 border-red-500/20",
+  pending: "bg-amber-500/10 text-amber-400 border border-amber-500/20",
+  partial: "bg-blue-500/10 text-blue-400 border border-blue-500/20",
+  paid: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
+  overdue: "bg-red-500/10 text-red-400 border border-red-500/20",
 };
 
 const TYPE_BADGE_CLASSES: Record<string, string> = {
-  payable: "bg-red-500/10 text-red-600 border-red-500/20",
-  receivable: "bg-green-500/10 text-green-600 border-green-500/20",
+  payable: "bg-red-500/10 text-red-400 border border-red-500/20",
+  receivable: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
 };
 
 export default function CourierDuesPage() {

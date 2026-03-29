@@ -249,7 +249,7 @@ export default function MarketingSettings() {
               {tokenExpiry && (
                 <div className="flex items-center gap-2 text-sm">
                   <span className="text-muted-foreground">Token expires:</span>
-                  <span className={isTokenExpiringSoon ? "text-amber-600 dark:text-amber-400 font-medium" : ""} data-testid="text-token-expiry">
+                  <span className={isTokenExpiringSoon ? "text-amber-400 font-medium" : ""} data-testid="text-token-expiry">
                     {formatPkDateTime(tokenExpiry.toISOString())}
                   </span>
                   <Button
@@ -422,7 +422,7 @@ export default function MarketingSettings() {
                     data-testid="input-manual-access-token"
                   />
                   {manualCreds?.hasAccessToken && (
-                    <p className="text-xs text-green-600 dark:text-green-400">Token is set</p>
+                    <p className="text-xs text-emerald-400">Token is set</p>
                   )}
                 </div>
                 <div className="space-y-1.5">

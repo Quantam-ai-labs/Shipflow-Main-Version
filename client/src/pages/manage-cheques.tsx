@@ -182,7 +182,7 @@ export default function ManageCheques() {
                 <ArrowDownRight className="h-4 w-4 text-green-500" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-green-600 dark:text-green-400" data-testid="text-total-net">{formatCurrency(summary.totalNet)}</div>
+                <div className="text-2xl font-bold text-emerald-400" data-testid="text-total-net">{formatCurrency(summary.totalNet)}</div>
               </CardContent>
             </Card>
             <Card>
@@ -191,7 +191,7 @@ export default function ManageCheques() {
                 <CheckCircle2 className="h-4 w-4 text-green-500" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-green-600 dark:text-green-400" data-testid="text-settled-count">{summary.settledCount}</div>
+                <div className="text-2xl font-bold text-emerald-400" data-testid="text-settled-count">{summary.settledCount}</div>
               </CardContent>
             </Card>
             <Card>
@@ -200,7 +200,7 @@ export default function ManageCheques() {
                 <Clock className="h-4 w-4 text-amber-500" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-amber-600 dark:text-amber-400" data-testid="text-pending-count">{summary.pendingCount}</div>
+                <div className="text-2xl font-bold text-amber-400" data-testid="text-pending-count">{summary.pendingCount}</div>
               </CardContent>
             </Card>
           </div>
@@ -330,7 +330,7 @@ export default function ManageCheques() {
                         <TableCell className="text-right text-muted-foreground" data-testid={`text-deductions-${cheque.settlementKey}`}>
                           {formatCurrency(cheque.totalDeductions)}
                         </TableCell>
-                        <TableCell className="text-right font-medium text-green-600 dark:text-green-400" data-testid={`text-net-${cheque.settlementKey}`}>
+                        <TableCell className="text-right font-medium text-emerald-400" data-testid={`text-net-${cheque.settlementKey}`}>
                           {formatCurrency(cheque.totalNet)}
                         </TableCell>
                         <TableCell>

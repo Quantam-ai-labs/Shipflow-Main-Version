@@ -73,7 +73,7 @@ export default function AccountingPartyBalances() {
         <Card>
           <CardContent className="p-6">
             <p className="text-sm text-muted-foreground">Total Receivables</p>
-            <p className="text-2xl font-bold mt-2 text-green-600 dark:text-green-400" data-testid="text-total-receivables">
+            <p className="text-2xl font-bold mt-2 text-emerald-400" data-testid="text-total-receivables">
               {formatPKR(totalReceivables)}
             </p>
           </CardContent>
@@ -81,7 +81,7 @@ export default function AccountingPartyBalances() {
         <Card>
           <CardContent className="p-6">
             <p className="text-sm text-muted-foreground">Total Payables</p>
-            <p className="text-2xl font-bold mt-2 text-red-600 dark:text-red-400" data-testid="text-total-payables">
+            <p className="text-2xl font-bold mt-2 text-red-400" data-testid="text-total-payables">
               {formatPKR(totalPayables)}
             </p>
           </CardContent>
@@ -116,7 +116,7 @@ export default function AccountingPartyBalances() {
                             {party.type}
                           </Badge>
                         </TableCell>
-                        <TableCell className={`text-right font-medium ${isPositive ? "text-green-600 dark:text-green-400" : isNegative ? "text-red-600 dark:text-red-400" : ""}`}>
+                        <TableCell className={`text-right font-medium ${isPositive ? "text-emerald-400" : isNegative ? "text-red-400" : ""}`}>
                           {formatPKR(bal)}
                         </TableCell>
                       </TableRow>

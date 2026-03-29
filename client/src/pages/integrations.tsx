@@ -697,7 +697,7 @@ export default function Integrations() {
             {isLoading ? (
               <Skeleton className="h-6 w-24" />
             ) : data?.shopify.isConnected ? (
-              <Badge className="bg-green-500/10 text-green-600 border-green-500/20">
+              <Badge className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                 <CheckCircle2 className="w-3 h-3 mr-1" />
                 Connected
               </Badge>
@@ -797,12 +797,12 @@ export default function Integrations() {
                   {isWebhookHealthLoading ? (
                     <Skeleton className="h-5 w-20" />
                   ) : webhookHealth?.status === 'healthy' ? (
-                    <Badge className="bg-green-500/10 text-green-600 border-green-500/20">
+                    <Badge className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                       <CheckCircle2 className="w-3 h-3 mr-1" />
                       All Active ({webhookHealth.registered.length})
                     </Badge>
                   ) : webhookHealth?.status === 'partial' ? (
-                    <Badge className="bg-yellow-500/10 text-yellow-600 border-yellow-500/20">
+                    <Badge className="bg-amber-500/10 text-amber-400 border border-amber-500/20">
                       <Activity className="w-3 h-3 mr-1" />
                       {webhookHealth.missing.length} Missing
                     </Badge>
@@ -863,11 +863,11 @@ export default function Integrations() {
                           {webhookTopicLabel(webhookActivity.lastEvent.topic)}
                         </Badge>
                         {webhookActivity.lastEvent.status === "processed" ? (
-                          <Badge className="text-xs bg-green-500/10 text-green-600 border-green-500/20">processed</Badge>
+                          <Badge className="text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">processed</Badge>
                         ) : webhookActivity.lastEvent.status === "failed" ? (
-                          <Badge className="text-xs bg-red-500/10 text-red-600 border-red-500/20">failed</Badge>
+                          <Badge className="text-xs bg-red-500/10 text-red-400 border border-red-500/20">failed</Badge>
                         ) : (
-                          <Badge className="text-xs bg-yellow-500/10 text-yellow-600 border-yellow-500/20">{webhookActivity.lastEvent.status}</Badge>
+                          <Badge className="text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20">{webhookActivity.lastEvent.status}</Badge>
                         )}
                         <span className="text-xs text-muted-foreground ml-auto">
                           {formatWebhookTimeAgo(webhookActivity.lastEvent.receivedAt)}
@@ -894,9 +894,9 @@ export default function Integrations() {
               )}
               {scopeData?.hasScopeMismatch && (
                 <div className="flex items-start gap-2 text-sm p-3 rounded-md border border-yellow-500/30 bg-yellow-500/5" data-testid="scope-warning">
-                  <AlertTriangle className="w-4 h-4 shrink-0 text-yellow-600 mt-0.5" />
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
                   <div>
-                    <p className="font-medium text-yellow-700 dark:text-yellow-400">
+                    <p className="font-medium text-amber-400">
                       Missing Shopify permissions
                     </p>
                     <p className="text-muted-foreground mt-1">
@@ -1032,12 +1032,12 @@ export default function Integrations() {
                     {isLoading ? (
                       <Skeleton className="h-6 w-24" />
                     ) : status.connected ? (
-                      <Badge className="bg-green-500/10 text-green-600 border-green-500/20">
+                      <Badge className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                         <CheckCircle2 className="w-3 h-3 mr-1" />
                         Connected
                       </Badge>
                     ) : status.source === 'env_available' ? (
-                      <Badge className="bg-blue-500/10 text-blue-600 border-blue-500/20">
+                      <Badge className="bg-blue-500/10 text-blue-400 border border-blue-500/20">
                         <Key className="w-3 h-3 mr-1" />
                         Key Available
                       </Badge>

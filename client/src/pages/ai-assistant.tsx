@@ -164,8 +164,8 @@ function formatMsg(content: string) {
 }
 
 function TrendIcon({ trend }: { trend?: string }) {
-  if (trend === "up")   return <TrendingUp className="h-3 w-3 text-green-500 dark:text-green-400 shrink-0" />;
-  if (trend === "down") return <TrendingDown className="h-3 w-3 text-red-500 dark:text-red-400 shrink-0" />;
+  if (trend === "up")   return <TrendingUp className="h-3 w-3 text-emerald-400 shrink-0" />;
+  if (trend === "down") return <TrendingDown className="h-3 w-3 text-red-400 shrink-0" />;
   return <Minus className="h-3 w-3 text-muted-foreground shrink-0" />;
 }
 

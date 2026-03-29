@@ -635,7 +635,7 @@ export default function AdsManager() {
                             ) : col.key === "status" ? (
                               statusBadge(row.status)
                             ) : col.key === "roas" ? (
-                              <span className={row.roas >= 1 ? "text-green-600 dark:text-green-400 font-medium" : row.roas > 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}>
+                              <span className={row.roas >= 1 ? "text-emerald-400 font-medium" : row.roas > 0 ? "text-red-400" : "text-muted-foreground"}>
                                 {formatCell(row[col.key], col.format)}
                               </span>
                             ) : col.key === "dailyBudget" ? (
@@ -663,7 +663,7 @@ export default function AdsManager() {
                           ) : col.key === "status" || col.key === "objective" || col.key === "dailyBudget" ? (
                             ""
                           ) : col.key === "roas" ? (
-                            <span className={data.totals.roas >= 1 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
+                            <span className={data.totals.roas >= 1 ? "text-emerald-400" : "text-red-400"}>
                               {data.totals.roas?.toFixed(2)}x
                             </span>
                           ) : data.totals[col.key] !== undefined ? (

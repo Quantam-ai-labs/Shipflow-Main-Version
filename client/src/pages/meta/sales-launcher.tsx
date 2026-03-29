@@ -1297,7 +1297,7 @@ export default function SalesLauncher() {
 
       {/* SECTION D: Real-time Launch Progress */}
       {activeJobId && !launchResult && launchStages.length > 0 && (
-        <div className={`${glassCard} border-blue-200/60 dark:border-blue-500/20`} data-testid="section-progress">
+        <div className={`${glassCard} border-blue-500/20`} data-testid="section-progress">
           <div className="px-5 pt-4 pb-3">
             <div className="flex items-center gap-2">
               <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />
@@ -1321,7 +1321,7 @@ export default function SalesLauncher() {
 
       {/* Launch Result */}
       {launchResult && (
-        <div className={`${glassCard} ${launchResult.success ? "border-emerald-200/60 dark:border-emerald-500/20" : "border-red-200/60 dark:border-red-500/20"}`} data-testid="section-result">
+        <div className={`${glassCard} ${launchResult.success ? "border-emerald-500/20" : "border-red-500/20"}`} data-testid="section-result">
           <div className="px-5 pt-4 pb-3">
             <div className="flex items-center gap-2">
               {launchResult.success ? (
@@ -1346,7 +1346,7 @@ export default function SalesLauncher() {
               <div className={`${glassInner} p-3 space-y-2`}>
                 <p className="text-xs font-semibold text-red-600">Validation Issues:</p>
                 {launchResult.validationIssues.map((issue, i) => (
-                  <div key={i} className="text-xs pl-2 border-l-2 border-red-200 dark:border-red-500/30 space-y-0.5">
+                  <div key={i} className="text-xs pl-2 border-l-2 border-red-500/30 space-y-0.5">
                     <p className="font-medium">{issue.message}</p>
                     <p className="text-muted-foreground text-[10px]">Fix: {issue.fixSuggestion}</p>
                   </div>
@@ -1379,7 +1379,7 @@ export default function SalesLauncher() {
             )}
 
             {!launchResult.success && launchResult.error && (
-              <div className={`${glassInner} border-red-200/60 dark:border-red-500/20 p-3 space-y-2`}>
+              <div className={`${glassInner} border-red-500/20 p-3 space-y-2`}>
                 <p className="text-xs font-semibold text-red-600">
                   Failed at: {getStageName(launchResult.errorStage || "")}
                 </p>
@@ -1438,7 +1438,7 @@ function LaunchJobHistory() {
           <div className="px-5 py-3.5 cursor-pointer hover:bg-white/40 dark:hover:bg-white/[0.03] transition-all rounded-2xl">
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center">
-                <History className="h-3.5 w-3.5 text-gray-600 dark:text-gray-400" />
+                <History className="h-3.5 w-3.5 text-muted-foreground" />
               </div>
               <h2 className="text-sm font-semibold flex-1">Launch History</h2>
               <Badge variant="secondary" className="text-[10px]">{jobs.length}</Badge>

@@ -77,11 +77,11 @@ function formatPKR(amount: number | string): string {
 function getStatusBadge(status?: string) {
   switch (status) {
     case "paid":
-      return <Badge variant="outline" className="bg-green-500/10 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800" data-testid="badge-status-paid">Paid</Badge>;
+      return <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20" data-testid="badge-status-paid">Paid</Badge>;
     case "partial":
-      return <Badge variant="outline" className="bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800" data-testid="badge-status-partial">Partial</Badge>;
+      return <Badge variant="outline" className="bg-amber-500/10 text-amber-400 border-amber-500/20" data-testid="badge-status-partial">Partial</Badge>;
     default:
-      return <Badge variant="outline" className="bg-red-500/10 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800" data-testid="badge-status-unpaid">Unpaid</Badge>;
+      return <Badge variant="outline" className="bg-red-500/10 text-red-400 border-red-500/20" data-testid="badge-status-unpaid">Unpaid</Badge>;
   }
 }
 
@@ -230,18 +230,18 @@ export default function AccountingExpenses() {
         <Card>
           <CardContent className="p-4 flex items-center gap-3">
             <div className="rounded-full bg-red-500/10 p-2">
-              <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+              <AlertCircle className="h-5 w-5 text-red-400" />
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Outstanding</p>
-              <p className="text-lg font-bold text-red-600 dark:text-red-400" data-testid="stat-outstanding">{formatPKR(totalOutstanding)}</p>
+              <p className="text-lg font-bold text-red-400" data-testid="stat-outstanding">{formatPKR(totalOutstanding)}</p>
             </div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4 flex items-center gap-3">
             <div className="rounded-full bg-amber-500/10 p-2">
-              <Clock className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              <Clock className="h-5 w-5 text-amber-400" />
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Needs Payment</p>
@@ -252,11 +252,11 @@ export default function AccountingExpenses() {
         <Card>
           <CardContent className="p-4 flex items-center gap-3">
             <div className="rounded-full bg-green-500/10 p-2">
-              <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+              <CheckCircle2 className="h-5 w-5 text-emerald-400" />
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Total Paid</p>
-              <p className="text-lg font-bold text-green-600 dark:text-green-400" data-testid="stat-total-paid">{formatPKR(totalPaid)}</p>
+              <p className="text-lg font-bold text-emerald-400" data-testid="stat-total-paid">{formatPKR(totalPaid)}</p>
             </div>
           </CardContent>
         </Card>
@@ -320,7 +320,7 @@ export default function AccountingExpenses() {
                       <TableCell className="text-right" data-testid={`text-expense-paid-${expense.id}`}>{formatPKR(paid)}</TableCell>
                       <TableCell className="text-right" data-testid={`text-expense-remaining-${expense.id}`}>
                         {remaining > 0 ? (
-                          <span className="text-red-600 dark:text-red-400">{formatPKR(remaining)}</span>
+                          <span className="text-red-400">{formatPKR(remaining)}</span>
                         ) : formatPKR(remaining)}
                       </TableCell>
                       <TableCell data-testid={`text-expense-status-${expense.id}`}>{getStatusBadge(expense.paymentStatus)}</TableCell>

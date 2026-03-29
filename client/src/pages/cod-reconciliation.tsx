@@ -66,9 +66,9 @@ const statusOptions = [
 
 function getStatusBadge(status: string) {
   const statusConfig: Record<string, { color: string; icon: React.ElementType }> = {
-    pending: { color: "bg-amber-500/10 text-amber-600 border-amber-500/20", icon: Clock },
-    received: { color: "bg-green-500/10 text-green-600 border-green-500/20", icon: CheckCircle2 },
-    disputed: { color: "bg-red-500/10 text-red-600 border-red-500/20", icon: AlertCircle },
+    pending: { color: "bg-amber-500/10 text-amber-400 border border-amber-500/20", icon: Clock },
+    received: { color: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20", icon: CheckCircle2 },
+    disputed: { color: "bg-red-500/10 text-red-400 border border-red-500/20", icon: AlertCircle },
   };
 
   const config = statusConfig[status] || statusConfig.pending;
@@ -82,10 +82,10 @@ function getCourierPaymentBadge(courierPaymentStatus: string | null) {
 
   const lower = courierPaymentStatus.toLowerCase();
   if (lower === "settled" || lower === "paid") {
-    return <Badge className="bg-green-500/10 text-green-600 border-green-500/20">{courierPaymentStatus}</Badge>;
+    return <Badge className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">{courierPaymentStatus}</Badge>;
   }
   if (lower === "pending" || lower === "unpaid") {
-    return <Badge className="bg-amber-500/10 text-amber-600 border-amber-500/20">{courierPaymentStatus}</Badge>;
+    return <Badge className="bg-amber-500/10 text-amber-400 border border-amber-500/20">{courierPaymentStatus}</Badge>;
   }
   return <Badge variant="secondary">{courierPaymentStatus}</Badge>;
 }

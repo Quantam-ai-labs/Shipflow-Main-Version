@@ -347,10 +347,10 @@ export default function ProductAnalyticsPage() {
                                 <Badge
                                   className={
                                     product.currentStock <= 0
-                                      ? "bg-red-500/10 text-red-600 border-red-500/20"
+                                      ? "bg-red-500/10 text-red-400 border border-red-500/20"
                                       : product.currentStock <= 10
-                                      ? "bg-amber-500/10 text-amber-600 border-amber-500/20"
-                                      : "bg-green-500/10 text-green-600 border-green-500/20"
+                                      ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                                      : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                                   }
                                 >
                                   {product.currentStock}
@@ -361,16 +361,16 @@ export default function ProductAnalyticsPage() {
                             </TableCell>
                             <TableCell className="text-right font-medium">{product.totalOrdered}</TableCell>
                             <TableCell className="text-right">
-                              <span className="text-blue-600 dark:text-blue-400">{product.committed}</span>
+                              <span className="text-blue-400">{product.committed}</span>
                             </TableCell>
                             <TableCell className="text-right">
-                              <span className="text-orange-600 dark:text-orange-400">{product.dispatched}</span>
+                              <span className="text-orange-400">{product.dispatched}</span>
                             </TableCell>
                             <TableCell className="text-right">
-                              <span className="text-green-600 dark:text-green-400">{product.delivered}</span>
+                              <span className="text-emerald-400">{product.delivered}</span>
                             </TableCell>
                             <TableCell className="text-right">
-                              <span className="text-red-600 dark:text-red-400">{product.returned}</span>
+                              <span className="text-red-400">{product.returned}</span>
                             </TableCell>
                             <TableCell className="text-right text-muted-foreground">{product.cancelled}</TableCell>
                           </TableRow>
@@ -407,15 +407,15 @@ export default function ProductAnalyticsPage() {
                                     </div>
                                     <div className="text-center p-2 rounded-md bg-background border">
                                       <p className="text-xs text-muted-foreground">Committed</p>
-                                      <p className="font-semibold text-blue-600 dark:text-blue-400">{product.committed}</p>
+                                      <p className="font-semibold text-blue-400">{product.committed}</p>
                                     </div>
                                     <div className="text-center p-2 rounded-md bg-background border">
                                       <p className="text-xs text-muted-foreground">Dispatched</p>
-                                      <p className="font-semibold text-orange-600 dark:text-orange-400">{product.dispatched}</p>
+                                      <p className="font-semibold text-orange-400">{product.dispatched}</p>
                                     </div>
                                     <div className="text-center p-2 rounded-md bg-background border">
                                       <p className="text-xs text-muted-foreground">Delivery Rate</p>
-                                      <p className="font-semibold text-green-600 dark:text-green-400">
+                                      <p className="font-semibold text-emerald-400">
                                         {product.dispatched > 0 ? `${Math.round((product.delivered / product.dispatched) * 100)}%` : "N/A"}
                                       </p>
                                     </div>
