@@ -700,6 +700,39 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/dashboard/trend", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const timezone = await getMerchantTimezone(merchantId);
+      const rows = (await db.execute(sql`
+        SELECT
+          DATE(order_date AT TIME ZONE 'UTC' AT TIME ZONE ${timezone}) AS day,
+          COUNT(*)::int AS count
+        FROM orders
+        WHERE merchant_id = ${merchantId}
+          AND order_date >= NOW() - INTERVAL '7 days'
+        GROUP BY day
+        ORDER BY day ASC
+      `)).rows as { day: string; count: number }[];
+
+      const today = new Date();
+      const result = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(today);
+        d.setDate(d.getDate() - i);
+        const key = d.toISOString().slice(0, 10);
+        const match = rows.find(r => String(r.day).slice(0, 10) === key);
+        result.push({ day: d.toLocaleDateString("en-US", { weekday: "short" }), date: key, orders: match ? match.count : 0 });
+      }
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching dashboard trend:", error);
+      res.status(500).json({ message: "Failed to fetch trend" });
+    }
+  });
+
   // Orders
   app.get("/api/orders/recent", isAuthenticated, async (req, res) => {
     try {

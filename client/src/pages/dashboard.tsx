@@ -59,7 +59,9 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  type TooltipProps,
 } from "recharts";
+import type { ValueType, NameType, Payload } from "recharts/types/component/DefaultTooltipContent";
 
 /* ── Design tokens ──────────────────────────────────────────────────────── */
 const BG = "#090e1a";
@@ -242,12 +244,12 @@ function MetricBar({
 }
 
 /* ── Custom recharts tooltip ─────────────────────────────────────────────── */
-function DarkTooltip({ active, payload, label }: any) {
+function DarkTooltip({ active, payload, label }: TooltipProps<ValueType, NameType>) {
   if (!active || !payload?.length) return null;
   return (
     <div style={{ background: "#0d1322", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px", padding: "10px 14px" }}>
       <p style={{ color: TEXT_MUTED, fontSize: "11px", marginBottom: "4px" }}>{label}</p>
-      {payload.map((p: any, i: number) => (
+      {(payload as Payload<ValueType, NameType>[]).map((p, i) => (
         <p key={i} style={{ color: p.color, fontSize: "13px", fontWeight: 600 }}>
           {p.name}: {p.value}
         </p>
@@ -677,14 +679,26 @@ function OrderSearchSection() {
   );
 }
 
+interface TrendDataPoint {
+  day: string;
+  date: string;
+  orders: number;
+}
+
 /* ── Main Dashboard ──────────────────────────────────────────────────────── */
 export default function Dashboard() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { dateRange } = useDateRange();
 
+  const statsParams = new URLSearchParams();
+  if (dateRange?.from) statsParams.set("dateFrom", dateRange.from.toISOString().slice(0, 10));
+  if (dateRange?.to) statsParams.set("dateTo", dateRange.to.toISOString().slice(0, 10));
+  const statsUrl = `/api/dashboard/stats${statsParams.toString() ? `?${statsParams}` : ""}`;
+
   const { data: stats, isLoading: statsLoading } = useQuery<DashboardStats>({
-    queryKey: ["/api/dashboard/stats"],
+    queryKey: ["/api/dashboard/stats", dateRange?.from?.toISOString(), dateRange?.to?.toISOString()],
+    queryFn: () => fetch(statsUrl, { credentials: "include" }).then(r => r.json()),
   });
 
   const { data: workflowCounts, isLoading: countsLoading } = useQuery<Record<string, number>>({
@@ -695,10 +709,15 @@ export default function Dashboard() {
     queryKey: ["/api/orders/recent"],
   });
 
+  const { data: trendData, isLoading: trendLoading } = useQuery<TrendDataPoint[]>({
+    queryKey: ["/api/dashboard/trend"],
+  });
+
   const handleRefresh = async () => {
     await queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
     await queryClient.invalidateQueries({ queryKey: ["/api/orders/workflow-counts"] });
     await queryClient.invalidateQueries({ queryKey: ["/api/orders/recent"] });
+    await queryClient.invalidateQueries({ queryKey: ["/api/dashboard/trend"] });
     toast({ title: "Dashboard refreshed" });
   };
 
@@ -715,17 +734,6 @@ export default function Dashboard() {
   const returnRatio        = dispatched > 0 ? Math.round((returned   / dispatched) * 100)  : 0;
   const cancellationRatio  = total      > 0 ? Math.round((cancelled  / total) * 100)       : 0;
   const pendingRatio       = dispatched > 0 ? Math.round((fulfilled  / dispatched) * 100)  : 0;
-
-  /* ── Spark chart data (workflow status distribution) ── */
-  const chartData = [
-    { name: "New",     orders: workflowCounts?.NEW          ?? 0 },
-    { name: "Pending", orders: workflowCounts?.PENDING      ?? 0 },
-    { name: "Booked",  orders: workflowCounts?.BOOKED       ?? 0 },
-    { name: "Ship",    orders: workflowCounts?.READY_TO_SHIP ?? 0 },
-    { name: "Transit", orders: workflowCounts?.FULFILLED    ?? 0 },
-    { name: "Deliver", orders: workflowCounts?.DELIVERED    ?? 0 },
-    { name: "Return",  orders: workflowCounts?.RETURN       ?? 0 },
-  ];
 
   return (
     <div className="relative min-h-full space-y-6" style={{ background: BG, margin: "-24px", padding: "24px" }}>
@@ -749,7 +757,7 @@ export default function Dashboard() {
       </div>
 
       {/* ── AI banner ── */}
-      <AIInsightsBanner />
+      <AIInsightsBanner section="dashboard" />
 
       {/* ── KPI cards ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4" data-testid="section-order-overview">
@@ -794,20 +802,20 @@ export default function Dashboard() {
       {/* ── Two-column grid: chart left, metrics right ── */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
 
-        {/* Chart (left, wider) */}
+        {/* Chart (left, wider) — 7-day order trend */}
         <div style={darkCard} className="xl:col-span-2 p-5">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="text-sm font-semibold" style={{ color: TEXT }}>Order Distribution</h3>
-              <p className="text-xs mt-0.5" style={{ color: TEXT_MUTED }}>Pipeline snapshot by stage</p>
+              <h3 className="text-sm font-semibold" style={{ color: TEXT }}>7-Day Order Trend</h3>
+              <p className="text-xs mt-0.5" style={{ color: TEXT_MUTED }}>Daily orders placed in the last week</p>
             </div>
             <BarChart3 className="w-4 h-4" style={{ color: TEXT_MUTED }} />
           </div>
-          {countsLoading ? (
+          {trendLoading ? (
             <Skeleton className="h-40 w-full bg-white/5 rounded-xl" />
           ) : (
             <ResponsiveContainer width="100%" height={200}>
-              <AreaChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+              <AreaChart data={trendData ?? []} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="blueGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.35} />
@@ -815,8 +823,8 @@ export default function Dashboard() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                <XAxis dataKey="name" tick={{ fill: TEXT_MUTED, fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: TEXT_MUTED, fontSize: 11 }} axisLine={false} tickLine={false} />
+                <XAxis dataKey="day" tick={{ fill: TEXT_MUTED, fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: TEXT_MUTED, fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
                 <Tooltip content={<DarkTooltip />} />
                 <Area type="monotone" dataKey="orders" name="Orders" stroke="#60a5fa" strokeWidth={2} fill="url(#blueGrad)" dot={{ fill: "#60a5fa", r: 3, strokeWidth: 0 }} activeDot={{ r: 5, fill: "#3b82f6" }} />
               </AreaChart>
