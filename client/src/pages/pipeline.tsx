@@ -301,6 +301,18 @@ const WORKFLOW_STATUS_COLORS: Record<string, string> = {
   'CANCELLED': "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
 };
 
+const WORKFLOW_STATUS_BORDER: Record<string, string> = {
+  'NEW': "border-l-blue-500",
+  'PENDING': "border-l-amber-500",
+  'HOLD': "border-l-purple-500",
+  'READY_TO_SHIP': "border-l-cyan-500",
+  'BOOKED': "border-l-indigo-500",
+  'FULFILLED': "border-l-teal-500",
+  'DELIVERED': "border-l-green-500",
+  'RETURN': "border-l-orange-500",
+  'CANCELLED': "border-l-red-500",
+};
+
 const WORKFLOW_STATUS_LABELS: Record<string, string> = {
   'NEW': 'New', 'PENDING': 'Pending', 'HOLD': 'Hold',
   'READY_TO_SHIP': 'Ready', 'BOOKED': 'Booked', 'FULFILLED': 'Fulfilled',
@@ -1965,12 +1977,16 @@ export default function Pipeline() {
               </tr>
             </thead>
             <tbody>
-              {orders.map(order => (
+              {orders.map((order, idx) => (
                 <tr
                   key={order.id}
-                  className={`border-b transition-colors hover-elevate ${
-                    selectedIds.has(order.id) ? "bg-primary/5" : ""
-                  } ${activeTab === "HOLD" && order.holdUntil && isPast(new Date(order.holdUntil)) ? "bg-red-50/50 dark:bg-red-950/30" : ""}`}
+                  className={`border-b border-l-[3px] transition-colors hover-elevate ${
+                    WORKFLOW_STATUS_BORDER[order.workflowStatus || ""] || "border-l-border"
+                  } ${
+                    selectedIds.has(order.id) ? "bg-primary/5" :
+                    activeTab === "HOLD" && order.holdUntil && isPast(new Date(order.holdUntil)) ? "bg-red-50/50 dark:bg-red-950/30" :
+                    idx % 2 === 1 ? "bg-muted/20" : ""
+                  }`}
                   data-testid={`order-row-${order.id}`}
                 >
                   {activeTab !== "CANCELLED" && activeTab !== "DELIVERED" && activeTab !== "RETURN" && (activeTab !== "ALL" || (order.workflowStatus !== "CANCELLED" && order.workflowStatus !== "DELIVERED" && order.workflowStatus !== "RETURN")) && (

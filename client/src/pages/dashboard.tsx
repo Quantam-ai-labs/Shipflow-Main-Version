@@ -157,8 +157,8 @@ function StatCard({
               <p className="text-xs text-muted-foreground">{subtitle}</p>
             )}
           </div>
-          <div className={`${iconColor} opacity-60`}>
-            <Icon className="w-5 h-5" />
+          <div className={`w-9 h-9 rounded-lg flex items-center justify-center bg-primary/10 shrink-0`}>
+            <Icon className={`w-4 h-4 ${iconColor}`} />
           </div>
         </div>
       </CardContent>

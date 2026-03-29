@@ -705,8 +705,10 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
       const days = Math.min(parseInt(req.query.days as string) || 7, 30);
-      const cutoff = new Date();
-      cutoff.setDate(cutoff.getDate() - days);
+      const pktFmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Karachi" });
+      const pktWeekday = new Intl.DateTimeFormat("en-PK", { timeZone: "Asia/Karachi", weekday: "short" });
+      const now = new Date();
+      const cutoff = new Date(now.getTime() - days * 86400000);
       const cutoffIso = cutoff.toISOString();
       const rows = await db.execute(sql`
         SELECT
@@ -724,10 +726,9 @@ export async function registerRoutes(
       }
       const result = [];
       for (let i = days - 1; i >= 0; i--) {
-        const d = new Date();
-        d.setDate(d.getDate() - i);
-        const dateStr = d.toISOString().split("T")[0];
-        const label = d.toLocaleDateString("en-PK", { weekday: "short" });
+        const d = new Date(now.getTime() - i * 86400000);
+        const dateStr = pktFmt.format(d);
+        const label = pktWeekday.format(d);
         result.push({ date: dateStr, count: countMap[dateStr] || 0, label });
       }
       res.json(result);

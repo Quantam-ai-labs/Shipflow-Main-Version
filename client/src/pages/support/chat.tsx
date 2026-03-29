@@ -1840,7 +1840,7 @@ export default function SupportChatPage() {
                   key={conv.id}
                   className={cn(
                     "group w-full px-3 py-3 text-left transition-colors flex items-center gap-3 border-b border-border cursor-pointer",
-                    isSelected && !selectMode ? "bg-accent" : "hover-elevate"
+                    isSelected && !selectMode ? "bg-primary/10 border-l-[3px] border-l-primary" : "border-l-[3px] border-l-transparent hover-elevate"
                   )}
                   data-testid={`button-conversation-${conv.id}`}
                   onClick={() => {
