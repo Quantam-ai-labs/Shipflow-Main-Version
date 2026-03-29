@@ -969,12 +969,16 @@ export default function SupportChatPage() {
   const archivedCount = isArchivedView ? conversations.length : archivedConversations.length;
 
   useEffect(() => {
+    let mounted = true;
     if (!deepLinkOrderId || deepLinkApplied.current || conversations.length === 0) return;
-    const match = conversations.find(c => c.orderId === deepLinkOrderId);
-    if (match) {
-      deepLinkApplied.current = true;
-      setSelectedConvId(match.id);
-    }
+    try {
+      const match = conversations.find(c => c.orderId === deepLinkOrderId);
+      if (match && mounted) {
+        deepLinkApplied.current = true;
+        setSelectedConvId(match.id);
+      }
+    } catch {}
+    return () => { mounted = false; };
   }, [conversations, deepLinkOrderId]);
 
   // ── Pagination state ─────────────────────────────────────────────────────────

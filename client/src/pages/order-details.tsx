@@ -1688,6 +1688,7 @@ export default function OrderDetails() {
 
   const { data: order, isLoading } = useQuery<OrderDetails>({
     queryKey: ["/api/orders", id],
+    enabled: !!id,
   });
 
   const { data: tagConfig } = useQuery<{ confirm: string; pending: string; cancel: string }>({
