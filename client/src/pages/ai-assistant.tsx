@@ -464,7 +464,7 @@ export default function MagicAI() {
               <div className={[
                 "max-w-[78%] rounded-2xl px-4 py-3 text-sm",
                 msg.role === "user"
-                  ? "bg-blue-500/15 border border-blue-500/30 text-white/90 rounded-tr-sm"
+                  ? "bg-blue-500/15 border-l-2 border border-blue-500/30 text-white/90 rounded-tr-sm"
                   : "bg-[#0d1322] border border-white/[0.08] text-white/80 rounded-tl-sm",
               ].join(" ")}>
                 {msg.role === "user"

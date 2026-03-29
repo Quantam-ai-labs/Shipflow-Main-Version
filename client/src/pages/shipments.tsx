@@ -558,7 +558,7 @@ export default function Shipments() {
                       </TableHeader>
                       <TableBody>
                         {shipmentOrders.map((order) => (
-                          <TableRow key={order.id} data-testid={`shipment-row-${order.id}`}>
+                          <TableRow key={order.id} className="hover:bg-blue-500/[0.06]" data-testid={`shipment-row-${order.id}`}>
                             <TableCell>
                               <Checkbox
                                 checked={selectedIds.has(order.id)}

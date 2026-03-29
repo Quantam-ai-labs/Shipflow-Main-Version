@@ -301,7 +301,7 @@ export default function Settings() {
                   "flex-shrink-0 flex flex-col items-center justify-center gap-1.5",
                   "px-5 py-3 rounded-xl border text-xs font-semibold transition-all whitespace-nowrap min-w-[90px]",
                   isActive
-                    ? "bg-blue-500/10 border-blue-500/30 text-white/90 shadow-sm shadow-blue-500/10"
+                    ? "bg-blue-500/10 border-blue-500/30 text-white/90 shadow-sm shadow-blue-500/10 border-b-2 border-b-blue-500"
                     : "bg-white/[0.04] border-white/[0.08] text-white/40 hover:text-white/60 hover:bg-white/[0.06]",
                 ].join(" ")}
               >
