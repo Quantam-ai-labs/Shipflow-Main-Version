@@ -4,7 +4,7 @@ import { Package, Menu, X, ArrowRight, Send } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { SiWhatsapp, SiInstagram, SiX } from "react-icons/si";
 
-function PublicFooter() {
+export function PublicFooter() {
   const [email, setEmail] = useState("");
   const year = new Date().getFullYear();
 

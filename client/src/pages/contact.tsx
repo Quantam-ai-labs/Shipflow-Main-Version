@@ -23,7 +23,10 @@ export default function ContactPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
-      if (!res.ok) throw new Error((await res.json()).message || "Failed to send");
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as any).message || "Failed to send");
+      }
       setSent(true);
       toast({ title: "Message sent successfully! We'll get back to you soon." });
     } catch (err: any) {
