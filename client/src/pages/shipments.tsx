@@ -83,6 +83,15 @@ function getWorkflowBadge(status: string) {
   return <Badge className={config.color}>{config.label}</Badge>;
 }
 
+function getCourierStatusBadge(rawStatus: string) {
+  const s = rawStatus.toLowerCase();
+  if (s.includes("deliver")) return <Badge className="text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">{rawStatus}</Badge>;
+  if (s.includes("transit") || s.includes("in-transit") || s.includes("pickup") || s.includes("dispatched") || s.includes("out for")) return <Badge className="text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">{rawStatus}</Badge>;
+  if (s.includes("return")) return <Badge className="text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">{rawStatus}</Badge>;
+  if (s.includes("pending") || s.includes("await") || s.includes("processing")) return <Badge className="text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">{rawStatus}</Badge>;
+  return <Badge className="text-xs font-medium bg-white/[0.04] text-white/40 border border-white/[0.08]">{rawStatus}</Badge>;
+}
+
 interface ShipmentOrder {
   id: string;
   orderNumber: string;
@@ -581,11 +590,7 @@ export default function Shipments() {
                               {getWorkflowBadge(order.workflowStatus)}
                             </TableCell>
                             <TableCell className="text-sm">
-                              {order.courierRawStatus ? (
-                                <Badge className="text-xs font-medium bg-muted text-muted-foreground">
-                                  {order.courierRawStatus}
-                                </Badge>
-                              ) : "-"}
+                              {order.courierRawStatus ? getCourierStatusBadge(order.courierRawStatus) : <span className="text-white/20">—</span>}
                             </TableCell>
                             <TableCell data-testid={`text-remark-${order.id}`}>
                               <button

@@ -227,28 +227,28 @@ const roleLabels: Record<string, string> = {
 function getRoleBadge(role: string, isMerchantOwner?: boolean) {
   if (isMerchantOwner) {
     return (
-      <Badge variant="secondary">
+      <Badge className="bg-amber-500/10 text-amber-400 border border-amber-500/20">
         <Crown className="w-3 h-3 mr-1" />
         Owner
       </Badge>
     );
   }
 
-  const roleConfig: Record<string, { icon: React.ElementType }> = {
-    manager: { icon: Shield },
-    customer_support: { icon: Headphones },
-    accountant: { icon: Calculator },
-    logistics_manager: { icon: Truck },
-    admin: { icon: Shield },
-    agent: { icon: Headphones },
+  const roleConfig: Record<string, { icon: React.ElementType; cls: string }> = {
+    manager:          { icon: Shield,     cls: "bg-blue-500/10 text-blue-400 border border-blue-500/20" },
+    admin:            { icon: Shield,     cls: "bg-blue-500/10 text-blue-400 border border-blue-500/20" },
+    customer_support: { icon: Headphones, cls: "bg-white/[0.04] text-white/40 border border-white/[0.08]" },
+    accountant:       { icon: Calculator, cls: "bg-white/[0.04] text-white/40 border border-white/[0.08]" },
+    logistics_manager:{ icon: Truck,      cls: "bg-white/[0.04] text-white/40 border border-white/[0.08]" },
+    agent:            { icon: Headphones, cls: "bg-white/[0.04] text-white/40 border border-white/[0.08]" },
   };
 
-  const config = roleConfig[role] || roleConfig.customer_support;
+  const config = roleConfig[role] || { icon: Headphones, cls: "bg-white/[0.04] text-white/40 border border-white/[0.08]" };
   const Icon = config.icon;
   const label = roleLabels[role] || role;
 
   return (
-    <Badge variant="outline">
+    <Badge className={config.cls}>
       <Icon className="w-3 h-3 mr-1" />
       {label}
     </Badge>

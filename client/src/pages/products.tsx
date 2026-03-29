@@ -400,11 +400,11 @@ export default function ProductsPage() {
                           <img
                             src={product.imageUrl}
                             alt={product.title}
-                            className="w-10 h-10 rounded-md object-cover border"
+                            className="w-10 h-10 rounded-md object-cover border border-white/[0.08]"
                             data-testid={`img-product-${product.id}`}
                           />
                         ) : (
-                          <div className="w-10 h-10 rounded-md border flex items-center justify-center bg-muted">
+                          <div className="w-10 h-10 rounded-md border border-white/[0.08] flex items-center justify-center bg-white/[0.04]">
                             <ImageIcon className="w-4 h-4 text-muted-foreground" />
                           </div>
                         )}
@@ -468,10 +468,10 @@ export default function ProductsPage() {
                   <img
                     src={selectedProduct.imageUrl}
                     alt={selectedProduct.title}
-                    className="w-12 h-12 rounded-md object-cover border"
+                    className="w-12 h-12 rounded-md object-cover border border-white/[0.08]"
                   />
                 ) : (
-                  <div className="w-12 h-12 rounded-md border flex items-center justify-center bg-muted">
+                  <div className="w-12 h-12 rounded-md border border-white/[0.08] flex items-center justify-center bg-white/[0.04]">
                     <ImageIcon className="w-5 h-5 text-muted-foreground" />
                   </div>
                 )}

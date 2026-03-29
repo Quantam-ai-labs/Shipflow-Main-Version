@@ -397,7 +397,7 @@ export default function MagicAI() {
 
       {/* ── CENTER: Chat Area ── */}
       <div className="flex-1 flex flex-col min-w-0">
-        <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-border bg-background">
+        <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-white/[0.08] bg-[#0d1322]">
           <div className="flex items-center gap-2 flex-wrap">
             <Sparkles className="w-4 h-4 text-primary" />
             <span className="text-sm font-semibold text-foreground">
@@ -498,7 +498,7 @@ export default function MagicAI() {
           <div ref={chatEndRef} />
         </div>
 
-        <div className="border-t border-border p-3 bg-background" data-testid="chat-input-area">
+        <div className="border-t border-white/[0.08] p-3 bg-[#0d1322]" data-testid="chat-input-area">
           <div className="flex gap-2 items-end">
             {hasSpeech && (
               <Button

@@ -228,11 +228,11 @@ export default function ShopifyProductsPage() {
                           <img
                             src={product.imageUrl}
                             alt={product.title}
-                            className="w-10 h-10 rounded-md object-cover border"
+                            className="w-10 h-10 rounded-md object-cover border border-white/[0.08]"
                             data-testid={`img-shopify-product-${product.id}`}
                           />
                         ) : (
-                          <div className="w-10 h-10 rounded-md border flex items-center justify-center bg-muted">
+                          <div className="w-10 h-10 rounded-md border border-white/[0.08] flex items-center justify-center bg-white/[0.04]">
                             <ImageIcon className="w-4 h-4 text-muted-foreground" />
                           </div>
                         )}
