@@ -564,7 +564,7 @@ export default function CouriersSettings() {
         <p className="text-muted-foreground">Connect and configure your courier accounts for shipment tracking and booking.</p>
       </div>
 
-      <Card data-testid="card-booking-remarks">
+      <Card className="bg-[#0d1322] border-white/[0.08]" data-testid="card-booking-remarks">
         <CardHeader>
           <div className="flex items-center gap-2">
             <MessageSquare className="w-5 h-5 text-muted-foreground" />
@@ -601,7 +601,7 @@ export default function CouriersSettings() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="bg-[#0d1322] border-white/[0.08]">
         <CardContent className="p-4">
           <div className="flex items-center justify-between gap-4 flex-wrap mb-3">
             <div className="flex items-center gap-3">
@@ -719,7 +719,7 @@ export default function CouriersSettings() {
           const status = getCourierStatus(courier.name);
 
           return (
-            <Card key={courier.name} className="hover-elevate">
+            <Card key={courier.name} className="hover-elevate bg-[#0d1322] border-white/[0.08]">
               <CardContent className="p-6">
                 <div className="flex items-start justify-between gap-2 mb-4">
                   <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center">
@@ -1091,7 +1091,7 @@ export default function CouriersSettings() {
         })}
       </div>
 
-      <Card data-testid="card-warehouse-access">
+      <Card className="bg-[#0d1322] border-white/[0.08]" data-testid="card-warehouse-access">
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>

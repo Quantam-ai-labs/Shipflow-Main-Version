@@ -695,59 +695,59 @@ export default function Team() {
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <Card>
+        <Card className="bg-[#0d1322] border-white/[0.08]">
           <CardContent className="p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center">
-              <Shield className="w-5 h-5 text-muted-foreground" />
+            <div className="w-10 h-10 rounded-md bg-blue-500/10 flex items-center justify-center">
+              <Shield className="w-5 h-5 text-blue-400" />
             </div>
             <div>
-              <p className="text-2xl font-bold" data-testid="text-manager-count">{members.filter((m) => m.role === "manager" || m.role === "admin").length}</p>
-              <p className="text-sm text-muted-foreground">Managers</p>
+              <p className="text-2xl font-bold text-white/90" data-testid="text-manager-count">{members.filter((m) => m.role === "manager" || m.role === "admin").length}</p>
+              <p className="text-sm text-white/40">Managers</p>
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="bg-[#0d1322] border-white/[0.08]">
           <CardContent className="p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center">
-              <Headphones className="w-5 h-5 text-muted-foreground" />
+            <div className="w-10 h-10 rounded-md bg-emerald-500/10 flex items-center justify-center">
+              <Headphones className="w-5 h-5 text-emerald-400" />
             </div>
             <div>
-              <p className="text-2xl font-bold" data-testid="text-support-count">{members.filter((m) => m.role === "customer_support" || m.role === "agent").length}</p>
-              <p className="text-sm text-muted-foreground">Support</p>
+              <p className="text-2xl font-bold text-white/90" data-testid="text-support-count">{members.filter((m) => m.role === "customer_support" || m.role === "agent").length}</p>
+              <p className="text-sm text-white/40">Support</p>
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="bg-[#0d1322] border-white/[0.08]">
           <CardContent className="p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center">
-              <Calculator className="w-5 h-5 text-muted-foreground" />
+            <div className="w-10 h-10 rounded-md bg-amber-500/10 flex items-center justify-center">
+              <Calculator className="w-5 h-5 text-amber-400" />
             </div>
             <div>
-              <p className="text-2xl font-bold" data-testid="text-accountant-count">{members.filter((m) => m.role === "accountant").length}</p>
-              <p className="text-sm text-muted-foreground">Accountants</p>
+              <p className="text-2xl font-bold text-white/90" data-testid="text-accountant-count">{members.filter((m) => m.role === "accountant").length}</p>
+              <p className="text-sm text-white/40">Accountants</p>
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="bg-[#0d1322] border-white/[0.08]">
           <CardContent className="p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center">
-              <Truck className="w-5 h-5 text-muted-foreground" />
+            <div className="w-10 h-10 rounded-md bg-purple-500/10 flex items-center justify-center">
+              <Truck className="w-5 h-5 text-purple-400" />
             </div>
             <div>
-              <p className="text-2xl font-bold" data-testid="text-logistics-count">{members.filter((m) => m.role === "logistics_manager").length}</p>
-              <p className="text-sm text-muted-foreground">Logistics</p>
+              <p className="text-2xl font-bold text-white/90" data-testid="text-logistics-count">{members.filter((m) => m.role === "logistics_manager").length}</p>
+              <p className="text-sm text-white/40">Logistics</p>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      <Card>
+      <Card className="bg-[#0d1322] border-white/[0.08]">
         <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Users className="w-5 h-5" />
+          <CardTitle className="text-lg flex items-center gap-2 text-white/90">
+            <Users className="w-5 h-5 text-blue-400" />
             Team Members
             {data?.total !== undefined && (
-              <Badge variant="secondary" className="ml-2">
+              <Badge className="ml-2 bg-blue-500/10 text-blue-400 border border-blue-500/20">
                 {data.total} members
               </Badge>
             )}
@@ -757,7 +757,7 @@ export default function Team() {
           {isLoading ? (
             <div className="space-y-4">
               {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="flex items-center gap-4 p-4 border rounded-lg">
+                <div key={i} className="flex items-center gap-4 p-4 border border-white/[0.08] rounded-lg">
                   <Skeleton className="h-12 w-12 rounded-full" />
                   <div className="flex-1 space-y-2">
                     <Skeleton className="h-4 w-32" />
@@ -770,7 +770,7 @@ export default function Team() {
           ) : members.length > 0 ? (
             <div className="space-y-3">
               {members.map((member) => (
-                <div key={member.id} className={`flex items-center gap-4 p-4 border rounded-lg hover-elevate ${!member.isActive ? "opacity-50 bg-muted/30" : ""}`} data-testid={`team-member-${member.id}`}>
+                <div key={member.id} className={`flex items-center gap-4 p-4 border border-white/[0.08] rounded-lg hover:bg-blue-500/[0.06] transition-colors ${!member.isActive ? "opacity-50" : ""}`} data-testid={`team-member-${member.id}`}>
                   <Avatar className="h-12 w-12">
                     <AvatarImage src={member.user?.profileImageUrl || undefined} />
                     <AvatarFallback className="bg-primary/10 text-primary">
@@ -894,20 +894,20 @@ export default function Team() {
       </Card>
 
       {pendingInvites.length > 0 && (
-        <Card>
+        <Card className="bg-[#0d1322] border-amber-500/20">
           <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Mail className="w-5 h-5" />
+            <CardTitle className="text-lg flex items-center gap-2 text-white/90">
+              <Mail className="w-5 h-5 text-amber-400" />
               Pending Invitations
-              <Badge variant="secondary">{pendingInvites.length}</Badge>
+              <Badge className="bg-amber-500/10 text-amber-400 border border-amber-500/20">{pendingInvites.length}</Badge>
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
               {pendingInvites.map((invite) => (
-                <div key={invite.id} className="flex items-center gap-4 p-4 border rounded-md" data-testid={`pending-invite-${invite.id}`}>
-                  <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                    <Mail className="w-5 h-5 text-muted-foreground" />
+                <div key={invite.id} className="flex items-center gap-4 p-4 border border-white/[0.08] rounded-md hover:bg-blue-500/[0.06] transition-colors" data-testid={`pending-invite-${invite.id}`}>
+                  <div className="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center flex-shrink-0">
+                    <Mail className="w-5 h-5 text-amber-400" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium" data-testid={`text-invite-email-${invite.id}`}>{invite.email}</p>

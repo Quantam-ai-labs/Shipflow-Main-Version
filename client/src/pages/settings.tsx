@@ -135,7 +135,7 @@ function NotificationHistoryCard() {
   const totalShown = allItems.length;
 
   return (
-    <Card>
+    <Card className="bg-[#0d1322] border-white/[0.08]">
       <CardHeader>
         <CardTitle className="text-lg flex items-center gap-2">
           <Bell className="w-5 h-5" />
@@ -318,10 +318,10 @@ export default function Settings() {
       <div className="p-6">
         {activeTab === "profile" && (
           <div className="space-y-6 max-w-3xl">
-            <Card>
+            <Card className="bg-[#0d1322] border-white/[0.08]">
               <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Building2 className="w-5 h-5" />
+                <CardTitle className="text-lg flex items-center gap-2 text-white/90">
+                  <Building2 className="w-5 h-5 text-blue-400" />
                   Business Profile
                 </CardTitle>
                 <CardDescription>
@@ -368,10 +368,10 @@ export default function Settings() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="bg-[#0d1322] border-white/[0.08]">
               <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Shield className="w-5 h-5" />
+                <CardTitle className="text-lg flex items-center gap-2 text-white/90">
+                  <Shield className="w-5 h-5 text-blue-400" />
                   Security
                 </CardTitle>
                 <CardDescription>
@@ -403,10 +403,10 @@ export default function Settings() {
 
         {activeTab === "notifications" && (
           <div className="max-w-3xl space-y-6">
-            <Card>
+            <Card className="bg-[#0d1322] border-white/[0.08]">
               <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Bell className="w-5 h-5" />
+                <CardTitle className="text-lg flex items-center gap-2 text-white/90">
+                  <Bell className="w-5 h-5 text-blue-400" />
                   Notifications
                 </CardTitle>
                 <CardDescription>

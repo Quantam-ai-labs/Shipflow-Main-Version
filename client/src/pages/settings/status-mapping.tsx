@@ -237,7 +237,7 @@ function RawStatusMappingSection() {
 
   if (isLoading) {
     return (
-      <Card>
+      <Card className="bg-[#0d1322] border-white/[0.08]">
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <Truck className="w-5 h-5" />
@@ -258,7 +258,7 @@ function RawStatusMappingSection() {
   const customCount = rawStatuses.filter((r) => r.isCustom).length;
 
   return (
-    <Card>
+    <Card className="bg-[#0d1322] border-white/[0.08]">
       <CardHeader>
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
           <div>
@@ -858,7 +858,7 @@ export default function StatusMappingPage() {
       <RawStatusMappingSection />
 
       {unmappedStatuses && unmappedStatuses.length > 0 && (
-        <Card>
+        <Card className="bg-[#0d1322] border-white/[0.08]">
           <CardHeader>
             <div className="flex items-start justify-between gap-4">
               <div>

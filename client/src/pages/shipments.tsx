@@ -355,57 +355,57 @@ export default function Shipments() {
         {/* ====== SHIPMENTS TAB ====== */}
         <TabsContent value="shipments" className="space-y-6 mt-6">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card>
+            <Card className="bg-[#0d1322] border-white/[0.08]">
               <CardContent className="p-4 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
-                  <Package className="w-5 h-5 text-muted-foreground" />
+                <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                  <Package className="w-5 h-5 text-blue-400" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold" data-testid="stat-total">{totalCount}</p>
-                  <p className="text-xs text-muted-foreground">Total Dispatched</p>
+                  <p className="text-2xl font-bold text-white/90" data-testid="stat-total">{totalCount}</p>
+                  <p className="text-xs text-white/40">Total Dispatched</p>
                 </div>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="bg-[#0d1322] border-amber-500/20">
               <CardContent className="p-4 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-yellow-500/10 flex items-center justify-center">
-                  <Clock className="w-5 h-5 text-yellow-500" />
+                <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                  <Clock className="w-5 h-5 text-amber-400" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold" data-testid="stat-pending">{pendingCount}</p>
-                  <p className="text-xs text-muted-foreground">In Transit</p>
+                  <p className="text-2xl font-bold text-amber-400" data-testid="stat-pending">{pendingCount}</p>
+                  <p className="text-xs text-white/40">In Transit</p>
                 </div>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="bg-[#0d1322] border-emerald-500/20">
               <CardContent className="p-4 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center">
-                  <CheckCircle2 className="w-5 h-5 text-green-500" />
+                <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold" data-testid="stat-delivered">{deliveredCount}</p>
-                  <p className="text-xs text-muted-foreground">Delivered</p>
+                  <p className="text-2xl font-bold text-emerald-400" data-testid="stat-delivered">{deliveredCount}</p>
+                  <p className="text-xs text-white/40">Delivered</p>
                 </div>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="bg-[#0d1322] border-red-500/20">
               <CardContent className="p-4 flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center">
-                  <RotateCcw className="w-5 h-5 text-red-500" />
+                  <RotateCcw className="w-5 h-5 text-red-400" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold" data-testid="stat-return">{returnCount}</p>
-                  <p className="text-xs text-muted-foreground">Returned</p>
+                  <p className="text-2xl font-bold text-red-400" data-testid="stat-return">{returnCount}</p>
+                  <p className="text-xs text-white/40">Returned</p>
                 </div>
               </CardContent>
             </Card>
           </div>
 
-          <Card>
+          <Card className="bg-[#0d1322] border-white/[0.08]">
             <CardContent className="p-4">
               <div className="flex flex-col lg:flex-row gap-4">
                 <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
                   <Input
                     placeholder="Search by tracking number, order, customer, or city..."
                     value={search}
@@ -499,13 +499,13 @@ export default function Shipments() {
             </div>
           )}
 
-          <Card>
+          <Card className="bg-[#0d1322] border-white/[0.08]">
             <CardHeader className="pb-4">
-              <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                <Truck className="w-5 h-5" />
+              <CardTitle className="text-lg font-semibold flex items-center gap-2 text-white/90">
+                <Truck className="w-5 h-5 text-blue-400" />
                 Shipments
                 {data?.total !== undefined && (
-                  <Badge variant="secondary" className="ml-2">{data.total} orders</Badge>
+                  <Badge className="ml-2 bg-blue-500/10 text-blue-400 border border-blue-500/20">{data.total} orders</Badge>
                 )}
               </CardTitle>
             </CardHeader>
@@ -526,25 +526,25 @@ export default function Shipments() {
                   <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-10">
+                        <TableRow className="bg-white/[0.04] hover:bg-white/[0.04]">
+                          <TableHead className="w-10 text-white/40 text-[11px] font-medium uppercase tracking-wider">
                             <Checkbox
                               checked={allCurrentPageSelected ? true : someCurrentPageSelected ? "indeterminate" : false}
                               onCheckedChange={toggleSelectAll}
                               data-testid="checkbox-select-all-shipments"
                             />
                           </TableHead>
-                          <TableHead>Order</TableHead>
-                          <TableHead>Customer</TableHead>
-                          <TableHead>City</TableHead>
-                          <TableHead>Courier</TableHead>
-                          <TableHead>Tracking #</TableHead>
-                          <TableHead className="text-right">Amount</TableHead>
-                          <TableHead className="text-right">Courier Wt.</TableHead>
-                          <TableHead>Stage</TableHead>
-                          <TableHead>Courier Status</TableHead>
-                          <TableHead>Remarks</TableHead>
-                          <TableHead>Date</TableHead>
+                          <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Order</TableHead>
+                          <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Customer</TableHead>
+                          <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">City</TableHead>
+                          <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Courier</TableHead>
+                          <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Tracking #</TableHead>
+                          <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">Amount</TableHead>
+                          <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">Courier Wt.</TableHead>
+                          <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Stage</TableHead>
+                          <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Courier Status</TableHead>
+                          <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Remarks</TableHead>
+                          <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Date</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>

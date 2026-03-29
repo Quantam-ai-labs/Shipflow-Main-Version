@@ -137,14 +137,14 @@ function PurchaseSummary({ productId }: { productId: string }) {
           </div>
         ))}
       </div>
-    <div className="border rounded-md overflow-hidden" data-testid="table-purchase-summary">
+    <div className="border border-white/[0.08] rounded-md overflow-hidden" data-testid="table-purchase-summary">
       <Table>
         <TableHeader>
-          <TableRow>
-            <TableHead>Customer</TableHead>
-            <TableHead>Order ID</TableHead>
-            <TableHead>Qty</TableHead>
-            <TableHead>Status</TableHead>
+          <TableRow className="bg-white/[0.04] hover:bg-white/[0.04]">
+            <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Customer</TableHead>
+            <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Order ID</TableHead>
+            <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Qty</TableHead>
+            <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Status</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -348,7 +348,7 @@ export default function ProductsPage() {
         </Select>
       </div>
 
-      <Card>
+      <Card className="bg-[#0d1322] border-white/[0.08]">
         <CardContent className="p-0">
           {isLoading ? (
             <div className="p-4 space-y-3">
@@ -375,14 +375,14 @@ export default function ProductsPage() {
           ) : (
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[60px]"></TableHead>
-                  <TableHead>Product</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Inventory</TableHead>
-                  <TableHead>Price</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Vendor</TableHead>
+                <TableRow className="bg-white/[0.04] hover:bg-white/[0.04]">
+                  <TableHead className="w-[60px] text-white/40 text-[11px] font-medium uppercase tracking-wider"></TableHead>
+                  <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Product</TableHead>
+                  <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Status</TableHead>
+                  <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Inventory</TableHead>
+                  <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Price</TableHead>
+                  <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Type</TableHead>
+                  <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Vendor</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

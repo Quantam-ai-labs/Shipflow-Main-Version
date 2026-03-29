@@ -331,7 +331,7 @@ export default function MagicAI() {
     <div className="flex h-[calc(100vh-4rem)] overflow-hidden border border-border bg-background" data-testid="page-magic-ai">
 
       {/* ── LEFT: Chat History Panel ── */}
-      <div className="w-60 flex-shrink-0 flex flex-col bg-muted/50 dark:bg-card border-r border-border">
+      <div className="w-60 flex-shrink-0 flex flex-col bg-[#0d1322] border-r border-white/[0.08]">
         <div className="p-3 border-b border-border">
           <div className="flex items-center gap-2 mb-3">
             <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center">
@@ -464,8 +464,8 @@ export default function MagicAI() {
               <div className={[
                 "max-w-[78%] rounded-2xl px-4 py-3 text-sm",
                 msg.role === "user"
-                  ? "bg-primary text-primary-foreground rounded-tr-sm"
-                  : "bg-card border border-border text-foreground rounded-tl-sm",
+                  ? "bg-blue-500/15 border border-blue-500/30 text-white/90 rounded-tr-sm"
+                  : "bg-[#0d1322] border border-white/[0.08] text-white/80 rounded-tl-sm",
               ].join(" ")}>
                 {msg.role === "user"
                   ? <p>{msg.content}</p>
@@ -485,7 +485,7 @@ export default function MagicAI() {
               <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center shrink-0">
                 <Sparkles className="w-3.5 h-3.5 text-primary-foreground" />
               </div>
-              <div className="bg-card border border-border rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-2">
+              <div className="bg-[#0d1322] border border-white/[0.08] rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-2">
                 <div className="flex gap-1">
                   {[0, 1, 2].map(i => (
                     <div key={i} className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: `${i * 150}ms` }} />
@@ -537,27 +537,27 @@ export default function MagicAI() {
       </div>
 
       {/* ── RIGHT: Insights Panel ── */}
-      <div className="w-72 flex-shrink-0 flex flex-col bg-muted/30 dark:bg-card border-l border-border">
-        <div className="flex border-b border-border">
+      <div className="w-72 flex-shrink-0 flex flex-col bg-[#0d1322] border-l border-white/[0.08]">
+        <div className="flex border-b border-white/[0.08]">
           <button
             onClick={() => setRightTab("alerts")}
             className={[
               "flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-colors",
-              rightTab === "alerts" ? "text-foreground border-b-2 border-primary bg-accent/50" : "text-muted-foreground",
+              rightTab === "alerts" ? "text-white/90 border-b-2 border-blue-500 bg-white/[0.04]" : "text-white/40 hover:text-white/60",
             ].join(" ")}
             data-testid="tab-alerts"
           >
             <AlertTriangle className="w-3.5 h-3.5" />
             Alerts
             {alerts.length > 0 && (
-              <span className="bg-destructive text-destructive-foreground text-[9px] rounded-full w-4 h-4 flex items-center justify-center">{alerts.length}</span>
+              <span className="bg-red-500/20 text-red-400 text-[9px] rounded-full w-4 h-4 flex items-center justify-center border border-red-500/30">{alerts.length}</span>
             )}
           </button>
           <button
             onClick={() => setRightTab("insights")}
             className={[
               "flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-colors",
-              rightTab === "insights" ? "text-foreground border-b-2 border-primary bg-accent/50" : "text-muted-foreground",
+              rightTab === "insights" ? "text-white/90 border-b-2 border-blue-500 bg-white/[0.04]" : "text-white/40 hover:text-white/60",
             ].join(" ")}
             data-testid="tab-insights"
           >
@@ -603,7 +603,7 @@ export default function MagicAI() {
                 const cfg = SEVERITY_CONFIG[sev];
                 const Icon = cfg.icon;
                 return (
-                  <div key={alert.key} className="rounded-md bg-card border border-border overflow-visible" data-testid={`alert-${alert.key}`}>
+                  <div key={alert.key} className="rounded-md bg-white/[0.03] border border-white/[0.08] overflow-visible" data-testid={`alert-${alert.key}`}>
                     <div className={`h-0.5 ${cfg.bar} rounded-t-md`} />
                     <div className="p-2.5">
                       <div className="flex items-start gap-2">
@@ -634,7 +634,7 @@ export default function MagicAI() {
             <div className="p-3 space-y-2">
               <button
                 onClick={() => setShowStrategy(s => !s)}
-                className="w-full flex items-center gap-2 p-2.5 rounded-md bg-accent border border-border hover-elevate transition-all text-left"
+                className="w-full flex items-center gap-2 p-2.5 rounded-md bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] transition-all text-left"
                 data-testid="btn-weekly-strategy"
               >
                 <Zap className="w-3.5 h-3.5 text-primary shrink-0" />
@@ -643,7 +643,7 @@ export default function MagicAI() {
               </button>
 
               {showStrategy && (
-                <div className="rounded-md bg-card border border-border p-3">
+                <div className="rounded-md bg-white/[0.03] border border-white/[0.08] p-3">
                   {strategyQuery.isLoading ? (
                     <div className="space-y-2">{[1,2,3,4].map(i => <div key={i} className="h-2.5 rounded bg-muted animate-pulse" />)}</div>
                   ) : strategyQuery.data ? (
@@ -682,7 +682,7 @@ export default function MagicAI() {
                 const Icon = cfg.icon;
                 const expanded = expandedInsights.has(insight.key);
                 return (
-                  <div key={insight.key} className="rounded-md bg-card border border-border p-2.5" data-testid={`insight-${insight.key}`}>
+                  <div key={insight.key} className="rounded-md bg-white/[0.03] border border-white/[0.08] p-2.5" data-testid={`insight-${insight.key}`}>
                     <div className="flex items-center gap-1.5 mb-1.5">
                       <Icon className={`w-3 h-3 shrink-0 ${cfg.color}`} />
                       <p className="text-[11px] font-semibold text-foreground flex-1 min-w-0 leading-tight">{insight.title}</p>

@@ -211,7 +211,7 @@ export default function MarketingSettings() {
 
   return (
     <div className="space-y-6" data-testid="marketing-settings-page">
-      <Card data-testid="card-facebook-oauth">
+      <Card className="bg-[#0d1322] border-white/[0.08]" data-testid="card-facebook-oauth">
         <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
           <div className="flex items-center gap-2">
             <SiFacebook className="w-5 h-5 text-[#1877F2]" />
@@ -389,7 +389,7 @@ export default function MarketingSettings() {
         </CardContent>
       </Card>
 
-      <Card data-testid="card-advanced-credentials">
+      <Card className="bg-[#0d1322] border-white/[0.08]" data-testid="card-advanced-credentials">
         <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
           <CardHeader className="pb-2">
             <CollapsibleTrigger className="flex items-center justify-between w-full text-left" data-testid="trigger-advanced-credentials">
@@ -454,7 +454,7 @@ export default function MarketingSettings() {
         </Collapsible>
       </Card>
 
-      <Card data-testid="card-campaign-summary">
+      <Card className="bg-[#0d1322] border-white/[0.08]" data-testid="card-campaign-summary">
         <CardHeader className="pb-2">
           <div className="flex items-center gap-2">
             <Megaphone className="w-4 h-4 text-muted-foreground" />
@@ -483,7 +483,7 @@ export default function MarketingSettings() {
         </CardContent>
       </Card>
 
-      <Card data-testid="card-sync-settings">
+      <Card className="bg-[#0d1322] border-white/[0.08]" data-testid="card-sync-settings">
         <CardHeader className="pb-2">
           <div className="flex items-center gap-2">
             <RefreshCw className="w-4 h-4 text-muted-foreground" />

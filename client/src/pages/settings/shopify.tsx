@@ -459,7 +459,7 @@ export default function ShopifySettings() {
         <p className="text-muted-foreground">Manage your Shopify store connection, sync settings, and data quality.</p>
       </div>
 
-      <Card>
+      <Card className="bg-[#0d1322] border-white/[0.08]">
         <CardHeader>
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="flex items-center gap-4">
@@ -813,7 +813,7 @@ export default function ShopifySettings() {
       <div>
         <h2 className="text-lg font-semibold mb-4">Sync Health & Data Quality</h2>
         <div className="grid md:grid-cols-2 gap-4">
-          <Card>
+          <Card className="bg-[#0d1322] border-white/[0.08]">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <div>
                 <CardTitle className="text-base">Data Quality</CardTitle>
@@ -864,7 +864,7 @@ export default function ShopifySettings() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="bg-[#0d1322] border-white/[0.08]">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <div>
                 <CardTitle className="text-base">Sync Status</CardTitle>
@@ -899,7 +899,7 @@ export default function ShopifySettings() {
           </Card>
         </div>
 
-        <Card className="mt-4">
+        <Card className="mt-4 bg-[#0d1322] border-white/[0.08]">
           <CardContent className="p-4">
             <div className="flex items-center justify-between gap-4 flex-wrap">
               <div className="flex items-center gap-3">
@@ -1092,7 +1092,7 @@ function OrderTagsConfig() {
 
   if (isLoading) {
     return (
-      <Card>
+      <Card className="bg-[#0d1322] border-white/[0.08]">
         <CardContent className="p-6">
           <Skeleton className="h-4 w-48 mb-4" />
           <div className="space-y-3">
@@ -1106,7 +1106,7 @@ function OrderTagsConfig() {
   }
 
   return (
-    <Card>
+    <Card className="bg-[#0d1322] border-white/[0.08]">
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>

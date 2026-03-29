@@ -175,7 +175,7 @@ export default function ShopifyProductsPage() {
         </Select>
       </div>
 
-      <Card>
+      <Card className="bg-[#0d1322] border-white/[0.08]">
         <CardContent className="p-0">
           {isLoading ? (
             <div className="p-4 space-y-3">
@@ -202,15 +202,15 @@ export default function ShopifyProductsPage() {
           ) : (
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[60px]"></TableHead>
-                  <TableHead>Product</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Inventory</TableHead>
-                  <TableHead>Cost</TableHead>
-                  <TableHead>Sale Price</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Vendor</TableHead>
+                <TableRow className="bg-white/[0.04] hover:bg-white/[0.04]">
+                  <TableHead className="w-[60px] text-white/40 text-[11px] font-medium uppercase tracking-wider"></TableHead>
+                  <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Product</TableHead>
+                  <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Status</TableHead>
+                  <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Inventory</TableHead>
+                  <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Cost</TableHead>
+                  <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Sale Price</TableHead>
+                  <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Type</TableHead>
+                  <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Vendor</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

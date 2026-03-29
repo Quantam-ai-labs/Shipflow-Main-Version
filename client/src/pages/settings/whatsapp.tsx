@@ -510,7 +510,7 @@ export default function SettingsWhatsApp() {
       )}
 
       {!isLoading && data?.connected && (
-        <Card>
+        <Card className="bg-[#0d1322] border-white/[0.08]">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <SiWhatsapp className="w-4 h-4 text-green-500" />
@@ -609,7 +609,7 @@ export default function SettingsWhatsApp() {
         </Card>
       )}
 
-      <Card>
+      <Card className="bg-[#0d1322] border-white/[0.08]">
         <CardHeader>
           <CardTitle className="text-base">Webhook Configuration</CardTitle>
           <CardDescription>
@@ -659,7 +659,7 @@ export default function SettingsWhatsApp() {
       </Card>
 
       <Collapsible open={manualOpen} onOpenChange={setManualOpen}>
-        <Card>
+        <Card className="bg-[#0d1322] border-white/[0.08]">
           <CollapsibleTrigger asChild>
             <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
               <div className="flex items-center justify-between">
@@ -760,7 +760,7 @@ export default function SettingsWhatsApp() {
         </Card>
       </Collapsible>
 
-      <Card>
+      <Card className="bg-[#0d1322] border-white/[0.08]">
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <Lock className="w-4 h-4" />
@@ -810,7 +810,7 @@ export default function SettingsWhatsApp() {
       </Card>
 
       {chatPinStatus?.slug && (
-        <Card>
+        <Card className="bg-[#0d1322] border-white/[0.08]">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <Smartphone className="w-4 h-4" />
@@ -937,7 +937,7 @@ function AiAutoReplyCard() {
 
   if (isLoading) {
     return (
-      <Card>
+      <Card className="bg-[#0d1322] border-white/[0.08]">
         <CardContent className="pt-6">
           <Skeleton className="h-40 w-full" />
         </CardContent>
@@ -946,7 +946,7 @@ function AiAutoReplyCard() {
   }
 
   return (
-    <Card>
+    <Card className="bg-[#0d1322] border-white/[0.08]">
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
@@ -1116,7 +1116,7 @@ function AgentChatSessionsCard() {
   const activeSessions = sessions.filter((s: any) => !s.isRevoked);
 
   return (
-    <Card>
+    <Card className="bg-[#0d1322] border-white/[0.08]">
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>

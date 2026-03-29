@@ -548,11 +548,11 @@ export default function LoadsheetPage() {
         {/* ====== SCANNER TAB ====== */}
         <TabsContent value="scanner" className="mt-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card>
+            <Card className="bg-[#0d1322] border-white/[0.08]">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <CardTitle className="text-sm font-medium">Scan Shipments</CardTitle>
+                    <CardTitle className="text-sm font-medium text-white/90">Scan Shipments</CardTitle>
                     {lockedCourier && (
                       <Badge variant="secondary" className="text-xs gap-1" data-testid="badge-locked-courier">
                         <Truck className="w-3 h-3" />
@@ -720,11 +720,11 @@ export default function LoadsheetPage() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="bg-[#0d1322] border-white/[0.08]">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="text-sm font-medium">Session Summary</CardTitle>
+                    <CardTitle className="text-sm font-medium text-white/90">Session Summary</CardTitle>
                     <CardDescription className="text-xs">
                       {scannedItems.length} shipments · COD: Rs {totalCOD.toLocaleString()}
                     </CardDescription>
@@ -802,7 +802,7 @@ export default function LoadsheetPage() {
 
         {/* ====== BOOKING LOGS TAB ====== */}
         <TabsContent value="booking-logs" className="space-y-4 mt-4">
-          <Card>
+          <Card className="bg-[#0d1322] border-white/[0.08]">
             <CardContent className="p-4">
               <div className="flex flex-col sm:flex-row gap-4 flex-wrap">
                 <Select value={bkCourierFilter} onValueChange={(v) => { setBkCourierFilter(v); setBkPage(1); }}>
@@ -824,13 +824,13 @@ export default function LoadsheetPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="bg-[#0d1322] border-white/[0.08]">
             <CardHeader className="pb-4">
-              <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                <BookOpen className="w-5 h-5" />
+              <CardTitle className="text-lg font-semibold flex items-center gap-2 text-white/90">
+                <BookOpen className="w-5 h-5 text-blue-400" />
                 Booking Sessions
                 {bkData?.total !== undefined && (
-                  <Badge variant="secondary" className="ml-2">{bkData.total} sessions</Badge>
+                  <Badge className="ml-2 bg-blue-500/10 text-blue-400 border border-blue-500/20">{bkData.total} sessions</Badge>
                 )}
               </CardTitle>
             </CardHeader>
@@ -851,15 +851,15 @@ export default function LoadsheetPage() {
                   <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
-                        <TableRow>
-                          <TableHead>Batch ID</TableHead>
-                          <TableHead>Courier</TableHead>
-                          <TableHead className="text-center">Total</TableHead>
-                          <TableHead className="text-center">Success</TableHead>
-                          <TableHead className="text-center">Failed</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Booked At</TableHead>
-                          <TableHead>Actions</TableHead>
+                        <TableRow className="bg-white/[0.04] hover:bg-white/[0.04]">
+                          <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Batch ID</TableHead>
+                          <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Courier</TableHead>
+                          <TableHead className="text-center text-white/40 text-[11px] font-medium uppercase tracking-wider">Total</TableHead>
+                          <TableHead className="text-center text-white/40 text-[11px] font-medium uppercase tracking-wider">Success</TableHead>
+                          <TableHead className="text-center text-white/40 text-[11px] font-medium uppercase tracking-wider">Failed</TableHead>
+                          <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Status</TableHead>
+                          <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Booked At</TableHead>
+                          <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -932,7 +932,7 @@ export default function LoadsheetPage() {
 
         {/* ====== LOADSHEET LOGS TAB ====== */}
         <TabsContent value="loadsheet-logs" className="space-y-4 mt-4">
-          <Card>
+          <Card className="bg-[#0d1322] border-white/[0.08]">
             <CardContent className="p-4">
               <div className="flex flex-col sm:flex-row gap-4 flex-wrap">
                 <Select value={batchCourierFilter} onValueChange={(v) => { setBatchCourierFilter(v); setBatchPage(1); }}>
@@ -954,13 +954,13 @@ export default function LoadsheetPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="bg-[#0d1322] border-white/[0.08]">
             <CardHeader className="pb-4">
-              <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                <FileSpreadsheet className="w-5 h-5" />
+              <CardTitle className="text-lg font-semibold flex items-center gap-2 text-white/90">
+                <FileSpreadsheet className="w-5 h-5 text-blue-400" />
                 Loadsheet Logs
                 {batchesData?.total !== undefined && (
-                  <Badge variant="secondary" className="ml-2">{batchesData.total} loadsheets</Badge>
+                  <Badge className="ml-2 bg-blue-500/10 text-blue-400 border border-blue-500/20">{batchesData.total} loadsheets</Badge>
                 )}
               </CardTitle>
             </CardHeader>
@@ -982,15 +982,15 @@ export default function LoadsheetPage() {
                   <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
-                        <TableRow>
-                          <TableHead>Batch ID</TableHead>
-                          <TableHead>Courier</TableHead>
-                          <TableHead className="text-center">Total</TableHead>
-                          <TableHead className="text-center">Success</TableHead>
-                          <TableHead className="text-center">Failed</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Created At</TableHead>
-                          <TableHead>Actions</TableHead>
+                        <TableRow className="bg-white/[0.04] hover:bg-white/[0.04]">
+                          <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Batch ID</TableHead>
+                          <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Courier</TableHead>
+                          <TableHead className="text-center text-white/40 text-[11px] font-medium uppercase tracking-wider">Total</TableHead>
+                          <TableHead className="text-center text-white/40 text-[11px] font-medium uppercase tracking-wider">Success</TableHead>
+                          <TableHead className="text-center text-white/40 text-[11px] font-medium uppercase tracking-wider">Failed</TableHead>
+                          <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Status</TableHead>
+                          <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Created At</TableHead>
+                          <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
