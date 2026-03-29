@@ -1,62 +1,56 @@
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { motion } from "framer-motion";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { Link } from "wouter";
-import {
-  Package,
-  ArrowRight,
-  CheckCircle2,
-  X as XIcon,
-  ChevronDown,
-  Zap,
-  Star,
-  Building,
-} from "lucide-react";
+import { Package, Sparkles, Building, CheckCircle2, X as XIcon, ArrowRight, ChevronDown } from "lucide-react";
+import { PublicLayout } from "@/components/public-layout";
 
 const plans = [
   {
     name: "Free",
-    icon: Zap,
+    icon: Package,
     monthlyPrice: 0,
     annualPrice: 0,
-    description: "Perfect for getting started with basic logistics management.",
+    description: "Perfect for new merchants just getting started.",
     popular: false,
+    accent: "from-white/10 to-white/5",
+    iconBg: "bg-white/10",
+    iconColor: "text-white/60",
     features: [
       { text: "Up to 100 orders/month", included: true },
-      { text: "1 Shopify store", included: true },
-      { text: "2 courier integrations", included: true },
+      { text: "1 store integration", included: true },
+      { text: "Leopards & PostEx only", included: true },
       { text: "Basic order tracking", included: true },
       { text: "WhatsApp confirmation (50/mo)", included: true },
-      { text: "Basic analytics", included: true },
-      { text: "Meta Ads management", included: false },
+      { text: "Basic analytics dashboard", included: true },
+      { text: "Meta Ads integration", included: false },
       { text: "AI insights", included: false },
       { text: "COD reconciliation", included: false },
-      { text: "Accounting module", included: false },
+      { text: "Accounting suite", included: false },
       { text: "RoboCall confirmation", included: false },
       { text: "Priority support", included: false },
     ],
   },
   {
     name: "Pro",
-    icon: Star,
+    icon: Sparkles,
     monthlyPrice: 4999,
     annualPrice: 3999,
-    description: "For growing businesses that need full automation and insights.",
+    description: "For growing merchants scaling their operations.",
     popular: true,
+    accent: "from-violet-500/20 to-emerald-500/10",
+    iconBg: "bg-gradient-to-br from-violet-500/30 to-emerald-500/20",
+    iconColor: "text-violet-300",
     features: [
       { text: "Up to 2,000 orders/month", included: true },
-      { text: "3 Shopify stores", included: true },
+      { text: "3 store integrations", included: true },
       { text: "All courier integrations", included: true },
-      { text: "Real-time tracking & webhooks", included: true },
-      { text: "WhatsApp confirmation (unlimited)", included: true },
-      { text: "Advanced analytics & reports", included: true },
-      { text: "Meta Ads management", included: true },
-      { text: "AI insights & assistant", included: true },
+      { text: "Real-time tracking", included: true },
+      { text: "WhatsApp confirmation (500/mo)", included: true },
+      { text: "Advanced analytics", included: true },
+      { text: "Meta Ads integration", included: true },
+      { text: "AI insights", included: true },
       { text: "COD reconciliation", included: true },
-      { text: "Basic accounting", included: true },
+      { text: "Basic accounting suite", included: true },
       { text: "RoboCall confirmation", included: false },
       { text: "Priority support", included: false },
     ],
@@ -68,6 +62,9 @@ const plans = [
     annualPrice: 11999,
     description: "For high-volume merchants with complete operational needs.",
     popular: false,
+    accent: "from-amber-500/10 to-white/5",
+    iconBg: "bg-amber-500/15",
+    iconColor: "text-amber-300",
     features: [
       { text: "Unlimited orders", included: true },
       { text: "Unlimited stores", included: true },
@@ -117,55 +114,61 @@ export default function PricingPage() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   return (
-    <div className="min-h-screen bg-background" data-testid="pricing-page">
-      <nav className="fixed top-0 left-0 right-0 z-50 border-b bg-background/95 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16 gap-4">
-            <Link href="/">
-              <div className="flex items-center gap-2 cursor-pointer" data-testid="link-logo">
-                <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
-                  <Package className="w-5 h-5 text-primary-foreground" />
-                </div>
-                <span className="font-bold text-xl">1SOL.AI</span>
-              </div>
-            </Link>
-            <div className="hidden md:flex items-center gap-8">
-              <Link href="/"><span className="text-muted-foreground hover:text-foreground transition-colors text-sm font-medium cursor-pointer">Home</span></Link>
-              <Link href="/contact"><span className="text-muted-foreground hover:text-foreground transition-colors text-sm font-medium cursor-pointer">Contact</span></Link>
-            </div>
-            <div className="flex items-center gap-3">
-              <ThemeToggle />
-              <a href="/auth">
-                <Button data-testid="button-login" size="sm">
-                  Get Started
-                  <ArrowRight className="w-4 h-4 ml-1" />
-                </Button>
-              </a>
-            </div>
+    <PublicLayout>
+      <div data-testid="pricing-page">
+        {/* ── HERO ── */}
+        <section className="relative pt-28 sm:pt-36 pb-16 px-4 sm:px-6 lg:px-8 overflow-hidden">
+          <div className="pointer-events-none absolute inset-0 overflow-hidden">
+            <div
+              className="absolute top-[-100px] left-1/2 -translate-x-1/2 w-[800px] h-[500px] rounded-full blur-[140px] opacity-20"
+              style={{ background: "radial-gradient(ellipse, #7c3aed 0%, #10b981 50%, transparent 70%)" }}
+            />
           </div>
-        </div>
-      </nav>
 
-      <section className="pt-28 sm:pt-32 pb-16 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="text-center mb-12"
-          >
-            <Badge variant="outline" className="mb-4">Pricing</Badge>
-            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-4">
-              Simple, Transparent Pricing
-            </h1>
-            <p className="text-muted-foreground max-w-2xl mx-auto text-lg mb-8">
+          <div className="relative z-10 max-w-4xl mx-auto text-center">
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.05 }}
+              className="mb-5 inline-block"
+            >
+              <span className="px-4 py-1.5 rounded-full border border-violet-500/30 bg-violet-500/10 text-violet-300 text-sm font-medium">
+                Pricing
+              </span>
+            </motion.div>
+
+            <motion.h1
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="text-4xl sm:text-5xl lg:text-6xl font-bold mb-5 leading-tight"
+            >
+              Simple,{" "}
+              <span className="bg-gradient-to-r from-violet-400 via-emerald-400 to-amber-400 bg-clip-text text-transparent">
+                Transparent
+              </span>{" "}
+              Pricing
+            </motion.h1>
+
+            <motion.p
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="text-white/50 text-lg mb-10 max-w-2xl mx-auto"
+            >
               Start free. Scale as you grow. No hidden fees.
-            </p>
-            <div className="flex items-center justify-center gap-3">
-              <span className={`text-sm font-medium ${!annual ? "text-foreground" : "text-muted-foreground"}`}>Monthly</span>
+            </motion.p>
+
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.3 }}
+              className="flex items-center justify-center gap-3"
+            >
+              <span className={`text-sm font-medium ${!annual ? "text-white" : "text-white/40"}`}>Monthly</span>
               <button
                 onClick={() => setAnnual(!annual)}
-                className={`relative w-12 h-6 rounded-full transition-colors ${annual ? "bg-primary" : "bg-muted"}`}
+                className={`relative w-12 h-6 rounded-full transition-colors ${annual ? "bg-gradient-to-r from-violet-600 to-emerald-500" : "bg-white/15"}`}
                 data-testid="toggle-billing"
               >
                 <motion.div
@@ -174,166 +177,184 @@ export default function PricingPage() {
                   className="absolute top-1 w-4 h-4 rounded-full bg-white"
                 />
               </button>
-              <span className={`text-sm font-medium ${annual ? "text-foreground" : "text-muted-foreground"}`}>
+              <span className={`text-sm font-medium flex items-center gap-2 ${annual ? "text-white" : "text-white/40"}`}>
                 Annual
-                <Badge variant="secondary" className="ml-2 text-[10px]">Save 20%</Badge>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-semibold border border-emerald-500/30">
+                  Save 20%
+                </span>
               </span>
-            </div>
-          </motion.div>
+            </motion.div>
+          </div>
+        </section>
 
-          <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
-            {plans.map((plan, i) => {
-              const Icon = plan.icon;
-              const price = annual ? plan.annualPrice : plan.monthlyPrice;
-              return (
-                <motion.div
-                  key={plan.name}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.1, duration: 0.5 }}
-                >
-                  <Card className={`relative h-full ${plan.popular ? "border-primary border-2" : ""}`} data-testid={`card-plan-${plan.name.toLowerCase()}`}>
+        {/* ── PRICING CARDS ── */}
+        <section className="pb-24 px-4 sm:px-6 lg:px-8">
+          <div className="max-w-5xl mx-auto">
+            <div className="grid md:grid-cols-3 gap-6">
+              {plans.map((plan, i) => {
+                const Icon = plan.icon;
+                const price = annual ? plan.annualPrice : plan.monthlyPrice;
+                return (
+                  <motion.div
+                    key={plan.name}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.1, duration: 0.5 }}
+                    className="relative"
+                  >
                     {plan.popular && (
-                      <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                        <Badge className="bg-primary text-primary-foreground">Most Popular</Badge>
+                      <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
+                        <span className="px-3 py-1 rounded-full text-xs font-semibold bg-gradient-to-r from-violet-600 to-emerald-500 text-white">
+                          Most Popular
+                        </span>
                       </div>
                     )}
-                    <CardContent className="p-6 flex flex-col h-full">
-                      <div className="mb-6">
-                        <div className="flex items-center gap-2 mb-3">
-                          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                            <Icon className="w-5 h-5 text-primary" />
+                    <div
+                      className={`relative flex flex-col h-full rounded-2xl border backdrop-blur-xl p-6 ${
+                        plan.popular
+                          ? "bg-white/6 border-violet-500/40"
+                          : "bg-white/3 border-white/10"
+                      }`}
+                      data-testid={`card-plan-${plan.name.toLowerCase()}`}
+                    >
+                      {plan.popular && (
+                        <div className="absolute inset-0 rounded-2xl pointer-events-none"
+                          style={{ background: "radial-gradient(ellipse at 50% 0%, rgba(124,58,237,0.15) 0%, transparent 60%)" }}
+                        />
+                      )}
+
+                      <div className="relative mb-6">
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${plan.iconBg}`}>
+                            <Icon className={`w-5 h-5 ${plan.iconColor}`} />
                           </div>
-                          <h3 className="text-xl font-bold">{plan.name}</h3>
+                          <h3 className="text-xl font-bold text-white">{plan.name}</h3>
                         </div>
                         <div className="mb-3">
                           {price === 0 ? (
                             <div className="flex items-baseline gap-1">
-                              <span className="text-4xl font-bold">Free</span>
-                              <span className="text-muted-foreground text-sm">forever</span>
+                              <span className="text-4xl font-bold text-white">Free</span>
+                              <span className="text-white/40 text-sm">forever</span>
                             </div>
                           ) : (
                             <div className="flex items-baseline gap-1">
-                              <span className="text-sm text-muted-foreground">PKR</span>
-                              <span className="text-4xl font-bold">{price.toLocaleString()}</span>
-                              <span className="text-muted-foreground text-sm">/month</span>
+                              <span className="text-sm text-white/40">PKR</span>
+                              <span className="text-4xl font-bold text-white">{price.toLocaleString()}</span>
+                              <span className="text-white/40 text-sm">/month</span>
                             </div>
                           )}
                         </div>
-                        <p className="text-sm text-muted-foreground">{plan.description}</p>
+                        <p className="text-sm text-white/40">{plan.description}</p>
                       </div>
-                      <div className="space-y-3 flex-1 mb-6">
+
+                      <div className="space-y-2.5 flex-1 mb-6">
                         {plan.features.map((feature) => (
                           <div key={feature.text} className="flex items-start gap-2">
                             {feature.included ? (
-                              <CheckCircle2 className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                             ) : (
-                              <XIcon className="w-4 h-4 text-muted-foreground/40 shrink-0 mt-0.5" />
+                              <XIcon className="w-4 h-4 text-white/20 shrink-0 mt-0.5" />
                             )}
-                            <span className={`text-sm ${feature.included ? "text-foreground" : "text-muted-foreground/50"}`}>
+                            <span className={`text-sm ${feature.included ? "text-white/80" : "text-white/25"}`}>
                               {feature.text}
                             </span>
                           </div>
                         ))}
                       </div>
+
                       <a href="/auth">
-                        <Button
-                          className="w-full"
-                          variant={plan.popular ? "default" : "outline"}
+                        <button
+                          className={`w-full py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                            plan.popular
+                              ? "bg-gradient-to-r from-violet-600 to-emerald-500 text-white hover:opacity-90"
+                              : "bg-white/8 border border-white/15 text-white hover:bg-white/12 hover:border-white/25"
+                          }`}
                           data-testid={`button-plan-${plan.name.toLowerCase()}`}
                         >
                           {plan.monthlyPrice === 0 ? "Get Started Free" : "Start Free Trial"}
-                          <ArrowRight className="w-4 h-4 ml-1" />
-                        </Button>
+                          <ArrowRight className="w-4 h-4 inline ml-1.5" />
+                        </button>
                       </a>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      <section className="py-20 bg-muted/20 border-y">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-12"
-          >
-            <h2 className="text-2xl sm:text-3xl font-bold mb-3">Frequently Asked Questions</h2>
-            <p className="text-muted-foreground">Everything you need to know about our pricing</p>
-          </motion.div>
-          <div className="space-y-3">
-            {faqs.map((faq, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 10 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.05 }}
-              >
-                <button
-                  onClick={() => setOpenFaq(openFaq === i ? null : i)}
-                  className="w-full flex items-center justify-between p-4 rounded-lg border bg-background hover:bg-muted/30 transition-colors text-left"
-                  data-testid={`button-faq-${i}`}
-                >
-                  <span className="font-medium text-sm pr-4">{faq.question}</span>
-                  <ChevronDown className={`w-4 h-4 shrink-0 text-muted-foreground transition-transform ${openFaq === i ? "rotate-180" : ""}`} />
-                </button>
-                {openFaq === i && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: "auto", opacity: 1 }}
-                    transition={{ duration: 0.2 }}
-                    className="px-4 pb-4"
-                  >
-                    <p className="text-sm text-muted-foreground pt-2">{faq.answer}</p>
+                    </div>
                   </motion.div>
-                )}
-              </motion.div>
-            ))}
+                );
+              })}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <section className="py-16">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-2xl sm:text-3xl font-bold mb-4">Need a Custom Plan?</h2>
-          <p className="text-muted-foreground mb-6">
-            For high-volume merchants or special requirements, we offer tailored solutions.
-          </p>
-          <Link href="/contact">
-            <Button size="lg" data-testid="button-contact-sales">
-              Contact Sales
-              <ArrowRight className="w-4 h-4 ml-2" />
-            </Button>
-          </Link>
-        </div>
-      </section>
+        {/* ── FAQ ── */}
+        <section className="py-20 px-4 sm:px-6 lg:px-8 border-t border-white/8">
+          <div className="max-w-3xl mx-auto">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="text-center mb-12"
+            >
+              <h2 className="text-2xl sm:text-3xl font-bold text-white mb-3">Frequently Asked Questions</h2>
+              <p className="text-white/40">Everything you need to know about our pricing</p>
+            </motion.div>
 
-      <footer className="py-12 border-t">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
-                <Package className="w-5 h-5 text-primary-foreground" />
+            <div className="space-y-3">
+              {faqs.map((faq, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, y: 10 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: i * 0.05 }}
+                >
+                  <button
+                    onClick={() => setOpenFaq(openFaq === i ? null : i)}
+                    className="w-full flex items-center justify-between p-4 rounded-xl border border-white/10 bg-white/3 hover:bg-white/6 hover:border-white/20 transition-all text-left"
+                    data-testid={`button-faq-${i}`}
+                  >
+                    <span className="font-medium text-sm text-white/80 pr-4">{faq.question}</span>
+                    <ChevronDown className={`w-4 h-4 shrink-0 text-white/40 transition-transform ${openFaq === i ? "rotate-180" : ""}`} />
+                  </button>
+                  {openFaq === i && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      transition={{ duration: 0.2 }}
+                      className="px-4 pb-4"
+                    >
+                      <p className="text-sm text-white/40 pt-3 leading-relaxed">{faq.answer}</p>
+                    </motion.div>
+                  )}
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ── CUSTOM PLAN CTA ── */}
+        <section className="py-20 px-4 sm:px-6 lg:px-8">
+          <div className="max-w-3xl mx-auto">
+            <div className="relative rounded-2xl border border-white/10 bg-white/3 backdrop-blur-xl p-10 sm:p-12 text-center overflow-hidden">
+              <div className="pointer-events-none absolute inset-0"
+                style={{ background: "radial-gradient(ellipse at 50% 0%, rgba(124,58,237,0.12) 0%, transparent 60%)" }}
+              />
+              <div className="relative">
+                <h2 className="text-2xl sm:text-3xl font-bold text-white mb-4">Need a Custom Plan?</h2>
+                <p className="text-white/40 mb-8 max-w-xl mx-auto">
+                  For high-volume merchants or special requirements, we offer tailored solutions.
+                </p>
+                <Link href="/contact">
+                  <button
+                    data-testid="button-contact-sales"
+                    className="px-7 py-3 rounded-full text-sm font-semibold bg-gradient-to-r from-violet-600 to-emerald-500 text-white hover:opacity-90 transition-opacity inline-flex items-center gap-2"
+                  >
+                    Contact Sales
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </Link>
               </div>
-              <span className="font-bold text-xl">1SOL.AI</span>
             </div>
-            <div className="flex items-center gap-6 text-sm text-muted-foreground">
-              <Link href="/privacy-policy"><span className="hover:text-foreground transition-colors cursor-pointer">Privacy</span></Link>
-              <Link href="/terms-of-service"><span className="hover:text-foreground transition-colors cursor-pointer">Terms</span></Link>
-              <Link href="/data-deletion"><span className="hover:text-foreground transition-colors cursor-pointer">Data Deletion</span></Link>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              © {new Date().getFullYear()} 1SOL.AI
-            </p>
           </div>
-        </div>
-      </footer>
-    </div>
+        </section>
+      </div>
+    </PublicLayout>
   );
 }

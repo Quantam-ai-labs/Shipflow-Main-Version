@@ -54,7 +54,7 @@ Preferred communication style: Simple, everyday language.
 - **Templates Tab**: Includes "Shopify Message Templates" page with Quick Start Presets, "Your Templates" list, and a rich template editor.
 - **Automations Tab**: Rules page for creating WhatsApp message automations based on order workflow status changes.
 - **Loadsheet System**: Features a Portal Loadsheet with scanning (USB barcode + camera QR) and a Warehouse PWA for mobile operations.
-- **Marketing Website**: Public-facing pages with Framer Motion animations, including a landing page, pricing page with 3-tier plans, contact page, and legal pages.
+- **Marketing Website**: Public-facing pages with Framer Motion animations, including a landing page, pricing page with 3-tier plans, contact page, and legal pages. All pages share a dark Aurora Glass design system (bg #08080f, glassmorphism cards, gradient text). Shared `PublicLayout` component (`client/src/components/public-layout.tsx`) provides: dark sticky glassmorphism nav with gradient logo and "Get Started" CTA; rich footer with gradient top border, aurora orb glows, 5-column layout (brand + social icons | product | company | legal | newsletter), and "Made for Pakistani merchants 🇵🇰" bottom bar.
 - **Disconnect/Reconnect**: Both WhatsApp and RoboCall integrations support temporary disconnection and one-click reconnection, with backend flags to manage this.
 - **Booking Remarks**: Customizable special instructions per merchant for courier booking.
 - **Booking Modal Enhancements**: Full-screen modal with editable order numbers, product thumbnails, and city autocomplete.

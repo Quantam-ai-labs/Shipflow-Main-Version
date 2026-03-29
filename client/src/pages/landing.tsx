@@ -28,6 +28,7 @@ import {
   Sparkles,
   ArrowDown,
 } from "lucide-react";
+import { SiWhatsapp, SiInstagram, SiX } from "react-icons/si";
 
 function useCountUp(end: number, duration = 2000, inView: boolean) {
   const [count, setCount] = useState(0);
@@ -1282,47 +1283,92 @@ export default function Landing() {
       </section>
 
       {/* ── FOOTER ── */}
-      <footer className="py-16 border-t border-white/8">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-12">
-            <div className="col-span-2 md:col-span-1">
+      <footer className="relative overflow-hidden">
+        <div className="h-px bg-gradient-to-r from-transparent via-violet-500/50 to-emerald-500/40" />
+        <div className="pointer-events-none absolute top-0 left-0 right-0 h-[300px] overflow-hidden">
+          <div
+            className="absolute top-[-80px] left-1/4 w-[500px] h-[300px] rounded-full blur-[120px] opacity-10"
+            style={{ background: "radial-gradient(ellipse, #7c3aed 0%, transparent 70%)" }}
+          />
+          <div
+            className="absolute top-[-60px] right-1/4 w-[400px] h-[250px] rounded-full blur-[120px] opacity-10"
+            style={{ background: "radial-gradient(ellipse, #10b981 0%, transparent 70%)" }}
+          />
+        </div>
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-8">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-12 gap-8 mb-12">
+            <div className="col-span-2 md:col-span-4 lg:col-span-4">
               <div className="flex items-center gap-2 mb-4">
                 <div className="w-8 h-8 rounded-md bg-gradient-to-br from-violet-500 to-emerald-500 flex items-center justify-center">
                   <Package className="w-5 h-5 text-white" />
                 </div>
                 <span className="font-bold text-xl text-white">1SOL.AI</span>
               </div>
-              <p className="text-sm text-white/40">
-                The complete e-commerce operating system for Pakistani merchants.
+              <p className="text-sm text-white/40 mb-5 max-w-xs">
+                The complete e-commerce operating system for Pakistani merchants. Orders, couriers, WhatsApp, ads — all in one place.
               </p>
+              <div className="flex items-center gap-3">
+                <a href="#" aria-label="WhatsApp" className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-white/40 hover:text-white hover:border-violet-500/40 hover:bg-white/8 transition-all" data-testid="link-footer-social-whatsapp">
+                  <SiWhatsapp className="w-4 h-4" />
+                </a>
+                <a href="#" aria-label="Instagram" className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-white/40 hover:text-white hover:border-violet-500/40 hover:bg-white/8 transition-all" data-testid="link-footer-social-instagram">
+                  <SiInstagram className="w-4 h-4" />
+                </a>
+                <a href="#" aria-label="Twitter / X" className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-white/40 hover:text-white hover:border-violet-500/40 hover:bg-white/8 transition-all" data-testid="link-footer-social-twitter">
+                  <SiX className="w-4 h-4" />
+                </a>
+              </div>
             </div>
-            <div>
-              <h4 className="font-semibold text-sm mb-3 text-white/70">Product</h4>
-              <div className="space-y-2">
+            <div className="col-span-1 lg:col-span-2">
+              <h4 className="font-semibold text-sm mb-4 text-white/70">Product</h4>
+              <div className="space-y-2.5">
                 <a href="#features" className="block text-sm text-white/40 hover:text-white transition-colors" data-testid="link-footer-features">Features</a>
                 <Link href="/pricing"><span className="block text-sm text-white/40 hover:text-white transition-colors cursor-pointer" data-testid="link-footer-pricing">Pricing</span></Link>
                 <a href="#how-it-works" className="block text-sm text-white/40 hover:text-white transition-colors" data-testid="link-footer-how-it-works">How it Works</a>
               </div>
             </div>
-            <div>
-              <h4 className="font-semibold text-sm mb-3 text-white/70">Company</h4>
-              <div className="space-y-2">
+            <div className="col-span-1 lg:col-span-2">
+              <h4 className="font-semibold text-sm mb-4 text-white/70">Company</h4>
+              <div className="space-y-2.5">
                 <Link href="/contact"><span className="block text-sm text-white/40 hover:text-white transition-colors cursor-pointer" data-testid="link-footer-contact">Contact</span></Link>
                 <a href="/auth" className="block text-sm text-white/40 hover:text-white transition-colors" data-testid="link-footer-login">Sign In</a>
               </div>
             </div>
-            <div>
-              <h4 className="font-semibold text-sm mb-3 text-white/70">Legal</h4>
-              <div className="space-y-2">
+            <div className="col-span-1 lg:col-span-2">
+              <h4 className="font-semibold text-sm mb-4 text-white/70">Legal</h4>
+              <div className="space-y-2.5">
                 <Link href="/privacy-policy"><span className="block text-sm text-white/40 hover:text-white transition-colors cursor-pointer" data-testid="link-footer-privacy">Privacy Policy</span></Link>
                 <Link href="/terms-of-service"><span className="block text-sm text-white/40 hover:text-white transition-colors cursor-pointer" data-testid="link-footer-terms">Terms of Service</span></Link>
                 <Link href="/data-deletion"><span className="block text-sm text-white/40 hover:text-white transition-colors cursor-pointer" data-testid="link-footer-data-deletion">Data Deletion</span></Link>
               </div>
             </div>
+            <div className="col-span-2 md:col-span-4 lg:col-span-2">
+              <h4 className="font-semibold text-sm mb-4 text-white/70">Stay Updated</h4>
+              <p className="text-sm text-white/40 mb-3">Get product updates and tips for Pakistani merchants.</p>
+              <div className="flex gap-2">
+                <input
+                  type="email"
+                  placeholder="you@example.com"
+                  className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-white placeholder-white/25 focus:outline-none focus:border-violet-500/50 focus:bg-white/8 transition-all"
+                  data-testid="input-footer-newsletter"
+                />
+                <button
+                  className="px-3 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-emerald-500 text-white text-sm font-medium hover:opacity-90 transition-opacity shrink-0"
+                  data-testid="button-footer-subscribe"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
           </div>
-          <div className="pt-8 border-t border-white/8 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="h-px bg-gradient-to-r from-transparent via-white/8 to-transparent mb-8" />
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
             <p className="text-sm text-white/30">
               © {new Date().getFullYear()} 1SOL.AI. All rights reserved.
+            </p>
+            <p className="text-sm text-white/30 flex items-center gap-1.5">
+              <span>Made for Pakistani merchants</span>
+              <span>🇵🇰</span>
             </p>
           </div>
         </div>
