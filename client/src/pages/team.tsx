@@ -773,7 +773,7 @@ export default function Team() {
                 <div key={member.id} className={`flex items-center gap-4 p-4 border border-white/[0.08] rounded-lg hover:bg-blue-500/[0.06] transition-colors ${!member.isActive ? "opacity-50" : ""}`} data-testid={`team-member-${member.id}`}>
                   <Avatar className="h-12 w-12">
                     <AvatarImage src={member.user?.profileImageUrl || undefined} />
-                    <AvatarFallback className="bg-primary/10 text-primary">
+                    <AvatarFallback className="bg-gradient-to-br from-blue-500/30 to-blue-600/20 text-blue-300 font-semibold">
                       {getUserInitials(member)}
                     </AvatarFallback>
                   </Avatar>
