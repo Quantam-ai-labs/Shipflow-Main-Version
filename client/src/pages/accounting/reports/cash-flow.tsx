@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid } from "recharts";
 
 interface CashFlowData {
   totalInflow: number;
@@ -15,12 +15,19 @@ function formatPKR(amount: number): string {
   return `Rs. ${amount.toLocaleString()}`;
 }
 
-function SummaryCard({ title, amount, color, testId }: { title: string; amount: number; color: string; testId: string }) {
+const darkTooltipStyle = {
+  backgroundColor: "#0d1322",
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: "8px",
+  color: "rgba(255,255,255,0.9)",
+};
+
+function SummaryCard({ title, amount, valueColor, testId }: { title: string; amount: number; valueColor: string; testId: string }) {
   return (
-    <Card>
-      <CardContent className="p-6">
-        <p className="text-sm text-muted-foreground">{title}</p>
-        <p className={`text-2xl font-bold mt-2 ${color}`} data-testid={testId}>
+    <Card className="bg-[#0d1322] border-white/[0.08]">
+      <CardContent className="p-5">
+        <p className="text-[10px] text-white/40 font-medium uppercase tracking-wider">{title}</p>
+        <p className={`text-2xl font-bold mt-1 ${valueColor}`} data-testid={testId}>
           {formatPKR(amount)}
         </p>
       </CardContent>
@@ -30,20 +37,20 @@ function SummaryCard({ title, amount, color, testId }: { title: string; amount: 
 
 function PageSkeleton() {
   return (
-    <div className="space-y-6" data-testid="cash-flow-skeleton">
+    <div className="space-y-5 p-6" data-testid="cash-flow-skeleton">
       <Skeleton className="h-8 w-48" />
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {Array.from({ length: 3 }).map((_, i) => (
-          <Card key={i}>
-            <CardContent className="p-6 space-y-3">
+          <Card key={i} className="bg-[#0d1322] border-white/[0.08]">
+            <CardContent className="p-5 space-y-3">
               <Skeleton className="h-4 w-24" />
               <Skeleton className="h-8 w-32" />
             </CardContent>
           </Card>
         ))}
       </div>
-      <Card>
-        <CardContent className="p-6">
+      <Card className="bg-[#0d1322] border-white/[0.08]">
+        <CardContent className="p-5">
           <Skeleton className="h-64 w-full" />
         </CardContent>
       </Card>
@@ -68,40 +75,54 @@ export default function AccountingCashFlow() {
   }));
 
   return (
-    <div className="space-y-6" data-testid="accounting-cash-flow">
+    <div className="space-y-5 p-6" data-testid="accounting-cash-flow">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight" data-testid="text-page-title">
+        <h1 className="text-2xl font-bold text-white/90 tracking-tight" data-testid="text-page-title">
           Cash Flow
         </h1>
-        <p className="text-muted-foreground mt-2">Track money in and out</p>
+        <p className="text-white/40 text-sm mt-1">Track money in and out</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <SummaryCard title="Total Inflows" amount={totalInflow} color="text-emerald-400" testId="text-total-inflow" />
-        <SummaryCard title="Total Outflows" amount={totalOutflow} color="text-red-400" testId="text-total-outflow" />
+        <SummaryCard title="Total Inflows" amount={totalInflow} valueColor="text-emerald-400" testId="text-total-inflow" />
+        <SummaryCard title="Total Outflows" amount={totalOutflow} valueColor="text-red-400" testId="text-total-outflow" />
         <SummaryCard
           title="Net Cash Flow"
           amount={netFlow}
-          color={netFlow >= 0 ? "text-emerald-400" : "text-red-400"}
+          valueColor={netFlow >= 0 ? "text-emerald-400" : "text-red-400"}
           testId="text-net-cash-flow"
         />
       </div>
 
       {monthlyFlow.length > 0 && (
-        <Card data-testid="card-monthly-chart">
-          <CardHeader>
-            <CardTitle className="text-lg">Monthly Breakdown</CardTitle>
+        <Card className="bg-[#0d1322] border-white/[0.08]" data-testid="card-monthly-chart">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold text-white/80">Monthly Breakdown</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={monthlyFlow}>
-                  <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-                  <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-                  <Tooltip formatter={(value: number) => formatPKR(value)} />
-                  <Legend />
-                  <Bar dataKey="Inflow" fill="hsl(142, 71%, 45%)" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="Outflow" fill="hsl(0, 84%, 60%)" radius={[4, 4, 0, 0]} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                  <XAxis
+                    dataKey="month"
+                    tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 11 }}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis
+                    tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 11 }}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
+                  />
+                  <Tooltip
+                    formatter={(value: number) => formatPKR(value)}
+                    contentStyle={darkTooltipStyle}
+                  />
+                  <Legend wrapperStyle={{ color: "rgba(255,255,255,0.5)", fontSize: 12 }} />
+                  <Bar dataKey="Inflow" fill="#10b981" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="Outflow" fill="rgba(239,68,68,0.7)" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -110,8 +131,8 @@ export default function AccountingCashFlow() {
       )}
 
       {monthlyFlow.length === 0 && (
-        <Card>
-          <CardContent className="py-8 text-center text-muted-foreground" data-testid="text-no-data">
+        <Card className="bg-[#0d1322] border-white/[0.08]">
+          <CardContent className="py-8 text-center text-white/30 text-sm" data-testid="text-no-data">
             No cash flow data available
           </CardContent>
         </Card>

@@ -20,20 +20,20 @@ function formatPKR(amount: number): string {
 
 function PageSkeleton() {
   return (
-    <div className="space-y-6" data-testid="party-balances-skeleton">
+    <div className="space-y-5 p-6" data-testid="party-balances-skeleton">
       <Skeleton className="h-8 w-48" />
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {Array.from({ length: 2 }).map((_, i) => (
-          <Card key={i}>
-            <CardContent className="p-6 space-y-3">
+          <Card key={i} className="bg-[#0d1322] border-white/[0.08]">
+            <CardContent className="p-5 space-y-3">
               <Skeleton className="h-4 w-24" />
               <Skeleton className="h-8 w-32" />
             </CardContent>
           </Card>
         ))}
       </div>
-      <Card>
-        <CardContent className="p-6 space-y-3">
+      <Card className="bg-[#0d1322] border-white/[0.08]">
+        <CardContent className="p-5 space-y-3">
           {Array.from({ length: 5 }).map((_, i) => (
             <Skeleton key={i} className="h-12 w-full" />
           ))}
@@ -61,46 +61,46 @@ export default function AccountingPartyBalances() {
   }, 0);
 
   return (
-    <div className="space-y-6" data-testid="accounting-party-balances">
+    <div className="space-y-5 p-6" data-testid="accounting-party-balances">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight" data-testid="text-page-title">
+        <h1 className="text-2xl font-bold text-white/90 tracking-tight" data-testid="text-page-title">
           Party Balances
         </h1>
-        <p className="text-muted-foreground mt-2">Outstanding balances with parties</p>
+        <p className="text-white/40 text-sm mt-1">Outstanding balances with parties</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Card>
-          <CardContent className="p-6">
-            <p className="text-sm text-muted-foreground">Total Receivables</p>
-            <p className="text-2xl font-bold mt-2 text-emerald-400" data-testid="text-total-receivables">
+        <Card className="bg-[#0d1322] border-emerald-500/20">
+          <CardContent className="p-5">
+            <p className="text-[10px] text-white/40 font-medium uppercase tracking-wider">Total Receivables</p>
+            <p className="text-2xl font-bold mt-1 text-emerald-400" data-testid="text-total-receivables">
               {formatPKR(totalReceivables)}
             </p>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-6">
-            <p className="text-sm text-muted-foreground">Total Payables</p>
-            <p className="text-2xl font-bold mt-2 text-red-400" data-testid="text-total-payables">
+        <Card className="bg-[#0d1322] border-red-500/20">
+          <CardContent className="p-5">
+            <p className="text-[10px] text-white/40 font-medium uppercase tracking-wider">Total Payables</p>
+            <p className="text-2xl font-bold mt-1 text-red-400" data-testid="text-total-payables">
               {formatPKR(totalPayables)}
             </p>
           </CardContent>
         </Card>
       </div>
 
-      <Card data-testid="card-party-table">
-        <CardHeader>
-          <CardTitle className="text-lg">All Parties</CardTitle>
+      <Card className="bg-[#0d1322] border-white/[0.08]" data-testid="card-party-table">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-semibold text-white/80">All Parties</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           {parties.length > 0 ? (
             <div className="overflow-auto">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Party Name</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead className="text-right">Balance</TableHead>
+                  <TableRow className="bg-white/[0.04] hover:bg-white/[0.04] border-b border-white/[0.06]">
+                    <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Party Name</TableHead>
+                    <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Type</TableHead>
+                    <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">Balance</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -109,14 +109,14 @@ export default function AccountingPartyBalances() {
                     const isPositive = bal > 0;
                     const isNegative = bal < 0;
                     return (
-                      <TableRow key={party.id} data-testid={`row-party-${party.id}`}>
-                        <TableCell className="font-medium">{party.name}</TableCell>
+                      <TableRow key={party.id} className="hover:bg-blue-500/[0.06] border-b border-white/[0.04]" data-testid={`row-party-${party.id}`}>
+                        <TableCell className="font-medium text-white/80">{party.name}</TableCell>
                         <TableCell>
-                          <Badge variant="outline" data-testid={`badge-type-${party.id}`}>
+                          <Badge className="bg-white/[0.04] text-white/50 border border-white/[0.08] text-xs" data-testid={`badge-type-${party.id}`}>
                             {party.type}
                           </Badge>
                         </TableCell>
-                        <TableCell className={`text-right font-medium ${isPositive ? "text-emerald-400" : isNegative ? "text-red-400" : ""}`}>
+                        <TableCell className={`text-right font-medium ${isPositive ? "text-emerald-400" : isNegative ? "text-red-400" : "text-white/60"}`}>
                           {formatPKR(bal)}
                         </TableCell>
                       </TableRow>
@@ -126,7 +126,7 @@ export default function AccountingPartyBalances() {
               </Table>
             </div>
           ) : (
-            <p className="text-center text-muted-foreground py-8" data-testid="text-no-parties">
+            <p className="text-center text-white/30 py-8 text-sm" data-testid="text-no-parties">
               No parties found
             </p>
           )}

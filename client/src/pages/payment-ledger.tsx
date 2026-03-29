@@ -268,71 +268,77 @@ export default function PaymentLedgerPage() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="p-6">
+        <Card className="bg-[#0d1322] border-white/[0.08]">
+          <CardContent className="p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-sm text-muted-foreground">Total COD Collected</p>
+                <p className="text-[10px] text-white/40 font-medium uppercase tracking-wider">Total COD Collected</p>
                 {isLoading ? (
                   <Skeleton className="h-8 w-28 mt-1" />
                 ) : (
                   <>
-                    <p className="text-2xl font-bold" data-testid="text-total-cod">Rs {summary?.totalCod ?? "0"}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{summary?.recordCount ?? 0} shipments</p>
+                    <p className="text-2xl font-bold text-emerald-400" data-testid="text-total-cod">Rs {summary?.totalCod ?? "0"}</p>
+                    <p className="text-xs text-white/30 mt-1">{summary?.recordCount ?? 0} shipments</p>
                   </>
                 )}
               </div>
-              <Wallet className="w-5 h-5 text-muted-foreground" />
+              <div className="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                <Wallet className="w-4 h-4 text-emerald-400" />
+              </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-6">
+        <Card className="bg-[#0d1322] border-white/[0.08]">
+          <CardContent className="p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-sm text-muted-foreground">Total Courier Deductions</p>
+                <p className="text-[10px] text-white/40 font-medium uppercase tracking-wider">Total Courier Deductions</p>
                 {isLoading ? (
                   <Skeleton className="h-8 w-28 mt-1" />
                 ) : (
                   <>
-                    <p className="text-2xl font-bold" data-testid="text-total-deductions">Rs {summary?.totalDeductions ?? "0"}</p>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+                    <p className="text-2xl font-bold text-amber-400" data-testid="text-total-deductions">Rs {summary?.totalDeductions ?? "0"}</p>
+                    <div className="flex items-center gap-2 text-xs text-white/30 mt-1">
                       <span>Fee: Rs {summary?.totalTxnFee ?? "0"}</span>
                       <span>Tax: Rs {summary?.totalTxnTax ?? "0"}</span>
                     </div>
                   </>
                 )}
               </div>
-              <TrendingDown className="w-5 h-5 text-muted-foreground" />
+              <div className="w-9 h-9 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                <TrendingDown className="w-4 h-4 text-amber-400" />
+              </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-6">
+        <Card className="bg-[#0d1322] border-white/[0.08]">
+          <CardContent className="p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-sm text-muted-foreground">Net Amount Paid to You</p>
+                <p className="text-[10px] text-white/40 font-medium uppercase tracking-wider">Net Amount Paid to You</p>
                 {isLoading ? (
                   <Skeleton className="h-8 w-28 mt-1" />
                 ) : (
                   <>
-                    <p className="text-2xl font-bold" data-testid="text-total-net">Rs {summary?.totalNetPaid ?? "0"}</p>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+                    <p className="text-2xl font-bold text-blue-400" data-testid="text-total-net">Rs {summary?.totalNetPaid ?? "0"}</p>
+                    <div className="flex items-center gap-2 text-xs text-white/30 mt-1">
                       <span>{summary?.syncedCount ?? 0} synced</span>
                       {(summary?.unsyncedCount ?? 0) > 0 && (
-                        <Badge variant="secondary" className="text-xs">{summary?.unsyncedCount} pending sync</Badge>
+                        <Badge className="text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20">{summary?.unsyncedCount} pending sync</Badge>
                       )}
                     </div>
                   </>
                 )}
               </div>
-              <ArrowDownRight className="w-5 h-5 text-muted-foreground" />
+              <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                <ArrowDownRight className="w-4 h-4 text-blue-400" />
+              </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      <Card>
+      <Card className="bg-[#0d1322] border-white/[0.08]">
         <CardContent className="p-4">
           <div className="flex flex-col lg:flex-row gap-4">
             <div className="relative flex-1">
@@ -361,12 +367,12 @@ export default function PaymentLedgerPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="bg-[#0d1322] border-white/[0.08]">
         <CardHeader className="pb-4">
-          <CardTitle className="text-base font-semibold flex items-center gap-2">
+          <CardTitle className="text-sm font-semibold text-white/80 flex items-center gap-2">
             Shipment Financial Breakdown
             {data?.total !== undefined && (
-              <Badge variant="secondary" className="ml-2">{data.total} records</Badge>
+              <Badge className="ml-2 bg-blue-500/10 text-blue-400 border border-blue-500/20">{data.total} records</Badge>
             )}
           </CardTitle>
         </CardHeader>
@@ -388,59 +394,59 @@ export default function PaymentLedgerPage() {
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead>Tracking #</TableHead>
-                      <TableHead>Courier</TableHead>
-                      <TableHead className="text-right">COD Amount</TableHead>
-                      <TableHead className="text-right">
+                    <TableRow className="bg-white/[0.04] hover:bg-white/[0.04] border-b border-white/[0.06]">
+                      <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Tracking #</TableHead>
+                      <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Courier</TableHead>
+                      <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">COD Amount</TableHead>
+                      <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">
                         <div className="flex items-center justify-end gap-1">
                           Service Fee
                           <Tooltip>
                             <TooltipTrigger>
-                              <Info className="w-3 h-3 text-muted-foreground" />
+                              <Info className="w-3 h-3 text-white/30" />
                             </TooltipTrigger>
                             <TooltipContent>Courier delivery/service charges per shipment</TooltipContent>
                           </Tooltip>
                         </div>
                       </TableHead>
-                      <TableHead className="text-right">Tax</TableHead>
-                      <TableHead className="text-right">
+                      <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">Tax</TableHead>
+                      <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">
                         <div className="flex items-center justify-end gap-1">
                           Reversal
                           <Tooltip>
                             <TooltipTrigger>
-                              <Info className="w-3 h-3 text-muted-foreground" />
+                              <Info className="w-3 h-3 text-white/30" />
                             </TooltipTrigger>
                             <TooltipContent>Charges for returned/reversed shipments</TooltipContent>
                           </Tooltip>
                         </div>
                       </TableHead>
-                      <TableHead className="text-right font-semibold">Total Deducted</TableHead>
-                      <TableHead className="text-right font-semibold">Net Paid</TableHead>
-                      <TableHead>Payment Status</TableHead>
-                      <TableHead>Payment Method</TableHead>
-                      <TableHead>Billing Method</TableHead>
-                      <TableHead>Invoice/Cheque #</TableHead>
-                      <TableHead>Settlement Date</TableHead>
-                      <TableHead>Message</TableHead>
-                      <TableHead>Slip</TableHead>
-                      <TableHead className="text-right">
+                      <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">Total Deducted</TableHead>
+                      <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">Net Paid</TableHead>
+                      <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Payment Status</TableHead>
+                      <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Payment Method</TableHead>
+                      <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Billing Method</TableHead>
+                      <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Invoice/Cheque #</TableHead>
+                      <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Settlement Date</TableHead>
+                      <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Message</TableHead>
+                      <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Slip</TableHead>
+                      <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">
                         <div className="flex items-center justify-end gap-1">
                           Upfront
                           <Tooltip>
                             <TooltipTrigger>
-                              <Info className="w-3 h-3 text-muted-foreground" />
+                              <Info className="w-3 h-3 text-white/30" />
                             </TooltipTrigger>
                             <TooltipContent>PostEx upfront payment amount</TooltipContent>
                           </Tooltip>
                         </div>
                       </TableHead>
-                      <TableHead className="text-right">
+                      <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">
                         <div className="flex items-center justify-end gap-1">
                           Reserve
                           <Tooltip>
                             <TooltipTrigger>
-                              <Info className="w-3 h-3 text-muted-foreground" />
+                              <Info className="w-3 h-3 text-white/30" />
                             </TooltipTrigger>
                             <TooltipContent>PostEx reserve payment amount</TooltipContent>
                           </Tooltip>

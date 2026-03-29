@@ -57,7 +57,14 @@ interface AnalyticsData {
   }>;
 }
 
-const COLORS = ["hsl(220, 70%, 50%)", "hsl(160, 60%, 45%)", "hsl(35, 90%, 50%)", "hsl(280, 60%, 55%)", "hsl(350, 70%, 55%)"];
+const COLORS = ["#3b82f6", "#10b981", "#8b5cf6", "#f59e0b", "#ffffff40"];
+
+const darkTooltipStyle = {
+  backgroundColor: "#0d1322",
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: "8px",
+  color: "rgba(255,255,255,0.9)",
+};
 
 export default function Analytics() {
   const { dateRange, dateParams } = useDateRange();
@@ -111,122 +118,118 @@ export default function Analytics() {
     exportCsvWithDate("analytics", headers, rows);
   }
 
+  const statCards = [
+    {
+      label: "Total Orders",
+      value: overview?.totalOrders ?? 0,
+      icon: Package,
+      iconClass: "text-blue-400",
+      iconBg: "bg-blue-500/10",
+      valueClass: "text-white/90",
+    },
+    {
+      label: "Delivered",
+      value: overview?.totalDelivered ?? 0,
+      icon: CheckCircle2,
+      iconClass: "text-emerald-400",
+      iconBg: "bg-emerald-500/10",
+      valueClass: "text-emerald-400",
+    },
+    {
+      label: "Delivery Rate",
+      value: `${overview?.deliveryRate ?? 0}%`,
+      icon: TrendingUp,
+      iconClass: "text-amber-400",
+      iconBg: "bg-amber-500/10",
+      valueClass: "text-amber-400",
+    },
+    {
+      label: "Total Revenue",
+      value: `PKR ${overview?.totalRevenue ?? "0"}`,
+      icon: BarChart3,
+      iconClass: "text-emerald-400",
+      iconBg: "bg-emerald-500/10",
+      valueClass: "text-emerald-400",
+    },
+  ];
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Analytics</h1>
-          <p className="text-muted-foreground">Track performance and insights across your operations.</p>
+          <h1 className="text-2xl font-bold text-white/90">Analytics</h1>
+          <p className="text-white/40 text-sm mt-0.5">Track performance and insights across your operations.</p>
         </div>
         <Button
           variant="outline"
           onClick={handleExport}
           disabled={isLoading || (!courierPerformance.length && !cityBreakdown.length && !dailyOrders.length)}
+          className="bg-white/[0.04] border-white/[0.08] text-white/70 hover:bg-white/[0.08] hover:text-white"
           data-testid="button-export-analytics"
         >
           <Download className="w-4 h-4 mr-2" />
-          Export
+          Export CSV
         </Button>
       </div>
 
       <AIInsightsBanner section="analytics" />
 
       {/* Overview Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-1.5 mb-1">
-              <Package className="w-3.5 h-3.5 text-muted-foreground" />
-              <p className="text-xs text-muted-foreground font-medium">Total Orders</p>
-            </div>
-            {isLoading ? (
-              <Skeleton className="h-7 w-16" />
-            ) : (
-              <p className="text-xl font-bold">{overview?.totalOrders ?? 0}</p>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-1.5 mb-1">
-              <CheckCircle2 className="w-3.5 h-3.5 text-muted-foreground" />
-              <p className="text-xs text-muted-foreground font-medium">Delivered</p>
-            </div>
-            {isLoading ? (
-              <Skeleton className="h-7 w-16" />
-            ) : (
-              <p className="text-xl font-bold">{overview?.totalDelivered ?? 0}</p>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-1.5 mb-1">
-              <TrendingUp className="w-3.5 h-3.5 text-muted-foreground" />
-              <p className="text-xs text-muted-foreground font-medium">Delivery Rate</p>
-            </div>
-            {isLoading ? (
-              <Skeleton className="h-7 w-16" />
-            ) : (
-              <p className="text-xl font-bold">{overview?.deliveryRate ?? 0}%</p>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-1.5 mb-1">
-              <BarChart3 className="w-3.5 h-3.5 text-muted-foreground" />
-              <p className="text-xs text-muted-foreground font-medium">Total Revenue</p>
-            </div>
-            {isLoading ? (
-              <Skeleton className="h-7 w-24" />
-            ) : (
-              <p className="text-xl font-bold">PKR {overview?.totalRevenue ?? "0"}</p>
-            )}
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {statCards.map((card) => {
+          const Icon = card.icon;
+          return (
+            <Card key={card.label} className="bg-[#0d1322] border-white/[0.08]">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className={`w-8 h-8 rounded-lg ${card.iconBg} flex items-center justify-center`}>
+                    <Icon className={`w-4 h-4 ${card.iconClass}`} />
+                  </div>
+                </div>
+                <p className="text-[10px] text-white/40 font-medium uppercase tracking-wider">{card.label}</p>
+                {isLoading ? (
+                  <Skeleton className="h-7 w-20 mt-1" />
+                ) : (
+                  <p className={`text-xl font-bold mt-0.5 ${card.valueClass}`}>{card.value}</p>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       {/* Charts Row */}
-      <div className="grid lg:grid-cols-2 gap-6">
+      <div className="grid lg:grid-cols-2 gap-5">
         {/* Orders Trend */}
-        <Card>
+        <Card className="bg-[#0d1322] border-white/[0.08]">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Orders Trend</CardTitle>
+            <CardTitle className="text-sm font-semibold text-white/80">Orders Trend</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <Skeleton className="h-[300px] w-full" />
+              <Skeleton className="h-[280px] w-full" />
             ) : dailyOrders.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
+              <ResponsiveContainer width="100%" height={280}>
                 <LineChart data={dailyOrders}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
                   <XAxis
                     dataKey="date"
-                    tick={{ fontSize: 12 }}
+                    tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 11 }}
                     tickLine={false}
                     axisLine={false}
-                    className="text-muted-foreground"
                   />
                   <YAxis
-                    tick={{ fontSize: 12 }}
+                    tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 11 }}
                     tickLine={false}
                     axisLine={false}
-                    className="text-muted-foreground"
                   />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "8px",
-                    }}
-                  />
-                  <Legend />
+                  <Tooltip contentStyle={darkTooltipStyle} />
+                  <Legend wrapperStyle={{ color: "rgba(255,255,255,0.5)", fontSize: 12 }} />
                   <Line
                     type="monotone"
                     dataKey="orders"
-                    stroke="hsl(220, 70%, 50%)"
+                    stroke="#3b82f6"
                     strokeWidth={2}
                     dot={false}
                     name="Orders"
@@ -234,7 +237,7 @@ export default function Analytics() {
                   <Line
                     type="monotone"
                     dataKey="delivered"
-                    stroke="hsl(160, 60%, 45%)"
+                    stroke="#10b981"
                     strokeWidth={2}
                     dot={false}
                     name="Delivered"
@@ -242,7 +245,7 @@ export default function Analytics() {
                 </LineChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+              <div className="h-[280px] flex items-center justify-center text-white/30 text-sm">
                 No data available
               </div>
             )}
@@ -250,39 +253,38 @@ export default function Analytics() {
         </Card>
 
         {/* Courier Performance */}
-        <Card>
+        <Card className="bg-[#0d1322] border-white/[0.08]">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Courier Performance</CardTitle>
+            <CardTitle className="text-sm font-semibold text-white/80">Courier Performance</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <Skeleton className="h-[300px] w-full" />
+              <Skeleton className="h-[280px] w-full" />
             ) : courierPerformance.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
+              <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={courierPerformance} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" horizontal={false} />
-                  <XAxis type="number" tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" horizontal={false} />
+                  <XAxis
+                    type="number"
+                    tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 11 }}
+                    tickLine={false}
+                    axisLine={false}
+                  />
                   <YAxis
                     type="category"
                     dataKey="courier"
-                    tick={{ fontSize: 12 }}
+                    tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 11 }}
                     tickLine={false}
                     axisLine={false}
                     width={80}
                   />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "8px",
-                    }}
-                  />
-                  <Bar dataKey="delivered" fill="hsl(160, 60%, 45%)" name="Delivered" radius={[0, 4, 4, 0]} />
-                  <Bar dataKey="returned" fill="hsl(350, 70%, 55%)" name="Returned" radius={[0, 4, 4, 0]} />
+                  <Tooltip contentStyle={darkTooltipStyle} />
+                  <Bar dataKey="delivered" fill="#10b981" name="Delivered" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="returned" fill="rgba(239,68,68,0.6)" name="Returned" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+              <div className="h-[280px] flex items-center justify-center text-white/30 text-sm">
                 No courier data available
               </div>
             )}
@@ -291,16 +293,16 @@ export default function Analytics() {
       </div>
 
       {/* City Breakdown */}
-      <div className="grid lg:grid-cols-2 gap-6">
-        <Card>
+      <div className="grid lg:grid-cols-2 gap-5">
+        <Card className="bg-[#0d1322] border-white/[0.08]">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Orders by City</CardTitle>
+            <CardTitle className="text-sm font-semibold text-white/80">Orders by City</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <Skeleton className="h-[300px] w-full" />
+              <Skeleton className="h-[280px] w-full" />
             ) : cityBreakdown.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
+              <ResponsiveContainer width="100%" height={280}>
                 <PieChart>
                   <Pie
                     data={cityBreakdown.slice(0, 5)}
@@ -308,7 +310,6 @@ export default function Analytics() {
                     cy="50%"
                     labelLine={false}
                     outerRadius={100}
-                    fill="#8884d8"
                     dataKey="orders"
                     label={({ city, percent }) => `${city} ${(percent * 100).toFixed(0)}%`}
                   >
@@ -316,17 +317,11 @@ export default function Analytics() {
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "8px",
-                    }}
-                  />
+                  <Tooltip contentStyle={darkTooltipStyle} />
                 </PieChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+              <div className="h-[280px] flex items-center justify-center text-white/30 text-sm">
                 No city data available
               </div>
             )}
@@ -334,37 +329,37 @@ export default function Analytics() {
         </Card>
 
         {/* Top Cities Table */}
-        <Card>
+        <Card className="bg-[#0d1322] border-white/[0.08]">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Top Cities by Orders</CardTitle>
+            <CardTitle className="text-sm font-semibold text-white/80">Top Cities by Orders</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {[1, 2, 3, 4, 5].map((i) => (
-                  <Skeleton key={i} className="h-12 w-full" />
+                  <Skeleton key={i} className="h-10 w-full" />
                 ))}
               </div>
             ) : cityBreakdown.length > 0 ? (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {cityBreakdown.slice(0, 6).map((city, index) => (
-                  <div key={city.city} className="flex items-center justify-between gap-4">
+                  <div key={city.city} className="flex items-center justify-between gap-4 px-3 py-2 rounded-lg hover:bg-blue-500/[0.06] transition-colors">
                     <div className="flex items-center gap-2.5">
-                      <span className="text-xs text-muted-foreground font-medium w-4 text-right tabular-nums">{index + 1}</span>
+                      <span className="text-xs text-white/30 font-medium w-4 text-right tabular-nums">{index + 1}</span>
                       <div>
-                        <p className="text-sm font-medium">{city.city}</p>
-                        <p className="text-xs text-muted-foreground">{city.orders} orders</p>
+                        <p className="text-sm font-medium text-white/80">{city.city}</p>
+                        <p className="text-xs text-white/40">{city.orders} orders</p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm font-medium tabular-nums">PKR {city.revenue}</p>
-                      <p className="text-xs text-muted-foreground">{city.delivered} delivered</p>
+                      <p className="text-sm font-medium text-emerald-400 tabular-nums">PKR {city.revenue}</p>
+                      <p className="text-xs text-white/40">{city.delivered} delivered</p>
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="h-[280px] flex items-center justify-center text-muted-foreground">
+              <div className="h-[260px] flex items-center justify-center text-white/30 text-sm">
                 No city data available
               </div>
             )}

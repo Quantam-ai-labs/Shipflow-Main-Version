@@ -373,53 +373,53 @@ function ReconciliationSection() {
 
       {/* Summary cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="bg-gradient-to-br from-amber-500/5 to-amber-500/10 border-amber-500/20">
-          <CardContent className="p-6">
+        <Card className="bg-[#0d1322] border-amber-500/20">
+          <CardContent className="p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-sm text-muted-foreground">Pending Collection</p>
+                <p className="text-[10px] text-white/40 font-medium uppercase tracking-wider">Pending Collection</p>
                 {isLoading ? <Skeleton className="h-8 w-28 mt-1" /> : (
                   <>
-                    <p className="text-2xl font-bold" data-testid="text-pending-amount">PKR {summary?.totalPending ?? "0"}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{summary?.pendingCount ?? 0} orders</p>
+                    <p className="text-2xl font-bold text-amber-400" data-testid="text-pending-amount">PKR {summary?.totalPending ?? "0"}</p>
+                    <p className="text-xs text-white/30 mt-1">{summary?.pendingCount ?? 0} orders</p>
                   </>
                 )}
               </div>
-              <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
-                <Clock className="w-5 h-5 text-amber-500" />
+              <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                <Clock className="w-5 h-5 text-amber-400" />
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card className="bg-gradient-to-br from-green-500/5 to-green-500/10 border-green-500/20">
-          <CardContent className="p-6">
+        <Card className="bg-[#0d1322] border-emerald-500/20">
+          <CardContent className="p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-sm text-muted-foreground">Total Received</p>
+                <p className="text-[10px] text-white/40 font-medium uppercase tracking-wider">Total Received</p>
                 {isLoading ? <Skeleton className="h-8 w-28 mt-1" /> : (
                   <>
-                    <p className="text-2xl font-bold" data-testid="text-received-amount">PKR {summary?.totalReceived ?? "0"}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{summary?.receivedCount ?? 0} orders</p>
+                    <p className="text-2xl font-bold text-emerald-400" data-testid="text-received-amount">PKR {summary?.totalReceived ?? "0"}</p>
+                    <p className="text-xs text-white/30 mt-1">{summary?.receivedCount ?? 0} orders</p>
                   </>
                 )}
               </div>
-              <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
-                <CheckCircle2 className="w-5 h-5 text-green-500" />
+              <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card className="bg-gradient-to-br from-red-500/5 to-red-500/10 border-red-500/20">
-          <CardContent className="p-6">
+        <Card className="bg-[#0d1322] border-red-500/20">
+          <CardContent className="p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-sm text-muted-foreground">Disputed</p>
+                <p className="text-[10px] text-white/40 font-medium uppercase tracking-wider">Disputed</p>
                 {isLoading ? <Skeleton className="h-8 w-28 mt-1" /> : (
-                  <p className="text-2xl font-bold" data-testid="text-disputed-amount">PKR {summary?.totalDisputed ?? "0"}</p>
+                  <p className="text-2xl font-bold text-red-400" data-testid="text-disputed-amount">PKR {summary?.totalDisputed ?? "0"}</p>
                 )}
               </div>
-              <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
-                <AlertCircle className="w-5 h-5 text-red-500" />
+              <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center">
+                <AlertCircle className="w-5 h-5 text-red-400" />
               </div>
             </div>
           </CardContent>
@@ -427,7 +427,7 @@ function ReconciliationSection() {
       </div>
 
       {/* Filters */}
-      <Card>
+      <Card className="bg-[#0d1322] border-white/[0.08]">
         <CardContent className="p-4">
           <div className="flex flex-col lg:flex-row gap-4">
             <div className="relative flex-1">
@@ -459,12 +459,12 @@ function ReconciliationSection() {
       </Card>
 
       {/* Table */}
-      <Card>
+      <Card className="bg-[#0d1322] border-white/[0.08]">
         <CardHeader className="pb-4">
-          <CardTitle className="text-lg font-semibold flex items-center gap-2">
-            <DollarSign className="w-5 h-5" />
+          <CardTitle className="text-sm font-semibold text-white/80 flex items-center gap-2">
+            <DollarSign className="w-4 h-4 text-blue-400" />
             COD Records
-            {data?.total !== undefined && <Badge variant="secondary" className="ml-2">{data.total} records</Badge>}
+            {data?.total !== undefined && <Badge className="ml-2 bg-blue-500/10 text-blue-400 border border-blue-500/20">{data.total} records</Badge>}
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -482,38 +482,38 @@ function ReconciliationSection() {
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
-                    <TableRow>
+                    <TableRow className="bg-white/[0.04] hover:bg-white/[0.04] border-b border-white/[0.06]">
                       <TableHead className="w-[50px]">
                         <Checkbox checked={allPendingSelected} onCheckedChange={handleSelectAll} disabled={pendingRecords.length === 0} data-testid="checkbox-select-all" />
                       </TableHead>
-                      <TableHead>Tracking #</TableHead>
-                      <TableHead>Courier</TableHead>
-                      <TableHead className="text-right">COD Amount</TableHead>
-                      <TableHead className="text-right">
+                      <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Tracking #</TableHead>
+                      <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Courier</TableHead>
+                      <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">COD Amount</TableHead>
+                      <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">
                         <div className="flex items-center justify-end gap-1">
                           Service Fee
-                          <Tooltip><TooltipTrigger><Info className="w-3 h-3 text-muted-foreground" /></TooltipTrigger>
+                          <Tooltip><TooltipTrigger><Info className="w-3 h-3 text-white/30" /></TooltipTrigger>
                           <TooltipContent>Courier delivery/service charges per shipment</TooltipContent></Tooltip>
                         </div>
                       </TableHead>
-                      <TableHead className="text-right">Tax</TableHead>
-                      <TableHead className="text-right">
+                      <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">Tax</TableHead>
+                      <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">
                         <div className="flex items-center justify-end gap-1">
                           Reversal
-                          <Tooltip><TooltipTrigger><Info className="w-3 h-3 text-muted-foreground" /></TooltipTrigger>
+                          <Tooltip><TooltipTrigger><Info className="w-3 h-3 text-white/30" /></TooltipTrigger>
                           <TooltipContent>Charges for returned/reversed shipments</TooltipContent></Tooltip>
                         </div>
                       </TableHead>
-                      <TableHead className="text-right font-semibold">Net Paid</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Courier Payment</TableHead>
-                      <TableHead>Method</TableHead>
-                      <TableHead>Billing</TableHead>
-                      <TableHead>Invoice / Cheque #</TableHead>
-                      <TableHead>Settlement Date</TableHead>
-                      <TableHead>Message</TableHead>
-                      <TableHead>Slip</TableHead>
-                      <TableHead>Last Synced</TableHead>
+                      <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">Net Paid</TableHead>
+                      <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Status</TableHead>
+                      <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Courier Payment</TableHead>
+                      <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Method</TableHead>
+                      <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Billing</TableHead>
+                      <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Invoice / Cheque #</TableHead>
+                      <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Settlement Date</TableHead>
+                      <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Message</TableHead>
+                      <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Slip</TableHead>
+                      <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Last Synced</TableHead>
                       <TableHead className="w-[50px]"></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -701,17 +701,17 @@ function ReceivableSection() {
       {isLoading ? (
         <Skeleton className="h-28 w-full max-w-sm" />
       ) : (
-        <Card className="max-w-sm" data-testid="card-total-pending">
-          <CardContent className="p-6">
-            <div className="space-y-3">
+        <Card className="max-w-sm bg-[#0d1322] border-amber-500/20" data-testid="card-total-pending">
+          <CardContent className="p-5">
+            <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <p className="text-sm text-muted-foreground">Total COD Pending</p>
-                <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
-                  <Banknote className="w-5 h-5 text-amber-500" />
+                <p className="text-[10px] text-white/40 font-medium uppercase tracking-wider">Total COD Pending</p>
+                <div className="w-9 h-9 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                  <Banknote className="w-4 h-4 text-amber-400" />
                 </div>
               </div>
-              <p className="text-2xl font-bold" data-testid="text-total-pending-amount">Rs. {totalPending.toLocaleString()}</p>
-              <p className="text-xs text-muted-foreground">{totalCount} orders pending</p>
+              <p className="text-2xl font-bold text-amber-400" data-testid="text-total-pending-amount">Rs. {totalPending.toLocaleString()}</p>
+              <p className="text-xs text-white/30">{totalCount} orders pending</p>
             </div>
           </CardContent>
         </Card>
@@ -727,8 +727,8 @@ function ReceivableSection() {
         </div>
       )}
 
-      <Card>
-        <CardHeader><CardTitle className="text-lg">Pending COD Orders</CardTitle></CardHeader>
+      <Card className="bg-[#0d1322] border-white/[0.08]">
+        <CardHeader><CardTitle className="text-sm font-semibold text-white/80">Pending COD Orders</CardTitle></CardHeader>
         <CardContent>
           {isLoading ? (
             <div className="space-y-3">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
@@ -736,13 +736,13 @@ function ReceivableSection() {
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Order</TableHead>
-                    <TableHead>Courier</TableHead>
-                    <TableHead>Tracking</TableHead>
-                    <TableHead className="text-right">COD Amount</TableHead>
-                    <TableHead>Delivery Date</TableHead>
-                    <TableHead className="text-right">Days Pending</TableHead>
+                  <TableRow className="bg-white/[0.04] hover:bg-white/[0.04] border-b border-white/[0.06]">
+                    <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Order</TableHead>
+                    <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Courier</TableHead>
+                    <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Tracking</TableHead>
+                    <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">COD Amount</TableHead>
+                    <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Delivery Date</TableHead>
+                    <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">Days Pending</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -848,23 +848,23 @@ function SettlementsSection() {
             { label: "Settled", value: summary.settledCount, icon: CheckCircle2, color: "text-emerald-400" },
             { label: "Pending", value: summary.pendingCount, icon: Clock, color: "text-amber-400" },
           ].map(({ label, value, icon: Icon, color }) => (
-            <Card key={label}>
+            <Card key={label} className="bg-[#0d1322] border-white/[0.08]">
               <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
-                <Icon className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-[10px] font-medium text-white/40 uppercase tracking-wider">{label}</CardTitle>
+                <Icon className={`h-4 w-4 ${color || "text-white/30"}`} />
               </CardHeader>
               <CardContent>
-                <div className={`text-2xl font-bold ${color}`}>{value}</div>
+                <div className={`text-2xl font-bold ${color || "text-white/80"}`}>{value}</div>
               </CardContent>
             </Card>
           ))}
         </div>
       )}
 
-      <Card>
+      <Card className="bg-[#0d1322] border-white/[0.08]">
         <CardHeader className="pb-3">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-            <CardTitle className="text-lg">Settlement Records</CardTitle>
+            <CardTitle className="text-sm font-semibold text-white/80">Settlement Records</CardTitle>
             <div className="flex flex-wrap items-center gap-2">
               <div className="relative w-full md:w-64">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -903,17 +903,17 @@ function SettlementsSection() {
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Reference</TableHead>
-                    <TableHead>Courier</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Method</TableHead>
-                    <TableHead className="text-right">Shipments</TableHead>
-                    <TableHead className="text-right">Total COD</TableHead>
-                    <TableHead className="text-right">Deductions</TableHead>
-                    <TableHead className="text-right">Settlement Amount</TableHead>
-                    <TableHead>Settlement Date</TableHead>
-                    <TableHead>Slip</TableHead>
+                  <TableRow className="bg-white/[0.04] hover:bg-white/[0.04] border-b border-white/[0.06]">
+                    <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Reference</TableHead>
+                    <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Courier</TableHead>
+                    <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Status</TableHead>
+                    <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Method</TableHead>
+                    <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">Shipments</TableHead>
+                    <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">Total COD</TableHead>
+                    <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">Deductions</TableHead>
+                    <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">Settlement Amount</TableHead>
+                    <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Settlement Date</TableHead>
+                    <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Slip</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -923,7 +923,7 @@ function SettlementsSection() {
                         <div className="flex flex-col gap-0.5">
                           <span className="font-mono text-sm font-medium">{getDisplayRef(cheque)}</span>
                           {cheque.chequeRef && cheque.settlementDate && (
-                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+                            <span className="text-xs text-white/40 flex items-center gap-1">
                               <Calendar className="w-3 h-3" />{formatPkDate(cheque.settlementDate)}
                             </span>
                           )}
@@ -1015,32 +1015,32 @@ function PayableSection() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {courierEntries.map(([courier, summary]) => (
-            <Card key={courier} data-testid={`card-courier-${courier}`}>
-              <CardContent className="p-6">
-                <div className="space-y-3">
+            <Card key={courier} className="bg-[#0d1322] border-white/[0.08]" data-testid={`card-courier-${courier}`}>
+              <CardContent className="p-5">
+                <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <p className="text-sm text-muted-foreground">{courier}</p>
-                    <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                      <Truck className="w-5 h-5 text-blue-500" />
+                    <p className="text-[10px] text-white/40 font-medium uppercase tracking-wider">{courier}</p>
+                    <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                      <Truck className="w-4 h-4 text-blue-400" />
                     </div>
                   </div>
-                  <p className="text-2xl font-bold">Rs. {summary.totalDue.toLocaleString()}</p>
-                  <p className="text-xs text-muted-foreground">{summary.shipments} shipments</p>
+                  <p className="text-2xl font-bold text-blue-400">Rs. {summary.totalDue.toLocaleString()}</p>
+                  <p className="text-xs text-white/30">{summary.shipments} shipments</p>
                 </div>
               </CardContent>
             </Card>
           ))}
           {courierEntries.length === 0 && (
-            <Card><CardContent className="p-6"><p className="text-sm text-muted-foreground">No payables found</p></CardContent></Card>
+            <Card className="bg-[#0d1322] border-white/[0.08]"><CardContent className="p-5"><p className="text-sm text-white/30">No payables found</p></CardContent></Card>
           )}
         </div>
       )}
 
-      <Card>
+      <Card className="bg-[#0d1322] border-white/[0.08]">
         <CardHeader>
-          <CardTitle className="text-lg">
+          <CardTitle className="text-sm font-semibold text-white/80">
             Courier Payable Details
-            {grandTotal > 0 && <span className="text-sm font-normal text-muted-foreground ml-2">Total: Rs. {grandTotal.toLocaleString()}</span>}
+            {grandTotal > 0 && <span className="text-sm font-normal text-white/40 ml-2">Total: Rs. {grandTotal.toLocaleString()}</span>}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -1050,11 +1050,11 @@ function PayableSection() {
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Courier</TableHead>
-                    <TableHead className="text-right">Total Shipments</TableHead>
-                    <TableHead className="text-right">Total Due</TableHead>
-                    <TableHead>Last Settlement Date</TableHead>
+                  <TableRow className="bg-white/[0.04] hover:bg-white/[0.04] border-b border-white/[0.06]">
+                    <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Courier</TableHead>
+                    <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">Total Shipments</TableHead>
+                    <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">Total Due</TableHead>
+                    <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Last Settlement Date</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

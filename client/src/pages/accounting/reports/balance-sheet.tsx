@@ -24,9 +24,9 @@ function formatPKR(amount: number): string {
 
 function LineItem({ label, amount, bold, color }: { label: string; amount: number; bold?: boolean; color?: string }) {
   return (
-    <div className={`flex items-center justify-between py-2 ${bold ? "font-semibold text-base" : "text-sm"}`}>
-      <span className={color || ""}>{label}</span>
-      <span className={color || ""} data-testid={`text-bs-${label.toLowerCase().replace(/\s+/g, "-")}`}>
+    <div className={`flex items-center justify-between py-2 border-b border-white/[0.04] last:border-0 ${bold ? "font-semibold text-base" : "text-sm"}`}>
+      <span className={color || "text-white/60"}>{label}</span>
+      <span className={color || "text-white/80"} data-testid={`text-bs-${label.toLowerCase().replace(/\s+/g, "-")}`}>
         {formatPKR(amount)}
       </span>
     </div>
@@ -35,12 +35,12 @@ function LineItem({ label, amount, bold, color }: { label: string; amount: numbe
 
 function PageSkeleton() {
   return (
-    <div className="space-y-6" data-testid="balance-sheet-skeleton">
+    <div className="space-y-5 p-6" data-testid="balance-sheet-skeleton">
       <Skeleton className="h-8 w-48" />
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {Array.from({ length: 3 }).map((_, i) => (
-          <Card key={i}>
-            <CardContent className="p-6 space-y-3">
+          <Card key={i} className="bg-[#0d1322] border-white/[0.08]">
+            <CardContent className="p-5 space-y-3">
               <Skeleton className="h-5 w-32" />
               <Skeleton className="h-8 w-40" />
               <Skeleton className="h-4 w-full" />
@@ -65,52 +65,52 @@ export default function AccountingBalanceSheet() {
   const netWorth = assets.total - liabilities.total;
 
   return (
-    <div className="space-y-6" data-testid="accounting-balance-sheet">
+    <div className="space-y-5 p-6" data-testid="accounting-balance-sheet">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight" data-testid="text-page-title">
+        <h1 className="text-2xl font-bold text-white/90 tracking-tight" data-testid="text-page-title">
           Balance Snapshot
         </h1>
-        <p className="text-muted-foreground mt-2">Current financial position</p>
+        <p className="text-white/40 text-sm mt-1">Current financial position</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card data-testid="card-assets">
-          <CardHeader>
-            <CardTitle className="text-lg">Assets</CardTitle>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card className="bg-[#0d1322] border-white/[0.08]" data-testid="card-assets">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold text-white/80">Assets</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-1">
+            <div className="space-y-0">
               {accounts.map((acct) => (
                 <LineItem key={acct.id} label={acct.name} amount={parseFloat(acct.balance)} />
               ))}
-              {accounts.length > 0 && <Separator className="my-2" />}
+              {accounts.length > 0 && <Separator className="my-2 bg-white/[0.08]" />}
               <LineItem label="Total Cash" amount={assets.cash} bold />
               <LineItem label="Inventory" amount={assets.inventory} />
               <LineItem label="Receivables" amount={assets.receivables} />
-              <Separator className="my-2" />
+              <Separator className="my-2 bg-white/[0.08]" />
               <LineItem label="Total Assets" amount={assets.total} bold color="text-emerald-400" />
             </div>
           </CardContent>
         </Card>
 
-        <Card data-testid="card-liabilities">
-          <CardHeader>
-            <CardTitle className="text-lg">Liabilities</CardTitle>
+        <Card className="bg-[#0d1322] border-white/[0.08]" data-testid="card-liabilities">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold text-white/80">Liabilities</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-1">
+            <div className="space-y-0">
               <LineItem label="Payables" amount={liabilities.payables} />
-              <Separator className="my-2" />
+              <Separator className="my-2 bg-white/[0.08]" />
               <LineItem label="Total Liabilities" amount={liabilities.total} bold color="text-red-400" />
             </div>
           </CardContent>
         </Card>
       </div>
 
-      <Card data-testid="card-net-worth">
-        <CardContent className="p-6">
+      <Card className="bg-[#0d1322] border-white/[0.08]" data-testid="card-net-worth">
+        <CardContent className="p-5">
           <LineItem
-            label="Net Worth (Assets - Liabilities)"
+            label="Net Worth (Assets − Liabilities)"
             amount={netWorth}
             bold
             color={netWorth >= 0 ? "text-emerald-400" : "text-red-400"}

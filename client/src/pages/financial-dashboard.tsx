@@ -102,17 +102,24 @@ function formatMonth(month: string): string {
   }
 }
 
+const darkTooltipStyle = {
+  backgroundColor: "#0d1322",
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: "8px",
+  color: "rgba(255,255,255,0.9)",
+};
+
 function SummaryCardSkeleton() {
   return (
-    <Card>
-      <CardContent className="p-6">
+    <Card className="bg-[#0d1322] border-white/[0.08]">
+      <CardContent className="p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-2">
             <Skeleton className="h-4 w-24" />
             <Skeleton className="h-8 w-32" />
             <Skeleton className="h-3 w-20" />
           </div>
-          <Skeleton className="w-10 h-10 rounded-lg" />
+          <Skeleton className="w-9 h-9 rounded-lg" />
         </div>
       </CardContent>
     </Card>
@@ -167,26 +174,26 @@ export default function FinancialDashboard() {
     <div className="space-y-6" data-testid="financial-dashboard">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold" data-testid="text-financial-title">Financial Overview</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-2xl font-semibold text-white/90" data-testid="text-financial-title">Financial Overview</h1>
+          <p className="text-sm text-white/40">
             Track revenue, expenses, stock, and courier dues
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Link href="/expense-tracker">
-            <Button variant="outline" data-testid="link-expenses">
+            <Button variant="outline" className="bg-white/[0.04] border-white/[0.08] text-white/70 hover:bg-white/[0.08]" data-testid="link-expenses">
               <Receipt className="w-4 h-4 mr-2" />
               Expenses
             </Button>
           </Link>
           <Link href="/stock-ledger">
-            <Button variant="outline" data-testid="link-stock-ledger">
+            <Button variant="outline" className="bg-white/[0.04] border-white/[0.08] text-white/70 hover:bg-white/[0.08]" data-testid="link-stock-ledger">
               <Package className="w-4 h-4 mr-2" />
               Stock Ledger
             </Button>
           </Link>
           <Link href="/courier-dues">
-            <Button variant="outline" data-testid="link-courier-dues">
+            <Button variant="outline" className="bg-white/[0.04] border-white/[0.08] text-white/70 hover:bg-white/[0.08]" data-testid="link-courier-dues">
               <Truck className="w-4 h-4 mr-2" />
               Courier Dues
             </Button>
@@ -204,56 +211,64 @@ export default function FinancialDashboard() {
           </>
         ) : (
           <>
-            <Card>
-              <CardContent className="p-6">
+            <Card className="bg-[#0d1322] border-white/[0.08]">
+              <CardContent className="p-5">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-sm text-muted-foreground">Revenue</p>
-                    <p className="text-2xl font-bold" data-testid="text-revenue">{formatPKR(revenue)}</p>
-                    <p className="text-xs text-muted-foreground">{data?.revenue?.deliveredOrders || 0} delivered orders</p>
+                    <p className="text-[10px] text-white/40 font-medium uppercase tracking-wider">Revenue</p>
+                    <p className="text-2xl font-bold text-emerald-400 mt-1" data-testid="text-revenue">{formatPKR(revenue)}</p>
+                    <p className="text-xs text-white/30 mt-1">{data?.revenue?.deliveredOrders || 0} delivered orders</p>
                   </div>
-                  <TrendingUp className="w-5 h-5 text-muted-foreground" />
+                  <div className="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                    <TrendingUp className="w-4 h-4 text-emerald-400" />
+                  </div>
                 </div>
               </CardContent>
             </Card>
 
-            <Card>
-              <CardContent className="p-6">
+            <Card className="bg-[#0d1322] border-white/[0.08]">
+              <CardContent className="p-5">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-sm text-muted-foreground">Total Expenses</p>
-                    <p className="text-2xl font-bold" data-testid="text-expenses">{formatPKR(expenses)}</p>
-                    <p className="text-xs text-muted-foreground">{data?.expenses?.count || 0} expense entries</p>
+                    <p className="text-[10px] text-white/40 font-medium uppercase tracking-wider">Total Expenses</p>
+                    <p className="text-2xl font-bold text-amber-400 mt-1" data-testid="text-expenses">{formatPKR(expenses)}</p>
+                    <p className="text-xs text-white/30 mt-1">{data?.expenses?.count || 0} expense entries</p>
                   </div>
-                  <TrendingDown className="w-5 h-5 text-muted-foreground" />
+                  <div className="w-9 h-9 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                    <TrendingDown className="w-4 h-4 text-amber-400" />
+                  </div>
                 </div>
               </CardContent>
             </Card>
 
-            <Card>
-              <CardContent className="p-6">
+            <Card className="bg-[#0d1322] border-white/[0.08]">
+              <CardContent className="p-5">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-sm text-muted-foreground">Net {isProfit ? "Profit" : "Loss"}</p>
-                    <p className={`text-2xl font-bold ${isProfit ? "text-emerald-400" : "text-red-400"}`} data-testid="text-net-profit">
+                    <p className="text-[10px] text-white/40 font-medium uppercase tracking-wider">Net {isProfit ? "Profit" : "Loss"}</p>
+                    <p className={`text-2xl font-bold mt-1 ${isProfit ? "text-emerald-400" : "text-red-400"}`} data-testid="text-net-profit">
                       {formatPKR(Math.abs(netProfit))}
                     </p>
-                    <p className="text-xs text-muted-foreground">{isProfit ? "Positive" : "Negative"} margin</p>
+                    <p className="text-xs text-white/30 mt-1">{isProfit ? "Positive" : "Negative"} margin</p>
                   </div>
-                  <DollarSign className="w-5 h-5 text-muted-foreground" />
+                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${isProfit ? "bg-emerald-500/10" : "bg-red-500/10"}`}>
+                    <DollarSign className={`w-4 h-4 ${isProfit ? "text-emerald-400" : "text-red-400"}`} />
+                  </div>
                 </div>
               </CardContent>
             </Card>
 
-            <Card>
-              <CardContent className="p-6">
+            <Card className="bg-[#0d1322] border-white/[0.08]">
+              <CardContent className="p-5">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-sm text-muted-foreground">Outstanding Dues</p>
-                    <p className="text-2xl font-bold" data-testid="text-outstanding-dues">{formatPKR(pendingDues)}</p>
-                    <p className="text-xs text-muted-foreground">Pending courier payables</p>
+                    <p className="text-[10px] text-white/40 font-medium uppercase tracking-wider">Outstanding Dues</p>
+                    <p className="text-2xl font-bold text-amber-400 mt-1" data-testid="text-outstanding-dues">{formatPKR(pendingDues)}</p>
+                    <p className="text-xs text-white/30 mt-1">Pending courier payables</p>
                   </div>
-                  <Truck className="w-5 h-5 text-muted-foreground" />
+                  <div className="w-9 h-9 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                    <Truck className="w-4 h-4 text-amber-400" />
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -261,62 +276,54 @@ export default function FinancialDashboard() {
         )}
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base font-semibold">
-              Monthly Expenses
-            </CardTitle>
+      <div className="grid lg:grid-cols-2 gap-5">
+        <Card className="bg-[#0d1322] border-white/[0.08]">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold text-white/80">Monthly Expenses</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <Skeleton className="h-[300px] w-full" />
+              <Skeleton className="h-[280px] w-full" />
             ) : monthlyData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
+              <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={monthlyData}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
                   <XAxis
                     dataKey="month"
-                    tick={{ fontSize: 12 }}
+                    tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 11 }}
                     tickLine={false}
                     axisLine={false}
                   />
                   <YAxis
-                    tick={{ fontSize: 12 }}
+                    tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 11 }}
                     tickLine={false}
                     axisLine={false}
                     tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
                   />
                   <Tooltip
                     formatter={(value: number) => [formatPKR(value), "Expenses"]}
-                    contentStyle={{
-                      backgroundColor: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "8px",
-                    }}
+                    contentStyle={darkTooltipStyle}
                   />
-                  <Bar dataKey="total" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="total" fill="#f59e0b" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-[300px] flex items-center justify-center text-muted-foreground" data-testid="text-no-monthly-data">
+              <div className="h-[280px] flex items-center justify-center text-white/30 text-sm" data-testid="text-no-monthly-data">
                 No monthly expense data available
               </div>
             )}
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base font-semibold">
-              Expense Breakdown
-            </CardTitle>
+        <Card className="bg-[#0d1322] border-white/[0.08]">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold text-white/80">Expense Breakdown</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <Skeleton className="h-[300px] w-full" />
+              <Skeleton className="h-[280px] w-full" />
             ) : categoryData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
+              <ResponsiveContainer width="100%" height={280}>
                 <PieChart>
                   <Pie
                     data={categoryData}
@@ -333,16 +340,12 @@ export default function FinancialDashboard() {
                   </Pie>
                   <Tooltip
                     formatter={(value: number) => [formatPKR(value), "Amount"]}
-                    contentStyle={{
-                      backgroundColor: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "8px",
-                    }}
+                    contentStyle={darkTooltipStyle}
                   />
                 </PieChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-[300px] flex items-center justify-center text-muted-foreground" data-testid="text-no-category-data">
+              <div className="h-[280px] flex items-center justify-center text-white/30 text-sm" data-testid="text-no-category-data">
                 No category data available
               </div>
             )}
@@ -350,73 +353,75 @@ export default function FinancialDashboard() {
         </Card>
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base font-semibold">
-              Stock Overview
-            </CardTitle>
+      <div className="grid lg:grid-cols-2 gap-5">
+        <Card className="bg-[#0d1322] border-white/[0.08]">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold text-white/80">Stock Overview</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <div className="space-y-4">
-                <Skeleton className="h-16 w-full" />
-                <Skeleton className="h-16 w-full" />
-                <Skeleton className="h-16 w-full" />
+              <div className="space-y-3">
+                <Skeleton className="h-14 w-full" />
+                <Skeleton className="h-14 w-full" />
+                <Skeleton className="h-14 w-full" />
               </div>
             ) : (
-              <div className="space-y-3" data-testid="stock-overview">
-                <div className="flex items-center justify-between gap-4 p-3 rounded-md border">
+              <div className="space-y-2" data-testid="stock-overview">
+                <div className="flex items-center justify-between gap-4 p-3 rounded-lg border border-white/[0.06] hover:bg-blue-500/[0.06] transition-colors">
                   <div className="flex items-center gap-3">
-                    <ArrowDownLeft className="w-4 h-4 text-muted-foreground" />
+                    <div className="w-7 h-7 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                      <ArrowDownLeft className="w-3.5 h-3.5 text-emerald-400" />
+                    </div>
                     <div>
-                      <p className="font-medium text-sm">Incoming Stock</p>
-                      <p className="text-xs text-muted-foreground">{stockIncoming?.totalQty || 0} units</p>
+                      <p className="font-medium text-sm text-white/80">Incoming Stock</p>
+                      <p className="text-xs text-white/40">{stockIncoming?.totalQty || 0} units</p>
                     </div>
                   </div>
-                  <p className="font-semibold text-sm" data-testid="text-stock-incoming-value">{formatPKR(stockIncoming?.totalValue || "0")}</p>
+                  <p className="font-semibold text-sm text-emerald-400" data-testid="text-stock-incoming-value">{formatPKR(stockIncoming?.totalValue || "0")}</p>
                 </div>
 
-                <div className="flex items-center justify-between gap-4 p-3 rounded-md border">
+                <div className="flex items-center justify-between gap-4 p-3 rounded-lg border border-white/[0.06] hover:bg-blue-500/[0.06] transition-colors">
                   <div className="flex items-center gap-3">
-                    <ArrowUpRight className="w-4 h-4 text-muted-foreground" />
+                    <div className="w-7 h-7 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                      <ArrowUpRight className="w-3.5 h-3.5 text-blue-400" />
+                    </div>
                     <div>
-                      <p className="font-medium text-sm">Outgoing Stock</p>
-                      <p className="text-xs text-muted-foreground">{stockOutgoing?.totalQty || 0} units</p>
+                      <p className="font-medium text-sm text-white/80">Outgoing Stock</p>
+                      <p className="text-xs text-white/40">{stockOutgoing?.totalQty || 0} units</p>
                     </div>
                   </div>
-                  <p className="font-semibold text-sm" data-testid="text-stock-outgoing-value">{formatPKR(stockOutgoing?.totalValue || "0")}</p>
+                  <p className="font-semibold text-sm text-blue-400" data-testid="text-stock-outgoing-value">{formatPKR(stockOutgoing?.totalValue || "0")}</p>
                 </div>
 
-                <div className="flex items-center justify-between gap-4 p-3 rounded-md border">
+                <div className="flex items-center justify-between gap-4 p-3 rounded-lg border border-white/[0.06] hover:bg-blue-500/[0.06] transition-colors">
                   <div className="flex items-center gap-3">
-                    <RotateCcw className="w-4 h-4 text-muted-foreground" />
+                    <div className="w-7 h-7 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                      <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+                    </div>
                     <div>
-                      <p className="font-medium text-sm">Returns</p>
-                      <p className="text-xs text-muted-foreground">{stockReturn?.totalQty || 0} units</p>
+                      <p className="font-medium text-sm text-white/80">Returns</p>
+                      <p className="text-xs text-white/40">{stockReturn?.totalQty || 0} units</p>
                     </div>
                   </div>
-                  <p className="font-semibold text-sm" data-testid="text-stock-return-value">{formatPKR(stockReturn?.totalValue || "0")}</p>
+                  <p className="font-semibold text-sm text-amber-400" data-testid="text-stock-return-value">{formatPKR(stockReturn?.totalValue || "0")}</p>
                 </div>
               </div>
             )}
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base font-semibold">
-              Courier Dues Summary
-            </CardTitle>
+        <Card className="bg-[#0d1322] border-white/[0.08]">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold text-white/80">Courier Dues Summary</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <div className="space-y-4">
-                <Skeleton className="h-16 w-full" />
-                <Skeleton className="h-16 w-full" />
+              <div className="space-y-3">
+                <Skeleton className="h-14 w-full" />
+                <Skeleton className="h-14 w-full" />
               </div>
             ) : Object.keys(courierGroups).length > 0 ? (
-              <div className="space-y-4" data-testid="courier-dues-summary">
+              <div className="space-y-3" data-testid="courier-dues-summary">
                 {Object.entries(courierGroups).map(([courier, dues]) => {
                   const totalPayable = dues
                     .filter((d) => d.type === "payable")
@@ -428,32 +433,32 @@ export default function FinancialDashboard() {
                   const settledCount = dues.filter((d) => d.status === "settled").length;
 
                   return (
-                    <div key={courier} className="p-3 rounded-md border" data-testid={`courier-due-${courier}`}>
+                    <div key={courier} className="p-3 rounded-lg border border-white/[0.06]" data-testid={`courier-due-${courier}`}>
                       <div className="flex items-center justify-between gap-4 mb-2">
-                        <p className="font-medium text-sm">{courier}</p>
+                        <p className="font-medium text-sm text-white/80">{courier}</p>
                         <div className="flex items-center gap-1.5">
                           {pendingCount > 0 && (
-                            <Badge variant="secondary" className="text-xs">
+                            <Badge className="bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs">
                               {pendingCount} pending
                             </Badge>
                           )}
                           {settledCount > 0 && (
-                            <Badge variant="secondary" className="text-xs">
+                            <Badge className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs">
                               {settledCount} settled
                             </Badge>
                           )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                        {totalPayable > 0 && <span>Payable: {formatPKR(totalPayable)}</span>}
-                        {totalReceivable > 0 && <span>Receivable: {formatPKR(totalReceivable)}</span>}
+                      <div className="flex items-center gap-4 text-xs text-white/40">
+                        {totalPayable > 0 && <span>Payable: <span className="text-amber-400">{formatPKR(totalPayable)}</span></span>}
+                        {totalReceivable > 0 && <span>Receivable: <span className="text-emerald-400">{formatPKR(totalReceivable)}</span></span>}
                       </div>
                     </div>
                   );
                 })}
               </div>
             ) : (
-              <div className="h-[200px] flex items-center justify-center text-muted-foreground" data-testid="text-no-courier-dues">
+              <div className="h-[200px] flex items-center justify-center text-white/30 text-sm" data-testid="text-no-courier-dues">
                 No courier dues data available
               </div>
             )}
@@ -461,11 +466,9 @@ export default function FinancialDashboard() {
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base font-semibold">
-            Recent Expenses
-          </CardTitle>
+      <Card className="bg-[#0d1322] border-white/[0.08]">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-semibold text-white/80">Recent Expenses</CardTitle>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -475,25 +478,27 @@ export default function FinancialDashboard() {
               ))}
             </div>
           ) : (data?.expenses?.recent || []).length > 0 ? (
-            <div className="space-y-3" data-testid="recent-expenses">
+            <div className="space-y-2" data-testid="recent-expenses">
               {(data?.expenses?.recent || []).slice(0, 5).map((expense, i) => (
-                <div key={expense.id || i} className="flex items-center justify-between gap-4 p-3 rounded-md border" data-testid={`recent-expense-${expense.id || i}`}>
+                <div key={expense.id || i} className="flex items-center justify-between gap-4 p-3 rounded-lg border border-white/[0.06] hover:bg-blue-500/[0.06] transition-colors" data-testid={`recent-expense-${expense.id || i}`}>
                   <div className="flex items-center gap-3 min-w-0">
-                    <Receipt className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <div className="w-7 h-7 rounded-lg bg-amber-500/10 flex items-center justify-center flex-shrink-0">
+                      <Receipt className="w-3.5 h-3.5 text-amber-400" />
+                    </div>
                     <div className="min-w-0">
-                      <p className="font-medium text-sm truncate">{expense.description || "Expense"}</p>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Badge variant="outline" className="text-xs">{expense.category}</Badge>
+                      <p className="font-medium text-sm text-white/80 truncate">{expense.description || "Expense"}</p>
+                      <div className="flex items-center gap-2 text-xs text-white/40">
+                        <Badge className="bg-white/[0.04] text-white/40 border border-white/[0.08] text-xs px-1.5 py-0">{expense.category}</Badge>
                         {expense.date && <span>{formatPkShortDate(expense.date)}</span>}
                       </div>
                     </div>
                   </div>
-                  <p className="font-semibold text-sm shrink-0">{formatPKR(expense.amount)}</p>
+                  <p className="font-semibold text-sm text-amber-400 shrink-0">{formatPKR(expense.amount)}</p>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="py-8 text-center text-muted-foreground" data-testid="text-no-recent-expenses">
+            <div className="py-8 text-center text-white/30 text-sm" data-testid="text-no-recent-expenses">
               No recent expenses found
             </div>
           )}

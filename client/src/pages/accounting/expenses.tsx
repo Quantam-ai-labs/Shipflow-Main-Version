@@ -275,7 +275,7 @@ export default function AccountingExpenses() {
         </TabsList>
       </Tabs>
 
-      <Card>
+      <Card className="bg-[#0d1322] border-white/[0.08]">
         <CardContent className="p-0">
           {isLoading ? (
             <div className="p-6 space-y-3" data-testid="table-skeleton">
@@ -292,15 +292,15 @@ export default function AccountingExpenses() {
           ) : (
             <Table data-testid="table-expenses">
               <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                  <TableHead className="text-right">Paid</TableHead>
-                  <TableHead className="text-right">Remaining</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                <TableRow className="bg-white/[0.04] hover:bg-white/[0.04] border-b border-white/[0.06]">
+                  <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Date</TableHead>
+                  <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Description</TableHead>
+                  <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Category</TableHead>
+                  <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">Total</TableHead>
+                  <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">Paid</TableHead>
+                  <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">Remaining</TableHead>
+                  <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Status</TableHead>
+                  <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

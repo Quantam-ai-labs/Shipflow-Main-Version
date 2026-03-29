@@ -317,14 +317,14 @@ export default function TransactionsPage() {
         </span>
       </div>
 
-      <Card>
+      <Card className="bg-[#0d1322] border-white/[0.08]">
         <CardContent className="p-0">
           {isLoading ? (
             <div className="p-6 space-y-3">
               {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
             </div>
           ) : txns.length === 0 ? (
-            <div className="p-12 text-center text-muted-foreground">
+            <div className="p-12 text-center text-white/30">
               <ArrowLeftRight className="h-12 w-12 mx-auto mb-3 opacity-30" />
               <p className="font-medium">No transactions yet</p>
               <p className="text-sm mt-1">Use the buttons above to create your first transaction</p>
@@ -332,14 +332,14 @@ export default function TransactionsPage() {
           ) : (
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[100px]">Date</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Flow</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                  <TableHead className="w-[80px]">Status</TableHead>
-                  <TableHead className="w-[80px]">Actions</TableHead>
+                <TableRow className="bg-white/[0.04] hover:bg-white/[0.04] border-b border-white/[0.06]">
+                  <TableHead className="w-[100px] text-white/40 text-[11px] font-medium uppercase tracking-wider">Date</TableHead>
+                  <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Type</TableHead>
+                  <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Flow</TableHead>
+                  <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Description</TableHead>
+                  <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">Amount</TableHead>
+                  <TableHead className="w-[80px] text-white/40 text-[11px] font-medium uppercase tracking-wider">Status</TableHead>
+                  <TableHead className="w-[80px] text-white/40 text-[11px] font-medium uppercase tracking-wider">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

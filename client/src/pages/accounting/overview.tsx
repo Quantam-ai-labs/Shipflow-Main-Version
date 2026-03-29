@@ -50,14 +50,14 @@ function formatPKR(amount: number | string): string {
 
 function SummaryCardSkeleton() {
   return (
-    <Card>
-      <CardContent className="p-6">
+    <Card className="bg-[#0d1322] border-white/[0.08]">
+      <CardContent className="p-5">
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <Skeleton className="h-4 w-32" />
-            <Skeleton className="w-10 h-10 rounded-lg" />
+            <Skeleton className="w-9 h-9 rounded-lg" />
           </div>
-          <Skeleton className="h-8 w-40" />
+          <Skeleton className="h-7 w-40" />
           <Skeleton className="h-3 w-24" />
         </div>
       </CardContent>
@@ -70,6 +70,9 @@ function SummaryCard({
   amount,
   subtitle,
   icon: Icon,
+  iconBg,
+  iconColor,
+  valueColor,
   isLoading,
   testId,
 }: {
@@ -77,25 +80,28 @@ function SummaryCard({
   amount: string;
   subtitle: string;
   icon: React.ComponentType<{ className?: string }>;
-  iconBgColor?: string;
-  iconColor?: string;
+  iconBg: string;
+  iconColor: string;
+  valueColor: string;
   isLoading?: boolean;
   testId: string;
 }) {
   if (isLoading) return <SummaryCardSkeleton />;
 
   return (
-    <Card>
-      <CardContent className="p-6">
+    <Card className="bg-[#0d1322] border-white/[0.08]">
+      <CardContent className="p-5">
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">{title}</p>
-            <Icon className="w-5 h-5 text-muted-foreground" />
+            <p className="text-[10px] text-white/40 font-medium uppercase tracking-wider">{title}</p>
+            <div className={`w-9 h-9 rounded-lg ${iconBg} flex items-center justify-center`}>
+              <Icon className={`w-4 h-4 ${iconColor}`} />
+            </div>
           </div>
-          <p className="text-2xl font-bold" data-testid={`text-${testId}`}>
+          <p className={`text-2xl font-bold ${valueColor}`} data-testid={`text-${testId}`}>
             {amount}
           </p>
-          <p className="text-xs text-muted-foreground">{subtitle}</p>
+          <p className="text-xs text-white/30">{subtitle}</p>
         </div>
       </CardContent>
     </Card>
@@ -114,116 +120,90 @@ export default function AccountingOverview() {
   const movements = Array.isArray(movementsData) ? movementsData.slice(0, 10) : [];
 
   return (
-    <div className="space-y-6" data-testid="accounting-overview">
+    <div className="space-y-6 p-6" data-testid="accounting-overview">
       <div>
-        <h1 className="text-2xl font-semibold" data-testid="text-page-title">
+        <h1 className="text-2xl font-semibold text-white/90" data-testid="text-page-title">
           Accounting Overview
         </h1>
-        <p className="text-sm text-muted-foreground mt-1">
+        <p className="text-sm text-white/40 mt-1">
           Track your business finances at a glance
         </p>
       </div>
 
       <AIInsightsBanner section="finance" />
 
-      <div
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
-        data-testid="summary-cards"
-      >
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" data-testid="summary-cards">
         <SummaryCard
           title="Cash in Hand"
-          amount={
-            isOverviewLoading
-              ? "Loading..."
-              : formatPKR(overviewData?.cashNow || 0)
-          }
+          amount={isOverviewLoading ? "—" : formatPKR(overviewData?.cashNow || 0)}
           subtitle="Total cash across accounts"
           icon={Wallet}
-          iconBgColor="bg-blue-500/10"
-          iconColor="text-blue-500"
+          iconBg="bg-blue-500/10"
+          iconColor="text-blue-400"
+          valueColor="text-blue-400"
           isLoading={isOverviewLoading}
           testId="cash-in-hand"
         />
-
         <SummaryCard
           title="Money Coming"
-          amount={
-            isOverviewLoading
-              ? "Loading..."
-              : formatPKR(overviewData?.moneyComing || 0)
-          }
+          amount={isOverviewLoading ? "—" : formatPKR(overviewData?.moneyComing || 0)}
           subtitle="Receivables from parties"
           icon={ArrowDownLeft}
-          iconBgColor="bg-green-500/10"
-          iconColor="text-green-500"
+          iconBg="bg-emerald-500/10"
+          iconColor="text-emerald-400"
+          valueColor="text-emerald-400"
           isLoading={isOverviewLoading}
           testId="money-coming"
         />
-
         <SummaryCard
           title="Money Owed"
-          amount={
-            isOverviewLoading
-              ? "Loading..."
-              : formatPKR(overviewData?.moneyOwed || 0)
-          }
+          amount={isOverviewLoading ? "—" : formatPKR(overviewData?.moneyOwed || 0)}
           subtitle="Payables to parties"
           icon={ArrowUpRight}
-          iconBgColor="bg-red-500/10"
-          iconColor="text-red-500"
+          iconBg="bg-red-500/10"
+          iconColor="text-red-400"
+          valueColor="text-red-400"
           isLoading={isOverviewLoading}
           testId="money-owed"
         />
-
         <SummaryCard
           title="Profit This Month"
-          amount={
-            isOverviewLoading
-              ? "Loading..."
-              : formatPKR(overviewData?.netProfit || 0)
-          }
+          amount={isOverviewLoading ? "—" : formatPKR(overviewData?.netProfit || 0)}
           subtitle="Revenue minus expenses"
           icon={TrendingUp}
-          iconBgColor="bg-emerald-500/10"
-          iconColor="text-emerald-500"
+          iconBg="bg-emerald-500/10"
+          iconColor="text-emerald-400"
+          valueColor="text-emerald-400"
           isLoading={isOverviewLoading}
           testId="profit-this-month"
         />
-
         <SummaryCard
           title="Stock Value"
-          amount={
-            isOverviewLoading
-              ? "Loading..."
-              : formatPKR(overviewData?.stockValue || 0)
-          }
+          amount={isOverviewLoading ? "—" : formatPKR(overviewData?.stockValue || 0)}
           subtitle={`${overviewData?.stockItems || 0} items in inventory`}
           icon={Package}
-          iconBgColor="bg-amber-500/10"
-          iconColor="text-amber-500"
+          iconBg="bg-amber-500/10"
+          iconColor="text-amber-400"
+          valueColor="text-amber-400"
           isLoading={isOverviewLoading}
           testId="stock-value"
         />
-
         <SummaryCard
           title="Working Capital"
-          amount={
-            isOverviewLoading
-              ? "Loading..."
-              : formatPKR(overviewData?.workingCapital || 0)
-          }
-          subtitle="Cash + Receivables - Payables"
+          amount={isOverviewLoading ? "—" : formatPKR(overviewData?.workingCapital || 0)}
+          subtitle="Cash + Receivables − Payables"
           icon={Zap}
-          iconBgColor="bg-purple-500/10"
-          iconColor="text-purple-500"
+          iconBg="bg-violet-500/10"
+          iconColor="text-violet-400"
+          valueColor="text-violet-400"
           isLoading={isOverviewLoading}
           testId="working-capital"
         />
       </div>
 
-      <Card data-testid="recent-activity-card">
-        <CardHeader>
-          <CardTitle className="text-base font-semibold">Recent Activity</CardTitle>
+      <Card className="bg-[#0d1322] border-white/[0.08]" data-testid="recent-activity-card">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-semibold text-white/80">Recent Activity</CardTitle>
         </CardHeader>
         <CardContent>
           {isMovementsLoading ? (
@@ -233,7 +213,7 @@ export default function AccountingOverview() {
               ))}
             </div>
           ) : movements.length > 0 ? (
-            <div className="space-y-3" data-testid="activity-list">
+            <div className="space-y-2" data-testid="activity-list">
               {movements.map((movement) => {
                 const amount = parseFloat(movement.amount);
                 const isInflow = movement.type === "in";
@@ -241,41 +221,37 @@ export default function AccountingOverview() {
                 return (
                   <div
                     key={movement.id}
-                    className="flex items-center justify-between gap-4 p-3 rounded-md border"
+                    className="flex items-center justify-between gap-4 p-3 rounded-lg border border-white/[0.06] hover:bg-blue-500/[0.06] transition-colors"
                     data-testid={`activity-item-${movement.id}`}
                   >
                     <div className="flex items-center gap-3 min-w-0 flex-1">
-                      {isInflow ? (
-                        <ArrowDownLeft className="w-4 h-4 text-muted-foreground shrink-0" />
-                      ) : (
-                        <ArrowUpRight className="w-4 h-4 text-muted-foreground shrink-0" />
-                      )}
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${isInflow ? "bg-emerald-500/10" : "bg-red-500/10"}`}>
+                        {isInflow ? (
+                          <ArrowDownLeft className="w-3.5 h-3.5 text-emerald-400" />
+                        ) : (
+                          <ArrowUpRight className="w-3.5 h-3.5 text-red-400" />
+                        )}
+                      </div>
                       <div className="min-w-0 flex-1">
-                        <p className="font-medium text-sm truncate" data-testid={`activity-description-${movement.id}`}>
+                        <p className="font-medium text-sm text-white/80 truncate" data-testid={`activity-description-${movement.id}`}>
                           {movement.description}
                         </p>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+                        <div className="flex items-center gap-2 text-xs text-white/40 mt-0.5">
                           {movement.accountName && (
-                            <Badge variant="outline" className="text-xs">
+                            <Badge className="bg-white/[0.04] text-white/40 border border-white/[0.08] text-xs px-1.5 py-0">
                               {movement.accountName}
                             </Badge>
                           )}
-                          {movement.date && (
-                            <span>{formatPkDate(movement.date)}</span>
-                          )}
+                          {movement.date && <span>{formatPkDate(movement.date)}</span>}
                         </div>
                       </div>
                     </div>
                     <div className="shrink-0">
                       <p
-                        className={`font-semibold text-sm ${
-                          isInflow
-                            ? "text-emerald-400"
-                            : "text-red-400"
-                        }`}
+                        className={`font-semibold text-sm ${isInflow ? "text-emerald-400" : "text-red-400"}`}
                         data-testid={`activity-amount-${movement.id}`}
                       >
-                        {isInflow ? "+" : "-"} {formatPKR(amount)}
+                        {isInflow ? "+" : "−"} {formatPKR(amount)}
                       </p>
                     </div>
                   </div>
@@ -283,7 +259,7 @@ export default function AccountingOverview() {
               })}
             </div>
           ) : (
-            <div className="py-8 text-center text-muted-foreground" data-testid="text-no-activities">
+            <div className="py-8 text-center text-white/30 text-sm" data-testid="text-no-activities">
               No recent activities found
             </div>
           )}

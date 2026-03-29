@@ -158,46 +158,46 @@ export default function ManageCheques() {
 
         {summary && (
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-            <Card>
+            <Card className="bg-[#0d1322] border-white/[0.08]">
               <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Settlements</CardTitle>
-                <Hash className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-[10px] font-medium text-white/40 uppercase tracking-wider">Settlements</CardTitle>
+                <Hash className="h-4 w-4 text-white/30" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold" data-testid="text-total-settlements">{summary.totalSettlements}</div>
+                <div className="text-2xl font-bold text-white/80" data-testid="text-total-settlements">{summary.totalSettlements}</div>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="bg-[#0d1322] border-white/[0.08]">
               <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Total COD</CardTitle>
-                <Banknote className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-[10px] font-medium text-white/40 uppercase tracking-wider">Total COD</CardTitle>
+                <Banknote className="h-4 w-4 text-blue-400" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold" data-testid="text-total-cod">{formatCurrency(summary.totalCod)}</div>
+                <div className="text-2xl font-bold text-blue-400" data-testid="text-total-cod">{formatCurrency(summary.totalCod)}</div>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="bg-[#0d1322] border-white/[0.08]">
               <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Net Received</CardTitle>
-                <ArrowDownRight className="h-4 w-4 text-green-500" />
+                <CardTitle className="text-[10px] font-medium text-white/40 uppercase tracking-wider">Net Received</CardTitle>
+                <ArrowDownRight className="h-4 w-4 text-emerald-400" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-emerald-400" data-testid="text-total-net">{formatCurrency(summary.totalNet)}</div>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="bg-[#0d1322] border-white/[0.08]">
               <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Settled</CardTitle>
-                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                <CardTitle className="text-[10px] font-medium text-white/40 uppercase tracking-wider">Settled</CardTitle>
+                <CheckCircle2 className="h-4 w-4 text-emerald-400" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-emerald-400" data-testid="text-settled-count">{summary.settledCount}</div>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="bg-[#0d1322] border-white/[0.08]">
               <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Pending</CardTitle>
-                <Clock className="h-4 w-4 text-amber-500" />
+                <CardTitle className="text-[10px] font-medium text-white/40 uppercase tracking-wider">Pending</CardTitle>
+                <Clock className="h-4 w-4 text-amber-400" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-amber-400" data-testid="text-pending-count">{summary.pendingCount}</div>
@@ -207,10 +207,10 @@ export default function ManageCheques() {
         )}
 
 
-        <Card>
+        <Card className="bg-[#0d1322] border-white/[0.08]">
           <CardHeader className="pb-3">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-              <CardTitle className="text-lg">Settlement Records</CardTitle>
+              <CardTitle className="text-sm font-semibold text-white/80">Settlement Records</CardTitle>
               <div className="flex flex-wrap items-center gap-2">
                 <div className="relative w-full md:w-64">
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -263,17 +263,17 @@ export default function ManageCheques() {
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead>Reference</TableHead>
-                      <TableHead>Courier</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Method</TableHead>
-                      <TableHead className="text-right">Shipments</TableHead>
-                      <TableHead className="text-right">Total COD</TableHead>
-                      <TableHead className="text-right">Deductions</TableHead>
-                      <TableHead className="text-right">Settlement Amount</TableHead>
-                      <TableHead>Settlement Date</TableHead>
-                      <TableHead>Slip</TableHead>
+                    <TableRow className="bg-white/[0.04] hover:bg-white/[0.04] border-b border-white/[0.06]">
+                      <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Reference</TableHead>
+                      <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Courier</TableHead>
+                      <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Status</TableHead>
+                      <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Method</TableHead>
+                      <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">Shipments</TableHead>
+                      <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">Total COD</TableHead>
+                      <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">Deductions</TableHead>
+                      <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">Settlement Amount</TableHead>
+                      <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Settlement Date</TableHead>
+                      <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Slip</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

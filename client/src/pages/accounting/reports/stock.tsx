@@ -26,16 +26,16 @@ function formatPKR(amount: number): string {
 
 function PageSkeleton() {
   return (
-    <div className="space-y-6" data-testid="stock-report-skeleton">
+    <div className="space-y-5 p-6" data-testid="stock-report-skeleton">
       <Skeleton className="h-8 w-48" />
-      <Card>
-        <CardContent className="p-6 space-y-3">
+      <Card className="bg-[#0d1322] border-white/[0.08]">
+        <CardContent className="p-5 space-y-3">
           <Skeleton className="h-4 w-24" />
           <Skeleton className="h-8 w-32" />
         </CardContent>
       </Card>
-      <Card>
-        <CardContent className="p-6 space-y-3">
+      <Card className="bg-[#0d1322] border-white/[0.08]">
+        <CardContent className="p-5 space-y-3">
           {Array.from({ length: 5 }).map((_, i) => (
             <Skeleton key={i} className="h-12 w-full" />
           ))}
@@ -57,48 +57,48 @@ export default function AccountingStockReport() {
   const totalItems = data?.totalItems || 0;
 
   return (
-    <div className="space-y-6" data-testid="accounting-stock-report">
+    <div className="space-y-5 p-6" data-testid="accounting-stock-report">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight" data-testid="text-page-title">
+        <h1 className="text-2xl font-bold text-white/90 tracking-tight" data-testid="text-page-title">
           Stock Report
         </h1>
-        <p className="text-muted-foreground mt-2">Current inventory status</p>
+        <p className="text-white/40 text-sm mt-1">Current inventory status</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Card>
-          <CardContent className="p-6">
-            <p className="text-sm text-muted-foreground">Total Stock Value</p>
-            <p className="text-2xl font-bold mt-2" data-testid="text-total-stock-value">
+        <Card className="bg-[#0d1322] border-white/[0.08]">
+          <CardContent className="p-5">
+            <p className="text-[10px] text-white/40 font-medium uppercase tracking-wider">Total Stock Value</p>
+            <p className="text-2xl font-bold mt-1 text-blue-400" data-testid="text-total-stock-value">
               {formatPKR(totalValue)}
             </p>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-6">
-            <p className="text-sm text-muted-foreground">Total Items</p>
-            <p className="text-2xl font-bold mt-2" data-testid="text-total-items">
+        <Card className="bg-[#0d1322] border-white/[0.08]">
+          <CardContent className="p-5">
+            <p className="text-[10px] text-white/40 font-medium uppercase tracking-wider">Total Items</p>
+            <p className="text-2xl font-bold mt-1 text-white/80" data-testid="text-total-items">
               {totalItems.toLocaleString()}
             </p>
           </CardContent>
         </Card>
       </div>
 
-      <Card data-testid="card-stock-table">
-        <CardHeader>
-          <CardTitle className="text-lg">Products</CardTitle>
+      <Card className="bg-[#0d1322] border-white/[0.08]" data-testid="card-stock-table">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-semibold text-white/80">Products</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           {products.length > 0 ? (
             <div className="overflow-auto">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Product</TableHead>
-                    <TableHead>SKU</TableHead>
-                    <TableHead className="text-right">Quantity</TableHead>
-                    <TableHead className="text-right">Avg Cost</TableHead>
-                    <TableHead className="text-right">Total Value</TableHead>
+                  <TableRow className="bg-white/[0.04] hover:bg-white/[0.04] border-b border-white/[0.06]">
+                    <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Product</TableHead>
+                    <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">SKU</TableHead>
+                    <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">Quantity</TableHead>
+                    <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">Avg Cost</TableHead>
+                    <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">Total Value</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -106,12 +106,12 @@ export default function AccountingStockReport() {
                     const avgCost = parseFloat(product.avgUnitCost);
                     const value = product.stockQty * avgCost;
                     return (
-                      <TableRow key={product.id} data-testid={`row-stock-${product.id}`}>
-                        <TableCell className="font-medium">{product.name}</TableCell>
-                        <TableCell className="text-muted-foreground">{product.sku || "-"}</TableCell>
-                        <TableCell className="text-right">{product.stockQty}</TableCell>
-                        <TableCell className="text-right">{formatPKR(avgCost)}</TableCell>
-                        <TableCell className="text-right font-medium">{formatPKR(value)}</TableCell>
+                      <TableRow key={product.id} className="hover:bg-blue-500/[0.06] border-b border-white/[0.04]" data-testid={`row-stock-${product.id}`}>
+                        <TableCell className="font-medium text-white/80">{product.name}</TableCell>
+                        <TableCell className="text-white/40">{product.sku || "-"}</TableCell>
+                        <TableCell className="text-right text-white/70">{product.stockQty}</TableCell>
+                        <TableCell className="text-right text-white/70">{formatPKR(avgCost)}</TableCell>
+                        <TableCell className="text-right font-medium text-blue-400">{formatPKR(value)}</TableCell>
                       </TableRow>
                     );
                   })}
@@ -119,7 +119,7 @@ export default function AccountingStockReport() {
               </Table>
             </div>
           ) : (
-            <p className="text-center text-muted-foreground py-8" data-testid="text-no-products">
+            <p className="text-center text-white/30 py-8 text-sm" data-testid="text-no-products">
               No products in inventory
             </p>
           )}

@@ -19,9 +19,9 @@ function formatPKR(amount: number): string {
 
 function LineItem({ label, amount, bold, color }: { label: string; amount: number; bold?: boolean; color?: string }) {
   return (
-    <div className={`flex items-center justify-between py-2 ${bold ? "font-semibold text-base" : "text-sm"}`}>
-      <span className={color || ""}>{label}</span>
-      <span className={color || ""} data-testid={`text-pnl-${label.toLowerCase().replace(/\s+/g, "-")}`}>
+    <div className={`flex items-center justify-between py-2 border-b border-white/[0.04] last:border-0 ${bold ? "font-semibold text-base" : "text-sm"}`}>
+      <span className={color || "text-white/60"}>{label}</span>
+      <span className={color || "text-white/80"} data-testid={`text-pnl-${label.toLowerCase().replace(/\s+/g, "-")}`}>
         {formatPKR(amount)}
       </span>
     </div>
@@ -30,16 +30,15 @@ function LineItem({ label, amount, bold, color }: { label: string; amount: numbe
 
 function PageSkeleton() {
   return (
-    <div className="space-y-6" data-testid="pnl-skeleton">
+    <div className="space-y-5 p-6" data-testid="pnl-skeleton">
       <Skeleton className="h-8 w-48" />
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <Card key={i}>
-            <CardContent className="p-6 space-y-3">
+          <Card key={i} className="bg-[#0d1322] border-white/[0.08]">
+            <CardContent className="p-5 space-y-3">
               <Skeleton className="h-5 w-32" />
               <Skeleton className="h-8 w-40" />
               <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-3/4" />
             </CardContent>
           </Card>
         ))}
@@ -63,61 +62,61 @@ export default function AccountingPnl() {
   const expensesByCategory = data?.expensesByCategory || [];
 
   return (
-    <div className="space-y-6" data-testid="accounting-pnl">
+    <div className="space-y-5 p-6" data-testid="accounting-pnl">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight" data-testid="text-page-title">
+        <h1 className="text-2xl font-bold text-white/90 tracking-tight" data-testid="text-page-title">
           Profit &amp; Loss
         </h1>
-        <p className="text-muted-foreground mt-2">Income statement summary</p>
+        <p className="text-white/40 text-sm mt-1">Income statement summary</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card data-testid="card-revenue">
-          <CardHeader>
-            <CardTitle className="text-lg">Revenue</CardTitle>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card className="bg-[#0d1322] border-white/[0.08]" data-testid="card-revenue">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold text-white/80">Revenue</CardTitle>
           </CardHeader>
           <CardContent>
-            <LineItem label="Total Sales" amount={revenue} />
+            <LineItem label="Total Sales" amount={revenue} color="text-emerald-400" />
           </CardContent>
         </Card>
 
-        <Card data-testid="card-cogs">
-          <CardHeader>
-            <CardTitle className="text-lg">Cost of Goods Sold</CardTitle>
+        <Card className="bg-[#0d1322] border-white/[0.08]" data-testid="card-cogs">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold text-white/80">Cost of Goods Sold</CardTitle>
           </CardHeader>
           <CardContent>
-            <LineItem label="COGS" amount={cogs} />
+            <LineItem label="COGS" amount={cogs} color="text-amber-400" />
           </CardContent>
         </Card>
       </div>
 
-      <Card data-testid="card-gross-profit">
-        <CardContent className="p-6">
+      <Card className="bg-[#0d1322] border-white/[0.08]" data-testid="card-gross-profit">
+        <CardContent className="p-5">
           <LineItem label="Gross Profit" amount={grossProfit} bold color={grossProfit >= 0 ? "text-emerald-400" : "text-red-400"} />
         </CardContent>
       </Card>
 
-      <Card data-testid="card-expenses">
-        <CardHeader>
-          <CardTitle className="text-lg">Expenses</CardTitle>
+      <Card className="bg-[#0d1322] border-white/[0.08]" data-testid="card-expenses">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-semibold text-white/80">Expenses</CardTitle>
         </CardHeader>
         <CardContent>
           {expensesByCategory.length > 0 ? (
-            <div className="space-y-1">
+            <div className="space-y-0">
               {expensesByCategory.map((exp) => (
                 <LineItem key={exp.category} label={exp.category || "Uncategorized"} amount={parseFloat(exp.total)} />
               ))}
-              <Separator className="my-2" />
-              <LineItem label="Total Expenses" amount={totalExpenses} bold />
+              <Separator className="my-2 bg-white/[0.08]" />
+              <LineItem label="Total Expenses" amount={totalExpenses} bold color="text-amber-400" />
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground" data-testid="text-no-expenses">No expenses recorded</p>
+            <p className="text-sm text-white/30" data-testid="text-no-expenses">No expenses recorded</p>
           )}
         </CardContent>
       </Card>
 
-      <Card data-testid="card-net-profit">
-        <CardContent className="p-6">
+      <Card className="bg-[#0d1322] border-white/[0.08]" data-testid="card-net-profit">
+        <CardContent className="p-5">
           <LineItem label="Net Profit" amount={netProfit} bold color={netProfit >= 0 ? "text-emerald-400" : "text-red-400"} />
         </CardContent>
       </Card>

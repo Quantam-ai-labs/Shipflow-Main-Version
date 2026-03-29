@@ -250,7 +250,7 @@ export default function AccountingParties() {
         </div>
       </div>
 
-      <Card>
+      <Card className="bg-[#0d1322] border-white/[0.08]">
         <CardContent className="p-0">
           {isLoading ? (
             <div className="p-6 space-y-3">
@@ -259,7 +259,7 @@ export default function AccountingParties() {
               ))}
             </div>
           ) : filteredParties.length === 0 ? (
-            <div className="py-12 text-center text-muted-foreground" data-testid="text-no-parties">
+            <div className="py-12 text-center text-white/30" data-testid="text-no-parties">
               {searchQuery || filterType !== "all"
                 ? "No parties match your filters"
                 : "No parties yet. Add your first party to get started."}
@@ -267,12 +267,12 @@ export default function AccountingParties() {
           ) : (
             <Table data-testid="table-parties">
               <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Phone</TableHead>
-                  <TableHead className="text-right">Balance</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                <TableRow className="bg-white/[0.04] hover:bg-white/[0.04] border-b border-white/[0.06]">
+                  <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Name</TableHead>
+                  <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Type</TableHead>
+                  <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Phone</TableHead>
+                  <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">Balance</TableHead>
+                  <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
