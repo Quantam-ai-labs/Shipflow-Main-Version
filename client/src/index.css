@@ -78,41 +78,41 @@
   --badge-outline: rgba(255,255,255, .04);
   --opaque-button-border-intensity: 7;
   --elevate-1: rgba(255,255,255, .03);
-  --elevate-2: rgba(255,255,255, .07);
-  --background: 220 10% 6%;
-  --foreground: 220 10% 93%;
-  --border: 220 8% 16%;
-  --card: 220 10% 8%;
-  --card-foreground: 220 10% 93%;
-  --card-border: 220 8% 13%;
-  --sidebar: 220 10% 8%;
-  --sidebar-foreground: 220 10% 88%;
-  --sidebar-border: 220 8% 14%;
-  --sidebar-primary: 220 60% 55%;
+  --elevate-2: rgba(255,255,255, .06);
+  --background: 222 47% 7%;
+  --foreground: 220 15% 92%;
+  --border: 222 25% 13%;
+  --card: 222 40% 9%;
+  --card-foreground: 220 15% 92%;
+  --card-border: 222 25% 12%;
+  --sidebar: 222 50% 5%;
+  --sidebar-foreground: 220 12% 88%;
+  --sidebar-border: 222 25% 10%;
+  --sidebar-primary: 217 91% 60%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 220 10% 14%;
-  --sidebar-accent-foreground: 220 10% 85%;
-  --sidebar-ring: 220 60% 55%;
-  --popover: 220 10% 10%;
-  --popover-foreground: 220 10% 90%;
-  --popover-border: 220 8% 16%;
-  --primary: 220 60% 55%;
+  --sidebar-accent: 217 50% 14%;
+  --sidebar-accent-foreground: 220 15% 92%;
+  --sidebar-ring: 217 91% 60%;
+  --popover: 222 40% 9%;
+  --popover-foreground: 220 12% 90%;
+  --popover-border: 222 25% 13%;
+  --primary: 217 91% 60%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 220 10% 16%;
-  --secondary-foreground: 220 10% 85%;
-  --muted: 220 10% 16%;
-  --muted-foreground: 220 8% 55%;
-  --accent: 220 10% 13%;
-  --accent-foreground: 220 10% 85%;
+  --secondary: 222 30% 14%;
+  --secondary-foreground: 220 12% 85%;
+  --muted: 222 30% 14%;
+  --muted-foreground: 220 8% 52%;
+  --accent: 222 30% 12%;
+  --accent-foreground: 220 12% 85%;
   --destructive: 0 72% 51%;
   --destructive-foreground: 0 0% 100%;
-  --input: 220 8% 28%;
-  --ring: 220 60% 55%;
-  --chart-1: 220 60% 58%;
-  --chart-2: 160 50% 48%;
-  --chart-3: 35 80% 55%;
-  --chart-4: 280 50% 58%;
-  --chart-5: 350 60% 58%;
+  --input: 222 25% 14%;
+  --ring: 217 91% 60%;
+  --chart-1: 217 91% 60%;
+  --chart-2: 160 70% 42%;
+  --chart-3: 38 92% 50%;
+  --chart-4: 271 81% 56%;
+  --chart-5: 0 72% 51%;
   --shadow-2xs: none;
   --shadow-xs: none;
   --shadow-sm: none;
@@ -146,6 +146,38 @@
   body {
     @apply font-sans antialiased bg-background text-foreground;
   }
+}
+
+/* ─── Dark mode sidebar active state: blue left-border accent ─── */
+.dark [data-sidebar="menu-button"][data-active="true"] {
+  border-left: 2px solid hsl(var(--sidebar-primary));
+  padding-left: calc(0.5rem - 2px);
+}
+
+/* ─── Dark mode: focus rings use primary blue ─── */
+.dark *:focus-visible {
+  outline-color: hsl(var(--ring));
+}
+
+/* ─── Dark mode: placeholder text ─── */
+.dark ::placeholder {
+  color: hsl(220 8% 35%);
+}
+
+/* ─── Dark mode: header border ─── */
+.dark header.border-b {
+  border-color: hsl(222 25% 11%);
+}
+
+/* ─── Scrollbar — adapts with theme ─── */
+.dark * {
+  scrollbar-color: hsl(220 15% 22% / 0.6) transparent;
+}
+.dark *::-webkit-scrollbar-thumb {
+  background-color: hsl(220 15% 22% / 0.6);
+}
+.dark *::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(220 15% 30% / 0.8);
 }
 
 @layer utilities {

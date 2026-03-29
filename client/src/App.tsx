@@ -593,7 +593,7 @@ function MainApp() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider defaultTheme="light" storageKey="shipflow-theme">
+      <ThemeProvider defaultTheme="dark" storageKey="shipflow-theme-v2">
         <TooltipProvider>
           <LocationBoundedErrorBoundary>
             <MainApp />
