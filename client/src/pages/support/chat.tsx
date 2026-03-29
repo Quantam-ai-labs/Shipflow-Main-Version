@@ -205,6 +205,7 @@ function getAvatarGradient(name: string): string {
     "bg-gradient-to-br from-violet-500 to-emerald-600",
     "bg-gradient-to-br from-emerald-500 to-blue-600",
   ];
+  if (!name?.length) return gradients[0];
   return gradients[name.charCodeAt(0) % gradients.length];
 }
 
