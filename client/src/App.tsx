@@ -37,16 +37,26 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
             <AlertTriangle className="w-12 h-12 text-destructive mx-auto" />
             <h2 className="text-xl font-semibold">Something went wrong</h2>
             <p className="text-muted-foreground">The page encountered an error. Please reload to continue.</p>
-            <Button onClick={() => window.location.reload()} data-testid="button-reload">
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Reload Page
-            </Button>
+            <div className="flex items-center justify-center gap-3 flex-wrap">
+              <Button onClick={() => window.location.reload()} data-testid="button-reload">
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Reload Page
+              </Button>
+              <Button variant="outline" onClick={() => { window.location.href = "/dashboard"; }} data-testid="button-go-dashboard">
+                Go to Dashboard
+              </Button>
+            </div>
           </div>
         </div>
       );
     }
     return this.props.children;
   }
+}
+
+function LocationBoundedErrorBoundary({ children }: { children: ReactNode }) {
+  const [location] = useLocation();
+  return <ErrorBoundary key={location}>{children}</ErrorBoundary>;
 }
 
 function PageLoader() {
@@ -582,16 +592,16 @@ function MainApp() {
 
 function App() {
   return (
-    <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <ThemeProvider defaultTheme="light" storageKey="shipflow-theme">
-          <TooltipProvider>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider defaultTheme="light" storageKey="shipflow-theme">
+        <TooltipProvider>
+          <LocationBoundedErrorBoundary>
             <MainApp />
             <Toaster />
-          </TooltipProvider>
-        </ThemeProvider>
-      </QueryClientProvider>
-    </ErrorBoundary>
+          </LocationBoundedErrorBoundary>
+        </TooltipProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
   );
 }
 
