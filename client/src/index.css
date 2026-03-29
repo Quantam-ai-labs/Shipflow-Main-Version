@@ -80,38 +80,38 @@
   --elevate-1: rgba(255,255,255, .03);
   --elevate-2: rgba(255,255,255, .06);
   --background: 222 47% 7%;
-  --foreground: 220 15% 92%;
-  --border: 222 25% 13%;
-  --card: 222 40% 9%;
-  --card-foreground: 220 15% 92%;
-  --card-border: 222 25% 12%;
+  --foreground: 220 14% 92%;
+  --border: 220 20% 14%;
+  --card: 222 42% 9%;
+  --card-foreground: 220 14% 92%;
+  --card-border: 220 20% 13%;
   --sidebar: 222 50% 5%;
   --sidebar-foreground: 220 12% 88%;
-  --sidebar-border: 222 25% 10%;
+  --sidebar-border: 220 20% 10%;
   --sidebar-primary: 217 91% 60%;
   --sidebar-primary-foreground: 0 0% 100%;
   --sidebar-accent: 217 50% 14%;
-  --sidebar-accent-foreground: 220 15% 92%;
+  --sidebar-accent-foreground: 220 14% 92%;
   --sidebar-ring: 217 91% 60%;
-  --popover: 222 40% 9%;
+  --popover: 222 42% 9%;
   --popover-foreground: 220 12% 90%;
-  --popover-border: 222 25% 13%;
+  --popover-border: 220 20% 14%;
   --primary: 217 91% 60%;
   --primary-foreground: 0 0% 100%;
   --secondary: 222 30% 14%;
   --secondary-foreground: 220 12% 85%;
   --muted: 222 30% 14%;
-  --muted-foreground: 220 8% 52%;
+  --muted-foreground: 220 8% 42%;
   --accent: 222 30% 12%;
   --accent-foreground: 220 12% 85%;
   --destructive: 0 72% 51%;
   --destructive-foreground: 0 0% 100%;
-  --input: 222 25% 14%;
+  --input: 220 20% 14%;
   --ring: 217 91% 60%;
   --chart-1: 217 91% 60%;
   --chart-2: 160 70% 42%;
   --chart-3: 38 92% 50%;
-  --chart-4: 271 81% 56%;
+  --chart-4: 195 80% 48%;
   --chart-5: 0 72% 51%;
   --shadow-2xs: none;
   --shadow-xs: none;
@@ -148,36 +148,47 @@
   }
 }
 
-/* ─── Dark mode sidebar active state: blue left-border accent ─── */
-.dark [data-sidebar="menu-button"][data-active="true"] {
+/* Dark mode: sidebar active items — blue left-border on both menu and submenu */
+.dark [data-sidebar="menu-button"][data-active="true"],
+.dark [data-sidebar="menu-sub-button"][data-active="true"] {
   border-left: 2px solid hsl(var(--sidebar-primary));
   padding-left: calc(0.5rem - 2px);
 }
 
-/* ─── Dark mode: focus rings use primary blue ─── */
+/* Dark mode: inactive sidebar icons at 70% opacity, active at full */
+.dark [data-sidebar="menu-button"] svg,
+.dark [data-sidebar="menu-sub-button"] svg {
+  opacity: 0.7;
+}
+.dark [data-sidebar="menu-button"][data-active="true"] svg,
+.dark [data-sidebar="menu-sub-button"][data-active="true"] svg {
+  opacity: 1;
+}
+
+/* Dark mode: focus rings use primary blue */
 .dark *:focus-visible {
   outline-color: hsl(var(--ring));
 }
 
-/* ─── Dark mode: placeholder text ─── */
+/* Dark mode: placeholder text at white/30 */
 .dark ::placeholder {
-  color: hsl(220 8% 35%);
+  color: rgba(255, 255, 255, 0.30);
 }
 
-/* ─── Dark mode: header border ─── */
+/* Dark mode: header bottom border subtler than card bg */
 .dark header.border-b {
-  border-color: hsl(222 25% 11%);
+  border-color: hsl(222 30% 11%);
 }
 
-/* ─── Scrollbar — adapts with theme ─── */
+/* Dark mode: scrollbar thumb white/20, no track */
 .dark * {
-  scrollbar-color: hsl(220 15% 22% / 0.6) transparent;
+  scrollbar-color: rgba(255, 255, 255, 0.20) transparent;
 }
 .dark *::-webkit-scrollbar-thumb {
-  background-color: hsl(220 15% 22% / 0.6);
+  background-color: rgba(255, 255, 255, 0.20);
 }
 .dark *::-webkit-scrollbar-thumb:hover {
-  background-color: hsl(220 15% 30% / 0.8);
+  background-color: rgba(255, 255, 255, 0.32);
 }
 
 @layer utilities {

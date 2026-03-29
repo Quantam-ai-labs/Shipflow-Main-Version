@@ -354,8 +354,8 @@ export function AppSidebar() {
       <SidebarHeader className="p-3 pb-2">
         <Link href="/dashboard">
           <div className="flex items-center gap-2 cursor-pointer">
-            <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center">
-              <Sparkles className="w-3.5 h-3.5 text-primary-foreground" />
+            <div className="w-7 h-7 rounded-md bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center shadow-sm shadow-blue-900/40">
+              <Sparkles className="w-3.5 h-3.5 text-white" />
             </div>
             <span className="font-bold text-lg tracking-tight text-foreground">
               1SOL.AI
@@ -679,10 +679,10 @@ export function AppSidebar() {
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="flex items-center gap-2 w-full p-2 rounded-md hover-elevate transition-colors" data-testid="nav-user-menu">
+            <button className="flex items-center gap-2 w-full p-2 rounded-md hover-elevate transition-colors dark:hover:bg-white/[0.05]" data-testid="nav-user-menu">
               <Avatar className="h-7 w-7">
                 <AvatarImage src={undefined} />
-                <AvatarFallback className="text-[10px] bg-muted text-muted-foreground">{getUserInitials()}</AvatarFallback>
+                <AvatarFallback className="text-[10px] bg-primary/20 text-primary dark:bg-blue-900/50 dark:text-blue-300">{getUserInitials()}</AvatarFallback>
               </Avatar>
               <div className="flex-1 text-left min-w-0">
                 <p className="text-sm font-medium truncate">{getUserDisplayName()}</p>
