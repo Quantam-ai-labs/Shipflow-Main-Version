@@ -705,12 +705,19 @@ export async function registerRoutes(
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
       const days = Math.min(parseInt(req.query.days as string) || 7, 30);
-      const pktFmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Karachi" });
-      const pktWeekday = new Intl.DateTimeFormat("en-PK", { timeZone: "Asia/Karachi", weekday: "short" });
+      const pktFmt = new Intl.DateTimeFormat("en-CA", { timeZone: DEFAULT_TIMEZONE });
+      const pktWeekday = new Intl.DateTimeFormat("en-PK", { timeZone: DEFAULT_TIMEZONE, weekday: "short" });
+      type DailyCountRow = { day: string; count: number };
       const now = new Date();
-      const cutoff = new Date(now.getTime() - days * 86400000);
-      const cutoffIso = cutoff.toISOString();
-      const rows = await db.execute(sql`
+      const todayStr = pktFmt.format(now);
+      const todayStartUtc = new Date(toMerchantStartOfDay(todayStr, DEFAULT_TIMEZONE));
+      const dateStrings: string[] = [];
+      for (let i = days - 1; i >= 0; i--) {
+        const dayStartUtc = new Date(todayStartUtc.getTime() - i * 86400000);
+        dateStrings.push(pktFmt.format(dayStartUtc));
+      }
+      const cutoffIso = toMerchantStartOfDay(dateStrings[0], DEFAULT_TIMEZONE);
+      const rawResult = await db.execute(sql`
         SELECT
           TO_CHAR(order_date AT TIME ZONE 'Asia/Karachi', 'YYYY-MM-DD') AS day,
           COUNT(*)::int AS count
@@ -721,16 +728,14 @@ export async function registerRoutes(
         ORDER BY day ASC
       `);
       const countMap: Record<string, number> = {};
-      for (const r of (rows as any).rows as any[]) {
+      for (const r of rawResult.rows as DailyCountRow[]) {
         countMap[r.day] = r.count;
       }
-      const result = [];
-      for (let i = days - 1; i >= 0; i--) {
-        const d = new Date(now.getTime() - i * 86400000);
-        const dateStr = pktFmt.format(d);
-        const label = pktWeekday.format(d);
-        result.push({ date: dateStr, count: countMap[dateStr] || 0, label });
-      }
+      const result = dateStrings.map(dateStr => ({
+        date: dateStr,
+        count: countMap[dateStr] || 0,
+        label: pktWeekday.format(new Date(toMerchantStartOfDay(dateStr, DEFAULT_TIMEZONE))),
+      }));
       res.json(result);
     } catch (error) {
       console.error("Error fetching daily counts:", error);
